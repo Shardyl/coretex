@@ -207,6 +207,12 @@ Bearer auth, needs a *browser* User-Agent past Cloudflare). Pending: **Cloudflar
 given), Gmail OAuth, R2, Google Drive backups, Google Ads (reuse from AddDrop), Stripe/Payfort (Phase 6),
 social (hard, last).
 
+**Cloudflare (`coretex.uk`):** Zone ID `d133736df89e162d72259cf215bca5e0`, Account ID
+`07ad2384313f06ab27de62c85ada5a8e`. The CF **API token is setup-only** (provisions DNS / Pages / R2
+*buckets* — control plane); **Cortex's runtime needs no CF token.** Runtime R2 object read/write uses
+**separate scoped R2 S3 keys** (data plane), generated when the bucket is created. Pattern: create a CF
+token just-in-time per provisioning task, then revoke. DNS + Pages + R2 provisioning happens in **Phase 3**.
+
 ### E.1 Lead & contact classification (deep-dive — locked 2026-06-14)
 
 **Two-axis model.** Every lead/contact carries a **Stage** + a **Value tier**, applied within each
