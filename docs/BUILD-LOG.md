@@ -58,8 +58,12 @@ Publish-live/Approve · Correct · Discard/Skip), **Ask** (company+skill+type+br
 **Activity** (decision log with status LEDs). Talks to the API via bearer token; graceful **demo
 fallback** (passcode `demo`) renders sample data offline. Deployable as-is to Cloudflare Pages.
 
-**Remaining for Phase 3 LIVE:** (1) expose the API publicly so the Pages-hosted cockpit can reach it
-— Cloudflare Tunnel `api.coretex.uk` → box:8787 (needs a cloudflared token / dashboard step);
-(2) deploy `web/` to Cloudflare Pages at coretex.uk + set the cockpit's API URL; (3) voice pipeline
-(Deepgram STT in / ElevenLabs Flash out, the 3 modes); (4) omnichannel doors. Gating item = the
-Cloudflare exposure step (operator-assisted, like the R2 setup).
+**LIVE ✅ (2026-06-15): https://coretex.uk** — the API serves the cockpit at `/` and the API at
+`/api`, exposed through a **Cloudflare Tunnel** (no open ports; box dials out). Built entirely via
+the Cloudflare API: tunnel `cortex` (`cf05b0b3-…`, remotely-managed, ingress coretex.uk→localhost:8787),
+proxied CNAME apex → `{tid}.cfargotunnel.com`, `cloudflared` running as a systemd service with the
+connector token. Verified: `https://coretex.uk/api/health` → 200, `/` serves the cockpit. Login uses
+`CORTEX_PASSCODE` (config is `@lru_cache`d → restart `cortex-api` after changing it).
+
+**Remaining for Phase 3:** (1) **voice** (Deepgram STT in / ElevenLabs Flash out, 3 modes);
+(2) omnichannel doors; (3) optional PWA manifest + service worker for an installable home-screen app.
