@@ -269,18 +269,21 @@ _Locked 2026-06-14 (usage-billing + payment-gateway + migration = dedicated deep
 **Scope:** Cortex's accounting module **replaces FreshBooks entirely** (removes the FreshBooks API).
 It is the real billing system, not just internal bookkeeping.
 
-**Two invoice models:**
-1. **Quote → invoice (project-based)** — Sensa, Sky Vision. An accepted quote converts to an invoice
-   (line items carry over); standalone invoices also possible. Quotes come from the existing
-   `sensa-quotation` skill.
-2. **Usage / credit-based auto-invoicing (SaaS metered)** — **Tabscanner & FilmSpoke.** Invoices
-   generated automatically from credit/usage, with **auto-payment** (replaces today's FreshBooks/
-   Tabscanner billing). Detailed specs from Rashad later.
+**Invoice models (per business type):**
+1. **Project businesses (Sensa, Sky Vision) — quote → invoice.** Accepted quote converts to an invoice
+   (line items carry over), typically **deposit up front + balance on delivery**; standalone invoices also
+   possible; **mark paid manually** (owner/PA). Quotes come from the existing `sensa-quotation` skill.
+2. **Tabscanner — existing billing system, wired to Cortex later** (not urgent; Rashad has a current
+   credit/usage + auto-payment setup he'll integrate with us when ready).
+3. **FilmSpoke — pay-per-creative, fixed price** (each finished "creative" billed at a fixed price; not
+   credit-metered).
 
-**Payments (per company):**
-- **Manual mark-paid** (owner/PA) — Sensa, Sky Vision project invoices.
-- **Stripe** — FilmSpoke (auto-charge).
-- **Payfort** (Amazon Payment Services) — Tabscanner (auto-charge).
+**Payments:** customers can use a **saved card (auto-charge)** OR a **pay-link** per invoice — both offered.
+Gateways: **Stripe** (FilmSpoke), **Payfort** (Tabscanner). Project invoices (Sensa/Sky Vision) are
+mark-paid manually.
+
+**FreshBooks migration (full):** bring over **active clients + open/unpaid invoices & balances + historical
+paid invoices** — Rashad wants the records, not just a clean cutover.
 
 **Chasing:** Cortex drafts overdue reminders at set intervals → owner/PA approves → sends (can earn
 auto-send later).
@@ -294,9 +297,10 @@ one per company.
 (§D). SaaS auto-charges run via the gateways (Stripe/Payfort) per the usage-billing specs.
 
 ### Open (accounts deep-dive — Rashad to provide specs)
-- **Usage/credit-based billing** for Tabscanner & FilmSpoke (metering, rates, auto-charge triggers).
-- **FreshBooks replacement/migration:** what's in FreshBooks now (clients, invoices, history) + cutover.
-- **Payment-gateway integration:** Stripe (FilmSpoke) + Payfort (Tabscanner) — auth, webhooks, auto-charge flow.
+- **Tabscanner existing billing** — wire Cortex to Tabscanner's current credit/usage + auto-payment system (Rashad walks through; not urgent).
+- **FilmSpoke pricing** — the fixed per-creative price(s).
+- **FreshBooks export** — pull clients + open balances + historical invoices out of FreshBooks for the migration.
+- **Payment-gateway integration:** Stripe (FilmSpoke) + Payfort (Tabscanner) — auth, webhooks, saved-card + pay-link flows.
 
 ## G. Voice & app surfaces
 _Locked 2026-06-14._
