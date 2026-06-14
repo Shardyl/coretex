@@ -99,6 +99,20 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
   font-size:13px;z-index:60;opacity:0;transition:.25s;pointer-events:none;max-width:90vw}
 .toast.show{opacity:1}
 .hidden{display:none!important}
+/* chat */
+.chatlog{display:flex;flex-direction:column;gap:10px;padding:8px 2px 152px}
+.bub{max-width:84%;padding:11px 14px;border-radius:16px;font-size:15px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere}
+.bub.u{align-self:flex-end;background:var(--accent);color:#04181d;border-bottom-right-radius:5px}
+.bub.a{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:5px}
+.chatbar{position:fixed;left:0;right:0;bottom:calc(60px + env(safe-area-inset-bottom));z-index:21;
+  display:flex;gap:8px;align-items:center;padding:10px 16px;border-top:1px solid var(--line);
+  background:color-mix(in srgb,var(--bg) 95%,transparent);backdrop-filter:blur(10px)}
+.chatbar .cin{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--ink);
+  border-radius:13px;padding:11px 13px;font:inherit;font-size:15px;min-width:0}
+.iconbtn.send{background:var(--accent);border-color:var(--accent);color:#04181d}
+.freehint{position:fixed;left:0;right:0;bottom:calc(116px + env(safe-area-inset-bottom));text-align:center;
+  font-size:12px;color:var(--accent);font-weight:600;pointer-events:none;opacity:0;transition:.2s}
+.freehint.on{opacity:1}
 .banner{background:color-mix(in srgb,var(--warn) 14%,var(--panel));border:1px solid color-mix(in srgb,var(--warn) 40%,var(--line));
   color:var(--ink);border-radius:12px;padding:10px 13px;font-size:12.5px;margin:14px 0}
 </style>
@@ -131,6 +145,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 </div>
 
 <div class="tabs">
+  <button class="tab" data-t="talk" onclick="go('talk')"><span class="e">💬</span>Talk</button>
   <button class="tab on" data-t="inbox" onclick="go('inbox')"><span class="e">📥</span>Inbox</button>
   <button class="tab" data-t="ask" onclick="go('ask')"><span class="e">✨</span>Ask</button>
   <button class="tab" data-t="log" onclick="go('log')"><span class="e">🗒️</span>Activity</button>
@@ -192,11 +207,13 @@ async function boot(){
 }
 
 // ---- nav ----
-function go(t){ tab=t; document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); render(); }
+function go(t){ if(t!=='talk'&&freeOn) freeStop(); tab=t;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); render(); }
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 async function render(){
   const v=document.getElementById('view');
+  if(tab==='talk')  return renderChat(v);
   if(tab==='inbox') return renderInbox(v);
   if(tab==='ask')   return renderAsk(v);
   if(tab==='log')   return renderLog(v);
@@ -327,6 +344,126 @@ async function speak(text){
 function speakCard(id){ const c=document.getElementById('t'+id); if(!c) return;
   const t=((c.querySelector('.title')||{}).textContent)||''; const b=((c.querySelector('.body')||{}).textContent)||'';
   speak((t+'. '+b).slice(0,2400)); }
+
+// ---- chat: talk to Cortex (text + hands-free Free mode) ----
+let chatMsgs=[], freeOn=false, freeUtt='', botSpeaking=false, freeThinking=false;
+function renderChat(v){
+  v.innerHTML=`<div class="h">Talk to Cortex</div>
+    <div id="chatlog" class="chatlog"></div>
+    <div class="freehint" id="freehint">Free mode on — just talk</div>
+    <div class="chatbar">
+      <button class="iconbtn" id="freeBtn" title="Hands-free voice" onclick="toggleFree()">🎧</button>
+      <input id="chatIn" class="cin" placeholder="Message Cortex, or tap 🎧 to talk" autocomplete="off"
+        onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="iconbtn send" title="Send" onclick="sendChat()">➤</button>
+    </div>`;
+  if(freeOn){ const b=document.getElementById('freeBtn'); if(b){ b.classList.add('rec'); b.textContent='⏹'; }
+    document.getElementById('freehint').classList.add('on'); }
+  // sit the bar + log above the ACTUAL tab bar (its height varies by device / safe-area)
+  const tEl=document.querySelector('.tabs'); const tabsH=tEl?Math.ceil(tEl.getBoundingClientRect().height):64;
+  const cb=document.querySelector('.chatbar'); if(cb) cb.style.bottom=tabsH+'px';
+  const barH=cb?Math.ceil(cb.getBoundingClientRect().height):60;
+  const fh=document.getElementById('freehint'); if(fh) fh.style.bottom=(tabsH+barH+6)+'px';
+  const cl=document.getElementById('chatlog'); if(cl) cl.style.paddingBottom=(tabsH+barH+24)+'px';
+  paintChat();
+}
+function paintChat(){
+  const l=document.getElementById('chatlog'); if(!l) return;
+  l.innerHTML = chatMsgs.length ? chatMsgs.map(m=>`<div class="bub ${m.role==='user'?'u':'a'}">${esc(m.content)}</div>`).join('')
+    : '<div class="empty" style="padding:34px 8px"><span class="e">💬</span>Say hello, or ask Cortex anything about your businesses. Tap 🎧 to talk hands-free.</div>';
+  window.scrollTo(0,document.body.scrollHeight);
+}
+async function sendChat(text, viaVoice){
+  const inp=document.getElementById('chatIn');
+  const msg=(text!=null?text:(inp?inp.value:'')).trim();
+  if(!msg) return '';
+  if(inp&&text==null) inp.value='';
+  chatMsgs.push({role:'user',content:msg});
+  chatMsgs.push({role:'assistant',content:'…'}); paintChat();
+  if(demo){ chatMsgs[chatMsgs.length-1]={role:'assistant',content:'(demo) Log in with your passcode to chat for real.'}; paintChat(); return ''; }
+  try{
+    const hist=chatMsgs.filter(m=>m.content!=='…');
+    const d=await api('/api/chat',{method:'POST',body:JSON.stringify({messages:hist})});
+    const reply=d.reply||'(no reply)';
+    chatMsgs[chatMsgs.length-1]={role:'assistant',content:reply}; paintChat();
+    if(viaVoice && reply) await speakAndWait(reply);
+    return reply;
+  }catch(e){ chatMsgs[chatMsgs.length-1]={role:'assistant',content:'Error: '+e.message}; paintChat(); return ''; }
+}
+function speakAndWait(text){
+  return new Promise(async(resolve)=>{
+    try{
+      botSpeaking=true;
+      const r=await fetch(API+'/api/voice/tts',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({text})});
+      if(!r.ok){ botSpeaking=false; return resolve(); }
+      const blob=await r.blob();
+      if(audioEl){ try{audioEl.pause();}catch(e){} }
+      audioEl=new Audio(URL.createObjectURL(blob));
+      audioEl.onended=()=>{ botSpeaking=false; resolve(); };
+      audioEl.onerror=()=>{ botSpeaking=false; resolve(); };
+      audioEl.play().catch(()=>{ botSpeaking=false; resolve(); });
+    }catch(e){ botSpeaking=false; resolve(); }
+  });
+}
+async function toggleFree(){
+  const b=document.getElementById('freeBtn');
+  if(freeOn){ freeStop(); return; }
+  if(demo){ toast('Voice chat needs the live app'); return; }
+  ensureAudio();
+  freeOn=true; freeUtt=''; if(b){ b.classList.add('rec'); b.textContent='⏹'; }
+  const hint=document.getElementById('freehint'); if(hint) hint.classList.add('on');
+  try{
+    vstream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    vctx=new (window.AudioContext||window.webkitAudioContext)();
+    if(vctx.state==='suspended') await vctx.resume();
+    const rate=Math.round(vctx.sampleRate);
+    const proto=location.protocol==='https:'?'wss':'ws';
+    vws=new WebSocket(`${proto}://${location.host}/api/voice/stream?token=${encodeURIComponent(token)}&rate=${rate}`);
+    vws.binaryType='arraybuffer';
+    vws.onopen=()=>{
+      vsrc=vctx.createMediaStreamSource(vstream);
+      vproc=vctx.createScriptProcessor(4096,1,1);
+      vproc.onaudioprocess=e=>{
+        if(!vws||vws.readyState!==1) return;
+        const f=e.inputBuffer.getChannelData(0), n=f.length, i16=new Int16Array(n);
+        if(botSpeaking){ vws.send(i16.buffer); return; }  // silence while Cortex talks: keep-alive + no echo
+        for(let i=0;i<n;i++){ let s=Math.max(-1,Math.min(1,f[i])); i16[i]=s<0?s*0x8000:s*0x7FFF; }
+        vws.send(i16.buffer);
+      };
+      vmute=vctx.createGain(); vmute.gain.value=0;
+      vsrc.connect(vproc); vproc.connect(vmute); vmute.connect(vctx.destination);
+      setTimeout(()=>{ if(freeOn) beep('start'); }, 220);
+    };
+    vws.onmessage=ev=>{
+      let d; try{ d=JSON.parse(ev.data);}catch(e){return;}
+      if(d.error){ toast('Voice: '+d.error); return; }
+      if(botSpeaking||freeThinking) return;
+      if(d.final && d.text){ freeUtt=(freeUtt?freeUtt+' ':'')+d.text; }
+      if(d.speech_final && freeUtt.trim()){ const u=freeUtt.trim(); freeUtt=''; freeTurn(u); }
+    };
+    vws.onerror=()=>{ toast('Voice stream error'); };
+  }catch(e){ freeOn=false; if(b){ b.classList.remove('rec'); b.textContent='🎧'; } toast('Mic blocked: '+(e.message||e)); }
+}
+async function freeTurn(utterance){
+  freeThinking=true;
+  const reply=await sendChat(utterance, false);
+  if(reply && freeOn) await speakAndWait(reply);
+  freeThinking=false;
+  if(freeOn) beep('start');   // your turn
+}
+function freeStop(){
+  freeOn=false; botSpeaking=false; freeThinking=false;
+  const b=document.getElementById('freeBtn'); if(b){ b.classList.remove('rec'); b.textContent='🎧'; }
+  const hint=document.getElementById('freehint'); if(hint) hint.classList.remove('on');
+  try{ if(audioEl) audioEl.pause(); }catch(e){}
+  try{ if(vproc){vproc.onaudioprocess=null;vproc.disconnect();} }catch(e){}
+  try{ if(vsrc) vsrc.disconnect(); }catch(e){}
+  try{ if(vmute) vmute.disconnect(); }catch(e){}
+  try{ if(vstream) vstream.getTracks().forEach(t=>t.stop()); }catch(e){}
+  try{ if(vws&&vws.readyState===1) vws.close(); }catch(e){}
+  try{ if(vctx) vctx.close(); }catch(e){}
+  vws=null;vctx=null;vsrc=null;vproc=null;vmute=null;vstream=null;
+}
 
 async function renderAsk(v){
   const co=document.getElementById('coSel').value || (companies[0]&&companies[0].slug)||'';

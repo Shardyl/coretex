@@ -27,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, db, engine, store
+from . import config, db, engine, provider, store
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -235,6 +235,32 @@ def tts(body: Speak, _: None = Depends(auth)) -> Response:
     return Response(content=r.content, media_type="audio/mpeg")
 
 
+# ---- chat: talk to Cortex (conversational brain) ----
+
+CHAT_SYSTEM = (
+    "You are Cortex, Rashad's voice-first AI operations partner. You help him run his businesses: "
+    "Tabscanner (receipt-OCR / data-extraction API), Sensa (AI video production), SkyVision, and "
+    "FilmSpoke. You are warm, sharp and concise. Your replies are usually read aloud, so write the "
+    "way you'd speak: natural sentences, no markdown, no bullet lists, no headings, and keep it brief "
+    "unless he asks for depth. Answer directly, help him think, draft copy when asked, and talk through "
+    "decisions. If he wants you to actually publish or create a piece of content as a task, tell him to "
+    "use the Ask tab for now (that runs it through the draft-and-approve flow)."
+)
+
+
+class ChatTurn(BaseModel):
+    messages: list[dict]
+
+
+@app.post("/api/chat")
+def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
+    msgs = [{"role": m.get("role"), "content": m.get("content", "")} for m in body.messages
+            if m.get("content") and m.get("role") in ("user", "assistant")][-20:]
+    if not msgs or msgs[-1]["role"] != "user":
+        raise HTTPException(status_code=400, detail="last message must be from the user")
+    return {"reply": provider.chat(CHAT_SYSTEM, msgs)}
+
+
 # ---- voice: live streaming transcription (browser mic -> us -> Deepgram -> back) ----
 
 @app.websocket("/api/voice/stream")
@@ -246,7 +272,8 @@ async def voice_stream(ws: WebSocket):
     await ws.accept()
     key = config.require("DEEPGRAM_API_KEY")
     url = ("wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16"
-           f"&sample_rate={rate}&channels=1&interim_results=true&smart_format=true&punctuate=true")
+           f"&sample_rate={rate}&channels=1&interim_results=true&smart_format=true&punctuate=true"
+           "&endpointing=300&vad_events=true")  # endpointing -> speech_final marks end of an utterance
     hdr = [("Authorization", f"Token {key}")]
     try:
         try:
@@ -280,8 +307,9 @@ async def voice_stream(ws: WebSocket):
                 if d.get("type") == "Results":
                     alts = (d.get("channel") or {}).get("alternatives") or [{}]
                     text = alts[0].get("transcript", "")
-                    if text:
-                        await ws.send_json({"final": bool(d.get("is_final")), "text": text})
+                    sf = bool(d.get("speech_final"))
+                    if text or sf:
+                        await ws.send_json({"final": bool(d.get("is_final")), "speech_final": sf, "text": text})
         except Exception:  # noqa: BLE001
             pass
 

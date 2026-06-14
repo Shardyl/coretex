@@ -35,6 +35,12 @@ def think(system: str, user: str, *, fast: bool = False, think_hard: bool = Fals
     return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
 
 
+def chat(system: str, messages: list[dict], *, max_tokens: int = 1000) -> str:
+    """Multi-turn conversation → assistant text. Snappy (no extended thinking) for voice back-and-forth."""
+    resp = _client().messages.create(model=MODEL, max_tokens=max_tokens, system=system, messages=messages)
+    return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+
+
 def think_json(system: str, user: str, *, fast: bool = True, max_tokens: int = 2000) -> dict:
     """Completion that must return a JSON object → parsed dict."""
     sys = system + "\n\nRespond with ONLY a valid JSON object — no prose, no markdown fences."
