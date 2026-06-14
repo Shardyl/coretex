@@ -17,7 +17,8 @@ import os
 import secrets
 import time
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+import httpx
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -187,6 +188,47 @@ def skip(task_id: int, _: None = Depends(auth)) -> dict:
 @app.post("/api/tasks/{task_id}/correct")
 def correct(task_id: int, body: Correction, _: None = Depends(auth)) -> dict:
     return engine.correct_task(task_id, body.text)
+
+
+# ---- voice: speech-to-text (Deepgram) + text-to-speech (ElevenLabs Flash) ----
+
+@app.post("/api/voice/stt")
+def stt(audio: UploadFile = File(...), _: None = Depends(auth)) -> dict:
+    """Transcribe a recorded audio clip -> text (Deepgram Nova-3)."""
+    key = config.require("DEEPGRAM_API_KEY")
+    data = audio.file.read()
+    ct = audio.content_type or "audio/webm"
+    r = httpx.post(
+        "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&punctuate=true",
+        headers={"Authorization": f"Token {key}", "Content-Type": ct}, content=data, timeout=60)
+    r.raise_for_status()
+    j = r.json()
+    try:
+        text = j["results"]["channels"][0]["alternatives"][0]["transcript"]
+    except (KeyError, IndexError):
+        text = ""
+    return {"text": text}
+
+
+class Speak(BaseModel):
+    text: str
+
+
+@app.post("/api/voice/tts")
+def tts(body: Speak, _: None = Depends(auth)) -> Response:
+    """Speak text aloud -> mp3 audio (ElevenLabs Flash v2.5)."""
+    key = config.require("ELEVENLABS_API_KEY")
+    voice = config.get("ELEVENLABS_VOICE_ID") or "21m00Tcm4TlvDq8ikWAM"
+    text = (body.text or "").strip()[:2500]
+    if not text:
+        raise HTTPException(status_code=400, detail="nothing to say")
+    r = httpx.post(
+        f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128",
+        headers={"xi-api-key": key, "Content-Type": "application/json"},
+        json={"text": text, "model_id": "eleven_flash_v2_5"}, timeout=60)
+    if r.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"tts failed: {r.status_code} {r.text[:200]}")
+    return Response(content=r.content, media_type="audio/mpeg")
 
 
 # ---- serve the cockpit (same origin as the API: no CORS, one domain) ----
