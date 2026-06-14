@@ -242,8 +242,9 @@ async function correct(id){
   catch(e){ toast('Error: '+e.message); }
 }
 
-// ---- voice: dictate into Ask (Deepgram) + read aloud (ElevenLabs) ----
-let mediaRec=null, recChunks=[], recording=false, starting=false, audioEl=null, actx=null;
+// ---- voice: live streaming dictation (Deepgram WS) + read aloud (ElevenLabs) ----
+let recording=false, starting=false, audioEl=null, actx=null;
+let vws=null, vctx=null, vsrc=null, vproc=null, vmute=null, vstream=null, vfinal='';
 function ensureAudio(){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended') actx.resume(); }catch(e){} }
 function beep(kind){
   try{
@@ -259,37 +260,57 @@ function beep(kind){
 }
 async function dictate(btn){
   if(demo){ toast('Voice needs the live app (log in with your passcode)'); return; }
-  if(recording){ try{ mediaRec.stop(); }catch(e){} return; }
+  if(recording){ stopDictation(btn); return; }
   if(starting) return;
   ensureAudio();  // unlock audio on this tap (needed on iOS)
   starting=true; btn.classList.add('rec'); btn.innerHTML='… getting ready';
+  const ta0=document.getElementById('aBrief'); vfinal=(ta0&&ta0.value)?ta0.value.trim():'';
   let readyFired=false;
   const goReady=()=>{ if(readyFired||!starting) return; readyFired=true; starting=false; recording=true;
-    btn.innerHTML='⏹ Stop'; beep('start'); toast('Speak now'); };
+    btn.innerHTML='⏹ Stop'; beep('start'); toast('Speak now — words appear as you talk'); };
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    recChunks=[]; mediaRec=new MediaRecorder(stream);
-    mediaRec.ondataavailable=e=>{ if(e.data&&e.data.size) recChunks.push(e.data); };
-    mediaRec.onstart=()=>setTimeout(goReady,220);   // warm the encoder ~220ms, THEN cue "go" so word 1 is captured
-    mediaRec.onstop=async()=>{
-      beep('stop');
-      stream.getTracks().forEach(t=>t.stop());
-      recording=false; starting=false; btn.classList.remove('rec'); btn.innerHTML='🎙️ Speak';
-      const blob=new Blob(recChunks,{type:(mediaRec&&mediaRec.mimeType)||'audio/webm'});
-      toast('Transcribing…');
-      const fd=new FormData(); fd.append('audio',blob,'rec');
-      try{
-        const r=await fetch(API+'/api/voice/stt',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});
-        if(!r.ok) throw new Error(r.status);
-        const d=await r.json(); const t=(d.text||'').trim();
-        if(!t){ toast('Didn’t catch that — try again'); return; }
-        const ta=document.getElementById('aBrief'); if(ta){ ta.value=(ta.value?ta.value.trim()+' ':'')+t; }
-        toast('Got it');
-      }catch(e){ toast('Transcribe failed: '+e.message); }
+    vstream=await navigator.mediaDevices.getUserMedia({audio:true});
+    vctx=new (window.AudioContext||window.webkitAudioContext)();
+    if(vctx.state==='suspended') await vctx.resume();
+    const rate=Math.round(vctx.sampleRate);
+    const proto=location.protocol==='https:'?'wss':'ws';
+    vws=new WebSocket(`${proto}://${location.host}/api/voice/stream?token=${encodeURIComponent(token)}&rate=${rate}`);
+    vws.binaryType='arraybuffer';
+    vws.onopen=()=>{
+      vsrc=vctx.createMediaStreamSource(vstream);
+      vproc=vctx.createScriptProcessor(4096,1,1);
+      vproc.onaudioprocess=e=>{
+        if(!vws||vws.readyState!==1) return;
+        const f=e.inputBuffer.getChannelData(0), n=f.length, i16=new Int16Array(n);
+        for(let i=0;i<n;i++){ let s=Math.max(-1,Math.min(1,f[i])); i16[i]=s<0?s*0x8000:s*0x7FFF; }
+        vws.send(i16.buffer);
+      };
+      vmute=vctx.createGain(); vmute.gain.value=0;
+      vsrc.connect(vproc); vproc.connect(vmute); vmute.connect(vctx.destination);
+      setTimeout(goReady,180);
     };
-    mediaRec.start();
-    setTimeout(goReady,800);   // fallback in case onstart doesn't fire
+    vws.onmessage=ev=>{
+      let d; try{ d=JSON.parse(ev.data); }catch(e){ return; }
+      if(d.error){ toast('Voice: '+d.error); return; }
+      if(!d.text) return;
+      const t=document.getElementById('aBrief'); if(!t) return;
+      if(d.final){ vfinal=(vfinal?vfinal+' ':'')+d.text; t.value=vfinal; }
+      else { t.value=(vfinal?vfinal+' ':'')+d.text; }   // live interim, replaced as you speak
+    };
+    vws.onerror=()=>{ toast('Voice stream error'); };
+    setTimeout(goReady,1500);  // fallback if onopen is slow
   }catch(e){ starting=false; recording=false; btn.classList.remove('rec'); btn.innerHTML='🎙️ Speak'; toast('Mic blocked: '+(e.message||e)); }
+}
+function stopDictation(btn){
+  recording=false; starting=false; beep('stop'); toast('Done');
+  try{ if(vproc){ vproc.onaudioprocess=null; vproc.disconnect(); } }catch(e){}
+  try{ if(vsrc) vsrc.disconnect(); }catch(e){}
+  try{ if(vmute) vmute.disconnect(); }catch(e){}
+  try{ if(vstream) vstream.getTracks().forEach(t=>t.stop()); }catch(e){}
+  const w=vws, c=vctx;
+  setTimeout(()=>{ try{ if(w&&w.readyState===1) w.close(); }catch(e){} try{ if(c) c.close(); }catch(e){} }, 400); // grace for the final words
+  vws=null;vsrc=null;vproc=null;vmute=null;vstream=null;vctx=null;
+  btn.classList.remove('rec'); btn.innerHTML='🎙️ Speak';
 }
 async function speak(text){
   if(demo){ toast('Voice needs the live app'); return; }

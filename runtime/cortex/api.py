@@ -10,15 +10,19 @@ proper multi-user logins come with the PA/PM roles later). Passcode in CORTEX_PA
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
+import json
 import os
 import secrets
 import time
 
 import httpx
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Response, UploadFile
+import websockets
+from fastapi import (Depends, FastAPI, File, Header, HTTPException, Response,
+                     UploadFile, WebSocket, WebSocketDisconnect)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -229,6 +233,69 @@ def tts(body: Speak, _: None = Depends(auth)) -> Response:
     if r.status_code != 200:
         raise HTTPException(status_code=502, detail=f"tts failed: {r.status_code} {r.text[:200]}")
     return Response(content=r.content, media_type="audio/mpeg")
+
+
+# ---- voice: live streaming transcription (browser mic -> us -> Deepgram -> back) ----
+
+@app.websocket("/api/voice/stream")
+async def voice_stream(ws: WebSocket):
+    if not _valid_token(ws.query_params.get("token", "")):
+        await ws.close(code=4401)
+        return
+    rate = ws.query_params.get("rate", "48000")
+    await ws.accept()
+    key = config.require("DEEPGRAM_API_KEY")
+    url = ("wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16"
+           f"&sample_rate={rate}&channels=1&interim_results=true&smart_format=true&punctuate=true")
+    hdr = [("Authorization", f"Token {key}")]
+    try:
+        try:
+            dg = await websockets.connect(url, additional_headers=hdr)
+        except TypeError:  # older websockets uses extra_headers
+            dg = await websockets.connect(url, extra_headers=hdr)
+    except Exception as e:  # noqa: BLE001
+        await ws.send_json({"error": f"deepgram connect failed: {e}"})
+        await ws.close()
+        return
+
+    async def pump_up():
+        try:
+            while True:
+                await dg.send(await ws.receive_bytes())
+        except (WebSocketDisconnect, Exception):  # noqa: BLE001
+            pass
+        finally:
+            try:
+                await dg.send(json.dumps({"type": "CloseStream"}))
+            except Exception:  # noqa: BLE001
+                pass
+
+    async def pump_down():
+        try:
+            async for msg in dg:
+                try:
+                    d = json.loads(msg)
+                except Exception:  # noqa: BLE001
+                    continue
+                if d.get("type") == "Results":
+                    alts = (d.get("channel") or {}).get("alternatives") or [{}]
+                    text = alts[0].get("transcript", "")
+                    if text:
+                        await ws.send_json({"final": bool(d.get("is_final")), "text": text})
+        except Exception:  # noqa: BLE001
+            pass
+
+    try:
+        await asyncio.gather(pump_up(), pump_down())
+    finally:
+        try:
+            await dg.close()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            await ws.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 # ---- serve the cockpit (same origin as the API: no CORS, one domain) ----
