@@ -14,12 +14,19 @@ Two task shapes:
 from __future__ import annotations
 
 import re
+import secrets
 import time
 
 from . import db, manager, store, worker
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
+
+_PWD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no ambiguous chars, easy to type on mobile
+
+
+def _gen_password(n: int = 6) -> str:
+    return "".join(secrets.choice(_PWD_ALPHABET) for _ in range(n))
 
 
 # ---------- formatting ----------
@@ -44,18 +51,21 @@ def _html_to_text(html: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
-def _fmt_blog(company: dict, skill: dict, art: dict, verdict: dict | None, link: str | None) -> str:
-    head = f"[{company['name']} · {skill['name']}]  ·  blog post — staged hidden"
+def _fmt_blog(company: dict, skill: dict, art: dict, verdict: dict | None,
+              link: str | None, password: str | None = None) -> str:
+    head = f"[{company['name']} · {skill['name']}]  ·  blog post — private preview"
     body = _html_to_text(art["html"])
-    if len(body) > 3000:
-        body = body[:3000] + "\n…(truncated for preview)"
+    if len(body) > 2600:
+        body = body[:2600] + "\n…(truncated for preview)"
     extra = ""
     if verdict and verdict.get("issues"):
         extra = "\n\n⚠ Manager: " + "; ".join(verdict["issues"])
-    tail = ("\n\n📝 Staged as a HIDDEN DRAFT on tabscanner.com (not public, not indexed).\n"
-            "Tapping “Publish live” makes it public and indexable on the blog.")
+    tail = "\n\n🔒 Preview the finished, designed page (live, only you can see it):"
     if link:
-        tail += f"\nDraft: {link}"
+        tail += f"\n{link}"
+    if password:
+        tail += f"\npassword: {password}"
+    tail += "\nThe public and Google can't see it. Tap “Publish live” to make it public."
     return f"{head}\n\nTITLE: {art['title']}\n\n{body}{extra}{tail}"
 
 
@@ -124,12 +134,14 @@ def _run_blog_task(task: dict, skill: dict, company: dict, site) -> None:
         art = worker.draft_article(skill, company, task["request"], manager_feedback=verdict["issues"])
         verdict = manager.check(skill, company, f"TITLE: {art['title']}\n\n{art['html']}", task["request"])
 
-    post = site.create_draft(art["title"], art["html"])  # hidden draft on the site
-    db.setting_set(f"wp:{task['id']}", {"post_id": post["id"], "link": post.get("link"), "title": art["title"]})
+    password = _gen_password()
+    post = site.stage_preview(art["title"], art["html"], password)  # password-protected preview
+    db.setting_set(f"wp:{task['id']}", {"post_id": post["id"], "link": post.get("link"),
+                                        "title": art["title"], "password": password})
 
     task = store.update_task(task["id"], draft=art["html"], manager=verdict, attempts=task["attempts"] + 1)
     # blog tasks ALWAYS go to the owner — never auto-publish (golden rule).
-    msg = tg.send(_fmt_blog(company, skill, art, verdict, post.get("link")), _blog_buttons(task["id"]))
+    msg = tg.send(_fmt_blog(company, skill, art, verdict, post.get("link"), password), _blog_buttons(task["id"]))
     store.update_task(task["id"], status="awaiting_approval", tg_message_id=msg["message_id"])
 
 
@@ -138,7 +150,7 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
     if site:
         info = db.setting_get(f"wp:{task['id']}") or {}
         pid = info.get("post_id")
-        result = site.publish(pid) if pid else {}
+        result = site.go_live(pid) if pid else {}  # clears the preview password -> public
         store.update_task(task["id"], status="done")
         store.log_decision(task["id"], skill["id"], actor, "publish",
                            snapshot={"post_id": pid, "link": result.get("link"), "title": info.get("title")})
@@ -253,17 +265,20 @@ def _on_message(msg: dict) -> None:
         art = worker.draft_article(skill, company, task["request"], correction=text)
         info = db.setting_get(f"wp:{task['id']}") or {}
         pid = info.get("post_id")
+        password = info.get("password")
         if pid:
-            site.update(pid, art["title"], art["html"])
+            site.update(pid, art["title"], art["html"])  # password preserved
             link = info.get("link")
         else:
-            post = site.create_draft(art["title"], art["html"])
+            password = _gen_password()
+            post = site.stage_preview(art["title"], art["html"], password)
             pid, link = post["id"], post.get("link")
-        db.setting_set(f"wp:{task['id']}", {"post_id": pid, "link": link, "title": art["title"]})
+        db.setting_set(f"wp:{task['id']}", {"post_id": pid, "link": link,
+                                            "title": art["title"], "password": password})
         task = store.update_task(task["id"], draft=art["html"], status="awaiting_approval",
                                  attempts=task["attempts"] + 1)
         store.log_decision(task["id"], skill["id"], "owner", "correct", note=text)
-        msg2 = tg.send(_fmt_blog(company, skill, art, None, link), _blog_buttons(task["id"]))
+        msg2 = tg.send(_fmt_blog(company, skill, art, None, link, password), _blog_buttons(task["id"]))
         store.update_task(task["id"], tg_message_id=msg2["message_id"])
         _maybe_propose_rule(task, skill, text, old or "", art["html"])
         return

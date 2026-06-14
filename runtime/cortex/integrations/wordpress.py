@@ -43,19 +43,25 @@ class WordPress:
         r.raise_for_status()
         return r.json() if r.content else {}
 
-    def create_draft(self, title: str, html: str, excerpt: str = "") -> dict:
-        body = {"title": title, "content": html, "status": "draft"}
+    def stage_preview(self, title: str, html: str, password: str, excerpt: str = "") -> dict:
+        """Publish PASSWORD-PROTECTED: a real, fully-themed URL the owner opens with the password,
+        but the public + search engines cannot. Rank Math excludes password-protected posts from
+        the sitemap and the content is gated, so it is effectively hidden + non-indexable while
+        still rendering the finished design. Approving (go_live) clears the password -> public."""
+        body = {"title": title, "content": html, "status": "publish", "password": password}
         if excerpt:
             body["excerpt"] = excerpt
         p = self._req("POST", "/posts", json=body)
         return {"id": p["id"], "link": p.get("link"), "status": p.get("status")}
 
     def update(self, post_id: int, title: str, html: str) -> dict:
+        # title + content only; the preview password is preserved.
         p = self._req("POST", f"/posts/{post_id}", json={"title": title, "content": html})
         return {"id": p["id"], "link": p.get("link"), "status": p.get("status")}
 
-    def publish(self, post_id: int) -> dict:
-        p = self._req("POST", f"/posts/{post_id}", json={"status": "publish"})
+    def go_live(self, post_id: int) -> dict:
+        """Clear the preview password -> the post becomes public + indexable."""
+        p = self._req("POST", f"/posts/{post_id}", json={"password": ""})
         return {"id": p["id"], "link": p.get("link"), "status": p.get("status")}
 
     def set_status(self, post_id: int, status: str) -> dict:
