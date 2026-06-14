@@ -13,11 +13,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import os
 import secrets
 import time
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config, db, engine, store
@@ -185,3 +187,10 @@ def skip(task_id: int, _: None = Depends(auth)) -> dict:
 @app.post("/api/tasks/{task_id}/correct")
 def correct(task_id: int, body: Correction, _: None = Depends(auth)) -> dict:
     return engine.correct_task(task_id, body.text)
+
+
+# ---- serve the cockpit (same origin as the API: no CORS, one domain) ----
+# Mounted LAST so the /api/* routes above take precedence; "/" serves web/index.html.
+_WEB = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "web")
+if os.path.isdir(_WEB):
+    app.mount("/", StaticFiles(directory=_WEB, html=True), name="web")
