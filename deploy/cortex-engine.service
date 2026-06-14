@@ -1,0 +1,17 @@
+[Unit]
+Description=Cortex engine (worker/manager/approval loop)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cortex
+Group=cortex
+WorkingDirectory=/opt/coretex/runtime
+ExecStart=/opt/coretex/.venv/bin/python /opt/coretex/runtime/main.py
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
