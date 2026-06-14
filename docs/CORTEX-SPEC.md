@@ -194,6 +194,11 @@ _Locked 2026-06-14 (lead/contact data handling = dedicated deep-dive, see Open).
 | Accounting | Cortex own module | build | §F (no external tool) |
 | WhatsApp (from websites) | channel | ⚙️ | inbound channel; exact source TBD |
 
+**Mailgun sending domains (per company; one account API key, validated US region 2026-06-14):**
+Tabscanner → `news.tabscanner.com` (newsletters) + `accounts.tabscanner.com` (transactional / billing);
+Sensa → `news.sensa.digital`; **Sky Vision & FilmSpoke → none** (no newsletters yet). (Snap Rewards
+domains exist in the account but it's out of scope.)
+
 ### E.1 Lead & contact classification (deep-dive — locked 2026-06-14)
 
 **Two-axis model.** Every lead/contact carries a **Stage** + a **Value tier**, applied within each
@@ -234,11 +239,13 @@ first** via a spreadsheet of the 157 + notes; **new leads auto-classify** (score
 arrival; dedupe on email/phone at import.
 
 ### Open
-- **157-review spreadsheet DELIVERED 2026-06-14** (`Desktop\Cortex - 157 Warm Contacts Review.xlsx`):
-  157 contacts sorted by company; 78 have resolved company names, only 10 had notes (Bitrix notes were
-  sparse). Built from the local `Desktop\Bitrix Export`. Awaiting Rashad's review → then set per-contact
-  stage/tier (default A-tier Qualified). Note: PowerShell tool writes are sandboxed (discarded) unless
-  run with sandbox disabled — needed `dangerouslyDisableSandbox` to land the file on the real Desktop.
+- **157 warm contacts — DISCOUNTED for now (Rashad reviewed 2026-06-14).** The list is **polluted**:
+  an old developer's webhook had been auto-feeding Bitrix with *all* inbound email inquiries to Sensa
+  (incl. irrelevant/internal), so it's mostly noise with a few real high-value contacts buried in it.
+  **Plan:** do NOT bulk-import. Rashad manually curates the genuine ones and **sends back a cleaned
+  list**, which Cortex then classifies (stage/tier). Review sheet delivered at
+  `Desktop\Cortex - 157 Warm Contacts Review.xlsx` (157 rows, 78 with company, 10 with notes). _(Tooling
+  note: PowerShell writes are sandboxed/discarded — needed `dangerouslyDisableSandbox` to land the file.)_
 - Re-engagement cadence + which tiers qualify for the 35k campaign.
 - WhatsApp-from-websites source; social access (hardest integration, sequenced last).
 
