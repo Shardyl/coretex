@@ -113,7 +113,25 @@ read, edit, or delete any of them anytime.
 - Whether "higher-stakes" has sub-tiers (e.g. a 50 bar vs a "never auto unless I flip it" tier) beyond money.
 
 ## C. The three doors
-_(not started)_
+_Locked 2026-06-14._
+
+**Chat door.** **Voice-first** (the "on the move" vision), type as fallback. Cortex classifies the
+subject and **infers which company** it concerns (asks only when ambiguous), loads the right skill +
+data, responds, and captures any decision back into the skill via §B's rule mechanic.
+
+**Incoming door (reactive omnichannel).** Channels monitored: **Email (Gmail), website contact forms,
+Instantly cold-email replies, social DMs (Meta/LinkedIn), and WhatsApp-from-websites.** Default
+handling — the **iterative refine-and-learn loop**: Cortex drafts a reply in the right voice →
+Rashad **approves or corrects** → it **redrafts until he's happy** → it then **learns from *why* he
+tweaked** and updates the skill. Replies go out on the **same channel**. Queue is **triaged by value
+& urgency** (hot leads / time-sensitive first).
+
+**Calendar door (scheduled/proactive).** **Cortex proposes** recurring tasks and runs them once
+approved, **and** Rashad can **set or trigger tasks manually**. Both paths coexist.
+
+### Open
+- Per-channel auth/setup (Gmail OAuth, WhatsApp-from-website source, social DM access) — specced in §E.
+- How "value & urgency" is scored for triage (lead-value signals, time-sensitivity) — detail later.
 
 ## D. Roles & permissions
 _(not started)_
