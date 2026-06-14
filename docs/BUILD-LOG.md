@@ -65,5 +65,15 @@ proxied CNAME apex → `{tid}.cfargotunnel.com`, `cloudflared` running as a syst
 connector token. Verified: `https://coretex.uk/api/health` → 200, `/` serves the cockpit. Login uses
 `CORTEX_PASSCODE` (config is `@lru_cache`d → restart `cortex-api` after changing it).
 
-**Remaining for Phase 3:** (1) **voice** (Deepgram STT in / ElevenLabs Flash out, 3 modes);
-(2) omnichannel doors; (3) optional PWA manifest + service worker for an installable home-screen app.
+**Installable PWA ✅ (2026-06-15):** `web/manifest.webmanifest` + `web/sw.js` (network-first, API never
+cached) + Cortex icons (180/192/512) + apple-touch meta. `display: standalone`; installs to the home
+screen as a real app.
+
+**Voice ✅ core (2026-06-15, round-trip verified):** backend `POST /api/voice/stt` (Deepgram Nova-3,
+audio upload → transcript) + `POST /api/voice/tts` (ElevenLabs Flash v2.5, text → mp3; voice
+`ELEVENLABS_VOICE_ID` env, default `21m00Tcm4TlvDq8ikWAM`). Cockpit: **Speak** button in Ask
+(MediaRecorder → /stt → fills the brief), **Read aloud** on Inbox cards (→ /tts → plays), header mic
+opens Ask + listens. Verified TTS→STT round-trip on the box ("Cortex voice is working…").
+
+**Remaining for Phase 3:** (1) hands-free **Free mode** (continuous listen + barge-in) and **Talk**
+gym-mode on top of the push-to-talk core; (2) omnichannel doors.
