@@ -243,17 +243,38 @@ async function correct(id){
 }
 
 // ---- voice: dictate into Ask (Deepgram) + read aloud (ElevenLabs) ----
-let mediaRec=null, recChunks=[], recording=false, audioEl=null;
+let mediaRec=null, recChunks=[], recording=false, starting=false, audioEl=null, actx=null;
+function ensureAudio(){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended') actx.resume(); }catch(e){} }
+function beep(kind){
+  try{
+    ensureAudio(); if(!actx) return;
+    const o=actx.createOscillator(), g=actx.createGain(); o.connect(g); g.connect(actx.destination);
+    const t=actx.currentTime, dur=(kind==='start'?0.20:0.24);
+    if(kind==='start'){ o.frequency.setValueAtTime(660,t); o.frequency.setValueAtTime(990,t+0.08); }   // rising "go"
+    else { o.frequency.setValueAtTime(560,t); o.frequency.setValueAtTime(370,t+0.10); }                 // falling "done"
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.3,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.start(t); o.stop(t+dur+0.02);
+  }catch(e){}
+}
 async function dictate(btn){
   if(demo){ toast('Voice needs the live app (log in with your passcode)'); return; }
   if(recording){ try{ mediaRec.stop(); }catch(e){} return; }
+  if(starting) return;
+  ensureAudio();  // unlock audio on this tap (needed on iOS)
+  starting=true; btn.classList.add('rec'); btn.innerHTML='… getting ready';
+  let readyFired=false;
+  const goReady=()=>{ if(readyFired||!starting) return; readyFired=true; starting=false; recording=true;
+    btn.innerHTML='⏹ Stop'; beep('start'); toast('Speak now'); };
   try{
     const stream=await navigator.mediaDevices.getUserMedia({audio:true});
     recChunks=[]; mediaRec=new MediaRecorder(stream);
     mediaRec.ondataavailable=e=>{ if(e.data&&e.data.size) recChunks.push(e.data); };
+    mediaRec.onstart=()=>setTimeout(goReady,220);   // warm the encoder ~220ms, THEN cue "go" so word 1 is captured
     mediaRec.onstop=async()=>{
+      beep('stop');
       stream.getTracks().forEach(t=>t.stop());
-      recording=false; btn.classList.remove('rec'); btn.innerHTML='🎙️ Speak';
+      recording=false; starting=false; btn.classList.remove('rec'); btn.innerHTML='🎙️ Speak';
       const blob=new Blob(recChunks,{type:(mediaRec&&mediaRec.mimeType)||'audio/webm'});
       toast('Transcribing…');
       const fd=new FormData(); fd.append('audio',blob,'rec');
@@ -266,9 +287,9 @@ async function dictate(btn){
         toast('Got it');
       }catch(e){ toast('Transcribe failed: '+e.message); }
     };
-    mediaRec.start(); recording=true; btn.classList.add('rec'); btn.innerHTML='⏹ Stop';
-    toast('Listening… tap Stop when done');
-  }catch(e){ toast('Mic blocked: '+(e.message||e)); }
+    mediaRec.start();
+    setTimeout(goReady,800);   // fallback in case onstart doesn't fire
+  }catch(e){ starting=false; recording=false; btn.classList.remove('rec'); btn.innerHTML='🎙️ Speak'; toast('Mic blocked: '+(e.message||e)); }
 }
 async function speak(text){
   if(demo){ toast('Voice needs the live app'); return; }
