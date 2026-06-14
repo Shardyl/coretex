@@ -134,7 +134,27 @@ approved, **and** Rashad can **set or trigger tasks manually**. Both paths coexi
 - How "value & urgency" is scored for triage (lead-value signals, time-sensitivity) — detail later.
 
 ## D. Roles & permissions
-_(not started)_
+_Locked 2026-06-14._
+
+Three roles:
+- **Owner (Rashad)** — full access everywhere; the **sole editor of skills and learned rules**.
+- **PA** — broad operational access across all companies, **including finance/money authority**
+  (explicitly authorized to handle finances). Can approve sensitive actions (including money) and
+  routine work. **Cannot edit skills/rules** (owner-only). A trusted operational deputy.
+- **PMs** — scoped to **their assigned company/project only**; approve routine work within their
+  area; no money, no skill editing.
+
+**Approvals:** sensitive actions (money, a skill graduating to auto, cross-company) require an
+**authorized human — owner or the finance-authorized PA**. PA/PMs approve routine work in scope.
+
+**Money reconciliation (refines §B):** money/financial actions are **never Cortex-auto**, but an
+**authorized human (Rashad or PA)** can approve them — it is not Rashad-exclusive.
+
+**Skills/rules:** only the owner shapes skills and confirmed rules.
+
+### Open
+- Exact PM ↔ company/project assignments (which PMs, which projects) — fill when people are added.
+- Whether the PA's finance authority has a ceiling (e.g. per-transaction amount limit) — confirm later.
 
 ## E. Data model & integrations
 _(not started)_
