@@ -10,16 +10,21 @@ auto-offer at threshold. Money kinds never auto.
 
 ## Phase 2 — WordPress publisher ✅ (2026-06-15, verified on production)
 `integrations/wordpress.py` + `worker.draft_article()` + engine blog-path. A `kind='blog'` task
-writes a real article, stages it as a **hidden draft** on tabscanner.com via WP REST, sends it to
-Telegram. **Approve = publish live · Discard = trash draft · Correct = redraft+update+learn-rule.**
-Verified: task #2 → draft post 472 (`status=draft`) on tabscanner.com + Telegram msg 12.
+writes a real article and stages a **private password-protected preview** on tabscanner.com
+(status=publish + generated password): a real, fully-themed URL the owner opens with the password
+to judge the **finished design**, while logged-out visitors get only a password box and the post is
+excluded from the Rank Math sitemap. Telegram card = link + password + content.
+**Approve (Publish live) = clear the password → public+indexed · Discard = trash · Correct =
+redraft + update (password preserved) + learn-rule.** Verified: task #3 → post 475 (password form
+rendered, 0 article H2s exposed to anon, not in sitemap).
 
-**Design constraint (probed live):** Rank Math `rank_math_robots` is NOT writable over WP REST, so
-there is no reliable "live-but-noindex" state over REST. Cortex therefore gates on **post status**:
-`draft` = hidden + non-indexable; `publish` = live + indexable, only on the owner's per-post tap.
-Blog tasks are **never auto** regardless of trust streak (enforces the web-page-builder golden rule:
-no page is indexed without explicit per-page approval). A true live-noindex preview would need a
-small Rank Math meta-registration mu-plugin on Tabscanner — future enhancement, not required.
+**Why password, not status=draft:** the operator needs to see the *rendered design* at a private
+link, not just text — a draft needs WP login and doesn't show the themed page; a password-protected
+publish does. **Constraint (probed live):** Rank Math `rank_math_robots` is NOT writable over WP
+REST (silently dropped), so there's no clean "live-but-noindex" over REST; password + sitemap
+exclusion + unlinked is the hide. Residual: the WP excerpt/meta-description summary still appears in
+page source during preview (invisible to a viewer, not indexed) — suppress later with a deliberate
+meta field. Blog tasks are **never auto** regardless of trust (enforces the golden rule).
 
 ## Deploy (this box)
 `/opt/coretex` is owned by the `cortex` user; the GitHub deploy key is in `/home/cortex/.ssh/`.
