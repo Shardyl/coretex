@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0F14">
+<title>Cortex</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0F14; --panel:#11171F; --panel2:#161E28; --line:#1F2A36;
+  --ink:#EAF2F8; --mut:#8597A6; --accent:#00DAFF; --accent2:#00C4E0;
+  --good:#2ad17e; --warn:#ffb020; --bad:#ff5d6c; --shadow:0 10px 30px rgba(0,0,0,.45);
+}
+html[data-theme="light"]{
+  --bg:#EEF2F6; --panel:#FFFFFF; --panel2:#F4F8FB; --line:#DCE5EC;
+  --ink:#0C1620; --mut:#5A6B79; --accent:#00C4E0; --accent2:#0098B3; --shadow:0 10px 30px rgba(20,40,60,.12);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+h1,h2,h3,.brand,.tab,.btn{font-family:Poppins,Inter,sans-serif}
+a{color:var(--accent)}
+.wrap{max-width:780px;margin:0 auto;padding:0 16px 120px;min-height:100%}
+/* top bar */
+header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 86%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.bar{max-width:780px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:12px 16px}
+.brand{font-weight:700;font-size:20px;letter-spacing:.3px;display:flex;align-items:center;gap:9px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 14px var(--accent);
+  animation:pulse 2.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.55;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
+.spacer{flex:1}
+.iconbtn{background:var(--panel);border:1px solid var(--line);color:var(--ink);width:38px;height:38px;
+  border-radius:11px;cursor:pointer;font-size:16px;display:grid;place-items:center}
+.iconbtn:active{transform:scale(.94)}
+.sel{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:11px;
+  padding:8px 10px;font:inherit;font-size:13px;max-width:150px}
+/* tabs */
+.tabs{display:flex;gap:8px;position:fixed;bottom:0;left:0;right:0;z-index:20;
+  background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(10px);
+  border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));justify-content:center}
+.tab{flex:1;max-width:200px;text-align:center;background:transparent;border:1px solid transparent;color:var(--mut);
+  padding:9px 6px;border-radius:12px;cursor:pointer;font-size:13px;font-weight:600}
+.tab.on{color:var(--bg);background:var(--accent);border-color:var(--accent)}
+.tab .e{font-size:17px;display:block;margin-bottom:2px}
+/* cards */
+.h{font-family:Poppins;font-weight:600;font-size:13px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--mut);margin:22px 4px 12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;
+  box-shadow:var(--shadow)}
+.meta{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut);margin-bottom:8px;flex-wrap:wrap}
+.chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:11px;
+  color:var(--ink);font-weight:600}
+.chip.cy{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+.title{font-family:Poppins;font-weight:600;font-size:17px;margin:2px 0 8px;line-height:1.3}
+.body{font-size:14px;color:var(--ink);opacity:.92;line-height:1.55;white-space:pre-wrap;
+  max-height:230px;overflow:auto;border-left:2px solid var(--line);padding-left:12px;margin:6px 0 14px}
+.row{display:flex;gap:9px;flex-wrap:wrap}
+.btn{flex:1;min-width:96px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);
+  padding:11px;border-radius:12px;font-weight:600;font-size:14px;cursor:pointer}
+.btn:active{transform:scale(.97)}
+.btn.go{background:var(--accent);border-color:var(--accent);color:#04181d}
+.btn.warn{color:var(--warn)}
+.btn.bad{color:var(--bad)}
+.empty{text-align:center;color:var(--mut);padding:48px 16px;font-size:14px}
+.empty .e{font-size:34px;display:block;margin-bottom:10px;opacity:.5}
+/* ask composer */
+label{display:block;font-size:12px;color:var(--mut);margin:14px 2px 6px;font-weight:600;letter-spacing:.04em}
+textarea,input,.field{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--ink);
+  border-radius:13px;padding:13px;font:inherit;font-size:15px}
+textarea{min-height:120px;resize:vertical;line-height:1.5}
+.seg{display:flex;gap:8px}.seg .btn{padding:10px}
+.seg .btn.on{background:var(--accent);border-color:var(--accent);color:#04181d}
+/* log */
+.logitem{display:flex;gap:12px;align-items:flex-start;padding:12px 4px;border-bottom:1px solid var(--line)}
+.led{width:9px;height:9px;border-radius:50%;margin-top:6px;flex:none}
+.led.publish,.led.approve,.led.auto,.led.rule_confirmed{background:var(--good)}
+.led.reject{background:var(--bad)}.led.correct{background:var(--warn)}
+.logmain{flex:1;min-width:0}.logmain b{font-weight:600}.logmain .s{font-size:12px;color:var(--mut)}
+/* login */
+.login{position:fixed;inset:0;background:var(--bg);z-index:50;display:grid;place-items:center;padding:24px}
+.login .box{width:100%;max-width:360px;text-align:center}
+.login .brand{justify-content:center;font-size:30px;margin-bottom:6px}
+.login p{color:var(--mut);font-size:14px;margin:0 0 22px}
+.login input{text-align:center;letter-spacing:.3em;font-size:18px;margin-bottom:12px}
+.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--panel);
+  border:1px solid var(--line);color:var(--ink);padding:11px 16px;border-radius:12px;box-shadow:var(--shadow);
+  font-size:13px;z-index:60;opacity:0;transition:.25s;pointer-events:none;max-width:90vw}
+.toast.show{opacity:1}
+.hidden{display:none!important}
+.banner{background:color-mix(in srgb,var(--warn) 14%,var(--panel));border:1px solid color-mix(in srgb,var(--warn) 40%,var(--line));
+  color:var(--ink);border-radius:12px;padding:10px 13px;font-size:12.5px;margin:14px 0}
+</style>
+</head>
+<body>
+
+<div class="login" id="login">
+  <div class="box">
+    <div class="brand"><span class="dot"></span>Cortex</div>
+    <p>Your AI operations cockpit</p>
+    <input id="pc" type="password" inputmode="text" placeholder="passcode" autocomplete="current-password">
+    <button class="btn go" style="width:100%" onclick="doLogin()">Enter</button>
+    <div id="loginerr" style="color:var(--bad);font-size:13px;margin-top:12px;min-height:18px"></div>
+  </div>
+</div>
+
+<header>
+  <div class="bar">
+    <div class="brand"><span class="dot"></span>Cortex</div>
+    <div class="spacer"></div>
+    <select class="sel" id="coSel" onchange="render()"></select>
+    <button class="iconbtn" title="Voice (coming in Phase 3)" onclick="toast('Voice lands next — Deepgram in, ElevenLabs out')">🎙️</button>
+    <button class="iconbtn" id="themeBtn" onclick="toggleTheme()">◐</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="demoBanner" class="banner hidden">Demo data — not connected to a live Cortex API. Set the API URL to go live.</div>
+  <div id="view"></div>
+</div>
+
+<div class="tabs">
+  <button class="tab on" data-t="inbox" onclick="go('inbox')"><span class="e">📥</span>Inbox</button>
+  <button class="tab" data-t="ask" onclick="go('ask')"><span class="e">✨</span>Ask</button>
+  <button class="tab" data-t="log" onclick="go('log')"><span class="e">🗒️</span>Activity</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---- config ----
+const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
+let token = localStorage.getItem('cortex_token') || '';
+let tab = 'inbox', companies = [], skills = {}, demo = false;
+
+// ---- sample data (graceful fallback so the cockpit is explorable offline) ----
+const SAMPLE = {
+  companies:[{slug:'tabscanner',name:'Tabscanner',north_star:'Enterprise / sales-qualified leads'},
+             {slug:'sensa',name:'Sensa',north_star:'Qualified inquiries'}],
+  skills:{tabscanner:[{skill_key:'content-seo',name:'Content & SEO',authority:'ask',trust_streak:1,stakes:'low'}],
+          sensa:[{skill_key:'content-seo',name:'Content & SEO',authority:'ask',trust_streak:0,stakes:'low'}]},
+  inbox:[{id:42,kind:'blog',company:'Tabscanner',skill:'Content & SEO',
+    title:'How Receipt OCR Accuracy Is Measured',
+    body:'Accuracy in receipt OCR is not one number. Field-level accuracy asks: did we get the merchant, date and total exactly right? Character-level accuracy is more forgiving...\n\nWhy it matters for expense and fintech apps, and what to ask a vendor before you commit.'}],
+  decisions:[{task_id:42,action:'correct',actor:'owner',note:'Lead with the cost angle'},
+             {task_id:38,action:'publish',actor:'owner',note:null},
+             {task_id:35,action:'auto',actor:'cortex',note:null},
+             {task_id:31,action:'reject',actor:'owner',note:null}]
+};
+
+// ---- api helper ----
+async function api(path, opts={}){
+  if(demo) throw new Error('demo');
+  const r = await fetch(API+path, {...opts, headers:{'Content-Type':'application/json',
+    ...(token?{Authorization:'Bearer '+token}:{}), ...(opts.headers||{})}});
+  if(r.status===401){ logout(); throw new Error('auth'); }
+  if(!r.ok){ throw new Error((await r.json().catch(()=>({}))).detail || r.status); }
+  return r.status===204?null:r.json();
+}
+
+// ---- auth ----
+async function doLogin(){
+  const pc = document.getElementById('pc').value.trim();
+  const err = document.getElementById('loginerr'); err.textContent='';
+  if(pc==='demo'){ demo=true; afterLogin(); return; }
+  try{
+    const d = await api('/api/login',{method:'POST',body:JSON.stringify({passcode:pc})});
+    token = d.token; localStorage.setItem('cortex_token',token); afterLogin();
+  }catch(e){ err.textContent = e.message==='wrong passcode'?'Wrong passcode':'Could not reach Cortex ('+e.message+'). Tip: passcode "demo" to explore.'; }
+}
+function logout(){ token=''; localStorage.removeItem('cortex_token'); document.getElementById('login').classList.remove('hidden'); }
+function afterLogin(){ document.getElementById('login').classList.add('hidden');
+  document.getElementById('demoBanner').classList.toggle('hidden',!demo); boot(); }
+
+async function boot(){
+  try{ companies = demo?SAMPLE.companies:await api('/api/companies'); }
+  catch(e){ demo=true; document.getElementById('demoBanner').classList.remove('hidden'); companies=SAMPLE.companies; }
+  const sel=document.getElementById('coSel'); sel.innerHTML='<option value="">All companies</option>'+
+    companies.map(c=>`<option value="${c.slug}">${c.name}</option>`).join('');
+  render();
+}
+
+// ---- nav ----
+function go(t){ tab=t; document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); render(); }
+const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function render(){
+  const v=document.getElementById('view');
+  if(tab==='inbox') return renderInbox(v);
+  if(tab==='ask')   return renderAsk(v);
+  if(tab==='log')   return renderLog(v);
+}
+
+async function renderInbox(v){
+  v.innerHTML='<div class="h">Needs your yes</div><div id="ib" class="empty">Loading…</div>';
+  let items;
+  try{ items = demo?SAMPLE.inbox:await api('/api/inbox'); }catch(e){ items=demo?SAMPLE.inbox:[]; }
+  const ib=document.getElementById('ib');
+  if(!items.length){ ib.outerHTML='<div class="empty"><span class="e">✓</span>Inbox zero. Cortex will ping you here and on Telegram when something needs a yes.</div>'; return; }
+  ib.outerHTML = items.map(t=>{
+    const co=t.company||compName(t.company_id), sk=t.skill||'';
+    const wp=t.wp||null, title=esc(t.title||(wp&&wp.title)||('Task #'+t.id));
+    const body=esc(t.body||t.draft||'');
+    return `<div class="card" id="t${t.id}">
+      <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${esc(sk)}</span>
+        <span class="chip">${t.kind==='blog'?'blog post':esc(t.kind||'task')}</span></div>
+      <div class="title">${title}</div>
+      ${body?`<div class="body">${body}</div>`:''}
+      ${wp&&wp.link?`<div class="meta">🔒 private preview: <a href="${esc(wp.link)}" target="_blank">${esc(wp.link)}</a></div>`:''}
+      <div class="row">
+        <button class="btn go" onclick="act(${t.id},'approve')">${t.kind==='blog'?'Publish live':'Approve'}</button>
+        <button class="btn warn" onclick="correct(${t.id})">Correct</button>
+        <button class="btn bad" onclick="act(${t.id},'skip')">${t.kind==='blog'?'Discard':'Skip'}</button>
+      </div></div>`;
+  }).join('');
+}
+
+function compName(id){ const c=companies.find(c=>c.id===id); return c?c.name:''; }
+
+async function act(id,what){
+  const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;
+  if(demo){ toast(what==='approve'?'Published ✓ (demo)':'Done (demo)'); if(card) card.remove(); return; }
+  try{ await api(`/api/tasks/${id}/${what}`,{method:'POST'}); toast(what==='approve'?'Published ✓':'Done ✓'); render(); }
+  catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
+}
+async function correct(id){
+  const text=prompt('What should change?'); if(!text) return;
+  if(demo){ toast('Sent correction (demo)'); return; }
+  try{ await api(`/api/tasks/${id}/correct`,{method:'POST',body:JSON.stringify({text})}); toast('Redrafting — back shortly'); render(); }
+  catch(e){ toast('Error: '+e.message); }
+}
+
+async function renderAsk(v){
+  const co=document.getElementById('coSel').value || (companies[0]&&companies[0].slug)||'';
+  let sk=[]; try{ sk=demo?(SAMPLE.skills[co]||[]):await api(`/api/companies/${co}/skills`); }catch(e){ sk=SAMPLE.skills[co]||[]; }
+  v.innerHTML=`<div class="h">Ask Cortex</div>
+    <div class="card">
+      <label>Company</label>
+      <select class="field" id="aCo">${companies.map(c=>`<option value="${c.slug}" ${c.slug===co?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
+      <label>Skill</label>
+      <select class="field" id="aSk">${sk.map(s=>`<option value="${s.skill_key}">${esc(s.name)}</option>`).join('')||'<option>content-seo</option>'}</select>
+      <label>Type</label>
+      <div class="seg" id="aKind">
+        <button class="btn on" data-k="content" onclick="pickKind(this)">Post / copy</button>
+        <button class="btn" data-k="blog" onclick="pickKind(this)">Blog post</button>
+      </div>
+      <label>What do you want?</label>
+      <textarea id="aBrief" placeholder="e.g. Write a LinkedIn post introducing our receipt OCR API to fintech developers."></textarea>
+      <div class="row" style="margin-top:14px"><button class="btn go" onclick="submitAsk()">Send to Cortex</button></div>
+    </div>
+    <div class="empty" style="padding:18px 8px">Cortex drafts it, the manager checks it, and it lands in your Inbox (and Telegram) for a yes.</div>`;
+  document.getElementById('aCo').onchange=()=>{document.getElementById('coSel').value=document.getElementById('aCo').value;renderAsk(v);};
+}
+let askKind='content';
+function pickKind(b){ askKind=b.dataset.k; document.querySelectorAll('#aKind .btn').forEach(x=>x.classList.toggle('on',x===b)); }
+async function submitAsk(){
+  const company=document.getElementById('aCo').value, skill=document.getElementById('aSk').value,
+        brief=document.getElementById('aBrief').value.trim();
+  if(!brief) return toast('Tell Cortex what you want first');
+  if(demo){ toast('Sent ✓ (demo) — would draft + land in Inbox'); document.getElementById('aBrief').value=''; return; }
+  try{ await api('/api/tasks',{method:'POST',body:JSON.stringify({company,skill,kind:askKind,brief})});
+    toast('Sent ✓ — Cortex is drafting it'); document.getElementById('aBrief').value=''; go('inbox'); }
+  catch(e){ toast('Error: '+e.message); }
+}
+
+async function renderLog(v){
+  v.innerHTML='<div class="h">Activity</div><div id="lg" class="empty">Loading…</div>';
+  let d; try{ d=demo?SAMPLE.decisions:await api('/api/decisions?limit=40'); }catch(e){ d=SAMPLE.decisions; }
+  const verb={publish:'published',approve:'approved',auto:'auto-ran',reject:'skipped',correct:'corrected',rule_confirmed:'added a rule'};
+  document.getElementById('lg').outerHTML = d.length? d.map(x=>`
+    <div class="logitem"><div class="led ${x.action}"></div><div class="logmain">
+      <b>${x.actor==='cortex'?'Cortex':'You'}</b> ${verb[x.action]||x.action} <b>task #${x.task_id}</b>
+      ${x.note?`<div class="s">“${esc(x.note)}”</div>`:''}</div></div>`).join('')
+    : '<div class="empty">No activity yet.</div>';
+}
+
+// ---- chrome ----
+function toggleTheme(){ const h=document.documentElement, n=h.dataset.theme==='dark'?'light':'dark';
+  h.dataset.theme=n; localStorage.setItem('cortex_theme',n);
+  document.querySelector('meta[name=theme-color]').content=n==='dark'?'#0B0F14':'#EEF2F6'; }
+let tT;
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(tT); tT=setTimeout(()=>t.classList.remove('show'),2600); }
+
+// ---- init ----
+(function(){ const th=localStorage.getItem('cortex_theme'); if(th) document.documentElement.dataset.theme=th;
+  document.getElementById('pc').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  if(token) afterLogin(); })();
+</script>
+</body>
+</html>

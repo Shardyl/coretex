@@ -42,6 +42,24 @@ parser); grep the specific key. Tabscanner WP creds: `TABSCANNER_APP_PASSWORD` (
 `_WP_APP_PASSWORD`), `TABSCANNER_WP_URL`, `TABSCANNER_WP_USER`. Curl-style UA required past
 Tabscanner's Cloudflare.
 
-## Phase 3 — next
-PWA cockpit (Cloudflare Pages, coretex.uk) + voice (Deepgram in / ElevenLabs Flash out, 3 modes) +
-omnichannel doors, backed by a FastAPI service over the existing engine/DB on the box.
+## Phase 3 — in progress
+**Backend ✅ (2026-06-15, verified):** `cortex/api.py` (FastAPI) running as the `cortex-api` systemd
+service on `127.0.0.1:8787`, reusing engine/store/db. Single-passcode auth (`CORTEX_PASSCODE` in env)
+→ signed expiring bearer token (HMAC, secret auto-stored in settings). Endpoints: `login·me·health`,
+reads `companies·{slug}/skills·tasks·inbox·tasks/{id}·decisions`, actions `POST tasks` +
+`tasks/{id}/{approve|skip|correct}` (reuse `engine.approve_task/skip_task/correct_task`; correction
+core extracted to `engine.apply_correction` so Telegram and the cockpit share it). Verified: wrong
+passcode + no-token → 401; companies/skills/inbox/decisions return real data; CORS locked to
+`*.coretex.uk` + localhost.
+
+**Cockpit ✅ built + render-verified (2026-06-15):** `web/index.html` — single-file PWA, Cyan theme
+(dark+light toggle), mobile-first, no horizontal scroll. Views: **Inbox** (approval cards →
+Publish-live/Approve · Correct · Discard/Skip), **Ask** (company+skill+type+brief → `POST /api/tasks`),
+**Activity** (decision log with status LEDs). Talks to the API via bearer token; graceful **demo
+fallback** (passcode `demo`) renders sample data offline. Deployable as-is to Cloudflare Pages.
+
+**Remaining for Phase 3 LIVE:** (1) expose the API publicly so the Pages-hosted cockpit can reach it
+— Cloudflare Tunnel `api.coretex.uk` → box:8787 (needs a cloudflared token / dashboard step);
+(2) deploy `web/` to Cloudflare Pages at coretex.uk + set the cockpit's API URL; (3) voice pipeline
+(Deepgram STT in / ElevenLabs Flash out, the 3 modes); (4) omnichannel doors. Gating item = the
+Cloudflare exposure step (operator-assisted, like the R2 setup).
