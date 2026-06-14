@@ -152,6 +152,11 @@ Three roles:
 
 **Skills/rules:** only the owner shapes skills and confirmed rules.
 
+**User-initiated escalation (review request).** Any in-scope user (PA or PM) can **push a decision
+up to Rashad for review** at any time — flagging an item they want his call on. It triggers a
+**notification to Rashad** (Telegram now, in-app push later); his decision flows back to the
+originating user/queue. Human-initiated, distinct from the manager-agent escalation in §B.
+
 ### Open
 - Exact PM ↔ company/project assignments (which PMs, which projects) — fill when people are added.
 - Whether the PA's finance authority has a ceiling (e.g. per-transaction amount limit) — confirm later.
