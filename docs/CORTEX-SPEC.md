@@ -227,11 +227,18 @@ visits · email opens & clicks · target-industry match · referral / warm intro
 - **Compliance:** Cortex **auto-respects unsubscribes + a do-not-contact flag** — never contacts
   flagged records.
 
+**Import & ongoing capture (decided 2026-06-14):** the export routes to each company's siloed store
+**by its source/company field**; the **35k cold** group **by source/company** (scored when
+re-engaged); the **157 warm** import as **Qualified contacts (A-tier)** but **Rashad reviews them
+first** via a spreadsheet of the 157 + notes; **new leads auto-classify** (scored/staged/tiered) on
+arrival; dedupe on email/phone at import.
+
 ### Open
-- The 157 already-warm contacts: confirm their initial stage/tier on import (likely Qualified/Contact, A-tier) — quick pass at import time.
-- Exact re-engagement cadence + which tiers qualify for the 35k campaign.
-- WhatsApp-from-websites: confirm exact source (WhatsApp Business API vs click-to-chat forwarding).
-- Social DM/post access is the hardest integration set — sequenced last in the build.
+- **157-review spreadsheet BLOCKED:** the prior Bitrix export is NOT on this machine (likely left on
+  the old laptop). Re-pull from Bitrix via a fresh inbound webhook (proven method), or locate the old
+  export, then generate the review sheet.
+- Re-engagement cadence + which tiers qualify for the 35k campaign.
+- WhatsApp-from-websites source; social access (hardest integration, sequenced last).
 
 ## F. Accounts module (replaces FreshBooks)
 _Locked 2026-06-14 (usage-billing + payment-gateway + migration = dedicated deep-dive, see Open)._
