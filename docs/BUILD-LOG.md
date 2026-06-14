@@ -18,9 +18,16 @@ excluded from the Rank Math sitemap. Telegram card = link + password + content.
 redraft + update (password preserved) + learn-rule.** Verified: task #3 → post 475 (password form
 rendered, 0 article H2s exposed to anon, not in sitemap).
 
-**Why password, not status=draft:** the operator needs to see the *rendered design* at a private
-link, not just text — a draft needs WP login and doesn't show the themed page; a password-protected
-publish does. **Constraint (probed live):** Rank Math `rank_math_robots` is NOT writable over WP
+**⚠ PARKED 2026-06-15 — operator rejected password-on-published.** "Publishing something live with
+a password on it is not the right solution." Requirement stands (he must see the *rendered design*,
+not text), but the delivery must change. **Agreed direction (revisit before Phase 2 is 'done'):**
+stage as `status=draft` and hand him the WordPress **logged-in draft preview** of the themed page
+("even if I have to log in to WordPress to see the draft, that's fine") — not a public/password URL.
+Engine still runs the password path until rebuilt. (Earlier why-password note retained below for
+context.)
+**Why password was tried, not status=draft:** the operator needs the *rendered design* at a link,
+not text — a plain draft needs WP login and didn't obviously show the themed page; password-publish
+did. The fix is to use WP's native logged-in draft preview, which does render the theme. **Constraint (probed live):** Rank Math `rank_math_robots` is NOT writable over WP
 REST (silently dropped), so there's no clean "live-but-noindex" over REST; password + sitemap
 exclusion + unlinked is the hide. Residual: the WP excerpt/meta-description summary still appears in
 page source during preview (invisible to a viewer, not indexed) — suppress later with a deliberate
