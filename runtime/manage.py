@@ -67,12 +67,26 @@ def task() -> None:
     print(f"created task #{t['id']} for {key}: {brief}")
 
 
+def blog() -> None:
+    brief = (sys.argv[2] if len(sys.argv) > 2 else
+             "Write a blog post for Tabscanner explaining how receipt-OCR accuracy is measured "
+             "(field-level vs character-level), why it matters for expense and fintech apps, and "
+             "what to ask a vendor. Practical, specific, accuracy-first, no hype.")
+    co = store.get_company_by_slug("tabscanner")
+    skill = store.get_skill_by_key(co["id"], "content-seo")
+    if not skill:
+        print("no skill 'content-seo' — run seed first"); return
+    t = store.create_task(co["id"], skill["id"], "blog", {"brief": brief})
+    print(f"created BLOG task #{t['id']} for content-seo: {brief[:70]}...")
+
+
 def engine() -> None:
     from cortex import engine as eng
     eng.run()
 
 
-COMMANDS = {"migrate": migrate, "status": status, "seed": seed, "task": task, "engine": engine}
+COMMANDS = {"migrate": migrate, "status": status, "seed": seed,
+            "task": task, "blog": blog, "engine": engine}
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"

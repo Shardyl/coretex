@@ -3,16 +3,26 @@
 Loop:  process new tasks (worker -> manager -> approval/auto)  +  handle Telegram
 taps and corrections (approve / correct->redraft->learn-rule / skip), updating the
 trust streak and offering auto at the threshold.
+
+Two task shapes:
+  • string tasks (kind != 'blog')  -> Phase 1 path: draft text, approve = mark done.
+  • blog tasks   (kind == 'blog')  -> Phase 2 path: write an article, stage it as a
+    HIDDEN DRAFT on the company's WordPress, approve = publish it live. Blog tasks are
+    NEVER auto-run (publishing/indexing always needs the owner's per-post tap — the
+    web-page-builder golden rule), regardless of trust streak.
 """
 from __future__ import annotations
 
+import re
 import time
 
 from . import db, manager, store, worker
-from .integrations import telegram as tg
+from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
 
+
+# ---------- formatting ----------
 
 def _fmt(task: dict, skill: dict, company: dict, verdict: dict | None) -> str:
     head = f"[{company['name']} · {skill['name']}]  ·  needs your yes"
@@ -25,10 +35,47 @@ def _fmt(task: dict, skill: dict, company: dict, verdict: dict | None) -> str:
     return f"{head}\n\n{draft}{extra}"
 
 
+def _html_to_text(html: str) -> str:
+    text = re.sub(r"(?i)</(p|h2|h3|li|blockquote)>", "\n", html)
+    text = re.sub(r"(?i)<li[^>]*>", "• ", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = (text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                .replace("&quot;", '"').replace("&#39;", "'").replace("&nbsp;", " "))
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _fmt_blog(company: dict, skill: dict, art: dict, verdict: dict | None, link: str | None) -> str:
+    head = f"[{company['name']} · {skill['name']}]  ·  blog post — staged hidden"
+    body = _html_to_text(art["html"])
+    if len(body) > 3000:
+        body = body[:3000] + "\n…(truncated for preview)"
+    extra = ""
+    if verdict and verdict.get("issues"):
+        extra = "\n\n⚠ Manager: " + "; ".join(verdict["issues"])
+    tail = ("\n\n📝 Staged as a HIDDEN DRAFT on tabscanner.com (not public, not indexed).\n"
+            "Tapping “Publish live” makes it public and indexable on the blog.")
+    if link:
+        tail += f"\nDraft: {link}"
+    return f"{head}\n\nTITLE: {art['title']}\n\n{body}{extra}{tail}"
+
+
 def _approval_buttons(task_id: int) -> list[list[dict]]:
     return [[tg.button("✅ Approve", f"ap:{task_id}"),
              tg.button("✎ Correct", f"co:{task_id}"),
              tg.button("✗ Skip", f"sk:{task_id}")]]
+
+
+def _blog_buttons(task_id: int) -> list[list[dict]]:
+    return [[tg.button("✅ Publish live", f"ap:{task_id}"),
+             tg.button("✎ Correct", f"co:{task_id}"),
+             tg.button("✗ Discard", f"sk:{task_id}")]]
+
+
+def _site_for(task: dict, company: dict):
+    """Return a WordPress connection if this task should publish, else None."""
+    if task["kind"] != "blog":
+        return None
+    return wp.for_company(company)
 
 
 # ---------- task processing ----------
@@ -47,6 +94,11 @@ def _run_task(task: dict) -> None:
     company = store.get_company(task["company_id"])
     store.update_task(task["id"], status="drafting")
 
+    site = _site_for(task, company)
+    if site:
+        _run_blog_task(task, skill, company, site)
+        return
+
     draft = worker.draft(skill, company, task["request"])
     verdict = manager.check(skill, company, draft, task["request"])
     if not verdict["aligned"] and verdict["issues"]:
@@ -64,13 +116,40 @@ def _run_task(task: dict) -> None:
         store.update_task(task["id"], status="awaiting_approval", tg_message_id=msg["message_id"])
 
 
-def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = False) -> None:
-    # Phase 1: 'execute' = mark done + log. Phase 2 swaps this for the real WordPress publish.
+def _run_blog_task(task: dict, skill: dict, company: dict, site) -> None:
+    art = worker.draft_article(skill, company, task["request"])
+    body = f"TITLE: {art['title']}\n\n{art['html']}"
+    verdict = manager.check(skill, company, body, task["request"])
+    if not verdict["aligned"] and verdict["issues"]:
+        art = worker.draft_article(skill, company, task["request"], manager_feedback=verdict["issues"])
+        verdict = manager.check(skill, company, f"TITLE: {art['title']}\n\n{art['html']}", task["request"])
+
+    post = site.create_draft(art["title"], art["html"])  # hidden draft on the site
+    db.setting_set(f"wp:{task['id']}", {"post_id": post["id"], "link": post.get("link"), "title": art["title"]})
+
+    task = store.update_task(task["id"], draft=art["html"], manager=verdict, attempts=task["attempts"] + 1)
+    # blog tasks ALWAYS go to the owner — never auto-publish (golden rule).
+    msg = tg.send(_fmt_blog(company, skill, art, verdict, post.get("link")), _blog_buttons(task["id"]))
+    store.update_task(task["id"], status="awaiting_approval", tg_message_id=msg["message_id"])
+
+
+def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = False) -> dict:
+    site = _site_for(task, company)
+    if site:
+        info = db.setting_get(f"wp:{task['id']}") or {}
+        pid = info.get("post_id")
+        result = site.publish(pid) if pid else {}
+        store.update_task(task["id"], status="done")
+        store.log_decision(task["id"], skill["id"], actor, "publish",
+                           snapshot={"post_id": pid, "link": result.get("link"), "title": info.get("title")})
+        return result
+    # Phase 1 string path: 'execute' = mark done + log.
     store.update_task(task["id"], status="done")
     store.log_decision(task["id"], skill["id"], actor, "auto" if auto else "approve",
                        snapshot={"draft": task.get("draft")})
     if auto:
         tg.send(f"[{company['name']} · {skill['name']}] auto-ran (trusted). #{task['id']} done.")
+    return {}
 
 
 # ---------- telegram handling ----------
@@ -106,7 +185,7 @@ def _on_callback(cq: dict) -> None:
     if action == "ap":
         _approve(task, skill, company)
     elif action == "sk":
-        _skip(task, skill)
+        _skip(task, skill, company)
     elif action == "co":
         store.update_task(task["id"], status="awaiting_correction")
         if task.get("tg_message_id"):
@@ -116,21 +195,45 @@ def _on_callback(cq: dict) -> None:
 
 
 def _approve(task: dict, skill: dict, company: dict) -> None:
-    _execute(task, skill, company, actor="owner")
+    result = _execute(task, skill, company, actor="owner")
     skill = store.bump_streak(skill["id"])
     if task.get("tg_message_id"):
-        tg.edit(task["tg_message_id"], f"✅ Approved — '{skill['name']}' (streak {skill['trust_streak']}). Done.")
-    if skill["authority"] == "ask" and skill["trust_streak"] >= skill["auto_threshold"]:
+        if result and result.get("link"):
+            tg.edit(task["tg_message_id"],
+                    f"✅ Published live on Tabscanner: {result['link']}  (streak {skill['trust_streak']}).")
+        else:
+            tg.edit(task["tg_message_id"], f"✅ Approved — '{skill['name']}' (streak {skill['trust_streak']}). Done.")
+    # Offer auto only for non-blog skills (blog publishing must never go auto).
+    if task["kind"] != "blog" and skill["authority"] == "ask" and skill["trust_streak"] >= skill["auto_threshold"]:
         tg.send(f"'{skill['name']}' has {skill['trust_streak']} clean approvals. "
                 f"Put it on auto for low-stakes work?",
                 [[tg.button("Yes, set auto", f"au:{skill['id']}")]])
 
 
-def _skip(task: dict, skill: dict) -> None:
+def _skip(task: dict, skill: dict, company: dict) -> None:
+    site = _site_for(task, company)
+    note = "Skipped"
+    if site:
+        info = db.setting_get(f"wp:{task['id']}") or {}
+        if info.get("post_id"):
+            try:
+                site.trash(info["post_id"])
+                note = "Discarded — draft removed from Tabscanner"
+            except Exception:  # noqa: BLE001
+                note = "Discarded (couldn't remove the WP draft — check manually)"
     store.update_task(task["id"], status="rejected")
     store.log_decision(task["id"], skill["id"], "owner", "reject", snapshot={"draft": task.get("draft")})
     if task.get("tg_message_id"):
-        tg.edit(task["tg_message_id"], f"✗ Skipped — '{skill['name']}'.")
+        tg.edit(task["tg_message_id"], f"✗ {note} — '{skill['name']}'.")
+
+
+def _maybe_propose_rule(task: dict, skill: dict, text: str, old: str, new: str) -> None:
+    rule = worker.infer_rule(skill, text, old or "", new or "")
+    if rule.get("is_rule") and rule.get("rule"):
+        db.setting_set(f"rule:{task['id']}", rule["rule"])
+        tg.send(f"I'm reading your correction as a standing rule:\n\n“{rule['rule']}”\n\n"
+                f"Add it to '{skill['name']}'?",
+                [[tg.button("Yes, add rule", f"ry:{task['id']}"), tg.button("No", f"rn:{task['id']}")]])
 
 
 def _on_message(msg: dict) -> None:
@@ -144,18 +247,33 @@ def _on_message(msg: dict) -> None:
     skill = store.get_skill(task["skill_id"])
     company = store.get_company(task["company_id"])
     old = task.get("draft")
+    site = _site_for(task, company)
+
+    if site:
+        art = worker.draft_article(skill, company, task["request"], correction=text)
+        info = db.setting_get(f"wp:{task['id']}") or {}
+        pid = info.get("post_id")
+        if pid:
+            site.update(pid, art["title"], art["html"])
+            link = info.get("link")
+        else:
+            post = site.create_draft(art["title"], art["html"])
+            pid, link = post["id"], post.get("link")
+        db.setting_set(f"wp:{task['id']}", {"post_id": pid, "link": link, "title": art["title"]})
+        task = store.update_task(task["id"], draft=art["html"], status="awaiting_approval",
+                                 attempts=task["attempts"] + 1)
+        store.log_decision(task["id"], skill["id"], "owner", "correct", note=text)
+        msg2 = tg.send(_fmt_blog(company, skill, art, None, link), _blog_buttons(task["id"]))
+        store.update_task(task["id"], tg_message_id=msg2["message_id"])
+        _maybe_propose_rule(task, skill, text, old or "", art["html"])
+        return
+
     new = worker.draft(skill, company, task["request"], correction=text)
     task = store.update_task(task["id"], draft=new, status="awaiting_approval", attempts=task["attempts"] + 1)
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text, snapshot={"old": old, "new": new})
     msg2 = tg.send(_fmt(task, skill, company, None), _approval_buttons(task["id"]))
     store.update_task(task["id"], tg_message_id=msg2["message_id"])
-    # learn the rule out loud
-    rule = worker.infer_rule(skill, text, old or "", new or "")
-    if rule.get("is_rule") and rule.get("rule"):
-        db.setting_set(f"rule:{task['id']}", rule["rule"])
-        tg.send(f"I'm reading your correction as a standing rule:\n\n“{rule['rule']}”\n\n"
-                f"Add it to '{skill['name']}'?",
-                [[tg.button("Yes, add rule", f"ry:{task['id']}"), tg.button("No", f"rn:{task['id']}")]])
+    _maybe_propose_rule(task, skill, text, old or "", new or "")
 
 
 def _confirm_rule(task: dict, skill: dict, yes: bool) -> None:
