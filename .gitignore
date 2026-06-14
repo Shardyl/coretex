@@ -1,0 +1,22 @@
+# Secrets — never commit
+.env
+.env.*
+*.env
+secrets/
+*.pem
+*.key
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Runtime / deps (fill in once the stack is chosen)
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
