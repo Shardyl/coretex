@@ -75,5 +75,12 @@ audio upload → transcript) + `POST /api/voice/tts` (ElevenLabs Flash v2.5, tex
 (MediaRecorder → /stt → fills the brief), **Read aloud** on Inbox cards (→ /tts → plays), header mic
 opens Ask + listens. Verified TTS→STT round-trip on the box ("Cortex voice is working…").
 
-**Remaining for Phase 3:** (1) hands-free **Free mode** (continuous listen + barge-in) and **Talk**
-gym-mode on top of the push-to-talk core; (2) omnichannel doors.
+**Voice — live streaming ✅ (2026-06-15, verified through edge):** `WS /api/voice/stream` proxies the
+browser mic to Deepgram's streaming API (linear16 PCM, interim+final) and relays transcripts back;
+keeps the Deepgram key server-side. Cockpit streams mic PCM via ScriptProcessor over the WS and shows
+words live in the Ask brief as you speak (interim replaced, finals appended). Start/stop beeps +
+"getting ready" warm-up retained. Verified: PCM round-trip on localhost AND through `wss://coretex.uk`
+(WebSockets pass the Cloudflare tunnel). Deps: `websockets`; box has `ffmpeg` (for test PCM only).
+
+**Remaining for Phase 3:** (1) hands-free **Free mode** (auto-stop on silence / continuous listen +
+barge-in + spoken replies) on top of streaming; (2) **Talk** gym-mode; (3) omnichannel doors.
