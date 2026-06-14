@@ -162,7 +162,43 @@ originating user/queue. Human-initiated, distinct from the manager-agent escalat
 - Whether the PA's finance authority has a ceiling (e.g. per-transaction amount limit) — confirm later.
 
 ## E. Data model & integrations
-_(not started)_
+_Locked 2026-06-14 (lead/contact data handling = dedicated deep-dive, see Open)._
+
+**Data model (entities — draft).** All company-scoped data is **siloed** per §A.
+- **Company** — context pack, brand, active departments, north star.
+- **Contact / Lead** — per company; lead vs warm-contact status; source; owner; activity history.
+- **Skill** — craft + company context; trust streak; confirmed rules; authority (ask/auto/never); stakes tier; pause state.
+- **Task / Job** — a unit of work (worker run → manager review → decision).
+- **Project** — grouping of work (esp. Production & Projects); stages; PM owner.
+- **Decision / Audit entry** — every action + who approved + before/after (rollback + the data that drives trust).
+- **User / Role** — owner, PA, PMs; permission scope.
+- **Incoming item** — inbound message across channels; triage score; draft reply; status.
+- **Scheduled task** — recurring/proactive work (Cortex- or owner-set).
+- **Account record** — invoices, client balances, statements (§F).
+
+**Integration map.**
+| Need | Tool | Status | Notes |
+|---|---|---|---|
+| The brain | Anthropic API | ✅ live | dedicated key + spend cap on `cortex-1` |
+| Approvals | Telegram | ✅ live | bot @Coretextelebot |
+| Publish web | WordPress REST per site (Rank Math) | ⚙️ | Tabscanner first; hidden→index toggle |
+| Cold email | Instantly | ⚙️ | campaigns + reply capture |
+| Newsletters | Mailgun | ⚙️ | bulk send + tracking |
+| Email replies | Gmail API (OAuth) | ⚙️ | inbound + reply |
+| Social | Meta (IG+FB), LinkedIn, X | ⚠️ hard | post + read DMs; per-platform; sequence last |
+| Paid ads | Google Ads API | ✅ proven | feeds Tabscanner / PPC→SEO |
+| AI media | Gemini/Imagen + Atlas | ✅ reuse AddDrop | images + video |
+| Voice out | ElevenLabs | ✅ owned | §G |
+| Voice in | Web Speech → Deepgram | ⚙️ | test on S25 first; §G |
+| Media storage | Cloudflare R2 | ✅ pattern | artifacts |
+| Accounting | Cortex own module | build | §F (no external tool) |
+| WhatsApp (from websites) | channel | ⚙️ | inbound channel; exact source TBD |
+
+### Open
+- **DEEP-DIVE (Rashad's request): lead & contact data handling** — its own focused block: dedupe /
+  segment / score the 35k; what to do with the 157 already-warm contacts; ongoing capture; privacy.
+- WhatsApp-from-websites: confirm exact source (WhatsApp Business API vs click-to-chat forwarding).
+- Social DM/post access is the hardest integration set — sequenced last in the build.
 
 ## F. Accounts module
 _(not started)_
