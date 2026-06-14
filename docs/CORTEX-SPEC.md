@@ -199,6 +199,12 @@ Tabscanner → `news.tabscanner.com` (newsletters) + `accounts.tabscanner.com` (
 Sensa → `news.sensa.digital`; **Sky Vision & FilmSpoke → none** (no newsletters yet). (Snap Rewards
 domains exist in the account but it's out of scope.)
 
+**Credentials verified live on `cortex-1` (2026-06-14):** Anthropic · Telegram · Deepgram · Mailgun ·
+ElevenLabs (TTS + Flash v2.5) · **Tabscanner WP** (user `tabscanner`, administrator, `publish_posts`✓ —
+needs a curl-style User-Agent to pass Cloudflare) · **Instantly** (V2 API, Bearer auth). Pending: Gmail
+OAuth, Cloudflare R2, Google Drive backups, reuse of AddDrop's Gemini/Atlas/Google-Ads, Stripe/Payfort
+(Phase 6), social (hard, last).
+
 ### E.1 Lead & contact classification (deep-dive — locked 2026-06-14)
 
 **Two-axis model.** Every lead/contact carries a **Stage** + a **Value tier**, applied within each
