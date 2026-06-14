@@ -233,8 +233,40 @@ visits · email opens & clicks · target-industry match · referral / warm intro
 - WhatsApp-from-websites: confirm exact source (WhatsApp Business API vs click-to-chat forwarding).
 - Social DM/post access is the hardest integration set — sequenced last in the build.
 
-## F. Accounts module
-_(not started)_
+## F. Accounts module (replaces FreshBooks)
+_Locked 2026-06-14 (usage-billing + payment-gateway + migration = dedicated deep-dive, see Open)._
+
+**Scope:** Cortex's accounting module **replaces FreshBooks entirely** (removes the FreshBooks API).
+It is the real billing system, not just internal bookkeeping.
+
+**Two invoice models:**
+1. **Quote → invoice (project-based)** — Sensa, Sky Vision. An accepted quote converts to an invoice
+   (line items carry over); standalone invoices also possible. Quotes come from the existing
+   `sensa-quotation` skill.
+2. **Usage / credit-based auto-invoicing (SaaS metered)** — **Tabscanner & FilmSpoke.** Invoices
+   generated automatically from credit/usage, with **auto-payment** (replaces today's FreshBooks/
+   Tabscanner billing). Detailed specs from Rashad later.
+
+**Payments (per company):**
+- **Manual mark-paid** (owner/PA) — Sensa, Sky Vision project invoices.
+- **Stripe** — FilmSpoke (auto-charge).
+- **Payfort** (Amazon Payment Services) — Tabscanner (auto-charge).
+
+**Chasing:** Cortex drafts overdue reminders at set intervals → owner/PA approves → sends (can earn
+auto-send later).
+
+**Tax & currency:** per-company currency + VAT rate (e.g. UAE 5%, UK 20%); Cortex applies the right
+one per company.
+
+**Also tracks:** client accounts/balances, statements, monies outstanding + aging, spreadsheet export.
+
+**Authorization:** issuing/sending invoices and any money action = owner or finance-authorized PA
+(§D). SaaS auto-charges run via the gateways (Stripe/Payfort) per the usage-billing specs.
+
+### Open (accounts deep-dive — Rashad to provide specs)
+- **Usage/credit-based billing** for Tabscanner & FilmSpoke (metering, rates, auto-charge triggers).
+- **FreshBooks replacement/migration:** what's in FreshBooks now (clients, invoices, history) + cutover.
+- **Payment-gateway integration:** Stripe (FilmSpoke) + Payfort (Tabscanner) — auth, webhooks, auto-charge flow.
 
 ## G. Voice & app surfaces
 _(not started)_
