@@ -194,9 +194,42 @@ _Locked 2026-06-14 (lead/contact data handling = dedicated deep-dive, see Open).
 | Accounting | Cortex own module | build | §F (no external tool) |
 | WhatsApp (from websites) | channel | ⚙️ | inbound channel; exact source TBD |
 
+### E.1 Lead & contact classification (deep-dive — locked 2026-06-14)
+
+**Two-axis model.** Every lead/contact carries a **Stage** + a **Value tier**, applied within each
+(siloed) company.
+
+**Stages (default — customizable per company in settings):**
+Cold → Engaged → Qualified → Opportunity → Client → Dormant.
+- **Non-linear:** records move backward/forward freely; notably a **Client returns to Opportunity**
+  when new business arises (repeat / upsell).
+
+**Value tier:** A / B / C by **revenue / deal potential** (A = enterprise / decision-maker / high
+potential; C = small or unlikely).
+
+**Lead → Contact promotion:** a lead becomes a contact on **real engagement / qualification**
+(meaningful reply or clear profile fit).
+
+**Lead score** (drives who to pursue / re-engage). Signals that raise it: recent engagement · ICP
+fit · seniority / decision-maker · past activity (prior quote/trial/inquiry) · website/pricing-page
+visits · email opens & clicks · target-industry match · referral / warm intro.
+
+**Ownership:** Cortex assigns the relationship (by company/stage); owner or PA can reassign anytime.
+
+**Handling (how each is treated):**
+- Cortex **drafts all outreach for approval** (graduates to auto per §B's trust model).
+- **Human involvement scales with value:** low-tier nurture is Cortex-led; **A-tier and any
+  Opportunity always loop in a human (owner/PA).**
+- **Opportunity stage (live deal / quote / proposal): human-driven, Cortex preps** the
+  quote/proposal/materials. Client commitment stays owner-authorized (§D).
+- **The existing 35k cold leads: quarantined**, scored/segmented by Cortex; promising ones surfaced
+  for a **re-engagement campaign Rashad approves** (not bulk-blasted).
+- **Compliance:** Cortex **auto-respects unsubscribes + a do-not-contact flag** — never contacts
+  flagged records.
+
 ### Open
-- **DEEP-DIVE (Rashad's request): lead & contact data handling** — its own focused block: dedupe /
-  segment / score the 35k; what to do with the 157 already-warm contacts; ongoing capture; privacy.
+- The 157 already-warm contacts: confirm their initial stage/tier on import (likely Qualified/Contact, A-tier) — quick pass at import time.
+- Exact re-engagement cadence + which tiers qualify for the 35k campaign.
 - WhatsApp-from-websites: confirm exact source (WhatsApp Business API vs click-to-chat forwarding).
 - Social DM/post access is the hardest integration set — sequenced last in the build.
 
