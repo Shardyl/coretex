@@ -269,7 +269,36 @@ one per company.
 - **Payment-gateway integration:** Stripe (FilmSpoke) + Payfort (Tabscanner) — auth, webhooks, auto-charge flow.
 
 ## G. Voice & app surfaces
-_(not started)_
+_Locked 2026-06-14._
+
+**Voice engines (decided):**
+- **Voice IN: Deepgram (Nova-3 streaming) from day one** — chosen over free Web Speech after seeing
+  pricing (~$0.0077/min, ~$0.46/hr, $200 free credit). Snappy STT from the start.
+- **Voice OUT: ElevenLabs Flash v2.5** (~75ms latency, $0.05/1k chars) — owned; fast enough for
+  real-time talk-back (solves the latency worry). _Deepgram Aura-2 is a cheaper TTS fallback if wanted._
+- Both behind a provider adapter (swappable via config).
+
+**Three voice modes** (switching between them must be effortless):
+1. **Normal** — tap to talk, tap to stop. **No voice talk-back; responses on screen (read it).** Default.
+2. **Free mode** (covers driving + any quiet/alone setting) — fully hands-free, **voice both ways**.
+   Turn-taking by silence: **~2s** of your silence ends your turn → Cortex responds; after Cortex speaks
+   → **~1s pause → soft beep** = your go. **Barge-in allowed** — start talking to interrupt Cortex anytime.
+   Silence/beep timings **tunable**.
+3. **Talk mode** ("gym mode" — noisy, headphones) — **always voice out** (heard in earphones), **tap-to-talk
+   in** (manual; silence detection is unreliable in noise and Rashad wants to control when he speaks).
+
+**On the move = full voice control** (approvals, briefings, asking it to do things). Planning/deep-dive
+sessions (like this one) can run in Free/Talk mode with options spoken and discussed back and forth.
+
+**App surfaces** (from the approved dark mockup — Sensa **Cyan** theme, light/dark toggle):
+Home · Inbox (needs-you queue) · Departments → Skill (authority + trust + the spell) · Chat (+ history by
+company) · Incoming (omnichannel) · Calendar (task calendar) · Contacts (per company) · Projects (stages +
+automations) · Team (users/permissions) · Invoices (accounts) · Reports · On-the-move (voice) · Settings.
+Hard rules: **no horizontal scrollers; no scroll to reach a decision button; Galaxy S25 first.**
+
+### Open
+- Exact beep/cue sound + default silence thresholds (tune on device).
+- Whether Talk mode auto-reads incoming approvals aloud, or only on tap.
 
 ## H. Reporting, decision log & ops
 _(not started)_
