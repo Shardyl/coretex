@@ -234,9 +234,11 @@ first** via a spreadsheet of the 157 + notes; **new leads auto-classify** (score
 arrival; dedupe on email/phone at import.
 
 ### Open
-- **157-review spreadsheet BLOCKED:** the prior Bitrix export is NOT on this machine (likely left on
-  the old laptop). Re-pull from Bitrix via a fresh inbound webhook (proven method), or locate the old
-  export, then generate the review sheet.
+- **157-review spreadsheet DELIVERED 2026-06-14** (`Desktop\Cortex - 157 Warm Contacts Review.xlsx`):
+  157 contacts sorted by company; 78 have resolved company names, only 10 had notes (Bitrix notes were
+  sparse). Built from the local `Desktop\Bitrix Export`. Awaiting Rashad's review → then set per-contact
+  stage/tier (default A-tier Qualified). Note: PowerShell tool writes are sandboxed (discarded) unless
+  run with sandbox disabled — needed `dangerouslyDisableSandbox` to land the file on the real Desktop.
 - Re-engagement cadence + which tiers qualify for the 35k campaign.
 - WhatsApp-from-websites source; social access (hardest integration, sequenced last).
 
