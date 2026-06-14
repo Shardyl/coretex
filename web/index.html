@@ -43,6 +43,7 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 8
 .iconbtn{background:var(--panel);border:1px solid var(--line);color:var(--ink);width:38px;height:38px;
   border-radius:11px;cursor:pointer;font-size:16px;display:grid;place-items:center}
 .iconbtn:active{transform:scale(.94)}
+.iconbtn.rec,.btn.rec{background:var(--bad);border-color:var(--bad);color:#fff;animation:pulse 1s infinite}
 .sel{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:11px;
   padding:8px 10px;font:inherit;font-size:13px;max-width:150px}
 /* tabs */
@@ -119,7 +120,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
     <div class="brand"><span class="dot"></span>Cortex</div>
     <div class="spacer"></div>
     <select class="sel" id="coSel" onchange="render()"></select>
-    <button class="iconbtn" title="Voice (coming in Phase 3)" onclick="toast('Voice lands next — Deepgram in, ElevenLabs out')">🎙️</button>
+    <button class="iconbtn" title="Speak to Cortex" onclick="go('ask');setTimeout(function(){var b=document.getElementById('aMic');if(b)dictate(b);},220)">🎙️</button>
     <button class="iconbtn" id="themeBtn" onclick="toggleTheme()">◐</button>
   </div>
 </header>
@@ -217,6 +218,7 @@ async function renderInbox(v){
       <div class="title">${title}</div>
       ${body?`<div class="body">${body}</div>`:''}
       ${wp&&wp.link?`<div class="meta">🔒 private preview: <a href="${esc(wp.link)}" target="_blank">${esc(wp.link)}</a></div>`:''}
+      <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">🔊 Read aloud</button></div>
       <div class="row">
         <button class="btn go" onclick="act(${t.id},'approve')">${t.kind==='blog'?'Publish live':'Approve'}</button>
         <button class="btn warn" onclick="correct(${t.id})">Correct</button>
@@ -240,6 +242,50 @@ async function correct(id){
   catch(e){ toast('Error: '+e.message); }
 }
 
+// ---- voice: dictate into Ask (Deepgram) + read aloud (ElevenLabs) ----
+let mediaRec=null, recChunks=[], recording=false, audioEl=null;
+async function dictate(btn){
+  if(demo){ toast('Voice needs the live app (log in with your passcode)'); return; }
+  if(recording){ try{ mediaRec.stop(); }catch(e){} return; }
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    recChunks=[]; mediaRec=new MediaRecorder(stream);
+    mediaRec.ondataavailable=e=>{ if(e.data&&e.data.size) recChunks.push(e.data); };
+    mediaRec.onstop=async()=>{
+      stream.getTracks().forEach(t=>t.stop());
+      recording=false; btn.classList.remove('rec'); btn.innerHTML='🎙️ Speak';
+      const blob=new Blob(recChunks,{type:(mediaRec&&mediaRec.mimeType)||'audio/webm'});
+      toast('Transcribing…');
+      const fd=new FormData(); fd.append('audio',blob,'rec');
+      try{
+        const r=await fetch(API+'/api/voice/stt',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});
+        if(!r.ok) throw new Error(r.status);
+        const d=await r.json(); const t=(d.text||'').trim();
+        if(!t){ toast('Didn’t catch that — try again'); return; }
+        const ta=document.getElementById('aBrief'); if(ta){ ta.value=(ta.value?ta.value.trim()+' ':'')+t; }
+        toast('Got it');
+      }catch(e){ toast('Transcribe failed: '+e.message); }
+    };
+    mediaRec.start(); recording=true; btn.classList.add('rec'); btn.innerHTML='⏹ Stop';
+    toast('Listening… tap Stop when done');
+  }catch(e){ toast('Mic blocked: '+(e.message||e)); }
+}
+async function speak(text){
+  if(demo){ toast('Voice needs the live app'); return; }
+  text=(text||'').trim(); if(!text) return;
+  toast('Speaking…');
+  try{
+    const r=await fetch(API+'/api/voice/tts',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({text})});
+    if(!r.ok) throw new Error(r.status);
+    const blob=await r.blob();
+    if(audioEl){ try{ audioEl.pause(); }catch(e){} }
+    audioEl=new Audio(URL.createObjectURL(blob)); audioEl.play();
+  }catch(e){ toast('Speak failed: '+e.message); }
+}
+function speakCard(id){ const c=document.getElementById('t'+id); if(!c) return;
+  const t=((c.querySelector('.title')||{}).textContent)||''; const b=((c.querySelector('.body')||{}).textContent)||'';
+  speak((t+'. '+b).slice(0,2400)); }
+
 async function renderAsk(v){
   const co=document.getElementById('coSel').value || (companies[0]&&companies[0].slug)||'';
   let sk=[]; try{ sk=demo?(SAMPLE.skills[co]||[]):await api(`/api/companies/${co}/skills`); }catch(e){ sk=SAMPLE.skills[co]||[]; }
@@ -254,9 +300,12 @@ async function renderAsk(v){
         <button class="btn on" data-k="content" onclick="pickKind(this)">Post / copy</button>
         <button class="btn" data-k="blog" onclick="pickKind(this)">Blog post</button>
       </div>
-      <label>What do you want?</label>
+      <label>What do you want? <span style="color:var(--accent);font-weight:600">(or tap Speak and talk)</span></label>
       <textarea id="aBrief" placeholder="e.g. Write a LinkedIn post introducing our receipt OCR API to fintech developers."></textarea>
-      <div class="row" style="margin-top:14px"><button class="btn go" onclick="submitAsk()">Send to Cortex</button></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="aMic" style="flex:0 0 auto;min-width:118px" onclick="dictate(this)">🎙️ Speak</button>
+        <button class="btn go" onclick="submitAsk()">Send to Cortex</button>
+      </div>
     </div>
     <div class="empty" style="padding:18px 8px">Cortex drafts it, the manager checks it, and it lands in your Inbox (and Telegram) for a yes.</div>`;
   document.getElementById('aCo').onchange=()=>{document.getElementById('coSel').value=document.getElementById('aCo').value;renderAsk(v);};
