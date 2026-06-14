@@ -82,5 +82,15 @@ words live in the Ask brief as you speak (interim replaced, finals appended). St
 "getting ready" warm-up retained. Verified: PCM round-trip on localhost AND through `wss://coretex.uk`
 (WebSockets pass the Cloudflare tunnel). Deps: `websockets`; box has `ffmpeg` (for test PCM only).
 
-**Remaining for Phase 3:** (1) hands-free **Free mode** (auto-stop on silence / continuous listen +
-barge-in + spoken replies) on top of streaming; (2) **Talk** gym-mode; (3) omnichannel doors.
+**Talk (chat) + Free mode ✅ (2026-06-15, verified):** `POST /api/chat` (provider.chat = opus, no
+extended thinking for snappiness; CHAT_SYSTEM = Cortex ops-partner persona, voice-friendly: no
+markdown, brief). Cockpit **Talk** tab = message bubbles + text input; **Free mode** (🎧) = hands-free
+loop: continuous streaming STT, Deepgram `endpointing` → `speech_final` segments each utterance →
+/api/chat → ElevenLabs reply spoken (`speakAndWait`) → "go" beep cues your turn. Echo-guarded (sends
+silence to Deepgram while Cortex speaks; `freeThinking`/`botSpeaking` serialize turns; AEC on).
+Chat-bar positioned off the live tab-bar height. Verified: chat replies + context retention through
+`https://coretex.uk`. NOTE: voice barge-in (cut in mid-reply) deferred — v1 is turn-based.
+
+**Remaining for Phase 3:** (1) voice barge-in + per-utterance live partial in Free mode; (2) **Talk**
+gym-mode layout; (3) chat that can trigger tasks/actions (currently conversational only, routes to
+Ask); (4) omnichannel doors.
