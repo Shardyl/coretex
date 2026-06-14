@@ -67,7 +67,50 @@ as each department is specced in detail.
 - Per-department on/off exceptions per company (caught while speccing each department).
 
 ## B. Worker / manager / skill / trust model
-_(not started)_
+_Locked 2026-06-14._
+
+**The pair.** Every department runs a **worker** (does the task per its skill) + a **manager**
+(judges the output). **The manager reviews every action** against the skill, the company's
+brand/voice, and the operator's confirmed rules before it surfaces to Rashad or auto-runs.
+(Accepts a small extra per-action cost for quality; revisit if cost demands it.)
+
+**Default authority.** A brand-new skill is **"always ask"** — nothing runs without Rashad's yes.
+
+**Earning auto (graduation).** A skill accumulates a **trust streak** of *clean* approvals.
+At the threshold it **OFFERS** auto mode; **Rashad opts in**. Nothing self-promotes.
+- Threshold: **~10 clean approvals for low-stakes, ~50 for higher-stakes.**
+- **Stakes = reversibility.** Easy-to-undo = low (auto sooner); hard-to-undo = high (higher bar
+  or stays manual). _Open: the concrete reversibility→tier mapping per action type._
+
+**Clean approval = untouched.** Only approvals Rashad didn't edit advance the streak. If he
+edits before approving, it does **not** count — the edit **teaches** instead.
+
+**Rules form out loud (operator-locked principle: approval ≠ silent rule).** On a "yes",
+Cortex **states the rule it's inferring** — *"I'm reading this as: always X when Y — correct?"* —
+and Rashad confirms / edits / rejects. Rules are **only** created when explicitly confirmed.
+The "yes" still approves that one action and ticks the streak.
+
+**Rejections/edits are lessons.** A "no" or an edit feeds back: Cortex **surfaces the adjustment
+it's making** and Rashad confirms (mirrors the approval mechanic). A rejection does **not** reset
+the streak.
+
+**Escalation.** Routine asks sit in the approval inbox; the manager **escalates directly** to
+Rashad when something is risky, ambiguous, or breaks a rule.
+
+**Permanently owner-only (never auto, regardless of trust): moving money / payments.**
+Everything else — messages to people, publishing public content, even quotes/contracts — **can**
+graduate to auto after the high (~50) bar. _(Deliberate widening of the original "sends are
+owner-only"; the high bar + rule-confirmation keep it safe.)_
+
+**Safety switches.** Per-skill **pause** (yank one skill back to manual) + a **global stop**
+(freeze everything), both instant.
+
+**Rule transparency.** Every inferred/confirmed rule is **listed in the skill's page**; Rashad can
+read, edit, or delete any of them anytime.
+
+### Open
+- The concrete reversibility → stakes-tier mapping (what counts as low vs higher-stakes per action type).
+- Whether "higher-stakes" has sub-tiers (e.g. a 50 bar vs a "never auto unless I flip it" tier) beyond money.
 
 ## C. The three doors
 _(not started)_
