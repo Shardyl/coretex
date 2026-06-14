@@ -301,7 +301,66 @@ Hard rules: **no horizontal scrollers; no scroll to reach a decision button; Gal
 - Whether Talk mode auto-reads incoming approvals aloud, or only on tap.
 
 ## H. Reporting, decision log & ops
-_(not started)_
+_Locked 2026-06-14._
 
-## I. Build roadmap
-_(derived last from A–H)_
+**Reports.** **Twice daily** (morning + evening) + **on-demand** anytime. Each contains: **what's done /
+in progress · what needs your approval · key north-star numbers per company · problems & escalations.**
+
+**Decision log / audit.** Every action records who / what / when + before→after state — the audit trail,
+the rollback source, and the data that drives trust graduation (§B).
+
+**Rollback.** **Undo any action where the action itself permits it**, from the decision log.
+
+**Backups.** **Daily offsite backup** of the Postgres DB + config to **Google Drive**.
+
+**Cost metering.** Per-department API-cost tracking against the dedicated Anthropic key + hard spend cap,
+visible so spend never surprises.
+
+### Open
+- Exact report send times + channel (Telegram now; in-app later).
+- Spend-cap thresholds + behaviour at the ceiling (pause vs alert).
+
+## I. Build roadmap (derived from A–H)
+_Drafted 2026-06-14. Built in **verified phases** — each ends with a real-world gate Rashad tests before
+the next. Reorderable, but this sequences risk + dependencies sensibly._
+
+**Phase 0 — Foundation. ✅ DONE.** Hetzner `cortex-1`, Postgres, Python, secrets, Telegram rail, repo,
+Cyan theme, this spec.
+
+**Phase 1 — The core engine** (the spine every department reuses).
+Provider adapter + worker/manager loop · skill system (git-backed, trust streak, rules-out-loud,
+ask/auto/never authority, per-skill pause + global stop) · company + siloed data model · decision log /
+audit / rollback · the approval pipeline on Telegram (approve / correct → redraft-until-happy → learn →
+rule clarification).
+**Gate:** a skill drafts something → manager checks → you approve/correct on Telegram → it redrafts →
+learns the rule → logged.
+
+**Phase 2 — First vertical: Tabscanner Content & SEO.**
+The Tabscanner SEO skill + WordPress REST publish (hidden → index) + Rank Math.
+**Gate:** a real Tabscanner post drafts → publishes hidden → you approve on your phone → it indexes.
+
+**Phase 3 — The app (PWA).**
+The Cyan cockpit (Home, Inbox, Chat, Departments, Skills, Incoming, Calendar, Contacts, Reports,
+Settings; light/dark) + **voice** (3 modes, Deepgram in, ElevenLabs Flash out, barge-in, on-the-move).
+Installable on the phone.
+**Gate:** approve a real decision and run a voice exchange from the installed app.
+
+**Phase 4 — Leads & Incoming (the CRM engine).**
+Lead/contact model (stage × tier + scoring) · Bitrix import (35k quarantined + 157 warm) · Incoming
+across Gmail / forms / Instantly / social / WhatsApp with the refine-learn loop + value/urgency triage.
+**Gate:** a real inbound lands → classified → drafted reply → you approve/redraft → sent → lead updated.
+
+**Phase 5 — More departments, per company, one at a time.**
+Outreach · Social · Paid Ads · Sales & Inquiries · PR · Production & Projects · Support — each verified
+before the next. Sensa, Sky Vision, FilmSpoke onboarded here.
+
+**Phase 6 — Accounts / billing engine** (after the billing deep-dive).
+Quote→invoice + usage-based auto-invoicing · payments (manual + Stripe + Payfort) · chasing · statements
+· **FreshBooks replacement & migration.**
+
+**Phase 7 — Scale & trust graduation.**
+PA + PM roles/permissions + user-initiated escalation · trust graduation to auto · reports/ops polish ·
+the hard social channels · remaining scale.
+
+**Pending deep-dives feeding the phases:** lead-import specifics (Phase 4); usage-billing + payment-gateway
++ FreshBooks-migration specs (Phase 6).
