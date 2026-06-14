@@ -211,7 +211,10 @@ social (hard, last).
 `07ad2384313f06ab27de62c85ada5a8e`. The CF **API token is setup-only** (provisions DNS / Pages / R2
 *buckets* — control plane); **Cortex's runtime needs no CF token.** Runtime R2 object read/write uses
 **separate scoped R2 S3 keys** (data plane), generated when the bucket is created. Pattern: create a CF
-token just-in-time per provisioning task, then revoke. DNS + Pages + R2 provisioning happens in **Phase 3**.
+token just-in-time per provisioning task, then revoke. **R2 bucket `coretex-media` + a scoped
+Object-Read&Write S3 token created & verified read/write 2026-06-14** (creds in env: `R2_BUCKET`,
+`R2_ENDPOINT`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`). DNS + Pages provisioning
+happen in **Phase 3** (just-in-time token).
 
 ### E.1 Lead & contact classification (deep-dive — locked 2026-06-14)
 
