@@ -201,9 +201,11 @@ domains exist in the account but it's out of scope.)
 
 **Credentials verified live on `cortex-1` (2026-06-14):** Anthropic · Telegram · Deepgram · Mailgun ·
 ElevenLabs (TTS + Flash v2.5) · **Tabscanner WP** (user `tabscanner`, administrator, `publish_posts`✓ —
-needs a curl-style User-Agent to pass Cloudflare) · **Instantly** (V2 API, Bearer auth). Pending: Gmail
-OAuth, Cloudflare R2, Google Drive backups, reuse of AddDrop's Gemini/Atlas/Google-Ads, Stripe/Payfort
-(Phase 6), social (hard, last).
+needs a curl-style User-Agent to pass Cloudflare) · **Instantly** (V2 API, Bearer auth) · **Gemini**
+(50 models incl. 2.5 Flash/Pro) · **Atlas Cloud** (`api.atlascloud.ai`, OpenAI-compatible `/v1/models`,
+Bearer auth, needs a *browser* User-Agent past Cloudflare). Pending: **Cloudflare** (API token — walkthrough
+given), Gmail OAuth, R2, Google Drive backups, Google Ads (reuse from AddDrop), Stripe/Payfort (Phase 6),
+social (hard, last).
 
 ### E.1 Lead & contact classification (deep-dive — locked 2026-06-14)
 
