@@ -315,6 +315,7 @@ Hard rules: **no horizontal scrollers; no scroll to reach a decision button; Gal
 ### Open
 - Exact beep/cue sound + default silence thresholds (tune on device).
 - Whether Talk mode auto-reads incoming approvals aloud, or only on tap.
+- ElevenLabs key verified 2026-06-14 (TTS + Flash v2.5 confirmed: generated audio with voice `21m00Tcm4TlvDq8ikWAM`). Current key lacks read scopes (`voices_read`/`user_read`) — add `voices_read` (or a full-access key) before the in-app voice picker; speaking works without it.
 
 ## H. Reporting, decision log & ops
 _Locked 2026-06-14._
