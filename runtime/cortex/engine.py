@@ -255,7 +255,11 @@ def _on_message(msg: dict) -> None:
     pending = db.query("select * from tasks where status='awaiting_correction' order by updated_at desc limit 1")
     if not pending:
         return
-    task = pending[0]
+    apply_correction(pending[0], text)
+
+
+def apply_correction(task: dict, text: str) -> None:
+    """Redraft a task from the owner's correction (works from Telegram OR the cockpit API)."""
     skill = store.get_skill(task["skill_id"])
     company = store.get_company(task["company_id"])
     old = task.get("draft")
@@ -300,6 +304,41 @@ def _confirm_rule(task: dict, skill: dict, yes: bool) -> None:
     else:
         tg.send("Okay — not adding a rule.")
     db.setting_set(f"rule:{task['id']}", None)
+
+
+# ---------- programmatic actions (cockpit API surface) ----------
+
+def _load(task_id: int):
+    task = store.get_task(task_id)
+    if not task:
+        return None, None, None
+    return task, store.get_skill(task["skill_id"]), store.get_company(task["company_id"])
+
+
+def approve_task(task_id: int) -> dict:
+    task, skill, company = _load(task_id)
+    if not task:
+        return {"ok": False, "error": "no such task"}
+    if task["status"] not in ("awaiting_approval", "awaiting_correction"):
+        return {"ok": False, "error": f"task is '{task['status']}', not awaiting approval"}
+    _approve(task, skill, company)
+    return {"ok": True, "task": store.get_task(task_id)}
+
+
+def skip_task(task_id: int) -> dict:
+    task, skill, company = _load(task_id)
+    if not task:
+        return {"ok": False, "error": "no such task"}
+    _skip(task, skill, company)
+    return {"ok": True, "task": store.get_task(task_id)}
+
+
+def correct_task(task_id: int, text: str) -> dict:
+    task, skill, company = _load(task_id)
+    if not task:
+        return {"ok": False, "error": "no such task"}
+    apply_correction(task, text)
+    return {"ok": True, "task": store.get_task(task_id)}
 
 
 def run(poll_idle: float = 1.0) -> None:

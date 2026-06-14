@@ -1,0 +1,17 @@
+[Unit]
+Description=Cortex cockpit API (FastAPI over the engine/DB)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cortex
+Group=cortex
+WorkingDirectory=/opt/coretex/runtime
+ExecStart=/opt/coretex/.venv/bin/uvicorn cortex.api:app --host 127.0.0.1 --port 8787
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
