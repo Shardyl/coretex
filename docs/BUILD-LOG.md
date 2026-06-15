@@ -177,6 +177,13 @@ rule appears on all companies; a local rule stays on its company only. This is t
 for the **existing-skills migration** (seo-campaign/web-page-builder/sensa-quotation/content-backtrack-audit
 → universal crafts in catalog.py + per-company context/rules) — pilot = Content & SEO, pending operator go.
 
+**Talk history (saved conversations) ✅ (2026-06-15, verified):** new `conversations` table (id, title,
+company, messages jsonb, timestamps) — server-side so it rides the nightly backup. Endpoints
+`GET/POST/GET{id}/PUT{id}/DELETE{id} /api/conversations`. Cockpit Talk tab gains a history dropdown
+(switch), ✚ new, 🗑️ delete; auto-saves after each exchange (creates on first message, title = first user
+line), resumes last conversation on reopen (id in localStorage `cortex_conv`). Verified create→save→
+list→get→delete round-trip.
+
 **Remaining for Phase 3:** "discuss this" deep-link item→Talk; Talk gym-mode; other cockpit screens;
 omnichannel/Gmail intake = Phase 4 (note: org SA-key block means Gmail also needs OAuth-per-mailbox or a
 policy exception — revisit at Phase 4).
