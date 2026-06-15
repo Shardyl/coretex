@@ -232,7 +232,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
   <div class="bar">
     <div class="brand"><span class="dot"></span>Cortex</div>
     <div class="spacer"></div>
-    <select class="sel" id="coSel" onchange="render()"></select>
+    <select class="sel" id="coSel" onchange="localStorage.setItem('cortex_company',this.value);render()"></select>
     <button class="iconbtn" title="Lock Cortex" onclick="lockNow()" id="hLock"></button>
     <button class="iconbtn" id="themeBtn" onclick="toggleTheme()"></button>
   </div>
@@ -376,6 +376,9 @@ async function boot(){
   catch(e){ demo=true; document.getElementById('demoBanner').classList.remove('hidden'); companies=SAMPLE.companies; }
   const sel=document.getElementById('coSel'); sel.innerHTML='<option value="">All companies</option>'+
     companies.map(c=>`<option value="${c.slug}">${c.name}</option>`).join('');
+  // remember the last company; default to Tabscanner the first time
+  let savedCo=localStorage.getItem('cortex_company'); if(savedCo===null) savedCo='tabscanner';
+  if([...sel.options].some(o=>o.value===savedCo)) sel.value=savedCo;
   // default to the Talk tab with a clean NEW chat (old chats via the dropdown)
   tab='talk'; chatMsgs=[]; currentConvId=null; currentConvTitle=''; routedTo=''; localStorage.removeItem('cortex_conv');
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t==='talk'));
