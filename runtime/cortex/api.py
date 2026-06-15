@@ -225,7 +225,26 @@ def inbox(company: str | None = None, _: None = Depends(auth)) -> list[dict]:
     rows = db.query(f"select * from tasks where {where} order by id desc", tuple(params))
     for t in rows:
         t["wp"] = db.setting_get(f"wp:{t['id']}")   # preview/edit links for blog drafts
+        sk = store.get_skill(t["skill_id"])         # the lane's autonomy state for the Inbox UI
+        if sk:
+            offer = (sk["authority"] == "ask" and sk["trust_streak"] >= sk["auto_threshold"]
+                     and t["kind"] != "blog" and sk["stakes"] == "low")
+            t["lane"] = {"skill_id": sk["id"], "name": sk["name"], "trust_streak": sk["trust_streak"],
+                         "auto_threshold": sk["auto_threshold"], "authority": sk["authority"],
+                         "stakes": sk["stakes"], "auto_offer": offer}
     return rows
+
+
+class AuthorityBody(BaseModel):
+    authority: str   # ask | auto | never
+
+
+@app.post("/api/skills/{skill_id}/authority")
+def set_skill_authority(skill_id: int, body: AuthorityBody, _: None = Depends(auth)) -> dict:
+    """Enable auto (earned-autonomy nudge accepted) or pause a lane back to 'ask'."""
+    if body.authority not in ("ask", "auto", "never"):
+        raise HTTPException(status_code=400, detail="authority must be ask | auto | never")
+    return store.set_authority(skill_id, body.authority)
 
 
 @app.get("/api/tasks/{task_id}")

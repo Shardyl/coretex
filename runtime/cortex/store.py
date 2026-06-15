@@ -83,6 +83,12 @@ def bump_streak(skill_id, by=1) -> dict:
     )
 
 
+def reset_streak(skill_id) -> dict:
+    """A correction or rejection breaks the clean-approval streak (manager and owner disagreed)."""
+    return db.execute("update skills set trust_streak=0, updated_at=now() where id=%s returning *",
+                      (skill_id,))
+
+
 def set_authority(skill_id, authority) -> dict:
     return db.execute("update skills set authority=%s, updated_at=now() where id=%s returning *",
                       (authority, skill_id))

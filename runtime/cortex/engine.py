@@ -36,10 +36,21 @@ def _fmt(task: dict, skill: dict, company: dict, verdict: dict | None) -> str:
     draft = task.get("draft") or ""
     if len(draft) > 3500:
         draft = draft[:3500] + "\n…(truncated for preview)"
-    extra = ""
-    if verdict and verdict.get("issues"):
-        extra = "\n\n⚠ Manager: " + "; ".join(verdict["issues"])
-    return f"{head}\n\n{draft}{extra}"
+    return f"{head}\n\n{draft}{_verdict_line(verdict)}"
+
+
+def _verdict_line(verdict: dict | None) -> str:
+    """The Manager's review, in one line the owner reads before deciding."""
+    if not verdict:
+        return ""
+    v = verdict.get("verdict") or ("pass" if verdict.get("aligned", True) else "revise")
+    summary = (verdict.get("summary") or "").strip()
+    issues = verdict.get("issues") or []
+    if v == "pass":
+        return f"\n\n🛠 Manager: passed" + (f" — {summary}" if summary else "")
+    label = "needs your judgement" if v == "escalate" else "flagged"
+    body = summary or "; ".join(issues)
+    return f"\n\n⚠ Manager ({label}): {body}" if body else f"\n\n⚠ Manager: {label}"
 
 
 def _html_to_text(html: str) -> str:
@@ -57,9 +68,7 @@ def _fmt_blog(company: dict, skill: dict, art: dict, verdict: dict | None,
     body = _html_to_text(art["html"])
     if len(body) > 2600:
         body = body[:2600] + "\n…(truncated for preview)"
-    extra = ""
-    if verdict and verdict.get("issues"):
-        extra = "\n\n⚠ Manager: " + "; ".join(verdict["issues"])
+    extra = _verdict_line(verdict)
     tail = "\n\n📝 Saved as an unpublished DRAFT on the site (not public, not indexed)."
     if preview:
         tail += f"\nPreview the finished page (open while logged into wp-admin):\n{preview}"
@@ -115,8 +124,11 @@ def _run_task(task: dict) -> None:
 
     task = store.update_task(task["id"], draft=draft, manager=verdict, attempts=task["attempts"] + 1)
 
+    # Earned autonomy + escalation valve: even on an auto lane, the Manager's verdict must be a clean,
+    # confident pass. Anything flagged, escalated, or low-confidence still goes to the owner.
     auto_ok = (skill["authority"] == "auto" and skill["stakes"] == "low"
-               and not skill["paused"] and task["kind"] not in MONEY_KINDS)
+               and not skill["paused"] and task["kind"] not in MONEY_KINDS
+               and verdict.get("aligned") and not verdict.get("escalate"))
     if auto_ok:
         _execute(task, skill, company, actor="cortex", auto=True)
     else:
@@ -231,6 +243,7 @@ def _skip(task: dict, skill: dict, company: dict) -> None:
             except Exception:  # noqa: BLE001
                 note = "Discarded (couldn't remove the WP draft — check manually)"
     store.update_task(task["id"], status="rejected")
+    store.reset_streak(skill["id"])   # a rejection breaks the clean-approval streak
     store.log_decision(task["id"], skill["id"], "owner", "reject", snapshot={"draft": task.get("draft")})
     if task.get("tg_message_id"):
         tg.edit(task["tg_message_id"], f"✗ {note} — '{skill['name']}'.")
@@ -259,6 +272,7 @@ def apply_correction(task: dict, text: str) -> None:
     """Redraft a task from the owner's correction (works from Telegram OR the cockpit API)."""
     skill = store.get_skill(task["skill_id"])
     company = store.get_company(task["company_id"])
+    store.reset_streak(skill["id"])   # the owner corrected a Manager-passed draft → streak breaks
     old = task.get("draft")
     site = _site_for(task, company)
 

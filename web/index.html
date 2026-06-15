@@ -361,6 +361,7 @@ async function renderInbox(v){
       <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${esc(sk)}</span>
         <span class="chip">${t.kind==='blog'?'blog post':esc(t.kind||'task')}</span></div>
       <div class="title">${title}</div>
+      ${mgrVerdict(t.manager)}
       ${body?`<div class="body">${body}</div>`:''}
       ${wp&&wp.preview?`<div class="meta">📝 draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
       <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">🔊 Read aloud</button></div>
@@ -368,11 +369,38 @@ async function renderInbox(v){
         <button class="btn go" onclick="act(${t.id},'approve')">${t.kind==='blog'?'Publish live':'Approve'}</button>
         <button class="btn warn" onclick="correct(${t.id})">Correct</button>
         <button class="btn bad" onclick="act(${t.id},'skip')">${t.kind==='blog'?'Discard':'Skip'}</button>
-      </div></div>`;
+      </div>
+      ${laneRow(t.lane)}</div>`;
   }).join('');
 }
 
 function compName(id){ const c=companies.find(c=>c.id===id); return c?c.name:''; }
+
+function mgrVerdict(v){
+  if(!v) return '';
+  const vv=v.verdict||(v.aligned?'pass':'revise');
+  const sm=esc(v.summary||(v.issues||[]).join('; ')||'');
+  if(vv==='pass') return `<div style="color:#6ee7a8;font-size:12.5px;margin:6px 0">🛠 Manager passed${sm?' · '+sm:''}</div>`;
+  const lbl=vv==='escalate'?'needs your judgement':'flagged';
+  return `<div style="color:#ffcf6e;font-size:12.5px;margin:6px 0">⚠ Manager ${lbl}${sm?' · '+sm:''}</div>`;
+}
+function laneRow(lane){
+  if(!lane) return '';
+  if(lane.authority==='auto') return `<div style="margin-top:9px;font-size:12.5px;color:var(--mut)">`+
+    `<span class="chip cy">AUTO</span> Cortex auto-approves this lane (still escalates anything flagged). `+
+    `<a href="#" onclick="setAuth(event,${lane.skill_id},'ask')">Pause</a></div>`;
+  if(lane.auto_offer) return `<div style="margin-top:10px;padding:9px 11px;border:1px solid var(--cy);border-radius:10px;font-size:12.5px">`+
+    `✅ ${lane.trust_streak} clean approvals in a row on ${esc(lane.name)}, and the Manager agreed each time. `+
+    `<button class="btn go" style="margin-top:7px" onclick="setAuth(event,${lane.skill_id},'auto')">Let the Manager auto-approve this lane</button></div>`;
+  return '';
+}
+async function setAuth(ev,id,auth){
+  if(ev) ev.preventDefault();
+  if(demo){ toast('(demo)'); return; }
+  try{ await api(`/api/skills/${id}/authority`,{method:'POST',body:JSON.stringify({authority:auth})});
+    toast(auth==='auto'?'Auto enabled — Manager handles this lane ✓':'Paused — back to asking you'); render(); }
+  catch(e){ toast('Error: '+e.message); }
+}
 
 async function act(id,what){
   const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;
