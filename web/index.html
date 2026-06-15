@@ -390,7 +390,7 @@ const ICON={
   alert:'M12 4l9 16H3zM12 10v4M12 17h.01',
   file:'M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5'
 };
-function ic(n,s){ s=s||20; return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle">${ICON[n]||''}</svg>`; }
+function ic(n,s){ s=s||20; return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle"><path d="${ICON[n]||''}"></path></svg>`; }
 function paintIcons(){
   const m={hMic:['mic',20],hLock:['lock',20],themeBtn:['moon',20]};
   Object.keys(m).forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=ic(m[id][0],m[id][1]); });
