@@ -536,9 +536,10 @@ def _chat_system() -> str:
     return CHAT_SYSTEM_BASE + "\n\n" + note
 
 
-# A Chief proposes strategy but never writes rules — it gets read-only tools. Managers and general
-# Cortex get the full set. This enforces the role split structurally (one keeper of rules = the Manager).
-_READONLY_TOOLS = {"list_skills", "list_tasks", "get_task"}
+# A Chief CAN grow the org — create_skill is global-by-nature (added to every company), so there's no
+# scope to bleed. But the scoped, bleed-risky part — writing per-company RULES (add_rule/update_craft)
+# — stays with the Manager (one keeper of rules). Managers + general Cortex get the full set.
+_CHIEF_TOOLS = {"list_skills", "list_tasks", "get_task", "create_skill"}
 
 
 @app.get("/api/heads")
@@ -565,7 +566,7 @@ def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
         psys, _model, is_chief = personas.persona_system(persona, body.company)
         if psys:
             system = psys
-            tools = [t for t in SKILL_TOOLS if t["name"] in _READONLY_TOOLS] if is_chief else SKILL_TOOLS
+            tools = [t for t in SKILL_TOOLS if t["name"] in _CHIEF_TOOLS] if is_chief else SKILL_TOOLS
     return {"reply": provider.chat_tools(system, msgs, tools, _exec_skill_tool)}
 
 
