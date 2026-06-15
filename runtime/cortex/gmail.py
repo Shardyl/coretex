@@ -104,7 +104,7 @@ def _parse(msg: dict) -> dict:
 
 def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
                  cc: str | None = None, html: str | None = None,
-                 inline_images: list | None = None) -> dict:
+                 inline_images: list | None = None, bcc: str | None = None) -> dict:
     """Send an email from the connected sending mailbox (gmail.modify) — it lands in that account's Sent
     folder. If `html` is given, sends a multipart/alternative (plain + html); any `inline_images`
     (list of (cid, filepath)) are embedded so a footer logo renders. `from_addr` is honoured when it
@@ -139,6 +139,8 @@ def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
         msg["From"] = from_addr
     if cc:
         msg["Cc"] = cc
+    if bcc:
+        msg["Bcc"] = bcc
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
     r = httpx.post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
                    headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"},

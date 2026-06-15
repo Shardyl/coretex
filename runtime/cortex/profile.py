@@ -49,6 +49,7 @@ QUESTIONS = [
     ("Communications", "inbox_email", "Which email address do inquiries arrive at? (the inbox Cortex reads — e.g. api@tabscanner.com)", "email"),
     ("Communications", "reply_from", "When Cortex sends a reply, which email address should it come FROM? (what the customer sees — e.g. rashad@tabscanner.com)", "email"),
     ("Communications", "default_cc", "Anyone CC'd by default on replies? (or none)", "text"),
+    ("Communications", "default_bcc", "Anyone BCC'd by default on replies? (e.g. an inbox you watch, to keep a copy) — or none", "text"),
     ("Communications", "signature", "Standard email signature — exactly as it should appear.", "long"),
     ("Communications", "social", "Social handles (per platform)?", "text"),
     # 6. Finance

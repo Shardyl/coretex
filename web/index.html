@@ -486,7 +486,7 @@ function compName(id){ const c=companies.find(c=>c.id===id); return c?c.name:'';
 
 function emailBlock(em){
   const q=em.inquiry||{};
-  const env=[em.to?'To: '+esc(em.to):'',em.from?'From: '+esc(em.from):'',em.cc?'Cc: '+esc(em.cc):'']
+  const env=[em.to?'To: '+esc(em.to):'',em.from?'From: '+esc(em.from):'',em.cc?'Cc: '+esc(em.cc):'',em.bcc?'Bcc: '+esc(em.bcc):'']
     .filter(Boolean).join('  ·  ');
   return `<div style="margin:8px 0;padding:10px 12px;background:var(--bg2,#0e1620);border:1px solid var(--ln,#22303f);border-radius:11px">
     <div class="meta" style="margin-bottom:5px">${ic('inbox',14)} their first message${q.name?' — '+esc(q.name):''}${q.email?' &lt;'+esc(q.email)+'&gt;':''}</div>

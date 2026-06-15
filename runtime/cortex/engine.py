@@ -109,8 +109,10 @@ def _email_envelope(task: dict, company: dict) -> dict:
     except Exception:  # noqa: BLE001
         data = {}
     cc = (data.get("default_cc") or "").strip()
+    bcc = (data.get("default_bcc") or "").strip()
     return {"to": inq.get("email") or "", "from": (data.get("reply_from") or "").strip() or None,
-            "cc": cc if "@" in cc else None, "subject": "Re: " + (inq.get("subject") or "your enquiry"),
+            "cc": cc if "@" in cc else None, "bcc": bcc if "@" in bcc else None,
+            "subject": "Re: " + (inq.get("subject") or "your enquiry"),
             "name": inq.get("name") or "", "signature": (data.get("signature") or "").strip()}
 
 
@@ -232,11 +234,11 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     env = _email_envelope(task, company)
     c = compose_reply_html(task, company, for_preview=False)
     res = gmail.send_message(env["to"], env["subject"], c["plain"], from_addr=env["from"], cc=env["cc"],
-                             html=c["html"], inline_images=c["inline"])
+                             html=c["html"], inline_images=c["inline"], bcc=env.get("bcc"))
     store.update_task(task["id"], status="done")
     store.log_decision(task["id"], skill["id"], actor, "send",
-                       snapshot={"to": env["to"], "cc": env["cc"], "from": env["from"],
-                                 "subject": env["subject"], "gmail_id": res.get("id")})
+                       snapshot={"to": env["to"], "cc": env["cc"], "bcc": env.get("bcc"),
+                                 "from": env["from"], "subject": env["subject"], "gmail_id": res.get("id")})
     if auto:
         tg.send(f"[{company['name']} · {skill['name']}] auto-sent a reply to {env['to']}. #{task['id']} done.")
     return {"sent_to": env["to"], "id": res.get("id")}
