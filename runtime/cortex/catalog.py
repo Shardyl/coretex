@@ -82,6 +82,18 @@ CATALOG = [
          "for [use-case]'). Make the site agent-ready: a sane robots.txt for AI crawlers, an llms.txt, clean "
          "structured content (for an API/SaaS product an MCP server is a real growth channel). Track it: "
          "periodically ask the assistants the target questions and record whether the company is named."),
+        ("content-page-builder", "Web page builder (structure, imagery, publish)",
+         "Turn a brief or ramble into a complete, on-brand web page. FIRST do the SEO/AEO research: primary "
+         "keyword, the page FORMAT the live SERP rewards, the question-set, and the single entity claim the "
+         "page must reinforce. Detect the page type and structure to its pattern - landing: hero with the "
+         "keyword H1 + value props + proof/portfolio + feature grid + FAQ (schema) + strong CTA; deep/module: "
+         "hero + thesis + numbered steps with alternating media; blog: lead + sectioned body. VARY the section "
+         "framing down the page (never two identical layouts in a row); for richer pages add bespoke CSS "
+         "graphics and subtle motion, not just stock images. Generate section imagery that is cinematic, "
+         "on-brand and optimised, with descriptive alt text and meaningful filenames. Bake in the on-page SEO "
+         "+ AEO checklist (keyword in title/H1/URL/first-100-words, question-headings with extractable answers, "
+         "FAQ schema, descriptive internal links). Hold the company's design system and voice; no em-dashes. "
+         "Build it as a WordPress DRAFT and hand over the preview link - never publish until approved."),
     ]),
     ("Demand", "Social (organic)", "Social manager", [
         ("social-instagram-posts", "Instagram posts & carousels"),
