@@ -99,6 +99,14 @@ UtteranceEnd (all proved twitchy/unreliable on nova-3, esp. with synthetic audio
 generic; the 🎙️ button on the Talk bar dictates into the chat box exactly like Ask (tap → live words →
 tap stop → review → send). Talk has both: 🎙️ normal + 🎧 hands-free.
 
-**Remaining for Phase 3:** (1) voice barge-in + per-utterance live partial in Free mode; (2) **Talk**
-gym-mode layout; (3) chat that can trigger tasks/actions (currently conversational only, routes to
-Ask); (4) omnichannel doors.
+**Voice barge-in + feedback ✅ (2026-06-15):** Free mode now sends real mic audio during TTS (AEC
+cancels Cortex's own voice) and treats a >=3-word transcript while `botSpeaking` as **barge-in** →
+`interruptSpeech()` pauses the audio (speakAndWait resolves on `onpause`) and listens. Feedback now
+mirrors Ask: warming-up state → rising "go" beep when listening → **falling handover beep** the moment
+your turn ends (you paused) → spoken reply ("talk to cut in") → rising "go" beep = your turn. Hint line
+shows warming up / Listening / thinking / speaking. (Barge-in is AEC-dependent; word threshold tunable
+if it self-interrupts on speakerphone.)
+
+**Remaining for Phase 3:** (1) **Talk** gym-mode layout; (2) chat that can trigger tasks/actions
+(currently conversational only, routes to Ask); (3) remaining cockpit screens (Departments, Skills,
+Incoming, Calendar, Contacts, Reports, Settings); (4) omnichannel doors.
