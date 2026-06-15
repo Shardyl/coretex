@@ -229,8 +229,9 @@ def inbox(company: str | None = None, _: None = Depends(auth)) -> list[dict]:
             co = store.get_company(t["company_id"])
             env = engine._email_envelope(t, co)
             inq = (t.get("request") or {}).get("inquiry") or {}
-            t["email"] = {**env, "inquiry": {"name": inq.get("name"), "email": inq.get("email"),
-                                             "message": inq.get("message") or inq.get("snippet") or ""}}
+            t["email"] = {**env, "preview": engine.compose_reply_body(t, co),  # exact body that will send
+                          "inquiry": {"name": inq.get("name"), "email": inq.get("email"),
+                                      "message": inq.get("message") or inq.get("snippet") or ""}}
         sk = store.get_skill(t["skill_id"])         # the lane's autonomy state for the Inbox UI
         if sk:
             offer = (sk["authority"] == "ask" and sk["trust_streak"] >= sk["auto_threshold"]

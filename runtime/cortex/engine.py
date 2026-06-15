@@ -124,12 +124,20 @@ def _fmt_email(task: dict, skill: dict, company: dict, verdict: dict | None) -> 
     return f"{head}\n\n{line}{their_block}\n\nDRAFTED REPLY:\n{draft}{_verdict_line(verdict)}"
 
 
-def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: bool) -> dict:
+def compose_reply_body(task: dict, company: dict) -> str:
+    """The exact body that will be sent: the drafted reply plus the appended signature. Used for both
+    the actual send and the Inbox preview, so what the owner approves is what goes out."""
     env = _email_envelope(task, company)
     body = (task.get("draft") or "").rstrip()
     sig = env["signature"]
     if sig and sig.splitlines()[0].lower() not in body.lower():
         body = body + "\n\n" + sig
+    return body
+
+
+def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: bool) -> dict:
+    env = _email_envelope(task, company)
+    body = compose_reply_body(task, company)
     res = gmail.send_message(env["to"], env["subject"], body, from_addr=env["from"], cc=env["cc"])
     store.update_task(task["id"], status="done")
     store.log_decision(task["id"], skill["id"], actor, "send",

@@ -453,14 +453,14 @@ async function renderInbox(v){
     const isEmail=t.kind==='email_reply';
     const kindLabel=t.kind==='blog'?'blog post':(isEmail?'email reply':esc(t.kind||'task'));
     const title=esc(isEmail&&em?('Reply to '+(em.inquiry&&em.inquiry.name||em.to||'enquiry')):(t.title||(wp&&wp.title)||('Task #'+t.id)));
-    const body=esc(t.body||t.draft||'');
+    const body=esc(isEmail&&em&&em.preview?em.preview:(t.body||t.draft||''));
     return `<div class="card" id="t${t.id}">
       <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${esc(sk)}</span>
         <span class="chip">${kindLabel}</span></div>
       <div class="title">${title}</div>
       ${isEmail&&em?emailBlock(em):''}
       ${mgrVerdict(t.manager)}
-      ${body?`<div class="body">${isEmail?'<div class="meta" style="margin-bottom:5px">'+ic('file',14)+' drafted reply</div>':''}${body}</div>`:''}
+      ${body?`<div class="body">${isEmail?'<div class="meta" style="margin-bottom:5px">'+ic('file',14)+' the email that will send (signature included)</div>':''}${body}</div>`:''}
       ${wp&&wp.preview?`<div class="meta">${ic('file',14)} draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
       <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">${ic('volume',16)} Read aloud</button></div>
       <div class="row">
