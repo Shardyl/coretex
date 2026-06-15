@@ -24,6 +24,7 @@ import websockets
 from fastapi import (Depends, FastAPI, File, Header, HTTPException, Response,
                      UploadFile, WebSocket, WebSocketDisconnect)
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -560,6 +561,47 @@ async def voice_stream(ws: WebSocket):
             await ws.close()
         except Exception:  # noqa: BLE001
             pass
+
+
+# ---- Google OAuth (keyless Drive backup: authorise once, store a refresh token) ----
+
+GOOGLE_OAUTH_CLIENT = "/etc/cortex/google_oauth_client.json"
+
+
+def _google_client() -> tuple[str, str, str]:
+    with open(GOOGLE_OAUTH_CLIENT) as f:
+        c = (json.load(f).get("web") or {})
+    return c["client_id"], c["client_secret"], (c.get("redirect_uris") or [""])[0]
+
+
+@app.get("/oauth/google/start")
+def google_start() -> RedirectResponse:
+    from urllib.parse import urlencode
+    cid, _, redirect = _google_client()
+    q = urlencode({"client_id": cid, "redirect_uri": redirect, "response_type": "code",
+                   "scope": "https://www.googleapis.com/auth/drive.file",
+                   "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true"})
+    return RedirectResponse("https://accounts.google.com/o/oauth2/v2/auth?" + q)
+
+
+@app.get("/oauth/google/callback")
+def google_callback(code: str = "", error: str = "") -> HTMLResponse:
+    page = lambda msg: HTMLResponse(
+        "<body style='background:#0B0F14;color:#EAF2F8;font-family:system-ui;text-align:center;"
+        "padding-top:80px'><h2>" + msg + "</h2></body>")
+    if error or not code:
+        return page("Authorisation cancelled.")
+    cid, secret, redirect = _google_client()
+    r = httpx.post("https://oauth2.googleapis.com/token", data={
+        "code": code, "client_id": cid, "client_secret": secret,
+        "redirect_uri": redirect, "grant_type": "authorization_code"}, timeout=30)
+    if r.status_code != 200:
+        return page("Token exchange failed: " + r.text[:200])
+    rt = r.json().get("refresh_token")
+    if not rt:
+        return page("No refresh token returned — revoke Cortex's access in your Google account and try again.")
+    db.setting_set("google_refresh_token", rt)
+    return page("✓ Cortex is connected to your Google Drive. You can close this tab — backups run nightly.")
 
 
 # ---- serve the cockpit (same origin as the API: no CORS, one domain) ----
