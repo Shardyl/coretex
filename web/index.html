@@ -449,18 +449,22 @@ async function renderInbox(v){
   if(!items.length){ ib.outerHTML='<div class="empty"><span class="e">✓</span>Inbox zero. Cortex will ping you here and on Telegram when something needs a yes.</div>'; return; }
   ib.outerHTML = items.map(t=>{
     const co=t.company||compName(t.company_id), sk=t.skill||'';
-    const wp=t.wp||null, title=esc(t.title||(wp&&wp.title)||('Task #'+t.id));
+    const wp=t.wp||null, em=t.email||null;
+    const isEmail=t.kind==='email_reply';
+    const kindLabel=t.kind==='blog'?'blog post':(isEmail?'email reply':esc(t.kind||'task'));
+    const title=esc(isEmail&&em?('Reply to '+(em.inquiry&&em.inquiry.name||em.to||'enquiry')):(t.title||(wp&&wp.title)||('Task #'+t.id)));
     const body=esc(t.body||t.draft||'');
     return `<div class="card" id="t${t.id}">
       <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${esc(sk)}</span>
-        <span class="chip">${t.kind==='blog'?'blog post':esc(t.kind||'task')}</span></div>
+        <span class="chip">${kindLabel}</span></div>
       <div class="title">${title}</div>
+      ${isEmail&&em?emailBlock(em):''}
       ${mgrVerdict(t.manager)}
-      ${body?`<div class="body">${body}</div>`:''}
+      ${body?`<div class="body">${isEmail?'<div class="meta" style="margin-bottom:5px">'+ic('file',14)+' drafted reply</div>':''}${body}</div>`:''}
       ${wp&&wp.preview?`<div class="meta">${ic('file',14)} draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
       <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">${ic('volume',16)} Read aloud</button></div>
       <div class="row">
-        <button class="btn go" onclick="act(${t.id},'approve')">${t.kind==='blog'?'Publish live':'Approve'}</button>
+        <button class="btn go" onclick="act(${t.id},'approve')">${t.kind==='blog'?'Publish live':(isEmail?'Send reply':'Approve')}</button>
         <button class="btn warn" onclick="correct(${t.id})">Correct</button>
         <button class="btn bad" onclick="act(${t.id},'skip')">${t.kind==='blog'?'Discard':'Skip'}</button>
       </div>
@@ -469,6 +473,16 @@ async function renderInbox(v){
 }
 
 function compName(id){ const c=companies.find(c=>c.id===id); return c?c.name:''; }
+
+function emailBlock(em){
+  const q=em.inquiry||{};
+  const env=[em.to?'To: '+esc(em.to):'',em.from?'From: '+esc(em.from):'',em.cc?'Cc: '+esc(em.cc):'']
+    .filter(Boolean).join('  ·  ');
+  return `<div style="margin:8px 0;padding:10px 12px;background:var(--bg2,#0e1620);border:1px solid var(--ln,#22303f);border-radius:11px">
+    <div class="meta" style="margin-bottom:5px">${ic('inbox',14)} their enquiry${q.email?' — '+esc(q.email):''}</div>
+    <div style="font-size:13px;color:var(--mut);white-space:pre-wrap;max-height:120px;overflow:auto">${esc(q.message||'')}</div>
+    <div class="meta" style="margin-top:8px">${env}${em.subject?'<br>Subject: '+esc(em.subject):''}</div></div>`;
+}
 
 function mgrVerdict(v){
   if(!v) return '';

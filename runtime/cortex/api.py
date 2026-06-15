@@ -225,6 +225,12 @@ def inbox(company: str | None = None, _: None = Depends(auth)) -> list[dict]:
     rows = db.query(f"select * from tasks where {where} order by id desc", tuple(params))
     for t in rows:
         t["wp"] = db.setting_get(f"wp:{t['id']}")   # preview/edit links for blog drafts
+        if t["kind"] in engine.EMAIL_KINDS:         # email replies: show the original enquiry + send envelope
+            co = store.get_company(t["company_id"])
+            env = engine._email_envelope(t, co)
+            inq = (t.get("request") or {}).get("inquiry") or {}
+            t["email"] = {**env, "inquiry": {"name": inq.get("name"), "email": inq.get("email"),
+                                             "message": inq.get("message") or inq.get("snippet") or ""}}
         sk = store.get_skill(t["skill_id"])         # the lane's autonomy state for the Inbox UI
         if sk:
             offer = (sk["authority"] == "ask" and sk["trust_streak"] >= sk["auto_threshold"]
@@ -344,6 +350,14 @@ def gmail_inquiries(days: int = 7, _: None = Depends(auth)) -> dict:
         raise HTTPException(status_code=502, detail=str(e))
     return {"account": db.setting_get("gmail_account"), "days": days,
             "count": len(items), "inquiries": items}
+
+
+@app.post("/api/gmail/intake")
+def gmail_intake(days: int = 7, _: None = Depends(auth)) -> dict:
+    """Pull new enquiries now: add each to the CRM and queue a drafted reply for approval (deduped)."""
+    out = engine.poll_inquiries_window(days=days)
+    engine.process_new_tasks()   # draft the queued replies immediately so they appear in the Inbox
+    return out
 
 
 @app.get("/api/questionnaire/areas")

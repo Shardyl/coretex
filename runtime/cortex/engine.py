@@ -17,10 +17,11 @@ import re
 import secrets
 import time
 
-from . import db, manager, store, worker
+from . import crm, db, gmail, manager, profile, store, worker
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
+EMAIL_KINDS = {"email_reply"}              # the reply is sent via Gmail on approval
 
 _PWD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no ambiguous chars, easy to type on mobile
 
@@ -82,6 +83,58 @@ def _approval_buttons(task_id: int) -> list[list[dict]]:
              tg.button("✗ Skip", f"sk:{task_id}")]]
 
 
+# ---------- email replies ----------
+
+def _email_brief(inq: dict) -> str:
+    """Frame a website enquiry as a reply-drafting brief for the worker."""
+    return ("Draft a reply to this website enquiry. Write ONLY the email body — no subject line, no "
+            "'From'/'To' headers, and no sign-off signature (the signature is added automatically). "
+            "Reply directly to the person, in the company voice, following the standing rules.\n\n"
+            f"Their name: {inq.get('name') or 'there'}\n"
+            f"Their email: {inq.get('email') or '(unknown)'}\n"
+            f"Their message:\n{(inq.get('message') or inq.get('snippet') or '').strip()}")
+
+
+def _email_envelope(task: dict, company: dict) -> dict:
+    """Who the approved reply goes to / from / cc — resolved from the inquiry + the company profile."""
+    inq = (task.get("request") or {}).get("inquiry") or {}
+    try:
+        data = profile.get(company["id"]) or {}
+    except Exception:  # noqa: BLE001
+        data = {}
+    cc = (data.get("default_cc") or "").strip()
+    return {"to": inq.get("email") or "", "from": (data.get("reply_from") or "").strip() or None,
+            "cc": cc if "@" in cc else None, "subject": "Re: " + (inq.get("subject") or "your enquiry"),
+            "name": inq.get("name") or "", "signature": (data.get("signature") or "").strip()}
+
+
+def _fmt_email(task: dict, skill: dict, company: dict, verdict: dict | None) -> str:
+    env = _email_envelope(task, company)
+    head = f"[{company['name']} · {skill['name']}]  ·  reply to {env['name'] or env['to']} — needs your yes"
+    line = f"To: {env['to']}" + (f"  ·  From: {env['from']}" if env["from"] else "") + \
+           (f"  ·  Cc: {env['cc']}" if env["cc"] else "") + f"\nSubject: {env['subject']}"
+    draft = (task.get("draft") or "").strip()
+    if len(draft) > 3200:
+        draft = draft[:3200] + "\n…(truncated for preview)"
+    return f"{head}\n\n{line}\n\n{draft}{_verdict_line(verdict)}"
+
+
+def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: bool) -> dict:
+    env = _email_envelope(task, company)
+    body = (task.get("draft") or "").rstrip()
+    sig = env["signature"]
+    if sig and sig.splitlines()[0].lower() not in body.lower():
+        body = body + "\n\n" + sig
+    res = gmail.send_message(env["to"], env["subject"], body, from_addr=env["from"], cc=env["cc"])
+    store.update_task(task["id"], status="done")
+    store.log_decision(task["id"], skill["id"], actor, "send",
+                       snapshot={"to": env["to"], "cc": env["cc"], "from": env["from"],
+                                 "subject": env["subject"], "gmail_id": res.get("id")})
+    if auto:
+        tg.send(f"[{company['name']} · {skill['name']}] auto-sent a reply to {env['to']}. #{task['id']} done.")
+    return {"sent_to": env["to"], "id": res.get("id")}
+
+
 def _blog_buttons(task_id: int) -> list[list[dict]]:
     return [[tg.button("✅ Publish live", f"ap:{task_id}"),
              tg.button("✎ Correct", f"co:{task_id}"),
@@ -132,7 +185,9 @@ def _run_task(task: dict) -> None:
     if auto_ok:
         _execute(task, skill, company, actor="cortex", auto=True)
     else:
-        msg = tg.send(_fmt(task, skill, company, verdict), _approval_buttons(task["id"]))
+        preview = _fmt_email(task, skill, company, verdict) if task["kind"] in EMAIL_KINDS \
+            else _fmt(task, skill, company, verdict)
+        msg = tg.send(preview, _approval_buttons(task["id"]))
         store.update_task(task["id"], status="awaiting_approval", tg_message_id=msg["message_id"])
 
 
@@ -155,6 +210,8 @@ def _run_blog_task(task: dict, skill: dict, company: dict, site) -> None:
 
 
 def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = False) -> dict:
+    if task["kind"] in EMAIL_KINDS:
+        return _send_email_reply(task, skill, company, actor, auto)
     site = _site_for(task, company)
     if site:
         info = db.setting_get(f"wp:{task['id']}") or {}
@@ -228,6 +285,9 @@ def _approve(task: dict, skill: dict, company: dict) -> None:
         if result and result.get("link"):
             tg.edit(task["tg_message_id"],
                     f"✅ Published live on Tabscanner: {result['link']}  (streak {skill['trust_streak']}).")
+        elif result and result.get("sent_to"):
+            tg.edit(task["tg_message_id"],
+                    f"✅ Sent to {result['sent_to']} — '{skill['name']}' (streak {skill['trust_streak']}). Done.")
         else:
             tg.edit(task["tg_message_id"], f"✅ Approved — '{skill['name']}' (streak {skill['trust_streak']}). Done.")
     # Offer auto only for non-blog skills (blog publishing must never go auto).
@@ -358,9 +418,60 @@ def correct_task(task_id: int, text: str) -> dict:
     return {"ok": True, "task": store.get_task(task_id)}
 
 
+# ---------- auto-intake: pull new enquiries from Gmail, draft a reply for each ----------
+
+def poll_inquiries() -> dict:
+    """The automatic intake (recent window), called on the engine loop."""
+    return poll_inquiries_window(days=2)
+
+
+def poll_inquiries_window(days: int = 2) -> dict:
+    """Pull new Tabscanner enquiries, add the contact to the CRM, and queue a drafted reply for each.
+    Deduped by Gmail id so each enquiry is drafted exactly once. Future enquiries flow in automatically."""
+    if not gmail.connected():
+        return {"made": 0, "reason": "gmail-not-connected"}
+    try:
+        inqs = gmail.list_inquiries(days=days)
+    except Exception as e:  # noqa: BLE001
+        return {"made": 0, "reason": f"list-failed: {e}"}
+    co = store.get_company_by_slug("tabscanner")
+    skill = store.get_skill_by_key(co["id"], "sales-first-response") if co else None
+    if not (co and skill):
+        return {"made": 0, "reason": "tabscanner sales-first-response skill missing"}
+    seen = set(db.setting_get("gmail_processed") or [])
+    made = 0
+    for inq in inqs:
+        gid = inq.get("gmail_id")
+        if not gid or gid in seen:
+            continue
+        try:
+            crm.add_inquiry(inq, "tabscanner")           # verified contact in the CRM
+        except Exception:  # noqa: BLE001
+            pass
+        store.create_task(co["id"], skill["id"], "email_reply",
+                          {"brief": _email_brief(inq), "inquiry": inq})   # -> drafts on the next tick
+        seen.add(gid)
+        made += 1
+        if made >= 10:
+            break
+    if made:
+        db.setting_set("gmail_processed", list(seen)[-1000:])
+        tg.send(f"{made} new Tabscanner enquir{'ies' if made > 1 else 'y'} in — "
+                f"drafting {'replies' if made > 1 else 'a reply'} for your approval.")
+    return {"made": made}
+
+
 def run(poll_idle: float = 1.0) -> None:
     tg.send("\U0001F9E0 Cortex engine online.")
+    last_poll = 0.0
     while True:
         process_new_tasks()
         handle_updates()
+        now = time.time()
+        if now - last_poll >= 60:        # check Gmail for new enquiries about once a minute
+            last_poll = now
+            try:
+                poll_inquiries()
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(enquiry poll hiccup: {e})")
         time.sleep(poll_idle)

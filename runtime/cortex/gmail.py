@@ -85,6 +85,27 @@ def _parse(msg: dict) -> dict:
             "message": _message_after(body), "snippet": msg.get("snippet", "")}
 
 
+def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
+                 cc: str | None = None) -> dict:
+    """Send an email via the connected mailbox (gmail.modify). `from_addr` only takes effect if it's a
+    verified 'send mail as' identity on the account; otherwise Gmail sends as the authenticated mailbox."""
+    from email.mime.text import MIMEText
+    tok = _access_token()
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["To"] = to
+    msg["Subject"] = subject
+    if from_addr:
+        msg["From"] = from_addr
+    if cc:
+        msg["Cc"] = cc
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    r = httpx.post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+                   headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"},
+                   json={"raw": raw}, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+
 def list_inquiries(days: int = 7, limit: int = 50) -> list[dict]:
     """Contact-form inquiries from the last `days` days, parsed."""
     tok = _access_token()
