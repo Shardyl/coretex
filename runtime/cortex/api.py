@@ -878,7 +878,8 @@ def google_start() -> RedirectResponse:
     from urllib.parse import urlencode
     cid, _, redirect = _google_client()
     q = urlencode({"client_id": cid, "redirect_uri": redirect, "response_type": "code",
-                   "scope": "https://www.googleapis.com/auth/drive.file",
+                   "scope": "https://www.googleapis.com/auth/drive.file "
+                            "https://www.googleapis.com/auth/drive.readonly",
                    "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true"})
     return RedirectResponse("https://accounts.google.com/o/oauth2/v2/auth?" + q)
 
