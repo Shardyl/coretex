@@ -257,6 +257,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
+const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent||'');  // auto re-lock on mobile only
 
 // ---- sample data (graceful fallback so the cockpit is explorable offline) ----
 const SAMPLE = {
@@ -1322,7 +1323,7 @@ function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.
 // re-lock when the app is reopened after being away >10s
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden'){ hidAt=Date.now(); }
-  else if(token && pinSet && !demo && hidAt && Date.now()-hidAt>300000){ lockNow(); }  // re-lock after 5 min away
+  else if(IS_MOBILE && token && pinSet && !demo && hidAt && Date.now()-hidAt>300000){ lockNow(); }  // re-lock after 5 min away — MOBILE only (desktop never auto-locks)
   else if(document.visibilityState==='visible'){ syncWake(); }   // re-acquire screen lock (drops when hidden)
 });
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{})); }

@@ -46,8 +46,8 @@ QUESTIONS = [
     ("Repositories & sources", "live_site", "Live site URL(s)?", "text"),
     ("Repositories & sources", "hosting", "Hosting / deploy details?", "long"),
     # 5. Communications
-    ("Communications", "inbox_email", "Inbound email address inquiries arrive at (read-from)?", "email"),
-    ("Communications", "reply_from", "Outbound identity replies are sent AS (reply-from)?", "email"),
+    ("Communications", "inbox_email", "Which email address do inquiries arrive at? (the inbox Cortex reads — e.g. api@tabscanner.com)", "email"),
+    ("Communications", "reply_from", "When Cortex sends a reply, which email address should it come FROM? (what the customer sees — e.g. rashad@tabscanner.com)", "email"),
     ("Communications", "default_cc", "Anyone CC'd by default on replies? (or none)", "text"),
     ("Communications", "signature", "Standard email signature — exactly as it should appear.", "long"),
     ("Communications", "social", "Social handles (per platform)?", "text"),
