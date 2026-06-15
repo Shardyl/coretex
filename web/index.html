@@ -608,7 +608,7 @@ function armTurn(){
   clearTimeout(freeTimer);
   freeTimer=setTimeout(()=>{
     if(freeOn && !botSpeaking && !freeThinking && freeUtt.trim()){
-      const u=freeUtt.trim(); freeUtt=''; freeLive=''; freeTurn(u);
+      const u=freeUtt.trim(); freeUtt=''; freeLive=''; (turnFn||freeTurn)(u);
     }
   }, TURN_SILENCE);
 }
@@ -687,7 +687,7 @@ function setTalkingTo(v){ talkingTo=v||''; localStorage.setItem('cortex_persona'
 function whoIcon(pk){ pk=pk||''; return ic(pk.indexOf('chief:')===0?'compass':(pk.indexOf('manager:')===0?'tool':'chat'),13); }
 
 // ---- voice mode (Free = hands-free, On-the-go = push-to-talk; same engine) ----
-let voiceMode='free', goPaused=false;
+let voiceMode='free', goPaused=false, turnFn=null;  // turnFn: where a completed spoken turn goes (null = chat)
 function setVoiceButtons(){
   const f=document.getElementById('freeBtn'), g=document.getElementById('goBtn'); if(!f||!g) return;
   const freeActive=freeOn&&voiceMode==='free', goActive=freeOn&&voiceMode==='go';
@@ -839,11 +839,12 @@ function speakAndWait(text){
     }catch(e){ botSpeaking=false; resolve(); }
   });
 }
-async function toggleFree(mode){
+async function toggleFree(mode, onTurn){
   if(freeOn){ freeStop(); return; }
   if(demo){ toast('Voice chat needs the live app'); return; }
   if(recording||starting){ stopDictation(document.getElementById('chatMic')); }
   voiceMode = (mode==='go')?'go':'free';
+  turnFn = onTurn || null;   // null => chat (freeTurn); set => questionnaire etc.
   ensureAudio(); requestWake();
   freeOn=true; freeUtt=''; freeLive=''; goPaused=false;
   setVoiceButtons(); updateLivePanel();
@@ -903,7 +904,7 @@ async function freeTurn(utterance){
   bargeInterrupted=false;
 }
 function freeStop(){
-  freeOn=false; botSpeaking=false; freeThinking=false; freeLive=''; freeUtt=''; clearTimeout(freeTimer);
+  freeOn=false; botSpeaking=false; freeThinking=false; freeLive=''; freeUtt=''; turnFn=null; clearTimeout(freeTimer);
   setVoiceButtons();
   const hint=document.getElementById('freehint'); if(hint) hint.classList.remove('on');
   try{ if(audioEl) audioEl.pause(); }catch(e){}
@@ -1050,6 +1051,7 @@ async function openQuestionnaire(area){
   await qzStatus();
 }
 async function qzStatus(){
+  if(freeOn) freeStop();
   const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
   let d; try{ d=await api('/api/questionnaire/status?area='+encodeURIComponent(qz.area)+(qz.company?'&company='+encodeURIComponent(qz.company):'')); }
   catch(e){ v.innerHTML='<div class="empty">Error: '+esc(e.message)+'</div>'; return; }
@@ -1087,11 +1089,37 @@ function qzQuestion(){
     <div><div class="qtitle">${esc(qz.area)} · ${esc(qz.tier)}</div><div class="qsub">Question ${s.idx+1} of ${s.total}</div></div></div>
     <div class="qprogbar"><div style="width:${pct}%"></div></div>
     <div class="qq">${esc(q.text)}</div>${opts}
-    <textarea id="qAns" class="qansta" placeholder="Type your answer, or tap the mic to speak it…"></textarea>
+    <div class="freehint" id="freehint"></div>
+    <div class="livepanel" id="livePanel" style="display:none"><div class="livehead"><span class="livedot"></span><span id="liveLabel">Listening</span></div><div class="livetext" id="liveText"></div></div>
+    <textarea id="qAns" class="qansta" placeholder="Type, tap the mic to speak, or go hands-free…"></textarea>
     <div class="row" style="margin-top:10px">
+      <button class="iconbtn" id="qzHF" title="Hands-free: I read each question, you answer aloud" onclick="qzHandsFree()" aria-label="Hands-free">${ic('headset',20)}</button>
       <button class="iconbtn" onclick="dictate(this,'qAns')" aria-label="Speak your answer">${ic('mic',20)}</button>
       <button class="btn go" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px" onclick="qzSubmit()">Next ${ic('arrow',16)}</button>
     </div>`;
+  if(freeOn){ const hf=document.getElementById('qzHF'); if(hf){ hf.classList.add('rec'); hf.innerHTML=ic('stop',20); }
+    const fh=document.getElementById('freehint'); if(fh) fh.classList.add('on'); updateLivePanel(); }
+}
+async function qzHandsFree(){
+  if(freeOn){ freeStop(); qzQuestion(); return; }
+  if(demo){ toast('Voice needs the live app'); return; }
+  await toggleFree('free', qzVoiceTurn);
+  if(!freeOn) return;
+  const hf=document.getElementById('qzHF'); if(hf){ hf.classList.add('rec'); hf.innerHTML=ic('stop',20); }
+  const fh=document.getElementById('freehint'); if(fh) fh.classList.add('on');
+  const q=qz.state&&qz.state.question;
+  if(q){ setHint('reading the question…'); await speakAndWait(q.text); if(freeOn){ beep('start'); setHint('Answer when ready…'); } }
+}
+async function qzVoiceTurn(u){
+  freeThinking=true; beep('stop'); setHint('got it, next…'); freeLive=''; updateLivePanel();
+  try{ qz.state=await api('/api/questionnaire/answer',{method:'POST',body:JSON.stringify({run_id:qz.run,answer:u})}); }
+  catch(e){ toast('Error: '+e.message); }
+  freeThinking=false;
+  if(!freeOn) return;
+  if(!qz.state||!qz.state.question||qz.state.status==='done'){ freeStop(); qzReview(); return; }
+  qzQuestion();   // render the next question, hands-free stays active
+  const q=qz.state.question;
+  if(q && freeOn){ setHint('reading…'); await speakAndWait(q.text); if(freeOn){ beep('start'); setHint('Answer when ready…'); } }
 }
 function qzPick(btn){ document.querySelectorAll('.qopt').forEach(b=>b.classList.remove('on')); btn.classList.add('on');
   const ta=document.getElementById('qAns'); if(ta) ta.value=btn.textContent; }
