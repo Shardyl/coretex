@@ -893,8 +893,10 @@ def _google_client() -> tuple[str, str, str]:
 def google_start(purpose: str = "drive") -> RedirectResponse:
     from urllib.parse import urlencode
     cid, _, redirect = _google_client()
-    if purpose == "gmail":   # the Tabscanner mailbox — its own login, stored separately from Drive
-        scope = ("https://www.googleapis.com/auth/gmail.readonly openid "
+    if purpose == "gmail":   # the Tabscanner mailbox — its own login, stored separately from Drive.
+        # gmail.modify = read + draft + SEND + label/archive (NOT permanent delete). One consent, full flow;
+        # nothing is ever sent without the owner's approval — the guardrail is the approval gate, not the scope.
+        scope = ("https://www.googleapis.com/auth/gmail.modify openid "
                  "https://www.googleapis.com/auth/userinfo.email")
     else:
         scope = ("https://www.googleapis.com/auth/drive.file "
