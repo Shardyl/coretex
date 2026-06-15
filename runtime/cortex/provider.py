@@ -20,11 +20,20 @@ def _client() -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
 
 
-def think(system: str, user: str, *, fast: bool = False, think_hard: bool = False,
-          max_tokens: int = 6000) -> str:
-    """One-shot completion → plain text."""
+def resolve_model(tier: str | None) -> str:
+    """Map a skill's model tier ('opus'|'sonnet'|None) to a concrete model id."""
+    if tier == "opus":
+        return MODEL
+    if tier == "sonnet":
+        return MODEL_FAST
+    return ""   # caller decides the default
+
+
+def think(system: str, user: str, *, fast: bool = False, model: str | None = None,
+          think_hard: bool = False, max_tokens: int = 6000) -> str:
+    """One-shot completion → plain text. `model` overrides the fast/slow default when given."""
     kwargs: dict = dict(
-        model=MODEL_FAST if fast else MODEL,
+        model=model or (MODEL_FAST if fast else MODEL),
         max_tokens=max_tokens,
         system=system,
         messages=[{"role": "user", "content": user}],
@@ -71,10 +80,11 @@ def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
     return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
 
 
-def think_json(system: str, user: str, *, fast: bool = True, max_tokens: int = 2000) -> dict:
+def think_json(system: str, user: str, *, fast: bool = True, model: str | None = None,
+               max_tokens: int = 2000) -> dict:
     """Completion that must return a JSON object → parsed dict."""
     sys = system + "\n\nRespond with ONLY a valid JSON object — no prose, no markdown fences."
-    raw = think(sys, user, fast=fast, max_tokens=max_tokens).strip()
+    raw = think(sys, user, fast=fast, model=model, max_tokens=max_tokens).strip()
     if raw.startswith("```"):
         raw = re.sub(r"^```[a-zA-Z]*", "", raw).rsplit("```", 1)[0].strip()
     try:

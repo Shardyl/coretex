@@ -195,6 +195,13 @@ CATALOG = [
 GATED = {"ads-budget-pacing"} | {k for _, dept, _, skills in CATALOG if dept == "Finance & Admin"
                                  for k, *_ in skills}
 
+# Workers default to Sonnet (cheap, fast). These quality-critical, client-facing skills override to
+# Opus (the per-skill "use the better brain" flag the operator locked: Sonnet default + Opus override).
+OPUS_SKILLS = {
+    "content-blog-posts", "content-landing-copy", "content-page-builder", "content-newsletter",
+    "sales-quotation", "sales-proposals", "pr-press-release",
+}
+
 # The four companies in scope (context packs from CORTEX-SPEC §A).
 COMPANIES = [
     ("tabscanner", "Tabscanner", "owned", "Enterprise / sales-qualified leads", {
@@ -241,10 +248,11 @@ def seed_all() -> dict:
         for key, name, *rest in skills:
             craft = rest[0] if rest else _craft(name)   # explicit craft when migrated, else generic
             stakes = "high" if key in GATED else "low"
+            model = "opus" if key in OPUS_SKILLS else None   # None = Sonnet default
             for slug, *_ in COMPANIES:
                 co = store.get_company_by_slug(slug)
                 store.upsert_skill(co["id"], key, name, craft=craft, authority="ask",
-                                   stakes=stakes, category=cat, department=dept, manager=mgr)
+                                   stakes=stakes, category=cat, department=dept, manager=mgr, model=model)
                 n += 1
     return {"companies": len(COMPANIES), "skills_per_company": sum(len(s) for *_, s in CATALOG),
             "rows": n}

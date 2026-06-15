@@ -25,6 +25,7 @@ _ALTERS = [
     "alter table skills add column if not exists category text",
     "alter table skills add column if not exists department text",
     "alter table skills add column if not exists manager text",
+    "alter table skills add column if not exists model text",
 ]
 
 

@@ -21,8 +21,9 @@ create table if not exists skills (
     department    text,                                  -- e.g. 'Content & SEO'
     manager       text,                                  -- e.g. 'Content manager'
     craft         text not null default '',              -- the skill instructions (markdown)
+    model         text,                                  -- worker model tier: 'opus' | 'sonnet' | null (=Sonnet default)
     authority     text not null default 'ask',           -- ask | auto | never
-    stakes        text not null default 'low',           -- low | high (reversibility tier)
+    stakes        text not null default 'low',           -- low | high (reversibility tier — gates money/auto)
     trust_streak  int  not null default 0,               -- clean approvals in a row
     auto_threshold int not null default 10,              -- streak needed before auto is offered
     paused        boolean not null default false,

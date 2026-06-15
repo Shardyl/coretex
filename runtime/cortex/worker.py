@@ -16,6 +16,11 @@ def _company_context(company: dict) -> str:
     return "\n".join(parts)
 
 
+def _model_for(skill: dict) -> str:
+    """Workers run on Sonnet by default; a skill tiered model='opus' overrides for high-quality work."""
+    return provider.resolve_model(skill.get("model")) or provider.MODEL_FAST
+
+
 def _rules_block(skill: dict) -> str:
     universal = store.get_universal_rules(skill.get("skill_key", "")) if skill.get("skill_key") else []
     local = skill.get("rules") or []
@@ -39,7 +44,7 @@ def draft(skill: dict, company: dict, request: dict,
         user.append("Your manager flagged these to fix:\n- " + "\n- ".join(manager_feedback))
     if correction:
         user.append(f"The owner corrected your previous draft. Apply this and produce a new version:\n{correction}")
-    return provider.think(system, "\n\n".join(user), think_hard=True, max_tokens=6000)
+    return provider.think(system, "\n\n".join(user), model=_model_for(skill), think_hard=True, max_tokens=6000)
 
 
 def _no_dashes(s: str) -> str:
@@ -67,7 +72,7 @@ def draft_article(skill: dict, company: dict, request: dict,
         user.append("Your manager flagged these to fix:\n- " + "\n- ".join(manager_feedback))
     if correction:
         user.append(f"The owner corrected your previous draft. Apply this and produce a new version:\n{correction}")
-    out = provider.think_json(system, "\n\n".join(user), fast=False, max_tokens=8000)
+    out = provider.think_json(system, "\n\n".join(user), model=_model_for(skill), fast=False, max_tokens=8000)
     title = _no_dashes((out.get("title") or "").strip()) or "Untitled"
     html = _no_dashes((out.get("html") or "").strip())
     return {"title": title, "html": html}

@@ -34,14 +34,14 @@ def get_skill_by_key(company_id, key) -> dict | None:
 
 
 def upsert_skill(company_id, key, name, craft, authority="ask", stakes="low", auto_threshold=10,
-                 category=None, department=None, manager=None) -> dict:
+                 category=None, department=None, manager=None, model=None) -> dict:
     return db.execute(
         "insert into skills (company_id,skill_key,name,craft,authority,stakes,auto_threshold,"
-        "category,department,manager) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+        "category,department,manager,model) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
         "on conflict (company_id,skill_key) do update set name=excluded.name, craft=excluded.craft, "
         "stakes=excluded.stakes, category=excluded.category, department=excluded.department, "
-        "manager=excluded.manager returning *",
-        (company_id, key, name, craft, authority, stakes, auto_threshold, category, department, manager),
+        "manager=excluded.manager, model=excluded.model returning *",
+        (company_id, key, name, craft, authority, stakes, auto_threshold, category, department, manager, model),
     )
 
 

@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import catalog, config, db, engine, provider, store, worker
+from . import catalog, config, db, engine, personas, provider, store, worker
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -536,8 +536,21 @@ def _chat_system() -> str:
     return CHAT_SYSTEM_BASE + "\n\n" + note
 
 
+# A Chief proposes strategy but never writes rules — it gets read-only tools. Managers and general
+# Cortex get the full set. This enforces the role split structurally (one keeper of rules = the Manager).
+_READONLY_TOOLS = {"list_skills", "list_tasks", "get_task"}
+
+
+@app.get("/api/heads")
+def heads(_: None = Depends(auth)) -> dict:
+    """The org as personas you can talk to: Chiefs (strategy) + Managers (standards)."""
+    return personas.org()
+
+
 class ChatTurn(BaseModel):
     messages: list[dict]
+    persona: str | None = None     # '' / None = general Cortex; 'chief:Demand'; 'manager:Content & SEO'
+    company: str | None = None     # company slug in focus (the global selector)
 
 
 @app.post("/api/chat")
@@ -546,7 +559,14 @@ def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
             if m.get("content") and m.get("role") in ("user", "assistant")][-20:]
     if not msgs or msgs[-1]["role"] != "user":
         raise HTTPException(status_code=400, detail="last message must be from the user")
-    return {"reply": provider.chat_tools(_chat_system(), msgs, SKILL_TOOLS, _exec_skill_tool)}
+    persona = (body.persona or "").strip()
+    system, tools = _chat_system(), SKILL_TOOLS
+    if persona:
+        psys, _model, is_chief = personas.persona_system(persona, body.company)
+        if psys:
+            system = psys
+            tools = [t for t in SKILL_TOOLS if t["name"] in _READONLY_TOOLS] if is_chief else SKILL_TOOLS
+    return {"reply": provider.chat_tools(system, msgs, tools, _exec_skill_tool)}
 
 
 # ---- saved conversations (Talk history) ----

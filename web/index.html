@@ -497,6 +497,9 @@ function renderChat(v){
       <button class="iconbtn" title="New chat" onclick="newConv()">✚</button>
       <button class="iconbtn" title="Delete this chat" onclick="delConv()">🗑️</button>
     </div>
+    <div class="convbar">
+      <select id="personaSel" class="convsel" title="Who you're talking to" onchange="setTalkingTo(this.value)"></select>
+    </div>
     <div id="chatlog" class="chatlog"></div>
     <div class="freehint" id="freehint">Free mode on — just talk</div>
     <div class="chatbar">
@@ -516,7 +519,21 @@ function renderChat(v){
   const cl=document.getElementById('chatlog'); if(cl) cl.style.paddingBottom=(tabsH+barH+24)+'px';
   paintChat();
   initConvs();
+  fillPersonaSel();
 }
+let talkingTo=localStorage.getItem('cortex_persona')||'';
+let headsCache=null;
+async function fillPersonaSel(){
+  const sel=document.getElementById('personaSel'); if(!sel) return;
+  if(!headsCache){ try{ headsCache=demo?{chiefs:[],managers:[]}:await api('/api/heads'); }catch(e){ headsCache={chiefs:[],managers:[]}; } }
+  let html='<option value="">💬 Cortex (general assistant)</option>';
+  if((headsCache.chiefs||[]).length) html+='<optgroup label="Chiefs · strategy &amp; ideas">'+
+    headsCache.chiefs.map(c=>`<option value="${esc(c.key)}">🧭 ${esc(c.title)}</option>`).join('')+'</optgroup>';
+  if((headsCache.managers||[]).length) html+='<optgroup label="Managers · standards &amp; QA">'+
+    headsCache.managers.map(m=>`<option value="${esc(m.key)}">🛠️ ${esc(m.title)} · ${esc(m.department)}</option>`).join('')+'</optgroup>';
+  sel.innerHTML=html; sel.value=talkingTo;
+}
+function setTalkingTo(v){ talkingTo=v||''; localStorage.setItem('cortex_persona',talkingTo); }
 function paintChat(){
   const l=document.getElementById('chatlog'); if(!l) return;
   let html;
@@ -580,7 +597,8 @@ async function sendChat(text, viaVoice){
   if(demo){ chatMsgs[chatMsgs.length-1]={role:'assistant',content:'(demo) Log in with your passcode to chat for real.'}; paintChat(); return ''; }
   try{
     const hist=chatMsgs.filter(m=>m.content!=='…');
-    const d=await api('/api/chat',{method:'POST',body:JSON.stringify({messages:hist})});
+    const fco=(document.getElementById('coSel')||{}).value||'';
+    const d=await api('/api/chat',{method:'POST',body:JSON.stringify({messages:hist,persona:talkingTo,company:fco})});
     const reply=d.reply||'(no reply)';
     chatMsgs[chatMsgs.length-1]={role:'assistant',content:reply}; paintChat();
     saveConv();
