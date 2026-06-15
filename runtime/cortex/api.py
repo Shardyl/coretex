@@ -578,11 +578,25 @@ def heads(_: None = Depends(auth)) -> dict:
     return personas.org()
 
 
+def _image_blocks(data_urls: list[str]) -> list[dict]:
+    """Turn data: URLs (data:image/jpeg;base64,...) into Anthropic image content blocks."""
+    blocks = []
+    for u in (data_urls or [])[:6]:
+        if not isinstance(u, str) or not u.startswith("data:") or ";base64," not in u:
+            continue
+        head, b64 = u.split(";base64,", 1)
+        media = head[5:] or "image/jpeg"
+        if media.startswith("image/"):
+            blocks.append({"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}})
+    return blocks
+
+
 class ChatTurn(BaseModel):
     messages: list[dict]
     persona: str | None = None     # PINNED head ('' / None = auto-route). 'chief:Demand', 'manager:Content & SEO'
     company: str | None = None     # company slug in focus (the global selector)
     current: str | None = None     # who handled the last turn (sticky auto-routing)
+    images: list[str] | None = None  # attached photos/files as data: URLs (multimodal context)
 
 
 @app.post("/api/chat")
@@ -594,6 +608,10 @@ def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
     pinned = (body.persona or "").strip()
     # pinned head wins; otherwise the concierge routes (sticky to `current` unless the subject shifts).
     chosen = pinned if pinned else personas.route(msgs, body.company, (body.current or "").strip())
+    # attach any images to the last user turn so Cortex can actually see them (Claude is multimodal).
+    blocks = _image_blocks(body.images or [])
+    if blocks:
+        msgs[-1]["content"] = blocks + [{"type": "text", "text": msgs[-1]["content"]}]
     system, tools = _chat_system(), SKILL_TOOLS
     if chosen:
         psys, _model, is_chief = personas.persona_system(chosen, body.company)
