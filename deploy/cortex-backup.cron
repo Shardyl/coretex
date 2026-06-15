@@ -1,0 +1,5 @@
+# Cortex nightly database backup -> Google Drive (keep last 30).
+# Install at /etc/cron.d/cortex-backup (root:root 644). Runs backup_drive.py as the cortex user.
+# Auth: keyless OAuth — client config /etc/cortex/google_oauth_client.json + refresh token in settings
+# (set once via https://coretex.uk/oauth/google/start). Target folder = GOOGLE_BACKUP_FOLDER (default in code).
+0 3 * * * cortex cd /opt/coretex/runtime && /opt/coretex/.venv/bin/python backup_drive.py >> /opt/coretex/backup.log 2>&1

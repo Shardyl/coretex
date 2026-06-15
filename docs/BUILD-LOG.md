@@ -146,8 +146,19 @@ offer biometric. Token auth unchanged underneath. `create_skill` chat tool now t
 sets category/manager via `catalog.dept_meta` (fixed the off-catalog notepad skill #315, re-filed under
 Finance & Admin).
 
-**Remaining for Phase 3:** nightly DB backup → Google Drive (operator setting up a service account; folder
-shared); "discuss this" deep-link item→Talk; Talk gym-mode; other cockpit screens; omnichannel = Phase 4.
+**Nightly Google Drive backup ✅ (2026-06-15, verified live):** keyless OAuth (org blocks service-account
+keys via `iam.disableServiceAccountKeyCreation` secure-default, so NO key — we use a user refresh token).
+Flow: `GET /oauth/google/start` → Google consent (scope `drive.file`, Internal app in Cloud project
+`coretex-499507` under sensa.digital org) → `GET /oauth/google/callback` exchanges code → refresh token in
+settings `google_refresh_token`. Client config at `/etc/cortex/google_oauth_client.json`. `backup_drive.py`:
+`pg_dump $DATABASE_URL | gzip` → multipart upload to Drive folder `1oEKRo6aH4r1-…ZATEZ`
+(`supportsAllDrives=true`), prune to last 30. Cron `/etc/cron.d/cortex-backup` (3am, as cortex). First
+backup landed: `cortex-20260615-074154.sql.gz`. So skill rules / all DB data are now backed up offsite to
+Rashad's personal-2TB Drive. (Re-auth via the /start link if the refresh token is ever revoked.)
+
+**Remaining for Phase 3:** "discuss this" deep-link item→Talk; Talk gym-mode; other cockpit screens;
+omnichannel/Gmail intake = Phase 4 (note: org SA-key block means Gmail also needs OAuth-per-mailbox or a
+policy exception — revisit at Phase 4).
 
 **Remaining for Phase 3:** (1) chat that can **trigger tasks/draft content** (currently manages skills +
 converses; drafting still routes to Ask); (2) a visual **Skills screen** + remaining cockpit screens
