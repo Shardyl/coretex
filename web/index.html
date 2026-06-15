@@ -154,6 +154,30 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .dept{display:flex;align-items:center;justify-content:space-between;background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:13px 15px;margin-bottom:8px;cursor:pointer}
 .deptsub{font-size:12px;color:var(--mut);margin-top:2px}
 .chev{color:var(--mut);font-size:13px;flex:none;margin-left:8px}
+.qbtn{background:none;border:none;color:var(--accent);padding:3px;cursor:pointer;display:flex;align-items:center}
+/* questionnaire flow */
+.qhead{display:flex;align-items:center;gap:10px;margin:2px 2px 14px}
+.qtitle{font-family:Poppins;font-weight:700;font-size:16px}
+.qsub{font-size:12px;color:var(--mut);margin-top:1px}
+.qcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:10px}
+.qcardh{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px}
+.qcardh b{font-size:15px}
+.qchip{font-size:11px;color:var(--mut);background:var(--bg2,rgba(127,127,127,.12));border:1px solid var(--line);border-radius:8px;padding:2px 7px}
+.qprog{font-size:12.5px;color:var(--mut)}
+.qwarn{font-size:12px;color:var(--mut);font-style:italic}
+.qprogbar{height:5px;border-radius:3px;background:var(--line);margin:2px 2px 14px;overflow:hidden}
+.qprogbar div{height:100%;background:var(--accent);transition:width .25s}
+.qq{font-size:18px;line-height:1.4;font-weight:500;margin:6px 2px 14px}
+.qopts{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.qopt{text-align:left;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:11px 13px;font:inherit;font-size:14px;cursor:pointer}
+.qopt.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--bg))}
+.qansta{width:100%;min-height:74px;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:11px 13px;font:inherit;font-size:15px;resize:vertical}
+.qrule{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:9px}
+.qinc{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mut);margin-bottom:5px}
+.qruletext{font-size:14px;line-height:1.45}
+.qmeta{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+.qconflict{font-size:12px;color:#ffcf6e;margin-top:8px;line-height:1.4}
+.qover{display:flex;align-items:flex-start;gap:6px;font-size:12px;color:var(--mut);margin-top:6px}
 .skill{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin:0 0 7px 12px;cursor:pointer}
 .sname{font-size:14px;font-weight:500}
 .schips{display:flex;gap:6px;flex:none}
@@ -386,6 +410,7 @@ const ICON={
   x:'M6 6l12 12M18 6L6 18',
   check:'M5 12l5 5L20 7',
   back:'M5 12h13M10 7l-5 5 5 5',
+  arrow:'M5 12h13M13 6l6 6-6 6',
   finger:'M12 11a2 2 0 0 0-2 2c0 1.4.3 2.8.8 4M12 7a5 5 0 0 0-5 5c0 1 0 2.4.5 3.6M12 7a5 5 0 0 1 5 5c0 .8 0 1.6-.2 2.4M9.5 4.3a8 8 0 0 1 10 7.7M4.3 11A8 8 0 0 1 7 6.2',
   alert:'M12 4l9 16H3zM12 10v4M12 17h.01',
   file:'M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5',
@@ -965,7 +990,9 @@ function paintSkills(){
   const cats={};
   skillsData.forEach(s=>{ const c=s.category||'Other', d=s.department||'Other';
     cats[c]=cats[c]||{}; cats[c][d]=cats[c][d]||[]; cats[c][d].push(s); });
-  let html='';
+  let html=`<div class="qcard" onclick="openQuestionnaire('General Operations')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+    <div><b>General Operations</b><div class="deptsub">Overall business operating questionnaire</div></div>
+    <span class="qbtn">${ic('tool',18)}</span></div>`;
   Object.keys(cats).forEach(cat=>{
     html+=`<div class="cath">${esc(cat)}</div>`;
     Object.keys(cats[cat]).forEach(dep=>{
@@ -973,7 +1000,7 @@ function paintSkills(){
       const mgr=sk[0]&&sk[0].manager?' · '+esc(sk[0].manager):'';
       html+=`<div class="dept" onclick="toggleDept('${dep.replace(/'/g,"\\'")}')">
         <div><b>${esc(dep)}</b><div class="deptsub">${sk.length} skill${sk.length===1?'':'s'} · ${ruleN} rule${ruleN===1?'':'s'}${mgr}</div></div>
-        <div class="chev">${open?'▾':'▸'}</div></div>`;
+        <div style="display:flex;align-items:center;gap:4px"><button class="qbtn" onclick="event.stopPropagation();openQuestionnaire('${dep.replace(/'/g,"\\'")}')" aria-label="Run questionnaire">${ic('tool',17)}</button><div class="chev">${open?'▾':'▸'}</div></div></div>`;
       if(open) sk.forEach(s=>{
         const ur=s.universal_rules||[], lr=s.rules||[], rc=ur.length+lr.length, so=openSkill===s.id;
         html+=`<div class="skill" onclick="toggleSkill(${s.id})"><div class="sname">${esc(s.name)}</div>
@@ -1012,6 +1039,98 @@ async function delRule(id,index,scope){
   if(demo){ toast('Removed (demo)'); return; }
   try{ const sk=await api(`/api/skills/${id}/rule/delete`,{method:'POST',body:JSON.stringify({index,scope:scope||'company'})});
     const i=skillsData.findIndex(s=>s.id===id); if(i>=0) skillsData[i]=sk; toast('Rule removed'); paintSkills(); }
+  catch(e){ toast('Error: '+e.message); }
+}
+
+// ---- Manager questionnaire (guided flow) ----
+let qz={area:null,manager:'',company:'',tier:null,run:null,state:null,distill:null};
+async function openQuestionnaire(area){
+  if(demo){ toast('Questionnaires need the live app'); return; }
+  qz={area:area, company:(document.getElementById('coSel')||{}).value||'', manager:'', tier:null, run:null, state:null, distill:null};
+  await qzStatus();
+}
+async function qzStatus(){
+  const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
+  let d; try{ d=await api('/api/questionnaire/status?area='+encodeURIComponent(qz.area)+(qz.company?'&company='+encodeURIComponent(qz.company):'')); }
+  catch(e){ v.innerHTML='<div class="empty">Error: '+esc(e.message)+'</div>'; return; }
+  qz.manager=d.manager;
+  const coName=(companies.find(c=>c.slug===qz.company)||{}).name||'';
+  let html=`<div class="qhead"><button class="iconbtn sm" onclick="go('skills')" aria-label="Back">${ic('back',18)}</button>
+    <div><div class="qtitle">${esc(qz.area)}</div><div class="qsub">${esc(qz.manager)} · choose a depth to run</div></div></div>`;
+  html+=d.tiers.map(t=>{
+    const scopeLbl = t.scope==='universal' ? 'Universal · all companies' : ('This company'+(coName?' · '+esc(coName):''));
+    const needCo = t.scope==='company' && !qz.company;
+    const prog = needCo ? '<span class="qwarn">Pick a company up top to run this depth</span>'
+      : (t.status==='not_started'?'Not started':(t.status==='done'?'Completed':`In progress · ${t.answered}/${t.total||'?'}`));
+    let act='';
+    if(!needCo){
+      if(t.status==='in_progress') act=`<button class="btn go" onclick="qzStart('${t.tier}',false)">Continue</button><button class="btn" onclick="qzStart('${t.tier}',true)">Start over</button>`;
+      else act=`<button class="btn go" onclick="qzStart('${t.tier}',false)">${t.status==='done'?'Re-run':'Start'}</button>`;
+    }
+    return `<div class="qcard"><div class="qcardh"><b>${esc(t.label)}</b><span class="qchip">${scopeLbl}</span></div>
+      <div class="qprog">${prog}</div>${act?`<div class="row" style="margin-top:9px">${act}</div>`:''}</div>`;
+  }).join('');
+  v.innerHTML=html;
+}
+async function qzStart(tier,restart){
+  qz.tier=tier;
+  const v=document.getElementById('view'); v.innerHTML='<div class="empty">Preparing the questions…</div>';
+  try{ qz.state=await api('/api/questionnaire/start',{method:'POST',body:JSON.stringify({area:qz.area,tier,company:qz.company,restart})}); }
+  catch(e){ toast('Error: '+e.message); qzStatus(); return; }
+  qz.run=qz.state.run_id; qzQuestion();
+}
+function qzQuestion(){
+  const s=qz.state; if(!s||s.status==='done'||!s.question){ qzReview(); return; }
+  const q=s.question, pct=Math.round((s.idx/Math.max(1,s.total))*100);
+  const opts = (q.type==='choice'&&q.options)? `<div class="qopts">${q.options.map(o=>`<button class="qopt" onclick="qzPick(this)">${esc(o)}</button>`).join('')}</div>`:'';
+  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="qzStatus()" aria-label="Back">${ic('back',18)}</button>
+    <div><div class="qtitle">${esc(qz.area)} · ${esc(qz.tier)}</div><div class="qsub">Question ${s.idx+1} of ${s.total}</div></div></div>
+    <div class="qprogbar"><div style="width:${pct}%"></div></div>
+    <div class="qq">${esc(q.text)}</div>${opts}
+    <textarea id="qAns" class="qansta" placeholder="Type your answer, or tap the mic to speak it…"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="iconbtn" onclick="dictate(this,'qAns')" aria-label="Speak your answer">${ic('mic',20)}</button>
+      <button class="btn go" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px" onclick="qzSubmit()">Next ${ic('arrow',16)}</button>
+    </div>`;
+}
+function qzPick(btn){ document.querySelectorAll('.qopt').forEach(b=>b.classList.remove('on')); btn.classList.add('on');
+  const ta=document.getElementById('qAns'); if(ta) ta.value=btn.textContent; }
+async function qzSubmit(){
+  const ta=document.getElementById('qAns'); const a=(ta?ta.value:'').trim();
+  if(!a){ toast('Give an answer, or tap an option'); return; }
+  if(recording){ stopDictation(null); }
+  try{ qz.state=await api('/api/questionnaire/answer',{method:'POST',body:JSON.stringify({run_id:qz.run,answer:a})}); }
+  catch(e){ toast('Error: '+e.message); return; }
+  qzQuestion();
+}
+async function qzReview(){
+  const v=document.getElementById('view'); v.innerHTML='<div class="empty">Reviewing your answers and drafting the rules…</div>';
+  let d; try{ d=await api('/api/questionnaire/distill',{method:'POST',body:JSON.stringify({run_id:qz.run})}); }
+  catch(e){ v.innerHTML='<div class="empty">Error: '+esc(e.message)+'</div>'; return; }
+  qz.distill=d;
+  let html=`<div class="qhead"><button class="iconbtn sm" onclick="qzStatus()" aria-label="Back">${ic('back',18)}</button>
+    <div><div class="qtitle">Review · ${esc(qz.area)}</div><div class="qsub">${esc(qz.manager)} drafted these from your answers</div></div></div>`;
+  if(!(d.rules||[]).length && !(d.roadmap||[]).length) html+='<div class="empty">No rules came out of these answers.</div>';
+  (d.rules||[]).forEach((r,i)=>{
+    const conflict=r.contradicts?`<div class="qconflict">${ic('alert',14)} Conflicts with: “${esc(r.contradicts)}”</div>
+      <label class="qover"><input type="checkbox" id="qov${i}"> <span>Override — this supersedes that universal rule for ${esc((companies.find(c=>c.slug===qz.company)||{}).name||'this company')}</span></label>`:'';
+    html+=`<div class="qrule"><label class="qinc"><input type="checkbox" id="qinc${i}" checked> include</label>
+      <div class="qruletext">${esc(r.rule)}</div>
+      <div class="qmeta"><span class="qchip">${r.scope==='universal'?'Universal':'Company'}</span>${r.skill?`<span class="qchip">${esc(r.skill)}</span>`:''}</div>${conflict}</div>`;
+  });
+  if((d.roadmap||[]).length){ html+=`<div class="cath" style="margin-top:16px">Roadmap & ideas captured</div>`+
+    d.roadmap.map((x,i)=>`<div class="qrule"><label class="qinc"><input type="checkbox" id="qrd${i}" checked> add to parking lot</label><div class="qruletext">${esc(x)}</div></div>`).join(''); }
+  html+=`<div class="row" style="margin:16px 2px 32px"><button class="btn go" style="flex:1" onclick="qzApply()">Save confirmed rules</button></div>`;
+  v.innerHTML=html;
+}
+async function qzApply(){
+  const d=qz.distill, rules=[], roadmap=[];
+  (d.rules||[]).forEach((r,i)=>{ const inc=document.getElementById('qinc'+i); if(inc&&inc.checked){
+    const it={skill:r.skill,rule:r.rule,scope:r.scope}; const ov=document.getElementById('qov'+i);
+    if(ov&&ov.checked&&r.contradicts) it.override_of=r.contradicts; rules.push(it); } });
+  (d.roadmap||[]).forEach((x,i)=>{ const c=document.getElementById('qrd'+i); if(c&&c.checked) roadmap.push(x); });
+  try{ const res=await api('/api/questionnaire/apply',{method:'POST',body:JSON.stringify({company:qz.company,area:qz.area,rules,roadmap})});
+    toast(`Saved ${res.rules_saved} rule${res.rules_saved===1?'':'s'}${res.roadmap_added?', '+res.roadmap_added+' to roadmap':''} ✓`); go('skills'); }
   catch(e){ toast('Error: '+e.message); }
 }
 
