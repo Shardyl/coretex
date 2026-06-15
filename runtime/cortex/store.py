@@ -33,12 +33,15 @@ def get_skill_by_key(company_id, key) -> dict | None:
     return db.one("select * from skills where company_id=%s and skill_key=%s", (company_id, key))
 
 
-def upsert_skill(company_id, key, name, craft, authority="ask", stakes="low", auto_threshold=10) -> dict:
+def upsert_skill(company_id, key, name, craft, authority="ask", stakes="low", auto_threshold=10,
+                 category=None, department=None, manager=None) -> dict:
     return db.execute(
-        "insert into skills (company_id,skill_key,name,craft,authority,stakes,auto_threshold) "
-        "values (%s,%s,%s,%s,%s,%s,%s) on conflict (company_id,skill_key) do update set "
-        "name=excluded.name, craft=excluded.craft returning *",
-        (company_id, key, name, craft, authority, stakes, auto_threshold),
+        "insert into skills (company_id,skill_key,name,craft,authority,stakes,auto_threshold,"
+        "category,department,manager) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+        "on conflict (company_id,skill_key) do update set name=excluded.name, craft=excluded.craft, "
+        "stakes=excluded.stakes, category=excluded.category, department=excluded.department, "
+        "manager=excluded.manager returning *",
+        (company_id, key, name, craft, authority, stakes, auto_threshold, category, department, manager),
     )
 
 

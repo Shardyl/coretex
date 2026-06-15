@@ -15,8 +15,11 @@ create table if not exists companies (
 create table if not exists skills (
     id            bigserial primary key,
     company_id    bigint references companies(id) on delete cascade,
-    skill_key     text not null,                         -- e.g. 'content-seo'
+    skill_key     text not null,                         -- e.g. 'content-blog-posts'
     name          text not null,
+    category      text,                                  -- Demand | Convert | Deliver | Run the business
+    department    text,                                  -- e.g. 'Content & SEO'
+    manager       text,                                  -- e.g. 'Content manager'
     craft         text not null default '',              -- the skill instructions (markdown)
     authority     text not null default 'ask',           -- ask | auto | never
     stakes        text not null default 'low',           -- low | high (reversibility tier)

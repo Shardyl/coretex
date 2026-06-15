@@ -265,9 +265,10 @@ CHAT_SYSTEM_BASE = (
 
 SKILL_TOOLS = [
     {"name": "list_skills",
-     "description": "List skills with company, craft summary and standing rules. Optional company-slug filter.",
+     "description": "List skills (with their standing rules) for a company and/or department. Omit both for an overview.",
      "input_schema": {"type": "object", "properties": {
-        "company": {"type": "string", "description": "company slug, omit for all"}}}},
+        "company": {"type": "string", "description": "company slug"},
+        "department": {"type": "string", "description": "department name e.g. 'Content & SEO' — zooms in with full detail"}}}},
     {"name": "add_rule",
      "description": "Add one standing rule to a skill; the worker follows it from now on.",
      "input_schema": {"type": "object", "properties": {
@@ -289,15 +290,26 @@ SKILL_TOOLS = [
 
 def _exec_skill_tool(name: str, inp: dict) -> str:
     if name == "list_skills":
-        slug = inp.get("company")
-        q = ("select s.skill_key, s.name, s.craft, s.authority, s.rules, c.slug as company "
-             "from skills s join companies c on c.id=s.company_id")
-        rows = (db.query(q + " where c.slug=%s order by s.name", (slug,)) if slug
-                else db.query(q + " order by c.name, s.name"))
-        out = [{"company": r["company"], "skill_key": r["skill_key"], "name": r["name"],
-                "authority": r["authority"], "craft": (r["craft"] or "")[:400], "rules": r["rules"] or []}
-               for r in rows]
-        return json.dumps(out) if out else "no skills yet"
+        slug, dept = inp.get("company"), inp.get("department")
+        where, params = [], []
+        if slug:
+            where.append("c.slug=%s"); params.append(slug)
+        if dept:
+            where.append("s.department=%s"); params.append(dept)
+        clause = (" where " + " and ".join(where)) if where else ""
+        rows = db.query(
+            "select s.skill_key, s.name, s.category, s.department, s.authority, s.rules, s.craft, "
+            "c.slug as company from skills s join companies c on c.id=s.company_id" + clause +
+            " order by c.name, s.category, s.department, s.name", tuple(params))
+        detail = bool(dept)  # include craft only when zoomed into one department
+        out = []
+        for r in rows:
+            item = {"company": r["company"], "department": r["department"], "skill_key": r["skill_key"],
+                    "name": r["name"], "authority": r["authority"], "rules": r["rules"] or []}
+            if detail:
+                item["craft"] = (r["craft"] or "")[:300]
+            out.append(item)
+        return json.dumps(out) if out else "no skills found"
     co = store.get_company_by_slug(inp.get("company", ""))
     if not co:
         known = ", ".join(r["slug"] for r in db.query("select slug from companies"))
@@ -321,11 +333,18 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
 
 
 def _chat_system() -> str:
-    rows = db.query("select s.skill_key, s.name, s.rules, c.slug as company "
-                    "from skills s join companies c on c.id=s.company_id order by c.name, s.name")
-    snap = "\n".join(f"- {r['company']}/{r['skill_key']} ({r['name']}): {len(r['rules'] or [])} rules"
-                     for r in rows) or "(no skills yet)"
-    return CHAT_SYSTEM_BASE + "\n\nSkills that currently exist:\n" + snap
+    cos = db.query("select slug from companies order by name")
+    depts = db.query("select distinct category, department from skills "
+                     "where department is not null order by category, department")
+    n = db.one("select count(*) as n from skills")["n"]
+    co_line = ", ".join(c["slug"] for c in cos) or "(none)"
+    dept_line = "; ".join(d["department"] for d in depts) or "(none)"
+    note = (f"Every company runs the SAME granular skill catalog ({n} skill rows in total), grouped by "
+            f"department. Companies: {co_line}. Departments (all companies have all of them): "
+            f"{dept_line}. Most skills are empty (no rules yet) and you tune them one at a time. Use "
+            f"list_skills(company, department) to read a department's skills and their rules before "
+            f"answering — never assume a skill's rules.")
+    return CHAT_SYSTEM_BASE + "\n\n" + note
 
 
 class ChatTurn(BaseModel):

@@ -20,11 +20,21 @@ def connect() -> psycopg.Connection:
     return psycopg.connect(config.require("DATABASE_URL"), row_factory=dict_row, autocommit=True)
 
 
+# columns added after the first schema shipped — applied to existing DBs on migrate.
+_ALTERS = [
+    "alter table skills add column if not exists category text",
+    "alter table skills add column if not exists department text",
+    "alter table skills add column if not exists manager text",
+]
+
+
 def migrate() -> None:
-    """Apply db/schema.sql (idempotent)."""
+    """Apply db/schema.sql + incremental column adds (idempotent)."""
     sql = SCHEMA_PATH.read_text(encoding="utf-8")
     with connect() as conn:
         conn.execute(sql)
+        for stmt in _ALTERS:
+            conn.execute(stmt)
 
 
 def query(sql: str, params: tuple = ()) -> list[dict]:

@@ -73,11 +73,17 @@ def blog() -> None:
              "(field-level vs character-level), why it matters for expense and fintech apps, and "
              "what to ask a vendor. Practical, specific, accuracy-first, no hype.")
     co = store.get_company_by_slug("tabscanner")
-    skill = store.get_skill_by_key(co["id"], "content-seo")
+    skill = store.get_skill_by_key(co["id"], "content-blog-posts")
     if not skill:
-        print("no skill 'content-seo' — run seed first"); return
+        print("no skill 'content-blog-posts' — run catalog first"); return
     t = store.create_task(co["id"], skill["id"], "blog", {"brief": brief})
-    print(f"created BLOG task #{t['id']} for content-seo: {brief[:70]}...")
+    print(f"created BLOG task #{t['id']} for content-blog-posts: {brief[:70]}...")
+
+
+def catalog() -> None:
+    from cortex import catalog as cat
+    c = cat.seed_all()
+    print(f"catalog seeded: {c['companies']} companies x {c['skills_per_company']} skills = {c['rows']} rows")
 
 
 def engine() -> None:
@@ -85,7 +91,7 @@ def engine() -> None:
     eng.run()
 
 
-COMMANDS = {"migrate": migrate, "status": status, "seed": seed,
+COMMANDS = {"migrate": migrate, "status": status, "seed": seed, "catalog": catalog,
             "task": task, "blog": blog, "engine": engine}
 
 if __name__ == "__main__":
