@@ -27,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, db, engine, provider, store
+from . import config, db, engine, provider, store, worker
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -118,7 +118,38 @@ def skills(slug: str, _: None = Depends(auth)) -> list[dict]:
     co = store.get_company_by_slug(slug)
     if not co:
         raise HTTPException(status_code=404, detail="no such company")
-    return db.query("select * from skills where company_id=%s order by name", (co["id"],))
+    return db.query("select * from skills where company_id=%s "
+                    "order by category, department, name", (co["id"],))
+
+
+class RuleBody(BaseModel):
+    rule: str
+
+
+@app.post("/api/skills/{skill_id}/rule")
+def add_skill_rule(skill_id: int, body: RuleBody, _: None = Depends(auth)) -> dict:
+    sk = store.get_skill(skill_id)
+    if not sk:
+        raise HTTPException(status_code=404, detail="no such skill")
+    if not body.rule.strip():
+        raise HTTPException(status_code=400, detail="empty rule")
+    return store.add_rule(skill_id, body.rule.strip())
+
+
+class RuleIdx(BaseModel):
+    index: int
+
+
+@app.post("/api/skills/{skill_id}/rule/delete")
+def del_skill_rule(skill_id: int, body: RuleIdx, _: None = Depends(auth)) -> dict:
+    sk = store.get_skill(skill_id)
+    if not sk:
+        raise HTTPException(status_code=404, detail="no such skill")
+    rules = list(sk.get("rules") or [])
+    if 0 <= body.index < len(rules):
+        rules.pop(body.index)
+    return db.execute("update skills set rules=%s::jsonb, updated_at=now() where id=%s returning *",
+                      (json.dumps(rules), skill_id))
 
 
 @app.get("/api/tasks")
@@ -259,8 +290,14 @@ CHAT_SYSTEM_BASE = (
     "asks to add a rule, create a skill, or change how something is handled, ACTUALLY DO IT with the "
     "tools, then confirm in one short spoken sentence what you changed. When he describes a case that "
     "went wrong (e.g. a misjudged lead), turn the lesson into one or more concise standing rules and "
-    "add them to the right skill. If unsure which skill or company he means, ask. To actually draft or "
-    "publish a piece of content as a task, tell him to use the Ask tab."
+    "add them to the right skill. If unsure which skill or company he means, ask. "
+    "You can also SEE and ACT on the work: list_tasks (recent / Inbox) and get_task (full detail incl. "
+    "the draft); when Rashad refers to 'that draft', 'the last post', or a specific Inbox item, FIND it "
+    "with those first — don't guess which one. Use draft to write something now with a skill (its craft "
+    "and rules get applied) and show it to him; create_task to queue work that drafts into the Inbox; and "
+    "on a PENDING task approve_task / skip_task / correct_task (correct redrafts it and learns the rule). "
+    "When he gives feedback on a draft you just made, you can re-run draft with a revision AND, if the "
+    "lesson is durable, add_rule so it sticks for next time — fix it and teach it in one go."
 )
 
 SKILL_TOOLS = [
@@ -285,6 +322,34 @@ SKILL_TOOLS = [
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string"}, "skill": {"type": "string"}, "craft": {"type": "string"}},
         "required": ["company", "skill", "craft"]}},
+    {"name": "list_tasks",
+     "description": "List recent tasks / Inbox items (newest first). Optional status filter (awaiting_approval, done, rejected).",
+     "input_schema": {"type": "object", "properties": {"status": {"type": "string"}}}},
+    {"name": "get_task",
+     "description": "Full detail of one task, including its current draft and the manager's verdict.",
+     "input_schema": {"type": "object", "properties": {"task_id": {"type": "integer"}}, "required": ["task_id"]}},
+    {"name": "draft",
+     "description": "Produce a draft NOW using a skill — applies that skill's craft + standing rules + the company voice. Returns the draft text to show Rashad. Use for replies, posts, copy.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string"}, "skill": {"type": "string", "description": "skill_key"},
+        "brief": {"type": "string"}, "revision": {"type": "string", "description": "optional: how to change a previous draft"}},
+        "required": ["company", "skill", "brief"]}},
+    {"name": "create_task",
+     "description": "Queue a task; the engine drafts it and it lands in the Inbox + Telegram for approval.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string"}, "skill": {"type": "string"},
+        "kind": {"type": "string", "description": "content (default) or blog"}, "brief": {"type": "string"}},
+        "required": ["company", "skill", "brief"]}},
+    {"name": "correct_task",
+     "description": "Give feedback on a pending task's draft; it redrafts and learns the rule.",
+     "input_schema": {"type": "object", "properties": {
+        "task_id": {"type": "integer"}, "feedback": {"type": "string"}}, "required": ["task_id", "feedback"]}},
+    {"name": "approve_task",
+     "description": "Approve a pending task (publishes / executes it).",
+     "input_schema": {"type": "object", "properties": {"task_id": {"type": "integer"}}, "required": ["task_id"]}},
+    {"name": "skip_task",
+     "description": "Skip / discard a pending task.",
+     "input_schema": {"type": "object", "properties": {"task_id": {"type": "integer"}}, "required": ["task_id"]}},
 ]
 
 
@@ -310,6 +375,31 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
                 item["craft"] = (r["craft"] or "")[:300]
             out.append(item)
         return json.dumps(out) if out else "no skills found"
+    if name == "list_tasks":
+        status = inp.get("status")
+        rows = db.query(
+            "select t.id,t.kind,t.status,t.request,t.draft,c.slug company,s.name skill "
+            "from tasks t join companies c on c.id=t.company_id left join skills s on s.id=t.skill_id "
+            + ("where t.status=%s " if status else "") + "order by t.id desc limit 15",
+            (status,) if status else ())
+        out = [{"id": r["id"], "company": r["company"], "skill": r["skill"], "kind": r["kind"],
+                "status": r["status"],
+                "brief": ((r["request"] or {}).get("brief") if isinstance(r["request"], dict) else "") or "",
+                "draft_preview": (r["draft"] or "")[:140]} for r in rows]
+        return json.dumps(out) if out else "no tasks yet"
+    if name == "get_task":
+        t = store.get_task(int(inp["task_id"]))
+        if not t:
+            return "no such task"
+        return json.dumps({"id": t["id"], "status": t["status"], "kind": t["kind"],
+                           "request": t.get("request"), "draft": t.get("draft"),
+                           "manager": t.get("manager")}, default=str)
+    if name == "correct_task":
+        return json.dumps(engine.correct_task(int(inp["task_id"]), inp.get("feedback", "")), default=str)
+    if name == "approve_task":
+        return json.dumps(engine.approve_task(int(inp["task_id"])), default=str)
+    if name == "skip_task":
+        return json.dumps(engine.skip_task(int(inp["task_id"])), default=str)
     co = store.get_company_by_slug(inp.get("company", ""))
     if not co:
         known = ", ".join(r["slug"] for r in db.query("select slug from companies"))
@@ -329,6 +419,18 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
             return f"no skill '{inp.get('skill')}'"
         db.execute("update skills set craft=%s, updated_at=now() where id=%s", (inp["craft"], sk["id"]))
         return f"updated craft for {co['slug']}/{sk['skill_key']}"
+    if name == "draft":
+        sk = store.get_skill_by_key(co["id"], inp.get("skill", ""))
+        if not sk:
+            return f"no skill '{inp.get('skill')}' for {co['slug']}"
+        text = worker.draft(sk, co, {"brief": inp.get("brief", "")}, correction=inp.get("revision"))
+        return "DRAFT (skill craft + rules applied):\n\n" + text
+    if name == "create_task":
+        sk = store.get_skill_by_key(co["id"], inp.get("skill", ""))
+        if not sk:
+            return f"no skill '{inp.get('skill')}' for {co['slug']}"
+        t = store.create_task(co["id"], sk["id"], inp.get("kind", "content"), {"brief": inp.get("brief", "")})
+        return f"created task #{t['id']} — drafting now; it'll appear in the Inbox and Telegram."
     return f"unknown tool {name}"
 
 
