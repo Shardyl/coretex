@@ -107,6 +107,15 @@ your turn ends (you paused) → spoken reply ("talk to cut in") → rising "go" 
 shows warming up / Listening / thinking / speaking. (Barge-in is AEC-dependent; word threshold tunable
 if it self-interrupts on speakerphone.)
 
-**Remaining for Phase 3:** (1) **Talk** gym-mode layout; (2) chat that can trigger tasks/actions
-(currently conversational only, routes to Ask); (3) remaining cockpit screens (Departments, Skills,
-Incoming, Calendar, Contacts, Reports, Settings); (4) omnichannel doors.
+**Skill-aware chat ✅ (2026-06-15):** `provider.chat_tools` (Claude tool-use loop) + `/api/chat` now
+gives Cortex tools `list_skills · add_rule · create_skill · update_craft`; system prompt injects a live
+snapshot of existing skills. So Cortex can **view and tune skills + rules by voice/chat** ("add a rule
+to the Tabscanner inquiry skill: …" → it actually adds it). Verified live: listed skills, added a rule,
+confirmed in DB. Seeded a **Tabscanner `sales-inquiries`** skill (assess-the-lead craft) for the Seb
+inquiry case. **Voice = Alice (British)** `Xb7hH8MSUJpSbSDYk0k2`, speed 1.14, stability 0.4 (env
+`ELEVENLABS_VOICE_ID`/`ELEVENLABS_SPEED`/`ELEVENLABS_STABILITY`); samples at `coretex.uk/voices/*.mp3`.
+
+**Remaining for Phase 3:** (1) chat that can **trigger tasks/draft content** (currently manages skills +
+converses; drafting still routes to Ask); (2) a visual **Skills screen** + remaining cockpit screens
+(Departments, Incoming, Calendar, Contacts, Projects, Team, Invoices, Reports, Settings); (3) Talk
+gym-mode; (4) omnichannel doors. Reference PDF on Rashad's Desktop: "Cortex - Build Phases & Specs.pdf".
