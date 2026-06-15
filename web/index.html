@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0B0F14">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -101,8 +103,8 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .pindots{display:flex;gap:14px;justify-content:center;margin-bottom:26px}
 .pd{width:14px;height:14px;border-radius:50%;border:2px solid var(--line)}
 .pd.on{background:var(--accent);border-color:var(--accent);box-shadow:0 0 10px var(--accent)}
-.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:258px;margin:0 auto}
-.kp{height:62px;border-radius:50%;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-size:23px;font-weight:500;cursor:pointer}
+.keypad{display:grid;grid-template-columns:repeat(3,64px);gap:18px;justify-content:center;margin:0 auto}
+.kp{width:64px;height:64px;border-radius:50%;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-size:23px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .kp:active{background:var(--panel2);transform:scale(.95)}
 .kp.ghost{background:none;border:none;pointer-events:none}
 #lockerr{color:var(--bad);font-size:13px;margin-top:14px;min-height:18px}
