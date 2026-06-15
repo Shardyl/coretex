@@ -137,8 +137,17 @@ answered correctly. This is the "refer to it, give feedback, it fixes + learns, 
 craft + standing rules (delete ✕) + an add-rule box. New endpoints `POST /api/skills/{id}/rule` and
 `/rule/delete`. Render-verified at mobile (5 tabs fit, no overflow).
 
-**Remaining for Phase 3:** "discuss this" deep-link from an item into Talk; Talk gym-mode; the other
-cockpit screens (Incoming, Calendar, Contacts, Projects, Team, Invoices, Reports, Settings); omnichannel doors.
+**App lock (security) ✅ (2026-06-15):** 4-digit **PIN** (server-verified: `_pin_hash` HMAC w/ api_secret,
+endpoints `GET /api/lock/status` · `POST /api/lock/set` · `/api/lock/check`; settings key `pin_hash`) +
+**Face ID/fingerprint** via WebAuthn platform authenticator (client gate; credential id in localStorage
+`cortex_bio`). Lock overlay (PIN pad) shows on **every app open and on return-to-foreground after >10s**;
+biometric auto-prompts if enrolled; 🔒 header button to lock now. First open with no PIN → set+confirm →
+offer biometric. Token auth unchanged underneath. `create_skill` chat tool now takes `department` and
+sets category/manager via `catalog.dept_meta` (fixed the off-catalog notepad skill #315, re-filed under
+Finance & Admin).
+
+**Remaining for Phase 3:** nightly DB backup → Google Drive (operator setting up a service account; folder
+shared); "discuss this" deep-link item→Talk; Talk gym-mode; other cockpit screens; omnichannel = Phase 4.
 
 **Remaining for Phase 3:** (1) chat that can **trigger tasks/draft content** (currently manages skills +
 converses; drafting still routes to Ask); (2) a visual **Skills screen** + remaining cockpit screens
