@@ -272,12 +272,12 @@ async def voice_stream(ws: WebSocket):
     await ws.accept()
     key = config.require("DEEPGRAM_API_KEY")
     try:
-        gap = max(1000, int(ws.query_params.get("gap", "2000")))  # ms of silence that ends a turn
+        gap = max(600, int(ws.query_params.get("gap", "1500")))  # ms of silence that ends a turn
     except ValueError:
-        gap = 2000
+        gap = 1500
     url = ("wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16"
            f"&sample_rate={rate}&channels=1&interim_results=true&smart_format=true&punctuate=true"
-           f"&endpointing=300&vad_events=true&utterance_end_ms={gap}")  # UtteranceEnd marks end of turn
+           f"&endpointing={gap}")  # speech_final fires after `gap` ms of silence = end of your turn
     hdr = [("Authorization", f"Token {key}")]
     try:
         try:
@@ -308,14 +308,12 @@ async def voice_stream(ws: WebSocket):
                     d = json.loads(msg)
                 except Exception:  # noqa: BLE001
                     continue
-                t = d.get("type")
-                if t == "Results":
+                if d.get("type") == "Results":
                     alts = (d.get("channel") or {}).get("alternatives") or [{}]
                     text = alts[0].get("transcript", "")
-                    if text:
-                        await ws.send_json({"final": bool(d.get("is_final")), "text": text})
-                elif t == "UtteranceEnd":
-                    await ws.send_json({"utterance_end": True})  # turn ends only after the silence gap
+                    sf = bool(d.get("speech_final"))
+                    if text or sf:
+                        await ws.send_json({"final": bool(d.get("is_final")), "speech_final": sf, "text": text})
         except Exception:  # noqa: BLE001
             pass
 

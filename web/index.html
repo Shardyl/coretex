@@ -450,14 +450,13 @@ async function toggleFree(){
       let d; try{ d=JSON.parse(ev.data);}catch(e){return;}
       if(d.error){ toast('Voice: '+d.error); return; }
       if(botSpeaking||freeThinking) return;
-      if(d.utterance_end){   // turn ends only after ~2s of real silence (won't cut you off mid-sentence)
-        if(freeUtt.trim()){ const u=freeUtt.trim(); freeUtt=''; freeLive=''; freeTurn(u); }
-        return;
-      }
       if(d.text){
         if(d.final){ freeUtt=(freeUtt?freeUtt+' ':'')+d.text; }
         freeLive = d.final ? freeUtt : ((freeUtt?freeUtt+' ':'')+d.text);   // show words live
         paintChat();
+      }
+      if(d.speech_final && freeUtt.trim()){   // ends turn after ~1.5s silence (not mid-sentence)
+        const u=freeUtt.trim(); freeUtt=''; freeLive=''; freeTurn(u);
       }
     };
     vws.onerror=()=>{ toast('Voice stream error'); };
