@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import catalog, config, db, engine, gmail, knowledge, personas, profile, provider, questionnaire, store, worker
+from . import catalog, config, db, engine, gmail, knowledge, personas, profile, provider, questionnaire, skillqa, store, worker
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -262,6 +262,57 @@ def set_skill_threshold(skill_id: int, body: ThresholdBody, _: None = Depends(au
     if body.threshold < 1:
         raise HTTPException(status_code=400, detail="threshold must be at least 1")
     return store.set_threshold(skill_id, body.threshold)
+
+
+# ---------- per-skill questionnaires (expert "what it handles" + question set; train via Talk) ----------
+
+@app.get("/api/skills/{skill_key}/questionnaire")
+def skill_questionnaire(skill_key: str, company: str | None = None, _: None = Depends(auth)) -> dict:
+    qn = skillqa.get(skill_key) or {}
+    out = {"skill_key": skill_key, "explanation": qn.get("explanation", ""),
+           "questions": qn.get("questions", [])}
+    if company:
+        co = store.get_company_by_slug(company)
+        if co:
+            out["progress"] = skillqa.progress(co["id"], skill_key)
+            sk = store.get_skill_by_key(co["id"], skill_key)
+            if sk:
+                out["skill"] = {"name": sk["name"], "department": sk.get("department"),
+                                "manager": sk.get("manager")}
+                uni, loc = store.effective_rules(sk)
+                out["rules"] = list(uni) + list(loc)
+    return out
+
+
+class QLock(BaseModel):
+    company: str
+    q_idx: int
+    rule: str
+    conversation_id: str | None = None
+
+
+class QPark(BaseModel):
+    company: str
+    q_idx: int
+    idea: str
+    question: str | None = ""
+    conversation_id: str | None = None
+
+
+@app.post("/api/skills/{skill_key}/questionnaire/lock")
+def skill_q_lock(skill_key: str, body: QLock, _: None = Depends(auth)) -> dict:
+    co = store.get_company_by_slug(body.company)
+    if not co:
+        raise HTTPException(status_code=404, detail="no such company")
+    return skillqa.lock_in(co["id"], skill_key, body.q_idx, body.rule, body.conversation_id)
+
+
+@app.post("/api/skills/{skill_key}/questionnaire/park")
+def skill_q_park(skill_key: str, body: QPark, _: None = Depends(auth)) -> dict:
+    co = store.get_company_by_slug(body.company)
+    if not co:
+        raise HTTPException(status_code=404, detail="no such company")
+    return skillqa.park(co["id"], skill_key, body.q_idx, body.idea, body.question or "", body.conversation_id)
 
 
 # ---------- Manager questionnaires ----------
