@@ -1,7 +1,7 @@
 """The worker — does the task per its skill (produces the deliverable)."""
 from __future__ import annotations
 
-from . import provider, store
+from . import grounding, provider, store
 
 
 def _company_context(company: dict) -> str:
@@ -13,7 +13,9 @@ def _company_context(company: dict) -> str:
                      ("products", "Products/services"), ("dos", "Always"), ("donts", "Never")):
         if ctx.get(k):
             parts.append(f"{label}: {ctx[k]}")
-    return "\n".join(parts)
+    base = "\n".join(parts)
+    ground = grounding.for_company(company)   # Company Profile + brand guidelines + site source
+    return base + ("\n\n" + ground if ground else "")
 
 
 def _model_for(skill: dict) -> str:
