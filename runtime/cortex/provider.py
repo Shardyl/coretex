@@ -41,6 +41,36 @@ def chat(system: str, messages: list[dict], *, max_tokens: int = 1000) -> str:
     return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
 
 
+def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
+               *, max_tokens: int = 1500, rounds: int = 6) -> str:
+    """Conversation where Claude can call tools to read/act on Cortex (e.g. manage skills).
+
+    `executor(name, input) -> str` runs the tool and returns a result string. Loops until Claude
+    stops calling tools or `rounds` is hit, then returns the final assistant text.
+    """
+    client = _client()
+    msgs = [dict(m) for m in messages]
+    resp = None
+    for _ in range(rounds):
+        resp = client.messages.create(model=MODEL, max_tokens=max_tokens, system=system,
+                                       tools=tools, messages=msgs)
+        if resp.stop_reason != "tool_use":
+            break
+        msgs.append({"role": "assistant", "content": resp.content})
+        results = []
+        for b in resp.content:
+            if getattr(b, "type", None) == "tool_use":
+                try:
+                    out = executor(b.name, b.input or {})
+                except Exception as e:  # noqa: BLE001
+                    out = f"error: {e}"
+                results.append({"type": "tool_result", "tool_use_id": b.id, "content": str(out)})
+        msgs.append({"role": "user", "content": results})
+    if not resp:
+        return ""
+    return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+
+
 def think_json(system: str, user: str, *, fast: bool = True, max_tokens: int = 2000) -> dict:
     """Completion that must return a JSON object → parsed dict."""
     sys = system + "\n\nRespond with ONLY a valid JSON object — no prose, no markdown fences."

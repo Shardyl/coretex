@@ -222,14 +222,24 @@ class Speak(BaseModel):
 def tts(body: Speak, _: None = Depends(auth)) -> Response:
     """Speak text aloud -> mp3 audio (ElevenLabs Flash v2.5)."""
     key = config.require("ELEVENLABS_API_KEY")
-    voice = config.get("ELEVENLABS_VOICE_ID") or "21m00Tcm4TlvDq8ikWAM"
+    voice = config.get("ELEVENLABS_VOICE_ID") or "Xb7hH8MSUJpSbSDYk0k2"  # Alice (British), default
+    try:
+        speed = float(config.get("ELEVENLABS_SPEED") or "1.14")
+    except ValueError:
+        speed = 1.14
+    try:
+        stab = float(config.get("ELEVENLABS_STABILITY") or "0.4")
+    except ValueError:
+        stab = 0.4
     text = (body.text or "").strip()[:2500]
     if not text:
         raise HTTPException(status_code=400, detail="nothing to say")
     r = httpx.post(
         f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128",
         headers={"xi-api-key": key, "Content-Type": "application/json"},
-        json={"text": text, "model_id": "eleven_flash_v2_5"}, timeout=60)
+        json={"text": text, "model_id": "eleven_flash_v2_5", "voice_settings": {
+            "stability": stab, "similarity_boost": 0.8, "style": 0.0,
+            "use_speaker_boost": True, "speed": speed}}, timeout=60)
     if r.status_code != 200:
         raise HTTPException(status_code=502, detail=f"tts failed: {r.status_code} {r.text[:200]}")
     return Response(content=r.content, media_type="audio/mpeg")
@@ -237,15 +247,85 @@ def tts(body: Speak, _: None = Depends(auth)) -> Response:
 
 # ---- chat: talk to Cortex (conversational brain) ----
 
-CHAT_SYSTEM = (
+CHAT_SYSTEM_BASE = (
     "You are Cortex, Rashad's voice-first AI operations partner. You help him run his businesses: "
     "Tabscanner (receipt-OCR / data-extraction API), Sensa (AI video production), SkyVision, and "
     "FilmSpoke. You are warm, sharp and concise. Your replies are usually read aloud, so write the "
     "way you'd speak: natural sentences, no markdown, no bullet lists, no headings, and keep it brief "
-    "unless he asks for depth. Answer directly, help him think, draft copy when asked, and talk through "
-    "decisions. If he wants you to actually publish or create a piece of content as a task, tell him to "
-    "use the Ask tab for now (that runs it through the draft-and-approve flow)."
+    "unless he asks for depth. "
+    "You manage Cortex's SKILLS and their standing rules. A skill is how a job gets done well plus "
+    "rules the worker always follows. Use your tools to view skills (list_skills), add a rule "
+    "(add_rule), create a skill (create_skill), or rewrite a skill's craft (update_craft). When Rashad "
+    "asks to add a rule, create a skill, or change how something is handled, ACTUALLY DO IT with the "
+    "tools, then confirm in one short spoken sentence what you changed. When he describes a case that "
+    "went wrong (e.g. a misjudged lead), turn the lesson into one or more concise standing rules and "
+    "add them to the right skill. If unsure which skill or company he means, ask. To actually draft or "
+    "publish a piece of content as a task, tell him to use the Ask tab."
 )
+
+SKILL_TOOLS = [
+    {"name": "list_skills",
+     "description": "List skills with company, craft summary and standing rules. Optional company-slug filter.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "company slug, omit for all"}}}},
+    {"name": "add_rule",
+     "description": "Add one standing rule to a skill; the worker follows it from now on.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string"}, "skill": {"type": "string", "description": "skill_key"},
+        "rule": {"type": "string"}}, "required": ["company", "skill", "rule"]}},
+    {"name": "create_skill",
+     "description": "Create a new skill for a company.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string"}, "skill_key": {"type": "string", "description": "short kebab id, e.g. sales-inquiries"},
+        "name": {"type": "string"}, "craft": {"type": "string", "description": "how to do this job well"}},
+        "required": ["company", "skill_key", "name", "craft"]}},
+    {"name": "update_craft",
+     "description": "Replace a skill's craft (the core how-to text).",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string"}, "skill": {"type": "string"}, "craft": {"type": "string"}},
+        "required": ["company", "skill", "craft"]}},
+]
+
+
+def _exec_skill_tool(name: str, inp: dict) -> str:
+    if name == "list_skills":
+        slug = inp.get("company")
+        q = ("select s.skill_key, s.name, s.craft, s.authority, s.rules, c.slug as company "
+             "from skills s join companies c on c.id=s.company_id")
+        rows = (db.query(q + " where c.slug=%s order by s.name", (slug,)) if slug
+                else db.query(q + " order by c.name, s.name"))
+        out = [{"company": r["company"], "skill_key": r["skill_key"], "name": r["name"],
+                "authority": r["authority"], "craft": (r["craft"] or "")[:400], "rules": r["rules"] or []}
+               for r in rows]
+        return json.dumps(out) if out else "no skills yet"
+    co = store.get_company_by_slug(inp.get("company", ""))
+    if not co:
+        known = ", ".join(r["slug"] for r in db.query("select slug from companies"))
+        return f"no company '{inp.get('company')}' (known: {known})"
+    if name == "add_rule":
+        sk = store.get_skill_by_key(co["id"], inp.get("skill", ""))
+        if not sk:
+            return f"no skill '{inp.get('skill')}' for {co['slug']}"
+        store.add_rule(sk["id"], inp["rule"])
+        return f"added rule to {co['slug']}/{sk['skill_key']}: {inp['rule']}"
+    if name == "create_skill":
+        store.upsert_skill(co["id"], inp["skill_key"], inp["name"], craft=inp["craft"])
+        return f"created skill {co['slug']}/{inp['skill_key']}"
+    if name == "update_craft":
+        sk = store.get_skill_by_key(co["id"], inp.get("skill", ""))
+        if not sk:
+            return f"no skill '{inp.get('skill')}'"
+        db.execute("update skills set craft=%s, updated_at=now() where id=%s", (inp["craft"], sk["id"]))
+        return f"updated craft for {co['slug']}/{sk['skill_key']}"
+    return f"unknown tool {name}"
+
+
+def _chat_system() -> str:
+    rows = db.query("select s.skill_key, s.name, s.rules, c.slug as company "
+                    "from skills s join companies c on c.id=s.company_id order by c.name, s.name")
+    snap = "\n".join(f"- {r['company']}/{r['skill_key']} ({r['name']}): {len(r['rules'] or [])} rules"
+                     for r in rows) or "(no skills yet)"
+    return CHAT_SYSTEM_BASE + "\n\nSkills that currently exist:\n" + snap
 
 
 class ChatTurn(BaseModel):
@@ -258,7 +338,7 @@ def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
             if m.get("content") and m.get("role") in ("user", "assistant")][-20:]
     if not msgs or msgs[-1]["role"] != "user":
         raise HTTPException(status_code=400, detail="last message must be from the user")
-    return {"reply": provider.chat(CHAT_SYSTEM, msgs)}
+    return {"reply": provider.chat_tools(_chat_system(), msgs, SKILL_TOOLS, _exec_skill_tool)}
 
 
 # ---- voice: live streaming transcription (browser mic -> us -> Deepgram -> back) ----
