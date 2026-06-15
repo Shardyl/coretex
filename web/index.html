@@ -390,8 +390,9 @@ function laneRow(lane){
     `<span class="chip cy">AUTO</span> Cortex auto-approves this lane (still escalates anything flagged). `+
     `<a href="#" onclick="setAuth(event,${lane.skill_id},'ask')">Pause</a></div>`;
   if(lane.auto_offer) return `<div style="margin-top:10px;padding:9px 11px;border:1px solid var(--cy);border-radius:10px;font-size:12.5px">`+
-    `✅ ${lane.trust_streak} clean approvals in a row on ${esc(lane.name)}, and the Manager agreed each time. `+
-    `<button class="btn go" style="margin-top:7px" onclick="setAuth(event,${lane.skill_id},'auto')">Let the Manager auto-approve this lane</button></div>`;
+    `✅ ${lane.trust_streak} clean approvals in a row on ${esc(lane.name)} (bar is ${lane.auto_threshold}), and the Manager agreed each time. `+
+    `<div class="row" style="margin-top:7px"><button class="btn go" onclick="setAuth(event,${lane.skill_id},'auto')">Let the Manager auto-approve this lane</button>`+
+    `<button class="btn" onclick="setThreshold(event,${lane.skill_id},${lane.trust_streak})">Raise the bar</button></div></div>`;
   return '';
 }
 async function setAuth(ev,id,auth){
@@ -399,6 +400,15 @@ async function setAuth(ev,id,auth){
   if(demo){ toast('(demo)'); return; }
   try{ await api(`/api/skills/${id}/authority`,{method:'POST',body:JSON.stringify({authority:auth})});
     toast(auth==='auto'?'Auto enabled — Manager handles this lane ✓':'Paused — back to asking you'); render(); }
+  catch(e){ toast('Error: '+e.message); }
+}
+async function setThreshold(ev,id,streak){
+  if(ev) ev.preventDefault();
+  const n=parseInt(prompt('Require how many clean approvals in a row before auto is offered?',String((streak||10)+20))||'',10);
+  if(!n||n<1) return;
+  if(demo){ toast('(demo)'); return; }
+  try{ await api(`/api/skills/${id}/threshold`,{method:'POST',body:JSON.stringify({threshold:n})});
+    toast(`Bar raised to ${n} clean approvals ✓`); render(); }
   catch(e){ toast('Error: '+e.message); }
 }
 

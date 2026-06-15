@@ -247,6 +247,17 @@ def set_skill_authority(skill_id: int, body: AuthorityBody, _: None = Depends(au
     return store.set_authority(skill_id, body.authority)
 
 
+class ThresholdBody(BaseModel):
+    threshold: int   # clean approvals in a row required before auto is offered
+
+
+@app.post("/api/skills/{skill_id}/threshold")
+def set_skill_threshold(skill_id: int, body: ThresholdBody, _: None = Depends(auth)) -> dict:
+    if body.threshold < 1:
+        raise HTTPException(status_code=400, detail="threshold must be at least 1")
+    return store.set_threshold(skill_id, body.threshold)
+
+
 @app.get("/api/tasks/{task_id}")
 def task(task_id: int, _: None = Depends(auth)) -> dict:
     t = store.get_task(task_id)

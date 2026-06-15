@@ -94,6 +94,12 @@ def set_authority(skill_id, authority) -> dict:
                       (authority, skill_id))
 
 
+def set_threshold(skill_id, n: int) -> dict:
+    """Raise/lower how many clean approvals in a row are needed before auto is offered."""
+    return db.execute("update skills set auto_threshold=%s, updated_at=now() where id=%s returning *",
+                      (max(1, int(n)), skill_id))
+
+
 # ---- tasks ----
 def create_task(company_id, skill_id, kind, request) -> dict:
     return db.execute(

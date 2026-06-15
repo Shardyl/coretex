@@ -198,6 +198,12 @@ def _on_callback(cq: dict) -> None:
             store.set_authority(skill["id"], "auto")
             tg.send(f"'{skill['name']}' is now on AUTO for low-stakes work. Pause it anytime.")
         return
+    if action == "th":  # raise the bar: th:{skill_id}:{n}
+        sid, _, num = ref.partition(":")
+        if sid.isdigit() and num.isdigit():
+            sk = store.set_threshold(int(sid), int(num))
+            tg.send(f"Okay — '{sk['name']}' now needs {num} clean approvals in a row before I offer auto.")
+        return
     task = store.get_task(int(ref)) if ref.isdigit() else None
     if not task:
         return
@@ -226,9 +232,11 @@ def _approve(task: dict, skill: dict, company: dict) -> None:
             tg.edit(task["tg_message_id"], f"✅ Approved — '{skill['name']}' (streak {skill['trust_streak']}). Done.")
     # Offer auto only for non-blog skills (blog publishing must never go auto).
     if task["kind"] != "blog" and skill["authority"] == "ask" and skill["trust_streak"] >= skill["auto_threshold"]:
+        higher = skill["trust_streak"] + 20
         tg.send(f"'{skill['name']}' has {skill['trust_streak']} clean approvals. "
-                f"Put it on auto for low-stakes work?",
-                [[tg.button("Yes, set auto", f"au:{skill['id']}")]])
+                f"Put it on auto for low-stakes work, or raise the bar for extra confidence?",
+                [[tg.button("Yes, set auto", f"au:{skill['id']}"),
+                  tg.button(f"No — raise to {higher}", f"th:{skill['id']}:{higher}")]])
 
 
 def _skip(task: dict, skill: dict, company: dict) -> None:
