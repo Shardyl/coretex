@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import catalog, config, db, engine, knowledge, personas, provider, questionnaire, store, worker
+from . import catalog, config, db, engine, gmail, knowledge, personas, provider, questionnaire, store, worker
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -265,6 +265,22 @@ def _cid(company: str | None) -> int:
         return 0
     co = store.get_company_by_slug(company)
     return co["id"] if co else 0
+
+
+@app.get("/api/gmail/status")
+def gmail_status(_: None = Depends(auth)) -> dict:
+    return {"connected": gmail.connected(), "account": db.setting_get("gmail_account")}
+
+
+@app.get("/api/gmail/inquiries")
+def gmail_inquiries(days: int = 7, _: None = Depends(auth)) -> dict:
+    """Read-only: the Tabscanner contact-form inquiries from the last `days` days."""
+    try:
+        items = gmail.list_inquiries(days=days)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"account": db.setting_get("gmail_account"), "days": days,
+            "count": len(items), "inquiries": items}
 
 
 @app.get("/api/questionnaire/areas")
@@ -874,18 +890,23 @@ def _google_client() -> tuple[str, str, str]:
 
 
 @app.get("/oauth/google/start")
-def google_start() -> RedirectResponse:
+def google_start(purpose: str = "drive") -> RedirectResponse:
     from urllib.parse import urlencode
     cid, _, redirect = _google_client()
+    if purpose == "gmail":   # the Tabscanner mailbox — its own login, stored separately from Drive
+        scope = ("https://www.googleapis.com/auth/gmail.readonly openid "
+                 "https://www.googleapis.com/auth/userinfo.email")
+    else:
+        scope = ("https://www.googleapis.com/auth/drive.file "
+                 "https://www.googleapis.com/auth/drive.readonly")
     q = urlencode({"client_id": cid, "redirect_uri": redirect, "response_type": "code",
-                   "scope": "https://www.googleapis.com/auth/drive.file "
-                            "https://www.googleapis.com/auth/drive.readonly",
-                   "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true"})
+                   "scope": scope, "state": purpose, "access_type": "offline",
+                   "prompt": "consent", "include_granted_scopes": "true"})
     return RedirectResponse("https://accounts.google.com/o/oauth2/v2/auth?" + q)
 
 
 @app.get("/oauth/google/callback")
-def google_callback(code: str = "", error: str = "") -> HTMLResponse:
+def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLResponse:
     page = lambda msg: HTMLResponse(
         "<body style='background:#0B0F14;color:#EAF2F8;font-family:system-ui;text-align:center;"
         "padding-top:80px'><h2>" + msg + "</h2></body>")
@@ -897,9 +918,21 @@ def google_callback(code: str = "", error: str = "") -> HTMLResponse:
         "redirect_uri": redirect, "grant_type": "authorization_code"}, timeout=30)
     if r.status_code != 200:
         return page("Token exchange failed: " + r.text[:200])
-    rt = r.json().get("refresh_token")
+    body = r.json()
+    rt = body.get("refresh_token")
     if not rt:
         return page("No refresh token returned — revoke Cortex's access in your Google account and try again.")
+    if state == "gmail":   # the Tabscanner mailbox — store separately so it doesn't clobber Drive
+        email = ""
+        try:
+            email = httpx.get("https://www.googleapis.com/oauth2/v2/userinfo",
+                              headers={"Authorization": "Bearer " + body.get("access_token", "")},
+                              timeout=15).json().get("email", "")
+        except Exception:  # noqa: BLE001
+            pass
+        db.setting_set("gmail_refresh_token", rt)
+        db.setting_set("gmail_account", email)
+        return page(f"✓ Cortex is connected to the {email or 'Gmail'} mailbox. You can close this tab.")
     db.setting_set("google_refresh_token", rt)
     return page("✓ Cortex is connected to your Google Drive. You can close this tab — backups run nightly.")
 
