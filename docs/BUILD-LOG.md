@@ -194,6 +194,16 @@ preserved. **Migration remaining:** sensa-quotation → Sales/Quotation generati
 also landing-copy (done) + the publish pipeline; website-management → publishing/onboarding; seo-campaign
 Paid Ads section → Paid Ads dept; per-site strategy packs → each company CONTEXT (positioning/voice).
 
+**WordPress draft + self-login preview ✅ (2026-06-15, operator-loved — resolves the parked preview):**
+the blog publish path now stages a real **`status=draft`** post (not password-protect) and returns a
+**preview link routed through `wp-login.php?redirect_to=...&preview=true`** — one tap logs the owner into
+wp-admin and lands them on the fully rendered, unpublished page; approve = publish, correct = update
+draft, discard = trash. `wordpress.stage_draft`/`go_live(publish)`/`update`/`_links`. Inbox card + Telegram
+carry the preview link. Verified live (draft #476). **Made UNIVERSAL:** a universal rule on
+`content-blog-posts` + `content-landing-copy` ("never auto-publish, always draft + preview, publish only
+on approval") for all companies; removed the redundant Tabscanner-local copy. Mechanism is universal (all
+4 sites are WP); the landing-PAGE creation flow (WP 'page' drafts) arrives with the web-page-builder migration.
+
 **Remaining for Phase 3:** "discuss this" deep-link item→Talk; Talk gym-mode; other cockpit screens;
 omnichannel/Gmail intake = Phase 4 (note: org SA-key block means Gmail also needs OAuth-per-mailbox or a
 policy exception — revisit at Phase 4).
