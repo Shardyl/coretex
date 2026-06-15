@@ -83,11 +83,8 @@ def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
     return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
 
 
-def think_json(system: str, user: str, *, fast: bool = True, model: str | None = None,
-               max_tokens: int = 2000) -> dict:
-    """Completion that must return a JSON object → parsed dict."""
-    sys = system + "\n\nRespond with ONLY a valid JSON object — no prose, no markdown fences."
-    raw = think(sys, user, fast=fast, model=model, max_tokens=max_tokens).strip()
+def _loads(raw: str) -> dict:
+    raw = (raw or "").strip()
     if raw.startswith("```"):
         raw = re.sub(r"^```[a-zA-Z]*", "", raw).rsplit("```", 1)[0].strip()
     try:
@@ -100,3 +97,27 @@ def think_json(system: str, user: str, *, fast: bool = True, model: str | None =
             except json.JSONDecodeError:
                 pass
     return {}
+
+
+def think_json(system: str, user: str, *, fast: bool = True, model: str | None = None,
+               max_tokens: int = 2000) -> dict:
+    """Completion that must return a JSON object → parsed dict."""
+    sys = system + "\n\nRespond with ONLY a valid JSON object — no prose, no markdown fences."
+    return _loads(think(sys, user, fast=fast, model=model, max_tokens=max_tokens))
+
+
+def research_json(system: str, user: str, *, model: str | None = None,
+                  max_searches: int = 5, max_tokens: int = 3500) -> dict:
+    """Completion WITH live web search (Anthropic server tool) → parsed JSON. The model can actually look
+    up the lead's domain, website and app before it answers. Returns {} if nothing usable comes back."""
+    sys = system + ("\n\nUse web search to investigate before you decide. When you have researched enough, "
+                    "respond with ONLY a valid JSON object (no prose, no markdown fences).")
+    tools = [{"type": "web_search_20250305", "name": "web_search", "max_uses": max_searches}]
+    try:
+        resp = _client().messages.create(
+            model=model or MODEL_FAST, max_tokens=max_tokens, system=sys,
+            tools=tools, messages=[{"role": "user", "content": user}])
+    except Exception:  # noqa: BLE001 — web search may be unavailable; caller falls back
+        raise
+    text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+    return _loads(text)
