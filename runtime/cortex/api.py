@@ -313,6 +313,21 @@ def q_distill(body: QRun, _: None = Depends(auth)) -> dict:
     return questionnaire.distill(body.run_id)
 
 
+@app.post("/api/questionnaire/review")
+def q_review(body: QStart, _: None = Depends(auth)) -> dict:
+    """Re-open a completed run's distilled rules for review + save (without re-answering)."""
+    if body.tier not in questionnaire.TIERS:
+        raise HTTPException(status_code=400, detail="unknown tier")
+    cid = 0 if questionnaire.TIERS[body.tier]["scope"] == "universal" else _cid(body.company)
+    run = db.one("select id from questionnaire_runs where department=%s and tier=%s and company_id=%s",
+                 (body.area, body.tier, cid))
+    if not run:
+        raise HTTPException(status_code=404, detail="no run to review yet")
+    d = questionnaire.distill(run["id"])
+    d["run_id"] = run["id"]
+    return d
+
+
 class QApply(BaseModel):
     company: str | None = None
     area: str
@@ -329,11 +344,15 @@ def q_apply(body: QApply, _: None = Depends(auth)) -> dict:
         if not rule:
             continue
         if scope == "universal" and skill_key:
+            if rule in (store.get_universal_rules(skill_key) or []):
+                continue                                              # already there — don't duplicate
             store.add_universal_rule(skill_key, rule)
             saved += 1
         elif co and skill_key:
             sk = store.get_skill_by_key(co["id"], skill_key)
             if sk:
+                if rule in (sk["rules"] or []):
+                    continue
                 if r.get("override_of"):
                     store.add_override(sk["id"], r["override_of"])   # supersede the universal here
                 store.add_rule(sk["id"], rule)

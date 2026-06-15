@@ -1077,7 +1077,8 @@ async function qzStatus(){
     let act='';
     if(!needCo){
       if(t.status==='in_progress') act=`<button class="btn go" onclick="qzStart('${t.tier}',false)">Continue</button><button class="btn" onclick="qzStart('${t.tier}',true)">Start over</button>`;
-      else act=`<button class="btn go" onclick="qzStart('${t.tier}',false)">${t.status==='done'?'Re-run':'Start'}</button>`;
+      else if(t.status==='done') act=`<button class="btn go" onclick="qzReviewTier('${t.tier}')">Review &amp; save rules</button><button class="btn" onclick="qzStart('${t.tier}',true)">Re-run</button>`;
+      else act=`<button class="btn go" onclick="qzStart('${t.tier}',false)">Start</button>`;
     }
     return `<div class="qcard"><div class="qcardh"><b>${esc(t.label)}</b><span class="qchip">${scopeLbl}</span></div>
       <div class="qprog">${prog}</div>${act?`<div class="row" style="margin-top:9px">${act}</div>`:''}</div>`;
@@ -1145,7 +1146,18 @@ async function qzReview(){
   const v=document.getElementById('view'); v.innerHTML='<div class="empty">Reviewing your answers and drafting the rules…</div>';
   let d; try{ d=await api('/api/questionnaire/distill',{method:'POST',body:JSON.stringify({run_id:qz.run})}); }
   catch(e){ v.innerHTML='<div class="empty">Error: '+esc(e.message)+'</div>'; return; }
-  qz.distill=d;
+  qz.distill=d; qzRenderReview(d);
+}
+async function qzReviewTier(tier){
+  if(freeOn) freeStop();
+  qz.tier=tier;
+  const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading your answers and drafting the rules…</div>';
+  try{ const d=await api('/api/questionnaire/review',{method:'POST',body:JSON.stringify({area:qz.area,tier,company:qz.company})});
+    qz.run=d.run_id; qz.distill=d; qzRenderReview(d); }
+  catch(e){ toast('Error: '+e.message); qzStatus(); }
+}
+function qzRenderReview(d){
+  const v=document.getElementById('view');
   let html=`<div class="qhead"><button class="iconbtn sm" onclick="qzStatus()" aria-label="Back">${ic('back',18)}</button>
     <div><div class="qtitle">Review · ${esc(qz.area)}</div><div class="qsub">${esc(qz.manager)} drafted these from your answers</div></div></div>`;
   if(!(d.rules||[]).length && !(d.roadmap||[]).length) html+='<div class="empty">No rules came out of these answers.</div>';
