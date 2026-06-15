@@ -124,6 +124,22 @@ front and empty (authority=ask, no rules) so Cortex + Rashad map to the same she
 repointed). Chat `_chat_system` gives a compact overview; `list_skills(company, department)` drills in.
 Verified: Cortex correctly lists a department's skills + which have rules.
 
+**Chat-drafts-tasks ✅ (2026-06-15, verified):** chat now has EYES + HANDS via tool use — `list_tasks`,
+`get_task`, `draft` (runs `worker.draft` with the skill's craft + rules + company voice, returns text),
+`create_task`, and on a pending task `approve_task`/`skip_task`/`correct_task` (reuse engine wrappers).
+System prompt tells it to find an item before acting and to fix-and-teach (re-draft + add_rule). Verified
+live: "draft a reply to Seb" → Cortex qualified before pricing and **held pricing back "per our rule"**
+(the standing rule applied through the worker); "anything in my inbox?" → it called list_tasks and
+answered correctly. This is the "refer to it, give feedback, it fixes + learns, no Inbox needed" loop.
+
+**Visual Skills screen ✅ (2026-06-15):** 5th cockpit tab 🧠 Skills — `renderSkills` fetches
+`/api/companies/{slug}/skills`, groups by category → department (collapsible), each skill expands to
+craft + standing rules (delete ✕) + an add-rule box. New endpoints `POST /api/skills/{id}/rule` and
+`/rule/delete`. Render-verified at mobile (5 tabs fit, no overflow).
+
+**Remaining for Phase 3:** "discuss this" deep-link from an item into Talk; Talk gym-mode; the other
+cockpit screens (Incoming, Calendar, Contacts, Projects, Team, Invoices, Reports, Settings); omnichannel doors.
+
 **Remaining for Phase 3:** (1) chat that can **trigger tasks/draft content** (currently manages skills +
 converses; drafting still routes to Ask); (2) a visual **Skills screen** + remaining cockpit screens
 (Departments, Incoming, Calendar, Contacts, Projects, Team, Invoices, Reports, Settings); (3) Talk
