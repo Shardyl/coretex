@@ -51,6 +51,18 @@ permission matrix specced in §D.
 Support, Finance & Admin). Per-company exceptions ("switch X off for company Y") get caught
 as each department is specced in detail.
 
+**GRANULAR SKILL CATALOG (operator-locked 2026-06-15).** Skills are **granular**, exactly per the
+`Cortex-Skills-Roadmap` document: 4 categories (Demand / Convert / Deliver / Run) → 9 departments
+(each with a named manager) → **~78 individual skills** (e.g. Content & SEO = SEO blog posts, keyword
+research, landing copy, newsletter, editorial calendar, repurposing, on-page SEO, content refresh,
+internal linking, AEO). **Every company gets every department and every skill, created up front and
+EMPTY** (authority=ask, no rules), so Cortex and Rashad both map to the same skill sheets and Cortex
+can refer to any skill on request. Rules are added and skills graduate to auto **one at a time**.
+Canonical source of truth = **`runtime/cortex/catalog.py`** (keep in sync with the roadmap doc); seeded
+via `manage.py catalog`. Skills carry `category`/`department`/`manager`. Seeded live 2026-06-15: 4
+companies × 78 skills = 312 rows. (Named per-department manager *agents* are a later refinement; today
+one shared manager checks every skill.)
+
 **Context packs (DRAFT — confirm/correct):**
 - **Tabscanner** — Audience: developers, product teams, fintech/expense/loyalty companies.
   Voice: technical, credible, accuracy-first, B2B. Watch-out: finance-adjacent (YMYL) content

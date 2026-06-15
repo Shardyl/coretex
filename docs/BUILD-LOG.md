@@ -115,6 +115,15 @@ confirmed in DB. Seeded a **Tabscanner `sales-inquiries`** skill (assess-the-lea
 inquiry case. **Voice = Alice (British)** `Xb7hH8MSUJpSbSDYk0k2`, speed 1.14, stability 0.4 (env
 `ELEVENLABS_VOICE_ID`/`ELEVENLABS_SPEED`/`ELEVENLABS_STABILITY`); samples at `coretex.uk/voices/*.mp3`.
 
+**Granular skill catalog seeded ✅ (2026-06-15, operator-locked):** every company gets the FULL granular
+catalog from the `Cortex-Skills-Roadmap` doc — 4 categories / 9 departments / ~78 skills, created up
+front and empty (authority=ask, no rules) so Cortex + Rashad map to the same sheets. Source of truth
+`runtime/cortex/catalog.py`; `manage.py catalog` seeds; skills carry `category`/`department`/`manager`
+(new columns, `db._ALTERS`). Seeded live: 4 companies × 78 = 312 rows. Old broad `content-seo`/
+`sales-inquiries` folded into `content-blog-posts`/`sales-first-response` (rules carried, tasks/decisions
+repointed). Chat `_chat_system` gives a compact overview; `list_skills(company, department)` drills in.
+Verified: Cortex correctly lists a department's skills + which have rules.
+
 **Remaining for Phase 3:** (1) chat that can **trigger tasks/draft content** (currently manages skills +
 converses; drafting still routes to Ask); (2) a visual **Skills screen** + remaining cockpit screens
 (Departments, Incoming, Calendar, Contacts, Projects, Team, Invoices, Reports, Settings); (3) Talk
