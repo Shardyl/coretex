@@ -458,6 +458,7 @@ async function renderInbox(v){
       <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${esc(sk)}</span>
         <span class="chip">${kindLabel}</span></div>
       <div class="title">${title}</div>
+      ${isEmail&&em?envHeader(em):''}
       ${isEmail&&em?emailBlock(em):''}
       ${mgrVerdict(t.manager)}
       ${isEmail&&em&&em.html
@@ -484,14 +485,16 @@ async function renderInbox(v){
 
 function compName(id){ const c=companies.find(c=>c.id===id); return c?c.name:''; }
 
+function envHeader(em){
+  const row=(lbl,val)=> val?`<div style="display:flex;gap:8px;margin:1px 0"><span style="color:var(--mut);min-width:46px;flex:none">${lbl}</span><span style="word-break:break-word">${esc(val)}</span></div>`:'';
+  return `<div style="margin:6px 0 10px;padding:9px 12px;background:var(--bg2,#0e1620);border:1px solid var(--ln,#22303f);border-radius:11px;font-size:13px">
+    ${row('From',em.from)}${row('To',em.to)}${row('Cc',em.cc)}${row('Bcc',em.bcc)}${row('Subject',em.subject)}</div>`;
+}
 function emailBlock(em){
   const q=em.inquiry||{};
-  const env=[em.to?'To: '+esc(em.to):'',em.from?'From: '+esc(em.from):'',em.cc?'Cc: '+esc(em.cc):'',em.bcc?'Bcc: '+esc(em.bcc):'']
-    .filter(Boolean).join('  ·  ');
   return `<div style="margin:8px 0;padding:10px 12px;background:var(--bg2,#0e1620);border:1px solid var(--ln,#22303f);border-radius:11px">
     <div class="meta" style="margin-bottom:5px">${ic('inbox',14)} their first message${q.name?' — '+esc(q.name):''}${q.email?' &lt;'+esc(q.email)+'&gt;':''}</div>
-    <div style="font-size:13.5px;color:var(--fg,#dfe7ef);white-space:pre-wrap;max-height:200px;overflow:auto">${esc(q.message||'(no message text provided)')}</div>
-    <div class="meta" style="margin-top:8px">${env}${em.subject?'<br>Subject: '+esc(em.subject):''}</div></div>`;
+    <div style="font-size:13.5px;color:var(--fg,#dfe7ef);white-space:pre-wrap;max-height:200px;overflow:auto">${esc(q.message||'(no message text provided)')}</div></div>`;
 }
 
 function mgrVerdict(v){
