@@ -11,16 +11,77 @@ from __future__ import annotations
 
 CATALOG = [
     ("Demand", "Content & SEO", "Content manager", [
-        ("content-blog-posts", "SEO blog posts (research, draft, optimise, publish)"),
-        ("content-keyword-research", "Keyword research & content-gap analysis"),
-        ("content-landing-copy", "Website & landing-page copy"),
-        ("content-newsletter", "Newsletter writing"),
-        ("content-editorial-calendar", "Editorial calendar & topic planning"),
-        ("content-repurposing", "Content repurposing (blog into social & email)"),
-        ("content-onpage-seo", "On-page SEO, meta & schema markup"),
-        ("content-refresh", "Content refresh (update & re-optimise old posts)"),
-        ("content-internal-linking", "Internal linking strategy"),
-        ("content-aeo", "Answer-engine optimisation (AEO / GEO)"),
+        ("content-blog-posts", "SEO blog posts (research, draft, optimise, publish)",
+         "Write genuinely useful, original posts that earn the ranking, not thin SEO filler (Google's "
+         "helpful-content bar). FIRST read the live SERP for the target keyword and match the format "
+         "Google rewards (guide vs listicle vs tool vs service page) - the wrong format won't rank. Lead "
+         "with the answer (inverted pyramid), back every claim with specifics and data, and structure for "
+         "skim-reading: question-style H2s, short paragraphs, and a self-contained answer near the top of "
+         "each section so AI Overviews can lift it. Put the primary keyword in the title, H1, URL slug and "
+         "first ~100 words naturally, never stuffed. Include an FAQ block (with schema) built from real "
+         "People-Also-Ask questions. Reinforce the company's one-line entity claim. Hold the company's voice; "
+         "no hype, no fluff, no em-dashes."),
+        ("content-keyword-research", "Keyword research & content-gap analysis",
+         "Find what the audience actually searches and the intent behind it. Read the live SERP for each "
+         "candidate term to capture the page FORMAT Google rewards, the real difficulty (who ranks, are they "
+         "authority sites), and whether intent is commercial / informational / navigational. Mine autocomplete, "
+         "People-Also-Ask and related searches for long-tail and the exact phrasings people use. Where real data "
+         "exists (Google Ads keyword ideas, or best of all the Search Terms Report of queries that actually "
+         "converted), re-rank by proven demand and intent, not guesses. Output a keyword/cluster map (primary + "
+         "secondaries + question-set per cluster) and name the gaps competitors are winning. Decide multilingual "
+         "relevance deliberately for self-serve, language-agnostic products."),
+        ("content-landing-copy", "Website & landing-page copy",
+         "Write landing and service-page copy that converts AND ranks. Detect the page type from the winning "
+         "SERP and build to it. Hero with the primary-keyword H1 and the crisp entity claim (what the company "
+         "is, does and where), then value props, proof/portfolio, a service or feature grid, an FAQ block with "
+         "schema, and a strong CTA. Lead with outcomes, be specific, and vary the section framing down the page "
+         "(never two identical layouts in a row). Bake in the on-page SEO + AEO checklist: keyword in the "
+         "structural slots, question-headings with extractable answers, descriptive internal links. Match the "
+         "company's brand voice exactly."),
+        ("content-newsletter", "Newsletter writing",
+         "Write newsletters people open and read. A subject line that earns the open (specific, not clickbait), "
+         "a strong first line, ONE clear primary message, scannable short sections, and a single clear CTA. "
+         "Repurpose recent content into a tight, valuable digest in the company's voice; give a reason to reply; "
+         "respect unsubscribes and avoid spam-trigger styling."),
+        ("content-editorial-calendar", "Editorial calendar & topic planning",
+         "Plan what to publish and when, driven by the keyword/cluster map and the company's north star. Sequence "
+         "pillar pages then their supporting cluster posts (topic clusters), balance commercial-intent pieces with "
+         "informational/AEO ones, and slot in refreshes of decaying posts. Each item carries its target keyword, "
+         "intent, the SERP-rewarded format, and the cluster it fills. Set a cadence the team can actually sustain; "
+         "prioritise by demand x conversion potential x gap."),
+        ("content-repurposing", "Content repurposing (blog into social & email)",
+         "Turn one piece into many without dilution. From a blog post, cut platform-native social posts "
+         "(LinkedIn, Instagram, X), a newsletter section, and short hooks or threads - each REWRITTEN for that "
+         "channel's format and audience, not copy-pasted. Pull the strongest stat, quote or insight as the hook. "
+         "Keep the entity claim and voice consistent and link back to the source where it fits."),
+        ("content-onpage-seo", "On-page SEO, meta & schema markup",
+         "Make every page technically findable. One H1 with the primary keyword, a logical H2/H3 outline with "
+         "secondaries in subheads, a compelling ~150-character meta description containing the primary term, "
+         "descriptive alt text and meaningful image filenames, a clean keyword-in-slug URL, and the right JSON-LD "
+         "schema for the page type (Organization/LocalBusiness, Service, FAQPage, Article). Keep it fast and "
+         "mobile-clean for Core Web Vitals. Anchor the keyword in the structural slots; never stuff."),
+        ("content-refresh", "Content refresh (update & re-optimise old posts)",
+         "Audit and re-optimise existing posts against Google's helpful-content, E-E-A-T and scaled-content "
+         "standards. Score each for genuine usefulness, originality, accuracy and intent-match; flag thin, "
+         "outdated, duplicated or AI-filler content. Update facts and stats, tighten to lead with the answer, add "
+         "missing depth and E-E-A-T signals, fix on-page SEO and internal links, and strengthen the FAQ for AEO. "
+         "Prioritise pages that are decaying or one push from page one. Improve or consolidate; don't leave "
+         "low-value pages indexable."),
+        ("content-internal-linking", "Internal linking strategy",
+         "Build a deliberate internal link graph. Link every new page in three ways when it goes live: from the "
+         "pillar/hub and a high-traffic page out to it; from sibling cluster pages wherever their copy naturally "
+         "names the topic; and from relevant existing posts. Use descriptive natural anchor text (never 'click "
+         "here'), 1-2 contextual links per source, only on real relevance - forced links read as spam. Keep links "
+         "root-relative; strengthen the cluster's topical authority and steer users toward conversion pages."),
+        ("content-aeo", "Answer-engine optimisation (AEO / GEO)",
+         "Win the AI answer, not just the blue links - be the named answer or a cited source in Google AI "
+         "Overviews and assistants (ChatGPT, Claude, Perplexity, Gemini). Structure pages as questions to short, "
+         "self-contained, extractable answers near the top; add FAQ schema; repeat one crisp, consistent entity "
+         "claim (what the company is, does and where) across the site so models confidently name it; and create "
+         "the comparison/decision shapes assistants synthesise from ('X vs Y', 'how much does X cost', 'best X "
+         "for [use-case]'). Make the site agent-ready: a sane robots.txt for AI crawlers, an llms.txt, clean "
+         "structured content (for an API/SaaS product an MCP server is a real growth channel). Track it: "
+         "periodically ask the assistants the target questions and record whether the company is named."),
     ]),
     ("Demand", "Social (organic)", "Social manager", [
         ("social-instagram-posts", "Instagram posts & carousels"),
@@ -110,7 +171,7 @@ CATALOG = [
 
 # Higher-stakes (slower to graduate to auto); Finance dept + ad-spend are gated.
 GATED = {"ads-budget-pacing"} | {k for _, dept, _, skills in CATALOG if dept == "Finance & Admin"
-                                 for k, _ in skills}
+                                 for k, *_ in skills}
 
 # The four companies in scope (context packs from CORTEX-SPEC §A).
 COMPANIES = [
@@ -155,11 +216,12 @@ def seed_all() -> dict:
         store.upsert_company(slug, name, kind, context=ctx, north_star=north)
     n = 0
     for cat, dept, mgr, skills in CATALOG:
-        for key, name in skills:
+        for key, name, *rest in skills:
+            craft = rest[0] if rest else _craft(name)   # explicit craft when migrated, else generic
             stakes = "high" if key in GATED else "low"
             for slug, *_ in COMPANIES:
                 co = store.get_company_by_slug(slug)
-                store.upsert_skill(co["id"], key, name, craft=_craft(name), authority="ask",
+                store.upsert_skill(co["id"], key, name, craft=craft, authority="ask",
                                    stakes=stakes, category=cat, department=dept, manager=mgr)
                 n += 1
     return {"companies": len(COMPANIES), "skills_per_company": sum(len(s) for *_, s in CATALOG),
