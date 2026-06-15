@@ -460,7 +460,9 @@ async function renderInbox(v){
       <div class="title">${title}</div>
       ${isEmail&&em?emailBlock(em):''}
       ${mgrVerdict(t.manager)}
-      ${body?`<div class="body"${isEmail?' style="white-space:pre-wrap"':''}>${isEmail?'<div class="meta" style="margin-bottom:5px;white-space:normal">'+ic('file',14)+' the email that will send (signature included)</div>':''}${body}</div>`:''}
+      ${isEmail&&em&&em.html
+        ? `<div class="body"><div class="meta" style="margin-bottom:6px">${ic('file',14)} the email that will send (logo + signature)</div><div style="background:#fff;border-radius:10px;padding:16px 18px">${em.html}</div></div>`
+        : (body?`<div class="body"${isEmail?' style="white-space:pre-wrap"':''}>${isEmail?'<div class="meta" style="margin-bottom:5px;white-space:normal">'+ic('file',14)+' the email that will send (signature included)</div>':''}${body}</div>`:'')}
       ${wp&&wp.preview?`<div class="meta">${ic('file',14)} draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
       <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">${ic('volume',16)} Read aloud</button></div>
       <div class="row">

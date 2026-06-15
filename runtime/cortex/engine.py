@@ -13,6 +13,9 @@ Two task shapes:
 """
 from __future__ import annotations
 
+import base64 as _b64
+import html as _html
+import os
 import re
 import secrets
 import time
@@ -155,8 +158,8 @@ def _strip_signoff(s: str) -> str:
 
 
 def compose_reply_body(task: dict, company: dict) -> str:
-    """The exact body that will be sent: the cleaned reply plus the company signature. Used for BOTH the
-    actual send and the Inbox preview, so what the owner approves is exactly what goes out."""
+    """The plain-text body that will be sent: the cleaned reply plus the company signature (text). Also the
+    fallback part of the multipart email, so non-HTML clients still get a clean message."""
     env = _email_envelope(task, company)
     body = _strip_signoff(_clean_email_text(task.get("draft") or ""))
     sig = (env.get("signature") or "").strip()
@@ -165,10 +168,71 @@ def compose_reply_body(task: dict, company: dict) -> str:
     return body
 
 
+# ---- HTML email (so the footer logo + formatting render) ----
+
+LOGO_PATH = os.environ.get("CORTEX_TAB_LOGO", "/opt/cortex/assets/tabscanner-logo.png")
+
+
+def _linkify(s: str) -> str:
+    return re.sub(r"(https?://[^\s<]+)", r'<a href="\1" style="color:#1E9BD7">\1</a>', s)
+
+
+def _body_to_html(text: str) -> str:
+    blocks = []
+    for para in re.split(r"\n\s*\n", (text or "").strip()):
+        lines = [ln for ln in para.split("\n")]
+        real = [ln for ln in lines if ln.strip()]
+        if real and all(ln.lstrip().startswith("- ") for ln in real):
+            items = "".join(f"<li style='margin:0 0 4px 0'>{_linkify(_html.escape(ln.lstrip()[2:]))}</li>"
+                             for ln in real)
+            blocks.append(f"<ul style='margin:0 0 14px 0;padding-left:20px'>{items}</ul>")
+        else:
+            blocks.append("<p style='margin:0 0 14px 0'>"
+                          + "<br>".join(_linkify(_html.escape(ln)) for ln in lines) + "</p>")
+    return "\n".join(blocks)
+
+
+def _signature_html(plain_sig: str, logo_src: str | None) -> str:
+    lines = (plain_sig or "").split("\n")
+    while lines and (not lines[0].strip()
+                     or re.match(r"(?i)^(best regards|kind regards|regards|thanks)[,.]?$", lines[0].strip())):
+        lines.pop(0)
+    rows, first = [], True
+    for ln in lines:
+        if not ln.strip():
+            continue
+        cell = _linkify(_html.escape(ln))
+        rows.append(f"<strong>{cell}</strong>" if first else cell)
+        first = False
+    logo = (f"<img src='{logo_src}' alt='Tabscanner' width='150' "
+            "style='display:block;border:0;margin:0 0 10px 0'>") if logo_src else ""
+    return ("<div style='margin-top:20px;font-family:Arial,Helvetica,sans-serif;font-size:13px;"
+            "color:#0A1828;line-height:1.55'><p style='margin:0 0 14px 0'>Best regards,</p>"
+            f"{logo}{'<br>'.join(rows)}</div>")
+
+
+def compose_reply_html(task: dict, company: dict, for_preview: bool = False) -> dict:
+    """Returns {plain, html, inline} — the multipart email. For preview the logo is a data-URI (renders in
+    the browser); for the real send it's a cid inline image."""
+    env = _email_envelope(task, company)
+    clean = _strip_signoff(_clean_email_text(task.get("draft") or ""))
+    plain_sig = (env.get("signature") or "").strip()
+    logo_src, inline = None, []
+    if os.path.isfile(LOGO_PATH):
+        if for_preview:
+            logo_src = "data:image/png;base64," + _b64.b64encode(open(LOGO_PATH, "rb").read()).decode()
+        else:
+            logo_src, inline = "cid:tabscannerlogo", [("tabscannerlogo", LOGO_PATH)]
+    html_body = ("<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#0A1828;"
+                 f"line-height:1.6'>{_body_to_html(clean)}{_signature_html(plain_sig, logo_src)}</div>")
+    return {"plain": compose_reply_body(task, company), "html": html_body, "inline": inline}
+
+
 def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: bool) -> dict:
     env = _email_envelope(task, company)
-    body = compose_reply_body(task, company)
-    res = gmail.send_message(env["to"], env["subject"], body, from_addr=env["from"], cc=env["cc"])
+    c = compose_reply_html(task, company, for_preview=False)
+    res = gmail.send_message(env["to"], env["subject"], c["plain"], from_addr=env["from"], cc=env["cc"],
+                             html=c["html"], inline_images=c["inline"])
     store.update_task(task["id"], status="done")
     store.log_decision(task["id"], skill["id"], actor, "send",
                        snapshot={"to": env["to"], "cc": env["cc"], "from": env["from"],

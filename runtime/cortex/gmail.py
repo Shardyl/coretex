@@ -103,13 +103,36 @@ def _parse(msg: dict) -> dict:
 
 
 def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
-                 cc: str | None = None) -> dict:
+                 cc: str | None = None, html: str | None = None,
+                 inline_images: list | None = None) -> dict:
     """Send an email from the connected sending mailbox (gmail.modify) — it lands in that account's Sent
-    folder. `from_addr` is honoured when it matches the authenticated account or a verified 'send mail as'
-    identity; otherwise Gmail sends as the authenticated mailbox."""
+    folder. If `html` is given, sends a multipart/alternative (plain + html); any `inline_images`
+    (list of (cid, filepath)) are embedded so a footer logo renders. `from_addr` is honoured when it
+    matches the authenticated account or a verified 'send mail as' identity."""
     from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.image import MIMEImage
     tok = _send_token()
-    msg = MIMEText(body, "plain", "utf-8")
+    if html:
+        alt = MIMEMultipart("alternative")
+        alt.attach(MIMEText(body or "", "plain", "utf-8"))
+        alt.attach(MIMEText(html, "html", "utf-8"))
+        if inline_images:
+            msg = MIMEMultipart("related")
+            msg.attach(alt)
+            for cid, path in inline_images:
+                try:
+                    with open(path, "rb") as f:
+                        img = MIMEImage(f.read())
+                    img.add_header("Content-ID", f"<{cid}>")
+                    img.add_header("Content-Disposition", "inline", filename=cid)
+                    msg.attach(img)
+                except OSError:
+                    pass
+        else:
+            msg = alt
+    else:
+        msg = MIMEText(body or "", "plain", "utf-8")
     msg["To"] = to
     msg["Subject"] = subject
     if from_addr:
