@@ -479,8 +479,8 @@ function emailBlock(em){
   const env=[em.to?'To: '+esc(em.to):'',em.from?'From: '+esc(em.from):'',em.cc?'Cc: '+esc(em.cc):'']
     .filter(Boolean).join('  ·  ');
   return `<div style="margin:8px 0;padding:10px 12px;background:var(--bg2,#0e1620);border:1px solid var(--ln,#22303f);border-radius:11px">
-    <div class="meta" style="margin-bottom:5px">${ic('inbox',14)} their enquiry${q.email?' — '+esc(q.email):''}</div>
-    <div style="font-size:13px;color:var(--mut);white-space:pre-wrap;max-height:120px;overflow:auto">${esc(q.message||'')}</div>
+    <div class="meta" style="margin-bottom:5px">${ic('inbox',14)} their first message${q.name?' — '+esc(q.name):''}${q.email?' &lt;'+esc(q.email)+'&gt;':''}</div>
+    <div style="font-size:13.5px;color:var(--fg,#dfe7ef);white-space:pre-wrap;max-height:200px;overflow:auto">${esc(q.message||'(no message text provided)')}</div>
     <div class="meta" style="margin-top:8px">${env}${em.subject?'<br>Subject: '+esc(em.subject):''}</div></div>`;
 }
 

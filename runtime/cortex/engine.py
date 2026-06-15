@@ -110,13 +110,18 @@ def _email_envelope(task: dict, company: dict) -> dict:
 
 def _fmt_email(task: dict, skill: dict, company: dict, verdict: dict | None) -> str:
     env = _email_envelope(task, company)
+    inq = (task.get("request") or {}).get("inquiry") or {}
+    their = (inq.get("message") or inq.get("snippet") or "").strip()
+    if len(their) > 800:
+        their = their[:800] + "…"
     head = f"[{company['name']} · {skill['name']}]  ·  reply to {env['name'] or env['to']} — needs your yes"
     line = f"To: {env['to']}" + (f"  ·  From: {env['from']}" if env["from"] else "") + \
            (f"  ·  Cc: {env['cc']}" if env["cc"] else "") + f"\nSubject: {env['subject']}"
+    their_block = f"\n\nTHEIR MESSAGE:\n“{their}”" if their else "\n\nTHEIR MESSAGE: (none provided)"
     draft = (task.get("draft") or "").strip()
-    if len(draft) > 3200:
-        draft = draft[:3200] + "\n…(truncated for preview)"
-    return f"{head}\n\n{line}\n\n{draft}{_verdict_line(verdict)}"
+    if len(draft) > 3000:
+        draft = draft[:3000] + "\n…(truncated for preview)"
+    return f"{head}\n\n{line}{their_block}\n\nDRAFTED REPLY:\n{draft}{_verdict_line(verdict)}"
 
 
 def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: bool) -> dict:
