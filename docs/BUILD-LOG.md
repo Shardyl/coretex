@@ -91,6 +91,14 @@ silence to Deepgram while Cortex speaks; `freeThinking`/`botSpeaking` serialize 
 Chat-bar positioned off the live tab-bar height. Verified: chat replies + context retention through
 `https://coretex.uk`. NOTE: voice barge-in (cut in mid-reply) deferred — v1 is turn-based.
 
+**Voice UX fixes (2026-06-15):** (a) Free-mode cutoff fixed — turn now ends on a **client-side 1.5s
+silence timer** (`TURN_SILENCE`, resets on every new word), NOT Deepgram endpointing/speech_final/
+UtteranceEnd (all proved twitchy/unreliable on nova-3, esp. with synthetic audio; speech_final at
+300ms was cutting mid-sentence). (b) **Live transcription in Free mode** — words show in a dimmed
+`.bub.live` bubble as you talk. (c) **Push-to-talk added to Talk** — `dictate(btn,targetId)` now
+generic; the 🎙️ button on the Talk bar dictates into the chat box exactly like Ask (tap → live words →
+tap stop → review → send). Talk has both: 🎙️ normal + 🎧 hands-free.
+
 **Remaining for Phase 3:** (1) voice barge-in + per-utterance live partial in Free mode; (2) **Talk**
 gym-mode layout; (3) chat that can trigger tasks/actions (currently conversational only, routes to
 Ask); (4) omnichannel doors.
