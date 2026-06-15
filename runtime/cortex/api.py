@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import catalog, config, db, engine, gmail, knowledge, personas, provider, questionnaire, store, worker
+from . import catalog, config, db, engine, gmail, knowledge, personas, profile, provider, questionnaire, store, worker
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -265,6 +265,69 @@ def _cid(company: str | None) -> int:
         return 0
     co = store.get_company_by_slug(company)
     return co["id"] if co else 0
+
+
+# ---------- Company Profile wizard ----------
+
+class ProfileStart(BaseModel):
+    company: str
+    restart: bool = False
+
+
+class ProfileAnswer(BaseModel):
+    company: str
+    value: str
+
+
+@app.get("/api/profile/status")
+def profile_status(company: str, _: None = Depends(auth)) -> dict:
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise HTTPException(status_code=404, detail="no such company")
+    return profile.status(co["id"])
+
+
+@app.post("/api/profile/start")
+def profile_start(body: ProfileStart, _: None = Depends(auth)) -> dict:
+    co = store.get_company_by_slug(body.company)
+    if not co:
+        raise HTTPException(status_code=404, detail="no such company")
+    return profile.start(co["id"], body.restart)
+
+
+@app.post("/api/profile/answer")
+def profile_answer(body: ProfileAnswer, _: None = Depends(auth)) -> dict:
+    co = store.get_company_by_slug(body.company)
+    if not co:
+        raise HTTPException(status_code=404, detail="no such company")
+    return profile.answer(co["id"], body.value)
+
+
+@app.get("/api/profile/questions")
+def profile_questions(_: None = Depends(auth)) -> list[dict]:
+    return profile.questions()
+
+
+class ProfileSet(BaseModel):
+    company: str
+    field: str
+    value: str
+
+
+@app.post("/api/profile/set")
+def profile_set(body: ProfileSet, _: None = Depends(auth)) -> dict:
+    co = store.get_company_by_slug(body.company)
+    if not co:
+        raise HTTPException(status_code=404, detail="no such company")
+    return {"profile": profile.set_field(co["id"], body.field, body.value)}
+
+
+@app.get("/api/profile/full")
+def profile_full(company: str, _: None = Depends(auth)) -> dict:
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise HTTPException(status_code=404, detail="no such company")
+    return {"company": company, "profile": profile.get(co["id"])}
 
 
 @app.get("/api/gmail/status")

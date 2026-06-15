@@ -1000,7 +1000,10 @@ function paintSkills(){
   const cats={};
   skillsData.forEach(s=>{ const c=s.category||'Other', d=s.department||'Other';
     cats[c]=cats[c]||{}; cats[c][d]=cats[c][d]||[]; cats[c][d].push(s); });
-  let html=`<div class="qcard" onclick="openQuestionnaire('General Operations')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+  let html=`<div class="qcard" onclick="openProfile()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;border-color:var(--accent)">
+    <div><b>Company profile · setup wizard</b><div class="deptsub">Teach Cortex everything about this company (identity, brand, assets, channels, team, CRM)</div></div>
+    <span class="qbtn">${ic('building',18)}</span></div>
+  <div class="qcard" onclick="openQuestionnaire('General Operations')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
     <div><b>General Operations</b><div class="deptsub">Overall business operating questionnaire</div></div>
     <span class="qbtn">${ic('tool',18)}</span></div>`;
   Object.keys(cats).forEach(cat=>{
@@ -1171,6 +1174,110 @@ function qzRenderReview(d){
     d.roadmap.map((x,i)=>`<div class="qrule"><label class="qinc"><input type="checkbox" id="qrd${i}" checked> add to parking lot</label><div class="qruletext">${esc(x)}</div></div>`).join(''); }
   html+=`<div class="row" style="margin:16px 2px 32px"><button class="btn go" style="flex:1" onclick="qzApply()">Save confirmed rules</button></div>`;
   v.innerHTML=html;
+}
+// ---- Company Profile wizard ----
+let pf={company:'', state:null};
+async function openProfile(){
+  if(demo){ toast('The wizard needs the live app'); return; }
+  pf={company:(document.getElementById('coSel')||{}).value||'', state:null};
+  if(!pf.company){ toast('Pick a company at the top first'); return; }
+  await pfStatus();
+}
+async function pfStatus(){
+  if(freeOn) freeStop();
+  const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
+  let s; try{ s=await api('/api/profile/status?company='+encodeURIComponent(pf.company)); }catch(e){ v.innerHTML='<div class="empty">Error: '+esc(e.message)+'</div>'; return; }
+  pf.state=s;
+  const coName=(companies.find(c=>c.slug===pf.company)||{}).name||pf.company;
+  const answered=Object.keys(s.data||{}).length, done=s.status==='done';
+  let act = done ? `<button class="btn go" onclick="pfReview()">Review answers</button><button class="btn" onclick="pfBegin(true)">Start over</button>`
+    : answered ? `<button class="btn go" onclick="pfBegin(false)">Continue</button><button class="btn" onclick="pfBegin(true)">Start over</button>`
+    : `<button class="btn go" onclick="pfBegin(false)">Start the setup</button>`;
+  v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('skills')" aria-label="Back">${ic('back',18)}</button>
+    <div><div class="qtitle">Company profile · ${esc(coName)}</div><div class="qsub">Everything Cortex needs to know about this company</div></div></div>
+    <div class="qcard"><div class="qprog">${done?'Completed':(answered?`In progress · ${answered}/${s.total} answered`:'Not started')}</div>
+    <div class="row" style="margin-top:9px">${act}</div></div>
+    ${answered?`<div class="row" style="margin:4px 2px"><button class="btn" onclick="pfReview()">See what's filled in</button></div>`:''}`;
+}
+async function pfBegin(restart){
+  const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
+  try{ pf.state=await api('/api/profile/start',{method:'POST',body:JSON.stringify({company:pf.company,restart})}); }
+  catch(e){ toast('Error: '+e.message); pfStatus(); return; }
+  pfQuestion();
+}
+function pfQuestion(){
+  const s=pf.state; if(!s||s.status==='done'||!s.question){ pfReview(); return; }
+  const q=s.question, pct=Math.round((q.idx/Math.max(1,s.total))*100), big=(q.type==='long'||q.type==='note');
+  const prev=(s.data||{})[q.field]||'';
+  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="pfStatus()" aria-label="Back">${ic('back',18)}</button>
+    <div><div class="qtitle">${esc(q.section)}</div><div class="qsub">Step ${q.idx+1} of ${s.total}</div></div></div>
+    <div class="qprogbar"><div style="width:${pct}%"></div></div>
+    <div class="qq">${esc(q.text)}</div>
+    <div class="freehint" id="freehint"></div>
+    <div class="livepanel" id="livePanel" style="display:none"><div class="livehead"><span class="livedot"></span><span id="liveLabel">Listening</span></div><div class="livetext" id="liveText"></div></div>
+    <textarea id="pfAns" class="qansta" style="${big?'min-height:120px':''}" placeholder="Type, tap the mic to speak, or go hands-free…">${esc(prev)}</textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="iconbtn" id="qzHF" title="Hands-free" onclick="pfHandsFree()" aria-label="Hands-free">${ic('headset',20)}</button>
+      <button class="iconbtn" onclick="dictate(this,'pfAns')" aria-label="Speak">${ic('mic',20)}</button>
+      <button class="btn" onclick="pfSubmit(true)">Skip</button>
+      <button class="btn go" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px" onclick="pfSubmit(false)">Next ${ic('arrow',16)}</button>
+    </div>`;
+  if(freeOn){ const hf=document.getElementById('qzHF'); if(hf){ hf.classList.add('rec'); hf.innerHTML=ic('stop',20); } const fh=document.getElementById('freehint'); if(fh) fh.classList.add('on'); updateLivePanel(); }
+}
+async function pfSubmit(skip){
+  const ta=document.getElementById('pfAns'); const val=skip?'':((ta?ta.value:'').trim());
+  if(!skip && !val){ toast('Type an answer, tap Skip, or use the mic'); return; }
+  if(recording) stopDictation(null);
+  try{ pf.state=await api('/api/profile/answer',{method:'POST',body:JSON.stringify({company:pf.company,value:val})}); }
+  catch(e){ toast('Error: '+e.message); return; }
+  pfQuestion();
+}
+async function pfHandsFree(){
+  if(freeOn){ freeStop(); pfQuestion(); return; }
+  if(demo){ toast('Voice needs the live app'); return; }
+  await toggleFree('free', pfVoiceTurn);
+  if(!freeOn) return;
+  const hf=document.getElementById('qzHF'); if(hf){ hf.classList.add('rec'); hf.innerHTML=ic('stop',20); }
+  const fh=document.getElementById('freehint'); if(fh) fh.classList.add('on');
+  const q=pf.state&&pf.state.question;
+  if(q){ setHint('reading…'); await speakAndWait(q.text); if(freeOn){ beep('start'); setHint('Answer when ready…'); } }
+}
+async function pfVoiceTurn(u){
+  freeThinking=true; beep('stop'); setHint('got it, next…'); freeLive=''; updateLivePanel();
+  try{ pf.state=await api('/api/profile/answer',{method:'POST',body:JSON.stringify({company:pf.company,value:u})}); }catch(e){ toast('Error: '+e.message); }
+  freeThinking=false;
+  if(!freeOn) return;
+  if(!pf.state||!pf.state.question||pf.state.status==='done'){ freeStop(); pfReview(); return; }
+  pfQuestion();
+  const q=pf.state.question;
+  if(q && freeOn){ setHint('reading…'); await speakAndWait(q.text); if(freeOn){ beep('start'); setHint('Answer when ready…'); } }
+}
+let pfQuestionsMeta=null;
+async function pfReview(){
+  if(freeOn) freeStop();
+  const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
+  try{ if(!pfQuestionsMeta) pfQuestionsMeta=await api('/api/profile/questions'); }catch(e){ pfQuestionsMeta=[]; }
+  let d; try{ d=await api('/api/profile/full?company='+encodeURIComponent(pf.company)); }catch(e){ v.innerHTML='<div class="empty">Error: '+esc(e.message)+'</div>'; return; }
+  pf._data=d.profile||{};
+  const coName=(companies.find(c=>c.slug===pf.company)||{}).name||pf.company;
+  let html=`<div class="qhead"><button class="iconbtn sm" onclick="pfStatus()" aria-label="Back">${ic('back',18)}</button>
+    <div><div class="qtitle">Profile · ${esc(coName)}</div><div class="qsub">What Cortex knows so far · tap any to edit</div></div></div>`;
+  let lastSec='';
+  pfQuestionsMeta.forEach(q=>{
+    if(q.section!==lastSec){ html+=`<div class="cath">${esc(q.section)}</div>`; lastSec=q.section; }
+    const val=pf._data[q.field];
+    html+=`<div class="qrule" onclick="pfEdit('${q.field}')" style="cursor:pointer">
+      <div class="qinc" style="margin-bottom:3px">${esc(q.text)}</div>
+      <div class="qruletext" style="${val?'':'color:var(--mut);font-style:italic'}">${val?esc(val):'— not answered'}</div></div>`;
+  });
+  v.innerHTML=html;
+}
+async function pfEdit(field){
+  const q=(pfQuestionsMeta||[]).find(x=>x.field===field); if(!q) return;
+  const val=prompt(q.text, (pf._data&&pf._data[field])||'');
+  if(val==null) return;
+  try{ const r=await api('/api/profile/set',{method:'POST',body:JSON.stringify({company:pf.company,field,value:val})}); pf._data=r.profile||pf._data; pfReview(); }
+  catch(e){ toast('Error: '+e.message); }
 }
 async function qzApply(){
   const d=qz.distill, rules=[], roadmap=[];
