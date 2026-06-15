@@ -87,9 +87,12 @@ def _approval_buttons(task_id: int) -> list[list[dict]]:
 
 def _email_brief(inq: dict) -> str:
     """Frame a website enquiry as a reply-drafting brief for the worker."""
-    return ("Draft a reply to this website enquiry. Write ONLY the email body — no subject line, no "
-            "'From'/'To' headers, and no sign-off signature (the signature is added automatically). "
-            "Reply directly to the person, in the company voice, following the standing rules.\n\n"
+    return ("Draft a reply to this website enquiry. Write it as a clean, professional plain-text email: "
+            "normal sentences in short paragraphs. Do NOT use any markdown, no **bold**, no #headings, no "
+            "[text](link) markdown links (write URLs plainly). Avoid bullet lists unless genuinely needed, "
+            "and if so use a simple hyphen. Do NOT add any closing, sign-off, name or signature, those are "
+            "appended automatically. Output ONLY the email body, no subject or headers. Reply directly to "
+            "the person, in the company voice, following the standing rules.\n\n"
             f"Their name: {inq.get('name') or 'there'}\n"
             f"Their email: {inq.get('email') or '(unknown)'}\n"
             f"Their message:\n{(inq.get('message') or inq.get('snippet') or '').strip()}")
@@ -124,13 +127,36 @@ def _fmt_email(task: dict, skill: dict, company: dict, verdict: dict | None) -> 
     return f"{head}\n\n{line}{their_block}\n\nDRAFTED REPLY:\n{draft}{_verdict_line(verdict)}"
 
 
+def _clean_email_text(s: str) -> str:
+    """Strip markdown so a plain-text email reads neat and professional (no **, #, [](), stray bullets)."""
+    s = s or ""
+    s = s.replace("**", "").replace("__", "")                      # bold markers
+    s = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", s)                    # markdown headings
+    s = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r"\1: \2", s)  # [text](url) -> text: url
+    s = re.sub(r"(?m)^(\s*)[*+]\s+", r"\1- ", s)                   # normalise bullets to "- "
+    s = s.replace(" — ", ", ").replace("—", ", ").replace(" – ", ", ").replace("–", "-")  # house: no em/en dash
+    s = re.sub(r"[ \t]+\n", "\n", s)                               # trailing spaces
+    s = re.sub(r"\n{3,}", "\n\n", s)                               # collapse blank runs
+    return s.strip()
+
+
+_SIGNOFF = re.compile(
+    r"(?is)\n\s*(best regards|kind regards|warm regards|best wishes|many thanks|thank you|thanks|"
+    r"best|regards|cheers|sincerely|talk soon)\s*[,.]?\s*(\n+\s*[^\n]{1,40}){0,2}\s*$")
+
+
+def _strip_signoff(s: str) -> str:
+    """Remove a trailing sign-off + name the worker may have added, so the real signature isn't doubled."""
+    return _SIGNOFF.sub("", s or "").rstrip()
+
+
 def compose_reply_body(task: dict, company: dict) -> str:
-    """The exact body that will be sent: the drafted reply plus the appended signature. Used for both
-    the actual send and the Inbox preview, so what the owner approves is what goes out."""
+    """The exact body that will be sent: the cleaned reply plus the company signature. Used for BOTH the
+    actual send and the Inbox preview, so what the owner approves is exactly what goes out."""
     env = _email_envelope(task, company)
-    body = (task.get("draft") or "").rstrip()
-    sig = env["signature"]
-    if sig and sig.splitlines()[0].lower() not in body.lower():
+    body = _strip_signoff(_clean_email_text(task.get("draft") or ""))
+    sig = (env.get("signature") or "").strip()
+    if sig:
         body = body + "\n\n" + sig
     return body
 
