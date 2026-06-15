@@ -343,12 +343,12 @@ SKILL_TOOLS = [
         "company": {"type": "string"}, "skill": {"type": "string", "description": "skill_key"},
         "rule": {"type": "string"}}, "required": ["company", "skill", "rule"]}},
     {"name": "create_skill",
-     "description": "Create a new skill for a company. Always set the department so it shows on the Skills screen.",
+     "description": "Create a new skill. It is added to EVERY company automatically (skills are global; rules get tuned per company). Always set the department so it files correctly on the Skills screen.",
      "input_schema": {"type": "object", "properties": {
-        "company": {"type": "string"}, "skill_key": {"type": "string", "description": "short kebab id, e.g. ideas-parking-lot"},
+        "skill_key": {"type": "string", "description": "short kebab id, e.g. ideas-parking-lot"},
         "name": {"type": "string"}, "craft": {"type": "string", "description": "how to do this job well"},
         "department": {"type": "string", "description": "department it belongs to, e.g. 'Finance & Admin', 'Content & SEO'"}},
-        "required": ["company", "skill_key", "name", "craft"]}},
+        "required": ["skill_key", "name", "craft", "department"]}},
     {"name": "update_craft",
      "description": "Replace a skill's craft (the core how-to text).",
      "input_schema": {"type": "object", "properties": {
@@ -432,6 +432,16 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         return json.dumps(engine.approve_task(int(inp["task_id"])), default=str)
     if name == "skip_task":
         return json.dumps(engine.skip_task(int(inp["task_id"])), default=str)
+    if name == "create_skill":
+        dept = inp.get("department")
+        cat, mgr = catalog.dept_meta(dept) if dept else (None, None)
+        slugs = []
+        for c in db.query("select id, slug from companies order by name"):
+            store.upsert_skill(c["id"], inp["skill_key"], inp["name"], craft=inp["craft"],
+                               category=cat, department=dept, manager=mgr)
+            slugs.append(c["slug"])
+        return (f"created '{inp['skill_key']}' across all companies ({', '.join(slugs)})"
+                + (f" in {dept}" if dept else " — but no department set; tell me which department it belongs to"))
     co = store.get_company_by_slug(inp.get("company", ""))
     if not co:
         known = ", ".join(r["slug"] for r in db.query("select slug from companies"))
@@ -442,13 +452,6 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
             return f"no skill '{inp.get('skill')}' for {co['slug']}"
         store.add_rule(sk["id"], inp["rule"])
         return f"added rule to {co['slug']}/{sk['skill_key']}: {inp['rule']}"
-    if name == "create_skill":
-        dept = inp.get("department")
-        cat, mgr = catalog.dept_meta(dept) if dept else (None, None)
-        store.upsert_skill(co["id"], inp["skill_key"], inp["name"], craft=inp["craft"],
-                           category=cat, department=dept, manager=mgr)
-        return (f"created skill {co['slug']}/{inp['skill_key']}"
-                + (f" in {dept}" if dept else " (no department set — tell me which department it belongs to)"))
     if name == "update_craft":
         sk = store.get_skill_by_key(co["id"], inp.get("skill", ""))
         if not sk:

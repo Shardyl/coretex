@@ -25,27 +25,27 @@ html[data-theme="light"]{
   --ink:#0C1620; --mut:#5A6B79; --accent:#00C4E0; --accent2:#0098B3; --shadow:0 10px 30px rgba(20,40,60,.12);
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%}
+html,body{margin:0;height:100%;overflow-x:hidden;overscroll-behavior:none;width:100%}
 body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;
   -webkit-font-smoothing:antialiased;overflow-x:hidden}
 h1,h2,h3,.brand,.tab,.btn{font-family:Poppins,Inter,sans-serif}
 a{color:var(--accent)}
-.wrap{max-width:780px;margin:0 auto;padding:0 16px 120px;min-height:100%}
+.wrap{max-width:780px;margin:0 auto;padding:0 16px 116px}
 /* top bar */
 header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 86%,transparent);
   backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-.bar{max-width:780px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:12px 16px}
-.brand{font-weight:700;font-size:20px;letter-spacing:.3px;display:flex;align-items:center;gap:9px}
+.bar{max-width:780px;margin:0 auto;display:flex;align-items:center;gap:6px;padding:11px 12px}
+.brand{font-weight:700;font-size:19px;letter-spacing:.2px;display:flex;align-items:center;gap:7px;flex:none}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 14px var(--accent);
   animation:pulse 2.2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:.55;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
 .spacer{flex:1}
-.iconbtn{background:var(--panel);border:1px solid var(--line);color:var(--ink);width:38px;height:38px;
-  border-radius:11px;cursor:pointer;font-size:16px;display:grid;place-items:center}
+.iconbtn{background:var(--panel);border:1px solid var(--line);color:var(--ink);width:36px;height:36px;
+  border-radius:10px;cursor:pointer;font-size:15px;display:grid;place-items:center;flex:none}
 .iconbtn:active{transform:scale(.94)}
 .iconbtn.rec,.btn.rec{background:var(--bad);border-color:var(--bad);color:#fff;animation:pulse 1s infinite}
-.sel{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:11px;
-  padding:8px 10px;font:inherit;font-size:13px;max-width:150px}
+.sel{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:10px;
+  padding:8px 6px;font:inherit;font-size:13px;max-width:118px;min-width:0;flex-shrink:1}
 /* tabs */
 .tabs{display:flex;gap:8px;position:fixed;bottom:0;left:0;right:0;z-index:20;
   background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(10px);
