@@ -350,7 +350,7 @@ function speakCard(id){ const c=document.getElementById('t'+id); if(!c) return;
   speak((t+'. '+b).slice(0,2400)); }
 
 // ---- chat: talk to Cortex (text + hands-free Free mode) ----
-let chatMsgs=[], freeOn=false, freeUtt='', freeLive='', botSpeaking=false, freeThinking=false, freeTimer=null;
+let chatMsgs=[], freeOn=false, freeUtt='', freeLive='', botSpeaking=false, freeThinking=false, freeTimer=null, bargeInterrupted=false;
 const TURN_SILENCE=1500;  // ms of no new words before Cortex takes its turn
 function armTurn(){
   clearTimeout(freeTimer);
@@ -360,6 +360,8 @@ function armTurn(){
     }
   }, TURN_SILENCE);
 }
+function setHint(s){ const h=document.getElementById('freehint'); if(h) h.textContent=s; }
+function interruptSpeech(){ bargeInterrupted=true; try{ if(audioEl) audioEl.pause(); }catch(e){} botSpeaking=false; }
 function renderChat(v){
   v.innerHTML=`<div class="h">Talk to Cortex</div>
     <div id="chatlog" class="chatlog"></div>
@@ -419,9 +421,9 @@ function speakAndWait(text){
       const blob=await r.blob();
       if(audioEl){ try{audioEl.pause();}catch(e){} }
       audioEl=new Audio(URL.createObjectURL(blob));
-      audioEl.onended=()=>{ botSpeaking=false; resolve(); };
-      audioEl.onerror=()=>{ botSpeaking=false; resolve(); };
-      audioEl.play().catch(()=>{ botSpeaking=false; resolve(); });
+      let settled=false; const done=()=>{ if(settled) return; settled=true; botSpeaking=false; resolve(); };
+      audioEl.onended=done; audioEl.onerror=done; audioEl.onpause=done;   // pause = barge-in interrupt
+      audioEl.play().catch(done);
     }catch(e){ botSpeaking=false; resolve(); }
   });
 }
@@ -431,8 +433,11 @@ async function toggleFree(){
   if(demo){ toast('Voice chat needs the live app'); return; }
   if(recording||starting){ stopDictation(document.getElementById('chatMic')); }
   ensureAudio();
-  freeOn=true; freeUtt=''; freeLive=''; if(b){ b.classList.add('rec'); b.textContent='⏹'; }
-  const hint=document.getElementById('freehint'); if(hint) hint.classList.add('on');
+  freeOn=true; freeUtt=''; freeLive='';
+  if(b){ b.classList.add('rec'); b.textContent='…'; }   // warming up
+  const hint=document.getElementById('freehint'); if(hint){ hint.textContent='warming up…'; hint.classList.add('on'); }
+  let ready=false;
+  const goReady=()=>{ if(ready||!freeOn) return; ready=true; if(b) b.textContent='⏹'; setHint('Listening — just talk'); beep('start'); };
   try{
     vstream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
     vctx=new (window.AudioContext||window.webkitAudioContext)();
@@ -447,18 +452,21 @@ async function toggleFree(){
       vproc.onaudioprocess=e=>{
         if(!vws||vws.readyState!==1) return;
         const f=e.inputBuffer.getChannelData(0), n=f.length, i16=new Int16Array(n);
-        if(botSpeaking){ vws.send(i16.buffer); return; }  // silence while Cortex talks: keep-alive + no echo
         for(let i=0;i<n;i++){ let s=Math.max(-1,Math.min(1,f[i])); i16[i]=s<0?s*0x8000:s*0x7FFF; }
-        vws.send(i16.buffer);
+        vws.send(i16.buffer);   // always send real audio (AEC cancels Cortex's own voice) -> enables barge-in
       };
       vmute=vctx.createGain(); vmute.gain.value=0;
       vsrc.connect(vproc); vproc.connect(vmute); vmute.connect(vctx.destination);
-      setTimeout(()=>{ if(freeOn) beep('start'); }, 220);
+      setTimeout(goReady,250);
     };
     vws.onmessage=ev=>{
       let d; try{ d=JSON.parse(ev.data);}catch(e){return;}
       if(d.error){ toast('Voice: '+d.error); return; }
-      if(botSpeaking||freeThinking) return;
+      if(botSpeaking){   // barge-in: talk over Cortex (>=3 words past AEC) and it stops + listens
+        if(d.text && d.text.trim().split(/\s+/).length>=3){ interruptSpeech(); }
+        return;
+      }
+      if(freeThinking) return;
       if(d.text){
         if(d.final){ freeUtt=(freeUtt?freeUtt+' ':'')+d.text; }
         freeLive = d.final ? freeUtt : ((freeUtt?freeUtt+' ':'')+d.text);   // show words live
@@ -467,14 +475,16 @@ async function toggleFree(){
       }
     };
     vws.onerror=()=>{ toast('Voice stream error'); };
+    setTimeout(goReady,1500);  // fallback if onopen is slow
   }catch(e){ freeOn=false; if(b){ b.classList.remove('rec'); b.textContent='🎧'; } toast('Mic blocked: '+(e.message||e)); }
 }
 async function freeTurn(utterance){
-  freeThinking=true;
+  freeThinking=true; beep('stop'); setHint('thinking…');   // handover beep: got it, my turn
   const reply=await sendChat(utterance, false);
-  if(reply && freeOn) await speakAndWait(reply);
+  if(reply && freeOn){ bargeInterrupted=false; setHint('speaking… (talk to cut in)'); await speakAndWait(reply); }
   freeThinking=false;
-  if(freeOn) beep('start');   // your turn
+  if(freeOn && !bargeInterrupted){ beep('start'); setHint('Listening — just talk'); }   // your turn
+  bargeInterrupted=false;
 }
 function freeStop(){
   freeOn=false; botSpeaking=false; freeThinking=false; freeLive=''; freeUtt=''; clearTimeout(freeTimer);
