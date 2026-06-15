@@ -765,7 +765,7 @@ function paintSkills(){
           <div class="schips"><span class="rchip ${rc?'has':''}">${rc} rule${rc===1?'':'s'}</span>
           <span class="achip">${esc(s.authority||'ask')}</span></div></div>`;
         if(so){
-          html+=`<div class="sdetail"><div class="craftlabel">Craft</div><div class="craft">${esc((s.craft||'').slice(0,600))}</div>`;
+          html+=`<div class="sdetail"><div class="craftlabel">Craft <span class="rulehint">the method, universal</span></div><div class="craft">${esc(s.craft||'')}</div>`;
           html+=`<div class="craftlabel">🌐 Universal rules <span class="rulehint">all companies</span></div>`;
           if(ur.length) ur.forEach((r,i)=>{ html+=`<div class="rule uni"><span>${esc(r)}</span><button class="rx" onclick="event.stopPropagation();delRule(${s.id},${i},'universal')">✕</button></div>`; });
           else html+=`<div class="norule">None yet.</div>`;
