@@ -189,7 +189,7 @@ def _body_to_html(text: str) -> str:
         else:
             blocks.append("<p style='margin:0 0 14px 0'>"
                           + "<br>".join(_linkify(_html.escape(ln)) for ln in lines) + "</p>")
-    return "\n".join(blocks)
+    return "".join(blocks)   # no stray newlines between tags (would show as gaps in a pre-wrap context)
 
 
 def _signature_html(plain_sig: str, logo_src: str | None) -> str:
