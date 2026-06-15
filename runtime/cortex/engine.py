@@ -17,7 +17,7 @@ import re
 import secrets
 import time
 
-from . import crm, db, gmail, manager, profile, store, worker
+from . import crm, db, gmail, manager, profile, provider, store, worker
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -425,40 +425,71 @@ def poll_inquiries() -> dict:
     return poll_inquiries_window(days=2)
 
 
+def triage_inquiry(inq: dict) -> dict:
+    """Decide if an enquiry is a genuine potential customer/partner worth a reply, or junk (spam, bots,
+    gibberish, off-topic). The form gets a lot of spam — only genuine enquiries get a draft + a CRM contact."""
+    try:
+        out = provider.think_json(
+            "You triage inbound website enquiries for Tabscanner, a receipt-OCR / data-extraction API for "
+            "developers and businesses (expense, loyalty, fintech, market research). Decide if an enquiry is "
+            "a GENUINE potential customer, partner, or support contact worth a human reply, or JUNK. Be "
+            "strict: random/gibberish sender addresses, mismatched names, off-topic messages (e.g. sports, "
+            "unrelated products), SEO/marketing/link-building solicitations, and obvious bot spam are JUNK.",
+            f"From: {inq.get('name')} <{inq.get('email')}>\nSubject: {inq.get('subject')}\n"
+            f"Message:\n{(inq.get('message') or inq.get('snippet') or '').strip()}\n\n"
+            'Return JSON: {"genuine": boolean, "category": "lead|partner|support|spam|offtopic|unclear", '
+            '"reason": "short phrase"}',
+            model=provider.MODEL_ROUTER)
+        return {"genuine": bool(out.get("genuine")), "category": out.get("category") or "unclear",
+                "reason": (out.get("reason") or "").strip()}
+    except Exception:  # noqa: BLE001
+        return {"genuine": True, "category": "unclear", "reason": "triage unavailable — defaulting to review"}
+
+
 def poll_inquiries_window(days: int = 2) -> dict:
-    """Pull new Tabscanner enquiries, add the contact to the CRM, and queue a drafted reply for each.
-    Deduped by Gmail id so each enquiry is drafted exactly once. Future enquiries flow in automatically."""
+    """Pull new Tabscanner enquiries, triage out the spam, and for each GENUINE one add the contact to the
+    CRM + queue a drafted reply. Deduped by Gmail id so each enquiry is handled exactly once."""
     if not gmail.connected():
-        return {"made": 0, "reason": "gmail-not-connected"}
+        return {"made": 0, "filtered": 0, "reason": "gmail-not-connected"}
     try:
         inqs = gmail.list_inquiries(days=days)
     except Exception as e:  # noqa: BLE001
-        return {"made": 0, "reason": f"list-failed: {e}"}
+        return {"made": 0, "filtered": 0, "reason": f"list-failed: {e}"}
     co = store.get_company_by_slug("tabscanner")
     skill = store.get_skill_by_key(co["id"], "sales-first-response") if co else None
     if not (co and skill):
-        return {"made": 0, "reason": "tabscanner sales-first-response skill missing"}
+        return {"made": 0, "filtered": 0, "reason": "tabscanner sales-first-response skill missing"}
     seen = set(db.setting_get("gmail_processed") or [])
-    made = 0
+    filtered_log = db.setting_get("gmail_filtered") or []
+    made, filtered = 0, 0
     for inq in inqs:
         gid = inq.get("gmail_id")
         if not gid or gid in seen:
             continue
+        seen.add(gid)
+        verdict = triage_inquiry(inq)
+        if not verdict["genuine"]:                       # spam/junk: filed, NOT drafted, NOT added to CRM
+            filtered_log.append({"name": inq.get("name"), "email": inq.get("email"),
+                                 "category": verdict["category"], "reason": verdict["reason"]})
+            filtered += 1
+            continue
         try:
-            crm.add_inquiry(inq, "tabscanner")           # verified contact in the CRM
+            crm.add_inquiry(inq, "tabscanner")           # genuine -> verified contact in the CRM
         except Exception:  # noqa: BLE001
             pass
         store.create_task(co["id"], skill["id"], "email_reply",
-                          {"brief": _email_brief(inq), "inquiry": inq})   # -> drafts on the next tick
-        seen.add(gid)
+                          {"brief": _email_brief(inq), "inquiry": inq, "triage": verdict})
         made += 1
         if made >= 10:
             break
+    db.setting_set("gmail_processed", list(seen)[-1000:])
+    if filtered:
+        db.setting_set("gmail_filtered", filtered_log[-200:])
     if made:
-        db.setting_set("gmail_processed", list(seen)[-1000:])
-        tg.send(f"{made} new Tabscanner enquir{'ies' if made > 1 else 'y'} in — "
-                f"drafting {'replies' if made > 1 else 'a reply'} for your approval.")
-    return {"made": made}
+        tg.send(f"{made} genuine Tabscanner enquir{'ies' if made > 1 else 'y'} in"
+                + (f" ({filtered} spam filtered out)" if filtered else "")
+                + f" — drafting {'replies' if made > 1 else 'a reply'} for your approval.")
+    return {"made": made, "filtered": filtered}
 
 
 def run(poll_idle: float = 1.0) -> None:
