@@ -135,6 +135,14 @@ COMPANIES = [
 ]
 
 
+def dept_meta(department: str):
+    """Return (category, manager) for a department name, or (None, None)."""
+    for cat, dept, mgr, _ in CATALOG:
+        if dept.lower() == (department or "").lower():
+            return cat, mgr
+    return None, None
+
+
 def _craft(name: str) -> str:
     return (f"{name}. Do this to a high standard in the company's voice — lead with what matters, be "
             f"specific and accurate, and follow this skill's standing rules. Ask the owner when unsure.")

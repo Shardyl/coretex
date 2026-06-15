@@ -94,6 +94,18 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .login .brand{justify-content:center;font-size:30px;margin-bottom:6px}
 .login p{color:var(--mut);font-size:14px;margin:0 0 22px}
 .login input{text-align:center;letter-spacing:.3em;font-size:18px;margin-bottom:12px}
+.lock{position:fixed;inset:0;background:var(--bg);z-index:60;display:grid;place-items:center;padding:24px}
+.lbox{width:100%;max-width:300px;text-align:center}
+.lbox .brand{justify-content:center;font-size:28px;margin-bottom:8px}
+.lbox p{color:var(--mut);font-size:14px;margin:0 0 18px}
+.pindots{display:flex;gap:14px;justify-content:center;margin-bottom:26px}
+.pd{width:14px;height:14px;border-radius:50%;border:2px solid var(--line)}
+.pd.on{background:var(--accent);border-color:var(--accent);box-shadow:0 0 10px var(--accent)}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:258px;margin:0 auto}
+.kp{height:62px;border-radius:50%;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-size:23px;font-weight:500;cursor:pointer}
+.kp:active{background:var(--panel2);transform:scale(.95)}
+.kp.ghost{background:none;border:none;pointer-events:none}
+#lockerr{color:var(--bad);font-size:13px;margin-top:14px;min-height:18px}
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--panel);
   border:1px solid var(--line);color:var(--ink);padding:11px 16px;border-radius:12px;box-shadow:var(--shadow);
   font-size:13px;z-index:60;opacity:0;transition:.25s;pointer-events:none;max-width:90vw}
@@ -152,12 +164,23 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
   </div>
 </div>
 
+<div class="lock hidden" id="lock">
+  <div class="lbox">
+    <div class="brand"><span class="dot"></span>Cortex</div>
+    <p id="lockmsg">Enter your PIN</p>
+    <div class="pindots" id="pindots"></div>
+    <div class="keypad" id="keypad"></div>
+    <div id="lockerr"></div>
+  </div>
+</div>
+
 <header>
   <div class="bar">
     <div class="brand"><span class="dot"></span>Cortex</div>
     <div class="spacer"></div>
     <select class="sel" id="coSel" onchange="render()"></select>
     <button class="iconbtn" title="Speak to Cortex" onclick="go('ask');setTimeout(function(){var b=document.getElementById('aMic');if(b)dictate(b);},220)">🎙️</button>
+    <button class="iconbtn" title="Lock Cortex" onclick="lockNow()">🔒</button>
     <button class="iconbtn" id="themeBtn" onclick="toggleTheme()">◐</button>
   </div>
 </header>
@@ -220,7 +243,81 @@ async function doLogin(){
 }
 function logout(){ token=''; localStorage.removeItem('cortex_token'); document.getElementById('login').classList.remove('hidden'); }
 function afterLogin(){ document.getElementById('login').classList.add('hidden');
-  document.getElementById('demoBanner').classList.toggle('hidden',!demo); boot(); }
+  document.getElementById('demoBanner').classList.toggle('hidden',!demo);
+  if(demo){ enterUnlocked(); return; }
+  lockBoot(); }
+
+// ---- app lock (4-digit PIN, server-verified + biometric gate) ----
+let pinSet=false, booted=false, lockMode='unlock', pinBuf='', pinFirst='', hidAt=0;
+const bioId=()=>localStorage.getItem('cortex_bio');
+function _b64ToBuf(b){ b=b.replace(/-/g,'+').replace(/_/g,'/'); const s=atob(b); const a=new Uint8Array(s.length); for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i); return a.buffer; }
+function _bufToB64(buf){ const a=new Uint8Array(buf); let s=''; a.forEach(b=>s+=String.fromCharCode(b)); return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function _rand(n){ const a=new Uint8Array(n); crypto.getRandomValues(a); return a; }
+function enterUnlocked(){ document.getElementById('lock').classList.add('hidden'); if(!booted){ booted=true; boot(); } }
+async function lockBoot(){
+  try{ const s=await api('/api/lock/status'); pinSet=!!s.pin_set; }catch(e){ pinSet=false; }
+  lockMode = pinSet?'unlock':'set'; pinBuf=''; pinFirst='';
+  showLock(pinSet?'Enter your PIN':'Set a 4-digit PIN');
+}
+function showLock(msg){
+  document.getElementById('lock').classList.remove('hidden');
+  document.getElementById('lockmsg').textContent=msg;
+  document.getElementById('lockerr').textContent=''; renderDots(); renderKeypad();
+  if(lockMode==='unlock' && bioId()) setTimeout(bioUnlock,350);
+}
+function renderDots(){ let h=''; for(let i=0;i<4;i++) h+=`<span class="pd ${i<pinBuf.length?'on':''}"></span>`; document.getElementById('pindots').innerHTML=h; }
+function renderKeypad(){
+  const bio = bioId() && lockMode==='unlock';
+  const keys=['1','2','3','4','5','6','7','8','9', bio?'bio':'ghost','0','del'];
+  document.getElementById('keypad').innerHTML=keys.map(k=>{
+    if(k==='del') return `<button class="kp" onclick="pinKey('del')">⌫</button>`;
+    if(k==='ghost') return `<button class="kp ghost"></button>`;
+    if(k==='bio') return `<button class="kp" onclick="bioUnlock()">☝️</button>`;
+    return `<button class="kp" onclick="pinKey('${k}')">${k}</button>`;
+  }).join('');
+}
+function pinKey(k){
+  if(k==='del'){ pinBuf=pinBuf.slice(0,-1); renderDots(); return; }
+  if(pinBuf.length>=4) return;
+  pinBuf+=k; renderDots();
+  if(pinBuf.length===4) setTimeout(pinSubmit,140);
+}
+async function pinSubmit(){
+  const pin=pinBuf, msg=document.getElementById('lockmsg'), err=document.getElementById('lockerr');
+  if(lockMode==='set'){
+    if(!pinFirst){ pinFirst=pin; pinBuf=''; msg.textContent='Confirm your PIN'; renderDots(); return; }
+    if(pin!==pinFirst){ err.textContent='Didn’t match — start again'; pinFirst=''; pinBuf=''; msg.textContent='Set a 4-digit PIN'; renderDots(); return; }
+    try{ await api('/api/lock/set',{method:'POST',body:JSON.stringify({pin})}); pinSet=true; enterUnlocked(); setTimeout(offerBiometric,500); }
+    catch(e){ err.textContent='Error: '+e.message; pinBuf=''; renderDots(); }
+    return;
+  }
+  try{ const r=await api('/api/lock/check',{method:'POST',body:JSON.stringify({pin})});
+    if(r.ok) enterUnlocked(); else { err.textContent='Wrong PIN'; pinBuf=''; renderDots(); }
+  }catch(e){ err.textContent='Error: '+e.message; pinBuf=''; renderDots(); }
+}
+async function offerBiometric(){
+  if(!window.PublicKeyCredential) return;
+  let ok=false; try{ ok=await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }catch(e){}
+  if(!ok || !confirm('Enable Face ID / fingerprint to unlock Cortex?')) return;
+  try{
+    const cred=await navigator.credentials.create({publicKey:{
+      challenge:_rand(32), rp:{name:'Cortex', id:location.hostname},
+      user:{id:_rand(16), name:'cortex', displayName:'Cortex Operator'},
+      pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection:{authenticatorAttachment:'platform', userVerification:'required'},
+      timeout:60000, attestation:'none'}});
+    localStorage.setItem('cortex_bio', _bufToB64(cred.rawId)); toast('Biometric unlock enabled ✓');
+  }catch(e){ toast('Skipped biometric'); }
+}
+async function bioUnlock(){
+  const id=bioId(); if(!id) return;
+  try{ await navigator.credentials.get({publicKey:{
+      challenge:_rand(32), rpId:location.hostname,
+      allowCredentials:[{type:'public-key', id:_b64ToBuf(id)}], userVerification:'required', timeout:60000}});
+    enterUnlocked();
+  }catch(e){ /* fall back to the PIN pad */ }
+}
+function lockNow(){ if(pinSet && !demo){ pinBuf=''; lockMode='unlock'; showLock('Enter your PIN'); } }
 
 async function boot(){
   try{ companies = demo?SAMPLE.companies:await api('/api/companies'); }
@@ -644,6 +741,11 @@ function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.
 (function(){ const th=localStorage.getItem('cortex_theme'); if(th) document.documentElement.dataset.theme=th;
   document.getElementById('pc').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
   if(token) afterLogin(); })();
+// re-lock when the app is reopened after being away >10s
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){ hidAt=Date.now(); }
+  else if(token && pinSet && !demo && hidAt && Date.now()-hidAt>10000){ lockNow(); }
+});
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{})); }
 </script>
 </body>

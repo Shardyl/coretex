@@ -27,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, db, engine, provider, store, worker
+from . import catalog, config, db, engine, provider, store, worker
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -104,6 +104,36 @@ def health() -> dict:
         return {"ok": True}
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---- app lock (a PIN, server-verified, on top of the session; biometric is a client gate) ----
+
+def _pin_hash(pin: str) -> str:
+    return hmac.new(_secret(), ("pin:" + pin).encode(), hashlib.sha256).hexdigest()
+
+
+class Pin(BaseModel):
+    pin: str
+
+
+@app.get("/api/lock/status")
+def lock_status(_: None = Depends(auth)) -> dict:
+    return {"pin_set": bool(db.setting_get("pin_hash"))}
+
+
+@app.post("/api/lock/set")
+def lock_set(body: Pin, _: None = Depends(auth)) -> dict:
+    p = (body.pin or "").strip()
+    if not (p.isdigit() and 4 <= len(p) <= 8):
+        raise HTTPException(status_code=400, detail="PIN must be 4-8 digits")
+    db.setting_set("pin_hash", _pin_hash(p))
+    return {"ok": True}
+
+
+@app.post("/api/lock/check")
+def lock_check(body: Pin, _: None = Depends(auth)) -> dict:
+    h = db.setting_get("pin_hash")
+    return {"ok": bool(h) and hmac.compare_digest(h, _pin_hash((body.pin or "").strip()))}
 
 
 # ---------- read views ----------
@@ -312,10 +342,11 @@ SKILL_TOOLS = [
         "company": {"type": "string"}, "skill": {"type": "string", "description": "skill_key"},
         "rule": {"type": "string"}}, "required": ["company", "skill", "rule"]}},
     {"name": "create_skill",
-     "description": "Create a new skill for a company.",
+     "description": "Create a new skill for a company. Always set the department so it shows on the Skills screen.",
      "input_schema": {"type": "object", "properties": {
-        "company": {"type": "string"}, "skill_key": {"type": "string", "description": "short kebab id, e.g. sales-inquiries"},
-        "name": {"type": "string"}, "craft": {"type": "string", "description": "how to do this job well"}},
+        "company": {"type": "string"}, "skill_key": {"type": "string", "description": "short kebab id, e.g. ideas-parking-lot"},
+        "name": {"type": "string"}, "craft": {"type": "string", "description": "how to do this job well"},
+        "department": {"type": "string", "description": "department it belongs to, e.g. 'Finance & Admin', 'Content & SEO'"}},
         "required": ["company", "skill_key", "name", "craft"]}},
     {"name": "update_craft",
      "description": "Replace a skill's craft (the core how-to text).",
@@ -411,8 +442,12 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         store.add_rule(sk["id"], inp["rule"])
         return f"added rule to {co['slug']}/{sk['skill_key']}: {inp['rule']}"
     if name == "create_skill":
-        store.upsert_skill(co["id"], inp["skill_key"], inp["name"], craft=inp["craft"])
-        return f"created skill {co['slug']}/{inp['skill_key']}"
+        dept = inp.get("department")
+        cat, mgr = catalog.dept_meta(dept) if dept else (None, None)
+        store.upsert_skill(co["id"], inp["skill_key"], inp["name"], craft=inp["craft"],
+                           category=cat, department=dept, manager=mgr)
+        return (f"created skill {co['slug']}/{inp['skill_key']}"
+                + (f" in {dept}" if dept else " (no department set — tell me which department it belongs to)"))
     if name == "update_craft":
         sk = store.get_skill_by_key(co["id"], inp.get("skill", ""))
         if not sk:
