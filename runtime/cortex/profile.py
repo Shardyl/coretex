@@ -29,14 +29,9 @@ QUESTIONS = [
     ("Identity", "address", "Registered / operating address?", "text"),
     ("Identity", "phone", "Main contact phone number(s)?", "text"),
     ("Identity", "registration", "VAT number / company registration number?", "text"),
-    # 2. Brand & positioning
-    ("Brand & positioning", "voice", "Voice & tone — how should it communicate?", "long"),
-    ("Brand & positioning", "audience", "Who's the target audience?", "long"),
-    ("Brand & positioning", "offer", "Products / services / the offer?", "long"),
-    ("Brand & positioning", "entity_claim", "The one-line entity claim — what it is, does, and where?", "text"),
-    ("Brand & positioning", "usp", "USP / key differentiators?", "long"),
-    ("Brand & positioning", "donts", "Things to NEVER do or say?", "long"),
-    # 3. Brand & visual identity / assets
+    # (Brand voice / positioning / audience / don'ts are captured by the General Operations questionnaire
+    #  — NOT re-asked here. This wizard is concrete profile + assets + locations only.)
+    # 2. Brand & visual identity / assets
     ("Brand & assets", "asset_folder", "Paste the link to this company's ASSET FOLDER in Drive. Cortex reads this folder (and its subfolders) only.", "url"),
     ("Brand & assets", "brand_guidelines", "Brand guidelines — link or filename in the asset folder. (Tell me if one needs creating.)", "text"),
     ("Brand & assets", "logo_dark", "Official DARK logo — filename or link in the asset folder.", "text"),
@@ -62,12 +57,10 @@ QUESTIONS = [
     ("Finance", "payment_terms", "Standard payment terms?", "text"),
     ("Finance", "bank_details", "Bank details (for quotes / invoices)?", "long"),
     ("Finance", "accounts_contact", "Who handles finance / who to CC for accounts?", "text"),
-    # 7. People & roles
-    ("People & roles", "team", "List the team — for each person: name, email, role/position, department.", "long"),
-    ("People & roles", "decision_makers", "Who approves what (decision-makers / escalation)?", "long"),
-    # 8. CRM & data
-    ("CRM & data", "crm", "Which CRM database does this company use? (e.g. the Cortex CRM)", "text"),
-    ("CRM & data", "genuine_inquiry", "What counts as a genuine inquiry worth recording in the CRM?", "long"),
+    # 7. Team email directory (the contact details — General Ops covers who-does-what, NOT the emails)
+    ("Team directory", "team", "The team email directory — for each person: name, email and role, so CC's, sign-offs and hand-offs resolve to real people.", "long"),
+    # 8. CRM
+    ("CRM", "crm", "Which CRM database does this company use? (e.g. the Cortex CRM)", "text"),
 ]
 
 
