@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import catalog, config, db, engine, personas, provider, store, worker
+from . import catalog, config, db, engine, personas, provider, questionnaire, store, worker
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -256,6 +256,96 @@ def set_skill_threshold(skill_id: int, body: ThresholdBody, _: None = Depends(au
     if body.threshold < 1:
         raise HTTPException(status_code=400, detail="threshold must be at least 1")
     return store.set_threshold(skill_id, body.threshold)
+
+
+# ---------- Manager questionnaires ----------
+
+def _cid(company: str | None) -> int:
+    if not company:
+        return 0
+    co = store.get_company_by_slug(company)
+    return co["id"] if co else 0
+
+
+@app.get("/api/questionnaire/areas")
+def q_areas(_: None = Depends(auth)) -> list[dict]:
+    return questionnaire.areas()
+
+
+@app.get("/api/questionnaire/status")
+def q_status(area: str, company: str | None = None, _: None = Depends(auth)) -> dict:
+    return questionnaire.open_area(area, _cid(company))
+
+
+class QStart(BaseModel):
+    area: str
+    tier: str
+    company: str | None = None
+    restart: bool = False
+
+
+@app.post("/api/questionnaire/start")
+def q_start(body: QStart, _: None = Depends(auth)) -> dict:
+    if body.tier not in questionnaire.TIERS:
+        raise HTTPException(status_code=400, detail="unknown tier")
+    cid = _cid(body.company)
+    if questionnaire.TIERS[body.tier]["scope"] == "company" and not cid:
+        raise HTTPException(status_code=400, detail="pick a company for a Deeper or Deepest dive")
+    return questionnaire.start(body.area, body.tier, cid, body.restart)
+
+
+class QAnswer(BaseModel):
+    run_id: int
+    answer: str
+
+
+@app.post("/api/questionnaire/answer")
+def q_answer(body: QAnswer, _: None = Depends(auth)) -> dict:
+    return questionnaire.answer(body.run_id, body.answer)
+
+
+class QRun(BaseModel):
+    run_id: int
+
+
+@app.post("/api/questionnaire/distill")
+def q_distill(body: QRun, _: None = Depends(auth)) -> dict:
+    return questionnaire.distill(body.run_id)
+
+
+class QApply(BaseModel):
+    company: str | None = None
+    area: str
+    rules: list[dict] = []      # [{skill, rule, scope, override_of?}]
+    roadmap: list[str] = []
+
+
+@app.post("/api/questionnaire/apply")
+def q_apply(body: QApply, _: None = Depends(auth)) -> dict:
+    co = store.get_company_by_slug(body.company) if body.company else None
+    saved = 0
+    for r in body.rules:
+        rule, skill_key, scope = r.get("rule"), r.get("skill"), r.get("scope")
+        if not rule:
+            continue
+        if scope == "universal" and skill_key:
+            store.add_universal_rule(skill_key, rule)
+            saved += 1
+        elif co and skill_key:
+            sk = store.get_skill_by_key(co["id"], skill_key)
+            if sk:
+                if r.get("override_of"):
+                    store.add_override(sk["id"], r["override_of"])   # supersede the universal here
+                store.add_rule(sk["id"], rule)
+                saved += 1
+    road = 0
+    if body.roadmap and co:
+        pl = store.get_skill_by_key(co["id"], "roadmap-ideas-parking-lot")
+        if pl:
+            for item in body.roadmap:
+                store.add_rule(pl["id"], item)
+                road += 1
+    return {"ok": True, "rules_saved": saved, "roadmap_added": road}
 
 
 @app.get("/api/tasks/{task_id}")

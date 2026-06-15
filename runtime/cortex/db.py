@@ -26,6 +26,7 @@ _ALTERS = [
     "alter table skills add column if not exists department text",
     "alter table skills add column if not exists manager text",
     "alter table skills add column if not exists model text",
+    "alter table skills add column if not exists overrides jsonb not null default '[]'::jsonb",
 ]
 
 

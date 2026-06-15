@@ -12,8 +12,7 @@ from . import provider, store
 
 def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
     ctx = company.get("context") or {}
-    universal = store.get_universal_rules(skill.get("skill_key", "")) if skill.get("skill_key") else []
-    local = skill.get("rules") or []
+    universal, local = store.effective_rules(skill)   # honour this company's overrides
     rules = list(universal) + list(local)
     brief = request.get("brief") if isinstance(request, dict) else request
     system = (

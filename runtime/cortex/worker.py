@@ -22,9 +22,8 @@ def _model_for(skill: dict) -> str:
 
 
 def _rules_block(skill: dict) -> str:
-    universal = store.get_universal_rules(skill.get("skill_key", "")) if skill.get("skill_key") else []
-    local = skill.get("rules") or []
-    rules = list(universal) + list(local)  # universal first, then this company's own
+    universal, local = store.effective_rules(skill)  # universal minus this company's overrides, then local
+    rules = list(universal) + list(local)
     if not rules:
         return ""
     return "Standing rules you MUST follow:\n" + "\n".join(f"- {r}" for r in rules)

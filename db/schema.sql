@@ -27,7 +27,8 @@ create table if not exists skills (
     trust_streak  int  not null default 0,               -- clean approvals in a row
     auto_threshold int not null default 10,              -- streak needed before auto is offered
     paused        boolean not null default false,
-    rules         jsonb not null default '[]'::jsonb,    -- confirmed standing rules
+    rules         jsonb not null default '[]'::jsonb,    -- confirmed standing rules (this company)
+    overrides     jsonb not null default '[]'::jsonb,    -- universal-rule texts this company SUPERSEDES
     created_at    timestamptz not null default now(),
     updated_at    timestamptz not null default now(),
     unique (company_id, skill_key)
@@ -81,4 +82,32 @@ create table if not exists conversations (
 create table if not exists settings (
     key    text primary key,
     value  jsonb not null
+);
+
+-- Manager questionnaires. Cortex (the Manager) drafts the question set per (area, tier, scope).
+-- tier basic = UNIVERSAL (company_id 0); deeper/deepest = PER COMPANY (company_id = that company).
+-- rule_sig records the rule set the questions were built to cover (for rule-aware self-updating).
+create table if not exists questionnaires (
+    department  text not null,                              -- area key: a department, or 'General Operations'
+    tier        text not null,                              -- basic | deeper | deepest
+    company_id  bigint not null default 0,                  -- 0 = universal (Basic); else the company
+    questions   jsonb not null default '[]'::jsonb,         -- [{id, text, type:'choice'|'open', options?:[]}]
+    rule_sig    text not null default '',                   -- signature of rules covered when last built
+    updated_at  timestamptz not null default now(),
+    primary key (department, tier, company_id)
+);
+
+-- A run is one lane answering a questionnaire (resumable). Basic = one universal lane (company_id 0);
+-- deeper/deepest = one lane per company. Tracks where you're up to + your answers.
+create table if not exists questionnaire_runs (
+    id          bigserial primary key,
+    company_id  bigint not null default 0,                  -- 0 = universal (Basic)
+    department  text not null,
+    tier        text not null,
+    answers     jsonb not null default '[]'::jsonb,         -- [{q, a}] in order
+    idx         int  not null default 0,                    -- next unanswered question index
+    status      text not null default 'in_progress',        -- in_progress | done
+    created_at  timestamptz not null default now(),
+    updated_at  timestamptz not null default now(),
+    unique (company_id, department, tier)
 );

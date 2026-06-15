@@ -83,6 +83,23 @@ def bump_streak(skill_id, by=1) -> dict:
     )
 
 
+def effective_rules(skill: dict) -> tuple[list, list]:
+    """The rules a company actually follows for a skill: (universal minus this company's overrides, local).
+    An override = a local rule explicitly supersedes a universal one for this company only."""
+    uni = get_universal_rules(skill.get("skill_key", "")) if skill.get("skill_key") else []
+    ov = skill.get("overrides") or []
+    uni = [r for r in uni if r not in ov]
+    return list(uni), list(skill.get("rules") or [])
+
+
+def add_override(skill_id, universal_rule: str) -> dict:
+    """Mark a universal rule as superseded for this company's skill (drops it from that company)."""
+    return db.execute(
+        "update skills set overrides = overrides || %s::jsonb, updated_at=now() where id=%s returning *",
+        (Json([universal_rule]), skill_id),
+    )
+
+
 def reset_streak(skill_id) -> dict:
     """A correction or rejection breaks the clean-approval streak (manager and owner disagreed)."""
     return db.execute("update skills set trust_streak=0, updated_at=now() where id=%s returning *",
