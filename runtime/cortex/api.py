@@ -228,9 +228,11 @@ def inbox(company: str | None = None, _: None = Depends(auth)) -> list[dict]:
         if t["kind"] in engine.EMAIL_KINDS:         # email replies: show the original enquiry + send envelope
             co = store.get_company(t["company_id"])
             env = engine._email_envelope(t, co)
-            inq = (t.get("request") or {}).get("inquiry") or {}
+            req = t.get("request") or {}
+            inq = req.get("inquiry") or {}
             t["email"] = {**env, "inquiry": {"name": inq.get("name"), "email": inq.get("email"),
                                              "message": inq.get("message") or inq.get("snippet") or ""}}
+            t["qual"] = req.get("qualification")    # tier + research, for the lead-qualification badge
         sk = store.get_skill(t["skill_id"])         # the lane's autonomy state for the Inbox UI
         if sk:
             offer = (sk["authority"] == "ask" and sk["trust_streak"] >= sk["auto_threshold"]

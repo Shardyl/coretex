@@ -17,7 +17,7 @@ import re
 import secrets
 import time
 
-from . import crm, db, gmail, manager, profile, provider, store, worker
+from . import crm, db, gmail, leadqualify, manager, profile, provider, store, worker
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -85,14 +85,20 @@ def _approval_buttons(task_id: int) -> list[list[dict]]:
 
 # ---------- email replies ----------
 
-def _email_brief(inq: dict) -> str:
+def _email_brief(inq: dict, qual: dict | None = None) -> str:
     """Frame a website enquiry as a reply-drafting brief for the worker."""
-    return ("Draft a reply to this website enquiry. Write ONLY the email body — no subject line, no "
-            "'From'/'To' headers, and no sign-off signature (the signature is added automatically). "
-            "Reply directly to the person, in the company voice, following the standing rules.\n\n"
-            f"Their name: {inq.get('name') or 'there'}\n"
-            f"Their email: {inq.get('email') or '(unknown)'}\n"
-            f"Their message:\n{(inq.get('message') or inq.get('snippet') or '').strip()}")
+    brief = ("Draft a reply to this website enquiry. Write ONLY the email body — no subject line, no "
+             "'From'/'To' headers, and no sign-off signature (the signature is added automatically). "
+             "Reply directly to the person, in the company voice, following the standing rules.\n\n"
+             f"Their name: {inq.get('name') or 'there'}\n"
+             f"Their email: {inq.get('email') or '(unknown)'}\n"
+             f"Their message:\n{(inq.get('message') or inq.get('snippet') or '').strip()}")
+    if qual:
+        brief += (f"\n\nQualification: this lead is {qual.get('tier_label')}. "
+                  f"What Cortex found: {qual.get('research') or '(no research)'} "
+                  f"Reason: {qual.get('reason') or ''}\n"
+                  "Draft a first reply appropriate to that tier (handle each tier however the owner has taught).")
+    return brief
 
 
 def _email_envelope(task: dict, company: dict) -> dict:
@@ -472,10 +478,10 @@ def poll_inquiries_window(days: int = 2) -> dict:
         if not gid or gid in seen:
             continue
         seen.add(gid)
-        verdict = triage_inquiry(inq)
-        if not verdict["genuine"]:                       # spam/junk: filed, NOT drafted, NOT added to CRM
+        qual = leadqualify.qualify(inq, co)              # research the lead, then classify the tier
+        if not qual["genuine"]:                          # spam/junk: filed, NOT drafted, NOT added to CRM
             filtered_log.append({"name": inq.get("name"), "email": inq.get("email"),
-                                 "category": verdict["category"], "reason": verdict["reason"]})
+                                 "category": "spam", "reason": qual["reason"]})
             filtered += 1
             continue
         try:
@@ -483,7 +489,7 @@ def poll_inquiries_window(days: int = 2) -> dict:
         except Exception:  # noqa: BLE001
             pass
         store.create_task(co["id"], skill["id"], "email_reply",
-                          {"brief": _email_brief(inq), "inquiry": inq, "triage": verdict})
+                          {"brief": _email_brief(inq, qual), "inquiry": inq, "qualification": qual})
         made += 1
         if made >= 10:
             break
