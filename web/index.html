@@ -348,8 +348,9 @@ async function render(){
 
 async function renderInbox(v){
   v.innerHTML='<div class="h">Needs your yes</div><div id="ib" class="empty">Loading…</div>';
+  const fco=document.getElementById('coSel').value;
   let items;
-  try{ items = demo?SAMPLE.inbox:await api('/api/inbox'); }catch(e){ items=demo?SAMPLE.inbox:[]; }
+  try{ items = demo?SAMPLE.inbox:await api('/api/inbox'+(fco?'?company='+encodeURIComponent(fco):'')); }catch(e){ items=demo?SAMPLE.inbox:[]; }
   const ib=document.getElementById('ib');
   if(!items.length){ ib.outerHTML='<div class="empty"><span class="e">✓</span>Inbox zero. Cortex will ping you here and on Telegram when something needs a yes.</div>'; return; }
   ib.outerHTML = items.map(t=>{
@@ -714,7 +715,8 @@ async function submitAsk(){
 
 async function renderLog(v){
   v.innerHTML='<div class="h">Activity</div><div id="lg" class="empty">Loading…</div>';
-  let d; try{ d=demo?SAMPLE.decisions:await api('/api/decisions?limit=40'); }catch(e){ d=SAMPLE.decisions; }
+  const fco=document.getElementById('coSel').value;
+  let d; try{ d=demo?SAMPLE.decisions:await api('/api/decisions?limit=40'+(fco?'&company='+encodeURIComponent(fco):'')); }catch(e){ d=SAMPLE.decisions; }
   const verb={publish:'published',approve:'approved',auto:'auto-ran',reject:'skipped',correct:'corrected',rule_confirmed:'added a rule'};
   document.getElementById('lg').outerHTML = d.length? d.map(x=>`
     <div class="logitem"><div class="led ${x.action}"></div><div class="logmain">
@@ -731,7 +733,13 @@ const DEMO_SKILLS=[
 ];
 let skillsData=[], openDept=null, openSkill=null, skillsCoName='';
 async function renderSkills(v){
-  const co=document.getElementById('coSel').value || (companies[0]&&companies[0].slug)||'';
+  const co=document.getElementById('coSel').value;
+  if(!co){
+    v.innerHTML=`<div class="h">Skills</div>
+      <div class="empty"><span class="e">🏢</span>Skills are tuned per company. Pick a company from the menu at the top to view and edit its skills.<br><br>
+      <span style="opacity:.65;font-size:13px">Universal rules (🌐) still show inside whichever company you choose, so you always see the shared layer.</span></div>`;
+    return;
+  }
   const coName=(companies.find(c=>c.slug===co)||{}).name||co; skillsCoName=coName;
   v.innerHTML=`<div class="h">Skills · ${esc(coName)}</div><div id="skilltree" class="empty">Loading…</div>`;
   try{ skillsData = demo?DEMO_SKILLS:await api(`/api/companies/${co}/skills`); }catch(e){ skillsData=DEMO_SKILLS; }

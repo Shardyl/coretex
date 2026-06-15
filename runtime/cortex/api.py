@@ -215,8 +215,14 @@ def tasks(status: str | None = None, company: str | None = None, limit: int = 50
 
 
 @app.get("/api/inbox")
-def inbox(_: None = Depends(auth)) -> list[dict]:
-    rows = db.query("select * from tasks where status in ('awaiting_approval','awaiting_correction') order by id desc")
+def inbox(company: str | None = None, _: None = Depends(auth)) -> list[dict]:
+    where = "status in ('awaiting_approval','awaiting_correction')"
+    params: list = []
+    if company:
+        co = store.get_company_by_slug(company)
+        where += " and company_id = %s"
+        params.append(co["id"] if co else -1)
+    rows = db.query(f"select * from tasks where {where} order by id desc", tuple(params))
     for t in rows:
         t["wp"] = db.setting_get(f"wp:{t['id']}")   # preview/edit links for blog drafts
     return rows
@@ -232,7 +238,14 @@ def task(task_id: int, _: None = Depends(auth)) -> dict:
 
 
 @app.get("/api/decisions")
-def decisions(limit: int = 50, _: None = Depends(auth)) -> list[dict]:
+def decisions(limit: int = 50, company: str | None = None, _: None = Depends(auth)) -> list[dict]:
+    if company:
+        co = store.get_company_by_slug(company)
+        return db.query(
+            "select d.* from decisions d join tasks t on t.id = d.task_id "
+            "where t.company_id = %s order by d.id desc limit %s",
+            (co["id"] if co else -1, limit),
+        )
     return db.query("select * from decisions order by id desc limit %s", (limit,))
 
 
