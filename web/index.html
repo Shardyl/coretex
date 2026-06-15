@@ -355,7 +355,7 @@ async function boot(){
 
 // ---- nav ----
 function go(t){ if(t!=='talk'&&freeOn) freeStop(); tab=t;
-  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); render(); }
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); render(); syncWake(); }
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 // ---- clean outline line-icons (no emoji anywhere) ----
@@ -388,7 +388,8 @@ const ICON={
   back:'M5 12h13M10 7l-5 5 5 5',
   finger:'M12 11a2 2 0 0 0-2 2c0 1.4.3 2.8.8 4M12 7a5 5 0 0 0-5 5c0 1 0 2.4.5 3.6M12 7a5 5 0 0 1 5 5c0 .8 0 1.6-.2 2.4M9.5 4.3a8 8 0 0 1 10 7.7M4.3 11A8 8 0 0 1 7 6.2',
   alert:'M12 4l9 16H3zM12 10v4M12 17h.01',
-  file:'M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5'
+  file:'M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5',
+  pause:'M9 5v14M15 5v14'
 };
 function ic(n,s){ s=s||20; return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle"><path d="${ICON[n]||''}"></path></svg>`; }
 function paintIcons(){
@@ -624,7 +625,7 @@ function renderChat(v){
   setVoiceButtons();
   if(freeOn) document.getElementById('freehint').classList.add('on');
   paintChat(); paintAttach(); updateLivePanel(); layoutChat();
-  initConvs(); fillPersonaSel();
+  initConvs(); fillPersonaSel(); syncWake();
 }
 function layoutChat(){
   const tEl=document.querySelector('.tabs'); const tabsH=tEl?Math.ceil(tEl.getBoundingClientRect().height):60;
@@ -661,13 +662,17 @@ function setTalkingTo(v){ talkingTo=v||''; localStorage.setItem('cortex_persona'
 function whoIcon(pk){ pk=pk||''; return ic(pk.indexOf('chief:')===0?'compass':(pk.indexOf('manager:')===0?'tool':'chat'),13); }
 
 // ---- voice mode (Free = hands-free, On-the-go = push-to-talk; same engine) ----
-let voiceMode='free';
+let voiceMode='free', goPaused=false;
 function setVoiceButtons(){
   const f=document.getElementById('freeBtn'), g=document.getElementById('goBtn'); if(!f||!g) return;
   const freeActive=freeOn&&voiceMode==='free', goActive=freeOn&&voiceMode==='go';
   f.classList.toggle('on',freeActive); g.classList.toggle('on',goActive);
   f.innerHTML = (freeActive?ic('stop',21):ic('headset',21))+`<span>${freeActive?'Stop':'Free'}<br><span class="sub">hands-free</span></span>`;
-  g.innerHTML = (goActive?ic('stop',21):ic('mic',21))+`<span>${goActive?'Send':'On-the-go'}<br><span class="sub">${goActive?'push to stop':'push to talk'}</span></span>`;
+  // On-the-go toggles the mic: listening -> Pause, paused -> Resume. Send (the arrow) sends the buffer.
+  let gi='mic', gt='On-the-go', gs='push to talk';
+  if(goActive && !goPaused){ gi='pause'; gt='Pause'; gs='listening…'; }
+  else if(goActive && goPaused){ gi='mic'; gt='Resume'; gs='paused — tap Send when ready'; }
+  g.innerHTML = ic(gi,21)+`<span>${gt}<br><span class="sub">${gs}</span></span>`;
 }
 function updateLivePanel(){
   const p=document.getElementById('livePanel'); if(!p) return;
@@ -678,9 +683,13 @@ function updateLivePanel(){
   layoutChat();
 }
 function toggleGo(){ if(demo){ toast('Voice needs the live app'); return; }
-  if(!freeOn){ toggleFree('go'); return; } if(voiceMode==='go') endTurnNow(); }
-function endTurnNow(){ clearTimeout(freeTimer); const u=(freeUtt||freeLive||'').trim();
-  if(!u){ freeStop(); return; } freeUtt=''; freeLive=''; updateLivePanel(); freeTurn(u); }
+  if(botSpeaking){ interruptSpeech(); }                 // tap to cut in while Cortex is speaking
+  if(!freeOn){ toggleFree('go'); return; }              // start a fresh On-the-go session
+  if(voiceMode!=='go') return;
+  goPaused=!goPaused; beep(goPaused?'stop':'start');     // pause / resume the mic, keep the buffer
+  setVoiceButtons();
+  setHint(goPaused?'Paused — gather your thoughts, then tap Send (or Resume to add more)':'On-the-go — talk; tap Pause to think, Send when ready');
+}
 
 // ---- attach / camera ----
 let pendingImages=[];
@@ -762,7 +771,12 @@ async function delConv(){
 }
 async function sendChat(text, viaVoice){
   const inp=document.getElementById('chatIn');
-  const msg=(text!=null?text:(inp?inp.value:'')).trim();
+  let msg=(text!=null?text:(inp?inp.value:'')).trim();
+  // On-the-go: tapping Send folds the gathered voice buffer in, ends the mic session, speaks the reply.
+  if(text==null && freeOn && voiceMode==='go'){
+    const u=(freeUtt||freeLive||'').trim(); if(u) msg=(msg?msg+' ':'')+u;
+    viaVoice=true; freeStop();
+  }
   const imgs=pendingImages.slice(); pendingImages=[]; paintAttach();
   if(!msg && !imgs.length) return '';
   if(inp&&text==null) inp.value='';
@@ -805,8 +819,8 @@ async function toggleFree(mode){
   if(demo){ toast('Voice chat needs the live app'); return; }
   if(recording||starting){ stopDictation(document.getElementById('chatMic')); }
   voiceMode = (mode==='go')?'go':'free';
-  ensureAudio();
-  freeOn=true; freeUtt=''; freeLive='';
+  ensureAudio(); requestWake();
+  freeOn=true; freeUtt=''; freeLive=''; goPaused=false;
   setVoiceButtons(); updateLivePanel();
   const hint=document.getElementById('freehint'); if(hint){ hint.textContent='warming up…'; hint.classList.add('on'); }
   let ready=false;
@@ -840,6 +854,7 @@ async function toggleFree(mode){
         return;
       }
       if(freeThinking) return;
+      if(voiceMode==='go' && goPaused) return;   // On-the-go paused: ignore speech while you think
       if(d.text){
         if(d.final){ freeUtt=(freeUtt?freeUtt+' ':'')+d.text; }
         freeLive = d.final ? freeUtt : ((freeUtt?freeUtt+' ':'')+d.text);   // show words live
@@ -874,7 +889,7 @@ function freeStop(){
   try{ if(vws&&vws.readyState===1) vws.close(); }catch(e){}
   try{ if(vctx) vctx.close(); }catch(e){}
   vws=null;vctx=null;vsrc=null;vproc=null;vmute=null;vstream=null;
-  updateLivePanel(); paintChat();
+  updateLivePanel(); paintChat(); syncWake();
 }
 
 async function renderAsk(v){
@@ -1004,6 +1019,17 @@ async function delRule(id,index,scope){
 function toggleTheme(){ const h=document.documentElement, n=h.dataset.theme==='dark'?'light':'dark';
   h.dataset.theme=n; localStorage.setItem('cortex_theme',n);
   document.querySelector('meta[name=theme-color]').content=n==='dark'?'#0B0F14':'#EEF2F6'; }
+
+// ---- screen wake lock: keep the phone awake on the Talk page / during voice (no more dimming) ----
+let wakeLock=null;
+async function requestWake(){
+  try{ if('wakeLock' in navigator && document.visibilityState==='visible' && !wakeLock){
+    wakeLock=await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release',()=>{ wakeLock=null; });
+  } }catch(e){}
+}
+function releaseWake(){ try{ if(wakeLock){ wakeLock.release(); wakeLock=null; } }catch(e){} }
+function syncWake(){ if(tab==='talk' || freeOn) requestWake(); else releaseWake(); }
 let tT;
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show');
   clearTimeout(tT); tT=setTimeout(()=>t.classList.remove('show'),2600); }
@@ -1017,6 +1043,7 @@ function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden'){ hidAt=Date.now(); }
   else if(token && pinSet && !demo && hidAt && Date.now()-hidAt>10000){ lockNow(); }
+  else if(document.visibilityState==='visible'){ syncWake(); }   // re-acquire screen lock (drops when hidden)
 });
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{})); }
 </script>
