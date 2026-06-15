@@ -165,6 +165,18 @@ no horizontal overflow); removed `.wrap{min-height:100%}` which (with the sticky
 scroll into empty space on short pages like Inbox-zero (verified scrollHeight==viewport); added
 `overflow-x:hidden;overscroll-behavior:none` on html/body.
 
+**Universal vs local rules ✅ (2026-06-15, isolation verified):** every skill now has two clearly
+separated rule layers. **Universal** rules apply to EVERY company — stored once in new table
+`universal_skill_rules` (keyed by skill_key), shared. **Local** rules apply to one company — stay in
+`skills.rules` (per company). `worker._rules_block` applies universal + local together. API: skills GET
+returns `universal_rules`; `POST /api/skills/{id}/rule` + `/rule/delete` take `scope` (universal|company,
+default company). Chat `add_rule` tool has a `scope` enum and the persona ASKS "universal or just
+<company>?" when unclear (default company; never spreads by accident). Skills screen shows both as
+labelled sections (🌐 Universal / 🏢 <company> only) with a scope picker on add. Verified live: a universal
+rule appears on all companies; a local rule stays on its company only. This is the isolation foundation
+for the **existing-skills migration** (seo-campaign/web-page-builder/sensa-quotation/content-backtrack-audit
+→ universal crafts in catalog.py + per-company context/rules) — pilot = Content & SEO, pending operator go.
+
 **Remaining for Phase 3:** "discuss this" deep-link item→Talk; Talk gym-mode; other cockpit screens;
 omnichannel/Gmail intake = Phase 4 (note: org SA-key block means Gmail also needs OAuth-per-mailbox or a
 policy exception — revisit at Phase 4).
