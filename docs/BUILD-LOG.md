@@ -184,6 +184,16 @@ company, messages jsonb, timestamps) — server-side so it rides the nightly bac
 line), resumes last conversation on reopen (id in localStorage `cortex_conv`). Verified create→save→
 list→get→delete round-trip.
 
+**Skill migration — Content & SEO pilot ✅ (2026-06-15):** `catalog.py` now supports explicit per-skill
+crafts (3-tuples `(key,name,craft)`; `seed_all` uses craft if present else `_craft`). All 10 Content & SEO
+crafts rewritten from the real methodology in `~/.claude/skills/seo-campaign` (SERP-format matching,
+converting-search-terms keyword research, AEO/GEO + agent-readiness, on-page schema, internal-linking
+3-ways, helpful-content refresh scoring) + `web-page-builder` (page structure, on-page+AEO checklist) +
+`content-backtrack-audit` (refresh scoring). Re-seeded → universal across all 4 companies; local rules
+preserved. **Migration remaining:** sensa-quotation → Sales/Quotation generation; web-page-builder →
+also landing-copy (done) + the publish pipeline; website-management → publishing/onboarding; seo-campaign
+Paid Ads section → Paid Ads dept; per-site strategy packs → each company CONTEXT (positioning/voice).
+
 **Remaining for Phase 3:** "discuss this" deep-link item→Talk; Talk gym-mode; other cockpit screens;
 omnichannel/Gmail intake = Phase 4 (note: org SA-key block means Gmail also needs OAuth-per-mailbox or a
 policy exception — revisit at Phase 4).
