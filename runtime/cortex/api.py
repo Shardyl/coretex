@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import catalog, config, db, engine, personas, provider, questionnaire, store, worker
+from . import catalog, config, db, engine, knowledge, personas, provider, questionnaire, store, worker
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -485,10 +485,23 @@ CHAT_SYSTEM_BASE = (
     "and rules get applied) and show it to him; create_task to queue work that drafts into the Inbox; and "
     "on a PENDING task approve_task / skip_task / correct_task (correct redrafts it and learns the rule). "
     "When he gives feedback on a draft you just made, you can re-run draft with a revision AND, if the "
-    "lesson is durable, add_rule so it sticks for next time — fix it and teach it in one go."
+    "lesson is durable, add_rule so it sticks for next time — fix it and teach it in one go. "
+    "You ALSO have a KNOWLEDGE BASE about the Cortex system itself — its architecture and how its features "
+    "work (the questionnaire, voice routing, the Chief/Manager/Worker org, approvals and earned autonomy, "
+    "the nightly backup). When Rashad asks how Cortex or any of its features work, or where to find "
+    "something, call system_knowledge to look it up and answer accurately — never guess about the system."
 )
 
 SKILL_TOOLS = [
+    {"name": "system_knowledge",
+     "description": "Look up how the CORTEX SYSTEM ITSELF works — its architecture, what has been built, "
+                    "and how its features work (the questionnaire, voice routing, the Chief/Manager/Worker "
+                    "org, approvals + earned autonomy, the nightly backup, etc.). Use this BEFORE answering "
+                    "ANY question about Cortex itself or 'how does X work / where do I find Y' — never guess "
+                    "about the system. Returns the relevant docs from Cortex's own knowledge base.",
+     "input_schema": {"type": "object", "properties": {
+        "query": {"type": "string", "description": "what to look up, e.g. 'how does the questionnaire work'"}},
+        "required": ["query"]}},
     {"name": "list_skills",
      "description": "List skills (with their standing rules) for a company and/or department. Omit both for an overview.",
      "input_schema": {"type": "object", "properties": {
@@ -548,6 +561,8 @@ SKILL_TOOLS = [
 
 
 def _exec_skill_tool(name: str, inp: dict) -> str:
+    if name == "system_knowledge":
+        return knowledge.search(inp.get("query", ""))
     if name == "list_skills":
         slug, dept = inp.get("company"), inp.get("department")
         where, params = [], []
@@ -659,7 +674,7 @@ def _chat_system() -> str:
 # A Chief CAN grow the org — create_skill is global-by-nature (added to every company), so there's no
 # scope to bleed. But the scoped, bleed-risky part — writing per-company RULES (add_rule/update_craft)
 # — stays with the Manager (one keeper of rules). Managers + general Cortex get the full set.
-_CHIEF_TOOLS = {"list_skills", "list_tasks", "get_task", "create_skill"}
+_CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "create_skill"}
 
 
 @app.get("/api/heads")
