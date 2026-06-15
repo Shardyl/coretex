@@ -467,7 +467,7 @@ async function renderInbox(v){
       ${wp&&wp.preview?`<div class="meta">${ic('file',14)} draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
       <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">${ic('volume',16)} Read aloud</button></div>
       <div class="row">
-        <button class="btn go" onclick="act(${t.id},'approve')">${t.kind==='blog'?'Publish live':(isEmail?'Send reply':'Approve')}</button>
+        <button class="btn go" onclick="act(${t.id},'approve')">Approve</button>
         <button class="btn warn" id="cm${t.id}" onclick="voiceCorrect(${t.id},this)">${ic('mic',16)} Tap to talk</button>
         <button class="btn bad" onclick="act(${t.id},'skip')">${t.kind==='blog'?'Discard':'Skip'}</button>
       </div>
@@ -535,8 +535,8 @@ async function setThreshold(ev,id,streak){
 
 async function act(id,what){
   const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;
-  if(demo){ toast(what==='approve'?'Published ✓ (demo)':'Done (demo)'); if(card) card.remove(); return; }
-  try{ await api(`/api/tasks/${id}/${what}`,{method:'POST'}); toast(what==='approve'?'Published ✓':'Done ✓'); render(); }
+  if(demo){ toast(what==='approve'?'Approved ✓ (demo)':'Done (demo)'); if(card) card.remove(); return; }
+  try{ await api(`/api/tasks/${id}/${what}`,{method:'POST'}); toast(what==='approve'?'Approved ✓':'Done ✓'); render(); }
   catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
 }
 // Voice (or typed) correction on every approval card: tap to talk -> editable transcript -> send.

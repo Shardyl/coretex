@@ -421,10 +421,10 @@ def _approve(task: dict, skill: dict, company: dict) -> None:
     if task.get("tg_message_id"):
         if result and result.get("link"):
             tg.edit(task["tg_message_id"],
-                    f"✅ Published live on Tabscanner: {result['link']}  (streak {skill['trust_streak']}).")
+                    f"✅ Approved — published live: {result['link']}  (streak {skill['trust_streak']}).")
         elif result and result.get("sent_to"):
             tg.edit(task["tg_message_id"],
-                    f"✅ Sent to {result['sent_to']} — '{skill['name']}' (streak {skill['trust_streak']}). Done.")
+                    f"✅ Approved — Cortex sent it to {result['sent_to']} (streak {skill['trust_streak']}).")
         else:
             tg.edit(task["tg_message_id"], f"✅ Approved — '{skill['name']}' (streak {skill['trust_streak']}). Done.")
     # Offer auto only for non-blog skills (blog publishing must never go auto).
