@@ -207,9 +207,12 @@ on approval") for all companies; removed the redundant Tabscanner-local copy. Me
 **Migration status (2026-06-15):** ✅ DONE (universal, all 4 companies) — **seo-campaign** → Content & SEO
 dept; **web-page-builder** → content-landing-copy + new **content-page-builder** ("Web page builder") skill
 (both carry the draft-preview universal rule); **content-backtrack-audit** → content-refresh. Skill
-STRUCTURE fully universal (80 skills × 4). ❌ REMAINING craft migration: **sensa-quotation** → Sales/
-Quotation generation; **website-management** → publishing/Support onboarding; and the per-site **strategy
-packs → each company CONTEXT** (voice/positioning). desktop-exports = skipped (workflow rule).
+STRUCTURE fully universal (80 skills × 4). **website-management** → new universal **content-website-management** ("Website management & deployment")
+skill, all 4 companies. **sensa-quotation** → 4 **Sensa-LOCAL** rules on sales-quotation (house Excel
+format, per-service presets + 15% agency-fee logic, AED/VAT 5%, bank/company details); isolation verified
+(tabscanner/skyvision/filmspoke sales-quotation = 0 rules). desktop-exports = skipped (workflow rule).
+**MIGRATION COMPLETE** except the per-site **strategy packs → each company CONTEXT** (voice/positioning) —
+DEFERRED per operator (local, later). Each company now carries 80 skills (universal structure).
 
 **Remaining for Phase 3:** "discuss this" deep-link item→Talk; Talk gym-mode; other cockpit screens;
 omnichannel/Gmail intake = Phase 4 (note: org SA-key block means Gmail also needs OAuth-per-mailbox or a
