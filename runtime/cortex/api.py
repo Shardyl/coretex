@@ -533,6 +533,45 @@ def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
     return {"reply": provider.chat_tools(_chat_system(), msgs, SKILL_TOOLS, _exec_skill_tool)}
 
 
+# ---- saved conversations (Talk history) ----
+
+class ConvSave(BaseModel):
+    messages: list[dict]
+    title: str | None = None
+
+
+@app.get("/api/conversations")
+def list_conversations(_: None = Depends(auth)) -> list[dict]:
+    return store.conv_list()
+
+
+@app.post("/api/conversations")
+def new_conversation(_: None = Depends(auth)) -> dict:
+    return store.conv_create()
+
+
+@app.get("/api/conversations/{cid}")
+def get_conversation(cid: int, _: None = Depends(auth)) -> dict:
+    c = store.conv_get(cid)
+    if not c:
+        raise HTTPException(status_code=404, detail="no such conversation")
+    return c
+
+
+@app.put("/api/conversations/{cid}")
+def save_conversation(cid: int, body: ConvSave, _: None = Depends(auth)) -> dict:
+    c = store.conv_save(cid, body.messages, body.title)
+    if not c:
+        raise HTTPException(status_code=404, detail="no such conversation")
+    return c
+
+
+@app.delete("/api/conversations/{cid}")
+def delete_conversation(cid: int, _: None = Depends(auth)) -> dict:
+    store.conv_delete(cid)
+    return {"ok": True}
+
+
 # ---- voice: live streaming transcription (browser mic -> us -> Deepgram -> back) ----
 
 @app.websocket("/api/voice/stream")

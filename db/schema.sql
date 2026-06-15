@@ -66,6 +66,16 @@ create table if not exists universal_skill_rules (
     updated_at  timestamptz not null default now()
 );
 
+-- saved Talk conversations (so chats persist + can be switched between).
+create table if not exists conversations (
+    id          bigserial primary key,
+    title       text not null default 'New chat',
+    company     text,
+    messages    jsonb not null default '[]'::jsonb,      -- [{role, content}, ...]
+    created_at  timestamptz not null default now(),
+    updated_at  timestamptz not null default now()
+);
+
 -- global app key/value (telegram update offset, etc.)
 create table if not exists settings (
     key    text primary key,

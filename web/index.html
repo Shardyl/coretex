@@ -113,6 +113,8 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .hidden{display:none!important}
 /* chat */
 .chatlog{display:flex;flex-direction:column;gap:10px;padding:8px 2px 152px}
+.convbar{display:flex;gap:8px;align-items:center;margin:0 2px 4px}
+.convsel{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:9px 10px;font:inherit;font-size:13px}
 .bub{max-width:84%;padding:11px 14px;border-radius:16px;font-size:15px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere}
 .bub.u{align-self:flex-end;background:var(--accent);color:#04181d;border-bottom-right-radius:5px}
 .bub.a{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:5px}
@@ -475,6 +477,7 @@ function speakCard(id){ const c=document.getElementById('t'+id); if(!c) return;
 
 // ---- chat: talk to Cortex (text + hands-free Free mode) ----
 let chatMsgs=[], freeOn=false, freeUtt='', freeLive='', botSpeaking=false, freeThinking=false, freeTimer=null, bargeInterrupted=false;
+let convs=[], currentConvId=(localStorage.getItem('cortex_conv')||null);
 const TURN_SILENCE=1500;  // ms of no new words before Cortex takes its turn
 function armTurn(){
   clearTimeout(freeTimer);
@@ -488,6 +491,11 @@ function setHint(s){ const h=document.getElementById('freehint'); if(h) h.textCo
 function interruptSpeech(){ bargeInterrupted=true; try{ if(audioEl) audioEl.pause(); }catch(e){} botSpeaking=false; }
 function renderChat(v){
   v.innerHTML=`<div class="h">Talk to Cortex</div>
+    <div class="convbar">
+      <select id="convSel" class="convsel" onchange="openConv(this.value)"></select>
+      <button class="iconbtn" title="New chat" onclick="newConv()">✚</button>
+      <button class="iconbtn" title="Delete this chat" onclick="delConv()">🗑️</button>
+    </div>
     <div id="chatlog" class="chatlog"></div>
     <div class="freehint" id="freehint">Free mode on — just talk</div>
     <div class="chatbar">
@@ -506,6 +514,7 @@ function renderChat(v){
   const fh=document.getElementById('freehint'); if(fh) fh.style.bottom=(tabsH+barH+6)+'px';
   const cl=document.getElementById('chatlog'); if(cl) cl.style.paddingBottom=(tabsH+barH+24)+'px';
   paintChat();
+  initConvs();
 }
 function paintChat(){
   const l=document.getElementById('chatlog'); if(!l) return;
@@ -518,6 +527,47 @@ function paintChat(){
   }
   l.innerHTML=html;
   window.scrollTo(0,document.body.scrollHeight);
+}
+// ---- conversations (Talk history: auto-save + switch between) ----
+async function initConvs(){
+  if(demo){ fillConvSel([]); return; }
+  await loadConvs();
+  if(currentConvId && !chatMsgs.length) await openConv(currentConvId);
+}
+async function loadConvs(){
+  if(demo) return;
+  try{ convs=await api('/api/conversations'); }catch(e){ convs=[]; }
+  fillConvSel(convs);
+}
+function fillConvSel(list){
+  const sel=document.getElementById('convSel'); if(!sel) return;
+  let opts=(list||[]).map(c=>`<option value="${c.id}">${esc(c.title||'Untitled')}</option>`);
+  if(!currentConvId) opts.unshift('<option value="" selected>New chat…</option>');
+  sel.innerHTML=opts.join('') || '<option value="">New chat…</option>';
+  if(currentConvId) sel.value=String(currentConvId);
+}
+async function openConv(id){
+  if(!id){ newConv(); return; }
+  if(demo) return;
+  try{ const c=await api('/api/conversations/'+id); chatMsgs=c.messages||[]; currentConvId=String(c.id);
+    localStorage.setItem('cortex_conv',currentConvId); paintChat(); fillConvSel(convs); }
+  catch(e){ currentConvId=null; localStorage.removeItem('cortex_conv'); newConv(); }
+}
+function newConv(){ chatMsgs=[]; currentConvId=null; localStorage.removeItem('cortex_conv'); paintChat(); fillConvSel(convs); }
+async function saveConv(){
+  if(demo || !chatMsgs.length) return;
+  const title=((chatMsgs.find(m=>m.role==='user')||{}).content||'New chat').slice(0,48);
+  try{
+    if(!currentConvId){ const c=await api('/api/conversations',{method:'POST'}); currentConvId=String(c.id); localStorage.setItem('cortex_conv',currentConvId); }
+    await api('/api/conversations/'+currentConvId,{method:'PUT',body:JSON.stringify({messages:chatMsgs,title})});
+    loadConvs();
+  }catch(e){}
+}
+async function delConv(){
+  if(!currentConvId){ newConv(); return; }
+  if(!confirm('Delete this conversation?')) return;
+  try{ await api('/api/conversations/'+currentConvId,{method:'DELETE'}); }catch(e){}
+  currentConvId=null; localStorage.removeItem('cortex_conv'); chatMsgs=[]; await loadConvs(); paintChat();
 }
 async function sendChat(text, viaVoice){
   const inp=document.getElementById('chatIn');
@@ -532,6 +582,7 @@ async function sendChat(text, viaVoice){
     const d=await api('/api/chat',{method:'POST',body:JSON.stringify({messages:hist})});
     const reply=d.reply||'(no reply)';
     chatMsgs[chatMsgs.length-1]={role:'assistant',content:reply}; paintChat();
+    saveConv();
     if(viaVoice && reply) await speakAndWait(reply);
     return reply;
   }catch(e){ chatMsgs[chatMsgs.length-1]={role:'assistant',content:'Error: '+e.message}; paintChat(); return ''; }

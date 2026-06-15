@@ -115,6 +115,31 @@ def tasks_by_status(status: str) -> list[dict]:
     return db.query("select * from tasks where status=%s order by id", (status,))
 
 
+# ---- conversations (Talk history) ----
+def conv_list(limit=60) -> list[dict]:
+    return db.query("select id, title, company, updated_at from conversations order by updated_at desc limit %s", (limit,))
+
+
+def conv_get(cid: int) -> dict | None:
+    return db.one("select * from conversations where id=%s", (cid,))
+
+
+def conv_create(title="New chat", company=None) -> dict:
+    return db.execute("insert into conversations (title, company) values (%s,%s) returning *", (title, company))
+
+
+def conv_save(cid: int, messages: list, title: str | None = None) -> dict | None:
+    if title:
+        return db.execute("update conversations set messages=%s, title=%s, updated_at=now() where id=%s returning *",
+                          (Json(messages), title, cid))
+    return db.execute("update conversations set messages=%s, updated_at=now() where id=%s returning *",
+                      (Json(messages), cid))
+
+
+def conv_delete(cid: int) -> None:
+    db.execute("delete from conversations where id=%s", (cid,))
+
+
 # ---- decisions ----
 def log_decision(task_id, skill_id, actor, action, note=None, snapshot=None) -> dict:
     return db.execute(
