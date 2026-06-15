@@ -132,7 +132,11 @@ def _clean_email_text(s: str) -> str:
     s = s or ""
     s = s.replace("**", "").replace("__", "")                      # bold markers
     s = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", s)                    # markdown headings
-    s = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r"\1: \2", s)  # [text](url) -> text: url
+    def _link(m):                                                 # [text](url): drop redundant URL text
+        text, url = m.group(1).strip(), m.group(2).strip()
+        norm = lambda x: x.rstrip("/").replace("https://", "").replace("http://", "").lower()
+        return url if norm(text) == norm(url) else f"{text}: {url}"
+    s = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", _link, s)
     s = re.sub(r"(?m)^(\s*)[*+]\s+", r"\1- ", s)                   # normalise bullets to "- "
     s = s.replace(" — ", ", ").replace("—", ", ").replace(" – ", ", ").replace("–", "-")  # house: no em/en dash
     s = re.sub(r"[ \t]+\n", "\n", s)                               # trailing spaces
