@@ -296,9 +296,9 @@ function renderKeypad(){
   const bio = bioId() && lockMode==='unlock';
   const keys=['1','2','3','4','5','6','7','8','9', bio?'bio':'ghost','0','del'];
   document.getElementById('keypad').innerHTML=keys.map(k=>{
-    if(k==='del') return `<button class="kp" onclick="pinKey('del')">⌫</button>`;
+    if(k==='del') return `<button class="kp" onclick="pinKey('del')" aria-label="Delete">${ic('back',24)}</button>`;
     if(k==='ghost') return `<button class="kp ghost"></button>`;
-    if(k==='bio') return `<button class="kp" onclick="bioUnlock()">☝️</button>`;
+    if(k==='bio') return `<button class="kp" onclick="bioUnlock()" aria-label="Unlock with fingerprint">${ic('finger',26)}</button>`;
     return `<button class="kp" onclick="pinKey('${k}')">${k}</button>`;
   }).join('');
 }
@@ -384,7 +384,11 @@ const ICON={
   building:'M6 21V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v16M9 8h2M13 8h2M9 12h2M13 12h2M9 16h2M13 16h2M4 21h16',
   globe:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18',
   x:'M6 6l12 12M18 6L6 18',
-  check:'M5 12l5 5L20 7'
+  check:'M5 12l5 5L20 7',
+  back:'M5 12h13M10 7l-5 5 5 5',
+  finger:'M12 11a2 2 0 0 0-2 2c0 1.4.3 2.8.8 4M12 7a5 5 0 0 0-5 5c0 1 0 2.4.5 3.6M12 7a5 5 0 0 1 5 5c0 .8 0 1.6-.2 2.4M9.5 4.3a8 8 0 0 1 10 7.7M4.3 11A8 8 0 0 1 7 6.2',
+  alert:'M12 4l9 16H3zM12 10v4M12 17h.01',
+  file:'M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5'
 };
 function ic(n,s){ s=s||20; return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle">${ICON[n]||''}</svg>`; }
 function paintIcons(){
@@ -419,8 +423,8 @@ async function renderInbox(v){
       <div class="title">${title}</div>
       ${mgrVerdict(t.manager)}
       ${body?`<div class="body">${body}</div>`:''}
-      ${wp&&wp.preview?`<div class="meta">📝 draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
-      <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">🔊 Read aloud</button></div>
+      ${wp&&wp.preview?`<div class="meta">${ic('file',14)} draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
+      <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">${ic('volume',16)} Read aloud</button></div>
       <div class="row">
         <button class="btn go" onclick="act(${t.id},'approve')">${t.kind==='blog'?'Publish live':'Approve'}</button>
         <button class="btn warn" onclick="correct(${t.id})">Correct</button>
@@ -436,9 +440,9 @@ function mgrVerdict(v){
   if(!v) return '';
   const vv=v.verdict||(v.aligned?'pass':'revise');
   const sm=esc(v.summary||(v.issues||[]).join('; ')||'');
-  if(vv==='pass') return `<div style="color:#6ee7a8;font-size:12.5px;margin:6px 0">🛠 Manager passed${sm?' · '+sm:''}</div>`;
+  if(vv==='pass') return `<div style="color:#6ee7a8;font-size:12.5px;margin:6px 0">${ic('tool',14)} Manager passed${sm?' · '+sm:''}</div>`;
   const lbl=vv==='escalate'?'needs your judgement':'flagged';
-  return `<div style="color:#ffcf6e;font-size:12.5px;margin:6px 0">⚠ Manager ${lbl}${sm?' · '+sm:''}</div>`;
+  return `<div style="color:#ffcf6e;font-size:12.5px;margin:6px 0">${ic('alert',14)} Manager ${lbl}${sm?' · '+sm:''}</div>`;
 }
 function laneRow(lane){
   if(!lane) return '';
@@ -446,7 +450,7 @@ function laneRow(lane){
     `<span class="chip cy">AUTO</span> Cortex auto-approves this lane (still escalates anything flagged). `+
     `<a href="#" onclick="setAuth(event,${lane.skill_id},'ask')">Pause</a></div>`;
   if(lane.auto_offer) return `<div style="margin-top:10px;padding:9px 11px;border:1px solid var(--cy);border-radius:10px;font-size:12.5px">`+
-    `✅ ${lane.trust_streak} clean approvals in a row on ${esc(lane.name)} (bar is ${lane.auto_threshold}), and the Manager agreed each time. `+
+    `${ic('check',14)} ${lane.trust_streak} clean approvals in a row on ${esc(lane.name)} (bar is ${lane.auto_threshold}), and the Manager agreed each time. `+
     `<div class="row" style="margin-top:7px"><button class="btn go" onclick="setAuth(event,${lane.skill_id},'auto')">Let the Manager auto-approve this lane</button>`+
     `<button class="btn" onclick="setThreshold(event,${lane.skill_id},${lane.trust_streak})">Raise the bar</button></div></div>`;
   return '';
@@ -509,7 +513,7 @@ async function dictate(btn, targetId){
   const ta0=document.getElementById(dictTarget); vfinal=(ta0&&ta0.value)?ta0.value.trim():'';
   let readyFired=false;
   const goReady=()=>{ if(readyFired||!starting) return; readyFired=true; starting=false; recording=true;
-    btn.innerHTML='⏹'; beep('start'); toast('Speak now — words appear as you talk'); };
+    btn.innerHTML=ic('stop',18); beep('start'); toast('Speak now — words appear as you talk'); };
   try{
     vstream=await navigator.mediaDevices.getUserMedia({audio:true});
     vctx=new (window.AudioContext||window.webkitAudioContext)();
@@ -541,7 +545,7 @@ async function dictate(btn, targetId){
     };
     vws.onerror=()=>{ toast('Voice stream error'); };
     setTimeout(goReady,1500);  // fallback if onopen is slow
-  }catch(e){ starting=false; recording=false; btn.classList.remove('rec'); btn.innerHTML=btn.dataset.idle||'🎙️'; toast('Mic blocked: '+(e.message||e)); }
+  }catch(e){ starting=false; recording=false; btn.classList.remove('rec'); btn.innerHTML=btn.dataset.idle||ic('mic',18); toast('Mic blocked: '+(e.message||e)); }
 }
 function stopDictation(btn){
   recording=false; starting=false; beep('stop'); toast('Done');
@@ -552,7 +556,7 @@ function stopDictation(btn){
   const w=vws, c=vctx;
   setTimeout(()=>{ try{ if(w&&w.readyState===1) w.close(); }catch(e){} try{ if(c) c.close(); }catch(e){} }, 400); // grace for the final words
   vws=null;vsrc=null;vproc=null;vmute=null;vstream=null;vctx=null;
-  if(btn){ btn.classList.remove('rec'); btn.innerHTML=btn.dataset.idle||'🎙️'; }
+  if(btn){ btn.classList.remove('rec'); btn.innerHTML=btn.dataset.idle||ic('mic',18); }
 }
 async function speak(text){
   if(demo){ toast('Voice needs the live app'); return; }
@@ -890,7 +894,7 @@ async function renderAsk(v){
       <label>What do you want? <span style="color:var(--accent);font-weight:600">(or tap Speak and talk)</span></label>
       <textarea id="aBrief" placeholder="e.g. Write a LinkedIn post introducing our receipt OCR API to fintech developers."></textarea>
       <div class="row" style="margin-top:12px">
-        <button class="btn" id="aMic" style="flex:0 0 auto;min-width:118px" onclick="dictate(this)">🎙️ Speak</button>
+        <button class="btn" id="aMic" style="flex:0 0 auto;min-width:118px" onclick="dictate(this)">${ic('mic',18)} Speak</button>
         <button class="btn go" onclick="submitAsk()">Send to Cortex</button>
       </div>
     </div>
@@ -932,8 +936,8 @@ async function renderSkills(v){
   const co=document.getElementById('coSel').value;
   if(!co){
     v.innerHTML=`<div class="h">Skills</div>
-      <div class="empty"><span class="e">🏢</span>Skills are tuned per company. Pick a company from the menu at the top to view and edit its skills.<br><br>
-      <span style="opacity:.65;font-size:13px">Universal rules (🌐) still show inside whichever company you choose, so you always see the shared layer.</span></div>`;
+      <div class="empty"><span class="e">${ic('building',30)}</span>Skills are tuned per company. Pick a company from the menu at the top to view and edit its skills.<br><br>
+      <span style="opacity:.65;font-size:13px">Universal rules still show inside whichever company you choose, so you always see the shared layer.</span></div>`;
     return;
   }
   const coName=(companies.find(c=>c.slug===co)||{}).name||co; skillsCoName=coName;
@@ -962,14 +966,14 @@ function paintSkills(){
           <span class="achip">${esc(s.authority||'ask')}</span></div></div>`;
         if(so){
           html+=`<div class="sdetail"><div class="craftlabel">Craft <span class="rulehint">the method, universal</span></div><div class="craft">${esc(s.craft||'')}</div>`;
-          html+=`<div class="craftlabel">🌐 Universal rules <span class="rulehint">all companies</span></div>`;
-          if(ur.length) ur.forEach((r,i)=>{ html+=`<div class="rule uni"><span>${esc(r)}</span><button class="rx" onclick="event.stopPropagation();delRule(${s.id},${i},'universal')">✕</button></div>`; });
+          html+=`<div class="craftlabel">${ic('globe',13)} Universal rules <span class="rulehint">all companies</span></div>`;
+          if(ur.length) ur.forEach((r,i)=>{ html+=`<div class="rule uni"><span>${esc(r)}</span><button class="rx" onclick="event.stopPropagation();delRule(${s.id},${i},'universal')">${ic('x',13)}</button></div>`; });
           else html+=`<div class="norule">None yet.</div>`;
-          html+=`<div class="craftlabel">🏢 ${esc(skillsCoName)} only</div>`;
-          if(lr.length) lr.forEach((r,i)=>{ html+=`<div class="rule"><span>${esc(r)}</span><button class="rx" onclick="event.stopPropagation();delRule(${s.id},${i},'company')">✕</button></div>`; });
+          html+=`<div class="craftlabel">${ic('building',13)} ${esc(skillsCoName)} only</div>`;
+          if(lr.length) lr.forEach((r,i)=>{ html+=`<div class="rule"><span>${esc(r)}</span><button class="rx" onclick="event.stopPropagation();delRule(${s.id},${i},'company')">${ic('x',13)}</button></div>`; });
           else html+=`<div class="norule">None yet.</div>`;
           html+=`<div class="addrule">
-            <select class="rscope" id="rs${s.id}" onclick="event.stopPropagation()"><option value="company">${esc(skillsCoName)} only</option><option value="universal">🌐 Universal (all)</option></select>
+            <select class="rscope" id="rs${s.id}" onclick="event.stopPropagation()"><option value="company">${esc(skillsCoName)} only</option><option value="universal">Universal (all companies)</option></select>
             <input id="nr${s.id}" placeholder="Add a rule…" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.stopPropagation();addRule(${s.id})}">
             <button class="btn go" onclick="event.stopPropagation();addRule(${s.id})">Add</button></div></div>`;
         }
@@ -986,7 +990,7 @@ async function addRule(id){
   if(demo){ toast('Rule added (demo)'); return; }
   try{ const sk=await api(`/api/skills/${id}/rule`,{method:'POST',body:JSON.stringify({rule,scope})});
     const i=skillsData.findIndex(s=>s.id===id); if(i>=0) skillsData[i]=sk;
-    toast(scope==='universal'?'🌐 Universal rule added ✓':'Rule added ✓'); paintSkills(); }
+    toast(scope==='universal'?'Universal rule added ✓':'Rule added ✓'); paintSkills(); }
   catch(e){ toast('Error: '+e.message); }
 }
 async function delRule(id,index,scope){
