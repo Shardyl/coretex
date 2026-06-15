@@ -156,6 +156,15 @@ settings `google_refresh_token`. Client config at `/etc/cortex/google_oauth_clie
 backup landed: `cortex-20260615-074154.sql.gz`. So skill rules / all DB data are now backed up offsite to
 Rashad's personal-2TB Drive. (Re-auth via the /start link if the refresh token is ever revoked.)
 
+**Skills are global (operator-locked 2026-06-15):** `create_skill` chat tool now adds a new skill to
+**every company** (skills replicate across all companies; rules stay per-company). department now required
+so it files correctly. Replicated the ad-hoc `roadmap-ideas-parking-lot` (Run the business / Finance &
+Admin) to all 4 companies. **Responsive fixes (2026-06-15):** header was overflowing on mobile (lock/theme
+icons cut off → horizontal swipe) — tightened `.bar`/`.brand`/`.sel`/`.iconbtn` so it fits 375px (verified
+no horizontal overflow); removed `.wrap{min-height:100%}` which (with the sticky header) caused phantom
+scroll into empty space on short pages like Inbox-zero (verified scrollHeight==viewport); added
+`overflow-x:hidden;overscroll-behavior:none` on html/body.
+
 **Remaining for Phase 3:** "discuss this" deep-link item→Talk; Talk gym-mode; other cockpit screens;
 omnichannel/Gmail intake = Phase 4 (note: org SA-key block means Gmail also needs OAuth-per-mailbox or a
 policy exception — revisit at Phase 4).
