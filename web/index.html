@@ -231,7 +231,6 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
     <div class="brand"><span class="dot"></span>Cortex</div>
     <div class="spacer"></div>
     <select class="sel" id="coSel" onchange="render()"></select>
-    <button class="iconbtn" title="Speak to Cortex" onclick="go('ask');setTimeout(function(){var b=document.getElementById('aMic');if(b)dictate(b);},220)" id="hMic"></button>
     <button class="iconbtn" title="Lock Cortex" onclick="lockNow()" id="hLock"></button>
     <button class="iconbtn" id="themeBtn" onclick="toggleTheme()"></button>
   </div>
@@ -243,10 +242,9 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 </div>
 
 <div class="tabs">
-  <button class="tab" data-t="talk" onclick="go('talk')"><span class="e" data-ic="chat"></span>Talk</button>
-  <button class="tab on" data-t="inbox" onclick="go('inbox')"><span class="e" data-ic="inbox"></span>Inbox</button>
+  <button class="tab on" data-t="talk" onclick="go('talk')"><span class="e" data-ic="chat"></span>Talk</button>
+  <button class="tab" data-t="inbox" onclick="go('inbox')"><span class="e" data-ic="inbox"></span>Inbox</button>
   <button class="tab" data-t="skills" onclick="go('skills')"><span class="e" data-ic="grid"></span>Skills</button>
-  <button class="tab" data-t="ask" onclick="go('ask')"><span class="e" data-ic="spark"></span>Ask</button>
   <button class="tab" data-t="log" onclick="go('log')"><span class="e" data-ic="pulse"></span>Activity</button>
 </div>
 
@@ -256,7 +254,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // ---- config ----
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
-let tab = 'inbox', companies = [], skills = {}, demo = false;
+let tab = 'talk', companies = [], skills = {}, demo = false;
 
 // ---- sample data (graceful fallback so the cockpit is explorable offline) ----
 const SAMPLE = {
@@ -376,6 +374,9 @@ async function boot(){
   catch(e){ demo=true; document.getElementById('demoBanner').classList.remove('hidden'); companies=SAMPLE.companies; }
   const sel=document.getElementById('coSel'); sel.innerHTML='<option value="">All companies</option>'+
     companies.map(c=>`<option value="${c.slug}">${c.name}</option>`).join('');
+  // default to the Talk tab with a clean NEW chat (old chats via the dropdown)
+  tab='talk'; chatMsgs=[]; currentConvId=null; currentConvTitle=''; routedTo=''; localStorage.removeItem('cortex_conv');
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t==='talk'));
   render();
 }
 
@@ -420,7 +421,7 @@ const ICON={
 };
 function ic(n,s){ s=s||20; return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle"><path d="${ICON[n]||''}"></path></svg>`; }
 function paintIcons(){
-  const m={hMic:['mic',20],hLock:['lock',20],themeBtn:['moon',20]};
+  const m={hLock:['lock',20],themeBtn:['moon',20]};
   Object.keys(m).forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=ic(m[id][0],m[id][1]); });
   document.querySelectorAll('[data-ic]').forEach(el=>{ el.innerHTML=ic(el.getAttribute('data-ic'),22); });
 }
@@ -430,7 +431,6 @@ async function render(){
   if(tab==='talk')  return renderChat(v);
   if(tab==='inbox') return renderInbox(v);
   if(tab==='skills')return renderSkills(v);
-  if(tab==='ask')   return renderAsk(v);
   if(tab==='log')   return renderLog(v);
 }
 
@@ -758,8 +758,7 @@ function paintChat(){
 // ---- conversations (Talk history: auto-save + switch between) ----
 async function initConvs(){
   if(demo){ fillConvSel([]); return; }
-  await loadConvs();
-  if(currentConvId && !chatMsgs.length) await openConv(currentConvId);
+  await loadConvs();   // fill the history dropdown; do NOT auto-open — Talk defaults to a clean new chat
 }
 async function loadConvs(){
   if(demo) return;
