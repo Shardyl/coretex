@@ -101,17 +101,45 @@ def _email_brief(inq: dict) -> str:
             f"Their message:\n{(inq.get('message') or inq.get('snippet') or '').strip()}")
 
 
+_EMAIL_RE = r"([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})"
+
+
+def _rule_recipients(skill: dict) -> tuple[list, list]:
+    """Honour CC/BCC addresses the owner stated in this skill's standing rules (e.g. 'CC ben@… and BCC me@…')."""
+    if not skill:
+        return [], []
+    uni, loc = store.effective_rules(skill)
+    text = " ".join(list(uni) + list(loc))
+    cc = re.findall(r"\bcc\s+" + _EMAIL_RE, text, re.I)     # \bcc won't match inside 'bcc' (no word boundary)
+    bcc = re.findall(r"\bbcc\s+" + _EMAIL_RE, text, re.I)
+    return cc, bcc
+
+
 def _email_envelope(task: dict, company: dict) -> dict:
-    """Who the approved reply goes to / from / cc — resolved from the inquiry + the company profile."""
+    """Who the approved reply goes to / from / cc / bcc — resolved from the inquiry, the company profile,
+    AND any CC/BCC the owner set as a standing rule on the skill."""
     inq = (task.get("request") or {}).get("inquiry") or {}
     try:
         data = profile.get(company["id"]) or {}
     except Exception:  # noqa: BLE001
         data = {}
-    cc = (data.get("default_cc") or "").strip()
-    bcc = (data.get("default_bcc") or "").strip()
+    cc_list, bcc_list = [], []
+    for v in [(data.get("default_cc") or "").strip()]:
+        if "@" in v:
+            cc_list.append(v)
+    for v in [(data.get("default_bcc") or "").strip()]:
+        if "@" in v:
+            bcc_list.append(v)
+    try:
+        rc, rb = _rule_recipients(store.get_skill(task.get("skill_id")))
+        cc_list += rc
+        bcc_list += rb
+    except Exception:  # noqa: BLE001
+        pass
+    cc = ", ".join(dict.fromkeys(cc_list))     # dedupe, keep order
+    bcc = ", ".join(dict.fromkeys(bcc_list))
     return {"to": inq.get("email") or "", "from": (data.get("reply_from") or "").strip() or None,
-            "cc": cc if "@" in cc else None, "bcc": bcc if "@" in bcc else None,
+            "cc": cc or None, "bcc": bcc or None,
             "subject": "Re: " + (inq.get("subject") or "your enquiry"),
             "name": inq.get("name") or "", "signature": (data.get("signature") or "").strip()}
 
