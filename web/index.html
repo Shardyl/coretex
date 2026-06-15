@@ -361,7 +361,7 @@ async function renderInbox(v){
         <span class="chip">${t.kind==='blog'?'blog post':esc(t.kind||'task')}</span></div>
       <div class="title">${title}</div>
       ${body?`<div class="body">${body}</div>`:''}
-      ${wp&&wp.link?`<div class="meta">🔒 private preview: <a href="${esc(wp.link)}" target="_blank">${esc(wp.link)}</a></div>`:''}
+      ${wp&&wp.preview?`<div class="meta">📝 draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
       <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">🔊 Read aloud</button></div>
       <div class="row">
         <button class="btn go" onclick="act(${t.id},'approve')">${t.kind==='blog'?'Publish live':'Approve'}</button>

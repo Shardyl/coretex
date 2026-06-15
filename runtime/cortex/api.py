@@ -216,7 +216,10 @@ def tasks(status: str | None = None, company: str | None = None, limit: int = 50
 
 @app.get("/api/inbox")
 def inbox(_: None = Depends(auth)) -> list[dict]:
-    return db.query("select * from tasks where status in ('awaiting_approval','awaiting_correction') order by id desc")
+    rows = db.query("select * from tasks where status in ('awaiting_approval','awaiting_correction') order by id desc")
+    for t in rows:
+        t["wp"] = db.setting_get(f"wp:{t['id']}")   # preview/edit links for blog drafts
+    return rows
 
 
 @app.get("/api/tasks/{task_id}")

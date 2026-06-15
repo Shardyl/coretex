@@ -1,18 +1,10 @@
-"""WordPress REST publisher (Tabscanner).
+"""WordPress REST publisher.
 
-Hidden draft -> publish on the owner's explicit approval.
-
-Rank Math's `rank_math_robots` is NOT exposed over the REST API (probed live on
-tabscanner.com 2026-06-15: setting it on create is silently dropped). So Cortex does NOT
-rely on a 'live-but-noindex' state. Instead it gates on post *status*:
-
-    draft   = not public, not indexable  (the hidden/preview state)
-    publish = live + indexable           (only on the owner's per-post approval)
-
-That is a stricter reading of the web-page-builder golden rule (nothing is even public
-until the owner approves THAT post), needing zero Rank Math cooperation. A true
-live-but-noindex preview would need a small meta-registration mu-plugin on Tabscanner —
-future enhancement, not required for the gate to be safe.
+Cortex never publishes a blog post straight to the live site. It creates a real WordPress
+**draft** (status=draft) - a fully-themed, unpublished page - and hands the owner a PREVIEW
+LINK. Opened while logged into wp-admin, that link renders the finished page exactly as it
+will look, but it is not public and not indexed. The owner then approves to publish
+(draft -> publish), corrects (updates the draft), or discards (trash). No Rank Math needed.
 """
 from __future__ import annotations
 
@@ -22,20 +14,17 @@ import httpx
 
 from .. import config
 
-# Cloudflare on tabscanner.com 403s library UAs (python-httpx / urllib). A curl-style UA passes.
-_UA = "curl/8.4.0"
+_UA = "curl/8.4.0"   # tabscanner.com Cloudflare 403s library UAs; a curl-style UA passes
 _TIMEOUT = 40.0
 
 
 class WordPress:
     def __init__(self, base_url: str, user: str, app_password: str):
-        self.base = base_url.rstrip("/") + "/wp-json/wp/v2"
+        self.site = base_url.rstrip("/")
+        self.base = self.site + "/wp-json/wp/v2"
         token = base64.b64encode(f"{user}:{app_password}".encode()).decode()
-        self._headers = {
-            "User-Agent": _UA,
-            "Authorization": f"Basic {token}",
-            "Content-Type": "application/json",
-        }
+        self._headers = {"User-Agent": _UA, "Authorization": f"Basic {token}",
+                         "Content-Type": "application/json"}
 
     def _req(self, method: str, path: str, **kw) -> dict:
         with httpx.Client(timeout=_TIMEOUT) as c:
@@ -43,29 +32,30 @@ class WordPress:
         r.raise_for_status()
         return r.json() if r.content else {}
 
-    def stage_preview(self, title: str, html: str, password: str, excerpt: str = "") -> dict:
-        """Publish PASSWORD-PROTECTED: a real, fully-themed URL the owner opens with the password,
-        but the public + search engines cannot. Rank Math excludes password-protected posts from
-        the sitemap and the content is gated, so it is effectively hidden + non-indexable while
-        still rendering the finished design. Approving (go_live) clears the password -> public."""
-        body = {"title": title, "content": html, "status": "publish", "password": password}
+    def _links(self, p: dict) -> tuple[str, str, str]:
+        link = p.get("link") or f"{self.site}/?p={p.get('id')}"
+        preview = link + ("&" if "?" in link else "?") + "preview=true"
+        edit = f"{self.site}/wp-admin/post.php?post={p.get('id')}&action=edit"
+        return link, preview, edit
+
+    def stage_draft(self, title: str, html: str, excerpt: str = "") -> dict:
+        """Create an unpublished WordPress draft. Returns a preview link (view it logged into wp-admin)."""
+        body = {"title": title, "content": html, "status": "draft"}
         if excerpt:
             body["excerpt"] = excerpt
         p = self._req("POST", "/posts", json=body)
-        return {"id": p["id"], "link": p.get("link"), "status": p.get("status")}
+        link, preview, edit = self._links(p)
+        return {"id": p["id"], "link": link, "preview": preview, "edit": edit, "status": p.get("status")}
 
     def update(self, post_id: int, title: str, html: str) -> dict:
-        # title + content only; the preview password is preserved.
+        # title + content only; the post stays a draft.
         p = self._req("POST", f"/posts/{post_id}", json={"title": title, "content": html})
-        return {"id": p["id"], "link": p.get("link"), "status": p.get("status")}
+        link, preview, edit = self._links(p)
+        return {"id": p["id"], "link": link, "preview": preview, "edit": edit, "status": p.get("status")}
 
     def go_live(self, post_id: int) -> dict:
-        """Clear the preview password -> the post becomes public + indexable."""
-        p = self._req("POST", f"/posts/{post_id}", json={"password": ""})
-        return {"id": p["id"], "link": p.get("link"), "status": p.get("status")}
-
-    def set_status(self, post_id: int, status: str) -> dict:
-        p = self._req("POST", f"/posts/{post_id}", json={"status": status})
+        """Publish the draft -> public + indexable (only on the owner's approval)."""
+        p = self._req("POST", f"/posts/{post_id}", json={"status": "publish"})
         return {"id": p["id"], "link": p.get("link"), "status": p.get("status")}
 
     def trash(self, post_id: int) -> dict:
@@ -80,7 +70,7 @@ def configured() -> bool:
 
 
 def for_company(company: dict) -> "WordPress | None":
-    """Phase 2 wires Tabscanner only. Later: per-company connection rows."""
+    """Wires Tabscanner today. Later: per-company connection rows (every site is WordPress)."""
     if (company.get("slug") != "tabscanner") or not configured():
         return None
     return WordPress(
