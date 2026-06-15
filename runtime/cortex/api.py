@@ -271,13 +271,9 @@ async def voice_stream(ws: WebSocket):
     rate = ws.query_params.get("rate", "48000")
     await ws.accept()
     key = config.require("DEEPGRAM_API_KEY")
-    try:
-        gap = max(600, int(ws.query_params.get("gap", "1500")))  # ms of silence that ends a turn
-    except ValueError:
-        gap = 1500
     url = ("wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16"
            f"&sample_rate={rate}&channels=1&interim_results=true&smart_format=true&punctuate=true"
-           f"&endpointing={gap}")  # speech_final fires after `gap` ms of silence = end of your turn
+           "&endpointing=300")  # finalize words promptly; the cockpit ends the turn on a silence timer
     hdr = [("Authorization", f"Token {key}")]
     try:
         try:

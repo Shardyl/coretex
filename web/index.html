@@ -350,7 +350,16 @@ function speakCard(id){ const c=document.getElementById('t'+id); if(!c) return;
   speak((t+'. '+b).slice(0,2400)); }
 
 // ---- chat: talk to Cortex (text + hands-free Free mode) ----
-let chatMsgs=[], freeOn=false, freeUtt='', freeLive='', botSpeaking=false, freeThinking=false;
+let chatMsgs=[], freeOn=false, freeUtt='', freeLive='', botSpeaking=false, freeThinking=false, freeTimer=null;
+const TURN_SILENCE=1500;  // ms of no new words before Cortex takes its turn
+function armTurn(){
+  clearTimeout(freeTimer);
+  freeTimer=setTimeout(()=>{
+    if(freeOn && !botSpeaking && !freeThinking && freeUtt.trim()){
+      const u=freeUtt.trim(); freeUtt=''; freeLive=''; freeTurn(u);
+    }
+  }, TURN_SILENCE);
+}
 function renderChat(v){
   v.innerHTML=`<div class="h">Talk to Cortex</div>
     <div id="chatlog" class="chatlog"></div>
@@ -454,9 +463,7 @@ async function toggleFree(){
         if(d.final){ freeUtt=(freeUtt?freeUtt+' ':'')+d.text; }
         freeLive = d.final ? freeUtt : ((freeUtt?freeUtt+' ':'')+d.text);   // show words live
         paintChat();
-      }
-      if(d.speech_final && freeUtt.trim()){   // ends turn after ~1.5s silence (not mid-sentence)
-        const u=freeUtt.trim(); freeUtt=''; freeLive=''; freeTurn(u);
+        armTurn();   // new words -> reset the silence timer; turn ends only after TURN_SILENCE of quiet
       }
     };
     vws.onerror=()=>{ toast('Voice stream error'); };
@@ -470,7 +477,7 @@ async function freeTurn(utterance){
   if(freeOn) beep('start');   // your turn
 }
 function freeStop(){
-  freeOn=false; botSpeaking=false; freeThinking=false; freeLive=''; freeUtt='';
+  freeOn=false; botSpeaking=false; freeThinking=false; freeLive=''; freeUtt=''; clearTimeout(freeTimer);
   const b=document.getElementById('freeBtn'); if(b){ b.classList.remove('rec'); b.textContent='🎧'; }
   const hint=document.getElementById('freehint'); if(hint) hint.classList.remove('on');
   try{ if(audioEl) audioEl.pause(); }catch(e){}
