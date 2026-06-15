@@ -94,6 +94,16 @@ CATALOG = [
          "+ AEO checklist (keyword in title/H1/URL/first-100-words, question-headings with extractable answers, "
          "FAQ schema, descriptive internal links). Hold the company's design system and voice; no em-dashes. "
          "Build it as a WordPress DRAFT and hand over the preview link - never publish until approved."),
+        ("content-website-management", "Website management & deployment",
+         "Manage and maintain the company's WordPress site to one consistent standard. Deploy via the "
+         "Git -> WP Engine workflow (push to main, CI sync, then flush the cache). Keep the standard plugin "
+         "stack and the in-place CMS editor pattern so every page stays editable without code. Make sure "
+         "SSL/HTTPS is valid and, at go-live, DNS points directly at the host (no proxy in front unless "
+         "decided). Every new or rebuilt page ships DEINDEXED (noindex + unlinked) by default and is flipped "
+         "to indexed - with nav, internal links and sitemap added - only on explicit approval. On a site "
+         "migration, verify content parity and run the pre-go-live checklist before cutover. Keep media "
+         "optimised and changes versioned; follow the new-site and existing-site checklists, and be clear on "
+         "who does what (operator vs Cortex)."),
     ]),
     ("Demand", "Social (organic)", "Social manager", [
         ("social-instagram-posts", "Instagram posts & carousels"),
