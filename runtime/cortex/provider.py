@@ -14,6 +14,7 @@ from . import config
 
 MODEL = config.get("CORTEX_MODEL", "claude-opus-4-8")          # reasoning / drafting
 MODEL_FAST = config.get("CORTEX_MODEL_FAST", "claude-sonnet-4-6")  # judging / JSON
+MODEL_ROUTER = config.get("CORTEX_MODEL_ROUTER", "claude-haiku-4-5")  # routing / chat naming (cheap+fast)
 
 
 def _client() -> anthropic.Anthropic:
@@ -26,6 +27,8 @@ def resolve_model(tier: str | None) -> str:
         return MODEL
     if tier == "sonnet":
         return MODEL_FAST
+    if tier == "haiku":
+        return MODEL_ROUTER
     return ""   # caller decides the default
 
 

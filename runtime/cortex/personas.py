@@ -131,3 +131,63 @@ def persona_system(persona_key: str, company_slug: str | None = None) -> tuple[s
         return system, provider.MODEL, False
 
     return None, provider.MODEL, False
+
+
+def label(key: str | None) -> str:
+    """Human label for a persona key ('' = general Cortex)."""
+    if not key:
+        return "Cortex"
+    o = org()
+    for h in o["chiefs"] + o["managers"]:
+        if h["key"] == key:
+            return h["title"]
+    return "Cortex"
+
+
+def _valid_keys() -> set[str]:
+    o = org()
+    return {h["key"] for h in o["chiefs"] + o["managers"]}
+
+
+def route(messages: list[dict], company_slug: str | None, current: str | None) -> str:
+    """Sticky-but-adaptive routing: pick who handles the latest turn. Default to `current` unless the
+    subject clearly moves to another head's domain. Returns a persona key, or '' for general Cortex.
+    Runs on the cheap router model (Haiku)."""
+    if not messages:
+        return current or ""
+    o = org()
+    opts = ["(empty string) — general Cortex assistant: chit-chat, greetings, anything not clearly "
+            "strategy or one department's standard"]
+    opts += [f"{c['key']} — {c['title']}: STRATEGY/ideas across {', '.join(c['departments'])}" for c in o["chiefs"]]
+    opts += [f"{m['key']} — {m['title']}: STANDARDS/rules/QA for {m['department']}" for m in o["managers"]]
+    convo = "\n".join(f"{m.get('role')}: {str(m.get('content', ''))[:220]}"
+                      for m in messages[-5:] if m.get("content"))
+    system = (
+        "You route a conversation to the right head in Cortex. Heads: a general assistant, 4 Chiefs "
+        "(cross-department STRATEGY and ideation), and 9 Managers (a single department's STANDARDS, rules "
+        "and draft QA). BE STICKY: if a head is already handling the chat and the latest message stays on "
+        "that thread, KEEP them — do not switch on a tangent. Switch only when the subject clearly moves "
+        "into another head's domain. Use general Cortex for small talk or anything not clearly strategy or "
+        "a specific department.")
+    user = (f"Currently handled by: {current or '(general Cortex)'}\n\n"
+            f"Recent conversation:\n{convo}\n\n"
+            "Choose one (return its key, or an empty string for general):\n" + "\n".join(opts) +
+            '\n\nReturn JSON: {"persona":"<key or empty string>"}')
+    out = provider.think_json(system, user, model=provider.MODEL_ROUTER, max_tokens=120)
+    key = (out.get("persona") or "").strip()
+    return key if key in _valid_keys() else ""
+
+
+def name_chat(messages: list[dict]) -> str:
+    """A short, specific subject label (2-5 words, Title Case) for a Talk conversation."""
+    convo = "\n".join(f"{m.get('role')}: {str(m.get('content', ''))[:220]}"
+                      for m in messages[-6:] if m.get("content"))
+    if not convo.strip():
+        return "New chat"
+    out = provider.think_json(
+        "Name this chat with a short, specific subject label of 2 to 5 words in Title Case. Capture the "
+        "topic, not the speaker. No surrounding quotes, no trailing punctuation.",
+        f"Conversation:\n{convo}\n\nReturn JSON: {{\"title\":\"...\"}}",
+        model=provider.MODEL_ROUTER, max_tokens=40)
+    t = (out.get("title") or "").strip().strip('"').strip()
+    return t[:48] or "New chat"

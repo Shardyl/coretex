@@ -580,8 +580,9 @@ def heads(_: None = Depends(auth)) -> dict:
 
 class ChatTurn(BaseModel):
     messages: list[dict]
-    persona: str | None = None     # '' / None = general Cortex; 'chief:Demand'; 'manager:Content & SEO'
+    persona: str | None = None     # PINNED head ('' / None = auto-route). 'chief:Demand', 'manager:Content & SEO'
     company: str | None = None     # company slug in focus (the global selector)
+    current: str | None = None     # who handled the last turn (sticky auto-routing)
 
 
 @app.post("/api/chat")
@@ -590,14 +591,29 @@ def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
             if m.get("content") and m.get("role") in ("user", "assistant")][-20:]
     if not msgs or msgs[-1]["role"] != "user":
         raise HTTPException(status_code=400, detail="last message must be from the user")
-    persona = (body.persona or "").strip()
+    pinned = (body.persona or "").strip()
+    # pinned head wins; otherwise the concierge routes (sticky to `current` unless the subject shifts).
+    chosen = pinned if pinned else personas.route(msgs, body.company, (body.current or "").strip())
     system, tools = _chat_system(), SKILL_TOOLS
-    if persona:
-        psys, _model, is_chief = personas.persona_system(persona, body.company)
+    if chosen:
+        psys, _model, is_chief = personas.persona_system(chosen, body.company)
         if psys:
             system = psys
             tools = [t for t in SKILL_TOOLS if t["name"] in _CHIEF_TOOLS] if is_chief else SKILL_TOOLS
-    return {"reply": provider.chat_tools(system, msgs, tools, _exec_skill_tool)}
+        else:
+            chosen = ""
+    reply = provider.chat_tools(system, msgs, tools, _exec_skill_tool)
+    return {"reply": reply, "persona": chosen, "persona_label": personas.label(chosen)}
+
+
+class TitleReq(BaseModel):
+    messages: list[dict]
+
+
+@app.post("/api/chat/title")
+def chat_title(body: TitleReq, _: None = Depends(auth)) -> dict:
+    """A short subject label for a Talk conversation (auto-naming)."""
+    return {"title": personas.name_chat(body.messages)}
 
 
 # ---- saved conversations (Talk history) ----

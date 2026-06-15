@@ -118,6 +118,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .bub{max-width:84%;padding:11px 14px;border-radius:16px;font-size:15px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere}
 .bub.u{align-self:flex-end;background:var(--accent);color:#04181d;border-bottom-right-radius:5px}
 .bub.a{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:5px}
+.who{align-self:flex-start;font-size:11px;color:var(--accent);margin:2px 0 -3px 4px;font-weight:600;letter-spacing:.02em}
 .bub.live{opacity:.55;font-style:italic}
 .chatbar{position:fixed;left:0;right:0;bottom:calc(60px + env(safe-area-inset-bottom));z-index:21;
   display:flex;gap:8px;align-items:center;padding:10px 16px;border-top:1px solid var(--line);
@@ -516,7 +517,7 @@ function speakCard(id){ const c=document.getElementById('t'+id); if(!c) return;
 
 // ---- chat: talk to Cortex (text + hands-free Free mode) ----
 let chatMsgs=[], freeOn=false, freeUtt='', freeLive='', botSpeaking=false, freeThinking=false, freeTimer=null, bargeInterrupted=false;
-let convs=[], currentConvId=(localStorage.getItem('cortex_conv')||null);
+let convs=[], currentConvId=(localStorage.getItem('cortex_conv')||null), currentConvTitle='', routedTo='';
 const TURN_SILENCE=1500;  // ms of no new words before Cortex takes its turn
 function armTurn(){
   clearTimeout(freeTimer);
@@ -564,7 +565,7 @@ let headsCache=null;
 async function fillPersonaSel(){
   const sel=document.getElementById('personaSel'); if(!sel) return;
   if(!headsCache){ try{ headsCache=demo?{chiefs:[],managers:[]}:await api('/api/heads'); }catch(e){ headsCache={chiefs:[],managers:[]}; } }
-  let html='<option value="">💬 Cortex (general assistant)</option>';
+  let html='<option value="">💬 Cortex (auto · routes to the right head)</option>';
   if((headsCache.chiefs||[]).length) html+='<optgroup label="Chiefs · strategy &amp; ideas">'+
     headsCache.chiefs.map(c=>`<option value="${esc(c.key)}">🧭 ${esc(c.title)}</option>`).join('')+'</optgroup>';
   if((headsCache.managers||[]).length) html+='<optgroup label="Managers · standards &amp; QA">'+
@@ -572,13 +573,17 @@ async function fillPersonaSel(){
   sel.innerHTML=html; sel.value=talkingTo;
 }
 function setTalkingTo(v){ talkingTo=v||''; localStorage.setItem('cortex_persona',talkingTo); }
+function whoIcon(pk){ pk=pk||''; return pk.indexOf('chief:')===0?'🧭':(pk.indexOf('manager:')===0?'🛠️':'💬'); }
 function paintChat(){
   const l=document.getElementById('chatlog'); if(!l) return;
   let html;
   if(!chatMsgs.length && !freeLive){
     html='<div class="empty" style="padding:34px 8px"><span class="e">💬</span>Say hello, or ask Cortex anything about your businesses. Tap 🎙️ to talk, or 🎧 for hands-free.</div>';
   } else {
-    html=chatMsgs.map(m=>`<div class="bub ${m.role==='user'?'u':'a'}">${esc(m.content)}</div>`).join('');
+    html=chatMsgs.map(m=>{
+      const tag=(m.role==='assistant'&&m.who&&m.who!=='Cortex')?`<div class="who">${whoIcon(m.pk)} ${esc(m.who)}</div>`:'';
+      return tag+`<div class="bub ${m.role==='user'?'u':'a'}">${esc(m.content)}</div>`;
+    }).join('');
     if(freeLive) html+=`<div class="bub u live">${esc(freeLive)} …</div>`;   // live words while you talk
   }
   l.innerHTML=html;
@@ -606,15 +611,23 @@ async function openConv(id){
   if(!id){ newConv(); return; }
   if(demo) return;
   try{ const c=await api('/api/conversations/'+id); chatMsgs=c.messages||[]; currentConvId=String(c.id);
+    currentConvTitle=c.title||''; routedTo='';
+    // resume sticky routing from the last assistant in this chat
+    for(let i=chatMsgs.length-1;i>=0;i--){ if(chatMsgs[i].role==='assistant'){ routedTo=chatMsgs[i].pk||''; break; } }
     localStorage.setItem('cortex_conv',currentConvId); paintChat(); fillConvSel(convs); }
   catch(e){ currentConvId=null; localStorage.removeItem('cortex_conv'); newConv(); }
 }
-function newConv(){ chatMsgs=[]; currentConvId=null; localStorage.removeItem('cortex_conv'); paintChat(); fillConvSel(convs); }
+function newConv(){ chatMsgs=[]; currentConvId=null; currentConvTitle=''; routedTo=''; localStorage.removeItem('cortex_conv'); paintChat(); fillConvSel(convs); }
 async function saveConv(){
   if(demo || !chatMsgs.length) return;
-  const title=((chatMsgs.find(m=>m.role==='user')||{}).content||'New chat').slice(0,48);
   try{
-    if(!currentConvId){ const c=await api('/api/conversations',{method:'POST'}); currentConvId=String(c.id); localStorage.setItem('cortex_conv',currentConvId); }
+    if(!currentConvId){
+      // name the chat by its subject (auto-naming) on first save
+      try{ const r=await api('/api/chat/title',{method:'POST',body:JSON.stringify({messages:chatMsgs})}); currentConvTitle=r.title||''; }
+      catch(e){ currentConvTitle=((chatMsgs.find(m=>m.role==='user')||{}).content||'New chat').slice(0,48); }
+      const c=await api('/api/conversations',{method:'POST'}); currentConvId=String(c.id); localStorage.setItem('cortex_conv',currentConvId);
+    }
+    const title=currentConvTitle||((chatMsgs.find(m=>m.role==='user')||{}).content||'New chat').slice(0,48);
     await api('/api/conversations/'+currentConvId,{method:'PUT',body:JSON.stringify({messages:chatMsgs,title})});
     loadConvs();
   }catch(e){}
@@ -634,11 +647,15 @@ async function sendChat(text, viaVoice){
   chatMsgs.push({role:'assistant',content:'…'}); paintChat();
   if(demo){ chatMsgs[chatMsgs.length-1]={role:'assistant',content:'(demo) Log in with your passcode to chat for real.'}; paintChat(); return ''; }
   try{
-    const hist=chatMsgs.filter(m=>m.content!=='…');
+    const hist=chatMsgs.filter(m=>m.content!=='…').map(m=>({role:m.role,content:m.content}));
     const fco=(document.getElementById('coSel')||{}).value||'';
-    const d=await api('/api/chat',{method:'POST',body:JSON.stringify({messages:hist,persona:talkingTo,company:fco})});
+    const payload={messages:hist,persona:talkingTo,company:fco};
+    if(!talkingTo) payload.current=routedTo;   // sticky auto-routing
+    const d=await api('/api/chat',{method:'POST',body:JSON.stringify(payload)});
     const reply=d.reply||'(no reply)';
-    chatMsgs[chatMsgs.length-1]={role:'assistant',content:reply}; paintChat();
+    const pk=talkingTo||d.persona||'';
+    if(!talkingTo) routedTo=d.persona||'';     // remember who the concierge routed to
+    chatMsgs[chatMsgs.length-1]={role:'assistant',content:reply,who:d.persona_label||'Cortex',pk}; paintChat();
     saveConv();
     if(viaVoice && reply) await speakAndWait(reply);
     return reply;
