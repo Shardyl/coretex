@@ -144,9 +144,12 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .rule span{flex:1}
 .rx{background:none;border:none;color:var(--bad);font-size:13px;cursor:pointer;flex:none;padding:0 2px}
 .norule{font-size:12.5px;color:var(--mut);margin-bottom:10px}
-.addrule{display:flex;gap:8px;margin-top:8px}
-.addrule input{flex:1;background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 11px;font:inherit;font-size:13px;min-width:0}
+.addrule{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.addrule input{flex:1;background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 11px;font:inherit;font-size:13px;min-width:120px}
 .addrule .btn{flex:none;min-width:60px;padding:9px}
+.rscope{flex:none;background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 6px;font:inherit;font-size:12px;max-width:140px}
+.rule.uni{border-color:color-mix(in srgb,var(--accent) 40%,var(--line));background:color-mix(in srgb,var(--accent) 7%,var(--panel2))}
+.rulehint{font-weight:400;text-transform:none;letter-spacing:0;color:var(--mut);font-size:10px}
 .tabs .tab{padding:9px 3px;font-size:12px}.tabs .tab .e{font-size:16px}
 .banner{background:color-mix(in srgb,var(--warn) 14%,var(--panel));border:1px solid color-mix(in srgb,var(--warn) 40%,var(--line));
   color:var(--ink);border-radius:12px;padding:10px 13px;font-size:12.5px;margin:14px 0}
@@ -671,14 +674,14 @@ async function renderLog(v){
 
 // ---- skills screen ----
 const DEMO_SKILLS=[
-  {id:1,category:'Demand',department:'Content & SEO',manager:'Content manager',name:'SEO blog posts',authority:'ask',craft:'Research, draft, optimise and publish SEO blog posts in the company voice.',rules:['Open every post with a concrete statistic.']},
-  {id:2,category:'Demand',department:'Content & SEO',manager:'Content manager',name:'Newsletter writing',authority:'ask',craft:'Write the newsletter.',rules:[]},
-  {id:3,category:'Convert',department:'Sales & Inquiries',manager:'Sales manager',name:'Inquiry first-response drafting',authority:'ask',craft:'Assess the lead, then draft the first reply.',rules:["Assess company, use case and volume before replying; never quote pricing without checking."]},
+  {id:1,category:'Demand',department:'Content & SEO',manager:'Content manager',name:'SEO blog posts',authority:'ask',craft:'Research, draft, optimise and publish SEO blog posts in the company voice.',universal_rules:['No em-dashes in any copy.'],rules:['Open every post with a concrete statistic.']},
+  {id:2,category:'Demand',department:'Content & SEO',manager:'Content manager',name:'Newsletter writing',authority:'ask',craft:'Write the newsletter.',universal_rules:[],rules:[]},
+  {id:3,category:'Convert',department:'Sales & Inquiries',manager:'Sales manager',name:'Inquiry first-response drafting',authority:'ask',craft:'Assess the lead, then draft the first reply.',universal_rules:[],rules:["Assess company, use case and volume before replying; never quote pricing without checking."]},
 ];
-let skillsData=[], openDept=null, openSkill=null;
+let skillsData=[], openDept=null, openSkill=null, skillsCoName='';
 async function renderSkills(v){
   const co=document.getElementById('coSel').value || (companies[0]&&companies[0].slug)||'';
-  const coName=(companies.find(c=>c.slug===co)||{}).name||co;
+  const coName=(companies.find(c=>c.slug===co)||{}).name||co; skillsCoName=coName;
   v.innerHTML=`<div class="h">Skills · ${esc(coName)}</div><div id="skilltree" class="empty">Loading…</div>`;
   try{ skillsData = demo?DEMO_SKILLS:await api(`/api/companies/${co}/skills`); }catch(e){ skillsData=DEMO_SKILLS; }
   paintSkills();
@@ -692,21 +695,28 @@ function paintSkills(){
   Object.keys(cats).forEach(cat=>{
     html+=`<div class="cath">${esc(cat)}</div>`;
     Object.keys(cats[cat]).forEach(dep=>{
-      const sk=cats[cat][dep], ruleN=sk.reduce((a,s)=>a+((s.rules||[]).length),0), open=openDept===dep;
+      const sk=cats[cat][dep], ruleN=sk.reduce((a,s)=>a+((s.rules||[]).length)+((s.universal_rules||[]).length),0), open=openDept===dep;
       const mgr=sk[0]&&sk[0].manager?' · '+esc(sk[0].manager):'';
       html+=`<div class="dept" onclick="toggleDept('${dep.replace(/'/g,"\\'")}')">
         <div><b>${esc(dep)}</b><div class="deptsub">${sk.length} skill${sk.length===1?'':'s'} · ${ruleN} rule${ruleN===1?'':'s'}${mgr}</div></div>
         <div class="chev">${open?'▾':'▸'}</div></div>`;
       if(open) sk.forEach(s=>{
-        const rc=(s.rules||[]).length, so=openSkill===s.id;
+        const ur=s.universal_rules||[], lr=s.rules||[], rc=ur.length+lr.length, so=openSkill===s.id;
         html+=`<div class="skill" onclick="toggleSkill(${s.id})"><div class="sname">${esc(s.name)}</div>
           <div class="schips"><span class="rchip ${rc?'has':''}">${rc} rule${rc===1?'':'s'}</span>
           <span class="achip">${esc(s.authority||'ask')}</span></div></div>`;
         if(so){
-          html+=`<div class="sdetail"><div class="craftlabel">Craft</div><div class="craft">${esc((s.craft||'').slice(0,600))}</div><div class="craftlabel">Standing rules</div>`;
-          if(rc) s.rules.forEach((r,i)=>{ html+=`<div class="rule"><span>${esc(r)}</span><button class="rx" onclick="event.stopPropagation();delRule(${s.id},${i})">✕</button></div>`; });
-          else html+=`<div class="norule">No rules yet — runs on its default craft. Add one below, or just tell Cortex in Talk.</div>`;
-          html+=`<div class="addrule"><input id="nr${s.id}" placeholder="Add a rule…" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.stopPropagation();addRule(${s.id})}"><button class="btn go" onclick="event.stopPropagation();addRule(${s.id})">Add</button></div></div>`;
+          html+=`<div class="sdetail"><div class="craftlabel">Craft</div><div class="craft">${esc((s.craft||'').slice(0,600))}</div>`;
+          html+=`<div class="craftlabel">🌐 Universal rules <span class="rulehint">all companies</span></div>`;
+          if(ur.length) ur.forEach((r,i)=>{ html+=`<div class="rule uni"><span>${esc(r)}</span><button class="rx" onclick="event.stopPropagation();delRule(${s.id},${i},'universal')">✕</button></div>`; });
+          else html+=`<div class="norule">None yet.</div>`;
+          html+=`<div class="craftlabel">🏢 ${esc(skillsCoName)} only</div>`;
+          if(lr.length) lr.forEach((r,i)=>{ html+=`<div class="rule"><span>${esc(r)}</span><button class="rx" onclick="event.stopPropagation();delRule(${s.id},${i},'company')">✕</button></div>`; });
+          else html+=`<div class="norule">None yet.</div>`;
+          html+=`<div class="addrule">
+            <select class="rscope" id="rs${s.id}" onclick="event.stopPropagation()"><option value="company">${esc(skillsCoName)} only</option><option value="universal">🌐 Universal (all)</option></select>
+            <input id="nr${s.id}" placeholder="Add a rule…" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.stopPropagation();addRule(${s.id})}">
+            <button class="btn go" onclick="event.stopPropagation();addRule(${s.id})">Add</button></div></div>`;
         }
       });
     });
@@ -717,14 +727,16 @@ function toggleDept(d){ openDept=openDept===d?null:d; openSkill=null; paintSkill
 function toggleSkill(id){ openSkill=openSkill===id?null:id; paintSkills(); }
 async function addRule(id){
   const inp=document.getElementById('nr'+id), rule=(inp?inp.value:'').trim(); if(!rule) return;
+  const scope=(document.getElementById('rs'+id)||{}).value||'company';
   if(demo){ toast('Rule added (demo)'); return; }
-  try{ const sk=await api(`/api/skills/${id}/rule`,{method:'POST',body:JSON.stringify({rule})});
-    const i=skillsData.findIndex(s=>s.id===id); if(i>=0) skillsData[i]=sk; toast('Rule added ✓'); paintSkills(); }
+  try{ const sk=await api(`/api/skills/${id}/rule`,{method:'POST',body:JSON.stringify({rule,scope})});
+    const i=skillsData.findIndex(s=>s.id===id); if(i>=0) skillsData[i]=sk;
+    toast(scope==='universal'?'🌐 Universal rule added ✓':'Rule added ✓'); paintSkills(); }
   catch(e){ toast('Error: '+e.message); }
 }
-async function delRule(id,index){
+async function delRule(id,index,scope){
   if(demo){ toast('Removed (demo)'); return; }
-  try{ const sk=await api(`/api/skills/${id}/rule/delete`,{method:'POST',body:JSON.stringify({index})});
+  try{ const sk=await api(`/api/skills/${id}/rule/delete`,{method:'POST',body:JSON.stringify({index,scope:scope||'company'})});
     const i=skillsData.findIndex(s=>s.id===id); if(i>=0) skillsData[i]=sk; toast('Rule removed'); paintSkills(); }
   catch(e){ toast('Error: '+e.message); }
 }

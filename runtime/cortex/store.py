@@ -52,6 +52,30 @@ def add_rule(skill_id, rule: str) -> dict:
     )
 
 
+# ---- universal rules (apply to every company for a skill_key) ----
+def get_universal_rules(skill_key: str) -> list:
+    row = db.one("select rules from universal_skill_rules where skill_key=%s", (skill_key,))
+    return (row["rules"] if row else []) or []
+
+
+def add_universal_rule(skill_key: str, rule: str) -> list:
+    rules = get_universal_rules(skill_key) + [rule]
+    db.execute("insert into universal_skill_rules (skill_key, rules) values (%s, %s) "
+               "on conflict (skill_key) do update set rules=%s, updated_at=now()",
+               (skill_key, Json(rules), Json(rules)))
+    return rules
+
+
+def remove_universal_rule(skill_key: str, index: int) -> list:
+    rules = get_universal_rules(skill_key)
+    if 0 <= index < len(rules):
+        rules.pop(index)
+    db.execute("insert into universal_skill_rules (skill_key, rules) values (%s, %s) "
+               "on conflict (skill_key) do update set rules=%s, updated_at=now()",
+               (skill_key, Json(rules), Json(rules)))
+    return rules
+
+
 def bump_streak(skill_id, by=1) -> dict:
     return db.execute(
         "update skills set trust_streak=trust_streak+%s, updated_at=now() where id=%s returning *",

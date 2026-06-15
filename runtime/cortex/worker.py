@@ -1,7 +1,7 @@
 """The worker — does the task per its skill (produces the deliverable)."""
 from __future__ import annotations
 
-from . import provider
+from . import provider, store
 
 
 def _company_context(company: dict) -> str:
@@ -17,7 +17,9 @@ def _company_context(company: dict) -> str:
 
 
 def _rules_block(skill: dict) -> str:
-    rules = skill.get("rules") or []
+    universal = store.get_universal_rules(skill.get("skill_key", "")) if skill.get("skill_key") else []
+    local = skill.get("rules") or []
+    rules = list(universal) + list(local)  # universal first, then this company's own
     if not rules:
         return ""
     return "Standing rules you MUST follow:\n" + "\n".join(f"- {r}" for r in rules)

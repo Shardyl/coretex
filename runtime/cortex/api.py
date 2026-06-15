@@ -149,12 +149,20 @@ def skills(slug: str, _: None = Depends(auth)) -> list[dict]:
     co = store.get_company_by_slug(slug)
     if not co:
         raise HTTPException(status_code=404, detail="no such company")
-    return db.query("select * from skills where company_id=%s "
-                    "order by category, department, name", (co["id"],))
+    return db.query(
+        "select s.*, coalesce(u.rules, '[]'::jsonb) as universal_rules from skills s "
+        "left join universal_skill_rules u on u.skill_key=s.skill_key "
+        "where s.company_id=%s order by s.category, s.department, s.name", (co["id"],))
+
+
+def _skill_with_rules(skill_id: int) -> dict:
+    return db.one("select s.*, coalesce(u.rules, '[]'::jsonb) as universal_rules from skills s "
+                  "left join universal_skill_rules u on u.skill_key=s.skill_key where s.id=%s", (skill_id,))
 
 
 class RuleBody(BaseModel):
     rule: str
+    scope: str = "company"   # "company" (this company only) | "universal" (all companies)
 
 
 @app.post("/api/skills/{skill_id}/rule")
@@ -162,13 +170,19 @@ def add_skill_rule(skill_id: int, body: RuleBody, _: None = Depends(auth)) -> di
     sk = store.get_skill(skill_id)
     if not sk:
         raise HTTPException(status_code=404, detail="no such skill")
-    if not body.rule.strip():
+    rule = (body.rule or "").strip()
+    if not rule:
         raise HTTPException(status_code=400, detail="empty rule")
-    return store.add_rule(skill_id, body.rule.strip())
+    if body.scope == "universal":
+        store.add_universal_rule(sk["skill_key"], rule)
+    else:
+        store.add_rule(skill_id, rule)
+    return _skill_with_rules(skill_id)
 
 
 class RuleIdx(BaseModel):
     index: int
+    scope: str = "company"
 
 
 @app.post("/api/skills/{skill_id}/rule/delete")
@@ -176,11 +190,14 @@ def del_skill_rule(skill_id: int, body: RuleIdx, _: None = Depends(auth)) -> dic
     sk = store.get_skill(skill_id)
     if not sk:
         raise HTTPException(status_code=404, detail="no such skill")
-    rules = list(sk.get("rules") or [])
-    if 0 <= body.index < len(rules):
-        rules.pop(body.index)
-    return db.execute("update skills set rules=%s::jsonb, updated_at=now() where id=%s returning *",
-                      (json.dumps(rules), skill_id))
+    if body.scope == "universal":
+        store.remove_universal_rule(sk["skill_key"], body.index)
+    else:
+        rules = list(sk.get("rules") or [])
+        if 0 <= body.index < len(rules):
+            rules.pop(body.index)
+        db.execute("update skills set rules=%s::jsonb, updated_at=now() where id=%s", (json.dumps(rules), skill_id))
+    return _skill_with_rules(skill_id)
 
 
 @app.get("/api/tasks")
@@ -322,6 +339,10 @@ CHAT_SYSTEM_BASE = (
     "tools, then confirm in one short spoken sentence what you changed. When he describes a case that "
     "went wrong (e.g. a misjudged lead), turn the lesson into one or more concise standing rules and "
     "add them to the right skill. If unsure which skill or company he means, ask. "
+    "RULES HAVE A SCOPE: 'universal' (applies to EVERY company) or 'company' (just one). This matters a "
+    "lot — never let a company-specific rule spread. Unless Rashad is clearly stating a universal "
+    "principle, ASK before saving: 'Universal for all companies, or just <company>?' Default to company "
+    "when in doubt, and always confirm which scope you saved it under. "
     "You can also SEE and ACT on the work: list_tasks (recent / Inbox) and get_task (full detail incl. "
     "the draft); when Rashad refers to 'that draft', 'the last post', or a specific Inbox item, FIND it "
     "with those first — don't guess which one. Use draft to write something now with a skill (its craft "
@@ -338,10 +359,15 @@ SKILL_TOOLS = [
         "company": {"type": "string", "description": "company slug"},
         "department": {"type": "string", "description": "department name e.g. 'Content & SEO' — zooms in with full detail"}}}},
     {"name": "add_rule",
-     "description": "Add one standing rule to a skill; the worker follows it from now on.",
+     "description": "Add a standing rule to a skill. scope='universal' applies it to EVERY company; "
+                    "scope='company' applies it to just the named company. If Rashad hasn't made the scope "
+                    "clear, ASK him ('universal for all companies, or just <company>?') BEFORE calling this.",
      "input_schema": {"type": "object", "properties": {
-        "company": {"type": "string"}, "skill": {"type": "string", "description": "skill_key"},
-        "rule": {"type": "string"}}, "required": ["company", "skill", "rule"]}},
+        "company": {"type": "string", "description": "the company slug (required when scope=company)"},
+        "skill": {"type": "string", "description": "skill_key"}, "rule": {"type": "string"},
+        "scope": {"type": "string", "enum": ["universal", "company"],
+                  "description": "universal = all companies; company = just one"}},
+        "required": ["skill", "rule", "scope"]}},
     {"name": "create_skill",
      "description": "Create a new skill. It is added to EVERY company automatically (skills are global; rules get tuned per company). Always set the department so it files correctly on the Skills screen.",
      "input_schema": {"type": "object", "properties": {
@@ -442,16 +468,22 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
             slugs.append(c["slug"])
         return (f"created '{inp['skill_key']}' across all companies ({', '.join(slugs)})"
                 + (f" in {dept}" if dept else " — but no department set; tell me which department it belongs to"))
-    co = store.get_company_by_slug(inp.get("company", ""))
-    if not co:
-        known = ", ".join(r["slug"] for r in db.query("select slug from companies"))
-        return f"no company '{inp.get('company')}' (known: {known})"
     if name == "add_rule":
+        if inp.get("scope") == "universal":
+            store.add_universal_rule(inp["skill"], inp["rule"])
+            return f"added UNIVERSAL rule to '{inp['skill']}' (applies to ALL companies): {inp['rule']}"
+        co = store.get_company_by_slug(inp.get("company", ""))
+        if not co:
+            return "For a company-only rule I need the company; or set scope='universal' for all companies."
         sk = store.get_skill_by_key(co["id"], inp.get("skill", ""))
         if not sk:
             return f"no skill '{inp.get('skill')}' for {co['slug']}"
         store.add_rule(sk["id"], inp["rule"])
-        return f"added rule to {co['slug']}/{sk['skill_key']}: {inp['rule']}"
+        return f"added LOCAL rule to {co['slug']}/{sk['skill_key']} (this company only): {inp['rule']}"
+    co = store.get_company_by_slug(inp.get("company", ""))
+    if not co:
+        known = ", ".join(r["slug"] for r in db.query("select slug from companies"))
+        return f"no company '{inp.get('company')}' (known: {known})"
     if name == "update_craft":
         sk = store.get_skill_by_key(co["id"], inp.get("skill", ""))
         if not sk:

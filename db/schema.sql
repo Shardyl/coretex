@@ -58,6 +58,14 @@ create table if not exists decisions (
     created_at  timestamptz not null default now()
 );
 
+-- universal rules: apply to EVERY company for a given skill_key (shared layer).
+-- Local/per-company rules stay in skills.rules. The worker applies universal + local together.
+create table if not exists universal_skill_rules (
+    skill_key   text primary key,
+    rules       jsonb not null default '[]'::jsonb,
+    updated_at  timestamptz not null default now()
+);
+
 -- global app key/value (telegram update offset, etc.)
 create table if not exists settings (
     key    text primary key,
