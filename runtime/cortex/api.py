@@ -338,7 +338,8 @@ def profile_full(company: str, _: None = Depends(auth)) -> dict:
 
 @app.get("/api/gmail/status")
 def gmail_status(_: None = Depends(auth)) -> dict:
-    return {"connected": gmail.connected(), "account": db.setting_get("gmail_account")}
+    return {"connected": gmail.connected(), "account": db.setting_get("gmail_account"),
+            "send_account": db.setting_get("gmail_send_account")}
 
 
 @app.get("/api/gmail/inquiries")
@@ -970,9 +971,11 @@ def _google_client() -> tuple[str, str, str]:
 def google_start(purpose: str = "drive") -> RedirectResponse:
     from urllib.parse import urlencode
     cid, _, redirect = _google_client()
-    if purpose == "gmail":   # the Tabscanner mailbox — its own login, stored separately from Drive.
+    if purpose in ("gmail", "gmail_send"):   # a Tabscanner mailbox — its own login, stored separately.
         # gmail.modify = read + draft + SEND + label/archive (NOT permanent delete). One consent, full flow;
         # nothing is ever sent without the owner's approval — the guardrail is the approval gate, not the scope.
+        # 'gmail'      = the inbox Cortex READS enquiries from (api@tabscanner.com).
+        # 'gmail_send' = the mailbox Cortex SENDS replies from, so they land in YOUR Sent folder, as you.
         scope = ("https://www.googleapis.com/auth/gmail.modify openid "
                  "https://www.googleapis.com/auth/userinfo.email")
     else:
@@ -1001,7 +1004,7 @@ def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLRes
     rt = body.get("refresh_token")
     if not rt:
         return page("No refresh token returned — revoke Cortex's access in your Google account and try again.")
-    if state == "gmail":   # the Tabscanner mailbox — store separately so it doesn't clobber Drive
+    if state in ("gmail", "gmail_send"):   # a Tabscanner mailbox — stored separately so it doesn't clobber Drive
         email = ""
         try:
             email = httpx.get("https://www.googleapis.com/oauth2/v2/userinfo",
@@ -1009,9 +1012,14 @@ def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLRes
                               timeout=15).json().get("email", "")
         except Exception:  # noqa: BLE001
             pass
+        if state == "gmail_send":   # the mailbox replies are SENT from (lands in this account's Sent folder)
+            db.setting_set("gmail_send_refresh_token", rt)
+            db.setting_set("gmail_send_account", email)
+            return page(f"✓ Cortex will send replies from {email or 'this mailbox'} — "
+                        "they'll appear in your Sent folder. You can close this tab.")
         db.setting_set("gmail_refresh_token", rt)
         db.setting_set("gmail_account", email)
-        return page(f"✓ Cortex is connected to the {email or 'Gmail'} mailbox. You can close this tab.")
+        return page(f"✓ Cortex reads enquiries from the {email or 'Gmail'} mailbox. You can close this tab.")
     db.setting_set("google_refresh_token", rt)
     return page("✓ Cortex is connected to your Google Drive. You can close this tab — backups run nightly.")
 

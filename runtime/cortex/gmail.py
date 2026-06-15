@@ -21,17 +21,34 @@ def connected() -> bool:
     return bool(db.setting_get("gmail_refresh_token"))
 
 
-def _access_token() -> str:
+def _token_for(rt_key: str, purpose: str) -> str:
     with open(_CLIENT) as f:
         c = (json.load(f).get("web") or {})
-    rt = db.setting_get("gmail_refresh_token")
+    rt = db.setting_get(rt_key)
     if not rt:
-        raise RuntimeError("Gmail not connected — authorise at /oauth/google/start?purpose=gmail")
+        raise RuntimeError(f"Gmail not connected — authorise at /oauth/google/start?purpose={purpose}")
     r = httpx.post("https://oauth2.googleapis.com/token", data={
         "client_id": c["client_id"], "client_secret": c["client_secret"],
         "refresh_token": rt, "grant_type": "refresh_token"}, timeout=30)
     r.raise_for_status()
     return r.json()["access_token"]
+
+
+def _access_token() -> str:
+    """The mailbox Cortex READS enquiries from (api@tabscanner.com)."""
+    return _token_for("gmail_refresh_token", "gmail")
+
+
+def send_account() -> str | None:
+    """The mailbox replies are SENT from, if a separate one is connected (else replies go from the read inbox)."""
+    return db.setting_get("gmail_send_account")
+
+
+def _send_token() -> str:
+    """Prefer the dedicated sending mailbox (so the reply lands in YOUR Sent folder); else the read inbox."""
+    if db.setting_get("gmail_send_refresh_token"):
+        return _token_for("gmail_send_refresh_token", "gmail_send")
+    return _access_token()
 
 
 def _get(tok: str, path: str, params: dict | None = None) -> dict:
@@ -87,10 +104,11 @@ def _parse(msg: dict) -> dict:
 
 def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
                  cc: str | None = None) -> dict:
-    """Send an email via the connected mailbox (gmail.modify). `from_addr` only takes effect if it's a
-    verified 'send mail as' identity on the account; otherwise Gmail sends as the authenticated mailbox."""
+    """Send an email from the connected sending mailbox (gmail.modify) — it lands in that account's Sent
+    folder. `from_addr` is honoured when it matches the authenticated account or a verified 'send mail as'
+    identity; otherwise Gmail sends as the authenticated mailbox."""
     from email.mime.text import MIMEText
-    tok = _access_token()
+    tok = _send_token()
     msg = MIMEText(body, "plain", "utf-8")
     msg["To"] = to
     msg["Subject"] = subject
