@@ -204,6 +204,13 @@ carry the preview link. Verified live (draft #476). **Made UNIVERSAL:** a univer
 on approval") for all companies; removed the redundant Tabscanner-local copy. Mechanism is universal (all
 4 sites are WP); the landing-PAGE creation flow (WP 'page' drafts) arrives with the web-page-builder migration.
 
+**Migration status (2026-06-15):** ✅ DONE (universal, all 4 companies) — **seo-campaign** → Content & SEO
+dept; **web-page-builder** → content-landing-copy + new **content-page-builder** ("Web page builder") skill
+(both carry the draft-preview universal rule); **content-backtrack-audit** → content-refresh. Skill
+STRUCTURE fully universal (80 skills × 4). ❌ REMAINING craft migration: **sensa-quotation** → Sales/
+Quotation generation; **website-management** → publishing/Support onboarding; and the per-site **strategy
+packs → each company CONTEXT** (voice/positioning). desktop-exports = skipped (workflow rule).
+
 **Remaining for Phase 3:** "discuss this" deep-link item→Talk; Talk gym-mode; other cockpit screens;
 omnichannel/Gmail intake = Phase 4 (note: org SA-key block means Gmail also needs OAuth-per-mailbox or a
 policy exception — revisit at Phase 4).
