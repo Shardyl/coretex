@@ -28,8 +28,8 @@ GENERAL = "General Operations"
 
 def areas() -> list[dict]:
     """General Operations (cross-cutting) + one area per department."""
-    out = [{"key": GENERAL, "manager": "Operations lead", "category": "Run the business", "general": True}]
-    seen = set()
+    out = [{"key": GENERAL, "manager": "Operations manager", "category": "Run the business", "general": True}]
+    seen = {GENERAL}   # the General Operations meta-area is already listed explicitly above
     for cat, dept, mgr, _ in catalog.CATALOG:
         if dept not in seen:
             seen.add(dept)
@@ -39,7 +39,7 @@ def areas() -> list[dict]:
 
 def _manager_for(area: str) -> str:
     if area == GENERAL:
-        return "Operations lead"
+        return "Operations manager"
     _, mgr = catalog.dept_meta(area)
     return mgr or f"{area} manager"
 

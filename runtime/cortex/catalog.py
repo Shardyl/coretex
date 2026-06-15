@@ -189,6 +189,13 @@ CATALOG = [
         ("finance-reporting", "Financial reporting (owed, revenue, per company)"),
         ("finance-bookkeeping-sync", "Bookkeeping sync (Xero / QuickBooks)"),
     ]),
+    ("Run the business", "General Operations", "Operations manager", [
+        ("general-operations", "Business operations & overall context",
+         "The cross-cutting layer: how the company is run overall - positioning, priorities, voice, and "
+         "company-wide operating rules that every other skill should respect. This is where the General "
+         "Operations questionnaire writes its rules; universal answers set principles shared across all "
+         "companies, company answers set that company's overall context."),
+    ]),
 ]
 
 # Higher-stakes (slower to graduate to auto); Finance dept + ad-spend are gated.
