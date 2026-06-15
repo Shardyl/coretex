@@ -9,6 +9,7 @@ will look, but it is not public and not indexed. The owner then approves to publ
 from __future__ import annotations
 
 import base64
+from urllib.parse import quote
 
 import httpx
 
@@ -34,7 +35,9 @@ class WordPress:
 
     def _links(self, p: dict) -> tuple[str, str, str]:
         link = p.get("link") or f"{self.site}/?p={p.get('id')}"
-        preview = link + ("&" if "?" in link else "?") + "preview=true"
+        raw_preview = link + ("&" if "?" in link else "?") + "preview=true"
+        # route through wp-login so an unauthenticated tap logs in then lands on the rendered draft.
+        preview = f"{self.site}/wp-login.php?redirect_to={quote(raw_preview, safe='')}"
         edit = f"{self.site}/wp-admin/post.php?post={p.get('id')}&action=edit"
         return link, preview, edit
 
