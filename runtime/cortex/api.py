@@ -323,6 +323,43 @@ def report_pdf(tid: int, _: None = Depends(auth)) -> FileResponse:
     return FileResponse(path, media_type="application/pdf", filename=name)
 
 
+@app.get("/api/inbox/history")
+def inbox_history(q: str | None = None, start: str | None = None, end: str | None = None,
+                  company: str | None = None, limit: int = 80, _: None = Depends(auth)) -> list[dict]:
+    """Past Inbox items (approved/sent/skipped/seen) with free-text search + a date range."""
+    where = ["status not in ('awaiting_approval','awaiting_correction','new','drafting')"]
+    params: list = []
+    if company:
+        co = store.get_company_by_slug(company)
+        where.append("company_id=%s"); params.append(co["id"] if co else -1)
+    if q:
+        where.append("(draft ilike %s or request::text ilike %s or kind ilike %s)")
+        like = f"%{q}%"; params += [like, like, like]
+    if start:
+        where.append("updated_at >= %s::date"); params.append(start)
+    if end:
+        where.append("updated_at < (%s::date + interval '1 day')"); params.append(end)
+    params.append(limit)
+    rows = db.query(f"select * from tasks where {' and '.join(where)} order by updated_at desc limit %s", tuple(params))
+    out = []
+    for t in rows:
+        co = store.get_company(t["company_id"]); sk = store.get_skill(t["skill_id"])
+        req = t.get("request") or {}
+        if t["kind"] == "email_reply":
+            inq = req.get("inquiry") or {}
+            title = "Reply to " + (inq.get("name") or inq.get("email") or "enquiry")
+        elif t["kind"] == "report":
+            title = req.get("title") or "Report"
+        else:
+            title = req.get("title") or (t.get("draft") or "").split("\n")[0][:70] or t["kind"]
+        out.append({"id": t["id"], "kind": t["kind"], "status": t["status"],
+                    "company": co["slug"] if co else None, "company_name": co["name"] if co else "",
+                    "skill": sk["name"] if sk else "", "title": title,
+                    "summary": (t.get("draft") or "")[:160], "body": (t.get("draft") or "")[:4000],
+                    "when": t["updated_at"].isoformat() if t.get("updated_at") else None})
+    return out
+
+
 class AuthorityBody(BaseModel):
     authority: str   # ask | auto | never
 

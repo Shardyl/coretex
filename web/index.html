@@ -143,6 +143,8 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .hitem{display:flex;gap:10px;margin-bottom:9px;font-size:13px}
 .hled{width:8px;height:8px;border-radius:50%;margin-top:5px;flex:none}
 .iconbtn.sm{width:32px;height:32px}
+.ibhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 2px 6px}
+.btn.sm{padding:7px 11px;font-size:13px;width:auto}
 .fsel{width:100%;box-sizing:border-box;background:var(--panel2,#0e1620);color:var(--ink);border:1px solid var(--line);border-radius:11px;padding:11px 12px;font:inherit;font-size:15px;-webkit-appearance:none;appearance:none}
 .fsel[type=time]{appearance:auto}
 /* chat */
@@ -633,8 +635,13 @@ async function delSched(id){ try{ await api('/api/schedule/'+id,{method:'DELETE'
 async function runSched(id){ try{ toast('Running…'); await api('/api/schedule/'+id+'/run',{method:'POST'}); toast('Done — it is in your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
 async function runReportNow(){ try{ toast('Generating…'); await api('/api/report/run?company='+encodeURIComponent(fval('scCo')),{method:'POST'}); toast('Done — check your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
 
+let inboxView='pending';
+function setInbox(x){ inboxView=x; render(); }
 async function renderInbox(v){
-  v.innerHTML='<div class="h">Needs your yes</div><div id="ib" class="empty">Loading…</div>';
+  if(inboxView==='history') return renderInboxHistory(v);
+  v.innerHTML=`<div class="ibhead"><div class="h" style="margin:0">Needs your yes</div>
+    <button class="btn sm" onclick="setInbox('history')">${ic('pulse',15)} History</button></div>
+    <div id="ib" class="empty">Loading…</div>`;
   const fco=document.getElementById('coSel').value;
   let items;
   try{ items = demo?SAMPLE.inbox:await api('/api/inbox'+(fco?'?company='+encodeURIComponent(fco):'')); }catch(e){ items=demo?SAMPLE.inbox:[]; }
@@ -677,6 +684,39 @@ async function renderInbox(v){
   }).join('');
 }
 
+let histTimer=null;
+function histSearch(){ clearTimeout(histTimer); histTimer=setTimeout(loadHistory,300); }
+async function renderInboxHistory(v){
+  v.innerHTML=`<div class="ibhead"><div class="h" style="margin:0">History</div>
+    <button class="btn sm" onclick="setInbox('pending')">${ic('back',15)} Pending</button></div>
+    <div class="srch">${ic('search',18)}<input id="hq" placeholder="Search past items…" oninput="histSearch()"></div>
+    <div class="row" style="gap:8px;margin:0 0 14px">
+      <label style="margin:0;flex:1;font-size:11px">From<input id="hfrom" type="date" class="fsel" onchange="loadHistory()"></label>
+      <label style="margin:0;flex:1;font-size:11px">To<input id="hto" type="date" class="fsel" onchange="loadHistory()"></label>
+    </div>
+    <div id="hist" class="empty">Loading…</div>`;
+  loadHistory();
+}
+async function loadHistory(){
+  const co=document.getElementById('coSel').value;
+  const q=(document.getElementById('hq')||{}).value||'', f=(document.getElementById('hfrom')||{}).value||'', t=(document.getElementById('hto')||{}).value||'';
+  const box=document.getElementById('hist'); if(!box) return; box.innerHTML='<div class="empty">Loading…</div>';
+  let rows; try{ rows=await api(`/api/inbox/history?company=${encodeURIComponent(co||'')}&q=${encodeURIComponent(q)}&start=${f}&end=${t}&limit=80`); }catch(e){ rows=[]; }
+  box.innerHTML = rows.length? rows.map(histRow).join('') : '<div class="empty">Nothing matches</div>';
+}
+function histStatus(s){ const m={done:['#2ad17e','done'],rejected:['#ff5d6c','skipped'],failed:['#ffb020','failed']}; const x=m[s]||['#8597A6',s]; return `<span class="chip" style="color:${x[0]};border-color:${x[0]}55">${esc(x[1])}</span>`; }
+function histRow(t){
+  const when=t.when?new Date(t.when).toLocaleDateString([],{day:'numeric',month:'short',year:'numeric'}):'';
+  const kl=t.kind==='email_reply'?'email reply':(t.kind==='report'?'report':(t.kind==='blog'?'blog post':esc(t.kind||'task')));
+  const pdf=t.kind==='report'?`<div class="row" style="margin-top:8px"><button class="btn sm go" onclick="event.stopPropagation();openReport(${t.id})">${ic('file',14)} Open PDF</button></div>`:'';
+  return `<div class="card" onclick="toggleHist(${t.id})" style="cursor:pointer">
+    <div class="meta"><span class="chip cy">${esc(t.company_name||'')}</span><span class="chip">${kl}</span>${histStatus(t.status)}<span style="margin-left:auto;color:var(--mut)">${esc(when)}</span></div>
+    <div class="title" style="font-size:15px">${esc(t.title||('Task #'+t.id))}</div>
+    <div class="csub">${esc(t.summary||'')}</div>
+    <div id="hb${t.id}" style="display:none;margin-top:9px;white-space:pre-wrap;font-size:13.5px;color:var(--ink)">${esc(t.body||'')}</div>
+    ${pdf}</div>`;
+}
+function toggleHist(id){ const e=document.getElementById('hb'+id); if(e) e.style.display=e.style.display==='none'?'block':'none'; }
 function reportCard(t,co){
   const r=t.request||{};
   return `<div class="card" id="t${t.id}">
