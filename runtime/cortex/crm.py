@@ -76,11 +76,30 @@ def add_inquiry(inq: dict, company: str = "tabscanner") -> tuple[str, str | None
     fn, ln = _split_name(name)
     dom = email.split("@")[-1] if "@" in email else ""
     note = f"Website enquiry ({datetime.now(timezone.utc):%Y-%m-%d}): {msg}" if msg else "Website enquiry."
+    # a genuine inbound enquiry (already past triage) = the contact has Engaged with us
     db.execute(
         "insert into crm_master (organisation, first_name, last_name, email, company_domain, "
-        "lead_source, lead_status, note, history) values (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-        (org, fn, ln, email, dom, "Website enquiry", "New", note, Json([ev])))
+        "lead_source, lead_status, stage, note, history) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        (org, fn, ln, email, dom, "Website enquiry", "New", "Engaged", note, Json([ev])))
     return ("added", email)
+
+
+# ---- Projects = real won work (created when a quote is accepted -> Booked) ----
+
+def create_project(company: str, contact_email: str, title: str, value=None,
+                   currency: str = "AED", stage: str = "Booked", owner: str | None = None,
+                   quote_ref: str | None = None, note: str | None = None) -> int:
+    """Create a project (the cash pipeline). Marks the contact an existing client + logs it on their history."""
+    org = _org(company)
+    row = db.execute(
+        "insert into crm_projects (company, contact_email, title, value, currency, stage, owner, quote_ref, "
+        "note, history) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id",
+        (org, (contact_email or "").lower(), title, value, currency, stage, owner, quote_ref, note,
+         Json([{"ts": _now(), "event": "project_created", "text": f"{title} ({stage})"}])))
+    if contact_email:
+        db.execute("update crm_master set is_client=true where lower(email)=lower(%s)", (contact_email,))
+        log_event(contact_email, "project_booked", f"Project: {title}" + (f" ({value} {currency})" if value else ""), company)
+    return row["id"]
 
 
 def ingest(inquiries: list[dict], company: str = "tabscanner") -> dict:
