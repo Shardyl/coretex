@@ -534,6 +534,19 @@ function contactRow(c){ const n=realName(c); return `<div class="card crow" oncl
   <div style="flex:1;min-width:0"><div class="cname">${esc(n)}</div>
     <div class="csub">${esc(c.organisation||'')}${c.company_name?' · '+esc(c.company_name):''}</div></div>
   ${c.is_client?'<span class="chip" style="color:#2ad17e;border-color:#2ad17e55">Client</span>':stageChip(c.stage)}</div>`; }
+const CHIDE=new Set(['id','first_name','last_name','account_id','is_client','stage','note','history','company_name','created_at','updated_at']);
+const CURL=new Set(['linkedin','instagram','facebook','website','company_domain']);
+function humanizeField(k){ let s=k.replace(/_/g,' '); s=s.charAt(0).toUpperCase()+s.slice(1); return s.replace(/Linkedin/,'LinkedIn'); }
+function fieldRows(c){
+  const rows=Object.keys(c||{}).filter(k=>!CHIDE.has(k) && c[k]!=null && String(c[k]).trim()!=='').map(k=>{
+    const v=String(c[k]); let val=esc(v);
+    if(CURL.has(k)){ const href=/^https?:\/\//i.test(v)?v:'https://'+v; val=`<a href="${esc(href)}" target="_blank" rel="noopener" style="color:var(--accent);word-break:break-all">${esc(v)}</a>`; }
+    else if(k==='email'){ val=`<a href="mailto:${esc(v)}" style="color:var(--accent)">${esc(v)}</a>`; }
+    else if(k==='phone'){ val=`<a href="tel:${esc(v.replace(/[^0-9+]/g,''))}" style="color:var(--accent)">${esc(v)}</a>`; }
+    return `<div class="dfld" style="align-items:flex-start"><span style="color:var(--mut);min-width:120px;flex:none;font-size:11.5px;padding-top:1px">${esc(humanizeField(k))}</span><span style="word-break:break-word">${val}</span></div>`;
+  });
+  return rows.join('') || '<div class="csub">No other details on file</div>';
+}
 async function openContact(email){
   const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
   let c; try{ c=await api('/api/crm/contact?email='+encodeURIComponent(email)); }catch(e){ c={}; }
@@ -546,7 +559,7 @@ async function openContact(email){
     <div class="row" style="margin-bottom:12px">${stageChip(c.stage)}${c.tier?`<span class="chip cy">Tier ${esc(c.tier)}</span>`:''}${c.is_client?'<span class="chip" style="color:#2ad17e">Client</span>':''}</div>
     ${contactStagePicker(c)}
     ${contactCompanyRow(c)}
-    <div class="dgrid">${fld('mail',c.email)}${fld('pin',[c.city,c.country].filter(Boolean).join(', '))}${fld('globe',c.company_domain||c.website)}${fld('briefcase',c.industry)}${fld('route',c.lead_source)}${fld('tool',c.software)}</div>
+    <div class="dgrid">${fieldRows(c)}</div>
     ${noteBox('c',c.email)}
     ${c.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${esc(c.note)}</div></div>`:''}
     ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:${h.event==='reply_sent'?'#2ad17e':'#00DAFF'}"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
