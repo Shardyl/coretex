@@ -603,7 +603,7 @@ function dealCompany(p){
     : `<div class="csub">No people at this company yet.</div>`;
   return `<div class="dsec"><div class="dlbl">Company</div>
     ${a?`<div class="crow" style="padding:4px 0;cursor:pointer" onclick="openAccount(${a.id})"><div class="cav" style="width:32px;height:32px;font-size:12px">${esc(initials(a.name))}</div><div style="flex:1;min-width:0"><div class="cname" style="font-size:15px">${esc(a.name)}</div><div class="csub">${cs.length} contact${cs.length==1?'':'s'}</div></div>${ic('chevron',16)}</div>`:'<div class="csub">No company set</div>'}
-    <div class="row" style="margin:7px 0 2px"><button class="btn sm" onclick="changeDealCompany(${p.id},${a?a.id:'null'})">${ic('edit',14)} ${a?'Change company':'Set company'}</button>${a?`<button class="btn go sm" onclick="openNewContact(${a.id})">${ic('plus',14)} Add contact</button>`:''}</div>
+    <div class="row" style="margin:7px 0 2px"><button class="btn sm" onclick="changeDealCompany(${p.id},${a?a.id:'null'})">${ic('edit',14)} ${a?'Change company':'Set company'}</button>${a?`<button class="btn go sm" onclick="addContactToCompany(${a.id})">${ic('plus',14)} Add contact</button>`:''}</div>
     ${a&&cs.length?`<div style="margin-top:6px">${people}</div>`:''}
   </div>`;
 }
@@ -649,6 +649,32 @@ async function saveNewContact(co){
   let acc=fval('nc_acc'); if(acc==='__new'){ const name=prompt('New company name:'); if(name){ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); acc=a.id; } else acc=''; }
   try{ const c=await api('/api/crm/contacts/new',{method:'POST',body:JSON.stringify({first_name:fval('nc_first'),last_name:fval('nc_last'),email,account_id:acc?+acc:null,company:co||null,phone:fval('nc_phone'),job_title:fval('nc_title')})});
     toast('Contact created'); openContact(c.email); }catch(e){ toast('Could not create ('+e.message+')'); }
+}
+async function addContactToCompany(accountId){
+  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="openAccount(${accountId})">${ic('back',18)}</button><b>Add contact</b></div>
+    <div class="card">
+      <div class="srch">${ic('search',18)}<input id="acq" placeholder="Search existing contacts…" oninput="acSearch(${accountId})"></div>
+      <div id="acres" class="csub" style="padding:6px 2px">Type a name, email or company to find someone already in the CRM.</div>
+      <div class="row" style="margin-top:10px"><button class="btn go sm" onclick="openNewContact(${accountId})">${ic('plus',15)} Create new contact</button></div>
+    </div>`;
+  setTimeout(()=>{ const e=document.getElementById('acq'); if(e) e.focus(); }, 60);
+}
+let acTimer=null;
+function acSearch(accountId){ clearTimeout(acTimer); acTimer=setTimeout(()=>acLoad(accountId),250); }
+async function acLoad(accountId){
+  const q=fval('acq').trim(); const box=document.getElementById('acres'); if(!box) return;
+  if(q.length<2){ box.className='csub'; box.innerHTML='Type at least 2 letters…'; return; }
+  box.className=''; box.innerHTML='<div class="csub">Searching…</div>';
+  let rows; try{ rows=await api('/api/crm/contacts?company=all&q='+encodeURIComponent(q)+'&limit=20'); }catch(e){ rows=[]; }
+  box.innerHTML = rows.length? rows.map(c=>{ const n=realName(c);
+    return `<div class="crow" style="padding:8px 0;cursor:pointer;border-bottom:1px solid var(--line)" onclick="attachExisting('${esc(c.email)}',${accountId})">
+      <div class="cav" style="width:30px;height:30px;font-size:11px">${esc(initials(n))}</div>
+      <div style="flex:1;min-width:0"><div class="cname" style="font-size:14px">${esc(n)}</div><div class="csub">${esc(c.email)}${c.company_name?' · '+esc(c.company_name):''}</div></div>
+      ${ic('plus',16)}</div>`; }).join('') : '<div class="csub">No matches. Create a new contact below.</div>';
+}
+async function attachExisting(email,accountId){
+  try{ await api('/api/crm/contact/company',{method:'POST',body:JSON.stringify({email,account_id:accountId})}); toast('Added to company'); openAccount(accountId); }
+  catch(e){ toast('Could not add ('+e.message+')'); }
 }
 function openNewCompany(){
   document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')">${ic('back',18)}</button><b>New company</b></div>
@@ -763,7 +789,7 @@ async function openAccount(id){
       <div class="cname" style="font-size:18px">${esc(a.name||'')}</div>
       <div class="dgrid">${fld('globe',a.domain||a.website)}${fld('pin',a.phone)}</div>
       <div class="dsec"><div class="dlbl">Contacts (${(a.contacts||[]).length})</div>${contacts||'<div class="csub">None linked</div>'}
-        <div class="row" style="margin-top:8px"><button class="btn go sm" onclick="openNewContact(${a.id})">${ic('plus',14)} Add contact</button></div></div>
+        <div class="row" style="margin-top:8px"><button class="btn go sm" onclick="addContactToCompany(${a.id})">${ic('plus',14)} Add contact</button></div></div>
       <div class="dsec"><div class="dlbl">Deals (${(a.deals||[]).length})</div>${deals||'<div class="csub">None</div>'}
         <div class="row" style="margin-top:8px"><button class="btn go sm" onclick="openNewDeal(${a.id})">${ic('plus',14)} New deal</button></div></div>
       ${noteBox('a',a.id)}
