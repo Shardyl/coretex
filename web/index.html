@@ -490,7 +490,8 @@ async function render(){
 }
 
 // ---- CRM pages: Contacts / Projects / Opportunities ----
-const STAGECOL={Cold:'#8597A6',Contacted:'#5B8DEF',Engaged:'#00DAFF',Qualified:'#2ad17e',Opportunity:'#ffb020',Quote:'#ffb020','Not interested':'#ff5d6c','Dormant/dead':'#8597A6',Booked:'#00DAFF',Production:'#ffb020',Delivered:'#5B8DEF','Final Payment':'#ffb020','Close & review':'#2ad17e',Lost:'#ff5d6c'};
+const STAGECOL={Cold:'#8597A6',Contacted:'#5B8DEF',Engaged:'#00DAFF',Qualified:'#2ad17e','Not interested':'#ff5d6c','Dormant/dead':'#8597A6',
+  Opportunity:'#A78BFA',Quote:'#60A5FA',Booked:'#22D3EE',Production:'#FBBF24',Delivered:'#FB923C','Final Payment':'#F472B6','Close & review':'#34D399',Lost:'#F43F5E'};
 function stageChip(s){ s=s||'Cold'; const c=STAGECOL[s]||'#8597A6'; return `<span class="chip" style="color:${c};border-color:${c}55;background:transparent">${esc(s)}</span>`; }
 function realName(c){ const n=((c.first_name||'')+' '+(c.last_name||'')).trim(); return /[A-Za-z]{2}/.test(n)?n:(c.email||'Contact'); }
 function initials(s){ const m=(s||'').match(/[A-Za-z]/g)||['?']; return (m[0]+(m[1]||'')).toUpperCase(); }

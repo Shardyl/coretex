@@ -663,6 +663,44 @@ def crm_create_deal(body: NewDealBody, _: None = Depends(auth)) -> dict:
     return crm.create_deal(body.company, body.title, body.value, body.currency, body.stage, body.account_id)
 
 
+class ContactEditBody(BaseModel):
+    email: str
+    first_name: str | None = None
+    last_name: str | None = None
+    job_title: str | None = None
+    phone: str | None = None
+    new_email: str | None = None
+
+
+@app.post("/api/crm/contact/update")
+def crm_update_contact(body: ContactEditBody, _: None = Depends(auth)) -> dict:
+    fields = {"first_name": body.first_name, "last_name": body.last_name,
+              "job_title": body.job_title, "phone": body.phone}
+    if body.new_email:
+        fields["email"] = body.new_email.strip().lower()
+    try:
+        r = crm.update_contact(body.email, **fields)
+    except Exception as e:  # noqa: BLE001 — e.g. email collides with the unique index
+        raise HTTPException(status_code=400, detail="that email is already used by another contact")
+    if not r:
+        raise HTTPException(status_code=404, detail="contact not found")
+    return r
+
+
+class DealEditBody(BaseModel):
+    title: str | None = None
+    value: float | None = None
+    currency: str | None = None
+
+
+@app.post("/api/crm/project/{id}/update")
+def crm_update_deal(id: int, body: DealEditBody, _: None = Depends(auth)) -> dict:
+    r = crm.update_deal(id, title=body.title, value=body.value, currency=body.currency)
+    if not r:
+        raise HTTPException(status_code=404, detail="deal not found")
+    return r
+
+
 class AssignAccountBody(BaseModel):
     account_id: int | None = None
     email: str | None = None

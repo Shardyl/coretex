@@ -361,6 +361,30 @@ def set_deal_account(deal_id: int, account_id) -> dict | None:
     return db.one("select * from crm_projects where id=%s", (deal_id,))
 
 
+def update_contact(email: str, **fields) -> dict | None:
+    allowed = {k: v for k, v in fields.items()
+               if k in ("first_name", "last_name", "job_title", "phone", "email") and v is not None}
+    if not db.one("select 1 from crm_master where lower(email)=lower(%s)", (email,)):
+        return None
+    if allowed:
+        sets = ", ".join(f"{k}=%s" for k in allowed)
+        db.execute(f"update crm_master set {sets}, updated_at=now() where lower(email)=lower(%s)",
+                   tuple(allowed.values()) + (email,))
+    return db.one("select * from crm_master where lower(email)=lower(%s)", (allowed.get("email", email),))
+
+
+def update_deal(deal_id: int, **fields) -> dict | None:
+    allowed = {k: v for k, v in fields.items()
+               if k in ("title", "value", "currency", "owner") and v is not None}
+    if not db.one("select 1 from crm_projects where id=%s", (deal_id,)):
+        return None
+    if allowed:
+        sets = ", ".join(f"{k}=%s" for k in allowed)
+        db.execute(f"update crm_projects set {sets}, updated_at=now() where id=%s",
+                   tuple(allowed.values()) + (deal_id,))
+    return db.one("select * from crm_projects where id=%s", (deal_id,))
+
+
 def delete_contact(email: str) -> None:
     db.execute("update crm_projects set contact_email=NULL where lower(contact_email)=lower(%s)", (email,))
     db.execute("delete from crm_master where lower(email)=lower(%s)", (email,))
