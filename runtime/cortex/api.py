@@ -1105,6 +1105,13 @@ CHAT_SYSTEM_BASE = (
     "on a PENDING task approve_task / skip_task / correct_task (correct redrafts it and learns the rule). "
     "When he gives feedback on a draft you just made, you can re-run draft with a revision AND, if the "
     "lesson is durable, add_rule so it sticks for next time — fix it and teach it in one go. "
+    "You ALSO run the CRM and the calendar. Use crm_lookup to find a contact or client company, and crm_pipeline "
+    "to read the deal pipeline (open opportunities + forecast, won projects + value) — use these BEFORE answering "
+    "'what's in the pipeline / the forecast / who is X'. You can create_company (a client company), create_contact "
+    "(a person; a deal's people come from their client company, so set the company), and create_deal (defaults to "
+    "the Opportunity stage). You can run_report (SEO & traffic report, lands in the Inbox now), schedule_report (run "
+    "it on a cadence), and list_scheduled. When Rashad asks you to add a contact/company/deal or to send/schedule a "
+    "report, DO IT with these tools, then confirm in one short spoken sentence. "
     "You ALSO have a KNOWLEDGE BASE about the Cortex system itself — its architecture and how its features "
     "work (the questionnaire, voice routing, the Chief/Manager/Worker org, approvals and earned autonomy, "
     "the nightly backup). When Rashad asks how Cortex or any of its features work, or where to find "
@@ -1176,6 +1183,30 @@ SKILL_TOOLS = [
     {"name": "skip_task",
      "description": "Skip / discard a pending task.",
      "input_schema": {"type": "object", "properties": {"task_id": {"type": "integer"}}, "required": ["task_id"]}},
+    {"name": "crm_lookup",
+     "description": "Search the CRM for contacts and client companies by name, email or company. Use this to FIND someone or a company before acting on them.",
+     "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}},
+    {"name": "crm_pipeline",
+     "description": "The deal pipeline: open opportunities + forecast value, and won projects + value. Use to answer 'what's in the pipeline / the forecast / what have we won'. Optional business slug to scope it.",
+     "input_schema": {"type": "object", "properties": {"company": {"type": "string", "description": "your business slug (sensa/tabscanner/...), omit for all"}}}},
+    {"name": "create_company",
+     "description": "Create a CLIENT company (account) in the CRM.",
+     "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "website": {"type": "string"}, "phone": {"type": "string"}}, "required": ["name"]}},
+    {"name": "create_contact",
+     "description": "Create a contact (a person). 'company' = the client company they work at (linked/created automatically). 'business' = which of YOUR businesses (slug) it relates to.",
+     "input_schema": {"type": "object", "properties": {"first_name": {"type": "string"}, "last_name": {"type": "string"}, "email": {"type": "string"}, "company": {"type": "string", "description": "client company name"}, "business": {"type": "string", "description": "your business slug"}, "phone": {"type": "string"}, "job_title": {"type": "string"}}, "required": ["email"]}},
+    {"name": "create_deal",
+     "description": "Create a deal. 'business' = which of YOUR businesses (slug). 'company' = the client company (linked/created). Defaults to the Opportunity stage; a deal's people come from its client company.",
+     "input_schema": {"type": "object", "properties": {"business": {"type": "string"}, "title": {"type": "string"}, "value": {"type": "number"}, "currency": {"type": "string"}, "stage": {"type": "string"}, "company": {"type": "string", "description": "client company name"}}, "required": ["business", "title"]}},
+    {"name": "schedule_report",
+     "description": "Schedule the per-business SEO & traffic report to run on a cadence; it lands in the Inbox. weekday 0=Mon..6=Sun.",
+     "input_schema": {"type": "object", "properties": {"company": {"type": "string", "description": "your business slug"}, "cadence": {"type": "string", "enum": ["daily", "weekly", "monthly"]}, "weekday": {"type": "integer"}, "hour": {"type": "integer"}}, "required": ["company"]}},
+    {"name": "run_report",
+     "description": "Generate the SEO & traffic report for a business right now; it lands in the Inbox.",
+     "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}, "required": ["company"]}},
+    {"name": "list_scheduled",
+     "description": "List the scheduled calendar tasks.",
+     "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}}},
 ]
 
 
@@ -1228,6 +1259,51 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         return json.dumps(engine.approve_task(int(inp["task_id"])), default=str)
     if name == "skip_task":
         return json.dumps(engine.skip_task(int(inp["task_id"])), default=str)
+    if name == "crm_lookup":
+        like = f"%{inp.get('query', '')}%"
+        cons = db.query("select first_name,last_name,email,company_name,stage,is_client from crm_master "
+                        "where first_name ilike %s or last_name ilike %s or email ilike %s or company_name ilike %s "
+                        "order by is_client desc, first_name nulls last limit 12", (like, like, like, like))
+        accs = db.query("select id,name,domain from crm_accounts where name ilike %s order by name limit 8", (like,))
+        return json.dumps({"contacts": cons, "companies": accs}, default=str)
+    if name == "crm_pipeline":
+        slug = inp.get("company")
+        opp, proj = crm_opportunities(slug, _=None), crm_projects(slug, _=None)
+        return json.dumps({"opportunities_count": opp["count"], "forecast_value": opp["total_value"],
+                           "top_opportunities": [{"title": o["title"], "value": o["value"], "company": o["company"]}
+                                                 for o in opp["opportunities"][:8]],
+                           "projects_count": proj["count"], "won_value": proj["total_value"],
+                           "projects": [{"title": p["title"], "value": p["value"], "stage": p["stage"]}
+                                        for p in proj["projects"][:10]]}, default=str)
+    if name == "create_company":
+        a = crm.create_account(inp["name"], website=inp.get("website"), phone=inp.get("phone"))
+        return f"created client company '{a['name']}' (id {a['id']})"
+    if name == "create_contact":
+        aid = crm.get_or_create_account(inp["company"].strip()) if inp.get("company") else None
+        c = crm.create_contact(inp.get("first_name", ""), inp.get("last_name", ""), inp["email"],
+                               account_id=aid, company=inp.get("business"), phone=inp.get("phone"),
+                               job_title=inp.get("job_title"))
+        return f"created contact {c['email']}" + (f" at {inp['company']}" if inp.get("company") else "")
+    if name == "create_deal":
+        aid = crm.get_or_create_account(inp["company"].strip()) if inp.get("company") else None
+        stage = inp.get("stage") if inp.get("stage") in crm.DEAL_STAGES else "Opportunity"
+        d = crm.create_deal(inp.get("business", "sensa"), inp["title"], value=inp.get("value"),
+                            currency=inp.get("currency", "AED"), stage=stage, account_id=aid)
+        return (f"created deal '{d['title']}' ({d['stage']}, {d.get('value') or 'no value'} {d['currency']})"
+                + (f" for {inp['company']}" if inp.get("company") else ""))
+    if name == "schedule_report":
+        slug = inp.get("company", "tabscanner")
+        label = seo_report.available().get(slug, slug)
+        t = schedule.create(slug, "seo_report", f"{label} — SEO & Traffic report", cadence=inp.get("cadence", "weekly"),
+                            weekday=int(inp.get("weekday", 0)), hour=int(inp.get("hour", 8)), minute=0, config={"days": 28})
+        return f"scheduled the {label} SEO report {inp.get('cadence', 'weekly')}; next run {t['next_run']}"
+    if name == "run_report":
+        t = engine.deliver_seo_report(inp.get("company", "tabscanner"), days=28)
+        return f"generated the report — it's in your Inbox now (task #{t['id']})"
+    if name == "list_scheduled":
+        rows = schedule.listing(inp.get("company"))
+        return json.dumps([{"title": r["title"], "cadence": r["cadence"], "next_run": str(r["next_run"]),
+                            "enabled": r["enabled"]} for r in rows]) or "no scheduled tasks"
     if name == "create_skill":
         dept = inp.get("department")
         cat, mgr = catalog.dept_meta(dept) if dept else (None, None)
