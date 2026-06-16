@@ -157,7 +157,7 @@ def set_deal_primary(deal_id: int, email: str) -> dict | None:
 # ---- Deals = the full lifecycle in crm_projects. Forecast stages show on the Opportunities screen;
 #      won/ongoing stages show on the Projects screen. Crossing 'Booked' promotes an opportunity to a project.
 FORECAST_STAGES = ["Opportunity", "Quote"]
-WON_STAGES = ["Booked", "Production", "Delivered", "Final Payment", "Close & review", "Recurring"]
+WON_STAGES = ["Booked", "Production", "Recurring", "Delivered", "Final Payment", "Close & review"]
 LOST_STAGE = "Lost"                                    # pitched but didn't win — exits both screens
 DEAL_STAGES = FORECAST_STAGES + WON_STAGES + [LOST_STAGE]   # 'Recurring' = ongoing/repeat won work (retainers)
 PROJECT_STAGES = DEAL_STAGES   # back-compat alias (any valid deal stage)
