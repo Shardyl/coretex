@@ -666,7 +666,10 @@ def crm_create_deal(body: NewDealBody, _: None = Depends(auth)) -> dict:
         raise HTTPException(status_code=400, detail="title required")
     if body.stage not in crm.DEAL_STAGES:
         raise HTTPException(status_code=400, detail=f"stage must be one of {crm.DEAL_STAGES}")
-    return crm.create_deal(body.company, body.title, body.value, body.currency, body.stage, body.account_id)
+    try:
+        return crm.create_deal(body.company, body.title, body.value, body.currency, body.stage, body.account_id)
+    except crm.DuplicateDeal as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 class ContactEditBody(BaseModel):
@@ -1360,8 +1363,11 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
     if name == "create_deal":
         aid = crm.get_or_create_account(inp["company"].strip()) if inp.get("company") else None
         stage = inp.get("stage") if inp.get("stage") in crm.DEAL_STAGES else "Opportunity"
-        d = crm.create_deal(inp.get("business", "sensa"), inp["title"], value=inp.get("value"),
-                            currency=inp.get("currency", "AED"), stage=stage, account_id=aid)
+        try:
+            d = crm.create_deal(inp.get("business", "sensa"), inp["title"], value=inp.get("value"),
+                                currency=inp.get("currency", "AED"), stage=stage, account_id=aid)
+        except crm.DuplicateDeal as e:
+            return str(e)
         return (f"created deal '{d['title']}' ({d['stage']}, {d.get('value') or 'no value'} {d['currency']})"
                 + (f" for {inp['company']}" if inp.get("company") else ""))
     if name == "schedule_report":

@@ -327,14 +327,25 @@ def create_contact(first_name: str, last_name: str, email: str, account_id=None,
     return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
 
 
+class DuplicateDeal(ValueError):
+    pass
+
+
 def create_deal(company: str, title: str, value=None, currency: str = "AED", stage: str = "Opportunity",
                 account_id=None, owner: str | None = None) -> dict:
     """A deal belongs to one of YOUR businesses (company) and one CLIENT company (account). Its people are
-    that account's contacts (company-mediated — no per-deal contact list)."""
+    that account's contacts (company-mediated — no per-deal contact list). Blocks an active same-name duplicate."""
+    org = _org(company)
+    title = (title or "").strip()
+    dup = db.one("select id from crm_projects where company=%s and lower(title)=lower(%s) and stage <> %s limit 1",
+                 (org, title, LOST_STAGE))
+    if dup:
+        raise DuplicateDeal(f"A deal '{title}' already exists for {org} (deal #{dup['id']}). "
+                            "Open that one, or give this a different name.")
     row = db.execute(
         "insert into crm_projects (company, title, value, currency, stage, owner, account_id, history) "
         "values (%s,%s,%s,%s,%s,%s,%s,%s) returning id",
-        (_org(company), title, value, currency, stage, owner, account_id,
+        (org, title, value, currency, stage, owner, account_id,
          Json([{"ts": _now(), "event": "deal_created", "text": f"{title} ({stage})"}])))
     if account_id and stage in WON_STAGES:
         flag_clients_for_deal(db.one("select * from crm_projects where id=%s", (row["id"],)))
