@@ -552,6 +552,11 @@ def crm_projects(company: str | None = None, _: None = Depends(auth)) -> dict:
             "total_value": float(total["v"] or 0), "count": total["n"]}
 
 
+@app.get("/api/crm/project")
+def crm_project(id: int, _: None = Depends(auth)) -> dict:
+    return db.one("select * from crm_projects where id=%s", (id,)) or {}
+
+
 @app.get("/api/crm/opportunities")
 def crm_opportunities(company: str | None = None, _: None = Depends(auth)) -> list[dict]:
     f, p = _org_like(company)

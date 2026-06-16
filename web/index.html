@@ -538,6 +538,21 @@ async function openContact(email){
     ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:${h.event==='reply_sent'?'#2ad17e':'#00DAFF'}"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
     </div>`;
 }
+async function openProject(id){
+  const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
+  let p; try{ p=await api('/api/crm/project?id='+id); }catch(e){ p={}; }
+  const money=n=>Math.round(n||0).toLocaleString(); const hist=(p.history||[]);
+  const fld=(ic_,t)=>t?`<div class="dfld">${ic(ic_,15)} ${esc(t)}</div>`:'';
+  v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>Project</b></div>
+    <div class="card">
+      <div class="cname" style="font-size:17px">${esc(p.title||'Untitled')}</div>
+      <div class="csub" style="margin-bottom:10px">${esc(p.company||'')}</div>
+      <div class="row" style="margin-bottom:12px">${stageChip(p.stage)}<span class="chip cy">${money(p.value)} ${esc(p.currency||'')}</span></div>
+      <div class="dgrid">${fld('briefcase',p.owner&&('Owner: '+p.owner))}${fld('file',p.quote_ref&&('Quote ref '+p.quote_ref))}${p.contact_email?`<div class="dfld">${ic('mail',15)} <a href="#" onclick="openContact('${esc(p.contact_email)}');return false" style="color:var(--accent)">${esc(p.contact_email)}</a></div>`:''}</div>
+      ${p.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${esc(p.note)}</div></div>`:''}
+      ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
+    </div>`;
+}
 async function renderProjects(b,co){
   let d; try{ d=await api('/api/crm/projects?company='+encodeURIComponent(co||'all')); }catch(e){ d={projects:[],groups:{},total_value:0,count:0}; }
   const money=n=>Math.round(n||0).toLocaleString();
@@ -545,7 +560,7 @@ async function renderProjects(b,co){
     <div class="mcard"><div class="ml">Active projects</div><div class="mv">${d.count}</div></div></div>`;
   ['Booked','Production','Delivered','Final Payment','Close & review'].forEach(st=>{ const g=d.groups[st]; if(!g) return;
     h+=`<div class="h">${esc(st)} · ${g.n} · ${money(g.value)}</div>`;
-    d.projects.filter(p=>p.stage===st).forEach(p=>{ h+=`<div class="card prow"><div style="flex:1;min-width:0"><div class="cname">${esc(p.title||'Untitled')}</div><div class="csub">${esc(p.company||'')}</div></div><div style="text-align:right"><div class="pval">${money(p.value)}</div>${stageChip(p.stage)}</div></div>`; });
+    d.projects.filter(p=>p.stage===st).forEach(p=>{ h+=`<div class="card prow" style="cursor:pointer" onclick="openProject(${p.id})"><div style="flex:1;min-width:0"><div class="cname">${esc(p.title||'Untitled')}</div><div class="csub">${esc(p.company||'')}</div></div><div style="text-align:right"><div class="pval">${money(p.value)}</div>${stageChip(p.stage)}</div></div>`; });
   });
   if(!d.count) h+='<div class="empty">No projects yet</div>';
   b.outerHTML='<div id="crmbody">'+h+'</div>';
@@ -556,7 +571,7 @@ async function renderOpps(b,co){
   let h=`<div class="mrow"><div class="mcard"><div class="ml">Open opportunities</div><div class="mv">${list.length}</div></div>
     <div class="mcard"><div class="ml">A-tier (priority)</div><div class="mv" style="color:var(--accent)">${a}</div></div></div><div class="h">In the pipeline</div>`;
   h+= list.length? list.map(o=>{ const n=((o.first_name||'')+' '+(o.last_name||'')).trim()||o.email;
-    return `<div class="card"><div class="orow"><span class="cname" style="flex:1">${esc(o.company_name||n)}</span>${stageChip(o.stage)}</div><div class="csub" style="margin-top:5px">${esc((o.note||'').slice(0,130))}</div></div>`; }).join('') : '<div class="empty">No open opportunities</div>';
+    return `<div class="card" style="cursor:pointer" onclick="openContact('${esc(o.email)}')"><div class="orow"><span class="cname" style="flex:1">${esc(o.company_name||n)}</span>${stageChip(o.stage)}</div><div class="csub" style="margin-top:5px">${esc((o.note||'').slice(0,130))}</div></div>`; }).join('') : '<div class="empty">No open opportunities</div>';
   b.outerHTML='<div id="crmbody">'+h+'</div>';
 }
 const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
