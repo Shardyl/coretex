@@ -31,7 +31,8 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
         'Return JSON: {"verdict":"pass|revise|escalate","confidence":"high|medium|low",'
         '"summary":"one short line the owner reads","issues":["concrete rule/brand problems, [] if none"],'
         '"rule_refs":["the specific rules that were broken, if any"]}')
-    out = provider.think_json(system, user, max_tokens=1500)
+    out = provider.think_json(system, user, max_tokens=1500,
+                              purpose=f"manager:{skill.get('skill_key', '')}", company=company.get("slug"))
 
     verdict = (out.get("verdict") or "pass").lower().strip()
     if verdict not in ("pass", "revise", "escalate"):

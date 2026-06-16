@@ -576,7 +576,7 @@ def triage_inquiry(inq: dict) -> dict:
             f"Message:\n{(inq.get('message') or inq.get('snippet') or '').strip()}\n\n"
             'Return JSON: {"genuine": boolean, "category": "lead|partner|support|spam|offtopic|unclear", '
             '"reason": "short phrase"}',
-            model=provider.MODEL_ROUTER)
+            model=provider.MODEL_ROUTER, purpose="triage", company="tabscanner")
         return {"genuine": bool(out.get("genuine")), "category": out.get("category") or "unclear",
                 "reason": (out.get("reason") or "").strip()}
     except Exception:  # noqa: BLE001

@@ -21,6 +21,34 @@ def _client() -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
 
 
+# ---- cost logging: every model call records exact tokens + $ (input, output, cache) ----
+# $/token (input, output, cache-write, cache-read)
+PRICES = {
+    "claude-opus-4-8":   (5 / 1e6, 25 / 1e6, 6.25 / 1e6, 0.5 / 1e6),
+    "claude-sonnet-4-6": (3 / 1e6, 15 / 1e6, 3.75 / 1e6, 0.3 / 1e6),
+    "claude-haiku-4-5":  (1 / 1e6, 5 / 1e6, 1.25 / 1e6, 0.1 / 1e6),
+}
+
+
+def _log_usage(model: str, usage, purpose: str, company: str | None) -> None:
+    """Record one model call's exact token usage + computed cost. Never raises into the caller."""
+    if usage is None:
+        return
+    try:
+        from . import db
+        i = getattr(usage, "input_tokens", 0) or 0
+        o = getattr(usage, "output_tokens", 0) or 0
+        cw = getattr(usage, "cache_creation_input_tokens", 0) or 0
+        cr = getattr(usage, "cache_read_input_tokens", 0) or 0
+        pi, po, pcw, pcr = PRICES.get(model, (5 / 1e6, 25 / 1e6, 6.25 / 1e6, 0.5 / 1e6))
+        cost = i * pi + o * po + cw * pcw + cr * pcr
+        db.execute("insert into usage_log (model, purpose, company, input_tokens, output_tokens, "
+                   "cache_write, cache_read, cost_usd) values (%s,%s,%s,%s,%s,%s,%s,%s)",
+                   (model, purpose, company, i, o, cw, cr, cost))
+    except Exception:  # noqa: BLE001 — logging must never break a call
+        pass
+
+
 def resolve_model(tier: str | None) -> str:
     """Map a skill's model tier ('opus'|'sonnet'|None) to a concrete model id."""
     if tier == "opus":
@@ -33,32 +61,35 @@ def resolve_model(tier: str | None) -> str:
 
 
 def think(system: str, user: str, *, fast: bool = False, model: str | None = None,
-          think_hard: bool = False, max_tokens: int = 6000) -> str:
+          think_hard: bool = False, max_tokens: int = 6000, purpose: str = "think",
+          company: str | None = None) -> str:
     """One-shot completion → plain text. `model` overrides the fast/slow default when given."""
-    kwargs: dict = dict(
-        model=model or (MODEL_FAST if fast else MODEL),
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": user}],
-    )
+    mdl = model or (MODEL_FAST if fast else MODEL)
+    kwargs: dict = dict(model=mdl, max_tokens=max_tokens, system=system,
+                        messages=[{"role": "user", "content": user}])
     if think_hard:
         kwargs["thinking"] = {"type": "adaptive"}
     resp = _client().messages.create(**kwargs)
+    _log_usage(mdl, getattr(resp, "usage", None), purpose, company)
     return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
 
 
-def chat(system: str, messages: list[dict], *, max_tokens: int = 1000) -> str:
+def chat(system: str, messages: list[dict], *, max_tokens: int = 1000,
+         purpose: str = "chat", company: str | None = None) -> str:
     """Multi-turn conversation → assistant text. Snappy (no extended thinking) for voice back-and-forth."""
     resp = _client().messages.create(model=MODEL, max_tokens=max_tokens, system=system, messages=messages)
+    _log_usage(MODEL, getattr(resp, "usage", None), purpose, company)
     return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
 
 
 def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
-               *, max_tokens: int = 1500, rounds: int = 6) -> str:
+               *, max_tokens: int = 1500, rounds: int = 6, purpose: str = "chat",
+               company: str | None = None) -> str:
     """Conversation where Claude can call tools to read/act on Cortex (e.g. manage skills).
 
     `executor(name, input) -> str` runs the tool and returns a result string. Loops until Claude
-    stops calling tools or `rounds` is hit, then returns the final assistant text.
+    stops calling tools or `rounds` is hit, then returns the final assistant text. EACH round is a
+    full Opus call (system + tools + history), so this is the priciest path — logged per round.
     """
     client = _client()
     msgs = [dict(m) for m in messages]
@@ -66,6 +97,7 @@ def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
     for _ in range(rounds):
         resp = client.messages.create(model=MODEL, max_tokens=max_tokens, system=system,
                                        tools=tools, messages=msgs)
+        _log_usage(MODEL, getattr(resp, "usage", None), purpose, company)
         if resp.stop_reason != "tool_use":
             break
         msgs.append({"role": "assistant", "content": resp.content})
@@ -100,10 +132,11 @@ def _loads(raw: str) -> dict:
 
 
 def think_json(system: str, user: str, *, fast: bool = True, model: str | None = None,
-               max_tokens: int = 2000) -> dict:
+               max_tokens: int = 2000, purpose: str = "think_json", company: str | None = None) -> dict:
     """Completion that must return a JSON object → parsed dict."""
     sys = system + "\n\nRespond with ONLY a valid JSON object — no prose, no markdown fences."
-    return _loads(think(sys, user, fast=fast, model=model, max_tokens=max_tokens))
+    return _loads(think(sys, user, fast=fast, model=model, max_tokens=max_tokens,
+                        purpose=purpose, company=company))
 
 
 def research_json(system: str, user: str, *, model: str | None = None,
@@ -113,11 +146,10 @@ def research_json(system: str, user: str, *, model: str | None = None,
     sys = system + ("\n\nUse web search to investigate before you decide. When you have researched enough, "
                     "respond with ONLY a valid JSON object (no prose, no markdown fences).")
     tools = [{"type": "web_search_20250305", "name": "web_search", "max_uses": max_searches}]
-    try:
-        resp = _client().messages.create(
-            model=model or MODEL_FAST, max_tokens=max_tokens, system=sys,
-            tools=tools, messages=[{"role": "user", "content": user}])
-    except Exception:  # noqa: BLE001 — web search may be unavailable; caller falls back
-        raise
+    mdl = model or MODEL_FAST
+    resp = _client().messages.create(
+        model=mdl, max_tokens=max_tokens, system=sys,
+        tools=tools, messages=[{"role": "user", "content": user}])
+    _log_usage(mdl, getattr(resp, "usage", None), "research", None)
     text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
     return _loads(text)

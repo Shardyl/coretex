@@ -389,6 +389,23 @@ def profile_full(company: str, _: None = Depends(auth)) -> dict:
     return {"company": company, "profile": profile.get(co["id"])}
 
 
+@app.get("/api/usage")
+def usage(days: int = 7, _: None = Depends(auth)) -> dict:
+    """Anthropic spend from the cost log: total + breakdown by model, purpose, day, company."""
+    w = "where ts > now() - make_interval(days => %s)"
+    p = (days,)
+    tot = db.one(f"select coalesce(sum(cost_usd),0) cost, count(*) calls, "
+                 f"coalesce(sum(input_tokens),0) in_tok, coalesce(sum(output_tokens),0) out_tok "
+                 f"from usage_log {w}", p)
+    by_model = db.query(f"select model, sum(cost_usd) cost, count(*) calls from usage_log {w} "
+                        f"group by model order by cost desc", p)
+    by_purpose = db.query(f"select purpose, sum(cost_usd) cost, count(*) calls from usage_log {w} "
+                          f"group by purpose order by cost desc limit 25", p)
+    by_day = db.query("select ts::date d, sum(cost_usd) cost, count(*) calls from usage_log "
+                      "group by d order by d desc limit %s", (days,))
+    return {"days": days, "total": tot, "by_model": by_model, "by_purpose": by_purpose, "by_day": by_day}
+
+
 @app.get("/api/gmail/status")
 def gmail_status(_: None = Depends(auth)) -> dict:
     return {"connected": gmail.connected(), "account": db.setting_get("gmail_account"),
@@ -891,7 +908,8 @@ def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
             tools = [t for t in SKILL_TOOLS if t["name"] in _CHIEF_TOOLS] if is_chief else SKILL_TOOLS
         else:
             chosen = ""
-    reply = provider.chat_tools(system, msgs, tools, _exec_skill_tool)
+    reply = provider.chat_tools(system, msgs, tools, _exec_skill_tool,
+                                purpose=f"chat:{chosen}" if chosen else "chat", company=body.company)
     return {"reply": reply, "persona": chosen, "persona_label": personas.label(chosen)}
 
 
