@@ -641,13 +641,14 @@ class NewAccountBody(BaseModel):
     domain: str | None = None
     website: str | None = None
     phone: str | None = None
+    company: str | None = None      # the business it's created under (so it shows in that business's list)
 
 
 @app.post("/api/crm/accounts/new")
 def crm_create_account(body: NewAccountBody, _: None = Depends(auth)) -> dict:
     if not (body.name or "").strip():
         raise HTTPException(status_code=400, detail="name required")
-    return crm.create_account(body.name, body.domain, body.website, body.phone)
+    return crm.create_account(body.name, body.domain, body.website, body.phone, body.company)
 
 
 class NewDealBody(BaseModel):
@@ -866,8 +867,9 @@ def crm_accounts(q: str | None = None, company: str | None = None, _: None = Dep
     if company and company not in ("all", ""):
         label = _CRM_ORG.get(company, company.title())
         conds.append("(exists (select 1 from crm_projects p where p.account_id=a.id and p.company ilike %s) "
-                     "or exists (select 1 from crm_master m where m.account_id=a.id and m.organisation ilike %s))")
-        params += [f"%{label}%", f"%{label}%"]
+                     "or exists (select 1 from crm_master m where m.account_id=a.id and m.organisation ilike %s) "
+                     "or a.company ilike %s)")
+        params += [f"%{label}%", f"%{label}%", f"%{label}%"]
     where = ("where " + " and ".join(conds)) if conds else ""
     return db.query(
         "select a.id, a.name, a.domain, "

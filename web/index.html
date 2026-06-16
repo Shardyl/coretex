@@ -742,7 +742,7 @@ async function orgSearchLoad(){
 async function saveNewCompany(){
   const name=fval('na_name').trim(); if(!name){ toast('Name is required'); return; }
   if(_saving) return; _saving=true;
-  try{ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name,website:fval('na_web'),phone:fval('na_phone')})}); await accountsCache(true); toast('Organisation created'); openAccount(a.id); }
+  try{ const co=document.getElementById('coSel').value||''; const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name,website:fval('na_web'),phone:fval('na_phone'),company:co||null})}); await accountsCache(true); toast('Organisation created'); openAccount(a.id); }
   catch(e){ toast('Could not create ('+e.message+')'); }
   finally{ _saving=false; }
 }

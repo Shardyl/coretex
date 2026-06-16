@@ -92,6 +92,7 @@ alter table crm_master add column if not exists account_id bigint;
 create table if not exists crm_accounts (
   id bigserial primary key, name text not null, domain text, website text, phone text,
   note text, history jsonb not null default '[]'::jsonb, created_at timestamptz default now());
+alter table crm_accounts add column if not exists company text;
 """
 
 
@@ -284,11 +285,12 @@ def rename_account(account_id: int, name: str) -> dict | None:
 # ---- Manual creates (cockpit + Cortex): a company, a contact (under a company), a deal (for a company) ----
 
 def create_account(name: str, domain: str | None = None, website: str | None = None,
-                   phone: str | None = None) -> dict:
+                   phone: str | None = None, company: str | None = None) -> dict:
     aid = get_or_create_account(name.strip(), domain)
-    if website or phone:
-        db.execute("update crm_accounts set website=coalesce(%s,website), phone=coalesce(%s,phone) where id=%s",
-                   (website, phone, aid))
+    label = _org(company) if company else None
+    if website or phone or label:
+        db.execute("update crm_accounts set website=coalesce(%s,website), phone=coalesce(%s,phone), "
+                   "company=coalesce(%s,company) where id=%s", (website, phone, label, aid))
     return db.one("select * from crm_accounts where id=%s", (aid,))
 
 
