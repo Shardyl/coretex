@@ -115,7 +115,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .hidden{display:none!important}
 /* CRM pages */
 .crmseg{display:flex;gap:6px;margin:14px 2px 4px}
-.cseg{flex:1;text-align:center;padding:9px 4px;border-radius:11px;font-family:Poppins;font-weight:600;font-size:13px;color:var(--mut);background:var(--panel);border:1px solid var(--line);cursor:pointer}
+.cseg{flex:1;text-align:center;padding:9px 3px;border-radius:11px;font-family:Poppins;font-weight:600;font-size:11.5px;color:var(--mut);background:var(--panel);border:1px solid var(--line);cursor:pointer;white-space:nowrap}
 .cseg.on{background:var(--accent);border-color:var(--accent);color:#04181d}
 .srch{display:flex;align-items:center;gap:9px;background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:11px 13px;margin:14px 0 12px;color:var(--mut)}
 .srch input{flex:1;background:none;border:none;color:var(--ink);font:inherit;font-size:15px;outline:none;padding:0}
@@ -498,10 +498,12 @@ async function renderCRM(v){
   const co=document.getElementById('coSel').value;
   v.innerHTML=`<div class="crmseg">
     <button class="cseg ${crmView==='contacts'?'on':''}" onclick="setCrm('contacts')">Contacts</button>
-    <button class="cseg ${crmView==='projects'?'on':''}" onclick="setCrm('projects')">Projects</button>
+    <button class="cseg ${crmView==='clients'?'on':''}" onclick="setCrm('clients')">Clients</button>
     <button class="cseg ${crmView==='opps'?'on':''}" onclick="setCrm('opps')">Opportunities</button>
+    <button class="cseg ${crmView==='projects'?'on':''}" onclick="setCrm('projects')">Projects</button>
   </div><div id="crmbody" class="empty">Loading…</div>`;
   const b=document.getElementById('crmbody');
+  if(crmView==='clients') return renderClients(b);
   if(crmView==='projects') return renderProjects(b,co);
   if(crmView==='opps') return renderOpps(b,co);
   return renderContacts(b,co);
@@ -572,8 +574,9 @@ async function saveNote(kind,id,tid){
   if(recording) stopDictation(document.querySelector('.btn.warn.rec'));
   try{
     if(kind==='c') await api('/api/crm/contact/note',{method:'POST',body:JSON.stringify({email:id,note:text})});
+    else if(kind==='a') await api('/api/crm/account/'+id+'/note',{method:'POST',body:JSON.stringify({note:text})});
     else await api('/api/crm/project/'+id+'/note',{method:'POST',body:JSON.stringify({note:text})});
-    toast('Note saved'); if(kind==='c') openContact(id); else openProject(+id);
+    toast('Note saved'); if(kind==='c') openContact(id); else if(kind==='a') openAccount(+id); else openProject(+id);
   }catch(e){ toast('Could not save ('+e.message+')'); }
 }
 function projStagePicker(p){
@@ -659,6 +662,46 @@ async function renderOpps(b,co){
   else { h+='<div class="h">In the pipeline</div>'+d.opportunities.map(dealCard).join(''); }
   if(d.lost&&d.lost.length){ h+=`<div class="h" style="color:var(--mut)">Lost · ${d.lost.length}</div><div style="opacity:.55">`+d.lost.map(dealCard).join('')+'</div>'; }
   b.outerHTML='<div id="crmbody">'+h+'</div>';
+}
+let clTimer=null;
+function searchClients(){ clearTimeout(clTimer); clTimer=setTimeout(loadClients,280); }
+async function renderClients(b){
+  b.outerHTML=`<div id="crmbody">
+    <div class="srch">${ic('search',18)}<input id="clq" placeholder="Search clients…" oninput="searchClients()"></div>
+    <div id="cllist" class="empty">Loading…</div></div>`;
+  loadClients();
+}
+async function loadClients(){
+  const q=(document.getElementById('clq')||{}).value||''; const list=document.getElementById('cllist'); if(!list) return;
+  let rows; try{ rows=await api('/api/crm/accounts?q='+encodeURIComponent(q)); }catch(e){ rows=[]; }
+  list.innerHTML = rows.length? rows.map(a=>`<div class="card crow" style="cursor:pointer" onclick="openAccount(${a.id})">
+    <div class="cav">${esc(initials(a.name))}</div>
+    <div style="flex:1;min-width:0"><div class="cname">${esc(a.name)}</div>
+      <div class="csub">${a.contacts} contact${a.contacts==1?'':'s'} · ${a.deals} deal${a.deals==1?'':'s'}${a.won_value?' · '+dmoney(a.won_value)+' won':''}</div></div>
+    ${ic('chevron',18)}</div>`).join('') : '<div class="empty">No clients yet</div>';
+}
+async function openAccount(id){
+  const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
+  let a; try{ a=await api('/api/crm/account?id='+id); }catch(e){ a={}; }
+  const fld=(ic_,t)=>t?`<div class="dfld">${ic(ic_,15)} ${esc(t)}</div>`:'';
+  const contacts=(a.contacts||[]).map(c=>{ const n=((c.first_name||'')+' '+(c.last_name||'')).trim()||c.email;
+    return `<div class="crow" style="padding:7px 0;cursor:pointer" onclick="openContact('${esc(c.email)}')"><div class="cav" style="width:30px;height:30px;font-size:11px">${esc(initials(n))}</div><div style="flex:1;min-width:0"><div class="cname" style="font-size:14px">${esc(n)}${c.is_client?' <span class="chip" style="font-size:10px;color:#2ad17e">client</span>':''}</div><div class="csub">${esc(c.job_title||c.email)}</div></div>${stageChip(c.stage)}</div>`; }).join('');
+  const deals=(a.deals||[]).map(dealCard).join('');
+  v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>Client</b>
+      <button class="iconbtn sm" style="margin-left:auto" title="Rename" onclick="renameAccount(${a.id},'${esc(a.name||'')}')">${ic('edit',16)}</button></div>
+    <div class="card">
+      <div class="cname" style="font-size:18px">${esc(a.name||'')}</div>
+      <div class="dgrid">${fld('globe',a.domain||a.website)}${fld('pin',a.phone)}</div>
+      <div class="dsec"><div class="dlbl">Contacts (${(a.contacts||[]).length})</div>${contacts||'<div class="csub">None linked</div>'}</div>
+      <div class="dsec"><div class="dlbl">Deals (${(a.deals||[]).length})</div>${deals||'<div class="csub">None</div>'}</div>
+      ${noteBox('a',a.id)}
+      ${(a.history&&a.history.length)?`<div class="dsec"><div class="dlbl">History</div>${a.history.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
+    </div>`;
+}
+async function renameAccount(id,cur){
+  const name=prompt('Rename client company:', cur); if(!name||name===cur) return;
+  try{ await api('/api/crm/account/'+id+'/rename',{method:'POST',body:JSON.stringify({name})}); toast('Renamed'); openAccount(id); }
+  catch(e){ toast('Could not rename ('+e.message+')'); }
 }
 const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 let schedCompanies={}, schedKinds={};

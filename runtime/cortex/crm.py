@@ -231,6 +231,40 @@ def create_project(company: str, contact_email: str, title: str, value=None,
     return row["id"]
 
 
+# ---- Accounts = the directory of CLIENT companies (the customers; distinct from your own businesses) ----
+
+def get_or_create_account(name: str, domain: str | None = None) -> int:
+    ensure_deal_schema()
+    a = db.one("select id, domain from crm_accounts where lower(name)=lower(%s)", (name,))
+    if a:
+        if domain and not a.get("domain"):
+            db.execute("update crm_accounts set domain=%s where id=%s", (domain, a["id"]))
+        return a["id"]
+    return db.execute("insert into crm_accounts (name, domain) values (%s,%s) returning id", (name, domain))["id"]
+
+
+def link_account(account_id: int, deal_id: int | None = None, email: str | None = None) -> None:
+    if deal_id:
+        db.execute("update crm_projects set account_id=%s where id=%s", (account_id, deal_id))
+    if email:
+        db.execute("update crm_master set account_id=%s where lower(email)=lower(%s)", (account_id, email))
+
+
+def add_account_note(account_id: int, note: str) -> dict | None:
+    if not db.one("select 1 from crm_accounts where id=%s", (account_id,)):
+        return None
+    db.execute("update crm_accounts set history = history || %s::jsonb where id=%s",
+               (Json([{"ts": _now(), "event": "note", "text": (note or "")[:1200]}]), account_id))
+    return db.one("select * from crm_accounts where id=%s", (account_id,))
+
+
+def rename_account(account_id: int, name: str) -> dict | None:
+    if not db.one("select 1 from crm_accounts where id=%s", (account_id,)):
+        return None
+    db.execute("update crm_accounts set name=%s where id=%s", (name, account_id))
+    return db.one("select * from crm_accounts where id=%s", (account_id,))
+
+
 def ingest(inquiries: list[dict], company: str = "tabscanner") -> dict:
     added, matched = [], []
     for inq in inquiries:

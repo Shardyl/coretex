@@ -706,6 +706,56 @@ def crm_deal_remove_contact(id: int, email: str, _: None = Depends(auth)) -> dic
     return r
 
 
+@app.get("/api/crm/accounts")
+def crm_accounts(q: str | None = None, _: None = Depends(auth)) -> list[dict]:
+    """The client-company directory: each account with its contact + deal counts and won value."""
+    where, params = "", []
+    if q:
+        where = "where a.name ilike %s"; params.append(f"%{q}%")
+    return db.query(
+        "select a.id, a.name, a.domain, "
+        "(select count(*) from crm_master m where m.account_id=a.id) contacts, "
+        "(select count(*) from crm_projects p where p.account_id=a.id) deals, "
+        "(select coalesce(sum(value),0) from crm_projects p where p.account_id=a.id and p.stage = any(%s)) won_value "
+        f"from crm_accounts a {where} order by a.name", tuple([crm.WON_STAGES] + params))
+
+
+@app.get("/api/crm/account")
+def crm_account(id: int, _: None = Depends(auth)) -> dict:
+    a = db.one("select * from crm_accounts where id=%s", (id,))
+    if not a:
+        return {}
+    a["contacts"] = db.query("select first_name, last_name, email, job_title, stage, is_client "
+                             "from crm_master where account_id=%s order by first_name nulls last", (id,))
+    a["deals"] = db.query("select id, title, company, value, currency, stage from crm_projects "
+                          "where account_id=%s order by value desc nulls last, id", (id,))
+    return a
+
+
+@app.post("/api/crm/account/{id}/note")
+def crm_account_note(id: int, body: NoteBody, _: None = Depends(auth)) -> dict:
+    if not (body.note or "").strip():
+        raise HTTPException(status_code=400, detail="note required")
+    r = crm.add_account_note(id, body.note.strip())
+    if not r:
+        raise HTTPException(status_code=404, detail="account not found")
+    return r
+
+
+class RenameBody(BaseModel):
+    name: str
+
+
+@app.post("/api/crm/account/{id}/rename")
+def crm_account_rename(id: int, body: RenameBody, _: None = Depends(auth)) -> dict:
+    if not (body.name or "").strip():
+        raise HTTPException(status_code=400, detail="name required")
+    r = crm.rename_account(id, body.name.strip())
+    if not r:
+        raise HTTPException(status_code=404, detail="account not found")
+    return r
+
+
 @app.get("/api/gmail/status")
 def gmail_status(_: None = Depends(auth)) -> dict:
     return {"connected": gmail.connected(), "account": db.setting_get("gmail_account"),
