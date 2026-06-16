@@ -544,11 +544,14 @@ def crm_summary(company: str | None = None, _: None = Depends(auth)) -> dict:
     stages = {r["s"]: r["n"] for r in
               db.query(f"select coalesce(nullif(stage,''),'Cold') s, count(*) n from crm_master {w} group by s", tuple(p))}
     pf, pp = _org_like(company, "company")
-    pw = f"where {pf}" if pf else ""
-    proj = db.one(f"select count(*) n, coalesce(sum(value),0) v from crm_projects {pw}", tuple(pp))
+    pclause = (" and " + pf) if pf else ""
+    won = db.one(f"select count(*) n, coalesce(sum(value),0) v from crm_projects where stage = any(%s){pclause}",
+                 tuple([crm.WON_STAGES] + pp))
+    fc = db.one(f"select count(*) n, coalesce(sum(value),0) v from crm_projects where stage = any(%s){pclause}",
+                tuple([crm.FORECAST_STAGES] + pp))
     return {"contacts": contacts, "stages": stages,
-            "opportunities": stages.get("Opportunity", 0) + stages.get("Quote", 0),
-            "projects": proj["n"], "project_value": float(proj["v"] or 0)}
+            "opportunities": fc["n"], "opportunity_value": float(fc["v"] or 0),
+            "projects": won["n"], "project_value": float(won["v"] or 0)}
 
 
 @app.get("/api/crm/contacts")
@@ -579,12 +582,15 @@ def crm_contact(email: str, _: None = Depends(auth)) -> dict:
 @app.get("/api/crm/projects")
 def crm_projects(company: str | None = None, _: None = Depends(auth)) -> dict:
     f, p = _org_like(company, "company")
-    w = f"where {f}" if f else ""
+    conds = ["stage = any(%s)"]; params: list = [crm.WON_STAGES]
+    if f:
+        conds.append(f); params += p
+    w = "where " + " and ".join(conds)
     rows = db.query(f"select id, company, title, contact_email, value, currency, stage, owner from crm_projects {w} "
                     "order by case stage when 'Booked' then 1 when 'Production' then 2 when 'Delivered' then 3 "
-                    "when 'Final Payment' then 4 else 5 end, value desc nulls last", tuple(p))
-    groups = db.query(f"select stage, count(*) n, coalesce(sum(value),0) v from crm_projects {w} group by stage", tuple(p))
-    total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects {w}", tuple(p))
+                    "when 'Final Payment' then 4 else 5 end, value desc nulls last", tuple(params))
+    groups = db.query(f"select stage, count(*) n, coalesce(sum(value),0) v from crm_projects {w} group by stage", tuple(params))
+    total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects {w}", tuple(params))
     return {"projects": rows, "groups": {g["stage"]: {"n": g["n"], "value": float(g["v"] or 0)} for g in groups},
             "total_value": float(total["v"] or 0), "count": total["n"]}
 
@@ -600,22 +606,27 @@ class ProjectStageBody(BaseModel):
 
 @app.post("/api/crm/project/{id}/stage")
 def crm_project_stage(id: int, body: ProjectStageBody, _: None = Depends(auth)) -> dict:
-    if body.stage not in crm.PROJECT_STAGES:
-        raise HTTPException(status_code=400, detail=f"stage must be one of {crm.PROJECT_STAGES}")
+    if body.stage not in crm.DEAL_STAGES:
+        raise HTTPException(status_code=400, detail=f"stage must be one of {crm.DEAL_STAGES}")
     r = crm.set_project_stage(id, body.stage)
     if not r:
-        raise HTTPException(status_code=404, detail="project not found")
+        raise HTTPException(status_code=404, detail="deal not found")
     return r
 
 
 @app.get("/api/crm/opportunities")
-def crm_opportunities(company: str | None = None, _: None = Depends(auth)) -> list[dict]:
-    f, p = _org_like(company)
-    clause = (f + " and ") if f else ""
-    return db.query(
-        "select first_name, last_name, email, organisation, company_name, stage, tier, note "
-        f"from crm_master where {clause} stage in ('Opportunity','Quote') order by tier nulls last, first_name",
-        tuple(p))
+def crm_opportunities(company: str | None = None, _: None = Depends(auth)) -> dict:
+    """Forecast deals (Opportunity/Quote) with values + a running total — same deal records as Projects,
+    just on the pre-Booked side of the line."""
+    f, p = _org_like(company, "company")
+    conds = ["stage = any(%s)"]; params: list = [crm.FORECAST_STAGES]
+    if f:
+        conds.append(f); params += p
+    w = "where " + " and ".join(conds)
+    rows = db.query(f"select id, company, title, contact_email, value, currency, stage, owner from crm_projects {w} "
+                    "order by value desc nulls last, id", tuple(params))
+    total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects {w}", tuple(params))
+    return {"opportunities": rows, "total_value": float(total["v"] or 0), "count": total["n"]}
 
 
 @app.get("/api/gmail/status")

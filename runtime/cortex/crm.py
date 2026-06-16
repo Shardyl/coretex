@@ -84,13 +84,17 @@ def add_inquiry(inq: dict, company: str = "tabscanner") -> tuple[str, str | None
     return ("added", email)
 
 
-# ---- Projects = real won work (created when a quote is accepted -> Booked) ----
-
-PROJECT_STAGES = ["Booked", "Production", "Delivered", "Final Payment", "Close & review"]
+# ---- Deals = the full lifecycle in crm_projects. Forecast stages show on the Opportunities screen;
+#      won/ongoing stages show on the Projects screen. Crossing 'Booked' promotes an opportunity to a project.
+FORECAST_STAGES = ["Opportunity", "Quote"]
+WON_STAGES = ["Booked", "Production", "Delivered", "Final Payment", "Close & review"]
+DEAL_STAGES = FORECAST_STAGES + WON_STAGES
+PROJECT_STAGES = DEAL_STAGES   # back-compat alias (any valid deal stage)
 
 
 def set_project_stage(project_id: int, stage: str) -> dict | None:
-    """Move a project to a new stage; logs the change on the project + the linked contact's history."""
+    """Move a deal to a new stage; logs the change, and (un)marks the linked contact a client across the
+    Booked boundary. Moving across 'Booked' shifts it between the Opportunities and Projects screens."""
     p = db.one("select * from crm_projects where id=%s", (project_id,))
     if not p:
         return None
@@ -99,7 +103,9 @@ def set_project_stage(project_id: int, stage: str) -> dict | None:
     db.execute("update crm_projects set stage=%s, history = history || %s::jsonb, updated_at=now() where id=%s",
                (stage, Json([ev]), project_id))
     if p.get("contact_email"):
-        log_event(p["contact_email"], "project_stage", f"{p['title']}: {old} -> {stage}")
+        db.execute("update crm_master set is_client=%s where lower(email)=lower(%s)",
+                   (stage in WON_STAGES, p["contact_email"]))
+        log_event(p["contact_email"], "deal_stage", f"{p['title']}: {old} -> {stage}")
     return db.one("select * from crm_projects where id=%s", (project_id,))
 
 def create_project(company: str, contact_email: str, title: str, value=None,
@@ -113,8 +119,10 @@ def create_project(company: str, contact_email: str, title: str, value=None,
         (org, (contact_email or "").lower(), title, value, currency, stage, owner, quote_ref, note,
          Json([{"ts": _now(), "event": "project_created", "text": f"{title} ({stage})"}])))
     if contact_email:
-        db.execute("update crm_master set is_client=true where lower(email)=lower(%s)", (contact_email,))
-        log_event(contact_email, "project_booked", f"Project: {title}" + (f" ({value} {currency})" if value else ""), company)
+        if stage in WON_STAGES:
+            db.execute("update crm_master set is_client=true where lower(email)=lower(%s)", (contact_email,))
+        log_event(contact_email, "deal_created", f"{title} ({stage})"
+                  + (f" — {value} {currency}" if value else ""), company)
     return row["id"]
 
 

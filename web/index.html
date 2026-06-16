@@ -540,7 +540,8 @@ async function openContact(email){
     ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:${h.event==='reply_sent'?'#2ad17e':'#00DAFF'}"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
     </div>`;
 }
-const PROJ_STAGES=['Booked','Production','Delivered','Final Payment','Close & review'];
+const PROJ_STAGES=['Opportunity','Quote','Booked','Production','Delivered','Final Payment','Close & review'];
+const FORECAST_STAGES=['Opportunity','Quote'];
 function projStagePicker(p){
   return `<div class="dsec"><div class="dlbl">Change stage</div><div class="chiprow">${PROJ_STAGES.map((s,i)=>{
     const on=s===p.stage, c=STAGECOL[s]||'#8597A6';
@@ -556,8 +557,9 @@ async function openProject(id){
   const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
   let p; try{ p=await api('/api/crm/project?id='+id); }catch(e){ p={}; }
   const money=n=>Math.round(n||0).toLocaleString(); const hist=(p.history||[]);
+  const forecast=FORECAST_STAGES.includes(p.stage);
   const fld=(ic_,t)=>t?`<div class="dfld">${ic(ic_,15)} ${esc(t)}</div>`:'';
-  v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>Project</b></div>
+  v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>${forecast?'Opportunity':'Project'}</b></div>
     <div class="card">
       <div class="cname" style="font-size:17px">${esc(p.title||'Untitled')}</div>
       <div class="csub" style="margin-bottom:10px">${esc(p.company||'')}</div>
@@ -581,12 +583,13 @@ async function renderProjects(b,co){
   b.outerHTML='<div id="crmbody">'+h+'</div>';
 }
 async function renderOpps(b,co){
-  let list; try{ list=await api('/api/crm/opportunities?company='+encodeURIComponent(co||'all')); }catch(e){ list=[]; }
-  const a=list.filter(o=>String(o.tier||'').toUpperCase()==='A').length;
-  let h=`<div class="mrow"><div class="mcard"><div class="ml">Open opportunities</div><div class="mv">${list.length}</div></div>
-    <div class="mcard"><div class="ml">A-tier (priority)</div><div class="mv" style="color:var(--accent)">${a}</div></div></div><div class="h">In the pipeline</div>`;
-  h+= list.length? list.map(o=>{ const n=((o.first_name||'')+' '+(o.last_name||'')).trim()||o.email;
-    return `<div class="card" style="cursor:pointer" onclick="openContact('${esc(o.email)}')"><div class="orow"><span class="cname" style="flex:1">${esc(o.company_name||n)}</span>${stageChip(o.stage)}</div><div class="csub" style="margin-top:5px">${esc((o.note||'').slice(0,130))}</div></div>`; }).join('') : '<div class="empty">No open opportunities</div>';
+  let d; try{ d=await api('/api/crm/opportunities?company='+encodeURIComponent(co||'all')); }catch(e){ d={opportunities:[],total_value:0,count:0}; }
+  const money=n=>Math.round(n||0).toLocaleString();
+  let h=`<div class="mrow"><div class="mcard"><div class="ml">Forecast value</div><div class="mv">${(d.total_value/1e6).toFixed(2)}M <span style="font-size:12px;color:var(--mut)">AED</span></div></div>
+    <div class="mcard"><div class="ml">Open opportunities</div><div class="mv">${d.count}</div></div></div><div class="h">In the pipeline</div>`;
+  h+= d.opportunities.length? d.opportunities.map(o=>
+    `<div class="card prow" style="cursor:pointer" onclick="openProject(${o.id})"><div style="flex:1;min-width:0"><div class="cname">${esc(o.title||'Untitled')}</div><div class="csub">${esc(o.company||'')}</div></div><div style="text-align:right"><div class="pval">${o.value?money(o.value):'<span style=\"color:var(--mut)\">no value yet</span>'}</div>${stageChip(o.stage)}</div></div>`
+    ).join('') : '<div class="empty">No open opportunities</div>';
   b.outerHTML='<div id="crmbody">'+h+'</div>';
 }
 const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
