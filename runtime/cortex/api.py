@@ -406,6 +406,82 @@ def usage(days: int = 7, _: None = Depends(auth)) -> dict:
     return {"days": days, "total": tot, "by_model": by_model, "by_purpose": by_purpose, "by_day": by_day}
 
 
+# ---------- CRM: contacts / projects / opportunities (read views for the cockpit pages) ----------
+
+_CRM_ORG = {"tabscanner": "Tabscanner", "sensa": "Sensa", "skyvision": "Sky Vision",
+            "filmspoke": "FilmSpoke", "snaprewards": "Snap Rewards"}
+
+
+def _org_like(company: str | None, col: str = "organisation"):
+    """(sql_fragment, params) filtering a company by its Organisation label; '' / all = no filter."""
+    if not company or company in ("all", ""):
+        return "", []
+    return f"{col} ilike %s", [f"%{_CRM_ORG.get(company, company.title())}%"]
+
+
+@app.get("/api/crm/summary")
+def crm_summary(company: str | None = None, _: None = Depends(auth)) -> dict:
+    f, p = _org_like(company)
+    w = f"where {f}" if f else ""
+    contacts = db.one(f"select count(*) n from crm_master {w}", tuple(p))["n"]
+    stages = {r["s"]: r["n"] for r in
+              db.query(f"select coalesce(nullif(stage,''),'Cold') s, count(*) n from crm_master {w} group by s", tuple(p))}
+    pf, pp = _org_like(company, "company")
+    pw = f"where {pf}" if pf else ""
+    proj = db.one(f"select count(*) n, coalesce(sum(value),0) v from crm_projects {pw}", tuple(pp))
+    return {"contacts": contacts, "stages": stages,
+            "opportunities": stages.get("Opportunity", 0) + stages.get("Quote", 0),
+            "projects": proj["n"], "project_value": float(proj["v"] or 0)}
+
+
+@app.get("/api/crm/contacts")
+def crm_contacts(company: str | None = None, q: str | None = None, stage: str | None = None,
+                 limit: int = 50, _: None = Depends(auth)) -> list[dict]:
+    clauses, params = [], []
+    f, p = _org_like(company)
+    if f:
+        clauses.append(f); params += p
+    if q:
+        clauses.append("(first_name ilike %s or last_name ilike %s or email ilike %s or company_name ilike %s)")
+        params += [f"%{q}%"] * 4
+    if stage and stage != "All":
+        clauses.append("stage = %s"); params.append(stage)
+    where = ("where " + " and ".join(clauses)) if clauses else ""
+    params.append(limit)
+    return db.query(
+        "select first_name, last_name, email, organisation, company_name, job_title, stage, tier, "
+        f"is_client, lead_source from crm_master {where} order by first_name nulls last limit %s", tuple(params))
+
+
+@app.get("/api/crm/contact")
+def crm_contact(email: str, _: None = Depends(auth)) -> dict:
+    r = db.one("select * from crm_master where lower(email)=lower(%s) limit 1", (email,))
+    return r or {}
+
+
+@app.get("/api/crm/projects")
+def crm_projects(company: str | None = None, _: None = Depends(auth)) -> dict:
+    f, p = _org_like(company, "company")
+    w = f"where {f}" if f else ""
+    rows = db.query(f"select id, company, title, contact_email, value, currency, stage, owner from crm_projects {w} "
+                    "order by case stage when 'Booked' then 1 when 'Production' then 2 when 'Delivered' then 3 "
+                    "when 'Final Payment' then 4 else 5 end, value desc nulls last", tuple(p))
+    groups = db.query(f"select stage, count(*) n, coalesce(sum(value),0) v from crm_projects {w} group by stage", tuple(p))
+    total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects {w}", tuple(p))
+    return {"projects": rows, "groups": {g["stage"]: {"n": g["n"], "value": float(g["v"] or 0)} for g in groups},
+            "total_value": float(total["v"] or 0), "count": total["n"]}
+
+
+@app.get("/api/crm/opportunities")
+def crm_opportunities(company: str | None = None, _: None = Depends(auth)) -> list[dict]:
+    f, p = _org_like(company)
+    clause = (f + " and ") if f else ""
+    return db.query(
+        "select first_name, last_name, email, organisation, company_name, stage, tier, note "
+        f"from crm_master where {clause} stage in ('Opportunity','Quote') order by tier nulls last, first_name",
+        tuple(p))
+
+
 @app.get("/api/gmail/status")
 def gmail_status(_: None = Depends(auth)) -> dict:
     return {"connected": gmail.connected(), "account": db.setting_get("gmail_account"),
