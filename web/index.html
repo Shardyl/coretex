@@ -511,12 +511,13 @@ async function renderCRM(v){
   if(crmView==='opps') return renderOpps(b,co);
   return renderContacts(b,co);
 }
-let cqTimer=null;
+let cqTimer=null, contactOrder=[];
 function searchContacts(){ clearTimeout(cqTimer); cqTimer=setTimeout(()=>{ const co=document.getElementById('coSel').value; loadContacts(co); },280); }
 async function loadContacts(co,stage){
   const q=(document.getElementById('cq')||{}).value||''; const list=document.getElementById('clist'); if(!list) return;
   list.innerHTML='<div class="empty">Loading…</div>';
   let rows; try{ rows=await api(`/api/crm/contacts?company=${encodeURIComponent(co||'all')}&q=${encodeURIComponent(q)}${stage&&stage!=='All'?'&stage='+encodeURIComponent(stage):''}&limit=40`); }catch(e){ rows=[]; }
+  contactOrder = rows.map(r=>r.email);
   list.innerHTML = rows.length? rows.map(contactRow).join('') : '<div class="empty">No contacts</div>';
 }
 function filterStage(s){ document.querySelectorAll('.fchip').forEach(c=>c.classList.toggle('on', c.dataset.stage===s)); loadContacts(document.getElementById('coSel').value, s); }
@@ -715,7 +716,9 @@ async function saveEditDeal(id){
     toast('Saved'); openProject(id); }
   catch(e){ toast('Could not save ('+e.message+')'); } finally{ _saving=false; }
 }
-async function deleteContact(email){ if(!confirm('Delete this contact permanently? This removes them from the database.')) return; try{ await api('/api/crm/contact?email='+encodeURIComponent(email),{method:'DELETE'}); toast('Contact deleted'); go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
+async function deleteContact(email){ if(!confirm('Delete this contact permanently? This removes them from the database.')) return; try{ await api('/api/crm/contact?email='+encodeURIComponent(email),{method:'DELETE'}); toast('Contact deleted');
+  const i=contactOrder.indexOf(email); if(i>=0) contactOrder.splice(i,1); const next=(i>=0)?(contactOrder[i]||contactOrder[i-1]):null;
+  if(next) openContact(next); else go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
 async function deleteDeal(id){ if(!confirm('Delete this deal permanently? This removes it from the database.')) return; try{ await api('/api/crm/project/'+id,{method:'DELETE'}); toast('Deal deleted'); go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
 async function deleteAccount(id){ if(!confirm('Delete this company permanently? Its contacts and deals stay but get unlinked from it.')) return; try{ await api('/api/crm/account/'+id,{method:'DELETE'}); toast('Company deleted'); go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
 function openNewCompany(){
