@@ -723,10 +723,21 @@ async function deleteDeal(id){ if(!confirm('Delete this deal permanently? This r
 async function deleteAccount(id){ if(!confirm('Delete this organisation permanently? Its contacts and deals stay but get unlinked from it.')) return; try{ await api('/api/crm/account/'+id,{method:'DELETE'}); toast('Organisation deleted'); go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
 function openNewCompany(){
   document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')">${ic('back',18)}</button><b>New organisation</b></div>
-    <div class="card"><label>Organisation name</label><input id="na_name" class="fsel">
+    <div class="card"><label>Organisation name</label><input id="na_name" class="fsel" oninput="orgSearch()" placeholder="Type to search or create…">
+      <div id="na_matches" class="csub" style="margin:7px 2px 0"></div>
       <label>Website</label><input id="na_web" class="fsel" placeholder="https://…">
       <label>Phone</label><input id="na_phone" class="fsel">
       <div class="row" style="margin-top:12px"><button class="btn go" onclick="saveNewCompany()">Create organisation</button><button class="btn" onclick="go('crm')">Cancel</button></div></div>`;
+  setTimeout(()=>{ const e=document.getElementById('na_name'); if(e) e.focus(); }, 60);
+}
+let orgTimer=null;
+function orgSearch(){ clearTimeout(orgTimer); orgTimer=setTimeout(orgSearchLoad,250); }
+async function orgSearchLoad(){
+  const q=fval('na_name').trim(); const box=document.getElementById('na_matches'); if(!box) return;
+  if(q.length<2){ box.innerHTML=''; return; }
+  let rows; try{ rows=await api('/api/crm/accounts?q='+encodeURIComponent(q)); }catch(e){ rows=[]; }
+  if(!rows.length){ box.innerHTML='<span style="color:#2ad17e">No match — "Create organisation" will add it as new.</span>'; return; }
+  box.innerHTML='<div style="margin-bottom:4px">Already in the CRM — tap to open instead of creating a duplicate:</div>'+rows.slice(0,6).map(a=>`<div class="crow" style="padding:6px 0;cursor:pointer;border-bottom:1px solid var(--line)" onclick="openAccount(${a.id})"><div class="cav" style="width:28px;height:28px;font-size:10px">${esc(initials(a.name))}</div><div style="flex:1;min-width:0"><div class="cname" style="font-size:14px">${esc(a.name)}</div><div class="csub">${a.contacts} contact${a.contacts==1?'':'s'} · ${a.deals} deal${a.deals==1?'':'s'}</div></div>${ic('chevron',16)}</div>`).join('');
 }
 async function saveNewCompany(){
   const name=fval('na_name').trim(); if(!name){ toast('Name is required'); return; }
