@@ -595,8 +595,11 @@ def crm_projects(company: str | None = None, _: None = Depends(auth)) -> dict:
                     "when 'Final Payment' then 4 else 5 end, value desc nulls last", tuple(params))
     groups = db.query(f"select stage, count(*) n, coalesce(sum(value),0) v from crm_projects {w} group by stage", tuple(params))
     total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects {w}", tuple(params))
+    cur = db.query(f"select coalesce(nullif(currency,''),'AED') c, coalesce(sum(value),0) v from crm_projects {w} "
+                   "and value is not null group by c", tuple(params))
     return {"projects": rows, "groups": {g["stage"]: {"n": g["n"], "value": float(g["v"] or 0)} for g in groups},
-            "total_value": float(total["v"] or 0), "count": total["n"]}
+            "total_value": float(total["v"] or 0), "count": total["n"],
+            "currencies": {r["c"]: float(r["v"] or 0) for r in cur if float(r["v"] or 0) > 0}}
 
 
 @app.get("/api/crm/project")
@@ -771,9 +774,12 @@ def crm_opportunities(company: str | None = None, _: None = Depends(auth)) -> di
                         f"from crm_projects where {' and '.join(base)} order by value desc nulls last, id", tuple(params))
     rows = run(crm.FORECAST_STAGES)
     lost = run([crm.LOST_STAGE])
-    total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects where {' and '.join(base)}",
-                   tuple([crm.FORECAST_STAGES] + (p if f else [])))
-    return {"opportunities": rows, "lost": lost, "total_value": float(total["v"] or 0), "count": total["n"]}
+    fparams = [crm.FORECAST_STAGES] + (p if f else [])
+    total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects where {' and '.join(base)}", tuple(fparams))
+    cur = db.query(f"select coalesce(nullif(currency,''),'AED') c, coalesce(sum(value),0) v from crm_projects "
+                   f"where {' and '.join(base)} and value is not null group by c", tuple(fparams))
+    return {"opportunities": rows, "lost": lost, "total_value": float(total["v"] or 0), "count": total["n"],
+            "currencies": {r["c"]: float(r["v"] or 0) for r in cur if float(r["v"] or 0) > 0}}
 
 
 class ContactStageBody(BaseModel):
