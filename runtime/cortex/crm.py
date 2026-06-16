@@ -361,6 +361,22 @@ def set_deal_account(deal_id: int, account_id) -> dict | None:
     return db.one("select * from crm_projects where id=%s", (deal_id,))
 
 
+def delete_contact(email: str) -> None:
+    db.execute("update crm_projects set contact_email=NULL where lower(contact_email)=lower(%s)", (email,))
+    db.execute("delete from crm_master where lower(email)=lower(%s)", (email,))
+
+
+def delete_account(account_id: int) -> None:
+    """Delete a client company; its contacts and deals are kept but unlinked from it."""
+    db.execute("update crm_master set account_id=NULL where account_id=%s", (account_id,))
+    db.execute("update crm_projects set account_id=NULL where account_id=%s", (account_id,))
+    db.execute("delete from crm_accounts where id=%s", (account_id,))
+
+
+def delete_deal(deal_id: int) -> None:
+    db.execute("delete from crm_projects where id=%s", (deal_id,))
+
+
 def ingest(inquiries: list[dict], company: str = "tabscanner") -> dict:
     added, matched = [], []
     for inq in inquiries:
