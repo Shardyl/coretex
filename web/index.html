@@ -570,26 +570,32 @@ async function openProject(id){
       ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
     </div>`;
 }
+const dmoney=n=>Math.round(n||0).toLocaleString();
+function byCompany(rows){ const g={}; rows.forEach(r=>{ const k=r.company||'Other'; (g[k]=g[k]||[]).push(r); }); return g; }
+function dealCard(x){
+  return `<div class="card prow" style="cursor:pointer" onclick="openProject(${x.id})"><div style="flex:1;min-width:0"><div class="cname">${esc(x.title||'Untitled')}</div><div class="csub">${esc(x.company||'')}</div></div><div style="text-align:right"><div class="pval">${x.value?dmoney(x.value):'<span style="color:var(--mut)">no value yet</span>'}</div>${stageChip(x.stage)}</div></div>`;
+}
 async function renderProjects(b,co){
   let d; try{ d=await api('/api/crm/projects?company='+encodeURIComponent(co||'all')); }catch(e){ d={projects:[],groups:{},total_value:0,count:0}; }
-  const money=n=>Math.round(n||0).toLocaleString();
+  const allco=!co;
   let h=`<div class="mrow"><div class="mcard"><div class="ml">Pipeline value</div><div class="mv">${(d.total_value/1e6).toFixed(2)}M <span style="font-size:12px;color:var(--mut)">AED</span></div></div>
     <div class="mcard"><div class="ml">Active projects</div><div class="mv">${d.count}</div></div></div>`;
-  ['Booked','Production','Delivered','Final Payment','Close & review'].forEach(st=>{ const g=d.groups[st]; if(!g) return;
-    h+=`<div class="h">${esc(st)} · ${g.n} · ${money(g.value)}</div>`;
-    d.projects.filter(p=>p.stage===st).forEach(p=>{ h+=`<div class="card prow" style="cursor:pointer" onclick="openProject(${p.id})"><div style="flex:1;min-width:0"><div class="cname">${esc(p.title||'Untitled')}</div><div class="csub">${esc(p.company||'')}</div></div><div style="text-align:right"><div class="pval">${money(p.value)}</div>${stageChip(p.stage)}</div></div>`; });
-  });
-  if(!d.count) h+='<div class="empty">No projects yet</div>';
+  if(!d.count){ h+='<div class="empty">No projects yet</div>'; }
+  else if(allco){ const g=byCompany(d.projects); Object.keys(g).sort().forEach(cn=>{ const it=g[cn], s=it.reduce((a,p)=>a+(+p.value||0),0);
+    h+=`<div class="h">${esc(cn)} · ${it.length} · ${dmoney(s)}</div>`+it.map(dealCard).join(''); }); }
+  else { ['Booked','Production','Delivered','Final Payment','Close & review'].forEach(st=>{ const g=d.groups[st]; if(!g) return;
+    h+=`<div class="h">${esc(st)} · ${g.n} · ${dmoney(g.value)}</div>`+d.projects.filter(p=>p.stage===st).map(dealCard).join(''); }); }
   b.outerHTML='<div id="crmbody">'+h+'</div>';
 }
 async function renderOpps(b,co){
   let d; try{ d=await api('/api/crm/opportunities?company='+encodeURIComponent(co||'all')); }catch(e){ d={opportunities:[],total_value:0,count:0}; }
-  const money=n=>Math.round(n||0).toLocaleString();
+  const allco=!co;
   let h=`<div class="mrow"><div class="mcard"><div class="ml">Forecast value</div><div class="mv">${(d.total_value/1e6).toFixed(2)}M <span style="font-size:12px;color:var(--mut)">AED</span></div></div>
-    <div class="mcard"><div class="ml">Open opportunities</div><div class="mv">${d.count}</div></div></div><div class="h">In the pipeline</div>`;
-  h+= d.opportunities.length? d.opportunities.map(o=>
-    `<div class="card prow" style="cursor:pointer" onclick="openProject(${o.id})"><div style="flex:1;min-width:0"><div class="cname">${esc(o.title||'Untitled')}</div><div class="csub">${esc(o.company||'')}</div></div><div style="text-align:right"><div class="pval">${o.value?money(o.value):'<span style=\"color:var(--mut)\">no value yet</span>'}</div>${stageChip(o.stage)}</div></div>`
-    ).join('') : '<div class="empty">No open opportunities</div>';
+    <div class="mcard"><div class="ml">Open opportunities</div><div class="mv">${d.count}</div></div></div>`;
+  if(!d.opportunities.length){ h+='<div class="empty">No open opportunities</div>'; }
+  else if(allco){ const g=byCompany(d.opportunities); Object.keys(g).sort().forEach(cn=>{ const it=g[cn], s=it.reduce((a,o)=>a+(+o.value||0),0);
+    h+=`<div class="h">${esc(cn)} · ${it.length}${s?' · '+dmoney(s):''}</div>`+it.map(dealCard).join(''); }); }
+  else { h+='<div class="h">In the pipeline</div>'+d.opportunities.map(dealCard).join(''); }
   b.outerHTML='<div id="crmbody">'+h+'</div>';
 }
 const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
