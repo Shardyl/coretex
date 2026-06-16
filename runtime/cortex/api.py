@@ -601,7 +601,89 @@ def crm_projects(company: str | None = None, _: None = Depends(auth)) -> dict:
 
 @app.get("/api/crm/project")
 def crm_project(id: int, _: None = Depends(auth)) -> dict:
-    return db.one("select * from crm_projects where id=%s", (id,)) or {}
+    p = db.one("select * from crm_projects where id=%s", (id,))
+    if not p:
+        return {}
+    if p.get("account_id"):                  # company-mediated: a deal's people = its client company's contacts
+        p["account"] = db.one("select id, name, domain from crm_accounts where id=%s", (p["account_id"],))
+        p["account_contacts"] = db.query(
+            "select first_name, last_name, email, job_title, stage, is_client from crm_master "
+            "where account_id=%s order by first_name nulls last", (p["account_id"],))
+    return p
+
+
+class NewContactBody(BaseModel):
+    first_name: str = ""
+    last_name: str = ""
+    email: str
+    account_id: int | None = None
+    company: str | None = None       # which of YOUR businesses (slug)
+    phone: str | None = None
+    job_title: str | None = None
+    stage: str = "Cold"
+
+
+@app.post("/api/crm/contacts/new")
+def crm_create_contact(body: NewContactBody, _: None = Depends(auth)) -> dict:
+    if not (body.email or "").strip():
+        raise HTTPException(status_code=400, detail="email required")
+    return crm.create_contact(body.first_name, body.last_name, body.email, body.account_id,
+                              body.company, body.phone, body.job_title, body.stage)
+
+
+class NewAccountBody(BaseModel):
+    name: str
+    domain: str | None = None
+    website: str | None = None
+    phone: str | None = None
+
+
+@app.post("/api/crm/accounts/new")
+def crm_create_account(body: NewAccountBody, _: None = Depends(auth)) -> dict:
+    if not (body.name or "").strip():
+        raise HTTPException(status_code=400, detail="name required")
+    return crm.create_account(body.name, body.domain, body.website, body.phone)
+
+
+class NewDealBody(BaseModel):
+    company: str                     # your business slug (sensa/tabscanner/...)
+    title: str
+    value: float | None = None
+    currency: str = "AED"
+    stage: str = "Opportunity"
+    account_id: int | None = None
+
+
+@app.post("/api/crm/deals/new")
+def crm_create_deal(body: NewDealBody, _: None = Depends(auth)) -> dict:
+    if not (body.title or "").strip():
+        raise HTTPException(status_code=400, detail="title required")
+    if body.stage not in crm.DEAL_STAGES:
+        raise HTTPException(status_code=400, detail=f"stage must be one of {crm.DEAL_STAGES}")
+    return crm.create_deal(body.company, body.title, body.value, body.currency, body.stage, body.account_id)
+
+
+class AssignAccountBody(BaseModel):
+    account_id: int | None = None
+    email: str | None = None
+
+
+@app.post("/api/crm/contact/company")
+def crm_contact_company(body: AssignAccountBody, _: None = Depends(auth)) -> dict:
+    if not body.email:
+        raise HTTPException(status_code=400, detail="email required")
+    r = crm.set_contact_account(body.email, body.account_id)
+    if not r:
+        raise HTTPException(status_code=404, detail="contact not found")
+    return r
+
+
+@app.post("/api/crm/project/{id}/account")
+def crm_deal_company(id: int, body: AssignAccountBody, _: None = Depends(auth)) -> dict:
+    r = crm.set_deal_account(id, body.account_id)
+    if not r:
+        raise HTTPException(status_code=404, detail="deal not found")
+    return r
 
 
 class ProjectStageBody(BaseModel):

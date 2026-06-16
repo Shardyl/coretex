@@ -280,6 +280,85 @@ def rename_account(account_id: int, name: str) -> dict | None:
     return db.one("select * from crm_accounts where id=%s", (account_id,))
 
 
+# ---- Manual creates (cockpit + Cortex): a company, a contact (under a company), a deal (for a company) ----
+
+def create_account(name: str, domain: str | None = None, website: str | None = None,
+                   phone: str | None = None) -> dict:
+    aid = get_or_create_account(name.strip(), domain)
+    if website or phone:
+        db.execute("update crm_accounts set website=coalesce(%s,website), phone=coalesce(%s,phone) where id=%s",
+                   (website, phone, aid))
+    return db.one("select * from crm_accounts where id=%s", (aid,))
+
+
+def _account_has_won(account_id) -> bool:
+    return bool(account_id and db.one("select 1 from crm_projects where account_id=%s and stage = any(%s) limit 1",
+                                      (account_id, WON_STAGES)))
+
+
+def create_contact(first_name: str, last_name: str, email: str, account_id=None, company: str | None = None,
+                   phone: str | None = None, job_title: str | None = None, stage: str = "Cold") -> dict:
+    ensure_schema()
+    email = (email or "").strip().lower()
+    if not email:
+        raise ValueError("email required")
+    cn = dom = None
+    if account_id:
+        a = db.one("select name, domain from crm_accounts where id=%s", (account_id,))
+        if a:
+            cn, dom = a["name"], a.get("domain")
+    ex = db.one("select id from crm_master where lower(email)=lower(%s)", (email,))
+    if ex:
+        db.execute("update crm_master set first_name=%s, last_name=%s, account_id=coalesce(%s,account_id), "
+                   "company_name=coalesce(%s,company_name), phone=coalesce(%s,phone), "
+                   "job_title=coalesce(%s,job_title), updated_at=now() where id=%s",
+                   (first_name, last_name, account_id, cn, phone, job_title, ex["id"]))
+    else:
+        db.execute("insert into crm_master (organisation, first_name, last_name, email, account_id, company_name, "
+                   "company_domain, phone, job_title, stage, lead_source) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                   (_org(company) if company else "", first_name, last_name, email, account_id, cn, dom,
+                    phone, job_title, stage, "Manual"))
+    if _account_has_won(account_id):
+        db.execute("update crm_master set is_client=true where lower(email)=lower(%s)", (email,))
+    return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
+
+
+def create_deal(company: str, title: str, value=None, currency: str = "AED", stage: str = "Opportunity",
+                account_id=None, owner: str | None = None) -> dict:
+    """A deal belongs to one of YOUR businesses (company) and one CLIENT company (account). Its people are
+    that account's contacts (company-mediated — no per-deal contact list)."""
+    row = db.execute(
+        "insert into crm_projects (company, title, value, currency, stage, owner, account_id, history) "
+        "values (%s,%s,%s,%s,%s,%s,%s,%s) returning id",
+        (_org(company), title, value, currency, stage, owner, account_id,
+         Json([{"ts": _now(), "event": "deal_created", "text": f"{title} ({stage})"}])))
+    if account_id and stage in WON_STAGES:
+        flag_clients_for_deal(db.one("select * from crm_projects where id=%s", (row["id"],)))
+    return db.one("select * from crm_projects where id=%s", (row["id"],))
+
+
+def set_contact_account(email: str, account_id) -> dict | None:
+    if not db.one("select 1 from crm_master where lower(email)=lower(%s)", (email,)):
+        return None
+    a = db.one("select name from crm_accounts where id=%s", (account_id,)) if account_id else None
+    db.execute("update crm_master set account_id=%s, company_name=coalesce(%s,company_name), updated_at=now() "
+               "where lower(email)=lower(%s)", (account_id, a["name"] if a else None, email))
+    if _account_has_won(account_id):
+        db.execute("update crm_master set is_client=true where lower(email)=lower(%s)", (email,))
+    return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
+
+
+def set_deal_account(deal_id: int, account_id) -> dict | None:
+    p = db.one("select * from crm_projects where id=%s", (deal_id,))
+    if not p:
+        return None
+    db.execute("update crm_projects set account_id=%s, updated_at=now() where id=%s", (account_id, deal_id))
+    p["account_id"] = account_id
+    if p["stage"] in WON_STAGES:
+        flag_clients_for_deal(p)
+    return db.one("select * from crm_projects where id=%s", (deal_id,))
+
+
 def ingest(inquiries: list[dict], company: str = "tabscanner") -> dict:
     added, matched = [], []
     for inq in inquiries:
