@@ -495,15 +495,15 @@ const STAGECOL={Cold:'#8597A6',Contacted:'#5B8DEF',Engaged:'#00DAFF',Qualified:'
 function stageChip(s){ s=s||'Cold'; const c=STAGECOL[s]||'#8597A6'; return `<span class="chip" style="color:${c};border-color:${c}55;background:transparent">${esc(s)}</span>`; }
 function realName(c){ const n=((c.first_name||'')+' '+(c.last_name||'')).trim(); return /[A-Za-z]{2}/.test(n)?n:(c.email||'Contact'); }
 function initials(s){ const m=(s||'').match(/[A-Za-z]/g)||['?']; return (m[0]+(m[1]||'')).toUpperCase(); }
-let crmView=localStorage.getItem('cortex_crmview')||'contacts';
-function setCrm(x){ crmView=x; localStorage.setItem('cortex_crmview',x); render(); }
+let crmView=localStorage.getItem('cortex_crm2')||'projects';
+function setCrm(x){ crmView=x; localStorage.setItem('cortex_crm2',x); render(); }
 async function renderCRM(v){
   const co=document.getElementById('coSel').value;
   v.innerHTML=`<div class="crmseg">
+    <button class="cseg ${crmView==='projects'?'on':''}" onclick="setCrm('projects')">Projects</button>
+    <button class="cseg ${crmView==='opps'?'on':''}" onclick="setCrm('opps')">Opportunities</button>
     <button class="cseg ${crmView==='contacts'?'on':''}" onclick="setCrm('contacts')">Contacts</button>
     <button class="cseg ${crmView==='clients'?'on':''}" onclick="setCrm('clients')">Clients</button>
-    <button class="cseg ${crmView==='opps'?'on':''}" onclick="setCrm('opps')">Opportunities</button>
-    <button class="cseg ${crmView==='projects'?'on':''}" onclick="setCrm('projects')">Projects</button>
   </div><div id="crmbody" class="empty">Loading…</div>`;
   const b=document.getElementById('crmbody');
   if(crmView==='clients') return renderClients(b);
