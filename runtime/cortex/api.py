@@ -568,13 +568,15 @@ def crm_contacts(company: str | None = None, q: str | None = None, stage: str | 
     if stage and stage != "All":
         if stage == "Client":
             clauses.append("is_client = true")          # 'Client' is a flag, not a funnel status
+        elif stage == "Do not market":
+            clauses.append("do_not_market = true")      # also a flag, not a status
         else:
             clauses.append("stage = %s"); params.append(stage)
     where = ("where " + " and ".join(clauses)) if clauses else ""
     params.append(limit)
     return db.query(
         "select first_name, last_name, email, organisation, company_name, job_title, stage, tier, "
-        f"is_client, lead_source from crm_master {where} order by is_client desc, first_name nulls last limit %s",
+        f"is_client, do_not_market, lead_source from crm_master {where} order by is_client desc, first_name nulls last limit %s",
         tuple(params))
 
 
@@ -786,6 +788,19 @@ def crm_opportunities(company: str | None = None, _: None = Depends(auth)) -> di
                    f"where {' and '.join(base)} and value is not null group by c", tuple(fparams))
     return {"opportunities": rows, "lost": lost, "total_value": float(total["v"] or 0), "count": total["n"],
             "currencies": {r["c"]: float(r["v"] or 0) for r in cur if float(r["v"] or 0) > 0}}
+
+
+class NoMarketBody(BaseModel):
+    email: str
+    on: bool = True
+
+
+@app.post("/api/crm/contact/nomarket")
+def crm_contact_nomarket(body: NoMarketBody, _: None = Depends(auth)) -> dict:
+    r = crm.set_do_not_market(body.email, body.on)
+    if not r:
+        raise HTTPException(status_code=404, detail="contact not found")
+    return r
 
 
 class ContactStageBody(BaseModel):

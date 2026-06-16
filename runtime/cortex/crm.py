@@ -20,6 +20,7 @@ _MIGRATE = """
 alter table crm_master add column if not exists note text;
 alter table crm_master add column if not exists history jsonb not null default '[]'::jsonb;
 alter table crm_master add column if not exists updated_at timestamptz not null default now();
+alter table crm_master add column if not exists do_not_market boolean not null default false;
 """
 
 
@@ -174,6 +175,17 @@ def set_contact_stage(email: str, stage: str) -> dict | None:
         return None
     db.execute("update crm_master set stage=%s, updated_at=now() where id=%s", (stage, c["id"]))
     log_event(email, "status_change", f"{c.get('stage')} -> {stage}")
+    return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
+
+
+def set_do_not_market(email: str, on: bool) -> dict | None:
+    """Flag/unflag a contact as do-not-market (friends / personal contacts excluded from all outreach)."""
+    ensure_schema()
+    c = db.one("select id from crm_master where lower(email)=lower(%s)", (email,))
+    if not c:
+        return None
+    db.execute("update crm_master set do_not_market=%s, updated_at=now() where id=%s", (bool(on), c["id"]))
+    log_event(email, "do_not_market", "Flagged do-not-market (excluded from outreach)" if on else "Do-not-market removed")
     return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
 
 
