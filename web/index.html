@@ -145,6 +145,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .iconbtn.sm{width:32px;height:32px}
 .ibhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 2px 6px}
 .btn.sm{padding:7px 11px;font-size:13px;width:auto}
+.nta{width:100%;box-sizing:border-box;background:var(--panel2,#0e1620);color:var(--ink);border:1px solid var(--line);border-radius:11px;padding:10px 12px;font:inherit;font-size:14px;resize:vertical}
 .fsel{width:100%;box-sizing:border-box;background:var(--panel2,#0e1620);color:var(--ink);border:1px solid var(--line);border-radius:11px;padding:11px 12px;font:inherit;font-size:15px;-webkit-appearance:none;appearance:none}
 .fsel[type=time]{appearance:auto}
 /* chat */
@@ -487,7 +488,7 @@ async function render(){
 }
 
 // ---- CRM pages: Contacts / Projects / Opportunities ----
-const STAGECOL={Cold:'#8597A6',Contacted:'#5B8DEF',Engaged:'#00DAFF',Qualified:'#2ad17e',Opportunity:'#ffb020',Quote:'#ffb020','Not interested':'#ff5d6c','Dormant/dead':'#8597A6',Booked:'#00DAFF',Production:'#ffb020',Delivered:'#5B8DEF','Final Payment':'#ffb020','Close & review':'#2ad17e'};
+const STAGECOL={Cold:'#8597A6',Contacted:'#5B8DEF',Engaged:'#00DAFF',Qualified:'#2ad17e',Opportunity:'#ffb020',Quote:'#ffb020','Not interested':'#ff5d6c','Dormant/dead':'#8597A6',Booked:'#00DAFF',Production:'#ffb020',Delivered:'#5B8DEF','Final Payment':'#ffb020','Close & review':'#2ad17e',Lost:'#ff5d6c'};
 function stageChip(s){ s=s||'Cold'; const c=STAGECOL[s]||'#8597A6'; return `<span class="chip" style="color:${c};border-color:${c}55;background:transparent">${esc(s)}</span>`; }
 function realName(c){ const n=((c.first_name||'')+' '+(c.last_name||'')).trim(); return /[A-Za-z]{2}/.test(n)?n:(c.email||'Contact'); }
 function initials(s){ const m=(s||'').match(/[A-Za-z]/g)||['?']; return (m[0]+(m[1]||'')).toUpperCase(); }
@@ -535,13 +536,46 @@ async function openContact(email){
     <div class="card"><div class="crow" style="padding:0;margin-bottom:12px"><div class="cav" style="width:44px;height:44px;font-size:15px">${esc(initials(n))}</div>
       <div><div class="cname" style="font-size:17px">${esc(n)}</div><div class="csub">${esc(c.organisation||'')}${c.job_title?' · '+esc(c.job_title):''}</div></div></div>
     <div class="row" style="margin-bottom:12px">${stageChip(c.stage)}${c.tier?`<span class="chip cy">Tier ${esc(c.tier)}</span>`:''}${c.is_client?'<span class="chip" style="color:#2ad17e">Client</span>':''}</div>
+    ${contactStagePicker(c)}
     <div class="dgrid">${fld('mail',c.email)}${fld('pin',[c.city,c.country].filter(Boolean).join(', '))}${fld('globe',c.company_domain||c.website)}${fld('briefcase',c.industry)}${fld('route',c.lead_source)}${fld('tool',c.software)}</div>
+    ${noteBox('c',c.email)}
     ${c.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${esc(c.note)}</div></div>`:''}
     ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:${h.event==='reply_sent'?'#2ad17e':'#00DAFF'}"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
     </div>`;
 }
-const PROJ_STAGES=['Opportunity','Quote','Booked','Production','Delivered','Final Payment','Close & review'];
+const PROJ_STAGES=['Opportunity','Quote','Booked','Production','Delivered','Final Payment','Close & review','Lost'];
 const FORECAST_STAGES=['Opportunity','Quote'];
+const CONTACT_STAGES=['Cold','Contacted','Engaged','Qualified','Not interested','Dormant/dead'];
+function contactStagePicker(c){
+  return `<div class="dsec"><div class="dlbl">Status</div><div class="chiprow">${CONTACT_STAGES.map((s,i)=>{
+    const on=s===c.stage, col=STAGECOL[s]||'#8597A6';
+    return `<span class="fchip${on?' on':''}" style="${on?`color:${col};border-color:${col}`:''}" onclick="setContactStage('${esc(c.email)}',${i})">${esc(s)}</span>`;
+  }).join('')}</div></div>`;
+}
+async function setContactStage(email,i){
+  const s=CONTACT_STAGES[i];
+  try{ await api('/api/crm/contact/stage',{method:'POST',body:JSON.stringify({email,stage:s})}); toast('Status: '+s); openContact(email); }
+  catch(e){ toast('Could not update ('+e.message+')'); }
+}
+function noteBox(kind,id){
+  const tid='note_'+kind+'_'+(''+id).replace(/[^a-zA-Z0-9]/g,'');
+  return `<div class="dsec"><div class="dlbl">Add a note</div>
+    <textarea id="${tid}" rows="2" class="nta" placeholder="Type, or tap the mic to speak…"></textarea>
+    <div class="row" style="margin-top:7px">
+      <button class="btn warn sm" onclick="dictate(this,'${tid}')">${ic('mic',15)} Tap to talk</button>
+      <button class="btn go sm" onclick="saveNote('${kind}','${esc(String(id))}','${tid}')">Save note</button>
+    </div></div>`;
+}
+async function saveNote(kind,id,tid){
+  const ta=document.getElementById(tid), text=(ta&&ta.value||'').trim();
+  if(!text){ toast('Type or speak a note first'); return; }
+  if(recording) stopDictation(document.querySelector('.btn.warn.rec'));
+  try{
+    if(kind==='c') await api('/api/crm/contact/note',{method:'POST',body:JSON.stringify({email:id,note:text})});
+    else await api('/api/crm/project/'+id+'/note',{method:'POST',body:JSON.stringify({note:text})});
+    toast('Note saved'); if(kind==='c') openContact(id); else openProject(+id);
+  }catch(e){ toast('Could not save ('+e.message+')'); }
+}
 function projStagePicker(p){
   return `<div class="dsec"><div class="dlbl">Change stage</div><div class="chiprow">${PROJ_STAGES.map((s,i)=>{
     const on=s===p.stage, c=STAGECOL[s]||'#8597A6';
@@ -565,6 +599,7 @@ async function openProject(id){
       <div class="csub" style="margin-bottom:10px">${esc(p.company||'')}</div>
       <div class="row" style="margin-bottom:12px">${stageChip(p.stage)}<span class="chip cy">${money(p.value)} ${esc(p.currency||'')}</span></div>
       ${projStagePicker(p)}
+      ${noteBox('p',p.id)}
       <div class="dgrid">${fld('briefcase',p.owner&&('Owner: '+p.owner))}${fld('file',p.quote_ref&&('Quote ref '+p.quote_ref))}${p.contact_email?`<div class="dfld">${ic('mail',15)} <a href="#" onclick="openContact('${esc(p.contact_email)}');return false" style="color:var(--accent)">${esc(p.contact_email)}</a></div>`:''}</div>
       ${p.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${esc(p.note)}</div></div>`:''}
       ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
@@ -588,7 +623,7 @@ async function renderProjects(b,co){
   b.outerHTML='<div id="crmbody">'+h+'</div>';
 }
 async function renderOpps(b,co){
-  let d; try{ d=await api('/api/crm/opportunities?company='+encodeURIComponent(co||'all')); }catch(e){ d={opportunities:[],total_value:0,count:0}; }
+  let d; try{ d=await api('/api/crm/opportunities?company='+encodeURIComponent(co||'all')); }catch(e){ d={opportunities:[],lost:[],total_value:0,count:0}; }
   const allco=!co;
   let h=`<div class="mrow"><div class="mcard"><div class="ml">Forecast value</div><div class="mv">${(d.total_value/1e6).toFixed(2)}M <span style="font-size:12px;color:var(--mut)">AED</span></div></div>
     <div class="mcard"><div class="ml">Open opportunities</div><div class="mv">${d.count}</div></div></div>`;
@@ -596,6 +631,7 @@ async function renderOpps(b,co){
   else if(allco){ const g=byCompany(d.opportunities); Object.keys(g).sort().forEach(cn=>{ const it=g[cn], s=it.reduce((a,o)=>a+(+o.value||0),0);
     h+=`<div class="h">${esc(cn)} · ${it.length}${s?' · '+dmoney(s):''}</div>`+it.map(dealCard).join(''); }); }
   else { h+='<div class="h">In the pipeline</div>'+d.opportunities.map(dealCard).join(''); }
+  if(d.lost&&d.lost.length){ h+=`<div class="h" style="color:var(--mut)">Lost · ${d.lost.length}</div><div style="opacity:.55">`+d.lost.map(dealCard).join('')+'</div>'; }
   b.outerHTML='<div id="crmbody">'+h+'</div>';
 }
 const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];

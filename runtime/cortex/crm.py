@@ -88,8 +88,42 @@ def add_inquiry(inq: dict, company: str = "tabscanner") -> tuple[str, str | None
 #      won/ongoing stages show on the Projects screen. Crossing 'Booked' promotes an opportunity to a project.
 FORECAST_STAGES = ["Opportunity", "Quote"]
 WON_STAGES = ["Booked", "Production", "Delivered", "Final Payment", "Close & review"]
-DEAL_STAGES = FORECAST_STAGES + WON_STAGES
+LOST_STAGE = "Lost"                                    # pitched but didn't win — exits both screens
+DEAL_STAGES = FORECAST_STAGES + WON_STAGES + [LOST_STAGE]
 PROJECT_STAGES = DEAL_STAGES   # back-compat alias (any valid deal stage)
+
+# Contact status = the relationship ladder ONLY (deals carry Opportunity/Quote — kept off contacts to avoid
+# the same word meaning two things). is_client is a separate flag set when a linked deal is won.
+CONTACT_STAGES = ["Cold", "Contacted", "Engaged", "Qualified", "Not interested", "Dormant/dead"]
+
+
+def set_contact_stage(email: str, stage: str) -> dict | None:
+    """Move a contact along the relationship ladder; logs the change on their history."""
+    c = db.one("select id, stage from crm_master where lower(email)=lower(%s)", (email,))
+    if not c:
+        return None
+    db.execute("update crm_master set stage=%s, updated_at=now() where id=%s", (stage, c["id"]))
+    log_event(email, "status_change", f"{c.get('stage')} -> {stage}")
+    return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
+
+
+def add_contact_note(email: str, note: str) -> dict | None:
+    if not db.one("select 1 from crm_master where lower(email)=lower(%s)", (email,)):
+        return None
+    log_event(email, "note", note)
+    return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
+
+
+def add_project_note(project_id: int, note: str) -> dict | None:
+    p = db.one("select * from crm_projects where id=%s", (project_id,))
+    if not p:
+        return None
+    ev = {"ts": _now(), "event": "note", "text": (note or "")[:1200]}
+    db.execute("update crm_projects set history = history || %s::jsonb, updated_at=now() where id=%s",
+               (Json([ev]), project_id))
+    if p.get("contact_email"):
+        log_event(p["contact_email"], "note", f"[{p['title']}] {note}")
+    return db.one("select * from crm_projects where id=%s", (project_id,))
 
 
 def set_project_stage(project_id: int, stage: str) -> dict | None:

@@ -617,16 +617,61 @@ def crm_project_stage(id: int, body: ProjectStageBody, _: None = Depends(auth)) 
 @app.get("/api/crm/opportunities")
 def crm_opportunities(company: str | None = None, _: None = Depends(auth)) -> dict:
     """Forecast deals (Opportunity/Quote) with values + a running total — same deal records as Projects,
-    just on the pre-Booked side of the line."""
+    just on the pre-Booked side of the line. Lost deals come back separately (not in the forecast total)."""
     f, p = _org_like(company, "company")
-    conds = ["stage = any(%s)"]; params: list = [crm.FORECAST_STAGES]
+    base = ["stage = any(%s)"]
     if f:
-        conds.append(f); params += p
-    w = "where " + " and ".join(conds)
-    rows = db.query(f"select id, company, title, contact_email, value, currency, stage, owner from crm_projects {w} "
-                    "order by value desc nulls last, id", tuple(params))
-    total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects {w}", tuple(params))
-    return {"opportunities": rows, "total_value": float(total["v"] or 0), "count": total["n"]}
+        base.append(f)
+
+    def run(stages):
+        params = [stages] + (p if f else [])
+        return db.query("select id, company, title, contact_email, value, currency, stage, owner "
+                        f"from crm_projects where {' and '.join(base)} order by value desc nulls last, id", tuple(params))
+    rows = run(crm.FORECAST_STAGES)
+    lost = run([crm.LOST_STAGE])
+    total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects where {' and '.join(base)}",
+                   tuple([crm.FORECAST_STAGES] + (p if f else [])))
+    return {"opportunities": rows, "lost": lost, "total_value": float(total["v"] or 0), "count": total["n"]}
+
+
+class ContactStageBody(BaseModel):
+    email: str
+    stage: str
+
+
+@app.post("/api/crm/contact/stage")
+def crm_contact_stage(body: ContactStageBody, _: None = Depends(auth)) -> dict:
+    if body.stage not in crm.CONTACT_STAGES:
+        raise HTTPException(status_code=400, detail=f"status must be one of {crm.CONTACT_STAGES}")
+    r = crm.set_contact_stage(body.email, body.stage)
+    if not r:
+        raise HTTPException(status_code=404, detail="contact not found")
+    return r
+
+
+class NoteBody(BaseModel):
+    note: str
+    email: str | None = None     # contact note
+
+
+@app.post("/api/crm/contact/note")
+def crm_contact_note(body: NoteBody, _: None = Depends(auth)) -> dict:
+    if not (body.note or "").strip() or not body.email:
+        raise HTTPException(status_code=400, detail="email and note required")
+    r = crm.add_contact_note(body.email, body.note.strip())
+    if not r:
+        raise HTTPException(status_code=404, detail="contact not found")
+    return r
+
+
+@app.post("/api/crm/project/{id}/note")
+def crm_project_note(id: int, body: NoteBody, _: None = Depends(auth)) -> dict:
+    if not (body.note or "").strip():
+        raise HTTPException(status_code=400, detail="note required")
+    r = crm.add_project_note(id, body.note.strip())
+    if not r:
+        raise HTTPException(status_code=404, detail="deal not found")
+    return r
 
 
 @app.get("/api/gmail/status")
