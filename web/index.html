@@ -513,14 +513,34 @@ async function renderCRM(v){
   if(crmView==='opps') return renderOpps(b,co);
   return renderContacts(b,co);
 }
-let cqTimer=null, contactOrder=[];
+let cqTimer=null, contactOrder=[], cState={co:'',stage:'',q:'',page:0,more:false,loading:false}, cObserver=null;
 function searchContacts(){ clearTimeout(cqTimer); cqTimer=setTimeout(()=>{ const co=document.getElementById('coSel').value; loadContacts(co); },280); }
+function contactsQuery(off){ return `/api/crm/contacts?company=${encodeURIComponent(cState.co||'all')}&q=${encodeURIComponent(cState.q)}${cState.stage&&cState.stage!=='All'?'&stage='+encodeURIComponent(cState.stage):''}&limit=40&offset=${off}`; }
 async function loadContacts(co,stage){
-  const q=(document.getElementById('cq')||{}).value||''; const list=document.getElementById('clist'); if(!list) return;
+  const list=document.getElementById('clist'); if(!list) return;
+  cState={co:co||'',stage:stage||'',q:(document.getElementById('cq')||{}).value||'',page:0,more:false,loading:false};
   list.innerHTML='<div class="empty">Loading…</div>';
-  let rows; try{ rows=await api(`/api/crm/contacts?company=${encodeURIComponent(co||'all')}&q=${encodeURIComponent(q)}${stage&&stage!=='All'?'&stage='+encodeURIComponent(stage):''}&limit=40`); }catch(e){ rows=[]; }
+  let rows; try{ rows=await api(contactsQuery(0)); }catch(e){ rows=[]; }
   contactOrder = rows.map(r=>r.email);
-  list.innerHTML = rows.length? rows.map(contactRow).join('') : '<div class="empty">No contacts</div>';
+  list.innerHTML = rows.length? rows.map(contactRow).join('')+'<div id="cmore" style="height:1px"></div>' : '<div class="empty">No contacts</div>';
+  cState.page=1; cState.more = rows.length===40;
+  if(cState.more) setupContactObserver();
+}
+async function loadMoreContacts(){
+  if(!cState.more || cState.loading) return;
+  const sentinel=document.getElementById('cmore'); if(!sentinel) return;
+  cState.loading=true;
+  let rows; try{ rows=await api(contactsQuery(cState.page*40)); }catch(e){ rows=[]; }
+  if(rows.length){ sentinel.insertAdjacentHTML('beforebegin', rows.map(contactRow).join('')); contactOrder=contactOrder.concat(rows.map(r=>r.email)); cState.page++; }
+  cState.more = rows.length===40;
+  if(!cState.more){ if(cObserver) cObserver.disconnect(); sentinel.remove(); }
+  cState.loading=false;
+}
+function setupContactObserver(){
+  if(cObserver) cObserver.disconnect();
+  const s=document.getElementById('cmore'); if(!s||!('IntersectionObserver' in window)) return;
+  cObserver=new IntersectionObserver(es=>{ if(es[0].isIntersecting) loadMoreContacts(); }, {rootMargin:'500px'});
+  cObserver.observe(s);
 }
 function filterStage(s){ document.querySelectorAll('.fchip').forEach(c=>c.classList.toggle('on', c.dataset.stage===s)); loadContacts(document.getElementById('coSel').value, s); }
 async function renderContacts(b,co){

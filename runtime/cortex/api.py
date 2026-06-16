@@ -556,7 +556,7 @@ def crm_summary(company: str | None = None, _: None = Depends(auth)) -> dict:
 
 @app.get("/api/crm/contacts")
 def crm_contacts(company: str | None = None, q: str | None = None, stage: str | None = None,
-                 limit: int = 50, _: None = Depends(auth)) -> list[dict]:
+                 limit: int = 50, offset: int = 0, _: None = Depends(auth)) -> list[dict]:
     clauses, params = [], []
     f, p = _org_like(company)
     if f:
@@ -573,10 +573,11 @@ def crm_contacts(company: str | None = None, q: str | None = None, stage: str | 
         else:
             clauses.append("stage = %s"); params.append(stage)
     where = ("where " + " and ".join(clauses)) if clauses else ""
-    params.append(limit)
+    params.append(limit); params.append(offset)
     return db.query(
         "select first_name, last_name, email, organisation, company_name, job_title, stage, tier, "
-        f"is_client, do_not_market, lead_source from crm_master {where} order by is_client desc, first_name nulls last limit %s",
+        f"is_client, do_not_market, lead_source from crm_master {where} "
+        "order by is_client desc, first_name nulls last limit %s offset %s",
         tuple(params))
 
 
