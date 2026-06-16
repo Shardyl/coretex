@@ -84,6 +84,74 @@ def add_inquiry(inq: dict, company: str = "tabscanner") -> tuple[str, str | None
     return ("added", email)
 
 
+_MIGRATE_DEALS = """
+alter table crm_projects add column if not exists contacts jsonb not null default '[]'::jsonb;
+alter table crm_projects add column if not exists account_id bigint;
+alter table crm_master add column if not exists account_id bigint;
+create table if not exists crm_accounts (
+  id bigserial primary key, name text not null, domain text, website text, phone text,
+  note text, history jsonb not null default '[]'::jsonb, created_at timestamptz default now());
+"""
+
+
+def ensure_deal_schema() -> None:
+    with db.connect() as c:
+        c.execute(_MIGRATE_DEALS)
+
+
+def _name_of(email: str) -> str:
+    c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (email,))
+    return (((c.get("first_name") or "") + " " + (c.get("last_name") or "")).strip()) if c else ""
+
+
+def add_deal_contact(deal_id: int, email: str, role: str = "", primary: bool = False) -> dict | None:
+    """Attach a contact to a deal (primary or secondary). One primary is always kept; mirrored to contact_email."""
+    ensure_deal_schema()
+    p = db.one("select contacts, contact_email from crm_projects where id=%s", (deal_id,))
+    if not p:
+        return None
+    email = (email or "").strip().lower()
+    lst = [c for c in (p.get("contacts") or []) if (c.get("email") or "").lower() != email]
+    if primary:
+        for c in lst:
+            c["primary"] = False
+    lst.append({"email": email, "name": _name_of(email), "role": role or "", "primary": bool(primary)})
+    if not any(c.get("primary") for c in lst):
+        lst[0]["primary"] = True
+    prim = next((c["email"] for c in lst if c.get("primary")), email)
+    db.execute("update crm_projects set contacts=%s::jsonb, contact_email=%s, updated_at=now() where id=%s",
+               (Json(lst), prim, deal_id))
+    log_event(email, "deal_linked", f"Linked to deal: {db.one('select title from crm_projects where id=%s',(deal_id,))['title']}")
+    return db.one("select * from crm_projects where id=%s", (deal_id,))
+
+
+def remove_deal_contact(deal_id: int, email: str) -> dict | None:
+    p = db.one("select contacts from crm_projects where id=%s", (deal_id,))
+    if not p:
+        return None
+    email = (email or "").strip().lower()
+    lst = [c for c in (p.get("contacts") or []) if (c.get("email") or "").lower() != email]
+    if lst and not any(c.get("primary") for c in lst):
+        lst[0]["primary"] = True
+    prim = next((c["email"] for c in lst if c.get("primary")), None)
+    db.execute("update crm_projects set contacts=%s::jsonb, contact_email=%s, updated_at=now() where id=%s",
+               (Json(lst), prim, deal_id))
+    return db.one("select * from crm_projects where id=%s", (deal_id,))
+
+
+def set_deal_primary(deal_id: int, email: str) -> dict | None:
+    p = db.one("select contacts from crm_projects where id=%s", (deal_id,))
+    if not p:
+        return None
+    email = (email or "").strip().lower()
+    lst = p.get("contacts") or []
+    for c in lst:
+        c["primary"] = (c.get("email") or "").lower() == email
+    db.execute("update crm_projects set contacts=%s::jsonb, contact_email=%s, updated_at=now() where id=%s",
+               (Json(lst), email, deal_id))
+    return db.one("select * from crm_projects where id=%s", (deal_id,))
+
+
 # ---- Deals = the full lifecycle in crm_projects. Forecast stages show on the Opportunities screen;
 #      won/ongoing stages show on the Projects screen. Crossing 'Booked' promotes an opportunity to a project.
 FORECAST_STAGES = ["Opportunity", "Quote"]
@@ -153,6 +221,9 @@ def create_project(company: str, contact_email: str, title: str, value=None,
         (org, (contact_email or "").lower(), title, value, currency, stage, owner, quote_ref, note,
          Json([{"ts": _now(), "event": "project_created", "text": f"{title} ({stage})"}])))
     if contact_email:
+        ce = contact_email.strip().lower()
+        db.execute("update crm_projects set contacts=%s::jsonb where id=%s",
+                   (Json([{"email": ce, "name": _name_of(ce), "role": "", "primary": True}]), row["id"]))
         if stage in WON_STAGES:
             db.execute("update crm_master set is_client=true where lower(email)=lower(%s)", (contact_email,))
         log_event(contact_email, "deal_created", f"{title} ({stage})"

@@ -674,6 +674,38 @@ def crm_project_note(id: int, body: NoteBody, _: None = Depends(auth)) -> dict:
     return r
 
 
+class DealContactBody(BaseModel):
+    email: str
+    role: str = ""
+    primary: bool = False
+
+
+@app.post("/api/crm/project/{id}/contacts")
+def crm_deal_add_contact(id: int, body: DealContactBody, _: None = Depends(auth)) -> dict:
+    if not (body.email or "").strip():
+        raise HTTPException(status_code=400, detail="email required")
+    r = crm.add_deal_contact(id, body.email.strip(), body.role, body.primary)
+    if not r:
+        raise HTTPException(status_code=404, detail="deal not found")
+    return r
+
+
+@app.post("/api/crm/project/{id}/contacts/primary")
+def crm_deal_set_primary(id: int, body: DealContactBody, _: None = Depends(auth)) -> dict:
+    r = crm.set_deal_primary(id, body.email.strip())
+    if not r:
+        raise HTTPException(status_code=404, detail="deal not found")
+    return r
+
+
+@app.delete("/api/crm/project/{id}/contacts")
+def crm_deal_remove_contact(id: int, email: str, _: None = Depends(auth)) -> dict:
+    r = crm.remove_deal_contact(id, email)
+    if not r:
+        raise HTTPException(status_code=404, detail="deal not found")
+    return r
+
+
 @app.get("/api/gmail/status")
 def gmail_status(_: None = Depends(auth)) -> dict:
     return {"connected": gmail.connected(), "account": db.setting_get("gmail_account"),

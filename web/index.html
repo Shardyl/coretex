@@ -587,6 +587,31 @@ async function setProjStage(id,i){
   try{ await api('/api/crm/project/'+id+'/stage',{method:'POST',body:JSON.stringify({stage:s})}); toast('Moved to '+s); openProject(id); }
   catch(e){ toast('Could not update ('+e.message+')'); }
 }
+function dealContacts(p){
+  const list=(p.contacts&&p.contacts.length)?p.contacts:(p.contact_email?[{email:p.contact_email,name:'',primary:true}]:[]);
+  const rows=list.map(c=>{ const nm=c.name||c.email;
+    return `<div class="crow" style="padding:7px 0;cursor:pointer" onclick="openContact('${esc(c.email)}')">
+      <div class="cav" style="width:30px;height:30px;font-size:11px">${esc(initials(nm))}</div>
+      <div style="flex:1;min-width:0"><div class="cname" style="font-size:14px">${esc(nm)}${c.primary?' <span class="chip cy" style="font-size:10px">primary</span>':''}</div>
+        <div class="csub">${esc(c.email)}${c.role?' · '+esc(c.role):''}</div></div>
+      <div class="row" style="gap:4px;flex:none" onclick="event.stopPropagation()">
+        ${c.primary?'':`<button class="iconbtn sm" title="Make primary" onclick="dealPrimary(${p.id},'${esc(c.email)}')">${ic('check',15)}</button>`}
+        <button class="iconbtn sm" title="Unlink" onclick="dealRemoveContact(${p.id},'${esc(c.email)}')">${ic('x',15)}</button>
+      </div></div>`; }).join('');
+  return `<div class="dsec"><div class="dlbl">Contacts</div>${rows||'<div class="csub">No contacts linked</div>'}
+    <div class="row" style="margin-top:8px">
+      <input id="dc_${p.id}" class="nta" style="flex:1" placeholder="Contact email to add…">
+      <button class="btn go sm" onclick="dealAddContact(${p.id})">${ic('plus',15)} Add</button>
+    </div></div>`;
+}
+async function dealAddContact(id){
+  const e=document.getElementById('dc_'+id), email=(e&&e.value||'').trim();
+  if(!email){ toast('Enter a contact email'); return; }
+  try{ await api('/api/crm/project/'+id+'/contacts',{method:'POST',body:JSON.stringify({email})}); toast('Contact linked'); openProject(id); }
+  catch(err){ toast('Could not add ('+err.message+')'); }
+}
+async function dealPrimary(id,email){ try{ await api('/api/crm/project/'+id+'/contacts/primary',{method:'POST',body:JSON.stringify({email})}); toast('Primary set'); openProject(id); }catch(e){ toast(e.message); } }
+async function dealRemoveContact(id,email){ try{ await api('/api/crm/project/'+id+'/contacts?email='+encodeURIComponent(email),{method:'DELETE'}); toast('Unlinked'); openProject(id); }catch(e){ toast(e.message); } }
 async function openProject(id){
   const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
   let p; try{ p=await api('/api/crm/project?id='+id); }catch(e){ p={}; }
@@ -599,8 +624,9 @@ async function openProject(id){
       <div class="csub" style="margin-bottom:10px">${esc(p.company||'')}</div>
       <div class="row" style="margin-bottom:12px">${stageChip(p.stage)}<span class="chip cy">${money(p.value)} ${esc(p.currency||'')}</span></div>
       ${projStagePicker(p)}
+      ${dealContacts(p)}
       ${noteBox('p',p.id)}
-      <div class="dgrid">${fld('briefcase',p.owner&&('Owner: '+p.owner))}${fld('file',p.quote_ref&&('Quote ref '+p.quote_ref))}${p.contact_email?`<div class="dfld">${ic('mail',15)} <a href="#" onclick="openContact('${esc(p.contact_email)}');return false" style="color:var(--accent)">${esc(p.contact_email)}</a></div>`:''}</div>
+      <div class="dgrid">${fld('briefcase',p.owner&&('Owner: '+p.owner))}${fld('file',p.quote_ref&&('Quote ref '+p.quote_ref))}</div>
       ${p.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${esc(p.note)}</div></div>`:''}
       ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
     </div>`;
