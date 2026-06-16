@@ -263,6 +263,10 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     c = compose_reply_html(task, company, for_preview=False)
     res = gmail.send_message(env["to"], env["subject"], c["plain"], from_addr=env["from"], cc=env["cc"],
                              html=c["html"], inline_images=c["inline"], bcc=env.get("bcc"))
+    try:
+        crm.log_event(env["to"], "reply_sent", f"Reply sent: {env['subject']}", company.get("slug"))
+    except Exception:  # noqa: BLE001 — CRM history must never block the send
+        pass
     store.update_task(task["id"], status="done")
     store.log_decision(task["id"], skill["id"], actor, "send",
                        snapshot={"to": env["to"], "cc": env["cc"], "bcc": env.get("bcc"),

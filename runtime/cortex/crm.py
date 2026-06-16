@@ -1,32 +1,25 @@
-"""CRM writes — add genuine website inquiries into the contacts database.
+"""CRM — ONE source of truth: the `crm_master` table.
 
-A parsed inquiry (name + the lead's real email + their message) becomes a VERIFIED contact (unlike the
-157 Bitrix webhook-junk rows), tagged with the company, with the inquiry kept as a note. Deduped by
-email, so a returning person isn't added twice.
+Every legitimate inbound inquiry, Cortex-wide and for any company, is upserted here (deduped by email),
+tagged to its company via `organisation`, with the inquiry kept as a `note` and a full `history` log of
+every interaction (enquiry received, reply sent, correction, etc.). There is no other contacts table.
 """
 from __future__ import annotations
 
-from email.utils import parsedate_to_datetime
+from datetime import datetime, timezone
 
 from psycopg.types.json import Json
 
 from . import db
 
-# one-time shape upgrade so the table can hold non-Bitrix contacts (Gmail/manual): surrogate id PK,
-# nullable bitrix_id (+ unique so the Bitrix import stays idempotent), source_type, a message note.
+# company slug -> the Organisation label used in crm_master (matches the imported master sheet)
+ORG = {"tabscanner": "Tabscanner", "sensa": "Sensa", "skyvision": "Sky Vision",
+       "filmspoke": "FilmSpoke", "snaprewards": "Snap Rewards", "flixton": "Flixton Manor"}
+
 _MIGRATE = """
-alter table crm_contacts add column if not exists id bigserial;
-alter table crm_contacts add column if not exists source_type text not null default 'bitrix';
-alter table crm_contacts add column if not exists message text;
-do $$ begin
-  if exists (select 1 from information_schema.columns where table_name='crm_contacts'
-             and column_name='bitrix_id' and is_nullable='NO') then
-    alter table crm_contacts drop constraint if exists crm_contacts_pkey;
-    alter table crm_contacts alter column bitrix_id drop not null;
-    alter table crm_contacts add constraint crm_contacts_id_pk primary key (id);
-  end if;
-end $$;
-create unique index if not exists crm_contacts_bitrix_uq on crm_contacts(bitrix_id);
+alter table crm_master add column if not exists note text;
+alter table crm_master add column if not exists history jsonb not null default '[]'::jsonb;
+alter table crm_master add column if not exists updated_at timestamptz not null default now();
 """
 
 
@@ -35,33 +28,64 @@ def ensure_schema() -> None:
         c.execute(_MIGRATE)
 
 
-def _date(s):
-    try:
-        return parsedate_to_datetime(s)
-    except (TypeError, ValueError):
-        return None
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
-def add_inquiry(inq: dict, company: str = "tabscanner") -> tuple[str, int]:
-    """Add a parsed inquiry as a verified contact (dedup by email). Returns (status, contact_id)."""
+def _org(company: str | None) -> str:
+    return ORG.get((company or "").lower(), (company or "").title())
+
+
+def _split_name(name: str) -> tuple[str, str]:
+    parts = (name or "").strip().split()
+    if not parts:
+        return ("", "")
+    return (parts[0], " ".join(parts[1:]))
+
+
+def log_event(email: str, event: str, text: str = "", company: str | None = None) -> None:
+    """Append one interaction to a contact's history in crm_master (matched by email)."""
+    if not email:
+        return
     ensure_schema()
-    email = (inq.get("email") or "").strip()
+    ev = {"ts": _now(), "event": event, "text": (text or "")[:1200]}
+    db.execute("update crm_master set history = history || %s::jsonb, updated_at=now() "
+               "where lower(email)=lower(%s)", (Json([ev]), email))
+
+
+def add_inquiry(inq: dict, company: str = "tabscanner") -> tuple[str, str | None]:
+    """Upsert a legitimate inquiry into crm_master (dedup by email), with a note + history event.
+    Returns (status, email). Works for ANY company via the `company` slug."""
+    ensure_schema()
+    email = (inq.get("email") or "").strip().lower()
+    if not email:
+        return ("skipped-no-email", None)
     name = (inq.get("name") or "").strip()
-    msg = (inq.get("message") or "").strip()
-    if email:
-        ex = db.one("select id from crm_contacts where lower(email)=lower(%s) limit 1", (email,))
-        if ex:
-            return ("matched", ex["id"])
-    row = db.execute(
-        "insert into crm_contacts (sensa_company,name,email,source,source_desc,message,verified,"
-        "source_type,created,data) values (%s,%s,%s,%s,%s,%s,true,'gmail',%s,%s) returning id",
-        (company, name, email, "Website contact form", msg[:500], msg, _date(inq.get("date")), Json(inq)))
-    return ("added", row["id"])
+    msg = (inq.get("message") or inq.get("snippet") or "").strip()
+    org = _org(company)
+    ev = {"ts": _now(), "event": "enquiry", "text": msg[:1200]}
+    existing = db.one("select id, organisation from crm_master where lower(email)=%s limit 1", (email,))
+    if existing:
+        # already a contact: record the new enquiry in history; make sure this company is on the tag
+        cur = existing.get("organisation") or ""
+        if org and org.lower() not in cur.lower():
+            new_org = (cur + ", " + org).strip(", ") if cur else org
+            db.execute("update crm_master set organisation=%s where id=%s", (new_org, existing["id"]))
+        log_event(email, "enquiry", msg, company)
+        return ("matched", email)
+    fn, ln = _split_name(name)
+    dom = email.split("@")[-1] if "@" in email else ""
+    note = f"Website enquiry ({datetime.now(timezone.utc):%Y-%m-%d}): {msg}" if msg else "Website enquiry."
+    db.execute(
+        "insert into crm_master (organisation, first_name, last_name, email, company_domain, "
+        "lead_source, lead_status, note, history) values (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        (org, fn, ln, email, dom, "Website enquiry", "New", note, Json([ev])))
+    return ("added", email)
 
 
 def ingest(inquiries: list[dict], company: str = "tabscanner") -> dict:
     added, matched = [], []
     for inq in inquiries:
-        status, cid = add_inquiry(inq, company)
-        (added if status == "added" else matched).append({"name": inq.get("name"), "email": inq.get("email"), "id": cid})
+        status, em = add_inquiry(inq, company)
+        (added if status == "added" else matched).append({"email": em})
     return {"added": added, "matched": matched}
