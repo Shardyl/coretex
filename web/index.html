@@ -831,8 +831,8 @@ async function renderClients(b){
   loadClients();
 }
 async function loadClients(){
-  const q=(document.getElementById('clq')||{}).value||''; const list=document.getElementById('cllist'); if(!list) return;
-  let rows; try{ rows=await api('/api/crm/accounts?q='+encodeURIComponent(q)); }catch(e){ rows=[]; }
+  const co=document.getElementById('coSel').value||''; const q=(document.getElementById('clq')||{}).value||''; const list=document.getElementById('cllist'); if(!list) return;
+  let rows; try{ rows=await api('/api/crm/accounts?company='+encodeURIComponent(co)+'&q='+encodeURIComponent(q)); }catch(e){ rows=[]; }
   list.innerHTML = rows.length? rows.map(a=>`<div class="card crow" style="cursor:pointer" onclick="openAccount(${a.id})">
     <div class="cav">${esc(initials(a.name))}</div>
     <div style="flex:1;min-width:0"><div class="cname">${esc(a.name)}</div>

@@ -849,11 +849,18 @@ def crm_deal_remove_contact(id: int, email: str, _: None = Depends(auth)) -> dic
 
 
 @app.get("/api/crm/accounts")
-def crm_accounts(q: str | None = None, _: None = Depends(auth)) -> list[dict]:
-    """The client-company directory: each account with its contact + deal counts and won value."""
-    where, params = "", []
+def crm_accounts(q: str | None = None, company: str | None = None, _: None = Depends(auth)) -> list[dict]:
+    """The client-organisation directory. Scoped to a business when `company` is given (orgs that have a deal
+    owned by that business OR a contact tagged to it); global when omitted (used by the create/link search)."""
+    conds, params = [], []
     if q:
-        where = "where a.name ilike %s"; params.append(f"%{q}%")
+        conds.append("a.name ilike %s"); params.append(f"%{q}%")
+    if company and company not in ("all", ""):
+        label = _CRM_ORG.get(company, company.title())
+        conds.append("(exists (select 1 from crm_projects p where p.account_id=a.id and p.company ilike %s) "
+                     "or exists (select 1 from crm_master m where m.account_id=a.id and m.organisation ilike %s))")
+        params += [f"%{label}%", f"%{label}%"]
+    where = ("where " + " and ".join(conds)) if conds else ""
     return db.query(
         "select a.id, a.name, a.domain, "
         "(select count(*) from crm_master m where m.account_id=a.id) contacts, "
