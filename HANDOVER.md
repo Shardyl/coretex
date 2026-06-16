@@ -11,7 +11,7 @@ A voice-first AI operations platform that runs Rashad's businesses (Tabscanner, 
 - **Runtime:** `/opt/coretex/runtime`, imported as the package **`cortex`** (WorkingDirectory `/opt/coretex/runtime`,
   venv `/opt/coretex/.venv`). Services: **cortex-api** (uvicorn `cortex.api:app` on 127.0.0.1:8787, also serves the
   cockpit at `/`) + **cortex-engine** (`runtime/main.py` — worker/manager/Telegram/scheduler loop).
-- **Nightly backup:** cron at 03:00 pg_dumps the DB + repo/docs + a mirror of Claude's memory → Google Drive.
+- **Nightly backup:** see "Nightly Google Drive backup" below.
 
 ## Skills — THIS IS THE IMPORTANT BIT
 **Skills now live in the Cortex Postgres `skills` table, NOT in `~/.claude/skills/*.md`.**
@@ -47,6 +47,23 @@ scp web/index.html cortex:/opt/coretex/web/           # cockpit (single-file PWA
 ssh cortex "cd /opt/coretex/runtime && /opt/coretex/.venv/bin/python -m py_compile cortex/<f>.py && sudo systemctl restart cortex-api cortex-engine"
 ```
 The cockpit is a single-file PWA with a network-first service worker — a normal page **reload** picks up new code.
+
+## Nightly Google Drive backup (everything, restorable)
+A cron backs up the WHOLE system to one Google Drive folder every night. This is the disaster-recovery copy.
+- **Cron:** `/etc/cron.d/cortex-backup` runs `runtime/backup_drive.py` at **03:00 UTC** daily; logs to
+  `/opt/coretex/backup.log`; keeps the **last 30** of each artifact (older are pruned).
+- **Drive folder:** ID `1oEKRo6aH4r1-HE29Qtds5DxyMlyZATEZ` (override via `GOOGLE_BACKUP_FOLDER`). Auth is keyless:
+  OAuth client at `/etc/cortex/google_oauth_client.json` + `google_refresh_token` in the DB `settings` table.
+- **Two artifacts per night:**
+  1. **`cortex-db-<ts>.sql.gz`** — full `pg_dump`: skills, universal + local rules, conversations, tasks,
+     settings, AND the whole CRM (`crm_master`, deals, accounts). The canonical operating state + all data.
+  2. **`cortex-knowledge-<ts>.tar.gz`** — the repo (code + docs + BUILD-LOG) AND `/opt/cortex-knowledge`
+     (the mirror of Claude's memory + the Atlas/Gemini/deploy protocols). "How we build and manage Cortex."
+- **⚠️ The memory backup is only as fresh as the box mirror.** `cortex-knowledge` tars `/opt/cortex-knowledge/memory/`,
+  which is a COPY of Claude's local memory. After changing memory you MUST refresh it:
+  `scp memory/*.md cortex:/opt/cortex-knowledge/memory/` — otherwise the nightly tar captures stale memory.
+- **Run on demand / restore point:** `ssh cortex "cd /opt/coretex/runtime && /opt/coretex/.venv/bin/python backup_drive.py"`.
+  To restore the DB: `gunzip -c cortex-db-<ts>.sql.gz | psql "$DATABASE_URL"`.
 
 ## Cross-session memory (the real handover mechanism)
 Claude's persistent memory at `C:\Users\rasha\.claude\projects\C--Users-rasha\memory\` is the source of truth across
