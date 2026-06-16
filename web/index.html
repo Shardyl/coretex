@@ -491,7 +491,7 @@ async function render(){
 
 // ---- CRM pages: Contacts / Projects / Opportunities ----
 const STAGECOL={Cold:'#8597A6',Contacted:'#5B8DEF',Engaged:'#00DAFF',Qualified:'#2ad17e','Not interested':'#ff5d6c','Dormant/dead':'#8597A6',
-  Opportunity:'#A78BFA',Quote:'#60A5FA',Booked:'#22D3EE',Production:'#FBBF24',Delivered:'#FB923C','Final Payment':'#F472B6','Close & review':'#34D399',Lost:'#F43F5E'};
+  Opportunity:'#A78BFA',Quote:'#60A5FA',Booked:'#22D3EE',Production:'#FBBF24',Delivered:'#FB923C','Final Payment':'#F472B6','Close & review':'#34D399',Recurring:'#14B8A6',Lost:'#F43F5E'};
 function stageChip(s){ s=s||'Cold'; const c=STAGECOL[s]||'#8597A6'; return `<span class="chip" style="color:${c};border-color:${c}55;background:transparent">${esc(s)}</span>`; }
 function realName(c){ const n=((c.first_name||'')+' '+(c.last_name||'')).trim(); return /[A-Za-z]{2}/.test(n)?n:(c.email||'Contact'); }
 function initials(s){ const m=(s||'').match(/[A-Za-z]/g)||['?']; return (m[0]+(m[1]||'')).toUpperCase(); }
@@ -552,7 +552,7 @@ async function openContact(email){
     ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:${h.event==='reply_sent'?'#2ad17e':'#00DAFF'}"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
     </div>`;
 }
-const PROJ_STAGES=['Opportunity','Quote','Booked','Production','Delivered','Final Payment','Close & review','Lost'];
+const PROJ_STAGES=['Opportunity','Quote','Booked','Production','Delivered','Final Payment','Close & review','Recurring','Lost'];
 const FORECAST_STAGES=['Opportunity','Quote'];
 const CONTACT_STAGES=['Cold','Contacted','Engaged','Qualified','Not interested','Dormant/dead'];
 function contactStagePicker(c){
@@ -810,7 +810,7 @@ async function renderProjects(b,co){
   if(!d.count){ h+='<div class="empty">No projects yet</div>'; }
   else if(allco){ const g=byCompany(d.projects); Object.keys(g).sort().forEach(cn=>{ const it=g[cn], s=it.reduce((a,p)=>a+(+p.value||0),0);
     h+=`<div class="h">${esc(cn)} · ${it.length} · ${dmoney(s)}</div>`+it.map(dealCard).join(''); }); }
-  else { ['Booked','Production','Delivered','Final Payment','Close & review'].forEach(st=>{ const g=d.groups[st]; if(!g) return;
+  else { ['Booked','Production','Delivered','Final Payment','Close & review','Recurring'].forEach(st=>{ const g=d.groups[st]; if(!g) return;
     h+=`<div class="h">${esc(st)} · ${g.n} · ${dmoney(g.value)}</div>`+d.projects.filter(p=>p.stage===st).map(dealCard).join(''); }); }
   b.outerHTML='<div id="crmbody">'+h+'</div>';
 }
