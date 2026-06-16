@@ -503,7 +503,7 @@ async function renderCRM(v){
     <button class="cseg ${crmView==='projects'?'on':''}" onclick="setCrm('projects')">Projects</button>
     <button class="cseg ${crmView==='opps'?'on':''}" onclick="setCrm('opps')">Opportunities</button>
     <button class="cseg ${crmView==='contacts'?'on':''}" onclick="setCrm('contacts')">Contacts</button>
-    <button class="cseg ${crmView==='clients'?'on':''}" onclick="setCrm('clients')">Clients</button>
+    <button class="cseg ${crmView==='clients'?'on':''}" onclick="setCrm('clients')">Organisations</button>
   </div><div id="crmbody" class="empty">Loading…</div>`;
   const b=document.getElementById('crmbody');
   if(crmView==='clients') return renderClients(b);
@@ -600,42 +600,42 @@ async function setProjStage(id,i){
 // ---- company-mediated: a deal's people = its client company's contacts ----
 let ACCOUNTS=[], _saving=false;
 async function accountsCache(force){ if(force||!ACCOUNTS.length){ try{ ACCOUNTS=await api('/api/crm/accounts'); }catch(e){ ACCOUNTS=[]; } } return ACCOUNTS; }
-function accountOptions(sel){ return '<option value="">— no company —</option>'+ACCOUNTS.map(a=>`<option value="${a.id}"${(''+sel)===(''+a.id)?' selected':''}>${esc(a.name)}</option>`).join('')+'<option value="__new">+ New company…</option>'; }
+function accountOptions(sel){ return '<option value="">— no organisation —</option>'+ACCOUNTS.map(a=>`<option value="${a.id}"${(''+sel)===(''+a.id)?' selected':''}>${esc(a.name)}</option>`).join('')+'<option value="__new">+ New organisation…</option>'; }
 function dealCompany(p){
   const a=p.account, cs=p.account_contacts||[];
   const people = cs.length? cs.map(c=>{ const n=((c.first_name||'')+' '+(c.last_name||'')).trim()||c.email;
     return `<div class="crow" style="padding:6px 0;cursor:pointer" onclick="openContact('${esc(c.email)}')"><div class="cav" style="width:28px;height:28px;font-size:10px">${esc(initials(n))}</div><div style="flex:1;min-width:0"><div class="cname" style="font-size:13.5px">${esc(n)}${c.is_client?' <span class="chip" style="font-size:9px;color:#2ad17e">client</span>':''}</div><div class="csub">${esc(c.job_title||c.email)}</div></div></div>`; }).join('')
-    : `<div class="csub">No people at this company yet.</div>`;
-  return `<div class="dsec"><div class="dlbl">Company</div>
-    ${a?`<div class="crow" style="padding:4px 0;cursor:pointer" onclick="openAccount(${a.id})"><div class="cav" style="width:32px;height:32px;font-size:12px">${esc(initials(a.name))}</div><div style="flex:1;min-width:0"><div class="cname" style="font-size:15px">${esc(a.name)}</div><div class="csub">${cs.length} contact${cs.length==1?'':'s'}</div></div>${ic('chevron',16)}</div>`:'<div class="csub">No company set</div>'}
-    <div class="row" style="margin:7px 0 2px"><button class="btn sm" onclick="changeDealCompany(${p.id},${a?a.id:'null'})">${ic('edit',14)} ${a?'Change company':'Set company'}</button>${a?`<button class="btn go sm" onclick="addContactToCompany(${a.id})">${ic('plus',14)} Add contact</button>`:''}</div>
+    : `<div class="csub">No people at this organisation yet.</div>`;
+  return `<div class="dsec"><div class="dlbl">Organisation</div>
+    ${a?`<div class="crow" style="padding:4px 0;cursor:pointer" onclick="openAccount(${a.id})"><div class="cav" style="width:32px;height:32px;font-size:12px">${esc(initials(a.name))}</div><div style="flex:1;min-width:0"><div class="cname" style="font-size:15px">${esc(a.name)}</div><div class="csub">${cs.length} contact${cs.length==1?'':'s'}</div></div>${ic('chevron',16)}</div>`:'<div class="csub">No organisation set</div>'}
+    <div class="row" style="margin:7px 0 2px"><button class="btn sm" onclick="changeDealCompany(${p.id},${a?a.id:'null'})">${ic('edit',14)} ${a?'Change organisation':'Set organisation'}</button>${a?`<button class="btn go sm" onclick="addContactToCompany(${a.id})">${ic('plus',14)} Add contact</button>`:''}</div>
     ${a&&cs.length?`<div style="margin-top:6px">${people}</div>`:''}
   </div>`;
 }
 async function changeDealCompany(id,cur){
   await accountsCache();
-  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="openProject(${id})">${ic('back',18)}</button><b>Set company</b></div>
-    <div class="card"><label>Client company</label><select id="dealAcc" class="fsel">${accountOptions(cur)}</select>
+  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="openProject(${id})">${ic('back',18)}</button><b>Set organisation</b></div>
+    <div class="card"><label>Organisation</label><select id="dealAcc" class="fsel">${accountOptions(cur)}</select>
     <div class="row" style="margin-top:12px"><button class="btn go" onclick="saveDealCompany(${id})">Save</button><button class="btn" onclick="openProject(${id})">Cancel</button></div></div>`;
 }
 async function saveDealCompany(id){
-  let v=fval('dealAcc'); if(v==='__new'){ const name=prompt('New company name:'); if(!name) return; const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); v=a.id; }
-  try{ await api('/api/crm/project/'+id+'/account',{method:'POST',body:JSON.stringify({account_id:v?+v:null})}); toast('Company set'); openProject(id); }catch(e){ toast('Could not set ('+e.message+')'); }
+  let v=fval('dealAcc'); if(v==='__new'){ const name=prompt('New organisation name:'); if(!name) return; const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); v=a.id; }
+  try{ await api('/api/crm/project/'+id+'/account',{method:'POST',body:JSON.stringify({account_id:v?+v:null})}); toast('Organisation set'); openProject(id); }catch(e){ toast('Could not set ('+e.message+')'); }
 }
 function contactCompanyRow(c){
-  return `<div class="dsec"><div class="dlbl">Company</div><div class="row" style="align-items:center">
-    <div style="flex:1">${c.company_name?`<span class="cname" style="font-size:14px">${esc(c.company_name)}</span>`:'<span class="csub">No company set</span>'}</div>
+  return `<div class="dsec"><div class="dlbl">Organisation</div><div class="row" style="align-items:center">
+    <div style="flex:1">${c.company_name?`<span class="cname" style="font-size:14px">${esc(c.company_name)}</span>`:'<span class="csub">No organisation set</span>'}</div>
     <button class="btn sm" onclick="changeContactCompany('${esc(c.email)}',${c.account_id||'null'})">${ic('edit',14)} ${c.account_id?'Change':'Set'}</button></div></div>`;
 }
 async function changeContactCompany(email,cur){
   await accountsCache();
-  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="openContact('${esc(email)}')">${ic('back',18)}</button><b>Set company</b></div>
-    <div class="card"><label>Company</label><select id="ccAcc" class="fsel">${accountOptions(cur)}</select>
+  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="openContact('${esc(email)}')">${ic('back',18)}</button><b>Set organisation</b></div>
+    <div class="card"><label>Organisation</label><select id="ccAcc" class="fsel">${accountOptions(cur)}</select>
     <div class="row" style="margin-top:12px"><button class="btn go" onclick="saveContactCompany('${esc(email)}')">Save</button><button class="btn" onclick="openContact('${esc(email)}')">Cancel</button></div></div>`;
 }
 async function saveContactCompany(email){
-  let v=fval('ccAcc'); if(v==='__new'){ const name=prompt('New company name:'); if(!name) return; const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); v=a.id; }
-  try{ await api('/api/crm/contact/company',{method:'POST',body:JSON.stringify({email,account_id:v?+v:null})}); toast('Company set'); openContact(email); }catch(e){ toast('Could not set ('+e.message+')'); }
+  let v=fval('ccAcc'); if(v==='__new'){ const name=prompt('New organisation name:'); if(!name) return; const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); v=a.id; }
+  try{ await api('/api/crm/contact/company',{method:'POST',body:JSON.stringify({email,account_id:v?+v:null})}); toast('Organisation set'); openContact(email); }catch(e){ toast('Could not set ('+e.message+')'); }
 }
 async function openNewContact(accountId){
   await accountsCache(); const co=document.getElementById('coSel').value||'';
@@ -644,7 +644,7 @@ async function openNewContact(accountId){
       <label>First name</label><input id="nc_first" class="fsel">
       <label>Last name</label><input id="nc_last" class="fsel">
       <label>Email</label><input id="nc_email" class="fsel" type="email">
-      <label>Company</label><select id="nc_acc" class="fsel">${accountOptions(accountId)}</select>
+      <label>Organisation</label><select id="nc_acc" class="fsel">${accountOptions(accountId)}</select>
       <label>Job title</label><input id="nc_title" class="fsel">
       <label>Phone</label><input id="nc_phone" class="fsel">
       <div class="row" style="margin-top:12px"><button class="btn go" onclick="saveNewContact('${esc(co)}')">Create contact</button><button class="btn" onclick="go('crm')">Cancel</button></div></div>`;
@@ -652,7 +652,7 @@ async function openNewContact(accountId){
 async function saveNewContact(co){
   const email=fval('nc_email').trim(); if(!email){ toast('Email is required'); return; }
   if(_saving) return; _saving=true;
-  try{ let acc=fval('nc_acc'); if(acc==='__new'){ const name=prompt('New company name:'); if(name){ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); acc=a.id; } else acc=''; }
+  try{ let acc=fval('nc_acc'); if(acc==='__new'){ const name=prompt('New organisation name:'); if(name){ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); acc=a.id; } else acc=''; }
     const c=await api('/api/crm/contacts/new',{method:'POST',body:JSON.stringify({first_name:fval('nc_first'),last_name:fval('nc_last'),email,account_id:acc?+acc:null,company:co||null,phone:fval('nc_phone'),job_title:fval('nc_title')})});
     toast('Contact created'); openContact(c.email); }
   catch(e){ toast('Could not create ('+e.message+')'); }
@@ -720,18 +720,18 @@ async function deleteContact(email){ if(!confirm('Delete this contact permanentl
   const i=contactOrder.indexOf(email); if(i>=0) contactOrder.splice(i,1); const next=(i>=0)?(contactOrder[i]||contactOrder[i-1]):null;
   if(next) openContact(next); else go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
 async function deleteDeal(id){ if(!confirm('Delete this deal permanently? This removes it from the database.')) return; try{ await api('/api/crm/project/'+id,{method:'DELETE'}); toast('Deal deleted'); go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
-async function deleteAccount(id){ if(!confirm('Delete this company permanently? Its contacts and deals stay but get unlinked from it.')) return; try{ await api('/api/crm/account/'+id,{method:'DELETE'}); toast('Company deleted'); go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
+async function deleteAccount(id){ if(!confirm('Delete this organisation permanently? Its contacts and deals stay but get unlinked from it.')) return; try{ await api('/api/crm/account/'+id,{method:'DELETE'}); toast('Organisation deleted'); go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
 function openNewCompany(){
-  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')">${ic('back',18)}</button><b>New company</b></div>
-    <div class="card"><label>Company name</label><input id="na_name" class="fsel">
+  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')">${ic('back',18)}</button><b>New organisation</b></div>
+    <div class="card"><label>Organisation name</label><input id="na_name" class="fsel">
       <label>Website</label><input id="na_web" class="fsel" placeholder="https://…">
       <label>Phone</label><input id="na_phone" class="fsel">
-      <div class="row" style="margin-top:12px"><button class="btn go" onclick="saveNewCompany()">Create company</button><button class="btn" onclick="go('crm')">Cancel</button></div></div>`;
+      <div class="row" style="margin-top:12px"><button class="btn go" onclick="saveNewCompany()">Create organisation</button><button class="btn" onclick="go('crm')">Cancel</button></div></div>`;
 }
 async function saveNewCompany(){
   const name=fval('na_name').trim(); if(!name){ toast('Name is required'); return; }
   if(_saving) return; _saving=true;
-  try{ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name,website:fval('na_web'),phone:fval('na_phone')})}); await accountsCache(true); toast('Company created'); openAccount(a.id); }
+  try{ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name,website:fval('na_web'),phone:fval('na_phone')})}); await accountsCache(true); toast('Organisation created'); openAccount(a.id); }
   catch(e){ toast('Could not create ('+e.message+')'); }
   finally{ _saving=false; }
 }
@@ -743,7 +743,7 @@ async function openNewDeal(accountId){
     <div class="card">
       <label>Your business</label><select id="nd_biz" class="fsel">${biz}</select>
       <label>Deal name</label><input id="nd_title" class="fsel">
-      <label>Client company</label><select id="nd_acc" class="fsel">${accountOptions(accountId)}</select>
+      <label>Organisation</label><select id="nd_acc" class="fsel">${accountOptions(accountId)}</select>
       <label>Value</label><input id="nd_value" class="fsel" type="number" inputmode="decimal">
       <label>Currency</label><select id="nd_cur" class="fsel"><option>AED</option><option>USD</option><option>GBP</option><option>EUR</option></select>
       <label>Stage</label><select id="nd_stage" class="fsel">${stages}</select>
@@ -752,7 +752,7 @@ async function openNewDeal(accountId){
 async function saveNewDeal(){
   const title=fval('nd_title').trim(); if(!title){ toast('Deal name is required'); return; }
   if(_saving) return; _saving=true;
-  try{ let acc=fval('nd_acc'); if(acc==='__new'){ const name=prompt('New company name:'); if(name){ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); acc=a.id; } else acc=''; }
+  try{ let acc=fval('nd_acc'); if(acc==='__new'){ const name=prompt('New organisation name:'); if(name){ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); acc=a.id; } else acc=''; }
     const value=parseFloat(fval('nd_value'))||null;
     const d=await api('/api/crm/deals/new',{method:'POST',body:JSON.stringify({company:fval('nd_biz'),title,value,currency:fval('nd_cur'),stage:fval('nd_stage'),account_id:acc?+acc:null})});
     toast('Deal created'); openProject(d.id); }
@@ -814,8 +814,8 @@ let clTimer=null;
 function searchClients(){ clearTimeout(clTimer); clTimer=setTimeout(loadClients,280); }
 async function renderClients(b){
   b.outerHTML=`<div id="crmbody">
-    <div class="srch">${ic('search',18)}<input id="clq" placeholder="Search clients…" oninput="searchClients()"></div>
-    <div class="row" style="margin-bottom:10px"><button class="btn go sm" onclick="openNewCompany()">${ic('plus',15)} New company</button></div>
+    <div class="srch">${ic('search',18)}<input id="clq" placeholder="Search organisations…" oninput="searchClients()"></div>
+    <div class="row" style="margin-bottom:10px"><button class="btn go sm" onclick="openNewCompany()">${ic('plus',15)} New organisation</button></div>
     <div id="cllist" class="empty">Loading…</div></div>`;
   loadClients();
 }
@@ -826,7 +826,7 @@ async function loadClients(){
     <div class="cav">${esc(initials(a.name))}</div>
     <div style="flex:1;min-width:0"><div class="cname">${esc(a.name)}</div>
       <div class="csub">${a.contacts} contact${a.contacts==1?'':'s'} · ${a.deals} deal${a.deals==1?'':'s'}${a.won_value?' · '+dmoney(a.won_value)+' won':''}</div></div>
-    ${ic('chevron',18)}</div>`).join('') : '<div class="empty">No clients yet</div>';
+    ${ic('chevron',18)}</div>`).join('') : '<div class="empty">No organisations yet</div>';
 }
 async function openAccount(id){
   const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
@@ -835,7 +835,7 @@ async function openAccount(id){
   const contacts=(a.contacts||[]).map(c=>{ const n=((c.first_name||'')+' '+(c.last_name||'')).trim()||c.email;
     return `<div class="crow" style="padding:7px 0;cursor:pointer" onclick="openContact('${esc(c.email)}')"><div class="cav" style="width:30px;height:30px;font-size:11px">${esc(initials(n))}</div><div style="flex:1;min-width:0"><div class="cname" style="font-size:14px">${esc(n)}${c.is_client?' <span class="chip" style="font-size:10px;color:#2ad17e">client</span>':''}</div><div class="csub">${esc(c.job_title||c.email)}</div></div>${stageChip(c.stage)}</div>`; }).join('');
   const deals=(a.deals||[]).map(dealCard).join('');
-  v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>Client</b>
+  v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>Organisation</b>
       <div style="margin-left:auto;display:flex;gap:6px"><button class="iconbtn sm" title="Rename" onclick="renameAccount(${a.id},'${esc(a.name||'')}')">${ic('edit',16)}</button><button class="iconbtn sm" title="Delete" onclick="deleteAccount(${a.id})">${ic('trash',16)}</button></div></div>
     <div class="card">
       <div class="cname" style="font-size:18px">${esc(a.name||'')}</div>
@@ -849,7 +849,7 @@ async function openAccount(id){
     </div>`;
 }
 async function renameAccount(id,cur){
-  const name=prompt('Rename client company:', cur); if(!name||name===cur) return;
+  const name=prompt('Rename organisation:', cur); if(!name||name===cur) return;
   try{ await api('/api/crm/account/'+id+'/rename',{method:'POST',body:JSON.stringify({name})}); toast('Renamed'); openAccount(id); }
   catch(e){ toast('Could not rename ('+e.message+')'); }
 }
@@ -864,7 +864,8 @@ function cadenceText(t){
 function whenText(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString([],{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; } }
 async function renderCalendar(v){
   v.innerHTML=`<div class="h">Calendar</div><div id="calbody" class="empty">Loading…</div>`;
-  let d; try{ d=await api('/api/schedule'); }catch(e){ d={tasks:[],kinds:{},companies:{}}; }
+  const fco=document.getElementById('coSel').value;
+  let d; try{ d=await api('/api/schedule'+(fco?'?company='+encodeURIComponent(fco):'')); }catch(e){ d={tasks:[],kinds:{},companies:{}}; }
   schedCompanies=d.companies||{}; schedKinds=d.kinds||{};
   const cos=Object.entries(schedCompanies), tasks=d.tasks||[];
   let h='';
@@ -882,8 +883,8 @@ async function renderCalendar(v){
     });
   } else { h+='<div class="empty" style="padding:22px 14px">No scheduled tasks yet. Add one below.</div>'; }
   h+=`<div class="h">Schedule a task</div><div class="card">
-    <label>Company</label>
-    <select id="scCo" class="fsel">${cos.map(([s,l])=>`<option value="${esc(s)}">${esc(l)}</option>`).join('')}</select>
+    <label>Organisation</label>
+    <select id="scCo" class="fsel">${cos.map(([s,l])=>`<option value="${esc(s)}"${s===fco?' selected':''}>${esc(l)}</option>`).join('')}</select>
     <label>Task</label>
     <select id="scKind" class="fsel">${Object.entries(schedKinds).map(([k,l])=>`<option value="${esc(k)}">${esc(l)}</option>`).join('')}</select>
     <label>How often</label>
@@ -1514,7 +1515,7 @@ async function renderAsk(v){
   let sk=[]; try{ sk=demo?(SAMPLE.skills[co]||[]):await api(`/api/companies/${co}/skills`); }catch(e){ sk=SAMPLE.skills[co]||[]; }
   v.innerHTML=`<div class="h">Ask Cortex</div>
     <div class="card">
-      <label>Company</label>
+      <label>Organisation</label>
       <select class="field" id="aCo">${companies.map(c=>`<option value="${c.slug}" ${c.slug===co?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
       <label>Skill</label>
       <select class="field" id="aSk">${sk.map(s=>`<option value="${s.skill_key}">${esc(s.name)}</option>`).join('')||'<option>content-seo</option>'}</select>
