@@ -79,7 +79,8 @@ def add_inquiry(inq: dict, company: str = "tabscanner") -> tuple[str, str | None
     # a genuine inbound enquiry (already past triage) = the contact has Engaged with us
     db.execute(
         "insert into crm_master (organisation, first_name, last_name, email, company_domain, "
-        "lead_source, lead_status, stage, note, history) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "lead_source, lead_status, stage, note, history) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+        "on conflict (lower(email)) do nothing",
         (org, fn, ln, email, dom, "Website enquiry", "New", "Engaged", note, Json([ev])))
     return ("added", email)
 
@@ -307,17 +308,18 @@ def create_contact(first_name: str, last_name: str, email: str, account_id=None,
         a = db.one("select name, domain from crm_accounts where id=%s", (account_id,))
         if a:
             cn, dom = a["name"], a.get("domain")
-    ex = db.one("select id from crm_master where lower(email)=lower(%s)", (email,))
-    if ex:
-        db.execute("update crm_master set first_name=%s, last_name=%s, account_id=coalesce(%s,account_id), "
-                   "company_name=coalesce(%s,company_name), phone=coalesce(%s,phone), "
-                   "job_title=coalesce(%s,job_title), updated_at=now() where id=%s",
-                   (first_name, last_name, account_id, cn, phone, job_title, ex["id"]))
-    else:
-        db.execute("insert into crm_master (organisation, first_name, last_name, email, account_id, company_name, "
-                   "company_domain, phone, job_title, stage, lead_source) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                   (_org(company) if company else "", first_name, last_name, email, account_id, cn, dom,
-                    phone, job_title, stage, "Manual"))
+    # atomic upsert (unique index on lower(email)) — concurrent submits can never create duplicates
+    db.execute(
+        "insert into crm_master (organisation, first_name, last_name, email, account_id, company_name, "
+        "company_domain, phone, job_title, stage, lead_source) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+        "on conflict (lower(email)) do update set first_name=excluded.first_name, last_name=excluded.last_name, "
+        "account_id=coalesce(excluded.account_id, crm_master.account_id), "
+        "company_name=coalesce(excluded.company_name, crm_master.company_name), "
+        "company_domain=coalesce(excluded.company_domain, crm_master.company_domain), "
+        "phone=coalesce(excluded.phone, crm_master.phone), "
+        "job_title=coalesce(excluded.job_title, crm_master.job_title), updated_at=now()",
+        (_org(company) if company else "", first_name, last_name, email, account_id, cn, dom,
+         phone, job_title, stage, "Manual"))
     if _account_has_won(account_id):
         db.execute("update crm_master set is_client=true where lower(email)=lower(%s)", (email,))
     return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))

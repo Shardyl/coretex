@@ -593,7 +593,7 @@ async function setProjStage(id,i){
   catch(e){ toast('Could not update ('+e.message+')'); }
 }
 // ---- company-mediated: a deal's people = its client company's contacts ----
-let ACCOUNTS=[];
+let ACCOUNTS=[], _saving=false;
 async function accountsCache(force){ if(force||!ACCOUNTS.length){ try{ ACCOUNTS=await api('/api/crm/accounts'); }catch(e){ ACCOUNTS=[]; } } return ACCOUNTS; }
 function accountOptions(sel){ return '<option value="">— no company —</option>'+ACCOUNTS.map(a=>`<option value="${a.id}"${(''+sel)===(''+a.id)?' selected':''}>${esc(a.name)}</option>`).join('')+'<option value="__new">+ New company…</option>'; }
 function dealCompany(p){
@@ -646,9 +646,12 @@ async function openNewContact(accountId){
 }
 async function saveNewContact(co){
   const email=fval('nc_email').trim(); if(!email){ toast('Email is required'); return; }
-  let acc=fval('nc_acc'); if(acc==='__new'){ const name=prompt('New company name:'); if(name){ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); acc=a.id; } else acc=''; }
-  try{ const c=await api('/api/crm/contacts/new',{method:'POST',body:JSON.stringify({first_name:fval('nc_first'),last_name:fval('nc_last'),email,account_id:acc?+acc:null,company:co||null,phone:fval('nc_phone'),job_title:fval('nc_title')})});
-    toast('Contact created'); openContact(c.email); }catch(e){ toast('Could not create ('+e.message+')'); }
+  if(_saving) return; _saving=true;
+  try{ let acc=fval('nc_acc'); if(acc==='__new'){ const name=prompt('New company name:'); if(name){ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); acc=a.id; } else acc=''; }
+    const c=await api('/api/crm/contacts/new',{method:'POST',body:JSON.stringify({first_name:fval('nc_first'),last_name:fval('nc_last'),email,account_id:acc?+acc:null,company:co||null,phone:fval('nc_phone'),job_title:fval('nc_title')})});
+    toast('Contact created'); openContact(c.email); }
+  catch(e){ toast('Could not create ('+e.message+')'); }
+  finally{ _saving=false; }
 }
 async function addContactToCompany(accountId){
   document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="openAccount(${accountId})">${ic('back',18)}</button><b>Add contact</b></div>
@@ -685,7 +688,10 @@ function openNewCompany(){
 }
 async function saveNewCompany(){
   const name=fval('na_name').trim(); if(!name){ toast('Name is required'); return; }
-  try{ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name,website:fval('na_web'),phone:fval('na_phone')})}); await accountsCache(true); toast('Company created'); openAccount(a.id); }catch(e){ toast('Could not create ('+e.message+')'); }
+  if(_saving) return; _saving=true;
+  try{ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name,website:fval('na_web'),phone:fval('na_phone')})}); await accountsCache(true); toast('Company created'); openAccount(a.id); }
+  catch(e){ toast('Could not create ('+e.message+')'); }
+  finally{ _saving=false; }
 }
 async function openNewDeal(accountId){
   await accountsCache(); const co=document.getElementById('coSel').value||'';
@@ -703,10 +709,13 @@ async function openNewDeal(accountId){
 }
 async function saveNewDeal(){
   const title=fval('nd_title').trim(); if(!title){ toast('Deal name is required'); return; }
-  let acc=fval('nd_acc'); if(acc==='__new'){ const name=prompt('New company name:'); if(name){ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); acc=a.id; } else acc=''; }
-  const value=parseFloat(fval('nd_value'))||null;
-  try{ const d=await api('/api/crm/deals/new',{method:'POST',body:JSON.stringify({company:fval('nd_biz'),title,value,currency:fval('nd_cur'),stage:fval('nd_stage'),account_id:acc?+acc:null})});
-    toast('Deal created'); openProject(d.id); }catch(e){ toast('Could not create ('+e.message+')'); }
+  if(_saving) return; _saving=true;
+  try{ let acc=fval('nd_acc'); if(acc==='__new'){ const name=prompt('New company name:'); if(name){ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); acc=a.id; } else acc=''; }
+    const value=parseFloat(fval('nd_value'))||null;
+    const d=await api('/api/crm/deals/new',{method:'POST',body:JSON.stringify({company:fval('nd_biz'),title,value,currency:fval('nd_cur'),stage:fval('nd_stage'),account_id:acc?+acc:null})});
+    toast('Deal created'); openProject(d.id); }
+  catch(e){ toast('Could not create ('+e.message+')'); }
+  finally{ _saving=false; }
 }
 async function openProject(id){
   const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
