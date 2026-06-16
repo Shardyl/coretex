@@ -701,6 +701,24 @@ def crm_update_deal(id: int, body: DealEditBody, _: None = Depends(auth)) -> dic
     return r
 
 
+@app.delete("/api/crm/contact")
+def crm_delete_contact(email: str, _: None = Depends(auth)) -> dict:
+    crm.delete_contact(email)
+    return {"ok": True}
+
+
+@app.delete("/api/crm/account/{id}")
+def crm_delete_account(id: int, _: None = Depends(auth)) -> dict:
+    crm.delete_account(id)
+    return {"ok": True}
+
+
+@app.delete("/api/crm/project/{id}")
+def crm_delete_deal(id: int, _: None = Depends(auth)) -> dict:
+    crm.delete_deal(id)
+    return {"ok": True}
+
+
 class AssignAccountBody(BaseModel):
     account_id: int | None = None
     email: str | None = None

@@ -538,7 +538,8 @@ async function openContact(email){
   let c; try{ c=await api('/api/crm/contact?email='+encodeURIComponent(email)); }catch(e){ c={}; }
   const n=realName(c); const hist=(c.history||[]);
   const fld=(ic_,t)=>t?`<div class="dfld">${ic(ic_,15)} ${esc(t)}</div>`:'';
-  v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>Contact</b></div>
+  v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>Contact</b>
+    <div style="margin-left:auto;display:flex;gap:6px"><button class="iconbtn sm" title="Edit" onclick="openEditContact('${esc(email)}')">${ic('edit',16)}</button><button class="iconbtn sm" title="Delete" onclick="deleteContact('${esc(email)}')">${ic('trash',16)}</button></div></div>
     <div class="card"><div class="crow" style="padding:0;margin-bottom:12px"><div class="cav" style="width:44px;height:44px;font-size:15px">${esc(initials(n))}</div>
       <div><div class="cname" style="font-size:17px">${esc(n)}</div><div class="csub">${esc(c.organisation||'')}${c.job_title?' · '+esc(c.job_title):''}</div></div></div>
     <div class="row" style="margin-bottom:12px">${stageChip(c.stage)}${c.tier?`<span class="chip cy">Tier ${esc(c.tier)}</span>`:''}${c.is_client?'<span class="chip" style="color:#2ad17e">Client</span>':''}</div>
@@ -682,6 +683,41 @@ async function attachExisting(email,accountId){
   try{ await api('/api/crm/contact/company',{method:'POST',body:JSON.stringify({email,account_id:accountId})}); toast('Added to company'); openAccount(accountId); }
   catch(e){ toast('Could not add ('+e.message+')'); }
 }
+async function openEditContact(email){
+  let c; try{ c=await api('/api/crm/contact?email='+encodeURIComponent(email)); }catch(e){ c={}; }
+  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="openContact('${esc(email)}')">${ic('back',18)}</button><b>Edit contact</b></div>
+    <div class="card">
+      <label>First name</label><input id="ec_first" class="fsel" value="${esc(c.first_name||'')}">
+      <label>Last name</label><input id="ec_last" class="fsel" value="${esc(c.last_name||'')}">
+      <label>Email</label><input id="ec_email" class="fsel" value="${esc(c.email||'')}">
+      <label>Job title</label><input id="ec_title" class="fsel" value="${esc(c.job_title||'')}">
+      <label>Phone</label><input id="ec_phone" class="fsel" value="${esc(c.phone||'')}">
+      <div class="row" style="margin-top:12px"><button class="btn go" onclick="saveEditContact('${esc(email)}')">Save</button><button class="btn" onclick="openContact('${esc(email)}')">Cancel</button></div></div>`;
+}
+async function saveEditContact(email){
+  if(_saving) return; _saving=true; const ne=fval('ec_email').trim();
+  try{ const c=await api('/api/crm/contact/update',{method:'POST',body:JSON.stringify({email,first_name:fval('ec_first'),last_name:fval('ec_last'),job_title:fval('ec_title'),phone:fval('ec_phone'),new_email:(ne&&ne.toLowerCase()!==email.toLowerCase())?ne:null})});
+    toast('Saved'); openContact(c.email); }
+  catch(e){ toast('Could not save ('+e.message+')'); } finally{ _saving=false; }
+}
+async function openEditDeal(id){
+  let p; try{ p=await api('/api/crm/project?id='+id); }catch(e){ p={}; }
+  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="openProject(${id})">${ic('back',18)}</button><b>Edit deal</b></div>
+    <div class="card">
+      <label>Deal name</label><input id="ed_title" class="fsel" value="${esc(p.title||'')}">
+      <label>Value</label><input id="ed_value" class="fsel" type="number" inputmode="decimal" value="${p.value!=null?esc(''+p.value):''}">
+      <label>Currency</label><select id="ed_cur" class="fsel">${['AED','USD','GBP','EUR'].map(x=>`<option${x===(p.currency||'AED')?' selected':''}>${x}</option>`).join('')}</select>
+      <div class="row" style="margin-top:12px"><button class="btn go" onclick="saveEditDeal(${id})">Save</button><button class="btn" onclick="openProject(${id})">Cancel</button></div></div>`;
+}
+async function saveEditDeal(id){
+  if(_saving) return; _saving=true; const v=fval('ed_value');
+  try{ await api('/api/crm/project/'+id+'/update',{method:'POST',body:JSON.stringify({title:fval('ed_title'),value:v!==''?parseFloat(v):null,currency:fval('ed_cur')})});
+    toast('Saved'); openProject(id); }
+  catch(e){ toast('Could not save ('+e.message+')'); } finally{ _saving=false; }
+}
+async function deleteContact(email){ if(!confirm('Delete this contact permanently? This removes them from the database.')) return; try{ await api('/api/crm/contact?email='+encodeURIComponent(email),{method:'DELETE'}); toast('Contact deleted'); go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
+async function deleteDeal(id){ if(!confirm('Delete this deal permanently? This removes it from the database.')) return; try{ await api('/api/crm/project/'+id,{method:'DELETE'}); toast('Deal deleted'); go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
+async function deleteAccount(id){ if(!confirm('Delete this company permanently? Its contacts and deals stay but get unlinked from it.')) return; try{ await api('/api/crm/account/'+id,{method:'DELETE'}); toast('Company deleted'); go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
 function openNewCompany(){
   document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')">${ic('back',18)}</button><b>New company</b></div>
     <div class="card"><label>Company name</label><input id="na_name" class="fsel">
@@ -726,7 +762,8 @@ async function openProject(id){
   const money=n=>Math.round(n||0).toLocaleString(); const hist=(p.history||[]);
   const forecast=FORECAST_STAGES.includes(p.stage);
   const fld=(ic_,t)=>t?`<div class="dfld">${ic(ic_,15)} ${esc(t)}</div>`:'';
-  v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>${forecast?'Opportunity':'Project'}</b></div>
+  v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>${forecast?'Opportunity':'Project'}</b>
+      <div style="margin-left:auto;display:flex;gap:6px"><button class="iconbtn sm" title="Edit" onclick="openEditDeal(${p.id})">${ic('edit',16)}</button><button class="iconbtn sm" title="Delete" onclick="deleteDeal(${p.id})">${ic('trash',16)}</button></div></div>
     <div class="card">
       <div class="cname" style="font-size:17px">${esc(p.title||'Untitled')}</div>
       <div class="csub" style="margin-bottom:10px">${esc(p.company||'')}</div>
@@ -796,7 +833,7 @@ async function openAccount(id){
     return `<div class="crow" style="padding:7px 0;cursor:pointer" onclick="openContact('${esc(c.email)}')"><div class="cav" style="width:30px;height:30px;font-size:11px">${esc(initials(n))}</div><div style="flex:1;min-width:0"><div class="cname" style="font-size:14px">${esc(n)}${c.is_client?' <span class="chip" style="font-size:10px;color:#2ad17e">client</span>':''}</div><div class="csub">${esc(c.job_title||c.email)}</div></div>${stageChip(c.stage)}</div>`; }).join('');
   const deals=(a.deals||[]).map(dealCard).join('');
   v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>Client</b>
-      <button class="iconbtn sm" style="margin-left:auto" title="Rename" onclick="renameAccount(${a.id},'${esc(a.name||'')}')">${ic('edit',16)}</button></div>
+      <div style="margin-left:auto;display:flex;gap:6px"><button class="iconbtn sm" title="Rename" onclick="renameAccount(${a.id},'${esc(a.name||'')}')">${ic('edit',16)}</button><button class="iconbtn sm" title="Delete" onclick="deleteAccount(${a.id})">${ic('trash',16)}</button></div></div>
     <div class="card">
       <div class="cname" style="font-size:18px">${esc(a.name||'')}</div>
       <div class="dgrid">${fld('globe',a.domain||a.website)}${fld('pin',a.phone)}</div>
