@@ -204,11 +204,26 @@ def set_project_stage(project_id: int, stage: str) -> dict | None:
     ev = {"ts": _now(), "event": "stage_change", "text": f"{old} -> {stage}"}
     db.execute("update crm_projects set stage=%s, history = history || %s::jsonb, updated_at=now() where id=%s",
                (stage, Json([ev]), project_id))
+    p["stage"] = stage
+    if stage in WON_STAGES:
+        flag_clients_for_deal(p)        # won = the people/company on it become clients (sticky)
     if p.get("contact_email"):
-        db.execute("update crm_master set is_client=%s where lower(email)=lower(%s)",
-                   (stage in WON_STAGES, p["contact_email"]))
         log_event(p["contact_email"], "deal_stage", f"{p['title']}: {old} -> {stage}")
     return db.one("select * from crm_projects where id=%s", (project_id,))
+
+
+def flag_clients_for_deal(p: dict) -> int:
+    """Mark every contact on a (won) deal — and everyone at its client account — as is_client. Sticky:
+    we never auto-unmark, since a contact can be a client via another deal."""
+    emails = {(c.get("email") or "").lower() for c in (p.get("contacts") or []) if c.get("email")}
+    if p.get("contact_email"):
+        emails.add(p["contact_email"].lower())
+    n = 0
+    for e in emails:
+        n += 1 if db.execute("update crm_master set is_client=true where lower(email)=lower(%s) returning id", (e,)) else 0
+    if p.get("account_id"):
+        db.execute("update crm_master set is_client=true where account_id=%s", (p["account_id"],))
+    return n
 
 def create_project(company: str, contact_email: str, title: str, value=None,
                    currency: str = "AED", stage: str = "Booked", owner: str | None = None,

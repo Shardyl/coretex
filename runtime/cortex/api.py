@@ -565,12 +565,16 @@ def crm_contacts(company: str | None = None, q: str | None = None, stage: str | 
         clauses.append("(first_name ilike %s or last_name ilike %s or email ilike %s or company_name ilike %s)")
         params += [f"%{q}%"] * 4
     if stage and stage != "All":
-        clauses.append("stage = %s"); params.append(stage)
+        if stage == "Client":
+            clauses.append("is_client = true")          # 'Client' is a flag, not a funnel status
+        else:
+            clauses.append("stage = %s"); params.append(stage)
     where = ("where " + " and ".join(clauses)) if clauses else ""
     params.append(limit)
     return db.query(
         "select first_name, last_name, email, organisation, company_name, job_title, stage, tier, "
-        f"is_client, lead_source from crm_master {where} order by first_name nulls last limit %s", tuple(params))
+        f"is_client, lead_source from crm_master {where} order by is_client desc, first_name nulls last limit %s",
+        tuple(params))
 
 
 @app.get("/api/crm/contact")
