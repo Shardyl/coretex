@@ -86,6 +86,22 @@ def add_inquiry(inq: dict, company: str = "tabscanner") -> tuple[str, str | None
 
 # ---- Projects = real won work (created when a quote is accepted -> Booked) ----
 
+PROJECT_STAGES = ["Booked", "Production", "Delivered", "Final Payment", "Close & review"]
+
+
+def set_project_stage(project_id: int, stage: str) -> dict | None:
+    """Move a project to a new stage; logs the change on the project + the linked contact's history."""
+    p = db.one("select * from crm_projects where id=%s", (project_id,))
+    if not p:
+        return None
+    old = p.get("stage")
+    ev = {"ts": _now(), "event": "stage_change", "text": f"{old} -> {stage}"}
+    db.execute("update crm_projects set stage=%s, history = history || %s::jsonb, updated_at=now() where id=%s",
+               (stage, Json([ev]), project_id))
+    if p.get("contact_email"):
+        log_event(p["contact_email"], "project_stage", f"{p['title']}: {old} -> {stage}")
+    return db.one("select * from crm_projects where id=%s", (project_id,))
+
 def create_project(company: str, contact_email: str, title: str, value=None,
                    currency: str = "AED", stage: str = "Booked", owner: str | None = None,
                    quote_ref: str | None = None, note: str | None = None) -> int:

@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import (catalog, config, db, engine, gmail, knowledge, personas, profile, provider,
+from . import (catalog, config, crm, db, engine, gmail, knowledge, personas, profile, provider,
                questionnaire, schedule, seo_report, skillqa, store, worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
@@ -592,6 +592,20 @@ def crm_projects(company: str | None = None, _: None = Depends(auth)) -> dict:
 @app.get("/api/crm/project")
 def crm_project(id: int, _: None = Depends(auth)) -> dict:
     return db.one("select * from crm_projects where id=%s", (id,)) or {}
+
+
+class ProjectStageBody(BaseModel):
+    stage: str
+
+
+@app.post("/api/crm/project/{id}/stage")
+def crm_project_stage(id: int, body: ProjectStageBody, _: None = Depends(auth)) -> dict:
+    if body.stage not in crm.PROJECT_STAGES:
+        raise HTTPException(status_code=400, detail=f"stage must be one of {crm.PROJECT_STAGES}")
+    r = crm.set_project_stage(id, body.stage)
+    if not r:
+        raise HTTPException(status_code=404, detail="project not found")
+    return r
 
 
 @app.get("/api/crm/opportunities")

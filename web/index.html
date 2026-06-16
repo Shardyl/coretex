@@ -540,6 +540,18 @@ async function openContact(email){
     ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:${h.event==='reply_sent'?'#2ad17e':'#00DAFF'}"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
     </div>`;
 }
+const PROJ_STAGES=['Booked','Production','Delivered','Final Payment','Close & review'];
+function projStagePicker(p){
+  return `<div class="dsec"><div class="dlbl">Change stage</div><div class="chiprow">${PROJ_STAGES.map((s,i)=>{
+    const on=s===p.stage, c=STAGECOL[s]||'#8597A6';
+    return `<span class="fchip${on?' on':''}" style="${on?`color:${c};border-color:${c}`:''}" onclick="setProjStage(${p.id},${i})">${esc(s)}</span>`;
+  }).join('')}</div></div>`;
+}
+async function setProjStage(id,i){
+  const s=PROJ_STAGES[i];
+  try{ await api('/api/crm/project/'+id+'/stage',{method:'POST',body:JSON.stringify({stage:s})}); toast('Moved to '+s); openProject(id); }
+  catch(e){ toast('Could not update ('+e.message+')'); }
+}
 async function openProject(id){
   const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
   let p; try{ p=await api('/api/crm/project?id='+id); }catch(e){ p={}; }
@@ -550,6 +562,7 @@ async function openProject(id){
       <div class="cname" style="font-size:17px">${esc(p.title||'Untitled')}</div>
       <div class="csub" style="margin-bottom:10px">${esc(p.company||'')}</div>
       <div class="row" style="margin-bottom:12px">${stageChip(p.stage)}<span class="chip cy">${money(p.value)} ${esc(p.currency||'')}</span></div>
+      ${projStagePicker(p)}
       <div class="dgrid">${fld('briefcase',p.owner&&('Owner: '+p.owner))}${fld('file',p.quote_ref&&('Quote ref '+p.quote_ref))}${p.contact_email?`<div class="dfld">${ic('mail',15)} <a href="#" onclick="openContact('${esc(p.contact_email)}');return false" style="color:var(--accent)">${esc(p.contact_email)}</a></div>`:''}</div>
       ${p.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${esc(p.note)}</div></div>`:''}
       ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
