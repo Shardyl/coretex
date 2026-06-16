@@ -143,6 +143,8 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .hitem{display:flex;gap:10px;margin-bottom:9px;font-size:13px}
 .hled{width:8px;height:8px;border-radius:50%;margin-top:5px;flex:none}
 .iconbtn.sm{width:32px;height:32px}
+.fsel{width:100%;box-sizing:border-box;background:var(--panel2,#0e1620);color:var(--ink);border:1px solid var(--line);border-radius:11px;padding:11px 12px;font:inherit;font-size:15px;-webkit-appearance:none;appearance:none}
+.fsel[type=time]{appearance:auto}
 /* chat */
 .chatlog{display:flex;flex-direction:column;gap:10px;padding:8px 2px 152px}
 .convbar{display:flex;gap:8px;align-items:center;margin:0 2px 4px}
@@ -462,7 +464,8 @@ const ICON={
   finger:'M12 11a2 2 0 0 0-2 2c0 1.4.3 2.8.8 4M12 7a5 5 0 0 0-5 5c0 1 0 2.4.5 3.6M12 7a5 5 0 0 1 5 5c0 .8 0 1.6-.2 2.4M9.5 4.3a8 8 0 0 1 10 7.7M4.3 11A8 8 0 0 1 7 6.2',
   alert:'M12 4l9 16H3zM12 10v4M12 17h.01',
   file:'M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5',
-  pause:'M9 5v14M15 5v14'
+  pause:'M9 5v14M15 5v14',
+  play:'M7 5l12 7-12 7z'
 };
 function ic(n,s){ s=s||20; return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle"><path d="${ICON[n]||''}"></path></svg>`; }
 function paintIcons(){
@@ -556,13 +559,64 @@ async function renderOpps(b,co){
     return `<div class="card"><div class="orow"><span class="cname" style="flex:1">${esc(o.company_name||n)}</span>${stageChip(o.stage)}</div><div class="csub" style="margin-top:5px">${esc((o.note||'').slice(0,130))}</div></div>`; }).join('') : '<div class="empty">No open opportunities</div>';
   b.outerHTML='<div id="crmbody">'+h+'</div>';
 }
-async function renderCalendar(v){
-  v.innerHTML=`<div class="h">Calendar</div>
-    <div class="card"><div class="cname">${ic('calendar',16)} Scheduled tasks</div>
-    <div class="csub" style="margin:8px 0 14px">Schedule recurring jobs for Cortex to run, like the weekly per-company SEO report, and see everything that's coming up here, per company or all together.</div>
-    <button class="btn go" onclick="toast('Scheduler engine is the next build')">${ic('plus',16)} Schedule a task</button></div>
-    <div class="empty" style="padding:30px 16px">The scheduling engine + the weekly SEO report task land in the next build.</div>`;
+const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+let schedCompanies={}, schedKinds={};
+function pad2(n){ return String(n||0).padStart(2,'0'); }
+function cadenceText(t){
+  if(t.cadence==='daily')   return `Daily · ${pad2(t.hour)}:${pad2(t.minute)}`;
+  if(t.cadence==='monthly') return `Monthly · ${pad2(t.hour)}:${pad2(t.minute)}`;
+  return `Weekly · ${DOW[t.weekday||0]} ${pad2(t.hour)}:${pad2(t.minute)}`;
 }
+function whenText(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString([],{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; } }
+async function renderCalendar(v){
+  v.innerHTML=`<div class="h">Calendar</div><div id="calbody" class="empty">Loading…</div>`;
+  let d; try{ d=await api('/api/schedule'); }catch(e){ d={tasks:[],kinds:{},companies:{}}; }
+  schedCompanies=d.companies||{}; schedKinds=d.kinds||{};
+  const cos=Object.entries(schedCompanies), tasks=d.tasks||[];
+  let h='';
+  if(tasks.length){
+    h+='<div class="h">Scheduled</div>';
+    tasks.forEach(t=>{
+      h+=`<div class="card prow" style="${t.enabled?'':'opacity:.55'}"><div style="flex:1;min-width:0">
+        <div class="cname">${esc(t.title||'Task')}</div>
+        <div class="csub">${esc(cadenceText(t))} · next ${esc(whenText(t.next_run))}${t.last_status?' · last: '+esc(t.last_status):''}</div></div>
+        <div class="row" style="gap:6px;flex:none">
+          <button class="iconbtn sm" title="Run now" onclick="runSched(${t.id})">${ic('play',15)}</button>
+          <button class="iconbtn sm" title="${t.enabled?'Pause':'Resume'}" onclick="toggleSched(${t.id})">${ic(t.enabled?'pause':'play',15)}</button>
+          <button class="iconbtn sm" title="Delete" onclick="delSched(${t.id})">${ic('trash',15)}</button>
+        </div></div>`;
+    });
+  } else { h+='<div class="empty" style="padding:22px 14px">No scheduled tasks yet. Add one below.</div>'; }
+  h+=`<div class="h">Schedule a task</div><div class="card">
+    <label>Company</label>
+    <select id="scCo" class="fsel">${cos.map(([s,l])=>`<option value="${esc(s)}">${esc(l)}</option>`).join('')}</select>
+    <label>Task</label>
+    <select id="scKind" class="fsel">${Object.entries(schedKinds).map(([k,l])=>`<option value="${esc(k)}">${esc(l)}</option>`).join('')}</select>
+    <label>How often</label>
+    <select id="scCad" class="fsel" onchange="document.getElementById('scDowWrap').style.display=this.value==='weekly'?'block':'none'">
+      <option value="weekly">Weekly</option><option value="daily">Daily</option><option value="monthly">Monthly</option></select>
+    <div id="scDowWrap"><label>Day</label>
+      <select id="scDow" class="fsel">${DOW.map((d2,i)=>`<option value="${i}"${i===0?' selected':''}>${d2}</option>`).join('')}</select></div>
+    <label>Time</label>
+    <input id="scTime" class="fsel" type="time" value="08:00">
+    <div class="row" style="margin-top:14px">
+      <button class="btn go" onclick="addSched()">${ic('plus',16)} Schedule it</button>
+      <button class="btn" onclick="runReportNow()">${ic('file',16)} Generate one now</button>
+    </div></div>`;
+  document.getElementById('calbody').outerHTML='<div id="calbody">'+h+'</div>';
+}
+function fval(id){ const e=document.getElementById(id); return e?e.value:''; }
+async function addSched(){
+  const [hh,mm]=(fval('scTime')||'08:00').split(':').map(Number);
+  try{ await api('/api/schedule',{method:'POST',body:JSON.stringify({company:fval('scCo'),kind:fval('scKind'),
+        cadence:fval('scCad'),weekday:parseInt(fval('scDow')||'0',10),hour:hh,minute:mm})});
+    toast('Scheduled'); renderCalendar(document.getElementById('view')); }
+  catch(e){ toast('Could not schedule ('+e.message+')'); }
+}
+async function toggleSched(id){ try{ await api('/api/schedule/'+id+'/toggle',{method:'POST'}); renderCalendar(document.getElementById('view')); }catch(e){ toast(e.message); } }
+async function delSched(id){ try{ await api('/api/schedule/'+id,{method:'DELETE'}); renderCalendar(document.getElementById('view')); }catch(e){ toast(e.message); } }
+async function runSched(id){ try{ toast('Running…'); await api('/api/schedule/'+id+'/run',{method:'POST'}); toast('Done — it is in your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
+async function runReportNow(){ try{ toast('Generating…'); await api('/api/report/run?company='+encodeURIComponent(fval('scCo')),{method:'POST'}); toast('Done — check your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
 
 async function renderInbox(v){
   v.innerHTML='<div class="h">Needs your yes</div><div id="ib" class="empty">Loading…</div>';
@@ -574,6 +628,7 @@ async function renderInbox(v){
   ib.outerHTML = items.map(t=>{
     const co=t.company||compName(t.company_id), sk=t.skill||'';
     const wp=t.wp||null, em=t.email||null;
+    if(t.kind==='report') return reportCard(t,co);
     const isEmail=t.kind==='email_reply';
     const kindLabel=t.kind==='blog'?'blog post':(isEmail?'email reply':esc(t.kind||'task'));
     const title=esc(isEmail&&em?('Reply to '+(em.inquiry&&em.inquiry.name||em.to||'enquiry')):(t.title||(wp&&wp.title)||('Task #'+t.id)));
@@ -607,6 +662,26 @@ async function renderInbox(v){
   }).join('');
 }
 
+function reportCard(t,co){
+  const r=t.request||{};
+  return `<div class="card" id="t${t.id}">
+    <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${ic('trend',13)} report</span></div>
+    <div class="title">${esc(r.title||'Report')}</div>
+    <div class="body">${esc(t.draft||r.summary||'')}</div>
+    <div class="row" style="margin:4px 0 9px"><button class="btn go" onclick="openReport(${t.id})">${ic('file',16)} Open report (PDF)</button></div>
+    <div class="row">
+      <button class="btn" onclick="act(${t.id},'approve')">${ic('check',16)} Mark as seen</button>
+      <button class="btn bad" onclick="act(${t.id},'skip')">Dismiss</button>
+    </div></div>`;
+}
+async function openReport(id){
+  try{
+    toast('Opening…');
+    const r=await fetch(API+'/api/report/'+id+'/pdf',{headers:token?{Authorization:'Bearer '+token}:{}});
+    if(!r.ok) throw new Error(r.status);
+    const u=URL.createObjectURL(await r.blob()); window.open(u,'_blank'); setTimeout(()=>URL.revokeObjectURL(u),60000);
+  }catch(e){ toast('Could not open report ('+e.message+')'); }
+}
 function compName(id){ const c=companies.find(c=>c.id===id); return c?c.name:''; }
 
 function envHeader(em){

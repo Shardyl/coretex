@@ -20,11 +20,14 @@ import re
 import secrets
 import time
 
-from . import crm, db, gmail, manager, profile, provider, store, worker
+from psycopg.types.json import Json
+
+from . import crm, db, gmail, manager, profile, provider, schedule, seo_report, store, worker
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
 EMAIL_KINDS = {"email_reply"}              # the reply is sent via Gmail on approval
+REPORTS_DIR = "/opt/coretex/reports"       # generated report PDFs (persisted, served to the Inbox)
 
 _PWD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no ambiguous chars, easy to type on mobile
 
@@ -633,6 +636,45 @@ def poll_inquiries_window(days: int = 2) -> dict:
     return {"made": made, "filtered": filtered}
 
 
+# ---------- scheduled tasks (recurring jobs -> Inbox) ----------
+
+REPORT_SKILL_KEY = "content-onpage-seo"   # the SEO report lands under the company's SEO lane
+
+
+def deliver_seo_report(company: str, days: int = 28) -> dict:
+    """Generate the per-company SEO/traffic report and drop it into the Cortex Inbox as a report task."""
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+    rep = seo_report.generate(company, days=days, out_dir=REPORTS_DIR)
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise ValueError(f"unknown company {company}")
+    skill = store.get_skill_by_key(co["id"], REPORT_SKILL_KEY)
+    skill_id = skill["id"] if skill else None
+    req = {"kind": "seo_report", "company": company, "file": rep["path"],
+           "title": rep["title"], "summary": rep["summary"], "days": days}
+    return db.execute(
+        "insert into tasks (company_id,skill_id,kind,request,draft,status) "
+        "values (%s,%s,'report',%s,%s,'awaiting_approval') returning *",
+        (co["id"], skill_id, Json(req), rep["summary"]))
+
+
+def _execute_scheduled(t: dict) -> None:
+    if t["kind"] == "seo_report":
+        deliver_seo_report(t["company"] or "tabscanner", (t.get("config") or {}).get("days", 28))
+    else:
+        raise ValueError(f"unknown scheduled kind {t['kind']}")
+
+
+def run_due_tasks() -> None:
+    for t in schedule.due():
+        try:
+            _execute_scheduled(t)
+            schedule.mark_ran(t, "ok")
+        except Exception as e:  # noqa: BLE001
+            schedule.mark_ran(t, f"error: {e}")
+            tg.send(f"(scheduled task '{t.get('title')}' failed: {e})")
+
+
 def run(poll_idle: float = 1.0) -> None:
     tg.send("\U0001F9E0 Cortex engine online.")
     last_poll = 0.0
@@ -640,10 +682,14 @@ def run(poll_idle: float = 1.0) -> None:
         process_new_tasks()
         handle_updates()
         now = time.time()
-        if now - last_poll >= 60:        # check Gmail for new enquiries about once a minute
+        if now - last_poll >= 60:        # check Gmail for new enquiries + run any due scheduled tasks
             last_poll = now
             try:
                 poll_inquiries()
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(enquiry poll hiccup: {e})")
+            try:
+                run_due_tasks()
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(scheduler hiccup: {e})")
         time.sleep(poll_idle)

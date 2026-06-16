@@ -24,11 +24,12 @@ import websockets
 from fastapi import (Depends, FastAPI, File, Header, HTTPException, Response,
                      UploadFile, WebSocket, WebSocketDisconnect)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import catalog, config, db, engine, gmail, knowledge, personas, profile, provider, questionnaire, skillqa, store, worker
+from . import (catalog, config, db, engine, gmail, knowledge, personas, profile, provider,
+               questionnaire, schedule, seo_report, skillqa, store, worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -241,6 +242,85 @@ def inbox(company: str | None = None, _: None = Depends(auth)) -> list[dict]:
                          "auto_threshold": sk["auto_threshold"], "authority": sk["authority"],
                          "stakes": sk["stakes"], "auto_offer": offer}
     return rows
+
+
+# ---------- calendar / scheduled tasks ----------
+
+KINDS = {"seo_report": "SEO & Traffic report"}
+
+
+@app.get("/api/schedule")
+def schedule_list(company: str | None = None, _: None = Depends(auth)) -> dict:
+    rows = schedule.listing(company)
+    return {"tasks": rows, "kinds": KINDS, "companies": seo_report.available()}
+
+
+class ScheduleBody(BaseModel):
+    company: str
+    kind: str = "seo_report"
+    title: str | None = None
+    cadence: str = "weekly"     # daily | weekly | monthly
+    weekday: int = 0            # 0=Mon .. 6=Sun
+    hour: int = 8
+    minute: int = 0
+    days: int = 28             # report look-back window
+
+
+@app.post("/api/schedule")
+def schedule_create(body: ScheduleBody, _: None = Depends(auth)) -> dict:
+    if body.kind not in KINDS:
+        raise HTTPException(status_code=400, detail=f"unknown kind {body.kind}")
+    label = seo_report.available().get(body.company, body.company)
+    title = body.title or f"{label} — {KINDS[body.kind]}"
+    t = schedule.create(body.company, body.kind, title, cadence=body.cadence, weekday=body.weekday,
+                        hour=body.hour, minute=body.minute, config={"days": body.days})
+    return {"ok": True, "task": t}
+
+
+@app.post("/api/schedule/{tid}/toggle")
+def schedule_toggle(tid: int, _: None = Depends(auth)) -> dict:
+    cur = db.one("select enabled from scheduled_tasks where id=%s", (tid,))
+    if not cur:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"ok": True, "task": schedule.toggle(tid, not cur["enabled"])}
+
+
+@app.delete("/api/schedule/{tid}")
+def schedule_delete(tid: int, _: None = Depends(auth)) -> dict:
+    schedule.delete(tid)
+    return {"ok": True}
+
+
+@app.post("/api/schedule/{tid}/run")
+def schedule_run_now(tid: int, _: None = Depends(auth)) -> dict:
+    """Run a scheduled task right now (drops the result straight into the Inbox)."""
+    t = db.one("select * from scheduled_tasks where id=%s", (tid,))
+    if not t:
+        raise HTTPException(status_code=404, detail="not found")
+    engine._execute_scheduled(t)
+    schedule.mark_ran(t, "ok (manual)")
+    return {"ok": True}
+
+
+@app.post("/api/report/run")
+def report_run(company: str, days: int = 28, _: None = Depends(auth)) -> dict:
+    """Generate a one-off SEO report for a company now and put it in the Inbox."""
+    if company not in seo_report.available():
+        raise HTTPException(status_code=400, detail=f"unknown company {company}")
+    t = engine.deliver_seo_report(company, days=days)
+    return {"ok": True, "task_id": t["id"], "summary": t.get("draft")}
+
+
+@app.get("/api/report/{tid}/pdf")
+def report_pdf(tid: int, _: None = Depends(auth)) -> FileResponse:
+    t = store.get_task(tid)
+    if not t or t["kind"] != "report":
+        raise HTTPException(status_code=404, detail="not a report")
+    path = (t.get("request") or {}).get("file")
+    if not path or not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="report file missing")
+    name = os.path.basename(path)
+    return FileResponse(path, media_type="application/pdf", filename=name)
 
 
 class AuthorityBody(BaseModel):
