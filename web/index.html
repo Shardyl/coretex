@@ -124,8 +124,8 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .fchip.on{background:var(--accent);border-color:var(--accent);color:#04181d}
 .fchip.flag{color:#2ad17e;border-color:#2ad17e55;background:transparent;margin-left:8px;display:inline-flex;align-items:center;gap:4px}
 .fchip.flag.on{background:#2ad17e;border-color:#2ad17e;color:#04181d}
-.fchip.nomarket{color:#ff5d6c;border-color:#ff5d6c55;background:transparent}
-.fchip.nomarket.on{background:#ff5d6c;border-color:#ff5d6c;color:#04181d}
+.fchip.optout{color:#ff5d6c;border-color:#ff5d6c55;background:transparent}
+.fchip.optout.on{background:#ff5d6c;border-color:#ff5d6c;color:#04181d}
 .crow{display:flex;align-items:center;gap:11px;padding:12px 13px}
 .cav{width:36px;height:36px;border-radius:50%;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;color:var(--accent);flex:none}
 .cname{font-family:Poppins;font-weight:600;font-size:14.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -546,7 +546,7 @@ function filterStage(s){ document.querySelectorAll('.fchip').forEach(c=>c.classL
 async function renderContacts(b,co){
   b.outerHTML=`<div id="crmbody">
     <div class="srch">${ic('search',18)}<input id="cq" placeholder="Search contacts…" oninput="searchContacts()"></div>
-    <div class="chiprow">${['All','Cold','Contacted','Engaged','Qualified','Not interested','Dormant/dead'].map(s=>`<span class="fchip${s==='All'?' on':''}" data-stage="${esc(s)}" onclick="filterStage('${esc(s)}')">${esc(s)}</span>`).join('')}<span class="fchip flag" data-stage="Client" onclick="filterStage('Client')">${ic('check',13)} Client</span><span class="fchip nomarket" data-stage="Do not market" onclick="filterStage('Do not market')">Do not market</span></div>
+    <div class="chiprow">${['All','Cold','Contacted','Engaged','Qualified','Not interested','Dormant/dead'].map(s=>`<span class="fchip${s==='All'?' on':''}" data-stage="${esc(s)}" onclick="filterStage('${esc(s)}')">${esc(s)}</span>`).join('')}<span class="fchip flag" data-stage="Client" onclick="filterStage('Client')">${ic('check',13)} Client</span><span class="fchip optout" data-stage="Opted out" onclick="filterStage('Opted out')">Opted out</span></div>
     <div class="row" style="margin-bottom:10px"><button class="btn go sm" onclick="openNewContact(null)">${ic('plus',15)} New contact</button></div>
     <div id="clist" class="empty">Loading…</div></div>`;
   loadContacts(co);
@@ -555,9 +555,9 @@ function contactRow(c){ const n=realName(c); return `<div class="card crow" oncl
   <div class="cav">${esc(initials(n))}</div>
   <div style="flex:1;min-width:0"><div class="cname">${esc(n)}</div>
     <div class="csub">${esc(c.organisation||'')}${c.company_name?' · '+esc(c.company_name):''}</div></div>
-  ${c.do_not_market?'<span class="chip" style="color:#ff5d6c;border-color:#ff5d6c55;font-size:10px">no market</span>':''}${c.is_client?'<span class="chip" style="color:#2ad17e;border-color:#2ad17e55">Client</span>':stageChip(c.stage)}</div>`; }
+  ${c.newsletter_opt_out?'<span class="chip" style="color:#ff5d6c;border-color:#ff5d6c55;font-size:10px">opted out</span>':''}${c.is_client?'<span class="chip" style="color:#2ad17e;border-color:#2ad17e55">Client</span>':stageChip(c.stage)}</div>`; }
 const CHIDE=new Set(['id','first_name','last_name','account_id','is_client','stage','note','history','company_name','created_at','updated_at']);
-const CURL=new Set(['linkedin','instagram','facebook','website','company_domain']);
+const CURL=new Set(['linkedin','instagram','facebook','website']);
 function humanizeField(k){ let s=k.replace(/_/g,' '); s=s.charAt(0).toUpperCase()+s.slice(1); return s.replace(/Linkedin/,'LinkedIn'); }
 function fieldRows(c){
   const rows=Object.keys(c||{}).filter(k=>!CHIDE.has(k) && c[k]!=null && String(c[k]).trim()!=='').map(k=>{
@@ -578,7 +578,7 @@ async function openContact(email){
     <div style="margin-left:auto;display:flex;gap:6px"><button class="iconbtn sm" title="Edit" onclick="openEditContact('${esc(email)}')">${ic('edit',16)}</button><button class="iconbtn sm" title="Delete" onclick="deleteContact('${esc(email)}')">${ic('trash',16)}</button></div></div>
     <div class="card"><div class="crow" style="padding:0;margin-bottom:12px"><div class="cav" style="width:44px;height:44px;font-size:15px">${esc(initials(n))}</div>
       <div><div class="cname" style="font-size:17px">${esc(n)}</div><div class="csub">${esc(c.organisation||'')}${c.job_title?' · '+esc(c.job_title):''}</div></div></div>
-    <div class="row" style="margin-bottom:12px">${stageChip(c.stage)}${c.tier?`<span class="chip cy">Tier ${esc(c.tier)}</span>`:''}${c.is_client?'<span class="chip" style="color:#2ad17e">Client</span>':''}<span class="chip" style="cursor:pointer;${c.do_not_market?'color:#04181d;background:#ff5d6c;border-color:#ff5d6c':'color:#ff5d6c;border-color:#ff5d6c55;background:transparent'}" onclick="toggleNoMarket('${esc(c.email)}',${!c.do_not_market})" title="Tap to ${c.do_not_market?'allow marketing':'exclude from outreach'}">${c.do_not_market?'Do not market':'Mark do-not-market'}</span></div>
+    <div class="row" style="margin-bottom:12px">${stageChip(c.stage)}${c.tier?`<span class="chip cy">Tier ${esc(c.tier)}</span>`:''}${c.is_client?'<span class="chip" style="color:#2ad17e">Client</span>':''}<span class="chip" style="cursor:pointer;${c.newsletter_opt_out?'color:#04181d;background:#ff5d6c;border-color:#ff5d6c':'color:#ff5d6c;border-color:#ff5d6c55;background:transparent'}" onclick="toggleOptOut('${esc(c.email)}',${!c.newsletter_opt_out})" title="Tap to ${c.newsletter_opt_out?'re-subscribe to newsletter':'opt out of newsletter'}">${c.newsletter_opt_out?'Opted out':'Mark opted-out'}</span></div>
     ${contactStagePicker(c)}
     ${contactCompanyRow(c)}
     <div class="dgrid">${fieldRows(c)}</div>
@@ -601,8 +601,8 @@ async function setContactStage(email,i){
   try{ await api('/api/crm/contact/stage',{method:'POST',body:JSON.stringify({email,stage:s})}); toast('Status: '+s); openContact(email); }
   catch(e){ toast('Could not update ('+e.message+')'); }
 }
-async function toggleNoMarket(email,on){
-  try{ await api('/api/crm/contact/nomarket',{method:'POST',body:JSON.stringify({email,on})}); toast(on?'Flagged — do not market':'Marketing allowed again'); openContact(email); }
+async function toggleOptOut(email,on){
+  try{ await api('/api/crm/contact/optout',{method:'POST',body:JSON.stringify({email,on})}); toast(on?'Opted out of newsletter':'Re-subscribed to newsletter'); openContact(email); }
   catch(e){ toast('Could not update ('+e.message+')'); }
 }
 function noteBox(kind,id){
@@ -986,7 +986,7 @@ async function renderInbox(v){
     const wp=t.wp||null, em=t.email||null;
     if(t.kind==='report') return reportCard(t,co);
     const isEmail=t.kind==='email_reply';
-    const kindLabel=t.kind==='blog'?'blog post':(isEmail?'email reply':esc(t.kind||'task'));
+    const kindLabel=t.kind==='blog'?'blog post':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to send':(isEmail?'email reply':esc(t.kind||'task'));
     const title=esc(isEmail&&em?('Reply to '+(em.inquiry&&em.inquiry.name||em.to||'enquiry')):(t.title||(wp&&wp.title)||('Task #'+t.id)));
     const body=esc(isEmail&&em&&em.preview?em.preview:(t.body||t.draft||''));
     return `<div class="card" id="t${t.id}">
@@ -1124,8 +1124,23 @@ async function setThreshold(ev,id,streak){
 async function act(id,what){
   const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;
   if(demo){ toast(what==='approve'?'Approved ✓ (demo)':'Done (demo)'); if(card) card.remove(); return; }
-  try{ await api(`/api/tasks/${id}/${what}`,{method:'POST'}); toast(what==='approve'?'Approved ✓':'Done ✓'); render(); }
+  try{ if(what==='approve') toast('Working on it…');
+    const r=await api(`/api/tasks/${id}/${what}`,{method:'POST'});
+    if(card) card.style.opacity=1;
+    if(r&&r.blocked){ toast('🔒 '+r.error); return; }                         // live sends OFF — nothing sent
+    if(r&&r.needs_confirm){ await confirmLiveSend(id, r.recipients, r.company); return; }  // require explicit count
+    const sent=r&&r.result&&r.result.sent_to, err=r&&r.result&&r.result.error;
+    toast(err? ('Note: '+err) : sent? ('Sent to '+sent+' ✓') : (what==='approve'?'Approved ✓':'Done ✓')); render(); }
   catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
+}
+// A real full-list send is NEVER a plain approve: the operator must type the exact recipient count.
+async function confirmLiveSend(id, n, co){
+  const c=prompt(`SEND TO THE LIVE LIST\n\nThis goes to ${n} REAL ${co||''} contacts — this cannot be undone.\nType the number ${n} to confirm, or Cancel to stop.`);
+  if(c===null){ toast('Cancelled — nothing sent'); return; }
+  try{ const cr=await api(`/api/tasks/${id}/confirm-send`,{method:'POST',body:JSON.stringify({count:Number(c)})});
+    const sent=cr&&cr.result&&cr.result.sent_to;
+    toast(cr&&cr.ok&&sent ? ('Sent to '+sent+' ✓') : ('Not sent: '+((cr&&cr.error)||(cr&&cr.result&&cr.result.error)||'blocked'))); render(); }
+  catch(e){ toast('Error: '+e.message); }
 }
 // Voice (or typed) correction on every approval card: tap to talk -> editable transcript -> send.
 function voiceCorrect(id, btn){
@@ -1147,9 +1162,34 @@ async function sendCorr(id){
   if(!text){ toast('Tell me what to change first — tap to talk or type'); return; }
   if(demo){ toast('Sent correction (demo)'); return; }
   const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;
-  try{ await api(`/api/tasks/${id}/correct`,{method:'POST',body:JSON.stringify({text})});
-    toast('Got it — redrafting from your explanation'); render(); }
+  try{ const r=await api(`/api/tasks/${id}/correct`,{method:'POST',body:JSON.stringify({text})});
+    if(card) card.style.opacity=1;
+    if(r&&r.proposed_rule){ toast('Redrafted — one quick thing'); proposeRule(id,r.proposed_rule,r.skill_name,r.company); }
+    else { toast('Redrafted ✓'); render(); pollRule(id,0); }   // rule offer (if any) lands shortly, off the critical path
+  }
   catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
+}
+// The 'is this a standing rule?' check runs in the background after a correction; poll a few times for its offer.
+function pollRule(id, tries){
+  if(tries>6) return;
+  setTimeout(async()=>{
+    try{ const r=await api(`/api/tasks/${id}/pending-rule`);
+      if(r&&r.proposed_rule) proposeRule(id,r.proposed_rule,r.skill_name,r.company);
+      else pollRule(id,tries+1);
+    }catch(e){}
+  }, 2500);
+}
+function proposeRule(id, rule, skillName, co){
+  const p=document.getElementById('cp'+id); if(!p){ render(); return; }
+  p.style.display='block';
+  p.innerHTML=`<div class="meta" style="margin:1px 0 7px">${ic('check',13)} I read that as a standing rule for ${esc(co||'')}${co?' · ':''}${esc(skillName||'this skill')}:</div>
+    <div style="background:var(--bg2,#0e1620);border:1px solid #2563EB66;border-radius:11px;padding:10px 12px;font-size:14px;color:var(--fg,#dfe7ef);margin-bottom:9px">${esc(rule)}</div>
+    <div class="row"><button class="btn go" onclick="decideRule(${id},true)">${ic('check',15)} Yes, add company rule</button><button class="btn" onclick="decideRule(${id},false)">No, just this once</button></div>`;
+}
+async function decideRule(id, add){
+  try{ const r=await api(`/api/tasks/${id}/rule`,{method:'POST',body:JSON.stringify({add})});
+    toast(add&&r.added?'Added as a company rule — I will follow it':'Okay, not a rule'); render(); }
+  catch(e){ toast('Error: '+e.message); render(); }
 }
 
 // ---- voice: live streaming dictation (Deepgram WS) + read aloud (ElevenLabs) ----

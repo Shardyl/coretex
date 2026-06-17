@@ -23,7 +23,8 @@ _IDS = "/etc/cortex/ga4-measurement-ids.json"
 SITES = {"tabscanner": ("Tabscanner", "tabscanner.com", "https://tabscanner.com/"),
          "sensa": ("Sensa", "sensa.digital", "https://sensa.digital/"),
          "skyvision": ("SkyVision", "skyvision.film", "https://skyvision.film/"),
-         "filmspoke": ("FilmSpoke", "filmspoke.ai", "https://filmspoke.ai/")}
+         "filmspoke": ("FilmSpoke", "filmspoke.ai", "https://filmspoke.ai/"),
+         "snaprewards": ("Snap Rewards", "snap-rewards.com", "https://snap-rewards.com/")}
 ACCENT = colors.HexColor("#0b7285"); DARK = colors.HexColor("#15202b")
 LIGHT = colors.HexColor("#eef3f5"); GREY = colors.HexColor("#667")
 CC = {"are": "UAE", "usa": "USA", "gbr": "UK", "ind": "India", "esp": "Spain", "lbn": "Lebanon",

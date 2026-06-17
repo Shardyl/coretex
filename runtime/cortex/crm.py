@@ -20,7 +20,9 @@ _MIGRATE = """
 alter table crm_master add column if not exists note text;
 alter table crm_master add column if not exists history jsonb not null default '[]'::jsonb;
 alter table crm_master add column if not exists updated_at timestamptz not null default now();
-alter table crm_master add column if not exists do_not_market boolean not null default false;
+alter table crm_master add column if not exists newsletter_opt_out boolean not null default false;
+alter table crm_master add column if not exists newsletter_bounced boolean not null default false;
+alter table crm_master drop column if exists do_not_market;
 """
 
 
@@ -79,10 +81,49 @@ def add_inquiry(inq: dict, company: str = "tabscanner") -> tuple[str, str | None
     note = f"Website enquiry ({datetime.now(timezone.utc):%Y-%m-%d}): {msg}" if msg else "Website enquiry."
     # a genuine inbound enquiry (already past triage) = the contact has Engaged with us
     db.execute(
-        "insert into crm_master (organisation, first_name, last_name, email, company_domain, "
+        "insert into crm_master (organisation, first_name, last_name, email, website, "
         "lead_source, lead_status, stage, note, history) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
         "on conflict (lower(email)) do nothing",
         (org, fn, ln, email, dom, "Website enquiry", "New", "Engaged", note, Json([ev])))
+    return ("added", email)
+
+
+def add_registration(reg: dict, company: str = "tabscanner",
+                     source: str = "Tabscanner registrations") -> tuple[str, str | None]:
+    """Upsert a website registration as an OPTED-IN newsletter subscriber (dedup by email).
+    Registering on the site = newsletter opt-in -> newsletter_subscriber='True', newsletter_opt_out=false.
+    Carries over (never clobbers) existing fields; just tags org/source/subscriber and logs the event."""
+    ensure_schema()
+    email = (reg.get("email") or "").strip().lower()
+    if not email:
+        return ("skipped-no-email", None)
+    first = (reg.get("first_name") or "").strip()
+    last = (reg.get("last_name") or "").strip()
+    name = (reg.get("name") or reg.get("full_name") or "").strip()
+    if not first and not last and name:
+        first, last = _split_name(name)
+    company_name = (reg.get("company_name") or reg.get("company") or "").strip() or None
+    phone = (reg.get("phone") or reg.get("phone_number") or "").strip() or None
+    org = _org(company)
+    dom = email.split("@")[-1] if "@" in email else None
+    ev = {"ts": _now(), "event": "registration", "text": f"Registered on the {org} website (newsletter opt-in)."}
+    existing = db.one("select id, organisation from crm_master where lower(email)=%s limit 1", (email,))
+    if existing:
+        cur = existing.get("organisation") or ""
+        new_org = (cur + ", " + org).strip(", ") if (org and org.lower() not in cur.lower()) else (cur or org)
+        db.execute(
+            "update crm_master set organisation=%s, newsletter_subscriber='True', newsletter_opt_out=false, "
+            "lead_source=coalesce(nullif(btrim(lead_source),''), %s), "
+            "company_name=coalesce(company_name, %s), phone=coalesce(phone, %s), updated_at=now() where id=%s",
+            (new_org, source, company_name, phone, existing["id"]))
+        log_event(email, "registration", ev["text"], company)
+        return ("matched", email)
+    db.execute(
+        "insert into crm_master (organisation, first_name, last_name, email, company_name, phone, website, "
+        "lead_source, newsletter_subscriber, newsletter_opt_out, lead_status, stage, history) "
+        "values (%s,%s,%s,%s,%s,%s,%s,%s,'True',false,%s,%s,%s) on conflict (lower(email)) do nothing",
+        (org, first or None, last or None, email, company_name, phone, dom,
+         source, "New", "Engaged", Json([ev])))
     return ("added", email)
 
 
@@ -178,14 +219,28 @@ def set_contact_stage(email: str, stage: str) -> dict | None:
     return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
 
 
-def set_do_not_market(email: str, on: bool) -> dict | None:
-    """Flag/unflag a contact as do-not-market (friends / personal contacts excluded from all outreach)."""
+def set_newsletter_opt_out(email: str, on: bool) -> dict | None:
+    """Flag/unflag a contact as newsletter opt-out. Default is opted-IN (everyone is sent the
+    newsletter) unless this is true. Single source of truth for newsletter consent."""
     ensure_schema()
     c = db.one("select id from crm_master where lower(email)=lower(%s)", (email,))
     if not c:
         return None
-    db.execute("update crm_master set do_not_market=%s, updated_at=now() where id=%s", (bool(on), c["id"]))
-    log_event(email, "do_not_market", "Flagged do-not-market (excluded from outreach)" if on else "Do-not-market removed")
+    db.execute("update crm_master set newsletter_opt_out=%s, updated_at=now() where id=%s", (bool(on), c["id"]))
+    log_event(email, "newsletter_opt_out", "Opted out of newsletter" if on else "Newsletter opt-out removed (re-subscribed)")
+    return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
+
+
+def set_newsletter_bounced(email: str, on: bool) -> dict | None:
+    """Flag/unflag a contact's email as a NEWSLETTER hard-bounce (dead address). Distinct from
+    newsletter_opt_out (chose to leave) and from Instantly's 'Bounced' status (cold-campaign channel).
+    A bounced address is NEVER sent a newsletter again until cleared."""
+    ensure_schema()
+    c = db.one("select id from crm_master where lower(email)=lower(%s)", (email,))
+    if not c:
+        return None
+    db.execute("update crm_master set newsletter_bounced=%s, updated_at=now() where id=%s", (bool(on), c["id"]))
+    log_event(email, "newsletter_bounced", "Newsletter hard-bounced (suppressed)" if on else "Newsletter bounce cleared")
     return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
 
 
@@ -325,11 +380,11 @@ def create_contact(first_name: str, last_name: str, email: str, account_id=None,
     # atomic upsert (unique index on lower(email)) — concurrent submits can never create duplicates
     db.execute(
         "insert into crm_master (organisation, first_name, last_name, email, account_id, company_name, "
-        "company_domain, phone, job_title, stage, lead_source) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+        "website, phone, job_title, stage, lead_source) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
         "on conflict (lower(email)) do update set first_name=excluded.first_name, last_name=excluded.last_name, "
         "account_id=coalesce(excluded.account_id, crm_master.account_id), "
         "company_name=coalesce(excluded.company_name, crm_master.company_name), "
-        "company_domain=coalesce(excluded.company_domain, crm_master.company_domain), "
+        "website=coalesce(excluded.website, crm_master.website), "
         "phone=coalesce(excluded.phone, crm_master.phone), "
         "job_title=coalesce(excluded.job_title, crm_master.job_title), updated_at=now()",
         (_org(company) if company else "", first_name, last_name, email, account_id, cn, dom,

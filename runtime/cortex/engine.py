@@ -18,15 +18,17 @@ import html as _html
 import os
 import re
 import secrets
+import threading
 import time
 
 from psycopg.types.json import Json
 
-from . import crm, db, gmail, manager, profile, provider, schedule, seo_report, store, worker
+from . import crm, db, gmail, manager, newsletter, profile, provider, schedule, seo_report, store, worker
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
 EMAIL_KINDS = {"email_reply"}              # the reply is sent via Gmail on approval
+NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review"}  # an outward send to real customers always needs the owner's tap
 REPORTS_DIR = "/opt/coretex/reports"       # generated report PDFs (persisted, served to the Inbox)
 
 _PWD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no ambiguous chars, easy to type on mobile
@@ -325,6 +327,7 @@ def _run_task(task: dict) -> None:
     # confident pass. Anything flagged, escalated, or low-confidence still goes to the owner.
     auto_ok = (skill["authority"] == "auto" and skill["stakes"] == "low"
                and not skill["paused"] and task["kind"] not in MONEY_KINDS
+               and task["kind"] not in NEVER_AUTO_KINDS
                and verdict.get("aligned") and not verdict.get("escalate"))
     if auto_ok:
         _execute(task, skill, company, actor="cortex", auto=True)
@@ -354,6 +357,10 @@ def _run_blog_task(task: dict, skill: dict, company: dict, site) -> None:
 
 
 def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = False) -> dict:
+    if task["kind"] == "newsletter_idea":   # approve the idea -> build + send to the test group + review card
+        return newsletter.execute_idea_approval(task, skill, company, actor)
+    if task["kind"] == "newsletter_review":  # approve the review -> send the built issue to the full list
+        return newsletter.execute_send_all(task, skill, company, actor)
     if task["kind"] in EMAIL_KINDS:
         return _send_email_reply(task, skill, company, actor, auto)
     site = _site_for(task, company)
@@ -422,8 +429,14 @@ def _on_callback(cq: dict) -> None:
         _confirm_rule(task, skill, yes=(action == "ry"))
 
 
-def _approve(task: dict, skill: dict, company: dict) -> None:
+def _approve(task: dict, skill: dict, company: dict) -> dict:
     result = _execute(task, skill, company, actor="owner")
+    if result and (result.get("blocked") or result.get("needs_confirm")):
+        # a guarded newsletter send did NOT go out — don't claim approval, don't bump the streak
+        if task.get("tg_message_id"):
+            tg.edit(task["tg_message_id"],
+                    f"⚠️ Not sent — {result.get('error', 'confirmation needed')}. Confirm a live send in the cockpit.")
+        return result
     skill = store.bump_streak(skill["id"])
     if task.get("tg_message_id"):
         if result and result.get("link"):
@@ -441,6 +454,7 @@ def _approve(task: dict, skill: dict, company: dict) -> None:
                 f"Put it on auto for low-stakes work, or raise the bar for extra confidence?",
                 [[tg.button("Yes, set auto", f"au:{skill['id']}"),
                   tg.button(f"No — raise to {higher}", f"th:{skill['id']}:{higher}")]])
+    return result or {}
 
 
 def _skip(task: dict, skill: dict, company: dict) -> None:
@@ -462,12 +476,33 @@ def _skip(task: dict, skill: dict, company: dict) -> None:
 
 
 def _maybe_propose_rule(task: dict, skill: dict, text: str, old: str, new: str) -> None:
-    rule = worker.infer_rule(skill, text, old or "", new or "")
+    """Run the 'is this a standing rule?' inference OFF the request path. A correction returns as soon as
+    the redraft is done; the offer (a second LLM call that can be slow) lands afterwards via Telegram and
+    the Inbox (rule:{id}), so a slow/overloaded inference never hangs the cockpit."""
+    threading.Thread(target=_infer_rule_offer, args=(task, skill, text, old or "", new or ""),
+                     daemon=True).start()
+
+
+def _infer_rule_offer(task: dict, skill: dict, text: str, old: str, new: str) -> None:
+    try:
+        rule = worker.infer_rule(skill, text, old, new)
+    except Exception:  # noqa: BLE001 — background; never surface
+        return
     if rule.get("is_rule") and rule.get("rule"):
         db.setting_set(f"rule:{task['id']}", rule["rule"])
         tg.send(f"I'm reading your correction as a standing rule:\n\n“{rule['rule']}”\n\n"
                 f"Add it to '{skill['name']}'?",
                 [[tg.button("Yes, add rule", f"ry:{task['id']}"), tg.button("No", f"rn:{task['id']}")]])
+
+
+def pending_rule(task_id: int) -> dict:
+    """Cockpit polls this after a correction: returns the rule the background inference proposed (if any)."""
+    task = store.get_task(task_id)
+    skill = store.get_skill(task["skill_id"]) if task else None
+    company = store.get_company(task["company_id"]) if task else None
+    return {"ok": True, "proposed_rule": db.setting_get(f"rule:{task_id}"),
+            "skill_name": skill["name"] if skill else None,
+            "company": company["name"] if company else None}
 
 
 def _on_message(msg: dict) -> None:
@@ -508,6 +543,19 @@ def apply_correction(task: dict, text: str) -> None:
         _maybe_propose_rule(task, skill, text, old or "", art["html"])
         return
 
+    if task["kind"] == "newsletter_idea":   # ideation stage: refine the TEXT idea only; HTML build is a LATER stage
+        new = provider.think(
+            "You refine a NEWSLETTER IDEA at the ideation stage. Output ONLY a short, plain-text idea/concept "
+            "(a few sentences: the suggested topic, the angle, and a CTA). NEVER write HTML, markup, or code, and do "
+            "not build the email - this is just the idea; the full HTML build is a separate, later stage.",
+            f"Company: {company['name']}.\nCurrent idea:\n{old}\n\nOperator's revision:\n{text}\n\n"
+            "Rewrite the idea text to incorporate the revision. Plain text only.",
+            model=worker._model_for(skill))   # respect the skill's model tier (Sonnet during the trial)
+        store.update_task(task["id"], draft=new, status="awaiting_approval", attempts=task["attempts"] + 1)
+        store.log_decision(task["id"], skill["id"], "owner", "correct", note=text, snapshot={"old": old, "new": new})
+        _maybe_propose_rule(task, skill, text, old or "", new or "")   # learn from ideation feedback too
+        return
+
     new = worker.draft(skill, company, task["request"], correction=text)
     task = store.update_task(task["id"], draft=new, status="awaiting_approval", attempts=task["attempts"] + 1)
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text, snapshot={"old": old, "new": new})
@@ -542,8 +590,59 @@ def approve_task(task_id: int) -> dict:
         return {"ok": False, "error": "no such task"}
     if task["status"] not in ("awaiting_approval", "awaiting_correction"):
         return {"ok": False, "error": f"task is '{task['status']}', not awaiting approval"}
-    _approve(task, skill, company)
-    return {"ok": True, "task": store.get_task(task_id)}
+    # SAFEGUARD: a full-list newsletter send NEVER goes out on a plain approve. It returns a block (lock
+    # off) or a confirm-required (lock on) and waits for the explicit count-confirmation flow.
+    if task["kind"] == "newsletter_review":
+        n = len(newsletter.recipients(task["company_id"]))
+        if not newsletter.live_sends_on():
+            return {"ok": False, "blocked": True, "recipients": n, "company": company["name"],
+                    "error": f"Live newsletter sends are OFF. This would reach {n} real "
+                             f"{company['name']} contacts. Turn on live sends first."}
+        return {"ok": False, "needs_confirm": True, "recipients": n, "company": company["name"],
+                "error": f"This will send to {n} real {company['name']} contacts."}
+    result = _approve(task, skill, company)
+    return {"ok": True, "task": store.get_task(task_id), "result": result}
+
+
+def confirm_send_task(task_id: int, count: int) -> dict:
+    """Actually send a newsletter to the full live list — the ONLY path that does. Requires live sends ON
+    and the operator to echo the EXACT recipient count (so a misclick can't fire it)."""
+    task, skill, company = _load(task_id)
+    if not task or task["kind"] != "newsletter_review":
+        return {"ok": False, "error": "not a newsletter send card"}
+    if not newsletter.live_sends_on():
+        return {"ok": False, "error": "Live newsletter sends are OFF."}
+    recips = newsletter.recipients(task["company_id"])
+    n = len(recips)
+    try:
+        if int(count) != n:
+            return {"ok": False, "error": f"Count mismatch: you entered {count}, the list is {n}. Not sending."}
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "Enter the exact recipient count to confirm."}
+    art = db.setting_get(f"newsletter:{task_id}")
+    if not art:
+        return {"ok": False, "error": "no built newsletter found for this card"}
+    # DRIP, don't blast: queue a throttled job the engine drains over time (default 250/hour).
+    per_hour = int(db.setting_get("newsletter_per_hour") or newsletter.DEFAULT_PER_HOUR)
+    jid = newsletter.enqueue_send(task["company_id"], task_id, art, recips, per_hour)
+    store.update_task(task_id, status="done")
+    db.setting_set(f"newsletter:{task_id}", None)
+    store.bump_streak(skill["id"])
+    hrs = round(n / per_hour, 1)
+    return {"ok": True, "result": {
+        "sent_to": f"the live list — drip-sending at {per_hour}/hour (~{hrs}h for {n:,} contacts)",
+        "queued": True, "job": jid}}
+
+
+def set_live_sends(on: bool) -> dict:
+    """Flip the global newsletter live-send lock. OFF = the real list is unreachable (testing-safe)."""
+    db.setting_set("newsletter_live_sends", bool(on))
+    tg.send(f"⚠️ Newsletter LIVE sends are now {'ON' if on else 'OFF'}.")
+    return {"ok": True, "live": bool(on)}
+
+
+def live_sends_status() -> dict:
+    return {"ok": True, "live": newsletter.live_sends_on()}
 
 
 def skip_task(task_id: int) -> dict:
@@ -559,7 +658,21 @@ def correct_task(task_id: int, text: str) -> dict:
     if not task:
         return {"ok": False, "error": "no such task"}
     apply_correction(task, text)
-    return {"ok": True, "task": store.get_task(task_id)}
+    proposed = db.setting_get(f"rule:{task_id}")   # _maybe_propose_rule stows the inferred rule here
+    return {"ok": True, "task": store.get_task(task_id),
+            "proposed_rule": proposed, "skill_name": skill["name"] if skill else None,
+            "company": company["name"] if company else None}
+
+
+def decide_rule(task_id: int, add: bool) -> dict:
+    """Cockpit confirm/dismiss of the rule Cortex inferred from a correction (company-level rule on the task's skill)."""
+    rule = db.setting_get(f"rule:{task_id}")
+    task = store.get_task(task_id)
+    if add and rule and task:
+        store.add_rule(task["skill_id"], rule)
+        store.log_decision(task_id, task["skill_id"], "owner", "rule_confirmed", note=rule)
+    db.setting_set(f"rule:{task_id}", None)
+    return {"ok": True, "added": bool(add and rule)}
 
 
 # ---------- auto-intake: pull new enquiries from Gmail, draft a reply for each ----------
@@ -675,6 +788,22 @@ def run_due_tasks() -> None:
             tg.send(f"(scheduled task '{t.get('title')}' failed: {e})")
 
 
+def drain_newsletter_sends() -> None:
+    """Push the next throttled batch of any in-flight newsletter, and alert when one finishes or auto-pauses."""
+    for ev in newsletter.drain_send_jobs():
+        co = store.get_company(ev["company_id"])
+        coname = co["name"] if co else ""
+        if ev["status"] == "done":
+            t = store.get_task(ev["task_id"]) if ev.get("task_id") else None
+            if t:
+                store.log_decision(ev["task_id"], t["skill_id"], "owner", "newsletter_sent",
+                                   note=ev["subject"], snapshot={"recipients": ev["sent"]})
+            tg.send(f"✅ Newsletter fully sent: '{ev['subject']}' -> {ev['sent']:,}/{ev['total']:,} {coname} contacts.")
+        elif ev["status"] == "paused":
+            tg.send(f"⚠️ Newsletter PAUSED (bounce spike): '{ev['subject']}' at "
+                    f"{ev['sent']:,}/{ev['total']:,} {coname}, {ev.get('bounces')} bounces. Check the list/domain.")
+
+
 def run(poll_idle: float = 1.0) -> None:
     tg.send("\U0001F9E0 Cortex engine online.")
     last_poll = 0.0
@@ -692,4 +821,8 @@ def run(poll_idle: float = 1.0) -> None:
                 run_due_tasks()
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(scheduler hiccup: {e})")
+            try:
+                drain_newsletter_sends()
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(newsletter drip hiccup: {e})")
         time.sleep(poll_idle)

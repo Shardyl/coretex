@@ -209,7 +209,7 @@ OPUS_SKILLS = {
     "sales-quotation", "sales-proposals", "pr-press-release",
 }
 
-# The four companies in scope (context packs from CORTEX-SPEC §A).
+# The companies in scope (context packs from CORTEX-SPEC §A).
 COMPANIES = [
     ("tabscanner", "Tabscanner", "owned", "Enterprise / sales-qualified leads", {
         "voice": "Technical, credible, accuracy-first, B2B. Concrete and specific, never hypey.",
@@ -229,6 +229,13 @@ COMPANIES = [
         "audience": "Brands wanting AI-made commercials.",
         "products": "AI commercial 'creatives' (finished commercial films). Products are called creatives.",
         "donts": "No Dubai imagery."}),
+    ("snaprewards", "Snap Rewards", "owned", "Shopify app installs / qualified merchant signups", {
+        "voice": "Friendly, benefit-led e-commerce SaaS. Clear and practical, lightly energetic, never hypey.",
+        "audience": "Shopify store owners and marketing agencies wanting receipt-based loyalty / rewards campaigns.",
+        "products": "Snap Rewards (Three Digital Software Trading LLC) — Shopify app for receipt-rewards loyalty: "
+                    "AI receipt OCR, a product-matching validation engine, and branded email/landing campaigns "
+                    "(snap-rewards.com). Same receipt-OCR world as Tabscanner.",
+        "donts": "No unqualified financial advice. Match the existing site's exact copy and voice; no em-dashes."}),
 ]
 
 

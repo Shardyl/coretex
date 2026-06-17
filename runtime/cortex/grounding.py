@@ -13,7 +13,7 @@ from . import profile
 SITES_ROOT = os.environ.get("CORTEX_SITES_ROOT", "/opt/sites")
 # company slug -> on-box repo dir name (slug differs from the dir for sky-vision)
 SITE_DIRS = {"tabscanner": "tabscanner", "sensa": "sensa", "skyvision": "sky-vision",
-             "filmspoke": "filmspoke", "flixton": "flixton-manor"}
+             "filmspoke": "filmspoke", "flixton": "flixton-manor", "snaprewards": "snap-rewards"}
 
 _LABELS = None
 

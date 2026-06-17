@@ -241,6 +241,8 @@ def inbox(company: str | None = None, _: None = Depends(auth)) -> list[dict]:
             t["lane"] = {"skill_id": sk["id"], "name": sk["name"], "trust_streak": sk["trust_streak"],
                          "auto_threshold": sk["auto_threshold"], "authority": sk["authority"],
                          "stakes": sk["stakes"], "auto_offer": offer}
+        t["title"] = t.get("title") or (t.get("request") or {}).get("title")
+        t["skill"] = sk["name"] if sk else t.get("skill")
     return rows
 
 
@@ -568,15 +570,15 @@ def crm_contacts(company: str | None = None, q: str | None = None, stage: str | 
     if stage and stage != "All":
         if stage == "Client":
             clauses.append("is_client = true")          # 'Client' is a flag, not a funnel status
-        elif stage == "Do not market":
-            clauses.append("do_not_market = true")      # also a flag, not a status
+        elif stage == "Opted out":
+            clauses.append("newsletter_opt_out = true")  # newsletter opt-out flag, not a status
         else:
             clauses.append("stage = %s"); params.append(stage)
     where = ("where " + " and ".join(clauses)) if clauses else ""
     params.append(limit); params.append(offset)
     return db.query(
         "select first_name, last_name, email, organisation, company_name, job_title, stage, tier, "
-        f"is_client, do_not_market, lead_source from crm_master {where} "
+        f"is_client, newsletter_opt_out, lead_source from crm_master {where} "
         "order by is_client desc, first_name nulls last limit %s offset %s",
         tuple(params))
 
@@ -791,17 +793,46 @@ def crm_opportunities(company: str | None = None, _: None = Depends(auth)) -> di
             "currencies": {r["c"]: float(r["v"] or 0) for r in cur if float(r["v"] or 0) > 0}}
 
 
-class NoMarketBody(BaseModel):
+class OptOutBody(BaseModel):
     email: str
     on: bool = True
 
 
-@app.post("/api/crm/contact/nomarket")
-def crm_contact_nomarket(body: NoMarketBody, _: None = Depends(auth)) -> dict:
-    r = crm.set_do_not_market(body.email, body.on)
+@app.post("/api/crm/contact/optout")
+def crm_contact_optout(body: OptOutBody, _: None = Depends(auth)) -> dict:
+    r = crm.set_newsletter_opt_out(body.email, body.on)
     if not r:
         raise HTTPException(status_code=404, detail="contact not found")
     return r
+
+
+class RegistrationBody(BaseModel):
+    email: str
+    first_name: str | None = None
+    last_name: str | None = None
+    name: str | None = None
+    company_name: str | None = None
+    company: str | None = None
+    phone: str | None = None
+
+
+@app.post("/api/intake/registration")
+def intake_registration(body: RegistrationBody, token: str = "", x_token: str = Header(default="")) -> dict:
+    """Public webhook for website/store registrations. Auth = a PER-SOURCE token (?token=... or X-Token
+    header), NOT the operator passcode. The token maps to {company, source}, so one endpoint serves many
+    registration sources (Tabscanner site, Snap Rewards store, etc.)."""
+    raw = db.setting_get("intake_tokens")
+    tokens = json.loads(raw) if raw else {}
+    legacy = db.setting_get("registration_intake_token")        # back-compat: original single-token URL
+    if legacy and legacy not in tokens:
+        tokens[legacy] = {"company": "tabscanner", "source": "Tabscanner registrations"}
+    cfg = tokens.get(token) or tokens.get(x_token)
+    if not cfg:
+        raise HTTPException(status_code=403, detail="invalid token")
+    reg = {"email": body.email, "first_name": body.first_name, "last_name": body.last_name,
+           "name": body.name, "company_name": body.company_name or body.company, "phone": body.phone}
+    status, email = crm.add_registration(reg, company=cfg["company"], source=cfg["source"])
+    return {"ok": status in ("added", "matched"), "status": status, "email": email}
 
 
 class ContactStageBody(BaseModel):
@@ -1118,6 +1149,47 @@ def skip(task_id: int, _: None = Depends(auth)) -> dict:
 @app.post("/api/tasks/{task_id}/correct")
 def correct(task_id: int, body: Correction, _: None = Depends(auth)) -> dict:
     return engine.correct_task(task_id, body.text)
+
+
+@app.get("/api/tasks/{task_id}/pending-rule")
+def task_pending_rule(task_id: int, _: None = Depends(auth)) -> dict:
+    """Cockpit polls this after a correction: the rule the background inference proposed, if any."""
+    return engine.pending_rule(task_id)
+
+
+class RuleDecision(BaseModel):
+    add: bool
+
+
+@app.post("/api/tasks/{task_id}/rule")
+def task_rule(task_id: int, body: RuleDecision, _: None = Depends(auth)) -> dict:
+    """Confirm/dismiss the company rule Cortex inferred from a correction (from the cockpit)."""
+    return engine.decide_rule(task_id, body.add)
+
+
+class SendConfirm(BaseModel):
+    count: int
+
+
+@app.post("/api/tasks/{task_id}/confirm-send")
+def task_confirm_send(task_id: int, body: SendConfirm, _: None = Depends(auth)) -> dict:
+    """Fire a newsletter to the full LIVE list. Requires live sends ON + the exact recipient count echoed."""
+    return engine.confirm_send_task(task_id, body.count)
+
+
+class LiveToggle(BaseModel):
+    on: bool
+
+
+@app.get("/api/newsletter/live-sends")
+def newsletter_live_get(_: None = Depends(auth)) -> dict:
+    return engine.live_sends_status()
+
+
+@app.post("/api/newsletter/live-sends")
+def newsletter_live_set(body: LiveToggle, _: None = Depends(auth)) -> dict:
+    """Flip the global newsletter live-send lock (OFF by default = real lists unreachable)."""
+    return engine.set_live_sends(body.on)
 
 
 # ---- voice: speech-to-text (Deepgram) + text-to-speech (ElevenLabs Flash) ----

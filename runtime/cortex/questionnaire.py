@@ -1,9 +1,11 @@
 """Manager-run questionnaires — the deep interview that builds out a skill's rules.
 
-10 areas (General Operations + the 9 departments) x 3 tiers:
-  basic   = UNIVERSAL  (answered once, -> universal rules)
+10 areas (General Operations + the 9 departments) x 3 tiers — ALL company-scoped:
+  basic   = PER COMPANY (light,  -> that company's local rules)
   deeper  = PER COMPANY (-> that company's local rules)
   deepest = PER COMPANY (-> deeper local rules)
+A questionnaire is ALWAYS answered for a specific company; there is no universal questionnaire. Universal
+rules are procedural and brand-free, and are set explicitly (rule UI / Cortex chat), never via a questionnaire.
 
 Cortex (the Manager, Opus) drafts the questions, rule-aware: it covers every rule already set for the
 relevant layer, and self-updates (appends questions) when rules change. Runs are resumable per lane.
@@ -19,7 +21,7 @@ from psycopg.types.json import Json
 from . import catalog, db, provider, store
 
 TIERS = {
-    "basic":   {"label": "Basic",   "scope": "universal", "count": (6, 8)},
+    "basic":   {"label": "Basic",   "scope": "company",   "count": (6, 8)},
     "deeper":  {"label": "Deeper",  "scope": "company",   "count": (12, 15)},
     "deepest": {"label": "Deepest", "scope": "company",   "count": (20, 25)},
 }

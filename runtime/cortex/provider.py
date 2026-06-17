@@ -18,7 +18,9 @@ MODEL_ROUTER = config.get("CORTEX_MODEL_ROUTER", "claude-haiku-4-5")  # routing 
 
 
 def _client() -> anthropic.Anthropic:
-    return anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
+    # Bound the per-attempt timeout (SDK default is 600s) so an overloaded call fails fast instead of
+    # holding a request open for minutes; keep a couple of retries for transient 429/529.
+    return anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"), timeout=90.0, max_retries=2)
 
 
 # ---- cost logging: every model call records exact tokens + $ (input, output, cache) ----
