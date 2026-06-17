@@ -28,7 +28,7 @@ from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
 EMAIL_KINDS = {"email_reply"}              # the reply is sent via Gmail on approval
-NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review"}  # an outward send to real customers always needs the owner's tap
+NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send"}  # real-customer sends always need the owner
 REPORTS_DIR = "/opt/coretex/reports"       # generated report PDFs (persisted, served to the Inbox)
 
 _PWD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no ambiguous chars, easy to type on mobile
@@ -359,8 +359,12 @@ def _run_blog_task(task: dict, skill: dict, company: dict, site) -> None:
 def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = False) -> dict:
     if task["kind"] == "newsletter_idea":   # approve the idea -> build + send to the test group + review card
         return newsletter.execute_idea_approval(task, skill, company, actor)
-    if task["kind"] == "newsletter_review":  # approve the review -> send the built issue to the full list
-        return newsletter.execute_send_all(task, skill, company, actor)
+    if task["kind"] in ("newsletter_review", "newsletter_send"):
+        # real-list newsletter actions route through the cockpit count-confirm (schedule / send); a plain
+        # approve (incl. Telegram) never fires one.
+        n = len(newsletter.recipients(company["id"]))
+        return {"needs_confirm": True, "recipients": n,
+                "error": f"Confirm with the recipient count ({n:,}) in the cockpit."}
     if task["kind"] in EMAIL_KINDS:
         return _send_email_reply(task, skill, company, actor, auto)
     site = _site_for(task, company)
@@ -411,6 +415,13 @@ def _on_callback(cq: dict) -> None:
         if sid.isdigit() and num.isdigit():
             sk = store.set_threshold(int(sid), int(num))
             tg.send(f"Okay — '{sk['name']}' now needs {num} clean approvals in a row before I offer auto.")
+        return
+    if action == "nlauto":  # monthly newsletter send auto: nlauto:{company_id}:{0|1}
+        cid, _, on = ref.partition(":")
+        if cid.isdigit():
+            set_newsletter_auto(int(cid), on == "1")
+            tg.send("Monthly newsletter send is now " + ("AUTO (no more Stage-3 confirm)." if on == "1"
+                                                         else "manual — I'll ask you to confirm each one."))
         return
     task = store.get_task(int(ref)) if ref.isdigit() else None
     if not task:
@@ -590,59 +601,88 @@ def approve_task(task_id: int) -> dict:
         return {"ok": False, "error": "no such task"}
     if task["status"] not in ("awaiting_approval", "awaiting_correction"):
         return {"ok": False, "error": f"task is '{task['status']}', not awaiting approval"}
-    # SAFEGUARD: a full-list newsletter send NEVER goes out on a plain approve. It returns a block (lock
-    # off) or a confirm-required (lock on) and waits for the explicit count-confirmation flow.
-    if task["kind"] == "newsletter_review":
+    # SAFEGUARD: a newsletter that touches the real list NEVER goes on a plain approve. Stage 2
+    # (newsletter_review) SCHEDULES for the 1st; Stage 3 (newsletter_send) SENDS. Both require the
+    # operator to echo the exact recipient count first.
+    if task["kind"] in ("newsletter_review", "newsletter_send"):
         n = len(newsletter.recipients(task["company_id"]))
-        if not newsletter.live_sends_on():
-            return {"ok": False, "blocked": True, "recipients": n, "company": company["name"],
-                    "error": f"Live newsletter sends are OFF. This would reach {n} real "
-                             f"{company['name']} contacts. Turn on live sends first."}
-        return {"ok": False, "needs_confirm": True, "recipients": n, "company": company["name"],
-                "error": f"This will send to {n} real {company['name']} contacts."}
+        action = "schedule" if task["kind"] == "newsletter_review" else "send"
+        info = {"ok": False, "needs_confirm": True, "recipients": n, "company": company["name"], "action": action}
+        if action == "schedule":
+            info["date"] = schedule.next_monthly_slot(company["slug"]).strftime("%-d %b %Y")
+        return info
     result = _approve(task, skill, company)
     return {"ok": True, "task": store.get_task(task_id), "result": result}
 
 
 def confirm_send_task(task_id: int, count: int) -> dict:
-    """Actually send a newsletter to the full live list — the ONLY path that does. Requires live sends ON
-    and the operator to echo the EXACT recipient count (so a misclick can't fire it)."""
+    """Confirm a newsletter with the EXACT recipient count. Stage 2 (newsletter_review) -> SCHEDULE for the
+    next free 1st; Stage 3 (newsletter_send) -> SEND now (drip). Count must match, so a misclick can't fire."""
     task, skill, company = _load(task_id)
-    if not task or task["kind"] != "newsletter_review":
-        return {"ok": False, "error": "not a newsletter send card"}
-    if not newsletter.live_sends_on():
-        return {"ok": False, "error": "Live newsletter sends are OFF."}
-    recips = newsletter.recipients(task["company_id"])
-    n = len(recips)
+    if not task or task["kind"] not in ("newsletter_review", "newsletter_send"):
+        return {"ok": False, "error": "not a newsletter card"}
+    n = len(newsletter.recipients(task["company_id"]))
     try:
         if int(count) != n:
-            return {"ok": False, "error": f"Count mismatch: you entered {count}, the list is {n}. Not sending."}
+            return {"ok": False, "error": f"Count mismatch: you entered {count}, the list is {n}. Nothing done."}
     except (TypeError, ValueError):
         return {"ok": False, "error": "Enter the exact recipient count to confirm."}
     art = db.setting_get(f"newsletter:{task_id}")
     if not art:
         return {"ok": False, "error": "no built newsletter found for this card"}
-    # DRIP, don't blast: queue a throttled job the engine drains over time (default 250/hour).
+    if task["kind"] == "newsletter_review":
+        return _schedule_newsletter(task, skill, company, art, n)
+    return _dispatch_newsletter(task, skill, company, art, n)
+
+
+def _schedule_newsletter(task, skill, company, art, n) -> dict:
+    """Stage 2 confirm: put the approved issue on the calendar for the next free 1st-of-month."""
+    slot = schedule.next_monthly_slot(company["slug"])
+    schedule.create_once(company["slug"], "newsletter", art["subject"], slot,
+                         config={"subject": art["subject"], "html": art["html"], "text": art["text"],
+                                 "hero_b64": art.get("hero_b64"), "review_task_id": task["id"]})
+    store.update_task(task["id"], status="done")
+    store.log_decision(task["id"], skill["id"], "owner", "newsletter_scheduled",
+                       note=art["subject"], snapshot={"when": slot.isoformat(), "recipients": n})
+    db.setting_set(f"newsletter:{task['id']}", None)
+    when = slot.strftime("%-d %b %Y")
+    return {"ok": True, "result": {"scheduled": when,
+                                   "sent_to": f"scheduled for {when} ({n:,} contacts) - now on the calendar"}}
+
+
+def _dispatch_newsletter(task, skill, company, art, n) -> dict:
+    """Stage 3 confirm: actually send (throttled drip). Counts toward earned-auto (offer at 5)."""
+    cid = company["id"]
+    recips = newsletter.recipients(cid)
     per_hour = int(db.setting_get("newsletter_per_hour") or newsletter.DEFAULT_PER_HOUR)
-    jid = newsletter.enqueue_send(task["company_id"], task_id, art, recips, per_hour)
-    store.update_task(task_id, status="done")
-    db.setting_set(f"newsletter:{task_id}", None)
-    store.bump_streak(skill["id"])
-    hrs = round(n / per_hour, 1)
-    return {"ok": True, "result": {
-        "sent_to": f"the live list — drip-sending at {per_hour}/hour (~{hrs}h for {n:,} contacts)",
-        "queued": True, "job": jid}}
+    jid = newsletter.enqueue_send(cid, task["id"], art, recips, per_hour)
+    store.update_task(task["id"], status="done")
+    db.setting_set(f"newsletter:{task['id']}", None)
+    streak = int(db.setting_get(f"nl_streak:{cid}") or 0) + 1
+    db.setting_set(f"nl_streak:{cid}", streak)
+    if streak >= 5 and not db.setting_get(f"nl_auto:{cid}"):
+        tg.send(f"You've confirmed {streak} monthly sends for {company['name']}. Put the monthly newsletter "
+                f"send on AUTO (skip the Stage-3 confirm from now on)?",
+                [[tg.button("Yes, auto", f"nlauto:{cid}:1"), tg.button("Keep confirming", f"nlauto:{cid}:0")]])
+    hrs = round(len(recips) / per_hour, 1)
+    return {"ok": True, "result": {"sent_to": f"the live list, drip {per_hour}/hour (~{hrs}h for {n:,})",
+                                   "queued": True, "job": jid, "streak": streak}}
 
 
-def set_live_sends(on: bool) -> dict:
-    """Flip the global newsletter live-send lock. OFF = the real list is unreachable (testing-safe)."""
-    db.setting_set("newsletter_live_sends", bool(on))
-    tg.send(f"⚠️ Newsletter LIVE sends are now {'ON' if on else 'OFF'}.")
-    return {"ok": True, "live": bool(on)}
+def set_newsletter_paused(paused: bool) -> dict:
+    """Emergency stop for ALL newsletter sending: pauses in-flight drips and blocks scheduled/auto sends."""
+    db.setting_set("newsletter_paused", bool(paused))
+    tg.send(f"⚠️ Newsletter sending is now {'PAUSED' if paused else 'resumed'}.")
+    return {"ok": True, "paused": bool(paused)}
 
 
-def live_sends_status() -> dict:
-    return {"ok": True, "live": newsletter.live_sends_on()}
+def set_newsletter_auto(company_id: int, on: bool) -> dict:
+    db.setting_set(f"nl_auto:{company_id}", bool(on))
+    return {"ok": True, "auto": bool(on)}
+
+
+def newsletter_status() -> dict:
+    return {"ok": True, "paused": bool(db.setting_get("newsletter_paused"))}
 
 
 def skip_task(task_id: int) -> dict:
@@ -774,8 +814,37 @@ def deliver_seo_report(company: str, days: int = 28) -> dict:
 def _execute_scheduled(t: dict) -> None:
     if t["kind"] == "seo_report":
         deliver_seo_report(t["company"] or "tabscanner", (t.get("config") or {}).get("days", 28))
+    elif t["kind"] == "newsletter":
+        _fire_scheduled_newsletter(t)
     else:
         raise ValueError(f"unknown scheduled kind {t['kind']}")
+
+
+def _fire_scheduled_newsletter(t: dict) -> None:
+    """A scheduled newsletter's 1st-of-month arrived. If the company is on AUTO, drip it out now; else drop
+    a Stage-3 'confirm to send' card in the Inbox (the operator types the count to fire it)."""
+    company = store.get_company_by_slug(t["company"])
+    if not company:
+        return
+    cid = company["id"]
+    cfg = t.get("config") or {}
+    art = {"subject": cfg.get("subject"), "html": cfg.get("html"),
+           "text": cfg.get("text"), "hero_b64": cfg.get("hero_b64")}
+    skill = store.get_skill_by_key(cid, "content-newsletter")
+    if db.setting_get(f"nl_auto:{cid}"):
+        recips = newsletter.recipients(cid)
+        per_hour = int(db.setting_get("newsletter_per_hour") or newsletter.DEFAULT_PER_HOUR)
+        newsletter.enqueue_send(cid, None, art, recips, per_hour)
+        tg.send(f"📤 Auto-sending {company['name']} newsletter '{art['subject']}' to {len(recips):,} "
+                f"contacts (drip {per_hour}/hr).")
+        return
+    n = len(newsletter.recipients(cid))
+    card = store.create_task(cid, skill["id"], "newsletter_send",
+                             {"title": f"Send today: {art['subject']}", "subject": art["subject"]})
+    store.update_task(card["id"], draft=f"Subject: {art['subject']}\n\nScheduled for today. Confirm to send "
+                      f"to the full {company['name']} list ({n:,} contacts).", status="awaiting_approval")
+    db.setting_set(f"newsletter:{card['id']}", art)
+    tg.send(f"🗓 {company['name']} newsletter due today: '{art['subject']}'. Confirm the send in your Inbox.")
 
 
 def run_due_tasks() -> None:

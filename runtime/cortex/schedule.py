@@ -50,6 +50,34 @@ def create(company, kind, title, cadence="weekly", weekday=0, hour=8, minute=0, 
         (company, kind, title, cadence, weekday, hour, minute, Json(config or {}), nr))
 
 
+def first_of_next_month(after: datetime, hour: int = 9) -> datetime:
+    y, m = (after.year + 1, 1) if after.month == 12 else (after.year, after.month + 1)
+    return after.replace(year=y, month=m, day=1, hour=hour, minute=0, second=0, microsecond=0)
+
+
+def next_monthly_slot(company: str, kind: str = "newsletter", hour: int = 9) -> datetime:
+    """Next free 1st-of-month for a company's scheduled newsletters, so approved drafts STACK one per
+    month: if the company already has one scheduled, take the 1st of the month after its latest; else the
+    next upcoming 1st."""
+    ensure_schema()
+    now = datetime.now(timezone.utc)
+    rows = db.query("select next_run from scheduled_tasks where company=%s and kind=%s and enabled=true "
+                    "and next_run is not null order by next_run desc limit 1", (company, kind))
+    if rows and rows[0]["next_run"] and rows[0]["next_run"] > now:
+        return first_of_next_month(rows[0]["next_run"], hour)
+    first_this = now.replace(day=1, hour=hour, minute=0, second=0, microsecond=0)
+    return first_this if first_this > now else first_of_next_month(now, hour)
+
+
+def create_once(company, kind, title, when: datetime, config=None) -> dict:
+    """A ONE-OFF scheduled task that fires at `when`, then disables itself (mark_ran handles 'once')."""
+    ensure_schema()
+    return db.execute(
+        "insert into scheduled_tasks (company,kind,title,cadence,next_run,config) "
+        "values (%s,%s,%s,'once',%s,%s) returning *",
+        (company, kind, title, when, Json(config or {})))
+
+
 def listing(company=None) -> list:
     ensure_schema()
     if company and company not in ("all", ""):
@@ -75,6 +103,10 @@ def due() -> list:
 
 
 def mark_ran(t: dict, status: str) -> None:
+    if t["cadence"] == "once":   # one-off (e.g. a scheduled newsletter): fire once, then disable
+        db.execute("update scheduled_tasks set last_run=now(), last_status=%s, enabled=false, next_run=null "
+                   "where id=%s", (status[:120], t["id"]))
+        return
     nr = next_run(t["cadence"], t["weekday"] or 0, t["hour"] or 8, t["minute"] or 0)
     db.execute("update scheduled_tasks set last_run=now(), last_status=%s, next_run=%s where id=%s",
                (status[:120], nr, t["id"]))

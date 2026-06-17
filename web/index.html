@@ -986,7 +986,7 @@ async function renderInbox(v){
     const wp=t.wp||null, em=t.email||null;
     if(t.kind==='report') return reportCard(t,co);
     const isEmail=t.kind==='email_reply';
-    const kindLabel=t.kind==='blog'?'blog post':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to send':(isEmail?'email reply':esc(t.kind||'task'));
+    const kindLabel=t.kind==='blog'?'blog post':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to schedule':t.kind==='newsletter_send'?'newsletter due to send':(isEmail?'email reply':esc(t.kind||'task'));
     const title=esc(isEmail&&em?('Reply to '+(em.inquiry&&em.inquiry.name||em.to||'enquiry')):(t.title||(wp&&wp.title)||('Task #'+t.id)));
     const body=esc(isEmail&&em&&em.preview?em.preview:(t.body||t.draft||''));
     return `<div class="card" id="t${t.id}">
@@ -1127,19 +1127,27 @@ async function act(id,what){
   try{ if(what==='approve') toast('Working on it…');
     const r=await api(`/api/tasks/${id}/${what}`,{method:'POST'});
     if(card) card.style.opacity=1;
-    if(r&&r.blocked){ toast('🔒 '+r.error); return; }                         // live sends OFF — nothing sent
-    if(r&&r.needs_confirm){ await confirmLiveSend(id, r.recipients, r.company); return; }  // require explicit count
+    if(r&&r.blocked){ toast('🔒 '+r.error); return; }                         // emergency-paused — nothing sent
+    if(r&&r.needs_confirm){ await confirmLiveSend(id, r); return; }            // require explicit count (schedule or send)
     const sent=r&&r.result&&r.result.sent_to, err=r&&r.result&&r.result.error;
     toast(err? ('Note: '+err) : sent? ('Sent to '+sent+' ✓') : (what==='approve'?'Approved ✓':'Done ✓')); render(); }
   catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
 }
-// A real full-list send is NEVER a plain approve: the operator must type the exact recipient count.
-async function confirmLiveSend(id, n, co){
-  const c=prompt(`SEND TO THE LIVE LIST\n\nThis goes to ${n} REAL ${co||''} contacts — this cannot be undone.\nType the number ${n} to confirm, or Cancel to stop.`);
-  if(c===null){ toast('Cancelled — nothing sent'); return; }
+// A real-list newsletter action is NEVER a plain approve: the operator must type the exact recipient
+// count. Stage 2 (action 'schedule') queues it for the 1st; Stage 3 (action 'send') sends it now.
+async function confirmLiveSend(id, r){
+  const n=r.recipients, co=r.company||'';
+  const msg = r.action==='schedule'
+    ? `SCHEDULE THIS NEWSLETTER\n\nIt will be queued to send to ${n} ${co} contacts on ${r.date}, then go out automatically that day.\nType the number ${n} to confirm, or Cancel.`
+    : `SEND TO THE LIVE LIST\n\nThis sends to ${n} REAL ${co} contacts now (drip 250/hr) — cannot be undone.\nType the number ${n} to confirm, or Cancel.`;
+  const c=prompt(msg);
+  if(c===null){ toast('Cancelled — nothing done'); return; }
   try{ const cr=await api(`/api/tasks/${id}/confirm-send`,{method:'POST',body:JSON.stringify({count:Number(c)})});
-    const sent=cr&&cr.result&&cr.result.sent_to;
-    toast(cr&&cr.ok&&sent ? ('Sent to '+sent+' ✓') : ('Not sent: '+((cr&&cr.error)||(cr&&cr.result&&cr.result.error)||'blocked'))); render(); }
+    const res=cr&&cr.result;
+    if(cr&&cr.ok&&res&&res.scheduled) toast('Scheduled for '+res.scheduled+' ✓');
+    else if(cr&&cr.ok&&res&&res.sent_to) toast(res.sent_to+' ✓');
+    else toast('Not done: '+((cr&&cr.error)||(res&&res.error)||'cancelled'));
+    render(); }
   catch(e){ toast('Error: '+e.message); }
 }
 // Voice (or typed) correction on every approval card: tap to talk -> editable transcript -> send.

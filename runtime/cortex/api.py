@@ -1173,23 +1173,34 @@ class SendConfirm(BaseModel):
 
 @app.post("/api/tasks/{task_id}/confirm-send")
 def task_confirm_send(task_id: int, body: SendConfirm, _: None = Depends(auth)) -> dict:
-    """Fire a newsletter to the full LIVE list. Requires live sends ON + the exact recipient count echoed."""
+    """Confirm a newsletter card with the exact count: Stage 2 schedules for the 1st, Stage 3 sends."""
     return engine.confirm_send_task(task_id, body.count)
 
 
-class LiveToggle(BaseModel):
+class PauseToggle(BaseModel):
+    paused: bool
+
+
+@app.get("/api/newsletter/status")
+def newsletter_status_get(_: None = Depends(auth)) -> dict:
+    return engine.newsletter_status()
+
+
+@app.post("/api/newsletter/pause")
+def newsletter_pause_set(body: PauseToggle, _: None = Depends(auth)) -> dict:
+    """Emergency stop for all newsletter sending (pauses in-flight drips + scheduled/auto sends)."""
+    return engine.set_newsletter_paused(body.paused)
+
+
+class AutoToggle(BaseModel):
+    company_id: int
     on: bool
 
 
-@app.get("/api/newsletter/live-sends")
-def newsletter_live_get(_: None = Depends(auth)) -> dict:
-    return engine.live_sends_status()
-
-
-@app.post("/api/newsletter/live-sends")
-def newsletter_live_set(body: LiveToggle, _: None = Depends(auth)) -> dict:
-    """Flip the global newsletter live-send lock (OFF by default = real lists unreachable)."""
-    return engine.set_live_sends(body.on)
+@app.post("/api/newsletter/auto")
+def newsletter_auto_set(body: AutoToggle, _: None = Depends(auth)) -> dict:
+    """Turn the monthly send to auto (skip the Stage-3 confirm) for a company, or back to manual."""
+    return engine.set_newsletter_auto(body.company_id, body.on)
 
 
 # ---- voice: speech-to-text (Deepgram) + text-to-speech (ElevenLabs Flash) ----

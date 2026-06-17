@@ -404,9 +404,9 @@ def enqueue_send(company_id: int, task_id: int, art: dict, recips: list[dict],
 
 def drain_send_jobs() -> list[dict]:
     """Engine calls this each ~60s tick. Sends ONE throttled batch per due job (≈6-min cadence) and returns
-    lifecycle events (done / paused) for the engine to alert + log. The global live-send lock doubles as a
-    kill-switch: while it is OFF, nothing drains (in-flight sends pause)."""
-    if not live_sends_on():
+    lifecycle events (done / paused) for the engine to alert + log. The `newsletter_paused` emergency stop
+    halts all draining (in-flight sends pause until resumed)."""
+    if db.setting_get("newsletter_paused"):
         return []
     events = []
     jobs = db.query("select * from newsletter_send_jobs where status='running' and "
