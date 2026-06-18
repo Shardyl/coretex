@@ -9,7 +9,6 @@ operator out of the existing flows before they've set it up.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import secrets
 import time
@@ -117,34 +116,17 @@ def _issue_stepup() -> str:
     return token
 
 
-# ---------- PIN fallback (works on any device, esp. desktop where biometric isn't set up) ----------
+# ---------- PIN ----------
+# The PIN step-up reuses the SAME 4-digit cockpit-login PIN (the `pin_hash` setting, owned by
+# api.py). PIN verification lives in api.py where _pin_hash/_secret are; here we only report
+# whether a PIN exists, so the gate knows it's active.
 
 def pin_set() -> bool:
-    return bool(db.setting_get("stepup_pin"))
-
-
-def set_pin(pin: str) -> dict:
-    pin = (pin or "").strip()
-    if not (pin.isdigit() and 4 <= len(pin) <= 12):
-        return {"ok": False, "error": "PIN must be 4 to 12 digits"}
-    salt = secrets.token_bytes(16)
-    h = hashlib.pbkdf2_hmac("sha256", pin.encode(), salt, 200_000)
-    db.setting_set("stepup_pin", {"salt": salt.hex(), "hash": h.hex()})
-    return {"ok": True}
-
-
-def verify_pin(pin: str) -> dict:
-    rec = db.setting_get("stepup_pin")
-    if not rec:
-        return {"ok": False, "error": "no PIN set"}
-    h = hashlib.pbkdf2_hmac("sha256", (pin or "").strip().encode(), bytes.fromhex(rec["salt"]), 200_000)
-    if not secrets.compare_digest(h.hex(), rec["hash"]):
-        return {"ok": False, "error": "wrong PIN"}
-    return {"ok": True, "stepup_token": _issue_stepup()}
+    return bool(db.setting_get("pin_hash"))
 
 
 def stepup_enabled() -> bool:
-    """The public-approval gate is ACTIVE once EITHER a biometric device or a PIN is set up."""
+    """The public-approval gate is ACTIVE once EITHER a biometric device or the cockpit PIN exists."""
     return is_registered() or pin_set()
 
 

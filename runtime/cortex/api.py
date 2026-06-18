@@ -138,6 +138,41 @@ def lock_check(body: Pin, _: None = Depends(auth)) -> dict:
     return {"ok": bool(h) and hmac.compare_digest(h, _pin_hash((body.pin or "").strip()))}
 
 
+# ---- unified login: the 4-digit PIN (and biometric on mobile) ARE the login ----
+# The PIN that unlocks the cockpit issues the session token directly; biometric (a registered
+# platform passkey, phone only) does the same. The text passcode below stays as a recovery path.
+
+@app.get("/api/auth/mode")
+def auth_mode() -> dict:
+    """Which login UI to show BEFORE authenticating (no token needed): PIN keypad vs passcode."""
+    return {"pin": bool(db.setting_get("pin_hash")), "biometric": webauthn_auth.is_registered()}
+
+
+@app.post("/api/login/pin")
+def login_pin(body: Pin) -> dict:
+    h = db.setting_get("pin_hash")
+    if not h:
+        raise HTTPException(status_code=503, detail="no PIN set")
+    if not hmac.compare_digest(h, _pin_hash((body.pin or "").strip())):
+        raise HTTPException(status_code=401, detail="wrong PIN")
+    return {"token": _make_token(), "ttl": TOKEN_TTL}
+
+
+@app.post("/api/login/webauthn/options")
+def login_wa_options() -> dict:
+    if not webauthn_auth.is_registered():
+        raise HTTPException(status_code=409, detail="no biometric registered")
+    return webauthn_auth.auth_options()
+
+
+@app.post("/api/login/webauthn/verify")
+def login_wa_verify(credential: dict = Body(...)) -> dict:
+    r = webauthn_auth.auth_verify(credential)
+    if not r.get("ok"):
+        raise HTTPException(status_code=401, detail=r.get("error", "biometric failed"))
+    return {"token": _make_token(), "ttl": TOKEN_TTL}
+
+
 # ---------- read views ----------
 
 @app.get("/api/companies")
@@ -1216,14 +1251,13 @@ class PinBody(BaseModel):
     pin: str
 
 
-@app.post("/api/stepup/pin/set")
-def stepup_pin_set(body: PinBody, _: None = Depends(auth)) -> dict:
-    return webauthn_auth.set_pin(body.pin)
-
-
 @app.post("/api/stepup/pin/verify")
 def stepup_pin_verify(body: PinBody, _: None = Depends(auth)) -> dict:
-    return webauthn_auth.verify_pin(body.pin)
+    """Confirm a public approval with the SAME 4-digit cockpit PIN (pin_hash)."""
+    h = db.setting_get("pin_hash")
+    if h and hmac.compare_digest(h, _pin_hash((body.pin or "").strip())):
+        return {"ok": True, "stepup_token": webauthn_auth._issue_stepup()}
+    return {"ok": False, "error": "wrong PIN"}
 
 
 class PauseToggle(BaseModel):
