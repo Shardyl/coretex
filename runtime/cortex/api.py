@@ -1501,7 +1501,12 @@ def tts(body: Speak, _: None = Depends(auth)) -> Response:
 CHAT_SYSTEM_BASE = (
     "You are Cortex, Rashad's voice-first AI operations partner. You help him run his businesses: "
     "Tabscanner (receipt-OCR / data-extraction API), Sensa (AI video production), SkyVision, and "
-    "FilmSpoke. You are warm, sharp and concise. Your replies are usually read aloud, so write the "
+    "FilmSpoke. The person you are ALWAYS talking to is Rashad Al-Safar, the founder and owner of all of "
+    "them. Voice-to-text frequently mis-hears 'Rashad' as 'Richard' — they are the SAME person (him): so "
+    "'Richard', 'Richard at Tabscanner', etc. all mean Rashad himself, and rashad@tabscanner.com is his "
+    "Tabscanner business email. When he names a person or a company, proactively look them up with "
+    "crm_lookup BEFORE asking him for details (like an email) you could find yourself. "
+    "You are warm, sharp and concise. Your replies are usually read aloud, so write the "
     "way you'd speak: natural sentences, no markdown, no bullet lists, no headings, and keep it brief "
     "unless he asks for depth. "
     "You manage Cortex's SKILLS and their standing rules. A skill is how a job gets done well plus "
@@ -1837,23 +1842,41 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         return (f"created task #{t['id']} — drafting now"
                 + (f" using the {n} attached file(s)" if n else "") + "; it'll appear in the Inbox for approval.")
     if name == "draft_email":
+        to_name = (inp.get("to_name") or "").strip()
+        to_email = (inp.get("to_email") or "").strip()
+        # Resolve the recipient from the CRM SERVER-SIDE so the email is real (never a "[email from CRM]" placeholder).
+        if (not to_email or "@" not in to_email or "[" in to_email) and to_name:
+            like = f"%{to_name}%"
+            ms = db.query(
+                "select first_name, last_name, email from crm_master where coalesce(email,'') <> '' and "
+                "(first_name ilike %s or last_name ilike %s or "
+                "(coalesce(first_name,'')||' '||coalesce(last_name,'')) ilike %s) "
+                "order by is_client desc nulls last limit 8", (like, like, like))
+            if len(ms) == 1:
+                to_email = ms[0]["email"]
+            elif len(ms) > 1:
+                opts = "; ".join(f"{(m.get('first_name') or '').strip()} {(m.get('last_name') or '').strip()} "
+                                 f"<{m['email']}>".strip() for m in ms)
+                return (f"There's more than one '{to_name}' in the CRM: {opts}. Ask Rashad which one, then "
+                        "call draft_email again with that exact to_email.")
+            else:
+                return (f"'{to_name}' isn't in the CRM. Ask Rashad for {to_name}'s email address "
+                        "(then call draft_email with it), or confirm he wants it drafted without a resolved address.")
         sk = (store.get_skill_by_key(co["id"], "email-handling")
               or store.get_skill_by_key(co["id"], "general-operations")
               or db.one("select * from skills where company_id=%s order by id limit 1", (co["id"],)))
         if not sk:
             return f"no skill available for {co['slug']}"
         req = {"brief": inp.get("brief", ""), "outbound": True,
-               "inquiry": {"name": inp.get("to_name", ""), "email": inp.get("to_email", "") or "",
-                           "subject": inp.get("subject", ""), "message": ""}}
+               "inquiry": {"name": to_name, "email": to_email, "subject": inp.get("subject", ""), "message": ""}}
         if inp.get("from_email"):
             req["from_email"] = inp["from_email"]
         if inp.get("_images"):
             req["attachments"] = inp["_images"]
         t = store.create_task(co["id"], sk["id"], "email_draft", req)
-        to = inp.get("to_name") or inp.get("to_email") or "the recipient"
-        addr = f" <{inp['to_email']}>" if inp.get("to_email") else " (no email on file)"
-        return (f"Drafting an email to {to}{addr} — it's in your Inbox as task #{t['id']} "
-                "with the recipient and logo, for your approval.")
+        addr = f" <{to_email}>" if to_email else " (no email resolved)"
+        return (f"Drafting an email to {to_name or 'the recipient'}{addr} — it's in your Inbox as task "
+                f"#{t['id']} showing the recipient, subject and logo, for your approval.")
     return f"unknown tool {name}"
 
 
@@ -1885,7 +1908,11 @@ def _chat_system() -> str:
 # A Chief CAN grow the org — create_skill is global-by-nature (added to every company), so there's no
 # scope to bleed. But the scoped, bleed-risky part — writing per-company RULES (add_rule/update_craft)
 # — stays with the Manager (one keeper of rules). Managers + general Cortex get the full set.
-_CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "create_skill", "set_reminder"}
+_CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "create_skill", "set_reminder",
+                # Chiefs can also DRAFT and look people up — anyone Rashad talks to should be able to act on a
+                # request, not just strategise. (Per-company RULE writes stay Manager-only to avoid scope bleed.)
+                "create_task", "draft_email", "draft", "crm_lookup", "crm_pipeline", "correct_task",
+                "approve_task", "skip_task", "run_report", "schedule_report", "list_scheduled"}
 
 
 @app.get("/api/heads")

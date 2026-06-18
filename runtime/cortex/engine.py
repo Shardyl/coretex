@@ -331,6 +331,18 @@ def process_new_tasks() -> None:
             tg.send(f"Task #{task['id']} failed: {e}")
 
 
+def _push_approval(task: dict, skill: dict, company: dict) -> None:
+    """Instant lock-screen ping that something needs the owner's yes. No extra Inbox row — the task IS the
+    card (no-mirror rule); this is just the push."""
+    try:
+        label = (task.get("title") or (task.get("request") or {}).get("title")
+                 or (skill.get("name") if skill else None) or task.get("kind") or "a task")
+        notifications.push_only("Needs your yes", f"{company['name']}: {str(label)[:80]}",
+                                url="/", category="approval")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _run_task(task: dict) -> None:
     skill = store.get_skill(task["skill_id"])
     company = store.get_company(task["company_id"])
@@ -367,6 +379,7 @@ def _run_task(task: dict) -> None:
             else _fmt(task, skill, company, verdict)
         msg = tg.send(preview, _approval_buttons(task["id"]))
         store.update_task(task["id"], status="awaiting_approval", tg_message_id=msg["message_id"])
+        _push_approval(task, skill, company)
 
 
 def _run_blog_task(task: dict, skill: dict, company: dict, site) -> None:
@@ -385,6 +398,7 @@ def _run_blog_task(task: dict, skill: dict, company: dict, site) -> None:
     # blog tasks ALWAYS go to the owner — never auto-publish (golden rule).
     msg = tg.send(_fmt_blog(company, skill, art, verdict, post.get("preview")), _blog_buttons(task["id"]))
     store.update_task(task["id"], status="awaiting_approval", tg_message_id=msg["message_id"])
+    _push_approval(task, skill, company)
 
 
 def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = False) -> dict:

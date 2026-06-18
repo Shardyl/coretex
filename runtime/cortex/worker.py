@@ -31,17 +31,38 @@ def _rules_block(skill: dict) -> str:
     return "Standing rules you MUST follow:\n" + "\n".join(f"- {r}" for r in rules)
 
 
+_EMAIL_BODY_RULE = (
+    "This is an EMAIL. Write ONLY the email body — the greeting and the message. Do NOT write From/To/Subject "
+    "headers. Do NOT add a sign-off (no 'Best regards', no your name) and do NOT add a signature or contact "
+    "details — the recipient, signature and logo are attached automatically, so adding them yourself doubles "
+    "them up. Do NOT mention, describe or instruct anyone to add attachments — any attached files are shown to "
+    "the owner separately. Just the message itself, ready to send.")
+
+
 def draft(skill: dict, company: dict, request: dict,
           correction: str | None = None, manager_feedback: list[str] | None = None) -> str:
+    is_email = isinstance(request, dict) and bool(request.get("outbound") or request.get("inquiry"))
     system = "\n\n".join(filter(None, [
         f"You are Cortex's worker for the '{skill['name']}' skill.",
         _company_context(company),
         skill.get("craft") or "",
         _rules_block(skill),
+        _EMAIL_BODY_RULE if is_email else
         "Produce the deliverable only — no preamble, no explanation, no meta-commentary.",
     ]))
     atts = request.get("attachments") if isinstance(request, dict) else None
     user = [f"Task: {request.get('brief') if isinstance(request, dict) else request}"]
+    if is_email:   # tell the worker WHO it's writing to, so it greets the recipient (not Rashad/itself)
+        inq = request.get("inquiry") or {}
+        bits = []
+        if inq.get("name") or inq.get("email"):
+            bits.append(f"This email is addressed TO {inq.get('name') or inq.get('email')} — greet THEM by "
+                        "name and write to them in the second person.")
+        if inq.get("subject"):
+            bits.append(f"Subject: {inq.get('subject')}.")
+        bits.append("It is sent BY the owner of the company in the owner's first-person voice. Do NOT address "
+                    "it to Rashad and do NOT write it to yourself — Rashad IS the sender.")
+        user.insert(0, " ".join(bits))
     if atts:
         user.append(f"{len(atts)} file(s)/image(s) are attached below — use them as source material for the deliverable.")
     if manager_feedback:

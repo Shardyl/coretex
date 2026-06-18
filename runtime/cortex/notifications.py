@@ -99,6 +99,17 @@ def _route(row: dict, priority: str) -> None:
 
 # ---- reads for the Inbox ----
 
+def push_only(title: str, body: str = "", url: str = "/", category: str = "approval") -> bool:
+    """Fire a Web Push WITHOUT persisting a row. For things that are ALREADY their own Inbox card (a task
+    needing approval) — the task is the source of truth; this is just the instant lock-screen ping, so we
+    keep the no-mirror rule (no duplicate notification row to drift)."""
+    try:
+        from . import push
+        return push.send_to_devices({"id": 0, "title": title, "body": body, "category": category, "url": url})
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def active(company_id: int | None = None) -> list[dict]:
     """Live info cards for the Inbox: unread + snoozed-now-due. Newest first."""
     ensure_schema()
