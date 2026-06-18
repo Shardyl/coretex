@@ -26,6 +26,7 @@ from fastapi import (Body, Depends, FastAPI, File, Header, HTTPException, Respon
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from psycopg.types.json import Json
 from pydantic import BaseModel
 
 from . import (catalog, config, crm, db, engine, gmail, knowledge, notifications, personas, profile,
@@ -497,6 +498,92 @@ def schedule_run_now(tid: int, _: None = Depends(auth)) -> dict:
         raise HTTPException(status_code=404, detail="not found")
     engine._execute_scheduled(t)
     schedule.mark_ran(t, "ok (manual)")
+    return {"ok": True}
+
+
+# ---------- unified Calendar (Phase 3.5): ONE timeline over the tasks table ----------
+# Three lanes: NOW (un-dated open work piling up) · RECURRING (templates on cadence) · UPCOMING (one-offs).
+
+def _cal_company_name(r: dict) -> str:
+    co = store.get_company(r["company_id"])
+    return co["name"] if co else ""
+
+
+def _cal_card(r: dict) -> dict:
+    return {"id": r["id"], "company": _cal_company_name(r), "company_id": r["company_id"],
+            "kind": r["kind"], "title": r.get("title") or KINDS.get(r["kind"], r["kind"])}
+
+
+@app.get("/api/calendar")
+def calendar_view(company: str | None = None, _: None = Depends(auth)) -> dict:
+    cid = None
+    if company and company not in ("", "all"):
+        co = store.get_company_by_slug(company)
+        cid = co["id"] if co else -1          # -1 = a real filter that matches nothing
+    flt = "" if cid is None else " and company_id=%s"
+    p: tuple = () if cid is None else (cid,)
+    now = db.query("select * from tasks where status in ('awaiting_approval','awaiting_correction') "
+                   "and schedule_kind is null" + flt + " order by created_at", p)
+    rec = db.query("select * from tasks where schedule_kind='recurring'" + flt
+                   + " order by next_run nulls last", p)
+    upc = db.query("select * from tasks where schedule_kind='once' and status='scheduled'" + flt
+                   + " order by run_at nulls last", p)
+    return {
+        "now": [{**_cal_card(r), "status": r["status"], "when": r["created_at"]} for r in now],
+        "recurring": [{**_cal_card(r), "cadence": r["cadence"], "weekday": r["weekday"], "hour": r["hour"],
+                       "minute": r["minute"], "next_run": r["next_run"], "enabled": r["enabled"],
+                       "last_run": r["last_run"], "last_status": r["last_status"]} for r in rec],
+        "upcoming": [{**_cal_card(r), "run_at": r["run_at"], "status": r["status"]} for r in upc],
+        "kinds": KINDS, "companies": seo_report.available(),
+    }
+
+
+@app.post("/api/calendar")
+def calendar_create(body: ScheduleBody, _: None = Depends(auth)) -> dict:
+    """Add a recurring job to the Calendar as a unified task template."""
+    if body.kind not in KINDS:
+        raise HTTPException(status_code=400, detail=f"unknown kind {body.kind}")
+    co = store.get_company_by_slug(body.company)
+    if not co:
+        raise HTTPException(status_code=400, detail=f"unknown company {body.company}")
+    skill = store.get_skill_by_key(co["id"], engine.REPORT_SKILL_KEY)
+    label = seo_report.available().get(body.company, body.company)
+    title = body.title or f"{label} — {KINDS[body.kind]}"
+    nr = schedule.next_run(body.cadence, body.weekday, body.hour, body.minute)
+    req = {"kind": body.kind, "company": body.company, "days": body.days}
+    t = db.execute(
+        "insert into tasks (company_id,skill_id,kind,request,status,origin,title,schedule_kind,cadence,"
+        "weekday,hour,minute,next_run,enabled) values (%s,%s,%s,%s,'scheduled','calendar',%s,'recurring',"
+        "%s,%s,%s,%s,true) returning *",
+        (co["id"], skill["id"] if skill else None, body.kind, Json(req), title,
+         body.cadence, body.weekday, body.hour, body.minute, nr))
+    return {"ok": True, "task": t}
+
+
+@app.post("/api/calendar/{tid}/toggle")
+def calendar_toggle(tid: int, _: None = Depends(auth)) -> dict:
+    cur = db.one("select enabled from tasks where id=%s and schedule_kind='recurring'", (tid,))
+    if not cur:
+        raise HTTPException(status_code=404, detail="not found")
+    t = db.execute("update tasks set enabled=%s, updated_at=now() where id=%s returning *",
+                   (not cur["enabled"], tid))
+    return {"ok": True, "task": t}
+
+
+@app.post("/api/calendar/{tid}/run")
+def calendar_run(tid: int, _: None = Depends(auth)) -> dict:
+    """Fire a template now — spawns a child instance the engine drafts into the Inbox."""
+    child = engine.run_template_now(tid)
+    if not child:
+        raise HTTPException(status_code=404, detail="not a runnable scheduled task")
+    return {"ok": True}
+
+
+@app.delete("/api/calendar/{tid}")
+def calendar_delete(tid: int, _: None = Depends(auth)) -> dict:
+    """Delete a scheduled template / one-off (never a normal Inbox task). Detaches any spawned children."""
+    db.execute("update tasks set parent_id=null where parent_id=%s", (tid,))
+    db.execute("delete from tasks where id=%s and schedule_kind is not null", (tid,))
     return {"ok": True}
 
 

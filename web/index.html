@@ -1037,27 +1037,56 @@ function cadenceText(t){
   return `Weekly · ${DOW[t.weekday||0]} ${pad2(t.hour)}:${pad2(t.minute)}`;
 }
 function whenText(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString([],{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; } }
+function kindLabel(k){ return {blog:'blog post',newsletter_idea:'newsletter idea',newsletter_review:'newsletter ready to schedule',newsletter_send:'newsletter due to send',email_draft:'email draft',email_reply:'email reply',seo_report:'SEO & Traffic report',report:'report'}[k]||k||'task'; }
 async function renderCalendar(v){
   v.innerHTML=`<div class="h">Calendar</div><div id="calbody" class="empty">Loading…</div>`;
   const fco=document.getElementById('coSel').value;
-  let d; try{ d=await api('/api/schedule'+(fco?'?company='+encodeURIComponent(fco):'')); }catch(e){ d={tasks:[],kinds:{},companies:{}}; }
+  let d; try{ d=await api('/api/calendar'+(fco?'?company='+encodeURIComponent(fco):'')); }catch(e){ d={now:[],recurring:[],upcoming:[],kinds:{},companies:{}}; }
   schedCompanies=d.companies||{}; schedKinds=d.kinds||{};
-  const cos=Object.entries(schedCompanies), tasks=d.tasks||[];
+  const cos=Object.entries(schedCompanies);
+  const now=d.now||[], rec=d.recurring||[], upc=d.upcoming||[];
   let h='';
-  if(tasks.length){
-    h+='<div class="h">Scheduled</div>';
-    tasks.forEach(t=>{
-      h+=`<div class="card prow" style="${t.enabled?'':'opacity:.55'}"><div style="flex:1;min-width:0">
+
+  // NOW / TO DEAL WITH — un-dated open work piling up (deep-links to the Inbox)
+  h+=`<div class="h" style="display:flex;align-items:center;gap:8px">${ic('pulse',16)} Now · to deal with`
+    +(now.length?`<span class="chip cy" style="margin-left:auto">${now.length}</span>`:'')+`</div>`;
+  if(now.length){
+    now.forEach(t=>{
+      const st=t.status==='awaiting_correction'?'correcting':'needs your yes';
+      h+=`<div class="card prow" style="cursor:pointer;border-left:3px solid var(--cy)" onclick="go('inbox')">
+        <div style="flex:1;min-width:0"><div class="cname">${esc(t.title||t.kind)}</div>
+        <div class="csub"><span class="chip cy">${esc(t.company)}</span> ${esc(kindLabel(t.kind))} · ${st} · ${esc(whenText(t.when))}</div></div>
+        <div class="row" style="flex:none">${ic('back',16)}</div></div>`;
+    });
+  } else { h+='<div class="csub" style="padding:2px 4px 12px">Nothing waiting — inbox zero on un-dated work.</div>'; }
+
+  // RECURRING — templates on a cadence
+  h+=`<div class="h">Recurring</div>`;
+  if(rec.length){
+    rec.forEach(t=>{
+      h+=`<div class="card prow" style="${t.enabled?'':'opacity:.5'}"><div style="flex:1;min-width:0">
         <div class="cname">${esc(t.title||'Task')}</div>
-        <div class="csub">${esc(cadenceText(t))} · next ${esc(whenText(t.next_run))}${t.last_status?' · last: '+esc(t.last_status):''}</div></div>
+        <div class="csub"><span class="chip cy">${esc(t.company)}</span> ${esc(cadenceText(t))} · next ${esc(whenText(t.next_run))}${t.last_status?' · last: '+esc(t.last_status):''}</div></div>
         <div class="row" style="gap:6px;flex:none">
-          <button class="iconbtn sm" title="Run now" onclick="runSched(${t.id})">${ic('play',15)}</button>
-          <button class="iconbtn sm" title="${t.enabled?'Pause':'Resume'}" onclick="toggleSched(${t.id})">${ic(t.enabled?'pause':'play',15)}</button>
-          <button class="iconbtn sm" title="Delete" onclick="delSched(${t.id})">${ic('trash',15)}</button>
+          <button class="iconbtn sm" title="Run now" onclick="runCal(${t.id})">${ic('play',15)}</button>
+          <button class="iconbtn sm" title="${t.enabled?'Pause':'Resume'}" onclick="toggleCal(${t.id})">${ic(t.enabled?'pause':'play',15)}</button>
+          <button class="iconbtn sm" title="Delete" onclick="delCal(${t.id})">${ic('trash',15)}</button>
         </div></div>`;
     });
-  } else { h+='<div class="empty" style="padding:22px 14px">No scheduled tasks yet. Add one below.</div>'; }
-  h+=`<div class="h">Schedule a task</div><div class="card">
+  } else { h+='<div class="csub" style="padding:2px 4px 12px">No recurring jobs.</div>'; }
+
+  // UPCOMING — dated one-offs
+  if(upc.length){
+    h+=`<div class="h">Upcoming</div>`;
+    upc.forEach(t=>{
+      h+=`<div class="card prow"><div style="flex:1;min-width:0">
+        <div class="cname">${esc(t.title||t.kind)}</div>
+        <div class="csub"><span class="chip cy">${esc(t.company)}</span> ${esc(kindLabel(t.kind))} · ${esc(whenText(t.run_at))}</div></div>
+        <div class="row" style="gap:6px;flex:none"><button class="iconbtn sm" title="Cancel" onclick="delCal(${t.id})">${ic('trash',15)}</button></div></div>`;
+    });
+  }
+
+  h+=`<div class="h">Schedule a recurring job</div><div class="card">
     <label>Organisation</label>
     <select id="scCo" class="fsel">${cos.map(([s,l])=>`<option value="${esc(s)}"${s===fco?' selected':''}>${esc(l)}</option>`).join('')}</select>
     <label>Task</label>
@@ -1068,7 +1097,7 @@ async function renderCalendar(v){
     <div id="scDowWrap"><label>Day</label>
       <select id="scDow" class="fsel">${DOW.map((d2,i)=>`<option value="${i}"${i===0?' selected':''}>${d2}</option>`).join('')}</select></div>
     <label>Time</label>
-    <input id="scTime" class="fsel" type="time" value="08:00">
+    <input id="scTime" class="fsel" type="time" value="12:00">
     <div class="row" style="margin-top:14px">
       <button class="btn go" onclick="addSched()">${ic('plus',16)} Schedule it</button>
       <button class="btn" onclick="runReportNow()">${ic('file',16)} Generate one now</button>
@@ -1077,15 +1106,15 @@ async function renderCalendar(v){
 }
 function fval(id){ const e=document.getElementById(id); return e?e.value:''; }
 async function addSched(){
-  const [hh,mm]=(fval('scTime')||'08:00').split(':').map(Number);
-  try{ await api('/api/schedule',{method:'POST',body:JSON.stringify({company:fval('scCo'),kind:fval('scKind'),
+  const [hh,mm]=(fval('scTime')||'12:00').split(':').map(Number);
+  try{ await api('/api/calendar',{method:'POST',body:JSON.stringify({company:fval('scCo'),kind:fval('scKind'),
         cadence:fval('scCad'),weekday:parseInt(fval('scDow')||'0',10),hour:hh,minute:mm})});
-    toast('Scheduled'); renderCalendar(document.getElementById('view')); }
+    toast('Scheduled ✓'); renderCalendar(document.getElementById('view')); }
   catch(e){ toast('Could not schedule ('+e.message+')'); }
 }
-async function toggleSched(id){ try{ await api('/api/schedule/'+id+'/toggle',{method:'POST'}); renderCalendar(document.getElementById('view')); }catch(e){ toast(e.message); } }
-async function delSched(id){ try{ await api('/api/schedule/'+id,{method:'DELETE'}); renderCalendar(document.getElementById('view')); }catch(e){ toast(e.message); } }
-async function runSched(id){ try{ toast('Running…'); await api('/api/schedule/'+id+'/run',{method:'POST'}); toast('Done — it is in your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
+async function toggleCal(id){ try{ await api('/api/calendar/'+id+'/toggle',{method:'POST'}); renderCalendar(document.getElementById('view')); }catch(e){ toast(e.message); } }
+async function delCal(id){ try{ await api('/api/calendar/'+id,{method:'DELETE'}); renderCalendar(document.getElementById('view')); }catch(e){ toast(e.message); } }
+async function runCal(id){ try{ toast('Running…'); await api('/api/calendar/'+id+'/run',{method:'POST'}); toast('Done — it is heading to your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
 async function runReportNow(){ try{ toast('Generating…'); await api('/api/report/run?company='+encodeURIComponent(fval('scCo')),{method:'POST'}); toast('Done — check your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
 
 let inboxView='pending', inboxSeg=localStorage.getItem('cortex_ibseg2')||'all';

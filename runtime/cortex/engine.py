@@ -1148,6 +1148,15 @@ def _spawn_recurring_child(template: dict) -> dict:
          template.get("title"), template["id"]))
 
 
+def run_template_now(tid: int) -> dict | None:
+    """Manually fire a scheduled/recurring task template right now: spawn a child the engine picks up
+    (its schedule/next_run is untouched — a manual run doesn't move the cadence)."""
+    t = store.get_task(tid)
+    if not t or t.get("schedule_kind") is None:
+        return None
+    return _spawn_recurring_child(t)
+
+
 def promote_due_tasks() -> None:
     """Unified clock (60s tick): turn DUE scheduled tasks (held in `tasks` with status='scheduled') into work.
       one-off   (schedule_kind='once', run_at<=now)  -> flip to 'new' (runs once via process_new_tasks).
