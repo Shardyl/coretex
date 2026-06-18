@@ -76,10 +76,26 @@ def think(system: str, user: str, *, fast: bool = False, model: str | None = Non
     return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
 
 
+def _cached_system(system: str) -> list[dict]:
+    """Wrap the system prompt as a single ephemeral-cached text block (5-min prompt cache)."""
+    return [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+
+
+def _cached_tools(tools: list[dict]) -> list[dict]:
+    """Mark the LAST tool as a cache breakpoint so the whole (static) tools block is cached."""
+    if not tools:
+        return tools
+    out = [dict(t) for t in tools]
+    out[-1] = {**out[-1], "cache_control": {"type": "ephemeral"}}
+    return out
+
+
 def chat(system: str, messages: list[dict], *, max_tokens: int = 1000,
          purpose: str = "chat", company: str | None = None) -> str:
-    """Multi-turn conversation → assistant text. Snappy (no extended thinking) for voice back-and-forth."""
-    resp = _client().messages.create(model=MODEL, max_tokens=max_tokens, system=system, messages=messages)
+    """Multi-turn conversation → assistant text. Snappy (no extended thinking) for voice back-and-forth.
+    The system prompt is PROMPT-CACHED — it's re-sent every turn, so the cache pays for itself immediately."""
+    resp = _client().messages.create(model=MODEL, max_tokens=max_tokens,
+                                     system=_cached_system(system), messages=messages)
     _log_usage(MODEL, getattr(resp, "usage", None), purpose, company)
     return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
 
@@ -94,11 +110,14 @@ def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
     full Opus call (system + tools + history), so this is the priciest path — logged per round.
     """
     client = _client()
+    # PROMPT CACHING: the system prompt + the (static) tool schemas are the big fixed prefix re-sent on
+    # every round/turn — cache them so each subsequent call reads them at ~10% instead of full price.
+    sys_blocks, cached_tools = _cached_system(system), _cached_tools(tools)
     msgs = [dict(m) for m in messages]
     resp = None
     for _ in range(rounds):
-        resp = client.messages.create(model=MODEL, max_tokens=max_tokens, system=system,
-                                       tools=tools, messages=msgs)
+        resp = client.messages.create(model=MODEL, max_tokens=max_tokens, system=sys_blocks,
+                                       tools=cached_tools, messages=msgs)
         _log_usage(MODEL, getattr(resp, "usage", None), purpose, company)
         if resp.stop_reason != "tool_use":
             break

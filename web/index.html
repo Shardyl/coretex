@@ -65,6 +65,18 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 8
 .chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:11px;
   color:var(--ink);font-weight:600}
 .chip.cy{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+.chip.spend{cursor:pointer;color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--line));font-variant-numeric:tabular-nums;flex:none}
+.chip.spend:active{transform:scale(.94)}
+#spendSheet{position:fixed;inset:0;z-index:55;background:color-mix(in srgb,var(--bg) 64%,transparent);backdrop-filter:blur(5px);display:grid;place-items:end center}
+#spendSheet .panel{width:100%;max-width:480px;max-height:82vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px 18px 0 0;padding:14px 16px calc(26px + env(safe-area-inset-bottom))}
+.shead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.srow{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px}
+.srow>span:first-child{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow .mut{color:var(--mut);font-size:12px;flex:none}
+.srow b{flex:none;font-variant-numeric:tabular-nums}
+.srow.big{justify-content:space-around;border:0;padding:4px 0 12px}
+.srow.big>div{text-align:center}.srow.big .sk{color:var(--mut);font-size:11px}.srow.big .sv{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums}
+.sk2{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:14px 0 3px}
 .title{font-family:Poppins;font-weight:600;font-size:17px;margin:2px 0 8px;line-height:1.3}
 .body{font-size:14px;color:var(--ink);opacity:.92;line-height:1.55;white-space:pre-wrap;
   max-height:230px;overflow:auto;border-left:2px solid var(--line);padding-left:12px;margin:6px 0 14px}
@@ -271,12 +283,21 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
   <div class="bar">
     <div class="brand"><span class="dot"></span>Cortex</div>
     <div class="spacer"></div>
+    <button class="chip spend" id="spendChip" title="Cortex spend (tap for detail)" onclick="openSpend()">$—</button>
     <select class="sel" id="coSel" onchange="localStorage.setItem('cortex_company',this.value);render()"></select>
     <button class="iconbtn" title="Activity" onclick="go('log')" id="hLog"></button>
     <button class="iconbtn" title="Lock Cortex" onclick="lockNow()" id="hLock"></button>
     <button class="iconbtn" id="themeBtn" onclick="toggleTheme()"></button>
   </div>
 </header>
+
+<div id="spendSheet" class="hidden" onclick="if(event.target===this)closeSpend()">
+  <div class="panel">
+    <div class="shead"><div class="brand" style="font-size:15px"><span class="dot"></span>Cortex spend</div>
+      <button class="btn" onclick="closeSpend()">Done</button></div>
+    <div id="spendBody"></div>
+  </div>
+</div>
 
 <div class="wrap">
   <div id="demoBanner" class="banner hidden">Demo data — not connected to a live Cortex API. Set the API URL to go live.</div>
@@ -479,7 +500,38 @@ function paintIcons(){
   const m={hLog:['pulse',20],hLock:['lock',20],themeBtn:['moon',20]};
   Object.keys(m).forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=ic(m[id][0],m[id][1]); });
   document.querySelectorAll('[data-ic]').forEach(el=>{ el.innerHTML=ic(el.getAttribute('data-ic'),22); });
+  updateSpendChip();
 }
+
+// ---- Spend chip + sheet (Anthropic cost from /api/usage) ----
+const _money=v=>'$'+(+v||0).toFixed(2);
+async function updateSpendChip(){
+  if(demo) return;
+  try{ const d=await api('/api/usage?days=1'); const el=document.getElementById('spendChip');
+    if(el) el.textContent=_money(d&&d.total&&d.total.cost); }
+  catch(e){}
+}
+async function openSpend(){
+  const sh=document.getElementById('spendSheet'), body=document.getElementById('spendBody');
+  if(!sh) return; sh.classList.remove('hidden');
+  body.innerHTML='<div class="meta" style="padding:18px 4px">Loading spend…</div>';
+  if(demo){ body.innerHTML='<div class="meta" style="padding:18px 4px">No spend data in demo.</div>'; return; }
+  try{
+    const d=await api('/api/usage?days=7');
+    const t=new Date().toISOString().slice(0,10);
+    const today=((d.by_day||[]).find(x=>String(x.d).slice(0,10)===t)||{}).cost||0;
+    const tot=(d.total&&d.total.cost)||0, calls=(d.total&&d.total.calls)||0;
+    const rows=(arr,key)=>(arr||[]).map(r=>`<div class="srow"><span>${esc(String(r[key]||'?'))}</span><span class="mut">${r.calls} ${r.calls==1?'call':'calls'}</span><b>${_money(r.cost)}</b></div>`).join('');
+    body.innerHTML=
+      `<div class="srow big"><div><div class="sk">Today</div><div class="sv">${_money(today)}</div></div>`+
+      `<div><div class="sk">7-day</div><div class="sv">${_money(tot)}</div></div>`+
+      `<div><div class="sk">Calls</div><div class="sv">${calls}</div></div></div>`+
+      `<div class="sk2">By model</div>`+rows(d.by_model,'model')+
+      `<div class="sk2">By purpose</div>`+rows((d.by_purpose||[]).slice(0,12),'purpose')+
+      `<div class="sk2">Daily</div>`+(d.by_day||[]).map(x=>`<div class="srow"><span>${esc(String(x.d).slice(0,10))}</span><span class="mut">${x.calls}</span><b>${_money(x.cost)}</b></div>`).join('');
+  }catch(e){ body.innerHTML='<div class="meta" style="padding:18px 4px">Could not load spend ('+esc(e.message)+')</div>'; }
+}
+function closeSpend(){ const sh=document.getElementById('spendSheet'); if(sh) sh.classList.add('hidden'); updateSpendChip(); }
 
 async function render(){
   const v=document.getElementById('view');
