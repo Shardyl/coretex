@@ -41,6 +41,7 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 8
 .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 14px var(--accent);
   animation:pulse 2.2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:.55;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
+@keyframes ibpulse{0%{box-shadow:0 0 0 0 rgba(0,218,255,.55)}70%,100%{box-shadow:0 0 0 6px rgba(0,218,255,0)}}
 .spacer{flex:1}
 .iconbtn{background:var(--panel);border:1px solid var(--line);color:var(--ink);width:36px;height:36px;
   border-radius:10px;cursor:pointer;font-size:15px;display:grid;place-items:center;flex:none}
@@ -465,13 +466,14 @@ async function boot(){
   tab='talk'; chatMsgs=[]; currentConvId=null; currentConvTitle=''; routedTo=''; localStorage.removeItem('cortex_conv');
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t==='talk'));
   render();
-  refreshBadge(); if(!window._badgeTimer) window._badgeTimer=setInterval(refreshBadge,90000);
+  refreshBadge(); if(!window._badgeTimer) window._badgeTimer=setInterval(refreshBadge,25000);
   if(!window._spendTimer) window._spendTimer=setInterval(updateSpendChip,180000);  // every 3 min — DB-only read, no LLM cost
 }
 async function refreshBadge(){
   if(demo) return;
   try{ const fco=(document.getElementById('coSel')||{}).value||'';
-    const r=await api('/api/inbox'+(fco?'?company='+encodeURIComponent(fco):'')); updateInboxBadge(r.unread||0); }
+    const r=await api('/api/inbox'+(fco?'?company='+encodeURIComponent(fco):''));
+    updateInboxBadge((r.needs_you||0)+(r.unread||0)); }   // pending approvals + unread updates
   catch(e){}
 }
 
@@ -1104,7 +1106,7 @@ async function renderInbox(v){
   try{ resp = demo?{items:(SAMPLE.inbox||[]).map(x=>({...x,card:'action'})),needs_you:(SAMPLE.inbox||[]).length,updates:0,unread:0}
                   :await api('/api/inbox'+(fco?'?company='+encodeURIComponent(fco):'')); }
   catch(e){ resp={items:[],needs_you:0,updates:0,unread:0}; }
-  const items=resp.items||[]; renderSeg(resp); updateInboxBadge(resp.unread||0);
+  const items=resp.items||[]; renderSeg(resp); updateInboxBadge((resp.needs_you||0)+(resp.unread||0));
   const shown=items.filter(it=> inboxSeg==='all'?true : inboxSeg==='updates'? it.card==='info' : it.card!=='info');
   const ib=document.getElementById('ib');
   if(!shown.length){ ib.outerHTML='<div class="empty"><span class="e">✓</span>'+(inboxSeg==='updates'?'No updates right now.':inboxSeg==='needs'?'Nothing needs your yes. Cortex pings you here when it does.':'Inbox zero.')+'</div>'; return; }
@@ -1137,7 +1139,9 @@ async function addReminder(){
   try{ const r=await api('/api/reminders',{method:'POST',body:JSON.stringify({title:what,when})});
     toast(r&&r.ok?'Reminder set ✓':'Could not set it'); render(); }catch(e){ toast('Error: '+(e.message||'')); }
 }
-function updateInboxBadge(n){ const el=document.getElementById('ibBadge'); if(el){ el.textContent=n>0?n:''; el.style.display=n>0?'inline-flex':'none'; } }
+function updateInboxBadge(n){ const el=document.getElementById('ibBadge'); if(!el) return;
+  el.textContent=n>0?n:''; el.style.display=n>0?'inline-flex':'none';
+  el.style.animation=n>0?'ibpulse 1.7s ease-in-out infinite':'none'; }
 async function enablePush(){
   if(demo) return;
   if(!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)){ toast('Push not supported on this device'); return; }
@@ -2265,9 +2269,10 @@ function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.
   startup(); })();
 // re-lock when the app is reopened after being away >10s
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='hidden'){ hidAt=Date.now(); }
-  else if(IS_MOBILE && token && pinSet && !demo && hidAt && Date.now()-hidAt>300000){ lockNow(); }  // re-lock after 5 min away — MOBILE only (desktop never auto-locks)
-  else if(document.visibilityState==='visible'){ syncWake(); }   // re-acquire screen lock (drops when hidden)
+  if(document.visibilityState==='hidden'){ hidAt=Date.now(); return; }
+  if(IS_MOBILE && token && pinSet && !demo && hidAt && Date.now()-hidAt>300000){ lockNow(); return; }  // re-lock after 5 min away — MOBILE only
+  syncWake();                          // re-acquire screen lock (drops when hidden)
+  if(booted) refreshBadge();           // punchy: refresh the inbox marker the moment you reopen the app
 });
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{})); }
 </script>
