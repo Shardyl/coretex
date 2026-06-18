@@ -351,15 +351,20 @@ async function api(path, opts={}){
 async function startup(){
   document.getElementById('demoBanner').classList.toggle('hidden',!demo);
   if(demo){ enterUnlocked(); return; }
-  let mode=null;
-  try{ mode=await api('/api/auth/mode'); }catch(e){}
-  biometricReg = mode ? !!mode.biometric : biometricReg;
-  const hasPin = mode ? !!mode.pin : !!token;          // a returning user (saved token) expects a PIN
-  // SECURITY: every cold load / hard refresh / cold app-start RE-LOCKS — drop any saved session
-  // so the PIN (or fingerprint on mobile) must re-authenticate. This is deliberate, not "remember me".
+  // SECURITY: every cold load RE-LOCKS — drop any saved session so the PIN must re-authenticate.
   token=''; localStorage.removeItem('cortex_token');
-  if(hasPin){ pinSet=true; lockMode='login'; pinBuf=''; pinFirst=''; showLock('Enter your PIN'); }
-  else { pinSet=false; document.getElementById('login').classList.remove('hidden'); }   // first run: passcode bootstrap
+  // RESILIENCE: show the PIN keypad IMMEDIATELY — never block the unlock screen on a network call. On a
+  // wedged/slow connection the old code awaited /api/auth/mode and hung forever on the loading screen.
+  pinSet=true; lockMode='login'; pinBuf=''; pinFirst='';
+  showLock('Enter your PIN');
+  try{
+    const mode=await api('/api/auth/mode');
+    biometricReg=!!(mode&&mode.biometric);
+    if(mode && !mode.pin){   // genuine first run (no PIN yet) -> passcode bootstrap
+      pinSet=false; document.getElementById('lock').classList.add('hidden');
+      document.getElementById('login').classList.remove('hidden');
+    } else { renderKeypad(); if(biometricReg && IS_MOBILE) setTimeout(bioAuth,300); }
+  }catch(e){}
 }
 // passcode recovery (hidden by default): first-time bootstrap, or if the PIN is ever forgotten
 async function doLogin(){

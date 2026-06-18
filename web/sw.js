@@ -1,6 +1,6 @@
 // Cortex service worker — makes the cockpit installable + keeps the shell working offline.
 // Network-first for everything; the API is never cached; the app shell falls back to cache.
-const CACHE = 'cortex-v2';
+const CACHE = 'cortex-v3';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -18,11 +18,20 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.pathname.startsWith('/api/')) return;  // never cache the API
-  e.respondWith(
-    fetch(e.request)
-      .then((r) => { const cp = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, cp)).catch(() => {}); return r; })
-      .catch(() => caches.match(e.request).then((r) => r || caches.match('/')))
-  );
+  // Network-first WITH A TIMEOUT: a slow/hung connection must never leave the app loading forever.
+  // If the network doesn't answer in 3.5s, serve the cached shell so the PIN screen always appears.
+  e.respondWith((async () => {
+    const net = fetch(e.request).then((r) => {
+      const cp = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, cp)).catch(() => {}); return r;
+    });
+    let r;
+    try { r = await Promise.race([net, new Promise((res) => setTimeout(() => res('TIMEOUT'), 3500))]); }
+    catch (x) { r = 'TIMEOUT'; }
+    if (r && r !== 'TIMEOUT') return r;
+    const cached = (await caches.match(e.request)) || (await caches.match('/'));
+    if (cached) return cached;
+    try { return await net; } catch (x) { return new Response('offline', { status: 503 }); }
+  })());
 });
 
 // ---- Web Push: show the notification, deep-link on tap ----
