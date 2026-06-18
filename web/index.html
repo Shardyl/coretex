@@ -1651,7 +1651,31 @@ function toggleGo(){ if(demo){ toast('Voice needs the live app'); return; }
 let pendingImages=[];
 function pickFile(camera){ const inp=document.getElementById(camera?'camIn':'fileIn'); if(inp){ inp.value=''; inp.click(); } }
 function onFilePicked(inp){ const f=inp.files&&inp.files[0]; if(!f) return;
-  const r=new FileReader(); r.onload=()=>{ pendingImages.push(r.result); paintAttach(); }; r.readAsDataURL(f); }
+  const r=new FileReader();
+  r.onload=()=>{ const data=r.result;
+    if(typeof data==='string' && data.startsWith('data:image/')){
+      shrinkImage(data, 2000, 0.82, out=>{ pendingImages.push(out); paintAttach(); });   // keep under the 10MB model limit
+    } else {   // PDFs / other files pass through, but guard the ~10MB API ceiling
+      if(typeof data==='string' && data.length>13000000){ toast('That file is too big (max ~10MB) — try a smaller one'); return; }
+      pendingImages.push(data); paintAttach();
+    }
+  };
+  r.readAsDataURL(f); }
+// Downscale a big image (screenshot/photo) to a sane size before it's attached — faster, cheaper, and never
+// trips the model's 10MB-per-image limit. Falls back to the original if the canvas can't export it.
+function shrinkImage(dataUrl, maxDim, quality, cb){
+  const img=new Image();
+  img.onload=()=>{ try{
+    let w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+    const scale=Math.min(1, maxDim/Math.max(w,h));
+    w=Math.max(1,Math.round(w*scale)); h=Math.max(1,Math.round(h*scale));
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    c.getContext('2d').drawImage(img,0,0,w,h);
+    cb(c.toDataURL('image/jpeg', quality));
+  }catch(e){ cb(dataUrl); } };
+  img.onerror=()=>cb(dataUrl);
+  img.src=dataUrl;
+}
 function rmAttach(i){ pendingImages.splice(i,1); paintAttach(); }
 function paintAttach(){ const p=document.getElementById('attachPrev'); if(!p) return;
   if(!pendingImages.length){ p.style.display='none'; p.innerHTML=''; layoutChat(); return; }

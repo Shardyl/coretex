@@ -2093,16 +2093,24 @@ def heads(_: None = Depends(auth)) -> dict:
     return personas.org()
 
 
+_IMG_LIMIT = 10 * 1024 * 1024   # Anthropic per-image hard limit (decoded bytes)
+
+
 def _image_blocks(data_urls: list[str]) -> list[dict]:
-    """Turn data: URLs (data:image/jpeg;base64,...) into Anthropic image content blocks."""
+    """Turn data: URLs (data:image/jpeg;base64,...) into Anthropic image content blocks. Skips any image whose
+    decoded size exceeds the model's 10 MB limit — a backstop so an oversized attachment can never 500 the chat
+    (the cockpit downscales on attach, so this should rarely fire)."""
     blocks = []
     for u in (data_urls or [])[:6]:
         if not isinstance(u, str) or not u.startswith("data:") or ";base64," not in u:
             continue
         head, b64 = u.split(";base64,", 1)
         media = head[5:] or "image/jpeg"
-        if media.startswith("image/"):
-            blocks.append({"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}})
+        if not media.startswith("image/"):
+            continue
+        if (len(b64) * 3) // 4 > _IMG_LIMIT:   # decoded-size estimate over the limit -> drop it, don't 400
+            continue
+        blocks.append({"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}})
     return blocks
 
 
