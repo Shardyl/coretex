@@ -1805,14 +1805,22 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         sk = store.get_skill_by_key(co["id"], inp.get("skill", ""))
         if not sk:
             return f"no skill '{inp.get('skill')}' for {co['slug']}"
-        text = worker.draft(sk, co, {"brief": inp.get("brief", "")}, correction=inp.get("revision"))
+        req = {"brief": inp.get("brief", "")}
+        if inp.get("_images"):
+            req["attachments"] = inp["_images"]
+        text = worker.draft(sk, co, req, correction=inp.get("revision"))
         return "DRAFT (skill craft + rules applied):\n\n" + text
     if name == "create_task":
         sk = store.get_skill_by_key(co["id"], inp.get("skill", ""))
         if not sk:
             return f"no skill '{inp.get('skill')}' for {co['slug']}"
-        t = store.create_task(co["id"], sk["id"], inp.get("kind", "content"), {"brief": inp.get("brief", "")})
-        return f"created task #{t['id']} — drafting now; it'll appear in the Inbox and Telegram."
+        req = {"brief": inp.get("brief", "")}
+        if inp.get("_images"):   # files/images shared in this Talk turn -> the worker drafts WITH them
+            req["attachments"] = inp["_images"]
+        t = store.create_task(co["id"], sk["id"], inp.get("kind", "content"), req)
+        n = len(req.get("attachments", []))
+        return (f"created task #{t['id']} — drafting now"
+                + (f" using the {n} attached file(s)" if n else "") + "; it'll appear in the Inbox for approval.")
     return f"unknown tool {name}"
 
 
@@ -1892,7 +1900,12 @@ def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
             tools = [t for t in SKILL_TOOLS if t["name"] in _CHIEF_TOOLS] if is_chief else SKILL_TOOLS
         else:
             chosen = ""
-    reply = provider.chat_tools(system, msgs, tools, _exec_skill_tool,
+    # carry the turn's attachments through to the worker when this turn creates/drafts a task
+    def _exec(name: str, inp: dict) -> str:
+        if name in ("create_task", "draft") and body.images:
+            inp = {**inp, "_images": body.images}
+        return _exec_skill_tool(name, inp)
+    reply = provider.chat_tools(system, msgs, tools, _exec,
                                 purpose=f"chat:{chosen}" if chosen else "chat", company=body.company)
     return {"reply": reply, "persona": chosen, "persona_label": personas.label(chosen)}
 

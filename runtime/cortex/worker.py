@@ -40,14 +40,17 @@ def draft(skill: dict, company: dict, request: dict,
         _rules_block(skill),
         "Produce the deliverable only — no preamble, no explanation, no meta-commentary.",
     ]))
+    atts = request.get("attachments") if isinstance(request, dict) else None
     user = [f"Task: {request.get('brief') if isinstance(request, dict) else request}"]
+    if atts:
+        user.append(f"{len(atts)} file(s)/image(s) are attached below — use them as source material for the deliverable.")
     if manager_feedback:
         user.append("Your manager flagged these to fix:\n- " + "\n- ".join(manager_feedback))
     if correction:
         user.append(f"The owner corrected your previous draft. Apply this and produce a new version:\n{correction}")
     return provider.think(system, "\n\n".join(user), model=_model_for(skill), think_hard=True,
                           max_tokens=6000, purpose=f"draft:{skill.get('skill_key', '')}",
-                          company=company.get("slug"))
+                          company=company.get("slug"), images=atts)
 
 
 def _no_dashes(s: str) -> str:

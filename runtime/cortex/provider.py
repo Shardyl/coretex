@@ -62,16 +62,35 @@ def resolve_model(tier: str | None) -> str:
     return ""   # caller decides the default
 
 
+def media_blocks(urls: list[str] | None) -> list[dict]:
+    """Turn data: URLs (data:image/...;base64,... or data:application/pdf;base64,...) into Anthropic
+    content blocks — images become image blocks, PDFs become document blocks (Claude reads both)."""
+    blocks: list[dict] = []
+    for u in (urls or [])[:8]:
+        if not isinstance(u, str) or not u.startswith("data:") or ";base64," not in u:
+            continue
+        head, b64 = u.split(";base64,", 1)
+        media = head[5:] or "image/jpeg"
+        if media.startswith("image/"):
+            blocks.append({"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}})
+        elif media == "application/pdf":
+            blocks.append({"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}})
+    return blocks
+
+
 def think(system: str, user: str, *, fast: bool = False, model: str | None = None,
           think_hard: bool = False, max_tokens: int = 6000, purpose: str = "think",
-          company: str | None = None, cache: bool = False) -> str:
+          company: str | None = None, cache: bool = False, images: list[str] | None = None) -> str:
     """One-shot completion → plain text. `model` overrides the fast/slow default when given.
     `cache=True` prompt-caches the system prompt — set it on REPEAT jobs (same big system prefix
-    re-sent often: the inbox classifier, manager reviews, drafts) so the prefix reads at ~10%."""
+    re-sent often: the inbox classifier, manager reviews, drafts) so the prefix reads at ~10%.
+    `images` = data: URLs (images/PDFs) the worker should actually see when drafting."""
     mdl = model or (MODEL_FAST if fast else MODEL)
+    blocks = media_blocks(images)
+    content: object = ([{"type": "text", "text": user}] + blocks) if blocks else user
     kwargs: dict = dict(model=mdl, max_tokens=max_tokens,
                         system=_cached_system(system) if cache else system,
-                        messages=[{"role": "user", "content": user}])
+                        messages=[{"role": "user", "content": content}])
     if think_hard:
         kwargs["thinking"] = {"type": "adaptive"}
     resp = _client().messages.create(**kwargs)
