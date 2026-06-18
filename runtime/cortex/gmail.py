@@ -158,3 +158,27 @@ def list_inquiries(days: int = 7, limit: int = 50) -> list[dict]:
     for m in res.get("messages", []):
         out.append(_parse(_get(tok, f"messages/{m['id']}", {"format": "full"})))
     return out
+
+
+def _parse_generic(msg: dict) -> dict:
+    """Light parse of ANY email (sender, subject, body) — for the inbox classifier, no form assumptions."""
+    h = {x["name"].lower(): x["value"] for x in msg.get("payload", {}).get("headers", [])}
+    frm = h.get("from", "")
+    m = re.match(r'^\s*"?([^"<]*?)"?\s*<([^>]+)>', frm)
+    name = ((m.group(1).strip() if m else "") or (frm.split("@")[0] if "@" in frm else frm)).strip()
+    email = (m.group(2).strip() if m else frm).strip().strip("<>")
+    return {"gmail_id": msg.get("id"), "subject": h.get("subject", ""), "from": frm, "date": h.get("date", ""),
+            "name": name, "email": email, "body": _plain_body(msg.get("payload", {})),
+            "snippet": msg.get("snippet", "")}
+
+
+def list_recent(days: int = 2, limit: int = 30, rt_key: str = "gmail_refresh_token",
+                q: str | None = None, skip: set | None = None) -> list[dict]:
+    """Recent inbox mail (not just the contact form) for the inbox classifier. `rt_key` selects which
+    company's mailbox refresh token to use; `q` overrides the default Gmail search; `skip` is a set of
+    already-seen message ids to NOT re-fetch (so each message is fetched in full at most once)."""
+    tok = _token_for(rt_key, "gmail")
+    res = _get(tok, "messages", {"q": q or f"in:inbox newer_than:{days}d", "maxResults": limit})
+    skip = skip or set()
+    return [_parse_generic(_get(tok, f"messages/{m['id']}", {"format": "full"}))
+            for m in res.get("messages", []) if m["id"] not in skip]

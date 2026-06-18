@@ -132,6 +132,36 @@ def add_registration(reg: dict, company: str = "tabscanner",
     return ("added", email)
 
 
+def add_inbound_contact(reg: dict, company: str, classification: str, stage: str = "Engaged",
+                        source: str = "inbound email") -> tuple[str, str | None]:
+    """Add/dedup a contact from an INBOUND email (someone emailed a catch-all inbox). Org-tagged, the
+    classification logged in history, lead_source set. NOT a newsletter opt-in (emailing us is not
+    subscribing). Carries over existing fields, never clobbers."""
+    ensure_schema()
+    email = (reg.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        return ("skipped-no-email", None)
+    name = (reg.get("name") or "").strip()
+    first, last = _split_name(name) if name else ("", "")
+    org = _org(company)
+    ev = {"ts": _now(), "event": "inbound_email",
+          "text": f"Inbound email to {org}, classified as: {classification}."}
+    existing = db.one("select id, organisation from crm_master where lower(email)=%s limit 1", (email,))
+    if existing:
+        cur = existing.get("organisation") or ""
+        new_org = (cur + ", " + org).strip(", ") if (org and org.lower() not in cur.lower()) else (cur or org)
+        db.execute("update crm_master set organisation=%s, "
+                   "lead_source=coalesce(nullif(btrim(lead_source),''), %s), updated_at=now() where id=%s",
+                   (new_org, source, existing["id"]))
+        log_event(email, "inbound_email", ev["text"], company)
+        return ("matched", email)
+    db.execute(
+        "insert into crm_master (organisation, first_name, last_name, email, website, lead_source, "
+        "lead_status, stage, history) values (%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (lower(email)) do nothing",
+        (org, first or None, last or None, email, email.split("@")[-1], source, "New", stage, Json([ev])))
+    return ("added", email)
+
+
 _MIGRATE_DEALS = """
 alter table crm_projects add column if not exists contacts jsonb not null default '[]'::jsonb;
 alter table crm_projects add column if not exists account_id bigint;

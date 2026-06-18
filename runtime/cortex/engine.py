@@ -789,6 +789,89 @@ def poll_inquiries_window(days: int = 2) -> dict:
     return {"made": made, "filtered": filtered}
 
 
+# ---------- inbox classifier (the sales-triage universal skill, on Haiku) ----------
+
+INBOX_CATEGORIES = ["lead", "partner", "support", "freelancer", "vendor",
+                    "marketing", "spam", "personal", "automated"]
+_INBOX_CRM = {"lead", "partner", "support", "freelancer", "vendor"}   # these become CRM contacts
+# each company's main catch-all inbox -> used to derive its OWN domain (never CRM our own / internal senders)
+INBOXES = {"tabscanner": "api@tabscanner.com", "sensa": "hello@sensa.digital",
+           "snaprewards": "loyalty@snap-rewards.com", "filmspoke": "create@filmspoke.ai",
+           "skyvision": "fly@skyvision.film"}
+
+
+def _is_internal(addr: str, own_domain: str) -> bool:
+    d = (addr or "").split("@")[-1].lower().strip()
+    return bool(own_domain) and (d == own_domain or d.endswith("." + own_domain))
+
+
+def classify_email(company: dict, email: dict) -> dict:
+    """Classify ONE inbound email via the `sales-triage` universal skill, on Haiku. Reads the skill's rules
+    + the company context, so the intelligence lives in the skill. Returns {category, to_crm, reason}."""
+    skill = store.get_skill_by_key(company["id"], "sales-triage")
+    system = "\n\n".join(filter(None, [
+        "You are Cortex's inbox classifier for this company's main catch-all inbox.",
+        worker._company_context(company),
+        worker._rules_block(skill) if skill else "",
+        ("Classify the email into EXACTLY ONE category from: " + ", ".join(INBOX_CATEGORIES) + ". "
+         'Return JSON {"category":"<one>","to_crm":boolean,"reason":"<short phrase>"}. to_crm is true for '
+         "lead/partner/support/freelancer/vendor, false for marketing/spam/personal/automated."),
+    ]))
+    user = (f"From: {email.get('name')} <{email.get('email')}>\nSubject: {email.get('subject')}\n\n"
+            + (email.get("body") or email.get("snippet") or "").strip()[:2500])
+    try:
+        out = provider.think_json(system, user, model=provider.MODEL_ROUTER,
+                                  purpose="inbox-classify", company=company.get("slug"))
+    except Exception:  # noqa: BLE001
+        return {"category": "unclear", "to_crm": False, "reason": "classify error"}
+    cat = (out.get("category") or "unclear").strip().lower()
+    if cat not in INBOX_CATEGORIES:
+        cat = "unclear"
+    return {"category": cat, "to_crm": cat in _INBOX_CRM, "reason": (out.get("reason") or "").strip()}
+
+
+def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_token",
+               days: int = 2, limit: int = 40, commit: bool = True) -> dict:
+    """Read a company's catch-all inbox (non-form mail; form notifications are handled by poll_inquiries),
+    classify each email on the sales-triage skill, and route the meaningful ones into the CRM. Deduped per
+    mailbox. commit=False is a dry run (classify + report, no CRM writes)."""
+    co = store.get_company_by_slug(company_slug)
+    if not co or not gmail.connected():
+        return {"processed": 0, "results": [], "reason": "no company / gmail not connected"}
+    q = f'in:inbox newer_than:{days}d -subject:"New enquiry from"'
+    own_domain = INBOXES.get(company_slug, "").split("@")[-1].lower()
+    key = f"inbox_processed:{company_slug}"
+    seen = set(db.setting_get(key) or [])
+    emails = gmail.list_recent(days=days, limit=limit, rt_key=rt_key, q=q, skip=seen)
+    results, added = [], 0
+    for e in emails:
+        gid = e.get("gmail_id")
+        if not gid or gid in seen:
+            continue
+        if _is_internal(e.get("email"), own_domain):   # our own / internal address: never classify or CRM
+            if commit:
+                seen.add(gid)
+            results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
+                            "category": "internal", "to_crm": False, "reason": "own/internal address"})
+            continue
+        cls = classify_email(co, e)
+        if commit:
+            if cls["to_crm"] and e.get("email"):
+                stage = "Engaged" if cls["category"] in ("lead", "partner", "support") else "Cold"
+                try:
+                    st, _ = crm.add_inbound_contact({"email": e["email"], "name": e["name"]},
+                                                    company_slug, cls["category"], stage=stage)
+                    if st == "added":
+                        added += 1
+                except Exception:  # noqa: BLE001
+                    pass
+            seen.add(gid)
+        results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60], **cls})
+    if commit:
+        db.setting_set(key, list(seen)[-3000:])
+    return {"processed": len(results), "added_to_crm": added, "results": results}
+
+
 # ---------- scheduled tasks (recurring jobs -> Inbox) ----------
 
 REPORT_SKILL_KEY = "content-onpage-seo"   # the SEO report lands under the company's SEO lane
@@ -886,6 +969,10 @@ def run(poll_idle: float = 1.0) -> None:
                 poll_inquiries()
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(enquiry poll hiccup: {e})")
+            try:
+                poll_inbox()        # classify + CRM-route non-form Tabscanner inbox mail (sales-triage skill)
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(inbox classify hiccup: {e})")
             try:
                 run_due_tasks()
             except Exception as e:  # noqa: BLE001
