@@ -2320,6 +2320,12 @@ def google_start(purpose: str = "drive", company: str = "") -> RedirectResponse:
         # 'gmail_send' = the mailbox Cortex SENDS replies from, so they land in YOUR Sent folder, as you.
         scope = ("https://www.googleapis.com/auth/gmail.modify openid "
                  "https://www.googleapis.com/auth/userinfo.email")
+    elif purpose == "youtube":   # per-company YouTube: upload + manage + read + analytics (channel binding = the token)
+        scope = ("https://www.googleapis.com/auth/youtube.upload "
+                 "https://www.googleapis.com/auth/youtube.force-ssl "
+                 "https://www.googleapis.com/auth/youtube.readonly "
+                 "https://www.googleapis.com/auth/yt-analytics.readonly openid "
+                 "https://www.googleapis.com/auth/userinfo.email")
     else:
         scope = ("https://www.googleapis.com/auth/drive.file "
                  "https://www.googleapis.com/auth/drive.readonly")
@@ -2367,6 +2373,25 @@ def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLRes
         db.setting_set("gmail_refresh_token" + sfx, rt)
         db.setting_set("gmail_account" + sfx, email)
         return page(f"✓ Cortex reads {who} enquiries from the {email or 'Gmail'} mailbox. You can close this tab.")
+    if purpose == "youtube":   # per-company YouTube channel access (upload/manage/read/analytics)
+        db.setting_set("youtube_refresh_token" + sfx, rt)
+        ch_name = ch_id = ""
+        try:
+            ch = httpx.get("https://www.googleapis.com/youtube/v3/channels",
+                           params={"part": "snippet", "mine": "true"},
+                           headers={"Authorization": "Bearer " + body.get("access_token", "")},
+                           timeout=15).json()
+            item = (ch.get("items") or [{}])[0]
+            ch_id = item.get("id", "")
+            ch_name = ((item.get("snippet") or {}).get("title")) or ""
+        except Exception:  # noqa: BLE001
+            pass
+        if ch_id:
+            db.setting_set("youtube_channel_id" + sfx, ch_id)
+            db.setting_set("youtube_channel_name" + sfx, ch_name)
+        return page(f"✓ Cortex is connected to {who}'s YouTube"
+                    + (f" — channel “{ch_name}”." if ch_name else ".")
+                    + " You can close this tab.")
     db.setting_set("google_refresh_token" + sfx, rt)
     return page("✓ Cortex is connected to your Google Drive. You can close this tab — backups run nightly.")
 
