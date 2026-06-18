@@ -967,6 +967,9 @@ FORM_INTAKE = {
                     "subject": "Site contact form", "skill": "sales-first-response"},
     "skyvision": {"rt_key": "gmail_refresh_token:skyvision", "client": "skyvision",
                   "subject": "New enquiry from", "skill": "sales-first-response"},
+    # Sensa: the team (Gino) replies to enquiries manually -> capture leads to CRM, but DON'T auto-draft.
+    "sensa": {"rt_key": "gmail_refresh_token:sensa", "client": "sensa",
+              "subject": "New enquiry from", "skill": "sales-first-response", "draft": False},
 }
 
 
@@ -999,24 +1002,28 @@ def _poll_one_form(slug: str, cfg: dict, days: int = 3) -> dict:
         if not gid or gid in seen:
             continue
         seen.add(gid)
+        if re.match(r"(?i)^\s*(re|fwd|fw)\s*:", e.get("subject") or ""):   # a reply/forward, not a fresh enquiry
+            continue
         inq = _parse_form_email(e)
         if not inq.get("email"):     # couldn't parse a lead email -> skip
             continue
-        if not triage_inquiry(inq, slug)["genuine"]:   # spam (e.g. SEO pitch) -> filed, no CRM, no draft
+        if not triage_inquiry(inq, slug)["genuine"]:   # spam (e.g. SEO/directory pitch) -> filed, no CRM, no draft
             filtered += 1
             continue
         try:
-            crm.add_inquiry(inq, slug)
+            crm.add_inquiry(inq, slug)            # genuine -> verified CRM contact (always)
         except Exception:  # noqa: BLE001
             pass
-        store.create_task(co["id"], skill["id"], "email_reply", {"brief": _email_brief(inq), "inquiry": inq})
+        if cfg.get("draft", True):               # full mode -> also draft a reply; CRM-only mode -> skip
+            store.create_task(co["id"], skill["id"], "email_reply", {"brief": _email_brief(inq), "inquiry": inq})
         made += 1
         if made >= 10:
             break
     db.setting_set(key, list(seen)[-1000:])
     if made:
+        action = "drafting for your approval" if cfg.get("draft", True) else "added to the CRM"
         tg.send(f"{made} genuine {co['name']} contact-form enquir{'ies' if made > 1 else 'y'}"
-                + (f" ({filtered} spam filtered)" if filtered else "") + " — drafting for your approval.")
+                + (f" ({filtered} spam filtered)" if filtered else "") + f" — {action}.")
     return {"made": made, "filtered": filtered}
 
 
