@@ -472,7 +472,7 @@ async function boot(){
 async function refreshBadge(){
   if(demo) return;
   try{ const fco=(document.getElementById('coSel')||{}).value||'';
-    const r=await api('/api/inbox'+(fco?'?company='+encodeURIComponent(fco):''));
+    const r=await api('/api/inbox/count'+(fco?'?company='+encodeURIComponent(fco):''));   // tiny — never the heavy inbox
     updateInboxBadge((r.needs_you||0)+(r.unread||0)); }   // pending approvals + unread updates
   catch(e){}
 }
@@ -1158,9 +1158,8 @@ async function enablePush(){
   }catch(e){ toast('Could not enable push: '+(e.message||'')); }
 }
 function attachmentStrip(t){
-  const a=(t.request&&t.request.attachments)||[]; if(!a.length) return '';
-  return `<div class="meta" style="margin-bottom:6px">${ic('file',14)} ${a.length} attachment${a.length>1?'s':''} the worker used</div><div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:9px">`+
-    a.map(u=>(typeof u==='string'&&u.startsWith('data:image/'))?`<img src="${u}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--line)">`:`<span class="chip">${ic('file',13)} PDF</span>`).join('')+`</div>`;
+  const n=t.att_count||((t.request&&t.request.attachments)||[]).length; if(!n) return '';
+  return `<div class="meta" style="margin-bottom:9px">${ic('file',14)} ${n} attachment${n>1?'s':''} attached to this draft (sent with the email)</div>`;
 }
 function actionCard(t){
     const co=t.company||compName(t.company_id), sk=t.skill||'';

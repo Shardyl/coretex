@@ -273,6 +273,13 @@ def _enrich_action_card(t: dict) -> dict:
     t["title"] = t.get("title") or (t.get("request") or {}).get("title")
     t["skill"] = sk["name"] if sk else t.get("skill")
     t["ts"] = (t.get("updated_at") or t.get("created_at"))
+    # NEVER ship the heavy attachment base64 in the list response — just a count (the files stay on the task
+    # for the send; fetch them on demand). A single phone screenshot can be ~9MB and chokes the connection.
+    req = t.get("request") or {}
+    atts = req.get("attachments") or []
+    t["att_count"] = len(atts)
+    if atts:
+        t["request"] = {**req, "attachments": []}
     return t
 
 
@@ -303,6 +310,22 @@ def inbox(company: str | None = None, _: None = Depends(auth)) -> dict:
     infos = [_info_card(n) for n in notifications.active(cid)]
     return {"items": actions + infos, "needs_you": len(actions), "updates": len(infos),
             "unread": notifications.unread_count(cid)}
+
+
+@app.get("/api/inbox/count")
+def inbox_count(company: str | None = None, _: None = Depends(auth)) -> dict:
+    """Tiny counts for the tab badge — so the 25s badge poll never drags the whole (heavy) inbox down."""
+    cid = None
+    if company:
+        co = store.get_company_by_slug(company)
+        cid = co["id"] if co else -1
+    where = "status in ('awaiting_approval','awaiting_correction')"
+    params: list = []
+    if cid is not None:
+        where += " and company_id = %s"
+        params.append(cid)
+    n = db.one(f"select count(*) c from tasks where {where}", tuple(params))["c"]
+    return {"needs_you": int(n), "unread": notifications.unread_count(cid)}
 
 
 # ---------- notification actions (info cards) ----------
