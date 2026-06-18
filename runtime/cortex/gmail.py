@@ -113,7 +113,12 @@ def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
     # SAFETY (enforced HERE so no path can bypass it): a global kill-switch + recipient sanity check.
     if db.setting_get("email_sending_paused"):
         raise RuntimeError("email sending is PAUSED — resume it to send")
-    primary = (to or "").split(",")[0].strip().strip("<>")
+    # This is the ONLY single-email send path in the system (bulk goes through Mailgun). Enforce that the
+    # primary recipient is EXACTLY ONE address — a comma-joined `to` (multiple recipients) is refused outright,
+    # so nothing here can ever fan out to more than the one addressee shown in the draft envelope.
+    if "," in (to or ""):
+        raise ValueError(f"refusing to send: single-send accepts one recipient only, got {to!r}")
+    primary = (to or "").strip().strip("<>")
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", primary):
         raise ValueError(f"refusing to send: invalid recipient {to!r}")
     if from_addr and primary.lower() == from_addr.split("<")[-1].strip(" <>").lower():

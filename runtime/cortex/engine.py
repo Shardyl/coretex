@@ -148,19 +148,22 @@ def _email_envelope(task: dict, company: dict) -> dict:
     except Exception:  # noqa: BLE001
         data = {}
     cc_list, bcc_list = [], []
-    if not (task.get("request") or {}).get("outbound"):   # default CC/BCC apply to inquiry REPLIES only —
-        for v in [(data.get("default_cc") or "").strip()]:  # a Talk-composed OUTBOUND draft never inherits them
+    # CC/BCC (BOTH the profile defaults AND any skill-rule "cc <addr>") apply to inquiry REPLIES only.
+    # A Talk-composed OUTBOUND draft NEVER inherits a Cc/Bcc from any automatic source — it goes to its
+    # single addressed recipient and nothing else. (Operator: single drafted emails don't copy anyone in.)
+    if not (task.get("request") or {}).get("outbound"):
+        for v in [(data.get("default_cc") or "").strip()]:
             if "@" in v:
                 cc_list.append(v)
         for v in [(data.get("default_bcc") or "").strip()]:
             if "@" in v:
                 bcc_list.append(v)
-    try:
-        rc, rb = _rule_recipients(store.get_skill(task.get("skill_id")))
-        cc_list += rc
-        bcc_list += rb
-    except Exception:  # noqa: BLE001
-        pass
+        try:
+            rc, rb = _rule_recipients(store.get_skill(task.get("skill_id")))
+            cc_list += rc
+            bcc_list += rb
+        except Exception:  # noqa: BLE001
+            pass
     cc = ", ".join(dict.fromkeys(cc_list))     # dedupe, keep order
     bcc = ", ".join(dict.fromkeys(bcc_list))
     req = task.get("request") or {}
