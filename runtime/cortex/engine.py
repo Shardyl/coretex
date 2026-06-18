@@ -28,7 +28,7 @@ from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
 EMAIL_KINDS = {"email_reply"}              # the reply is sent via Gmail on approval
-NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send"}  # real-customer sends always need the owner
+NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send", "email_reply"}  # outward sends always need the owner
 REPORTS_DIR = "/opt/coretex/reports"       # generated report PDFs (persisted, served to the Inbox)
 
 _PWD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no ambiguous chars, easy to type on mobile
@@ -264,6 +264,9 @@ def compose_reply_html(task: dict, company: dict, for_preview: bool = False) -> 
 
 
 def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: bool) -> dict:
+    if db.setting_get("email_sending_paused"):   # global kill-switch — keep the card, don't send
+        store.update_task(task["id"], status="awaiting_approval")
+        return {"blocked": True, "error": "Email sending is PAUSED. Resume it to send this reply."}
     env = _email_envelope(task, company)
     c = compose_reply_html(task, company, for_preview=False)
     res = gmail.send_message(env["to"], env["subject"], c["plain"], from_addr=env["from"], cc=env["cc"],
@@ -683,6 +686,18 @@ def set_newsletter_auto(company_id: int, on: bool) -> dict:
 
 def newsletter_status() -> dict:
     return {"ok": True, "paused": bool(db.setting_get("newsletter_paused"))}
+
+
+def set_email_sending_paused(paused: bool) -> dict:
+    """Emergency stop for ALL outbound Gmail email (replies from official addresses). Enforced at
+    gmail.send_message, so nothing sends while paused."""
+    db.setting_set("email_sending_paused", bool(paused))
+    tg.send(f"⚠️ Outbound email sending is now {'PAUSED' if paused else 'resumed'}.")
+    return {"ok": True, "paused": bool(paused)}
+
+
+def email_status() -> dict:
+    return {"ok": True, "paused": bool(db.setting_get("email_sending_paused"))}
 
 
 def skip_task(task_id: int) -> dict:

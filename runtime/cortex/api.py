@@ -1194,6 +1194,17 @@ def newsletter_pause_set(body: PauseToggle, _: None = Depends(auth)) -> dict:
     return engine.set_newsletter_paused(body.paused)
 
 
+@app.get("/api/email/status")
+def email_status_get(_: None = Depends(auth)) -> dict:
+    return engine.email_status()
+
+
+@app.post("/api/email/pause")
+def email_pause_set(body: PauseToggle, _: None = Depends(auth)) -> dict:
+    """Emergency stop for all outbound Gmail email (replies from official addresses)."""
+    return engine.set_email_sending_paused(body.paused)
+
+
 class AutoToggle(BaseModel):
     company_id: int
     on: bool

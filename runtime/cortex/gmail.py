@@ -109,6 +109,14 @@ def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
     folder. If `html` is given, sends a multipart/alternative (plain + html); any `inline_images`
     (list of (cid, filepath)) are embedded so a footer logo renders. `from_addr` is honoured when it
     matches the authenticated account or a verified 'send mail as' identity."""
+    # SAFETY (enforced HERE so no path can bypass it): a global kill-switch + recipient sanity check.
+    if db.setting_get("email_sending_paused"):
+        raise RuntimeError("email sending is PAUSED — resume it to send")
+    primary = (to or "").split(",")[0].strip().strip("<>")
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", primary):
+        raise ValueError(f"refusing to send: invalid recipient {to!r}")
+    if from_addr and primary.lower() == from_addr.split("<")[-1].strip(" <>").lower():
+        raise ValueError("refusing to send: recipient equals sender (loop)")
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
     from email.mime.image import MIMEImage
