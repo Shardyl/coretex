@@ -21,7 +21,7 @@ import time
 
 import httpx
 import websockets
-from fastapi import (Depends, FastAPI, File, Header, HTTPException, Response,
+from fastapi import (Body, Depends, FastAPI, File, Header, HTTPException, Response,
                      UploadFile, WebSocket, WebSocketDisconnect)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -29,7 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import (catalog, config, crm, db, engine, gmail, knowledge, personas, profile, provider,
-               questionnaire, schedule, seo_report, skillqa, store, worker)
+               questionnaire, schedule, seo_report, skillqa, store, webauthn_auth, worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -1139,8 +1139,8 @@ class Correction(BaseModel):
 
 
 @app.post("/api/tasks/{task_id}/approve")
-def approve(task_id: int, _: None = Depends(auth)) -> dict:
-    return engine.approve_task(task_id)
+def approve(task_id: int, x_stepup: str = Header(default=""), _: None = Depends(auth)) -> dict:
+    return engine.approve_task(task_id, stepup_token=x_stepup or None)
 
 
 @app.post("/api/tasks/{task_id}/skip")
@@ -1174,9 +1174,37 @@ class SendConfirm(BaseModel):
 
 
 @app.post("/api/tasks/{task_id}/confirm-send")
-def task_confirm_send(task_id: int, body: SendConfirm, _: None = Depends(auth)) -> dict:
+def task_confirm_send(task_id: int, body: SendConfirm, x_stepup: str = Header(default=""),
+                      _: None = Depends(auth)) -> dict:
     """Confirm a newsletter card with the exact count: Stage 2 schedules for the 1st, Stage 3 sends."""
-    return engine.confirm_send_task(task_id, body.count)
+    return engine.confirm_send_task(task_id, body.count, stepup_token=x_stepup or None)
+
+
+# ---------- WebAuthn (biometric step-up for public approvals) ----------
+
+@app.get("/api/webauthn/registered")
+def wa_registered(_: None = Depends(auth)) -> dict:
+    return {"registered": webauthn_auth.is_registered()}
+
+
+@app.post("/api/webauthn/register/options")
+def wa_register_options(_: None = Depends(auth)) -> dict:
+    return webauthn_auth.register_options()
+
+
+@app.post("/api/webauthn/register/verify")
+def wa_register_verify(credential: dict = Body(...), _: None = Depends(auth)) -> dict:
+    return webauthn_auth.register_verify(credential)
+
+
+@app.post("/api/webauthn/auth/options")
+def wa_auth_options(_: None = Depends(auth)) -> dict:
+    return webauthn_auth.auth_options()
+
+
+@app.post("/api/webauthn/auth/verify")
+def wa_auth_verify(credential: dict = Body(...), _: None = Depends(auth)) -> dict:
+    return webauthn_auth.auth_verify(credential)
 
 
 class PauseToggle(BaseModel):

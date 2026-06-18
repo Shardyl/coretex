@@ -23,12 +23,29 @@ import time
 
 from psycopg.types.json import Json
 
-from . import crm, db, gmail, manager, newsletter, profile, provider, schedule, seo_report, store, worker
+from . import (crm, db, gmail, manager, newsletter, profile, provider, schedule, seo_report, store,
+               webauthn_auth, worker)
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
 EMAIL_KINDS = {"email_reply"}              # the reply is sent via Gmail on approval
 NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send", "email_reply"}  # outward sends always need the owner
+# PUBLIC actions (go OUT to the public) — approving these needs a biometric step-up (see
+# feedback_public_actions_biometric). Internal items use the normal approve. Split by where the action fires:
+_APPROVE_PUBLIC = {"email_reply", "newsletter_idea", "blog"}      # the action happens in approve_task
+_CONFIRM_PUBLIC = {"newsletter_review", "newsletter_send"}        # the action happens in confirm_send_task
+
+
+def _biometric_gate(is_public: bool, stepup_token: str | None) -> dict | None:
+    """For a PUBLIC approval, require a fresh fingerprint: returns a needs_biometric response if one wasn't
+    provided, else None to proceed (consuming the step-up). No-op until a device is registered, so enabling
+    this can never lock the operator out of existing flows."""
+    if not is_public or not webauthn_auth.is_registered():
+        return None
+    if webauthn_auth.consume_stepup(stepup_token):
+        return None
+    return {"ok": False, "needs_biometric": True,
+            "error": "This goes out to the public — confirm with your fingerprint to approve."}
 REPORTS_DIR = "/opt/coretex/reports"       # generated report PDFs (persisted, served to the Inbox)
 
 _PWD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no ambiguous chars, easy to type on mobile
@@ -598,7 +615,7 @@ def _load(task_id: int):
     return task, store.get_skill(task["skill_id"]), store.get_company(task["company_id"])
 
 
-def approve_task(task_id: int) -> dict:
+def approve_task(task_id: int, stepup_token: str | None = None) -> dict:
     task, skill, company = _load(task_id)
     if not task:
         return {"ok": False, "error": "no such task"}
@@ -614,11 +631,14 @@ def approve_task(task_id: int) -> dict:
         if action == "schedule":
             info["date"] = schedule.next_monthly_slot(company["slug"]).strftime("%-d %b %Y")
         return info
+    gate = _biometric_gate(task["kind"] in _APPROVE_PUBLIC, stepup_token)
+    if gate:
+        return gate
     result = _approve(task, skill, company)
     return {"ok": True, "task": store.get_task(task_id), "result": result}
 
 
-def confirm_send_task(task_id: int, count: int) -> dict:
+def confirm_send_task(task_id: int, count: int, stepup_token: str | None = None) -> dict:
     """Confirm a newsletter with the EXACT recipient count. Stage 2 (newsletter_review) -> SCHEDULE for the
     next free 1st; Stage 3 (newsletter_send) -> SEND now (drip). Count must match, so a misclick can't fire."""
     task, skill, company = _load(task_id)
@@ -630,6 +650,9 @@ def confirm_send_task(task_id: int, count: int) -> dict:
             return {"ok": False, "error": f"Count mismatch: you entered {count}, the list is {n}. Nothing done."}
     except (TypeError, ValueError):
         return {"ok": False, "error": "Enter the exact recipient count to confirm."}
+    gate = _biometric_gate(True, stepup_token)   # a newsletter schedule/send is always a public action
+    if gate:
+        return gate
     art = db.setting_get(f"newsletter:{task_id}")
     if not art:
         return {"ok": False, "error": "no built newsletter found for this card"}
