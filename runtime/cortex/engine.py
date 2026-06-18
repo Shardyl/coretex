@@ -965,6 +965,8 @@ def poll_inquiries_window(days: int = 2) -> dict:
 FORM_INTAKE = {
     "snaprewards": {"rt_key": "gmail_refresh_token:snaprewards", "client": "snaprewards",
                     "subject": "Site contact form", "skill": "sales-first-response"},
+    "skyvision": {"rt_key": "gmail_refresh_token:skyvision", "client": "skyvision",
+                  "subject": "New enquiry from", "skill": "sales-first-response"},
 }
 
 
