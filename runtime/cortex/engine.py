@@ -328,6 +328,11 @@ def process_new_tasks() -> None:
 def _run_task(task: dict) -> None:
     skill = store.get_skill(task["skill_id"])
     company = store.get_company(task["company_id"])
+    if not skill:   # e.g. an action reminder pointed at a skill that doesn't exist — fail cleanly
+        store.update_task(task["id"], status="failed",
+                          manager={"summary": "No valid skill assigned — nothing drafted.", "aligned": False})
+        tg.send(f"Task #{task['id']} couldn't run: no valid skill assigned.")
+        return
     store.update_task(task["id"], status="drafting")
 
     site = _site_for(task, company)
@@ -1055,8 +1060,14 @@ def run(poll_idle: float = 1.0) -> None:
     tg.send("\U0001F9E0 Cortex engine online.")
     last_poll = 0.0
     while True:
-        process_new_tasks()
-        handle_updates()
+        try:
+            process_new_tasks()
+        except Exception as e:  # noqa: BLE001 — a single bad task / model timeout must NEVER kill the engine
+            tg.send(f"(process hiccup: {e})")
+        try:
+            handle_updates()
+        except Exception as e:  # noqa: BLE001
+            tg.send(f"(updates hiccup: {e})")
         now = time.time()
         if now - last_poll >= 60:        # check Gmail for new enquiries + run any due scheduled tasks
             last_poll = now

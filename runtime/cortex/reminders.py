@@ -139,15 +139,22 @@ def fire(r: dict) -> dict:
 
 
 def _spawn_task(r: dict, action: dict) -> int | None:
-    """Turn an action reminder into a normal task in the standard pipeline (engine drafts it -> Inbox)."""
+    """Turn an action reminder into a normal task in the standard pipeline (engine drafts it -> Inbox).
+    If the company/skill can't be resolved, do NOT create a broken task — drop an info card instead."""
     try:
         co = store.get_company_by_slug(action.get("company") or "")
-        if not co:
+        sk = store.get_skill_by_key(co["id"], action.get("skill") or "") if co else None
+        if not co or not sk:
+            notifications.notify(
+                "Reminder couldn't run automatically",
+                f"\"{r['title']}\" — couldn't find the {'business' if not co else 'skill'} to draft it. "
+                "Set it again with a valid skill, or as a plain reminder.",
+                priority="normal", category="reminder", company_id=r.get("company_id"),
+                target_type=r.get("target_type"), target_id=r.get("target_id"))
             return None
-        sk = store.get_skill_by_key(co["id"], action.get("skill") or "")
         kind = action.get("kind") or "content"
         brief = action.get("brief") or r["title"]
-        t = store.create_task(co["id"], sk["id"] if sk else None, kind, {"brief": brief, "title": r["title"]})
+        t = store.create_task(co["id"], sk["id"], kind, {"brief": brief, "title": r["title"]})
         return t["id"] if t else None
     except Exception:  # noqa: BLE001
         return None

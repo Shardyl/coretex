@@ -1752,9 +1752,17 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
             co = store.get_company_by_slug(inp["company"]); cid = co["id"] if co else None
         action = None
         if inp.get("action_skill") and inp.get("action_brief"):
-            action = {"company": inp.get("action_company") or inp.get("company"),
-                      "skill": inp["action_skill"], "kind": inp.get("action_kind") or "content",
-                      "brief": inp["action_brief"]}
+            aco_slug = inp.get("action_company") or inp.get("company")
+            aco = store.get_company_by_slug(aco_slug or "")
+            ask = store.get_skill_by_key(aco["id"], inp["action_skill"]) if aco else None
+            if not aco or not ask:   # give the model immediate feedback so it picks a REAL skill
+                return (f"Can't set that ACTION reminder: "
+                        + ("no business '%s'." % aco_slug if not aco else
+                           "skill '%s' doesn't exist for %s." % (inp["action_skill"], aco_slug))
+                        + " Call list_skills to choose a real skill_key, or set it as a plain nudge "
+                          "reminder (drop the action_* fields).")
+            action = {"company": aco_slug, "skill": inp["action_skill"],
+                      "kind": inp.get("action_kind") or "content", "brief": inp["action_brief"]}
         r = reminders.create(inp["title"], due, company_id=cid, target_type=inp.get("target_type"),
                              target_id=inp.get("target_id"), recurrence=inp.get("recurrence") or "none",
                              custom_days=inp.get("custom_days"), action=action)
