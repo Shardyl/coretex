@@ -51,8 +51,11 @@ def send_account() -> str | None:
     return db.setting_get("gmail_send_account")
 
 
-def _send_token() -> str:
-    """Prefer the dedicated sending mailbox (so the reply lands in YOUR Sent folder); else the read inbox."""
+def _send_token(company: str | None = None, send_rt_key: str | None = None) -> str:
+    """The access token to SEND from. Per-company: pass `send_rt_key` (that brand's mailbox token) + `company`
+    (its OAuth client). Legacy (Tabscanner): prefer the dedicated send mailbox, else the read inbox."""
+    if send_rt_key:
+        return _token_for(send_rt_key, "gmail_send", company)
     if db.setting_get("gmail_send_refresh_token"):
         return _token_for("gmail_send_refresh_token", "gmail_send")
     return _access_token()
@@ -112,7 +115,8 @@ def _parse(msg: dict) -> dict:
 def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
                  cc: str | None = None, html: str | None = None,
                  inline_images: list | None = None, bcc: str | None = None,
-                 files: list | None = None, file_names: list | None = None) -> dict:
+                 files: list | None = None, file_names: list | None = None,
+                 company: str | None = None, send_rt_key: str | None = None) -> dict:
     """Send an email from the connected sending mailbox (gmail.modify) — it lands in that account's Sent
     folder. If `html` is given, sends a multipart/alternative (plain + html); any `inline_images`
     (list of (cid, filepath)) are embedded so a footer logo renders. `from_addr` is honoured when it
@@ -133,7 +137,7 @@ def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
     from email.mime.image import MIMEImage
-    tok = _send_token()
+    tok = _send_token(company, send_rt_key)
     if html:
         alt = MIMEMultipart("alternative")
         alt.attach(MIMEText(body or "", "plain", "utf-8"))

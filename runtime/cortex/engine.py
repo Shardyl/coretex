@@ -344,9 +344,17 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     req = task.get("request") or {}
     files = req.get("attachments")            # outbound drafts carry real file attachments
     file_names = req.get("attachment_names")  # ...with their original filenames
-    res = gmail.send_message(env["to"], env["subject"], c["plain"], from_addr=env["from"], cc=env["cc"],
+    # per-company send: a brand with its own project sends from its OWN mailbox/client (else Tabscanner legacy)
+    slug = (company or {}).get("slug")
+    send_company = _inbox_client_company(slug) if slug else None
+    send_rt_key, from_addr = None, env["from"]
+    if send_company:
+        send_rt_key = (f"gmail_send_refresh_token:{slug}" if db.setting_get(f"gmail_send_refresh_token:{slug}")
+                       else f"gmail_refresh_token:{slug}")
+        from_addr = from_addr or db.setting_get(f"gmail_send_account:{slug}") or db.setting_get(f"gmail_account:{slug}")
+    res = gmail.send_message(env["to"], env["subject"], c["plain"], from_addr=from_addr, cc=env["cc"],
                              html=c["html"], inline_images=c["inline"], bcc=env.get("bcc"),
-                             files=files, file_names=file_names)
+                             files=files, file_names=file_names, company=send_company, send_rt_key=send_rt_key)
     try:
         crm.log_event(env["to"], "email_sent", f"Email sent: {env['subject']}", company.get("slug"))
     except Exception:  # noqa: BLE001 — CRM history must never block the send
@@ -996,18 +1004,20 @@ def classify_email(company: dict, email: dict) -> dict:
 
 
 def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_token",
-               days: int = 2, limit: int = 40, commit: bool = True) -> dict:
+               days: int = 2, limit: int = 40, commit: bool = True, company: str | None = None) -> dict:
     """Read a company's catch-all inbox (non-form mail; form notifications are handled by poll_inquiries),
     classify each email on the sales-triage skill, and route the meaningful ones into the CRM. Deduped per
     mailbox. commit=False is a dry run (classify + report, no CRM writes)."""
     co = store.get_company_by_slug(company_slug)
-    if not co or not gmail.connected():
-        return {"processed": 0, "results": [], "reason": "no company / gmail not connected"}
+    if company is None:
+        company = _inbox_client_company(company_slug)   # the OAuth client that minted this inbox's token
+    if not co or not db.setting_get(rt_key):
+        return {"processed": 0, "results": [], "reason": "no company / inbox not connected"}
     q = f'in:inbox newer_than:{days}d -subject:"New enquiry from"'
     own_domain = INBOXES.get(company_slug, "").split("@")[-1].lower()
     key = f"inbox_processed:{company_slug}"
     seen = set(db.setting_get(key) or [])
-    emails = gmail.list_recent(days=days, limit=limit, rt_key=rt_key, q=q, skip=seen)
+    emails = gmail.list_recent(days=days, limit=limit, rt_key=rt_key, q=q, skip=seen, company=company)
     results, added = [], 0
     for e in emails:
         gid = e.get("gmail_id")
@@ -1047,6 +1057,12 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
 def _default_rt_key(slug: str) -> str:
     # Tabscanner keeps the legacy key; every other inbox gets its own namespaced token key.
     return "gmail_refresh_token" if slug == "tabscanner" else f"gmail_refresh_token:{slug}"
+
+
+def _inbox_client_company(slug: str) -> str | None:
+    """Which per-company OAuth client minted this inbox's token — the slug if it has its own client file on
+    the box, else None (the shared Cortex-system client, e.g. Tabscanner). Auto-detects new companies."""
+    return slug if os.path.exists(f"/etc/cortex/google_oauth_client_{slug}.json") else None
 
 
 def inbox_registry() -> list[dict]:
