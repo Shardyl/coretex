@@ -29,7 +29,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import (catalog, config, crm, db, engine, gmail, knowledge, notifications, personas, profile,
-               provider, questionnaire, reminders, schedule, seo_report, skillqa, store, webauthn_auth, worker)
+               provider, push, questionnaire, reminders, schedule, seo_report, skillqa, store,
+               webauthn_auth, worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -391,6 +392,31 @@ def reminder_done(rid: int, _: None = Depends(auth)) -> dict:
 @app.post("/api/reminders/{rid}/cancel")
 def reminder_cancel(rid: int, _: None = Depends(auth)) -> dict:
     return {"ok": True, "reminder": reminders.cancel(rid)}
+
+
+# ---------- web push (phone lock screen) ----------
+
+@app.get("/api/push/vapid")
+def push_vapid(_: None = Depends(auth)) -> dict:
+    return {"public_key": push.public_key()}
+
+
+class PushSub(BaseModel):
+    subscription: dict
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(body: PushSub, _: None = Depends(auth)) -> dict:
+    return push.subscribe(body.subscription)
+
+
+class PushUnsub(BaseModel):
+    endpoint: str
+
+
+@app.post("/api/push/unsubscribe")
+def push_unsubscribe(body: PushUnsub, _: None = Depends(auth)) -> dict:
+    return push.unsubscribe(body.endpoint)
 
 
 # ---------- calendar / scheduled tasks ----------

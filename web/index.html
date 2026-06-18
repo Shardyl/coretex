@@ -1095,6 +1095,7 @@ async function renderInbox(v){
       <button class="btn sm" onclick="addReminder()">${ic('clock',15)} Reminder</button>
       <button class="btn sm" onclick="setInbox('history')">${ic('pulse',15)} History</button></div></div>
     ${(!demo && IS_MOBILE && !biometricReg)?`<div class="banner" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>${ic('finger',15)} Faster approvals: unlock with your fingerprint on this phone</span><button class="btn sm go" style="flex:none" onclick="registerDevice()">Enable fingerprint</button></div>`:''}
+    ${(!demo && IS_MOBILE && localStorage.getItem('cortex_push')!=='1')?`<div class="banner" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>${ic('alert',15)} Get Cortex alerts on your lock screen</span><button class="btn sm go" style="flex:none" onclick="enablePush()">Enable alerts</button></div>`:''}
     <div class="convbar" id="ibSeg" style="margin:0 0 10px"></div>
     <div id="ib" class="empty">Loading…</div>`;
   const fco=document.getElementById('coSel').value;
@@ -1136,6 +1137,21 @@ async function addReminder(){
     toast(r&&r.ok?'Reminder set ✓':'Could not set it'); render(); }catch(e){ toast('Error: '+(e.message||'')); }
 }
 function updateInboxBadge(n){ const el=document.getElementById('ibBadge'); if(el){ el.textContent=n>0?n:''; el.style.display=n>0?'inline-flex':'none'; } }
+async function enablePush(){
+  if(demo) return;
+  if(!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)){ toast('Push not supported on this device'); return; }
+  try{
+    const perm = await Notification.requestPermission();
+    if(perm!=='granted'){ toast('Notifications blocked — allow them in browser settings'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const vk = await api('/api/push/vapid');
+    if(!vk || !vk.public_key){ toast('Push not configured on the server'); return; }
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub) sub = await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:_b64uToBuf(vk.public_key)});
+    await api('/api/push/subscribe',{method:'POST',body:JSON.stringify({subscription:sub.toJSON()})});
+    localStorage.setItem('cortex_push','1'); toast('Phone alerts on ✓'); render();
+  }catch(e){ toast('Could not enable push: '+(e.message||'')); }
+}
 function actionCard(t){
     const co=t.company||compName(t.company_id), sk=t.skill||'';
     const wp=t.wp||null, em=t.email||null;

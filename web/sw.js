@@ -1,6 +1,6 @@
 // Cortex service worker — makes the cockpit installable + keeps the shell working offline.
 // Network-first for everything; the API is never cached; the app shell falls back to cache.
-const CACHE = 'cortex-v1';
+const CACHE = 'cortex-v2';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -23,4 +23,22 @@ self.addEventListener('fetch', (e) => {
       .then((r) => { const cp = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, cp)).catch(() => {}); return r; })
       .catch(() => caches.match(e.request).then((r) => r || caches.match('/')))
   );
+});
+
+// ---- Web Push: show the notification, deep-link on tap ----
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (x) {}
+  e.waitUntil(self.registration.showNotification(d.title || 'Cortex', {
+    body: d.body || '', tag: d.tag, data: { url: d.url || '/' },
+    icon: '/icon-192.png', badge: '/icon-192.png', renotify: true
+  }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => {
+    for (const c of cs) { if ('focus' in c) return c.focus(); }
+    if (clients.openWindow) return clients.openWindow(url);
+  }));
 });
