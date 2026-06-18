@@ -2298,16 +2298,21 @@ async def voice_stream(ws: WebSocket):
 GOOGLE_OAUTH_CLIENT = "/etc/cortex/google_oauth_client.json"
 
 
-def _google_client() -> tuple[str, str, str]:
-    with open(GOOGLE_OAUTH_CLIENT) as f:
+def _google_client(company: str | None = None) -> tuple[str, str, str]:
+    """The OAuth web-client config. Default = the shared Cortex-system project (Drive backup + Tabscanner
+    email). When `company` is given, use that company's OWN project client (`/etc/cortex/
+    google_oauth_client_<company>.json`) — the per-company isolation model for YouTube + per-brand email."""
+    path = f"/etc/cortex/google_oauth_client_{company}.json" if company else GOOGLE_OAUTH_CLIENT
+    with open(path) as f:
         c = (json.load(f).get("web") or {})
     return c["client_id"], c["client_secret"], (c.get("redirect_uris") or [""])[0]
 
 
 @app.get("/oauth/google/start")
-def google_start(purpose: str = "drive") -> RedirectResponse:
+def google_start(purpose: str = "drive", company: str = "") -> RedirectResponse:
     from urllib.parse import urlencode
-    cid, _, redirect = _google_client()
+    company = (company or "").strip().lower()
+    cid, _, redirect = _google_client(company or None)
     if purpose in ("gmail", "gmail_send"):   # a Tabscanner mailbox — its own login, stored separately.
         # gmail.modify = read + draft + SEND + label/archive (NOT permanent delete). One consent, full flow;
         # nothing is ever sent without the owner's approval — the guardrail is the approval gate, not the scope.
@@ -2318,8 +2323,9 @@ def google_start(purpose: str = "drive") -> RedirectResponse:
     else:
         scope = ("https://www.googleapis.com/auth/drive.file "
                  "https://www.googleapis.com/auth/drive.readonly")
+    state = f"{purpose}|{company}" if company else purpose   # carry WHICH company is authorising
     q = urlencode({"client_id": cid, "redirect_uri": redirect, "response_type": "code",
-                   "scope": scope, "state": purpose, "access_type": "offline",
+                   "scope": scope, "state": state, "access_type": "offline",
                    "prompt": "consent", "include_granted_scopes": "true"})
     return RedirectResponse("https://accounts.google.com/o/oauth2/v2/auth?" + q)
 
@@ -2331,7 +2337,11 @@ def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLRes
         "padding-top:80px'><h2>" + msg + "</h2></body>")
     if error or not code:
         return page("Authorisation cancelled.")
-    cid, secret, redirect = _google_client()
+    purpose, _, company = state.partition("|")   # 'gmail' (legacy) or 'gmail|filmspoke' (per-company)
+    company = company.strip().lower()
+    sfx = f":{company}" if company else ""       # per-company storage suffix (legacy keys unchanged)
+    who = (company.title() if company else "Tabscanner")
+    cid, secret, redirect = _google_client(company or None)
     r = httpx.post("https://oauth2.googleapis.com/token", data={
         "code": code, "client_id": cid, "client_secret": secret,
         "redirect_uri": redirect, "grant_type": "authorization_code"}, timeout=30)
@@ -2341,7 +2351,7 @@ def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLRes
     rt = body.get("refresh_token")
     if not rt:
         return page("No refresh token returned — revoke Cortex's access in your Google account and try again.")
-    if state in ("gmail", "gmail_send"):   # a Tabscanner mailbox — stored separately so it doesn't clobber Drive
+    if purpose in ("gmail", "gmail_send"):   # a mailbox — stored separately so it doesn't clobber Drive
         email = ""
         try:
             email = httpx.get("https://www.googleapis.com/oauth2/v2/userinfo",
@@ -2349,15 +2359,15 @@ def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLRes
                               timeout=15).json().get("email", "")
         except Exception:  # noqa: BLE001
             pass
-        if state == "gmail_send":   # the mailbox replies are SENT from (lands in this account's Sent folder)
-            db.setting_set("gmail_send_refresh_token", rt)
-            db.setting_set("gmail_send_account", email)
-            return page(f"✓ Cortex will send replies from {email or 'this mailbox'} — "
+        if purpose == "gmail_send":   # the mailbox replies are SENT from (lands in this account's Sent folder)
+            db.setting_set("gmail_send_refresh_token" + sfx, rt)
+            db.setting_set("gmail_send_account" + sfx, email)
+            return page(f"✓ Cortex will send {who} replies from {email or 'this mailbox'} — "
                         "they'll appear in your Sent folder. You can close this tab.")
-        db.setting_set("gmail_refresh_token", rt)
-        db.setting_set("gmail_account", email)
-        return page(f"✓ Cortex reads enquiries from the {email or 'Gmail'} mailbox. You can close this tab.")
-    db.setting_set("google_refresh_token", rt)
+        db.setting_set("gmail_refresh_token" + sfx, rt)
+        db.setting_set("gmail_account" + sfx, email)
+        return page(f"✓ Cortex reads {who} enquiries from the {email or 'Gmail'} mailbox. You can close this tab.")
+    db.setting_set("google_refresh_token" + sfx, rt)
     return page("✓ Cortex is connected to your Google Drive. You can close this tab — backups run nightly.")
 
 

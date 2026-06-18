@@ -21,12 +21,19 @@ def connected() -> bool:
     return bool(db.setting_get("gmail_refresh_token"))
 
 
-def _token_for(rt_key: str, purpose: str) -> str:
-    with open(_CLIENT) as f:
+def _client_for(company: str | None = None) -> str:
+    """The OAuth client config to refresh a token with — the per-company project's client when `company`
+    is given (its token was minted by that client), else the shared Cortex-system client."""
+    return f"/etc/cortex/google_oauth_client_{company}.json" if company else _CLIENT
+
+
+def _token_for(rt_key: str, purpose: str, company: str | None = None) -> str:
+    with open(_client_for(company)) as f:
         c = (json.load(f).get("web") or {})
     rt = db.setting_get(rt_key)
     if not rt:
-        raise RuntimeError(f"Gmail not connected — authorise at /oauth/google/start?purpose={purpose}")
+        raise RuntimeError(f"Gmail not connected — authorise at /oauth/google/start?purpose={purpose}"
+                           + (f"&company={company}" if company else ""))
     r = httpx.post("https://oauth2.googleapis.com/token", data={
         "client_id": c["client_id"], "client_secret": c["client_secret"],
         "refresh_token": rt, "grant_type": "refresh_token"}, timeout=30)
@@ -212,11 +219,12 @@ def _parse_generic(msg: dict) -> dict:
 
 
 def list_recent(days: int = 2, limit: int = 30, rt_key: str = "gmail_refresh_token",
-                q: str | None = None, skip: set | None = None) -> list[dict]:
+                q: str | None = None, skip: set | None = None, company: str | None = None) -> list[dict]:
     """Recent inbox mail (not just the contact form) for the inbox classifier. `rt_key` selects which
-    company's mailbox refresh token to use; `q` overrides the default Gmail search; `skip` is a set of
-    already-seen message ids to NOT re-fetch (so each message is fetched in full at most once)."""
-    tok = _token_for(rt_key, "gmail")
+    company's mailbox refresh token to use, `company` selects which OAuth client minted it (per-company
+    project); `q` overrides the default Gmail search; `skip` is a set of already-seen message ids to NOT
+    re-fetch (so each message is fetched in full at most once)."""
+    tok = _token_for(rt_key, "gmail", company)
     res = _get(tok, "messages", {"q": q or f"in:inbox newer_than:{days}d", "maxResults": limit})
     skip = skip or set()
     return [_parse_generic(_get(tok, f"messages/{m['id']}", {"format": "full"}))
