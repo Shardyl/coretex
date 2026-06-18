@@ -37,6 +37,36 @@ NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send", "
 _APPROVE_PUBLIC = {"email_reply", "email_draft", "newsletter_idea", "blog"}   # the action happens in approve_task
 _CONFIRM_PUBLIC = {"newsletter_review", "newsletter_send"}        # the action happens in confirm_send_task
 
+# Phase 3.2 — central kind -> security class (the single source of truth for gating; merged spec §3a).
+#   internal : may auto-run on an auto lane with a clean manager verdict.
+#   outward  : goes OUT to the public — NEVER auto; Inbox + PIN/biometric step-up to approve.
+#   money    : never auto; human + PIN.
+# Existing gate constants above stay the enforcers for now; this map is wired into the unified pipeline in
+# 3.4/3.5. The assertion below keeps the two in lock-step so they can never silently diverge.
+KIND_CLASS = {
+    "content": "internal", "draft": "internal", "research": "internal", "summary": "internal",
+    "report": "internal", "seo_report": "internal", "crm_update": "internal", "internal_note": "internal",
+    "email_reply": "outward", "email_draft": "outward", "email_send": "outward", "blog": "outward",
+    "newsletter_idea": "outward", "newsletter_review": "outward", "newsletter_send": "outward",
+    "social_post": "outward", "dm_reply": "outward", "sms": "outward",
+    "payment": "money", "invoice_send": "money", "refund": "money",
+}
+
+
+def kind_class(kind: str) -> str:
+    """Security class for a task kind. Unknown kinds default to 'outward' (fail SAFE — never auto-send)."""
+    return KIND_CLASS.get(kind, "outward")
+
+
+def is_auto_eligible(kind: str) -> bool:
+    """Only 'internal' kinds may ever auto-run (and even then only on an auto lane with a clean verdict)."""
+    return kind_class(kind) == "internal"
+
+
+# guard: every currently-gated kind must be classed outward/money (so centralising can't loosen a gate)
+assert all(kind_class(k) in ("outward", "money") for k in (NEVER_AUTO_KINDS | MONEY_KINDS)), \
+    "KIND_CLASS drift: a never-auto/money kind is not classed outward/money"
+
 
 def _biometric_gate(is_public: bool, stepup_token: str | None) -> dict | None:
     """For a PUBLIC approval, require a fresh fingerprint: returns a needs_biometric response if one wasn't
@@ -1085,6 +1115,39 @@ def run_due_tasks() -> None:
             tg.send(f"(scheduled task '{t.get('title')}' failed: {e})")
 
 
+# ---------- Phase 3: the unified clock (scheduled tasks live in `tasks`, not scheduled_tasks) ----------
+
+def _spawn_recurring_child(template: dict) -> dict:
+    """One occurrence of a recurring template -> a fresh immediate task that flows through the normal
+    draft -> manager -> Inbox pipeline (its own approval + history). The template itself never executes."""
+    return db.execute(
+        "insert into tasks (company_id,skill_id,kind,request,status,origin,title,parent_id) "
+        "values (%s,%s,%s,%s,'new',%s,%s,%s) returning *",
+        (template["company_id"], template["skill_id"], template["kind"],
+         Json(template.get("request") or {}), template.get("origin") or "calendar",
+         template.get("title"), template["id"]))
+
+
+def promote_due_tasks() -> None:
+    """Unified clock (60s tick): turn DUE scheduled tasks (held in `tasks` with status='scheduled') into work.
+      one-off   (schedule_kind='once', run_at<=now)  -> flip to 'new' (runs once via process_new_tasks).
+      recurring (schedule_kind='recurring', next_run<=now) -> spawn a child 'new' task + bump next_run.
+    No-op until the Calendar/Talk (or the 3.4 migration) creates scheduled tasks."""
+    for t in db.query("select id from tasks where schedule_kind='once' and status='scheduled' "
+                      "and coalesce(enabled,true)=true and run_at is not null and run_at <= now()"):
+        db.execute("update tasks set status='new', last_run=now(), updated_at=now() where id=%s", (t["id"],))
+    for t in db.query("select * from tasks where schedule_kind='recurring' and coalesce(enabled,true)=true "
+                      "and next_run is not null and next_run <= now()"):
+        try:
+            _spawn_recurring_child(t)
+            nr = schedule.next_run(t.get("cadence") or "weekly", t.get("weekday") or 0,
+                                   8 if t.get("hour") is None else t["hour"], t.get("minute") or 0)
+            db.execute("update tasks set last_run=now(), next_run=%s, last_status='ok', updated_at=now() "
+                       "where id=%s", (nr, t["id"]))
+        except Exception as e:  # noqa: BLE001 — one bad template must not stall the rest
+            db.execute("update tasks set last_status=%s where id=%s", (f"error: {e}"[:120], t["id"]))
+
+
 def drain_newsletter_sends() -> None:
     """Push the next throttled batch of any in-flight newsletter, and alert when one finishes or auto-pauses."""
     for ev in newsletter.drain_send_jobs():
@@ -1128,6 +1191,10 @@ def run(poll_idle: float = 1.0) -> None:
                 reminders.fire_due()    # fire due reminders -> nudge notification or spawn an action task
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(reminder fire hiccup: {e})")
+            try:
+                promote_due_tasks()   # unified clock (tasks-table scheduled work); runs beside the legacy one
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(promote hiccup: {e})")
             try:
                 run_due_tasks()
             except Exception as e:  # noqa: BLE001
