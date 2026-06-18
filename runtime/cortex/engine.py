@@ -910,6 +910,57 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
     return {"processed": len(results), "added_to_crm": added, "results": results}
 
 
+# ---------- inbox registry: data-driven, so a NEW address auto-joins the classifier loop ----------
+# The 60s loop polls EVERY connected inbox in this registry. Adding an inbox is data, not code:
+# the OAuth onboarding flow calls register_inbox() + stores that inbox's read token, and the loop
+# picks it up on the next cycle — no edit here. (`_inbox_connected` is the access seam the OAuth
+# plan fills in: today = a stored Gmail refresh token; could become domain-wide delegation.)
+
+def _default_rt_key(slug: str) -> str:
+    # Tabscanner keeps the legacy key; every other inbox gets its own namespaced token key.
+    return "gmail_refresh_token" if slug == "tabscanner" else f"gmail_refresh_token:{slug}"
+
+
+def inbox_registry() -> list[dict]:
+    """The configured catch-all inboxes [{slug, address, rt_key}]. Stored in settings (data-driven);
+    seeded from the INBOXES map the first time so existing config carries over."""
+    reg = db.setting_get("inbox_registry")
+    if not reg:
+        reg = [{"slug": s, "address": a, "rt_key": _default_rt_key(s)} for s, a in INBOXES.items()]
+        db.setting_set("inbox_registry", reg)
+    return reg
+
+
+def register_inbox(slug: str, address: str, rt_key: str | None = None) -> dict:
+    """Plug a new inbox into the classifier (called by the OAuth onboarding flow). Idempotent."""
+    entry = {"slug": slug, "address": address, "rt_key": rt_key or _default_rt_key(slug)}
+    reg = [e for e in inbox_registry() if not (e.get("slug") == slug and e.get("address") == address)]
+    reg.append(entry)
+    db.setting_set("inbox_registry", reg)
+    INBOXES.setdefault(slug, address)   # keep the own-domain lookup in sync
+    return entry
+
+
+def _inbox_connected(entry: dict) -> bool:
+    """Does Cortex have read access to this inbox yet? (Access seam — extend for the OAuth plan.)"""
+    return bool(db.setting_get(entry.get("rt_key", "")))
+
+
+def poll_all_inboxes() -> dict:
+    """Classify + CRM-route every CONNECTED inbox in the registry. Unconnected ones are skipped
+    silently, so the loop never errors on an inbox we don't have access to yet."""
+    polled = []
+    for e in inbox_registry():
+        if not _inbox_connected(e):
+            continue
+        try:
+            poll_inbox(e["slug"], e.get("rt_key") or _default_rt_key(e["slug"]))
+            polled.append(e["slug"])
+        except Exception as ex:  # noqa: BLE001
+            tg.send(f"(inbox classify hiccup [{e.get('slug')}]: {ex})")
+    return {"polled": polled}
+
+
 # ---------- scheduled tasks (recurring jobs -> Inbox) ----------
 
 REPORT_SKILL_KEY = "content-onpage-seo"   # the SEO report lands under the company's SEO lane
@@ -1008,7 +1059,7 @@ def run(poll_idle: float = 1.0) -> None:
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(enquiry poll hiccup: {e})")
             try:
-                poll_inbox()        # classify + CRM-route non-form Tabscanner inbox mail (sales-triage skill)
+                poll_all_inboxes()  # classify + CRM-route EVERY connected inbox (data-driven registry)
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(inbox classify hiccup: {e})")
             try:
