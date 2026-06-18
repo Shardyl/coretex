@@ -59,6 +59,20 @@ def kind_class(kind: str) -> str:
     return KIND_CLASS.get(kind, "outward")
 
 
+# What tapping Approve ACTUALLY DOES, per kind — surfaced verbatim on the Inbox button so the consequence
+# is never ambiguous (email sends, blog publishes, newsletter schedules/sends). Add a line when you add a kind.
+APPROVE_ACTION = {
+    "email_reply": "Approve & send", "email_draft": "Approve & send",
+    "blog": "Approve & publish",
+    "newsletter_idea": "Approve & build", "newsletter_review": "Approve & schedule",
+    "newsletter_send": "Approve & send",
+}
+
+
+def approve_label(kind: str) -> str:
+    return APPROVE_ACTION.get(kind, "Approve")
+
+
 def is_auto_eligible(kind: str) -> bool:
     """Only 'internal' kinds may ever auto-run (and even then only on an auto lane with a clean verdict)."""
     return kind_class(kind) == "internal"

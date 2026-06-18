@@ -273,6 +273,7 @@ def _enrich_action_card(t: dict) -> dict:
                      "stakes": sk["stakes"], "auto_offer": offer}
     t["title"] = t.get("title") or (t.get("request") or {}).get("title")
     t["skill"] = sk["name"] if sk else t.get("skill")
+    t["approve_label"] = engine.approve_label(t["kind"])   # exact consequence on the Approve button
     t["ts"] = (t.get("updated_at") or t.get("created_at"))
     # NEVER ship the heavy attachment base64 in the list response — just a count (the files stay on the task
     # for the send; fetch them on demand). A single phone screenshot can be ~9MB and chokes the connection.
