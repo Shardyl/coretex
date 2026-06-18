@@ -381,6 +381,10 @@ def _push_approval(task: dict, skill: dict, company: dict) -> None:
 def _run_task(task: dict) -> None:
     skill = store.get_skill(task["skill_id"])
     company = store.get_company(task["company_id"])
+    if task["kind"] == "seo_report":   # a scheduled report instance — generate it, don't worker-draft it
+        store.update_task(task["id"], status="drafting")
+        _run_report_task(task)
+        return
     if not skill:   # e.g. an action reminder pointed at a skill that doesn't exist — fail cleanly
         store.update_task(task["id"], status="failed",
                           manager={"summary": "No valid skill assigned — nothing drafted.", "aligned": False})
@@ -1052,21 +1056,37 @@ def poll_all_inboxes() -> dict:
 REPORT_SKILL_KEY = "content-onpage-seo"   # the SEO report lands under the company's SEO lane
 
 
-def deliver_seo_report(company: str, days: int = 28) -> dict:
-    """Generate the per-company SEO/traffic report and drop it into the Cortex Inbox as a report task."""
+def _generate_seo_report(company: str, days: int = 28) -> dict:
+    """Generate the per-company SEO/traffic report; returns the pieces needed to fill a report card."""
     os.makedirs(REPORTS_DIR, exist_ok=True)
     rep = seo_report.generate(company, days=days, out_dir=REPORTS_DIR)
     co = store.get_company_by_slug(company)
     if not co:
         raise ValueError(f"unknown company {company}")
     skill = store.get_skill_by_key(co["id"], REPORT_SKILL_KEY)
-    skill_id = skill["id"] if skill else None
     req = {"kind": "seo_report", "company": company, "file": rep["path"],
            "title": rep["title"], "summary": rep["summary"], "days": days}
+    return {"company_id": co["id"], "skill_id": skill["id"] if skill else None,
+            "request": req, "summary": rep["summary"]}
+
+
+def deliver_seo_report(company: str, days: int = 28) -> dict:
+    """Legacy path (scheduled_tasks): generate the report and drop a fresh card into the Cortex Inbox."""
+    g = _generate_seo_report(company, days)
     return db.execute(
         "insert into tasks (company_id,skill_id,kind,request,draft,status) "
         "values (%s,%s,'report',%s,%s,'awaiting_approval') returning *",
-        (co["id"], skill_id, Json(req), rep["summary"]))
+        (g["company_id"], g["skill_id"], Json(g["request"]), g["summary"]))
+
+
+def _run_report_task(task: dict) -> None:
+    """A scheduled report INSTANCE (a 'seo_report' child spawned by the unified clock): generate the report
+    and turn THIS task into the finished report card in place — one row per occurrence (own approval/history)."""
+    req = task.get("request") or {}
+    company = req.get("company") or (store.get_company(task["company_id"]) or {}).get("slug")
+    g = _generate_seo_report(company, req.get("days", 28))
+    store.update_task(task["id"], kind="report", skill_id=g["skill_id"],
+                      request=g["request"], draft=g["summary"], status="awaiting_approval")
 
 
 def _execute_scheduled(t: dict) -> None:
