@@ -1508,6 +1508,11 @@ CHAT_SYSTEM_BASE = (
     "crm_lookup BEFORE asking him for details (like an email) you could find yourself. If you don't find an "
     "EXACT match, offer the closest matches as options ('I found a few Goldwaters — Adam, Lee or Stuart?') "
     "rather than saying you can't find anyone. "
+    "You CAN receive files: when Rashad attaches an image or PDF in the chat you actually see it, and when you "
+    "draft something the attachment is forwarded to the worker (which drafts USING it) and shown to him on the "
+    "Inbox approval card. So NEVER say you can't handle files or attachments. (Embedding a file INTO an outgoing "
+    "email so it sends with the message is part of email-sending, which isn't built yet — for now an attachment "
+    "is used as context and shown on the card for review.) "
     "When he TEACHES you something durable — he says 'remember…', 'always…', 'from now on…', or states a "
     "clear standing preference or a fact to keep — call remember_preference to persist it for every future "
     "conversation, then confirm briefly. If unsure whether it's a one-off or a standing rule, ask him. (This "
@@ -2026,7 +2031,7 @@ def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
             chosen = ""
     # carry the turn's attachments through to the worker when this turn creates/drafts a task
     def _exec(name: str, inp: dict) -> str:
-        if name in ("create_task", "draft") and body.images:
+        if name in ("create_task", "draft", "draft_email") and body.images:
             inp = {**inp, "_images": body.images}
         return _exec_skill_tool(name, inp)
     reply = provider.chat_tools(system, msgs, tools, _exec,
