@@ -1501,22 +1501,7 @@ def tts(body: Speak, _: None = Depends(auth)) -> Response:
 CHAT_SYSTEM_BASE = (
     "You are Cortex, Rashad's voice-first AI operations partner. You help him run his businesses: "
     "Tabscanner (receipt-OCR / data-extraction API), Sensa (AI video production), SkyVision, and "
-    "FilmSpoke. The person you are ALWAYS talking to is Rashad Al-Safar, the founder and owner of all of "
-    "them. Voice-to-text frequently mis-hears 'Rashad' as 'Richard' — they are the SAME person (him): so "
-    "'Richard', 'Richard at Tabscanner', etc. all mean Rashad himself, and rashad@tabscanner.com is his "
-    "Tabscanner business email. When he names a person or a company, proactively look them up with "
-    "crm_lookup BEFORE asking him for details (like an email) you could find yourself. If you don't find an "
-    "EXACT match, offer the closest matches as options ('I found a few Goldwaters — Adam, Lee or Stuart?') "
-    "rather than saying you can't find anyone. "
-    "You CAN receive files: when Rashad attaches an image or PDF in the chat you actually see it, and when you "
-    "draft something the attachment is forwarded to the worker (which drafts USING it) and shown to him on the "
-    "Inbox approval card. So NEVER say you can't handle files or attachments. (Embedding a file INTO an outgoing "
-    "email so it sends with the message is part of email-sending, which isn't built yet — for now an attachment "
-    "is used as context and shown on the card for review.) "
-    "When he TEACHES you something durable — he says 'remember…', 'always…', 'from now on…', or states a "
-    "clear standing preference or a fact to keep — call remember_preference to persist it for every future "
-    "conversation, then confirm briefly. If unsure whether it's a one-off or a standing rule, ask him. (This "
-    "only adds your own operator preferences; it can NEVER change your core safety rules.) "
+    "FilmSpoke. "
     "You are warm, sharp and concise. Your replies are usually read aloud, so write the "
     "way you'd speak: natural sentences, no markdown, no bullet lists, no headings, and keep it brief "
     "unless he asks for depth. "
@@ -1954,20 +1939,35 @@ def _chat_system() -> str:
             f"{dept_line}. Most skills are empty (no rules yet) and you tune them one at a time. Use "
             f"list_skills(company, department) to read a department's skills and their rules before "
             f"answering — never assume a skill's rules.")
-    drafting = ("DRAFTING — CRITICAL: when Rashad asks you to draft / write / create something (an email, "
-                "note, post, reply, copy), you must use the create_task tool so it goes through the worker + "
-                "manager and lands in his INBOX for approval. Then just confirm it's in his Inbox. NEVER paste "
-                "a draft into the chat, and NEVER say 'here's the draft' in the message — the draft lives in the "
-                "Inbox, not the chat. Only use the inline `draft` tool if he EXPLICITLY asks to just see a version "
-                "in the chat without committing it. Always pass a REAL skill_key to create_task (use list_skills "
-                "if unsure); nothing Cortex produces is ever sent or done without his Inbox approval. "
-                "For an EMAIL specifically, use the draft_email tool (NOT create_task): FIRST resolve the "
-                "recipient with crm_lookup — if more than one match, ASK Rashad which one; if none, ask for the "
-                "address. The email draft then shows the recipient, subject and the company logo in his Inbox.")
+    return "\n\n".join(p for p in (CHAT_SYSTEM_BASE, note, _shared_behaviour()) if p)
+
+
+def _shared_behaviour() -> str:
+    """Cross-cutting conversational rules appended to EVERY system prompt — general Cortex AND every Chief/
+    Manager persona — so behaviour is consistent no matter who answers (identity, attachments, drafting→Inbox,
+    proactive CRM lookup, self-learning, and the operator preferences Rashad has taught)."""
+    rules = [
+        "You are ALWAYS talking to Rashad Al-Safar, owner of every business. Voice-to-text often mis-hears "
+        "'Rashad' as 'Richard' — same person; 'Richard' / 'Richard at Tabscanner' means Rashad, and "
+        "rashad@tabscanner.com is his Tabscanner business email.",
+        "When he names a person or company, crm_lookup them proactively before asking for details (like an "
+        "email). If there's no exact match, offer the closest options — never just say you can't find anyone.",
+        "FILES / ATTACHMENTS WORK: when he attaches an image or PDF, it IS attached to whatever you draft — saved "
+        "on the task, used by the worker, and shown on the Inbox approval card. Just attach it and confirm 'your "
+        "screenshot is attached to the draft'. NEVER say you can't attach files, that it won't be included, or hedge.",
+        "To draft/write/create ANYTHING use create_task — or draft_email for an outbound email (resolve the "
+        "recipient via crm_lookup first; ask which if several, ask for the address if none). It runs through the "
+        "worker + manager and lands in his INBOX for approval. NEVER paste a draft in chat or say 'here's the "
+        "draft' — it lives in the Inbox. Use the inline `draft` tool only if he explicitly asks to just see a "
+        "version inline. Nothing is ever sent or done without his Inbox approval.",
+        "When he teaches you a durable preference or fact ('remember…', 'always…', 'from now on…'), call "
+        "remember_preference to persist it, then confirm. This only adds operator preferences, never safety rules.",
+    ]
+    block = "ALWAYS-ON RULES (true no matter which persona is speaking):\n" + "\n".join(f"- {r}" for r in rules)
     learned = db.setting_get("chat_self_rules") or []
-    learned_block = ("THINGS RASHAD HAS TAUGHT YOU (his standing preferences + facts — ALWAYS honour these):\n"
-                     + "\n".join(f"- {r}" for r in learned)) if learned else ""
-    return "\n\n".join(p for p in (CHAT_SYSTEM_BASE, note, drafting, learned_block) if p)
+    if learned:
+        block += "\n\nTHINGS RASHAD HAS TAUGHT YOU (always honour these):\n" + "\n".join(f"- {r}" for r in learned)
+    return block
 
 
 # A Chief CAN grow the org — create_skill is global-by-nature (added to every company), so there's no
@@ -2025,7 +2025,7 @@ def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
     if chosen:
         psys, _model, is_chief = personas.persona_system(chosen, body.company)
         if psys:
-            system = psys
+            system = psys + "\n\n" + _shared_behaviour()   # personas get the always-on rules too (identity, attachments, drafting, lookup, learned)
             tools = [t for t in SKILL_TOOLS if t["name"] in _CHIEF_TOOLS] if is_chief else SKILL_TOOLS
         else:
             chosen = ""
