@@ -1207,6 +1207,25 @@ def wa_auth_verify(credential: dict = Body(...), _: None = Depends(auth)) -> dic
     return webauthn_auth.auth_verify(credential)
 
 
+@app.get("/api/stepup/status")
+def stepup_status(_: None = Depends(auth)) -> dict:
+    return webauthn_auth.status()
+
+
+class PinBody(BaseModel):
+    pin: str
+
+
+@app.post("/api/stepup/pin/set")
+def stepup_pin_set(body: PinBody, _: None = Depends(auth)) -> dict:
+    return webauthn_auth.set_pin(body.pin)
+
+
+@app.post("/api/stepup/pin/verify")
+def stepup_pin_verify(body: PinBody, _: None = Depends(auth)) -> dict:
+    return webauthn_auth.verify_pin(body.pin)
+
+
 class PauseToggle(BaseModel):
     paused: bool
 

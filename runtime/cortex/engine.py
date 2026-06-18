@@ -40,12 +40,12 @@ def _biometric_gate(is_public: bool, stepup_token: str | None) -> dict | None:
     """For a PUBLIC approval, require a fresh fingerprint: returns a needs_biometric response if one wasn't
     provided, else None to proceed (consuming the step-up). No-op until a device is registered, so enabling
     this can never lock the operator out of existing flows."""
-    if not is_public or not webauthn_auth.is_registered():
+    if not is_public or not webauthn_auth.stepup_enabled():
         return None
     if webauthn_auth.consume_stepup(stepup_token):
         return None
     return {"ok": False, "needs_biometric": True,
-            "error": "This goes out to the public — confirm with your fingerprint to approve."}
+            "error": "This goes out to the public — confirm with your fingerprint or PIN to approve."}
 REPORTS_DIR = "/opt/coretex/reports"       # generated report PDFs (persisted, served to the Inbox)
 
 _PWD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no ambiguous chars, easy to type on mobile

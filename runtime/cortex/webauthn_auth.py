@@ -9,6 +9,7 @@ operator out of the existing flows before they've set it up.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import secrets
 import time
@@ -102,9 +103,50 @@ def auth_verify(credential: dict) -> dict:
 
 
 def consume_stepup(token: str | None) -> bool:
-    """A one-time, short-lived proof that a fingerprint was just verified. True iff valid (and consumes it)."""
+    """A one-time, short-lived proof that a fingerprint OR PIN was just verified. True iff valid (consumes it)."""
     s = db.setting_get("webauthn_stepup")
     if not (s and token and s.get("token") == token and s.get("exp", 0) >= int(time.time())):
         return False
     db.setting_set("webauthn_stepup", None)
     return True
+
+
+def _issue_stepup() -> str:
+    token = secrets.token_urlsafe(24)
+    db.setting_set("webauthn_stepup", {"token": token, "exp": int(time.time()) + _STEPUP_TTL})
+    return token
+
+
+# ---------- PIN fallback (works on any device, esp. desktop where biometric isn't set up) ----------
+
+def pin_set() -> bool:
+    return bool(db.setting_get("stepup_pin"))
+
+
+def set_pin(pin: str) -> dict:
+    pin = (pin or "").strip()
+    if not (pin.isdigit() and 4 <= len(pin) <= 12):
+        return {"ok": False, "error": "PIN must be 4 to 12 digits"}
+    salt = secrets.token_bytes(16)
+    h = hashlib.pbkdf2_hmac("sha256", pin.encode(), salt, 200_000)
+    db.setting_set("stepup_pin", {"salt": salt.hex(), "hash": h.hex()})
+    return {"ok": True}
+
+
+def verify_pin(pin: str) -> dict:
+    rec = db.setting_get("stepup_pin")
+    if not rec:
+        return {"ok": False, "error": "no PIN set"}
+    h = hashlib.pbkdf2_hmac("sha256", (pin or "").strip().encode(), bytes.fromhex(rec["salt"]), 200_000)
+    if not secrets.compare_digest(h.hex(), rec["hash"]):
+        return {"ok": False, "error": "wrong PIN"}
+    return {"ok": True, "stepup_token": _issue_stepup()}
+
+
+def stepup_enabled() -> bool:
+    """The public-approval gate is ACTIVE once EITHER a biometric device or a PIN is set up."""
+    return is_registered() or pin_set()
+
+
+def status() -> dict:
+    return {"biometric": is_registered(), "pin": pin_set(), "enabled": stepup_enabled()}

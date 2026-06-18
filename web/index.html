@@ -537,10 +537,25 @@ async function openSpend(){
 function closeSpend(){ const sh=document.getElementById('spendSheet'); if(sh) sh.classList.add('hidden'); updateSpendChip(); }
 
 // ---- WebAuthn: biometric step-up for PUBLIC approvals (send email / newsletter / publish) ----
-let biometricReg=false;
+let biometricReg=false, pinSet=false;
 function _b64uToBuf(s){ s=(s||'').replace(/-/g,'+').replace(/_/g,'/'); s+='='.repeat((4-s.length%4)%4); const b=atob(s),u=new Uint8Array(b.length); for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i); return u.buffer; }
 function _bufToB64u(buf){ const b=new Uint8Array(buf); let s=''; for(let i=0;i<b.length;i++)s+=String.fromCharCode(b[i]); return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
-async function checkBiometric(){ if(demo) return; try{ const r=await api('/api/webauthn/registered'); biometricReg=!!(r&&r.registered); }catch(e){} }
+async function checkBiometric(){ if(demo) return; try{ const r=await api('/api/stepup/status'); biometricReg=!!(r&&r.biometric); pinSet=!!(r&&r.pin); }catch(e){} }
+async function setPin(){
+  const p1=prompt('Set a Cortex PIN (4-12 digits) to authorise public actions — works on any device, incl. desktop:');
+  if(p1===null) return;
+  if(prompt('Re-enter the PIN to confirm:')!==p1){ toast('PINs did not match'); return; }
+  try{ const r=await api('/api/stepup/pin/set',{method:'POST',body:JSON.stringify({pin:p1})});
+    if(r&&r.ok){ pinSet=true; toast('PIN set — authorise with it on desktop ✓'); render(); } else toast('Could not set PIN: '+((r&&r.error)||'')); }
+  catch(e){ toast('Error setting PIN'); }
+}
+async function _stepUpPin(){
+  const pin=prompt('Enter your Cortex PIN to authorise this:');
+  if(pin===null) return null;
+  try{ const v=await api('/api/stepup/pin/verify',{method:'POST',body:JSON.stringify({pin})});
+    if(v&&v.ok) return v.stepup_token; toast((v&&v.error)||'Wrong PIN'); return null; }
+  catch(e){ return null; }
+}
 async function registerDevice(){
   if(!window.PublicKeyCredential){ toast('This device/browser does not support biometric passkeys'); return; }
   try{
@@ -555,7 +570,16 @@ async function registerDevice(){
     else toast('Registration failed: '+((v&&v.error)||'unknown'));
   }catch(e){ toast('Registration cancelled'); }
 }
-async function stepUp(){   // returns a one-time step-up token, or null
+async function stepUp(){   // biometric on a phone, PIN on desktop — either satisfies the same server gate
+  if(biometricReg && window.PublicKeyCredential){
+    let plat=false; try{ plat=await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }catch(e){}
+    if(plat){ const t=await _stepUpBiometric(); if(t) return t; }   // success; else fall through to PIN
+  }
+  if(pinSet) return await _stepUpPin();
+  if(biometricReg) return await _stepUpBiometric();                 // no PIN set: last resort (may show a QR)
+  return null;
+}
+async function _stepUpBiometric(){   // returns a one-time step-up token, or null
   try{
     const o=await api('/api/webauthn/auth/options',{method:'POST'});
     o.challenge=_b64uToBuf(o.challenge);
@@ -1062,7 +1086,7 @@ async function renderInbox(v){
   if(inboxView==='history') return renderInboxHistory(v);
   v.innerHTML=`<div class="ibhead"><div class="h" style="margin:0">Needs your yes</div>
     <button class="btn sm" onclick="setInbox('history')">${ic('pulse',15)} History</button></div>
-    ${(!biometricReg&&!demo)?`<div class="banner" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>${ic('lock',15)} Secure public actions (email, newsletters, publishing) with your fingerprint.</span><button class="btn sm go" onclick="registerDevice()">Register this device</button></div>`:''}
+    ${(!demo && !(biometricReg&&pinSet))?`<div class="banner" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>${ic('lock',15)} Secure public actions (email, newsletters, publishing) ${biometricReg?'(fingerprint set)':''}${pinSet?'(PIN set)':''}</span><span style="display:flex;gap:6px;flex:none">${!biometricReg?`<button class="btn sm go" onclick="registerDevice()">Register fingerprint</button>`:''}${!pinSet?`<button class="btn sm" onclick="setPin()">Set a PIN</button>`:''}</span></div>`:''}
     <div id="ib" class="empty">Loading…</div>`;
   const fco=document.getElementById('coSel').value;
   let items;
