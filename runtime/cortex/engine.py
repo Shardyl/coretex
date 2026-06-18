@@ -890,21 +890,22 @@ def poll_inquiries() -> dict:
     return poll_inquiries_window(days=2)
 
 
-def triage_inquiry(inq: dict) -> dict:
+def triage_inquiry(inq: dict, company_slug: str = "tabscanner") -> dict:
     """Decide if an enquiry is a genuine potential customer/partner worth a reply, or junk (spam, bots,
-    gibberish, off-topic). The form gets a lot of spam — only genuine enquiries get a draft + a CRM contact."""
+    gibberish, off-topic, SEO/link-building pitches). Company-aware: each brand triages in its own context."""
+    co = store.get_company_by_slug(company_slug)
+    ctx = worker._company_context(co) if co else "Tabscanner, a receipt-OCR / data-extraction API."
     try:
         out = provider.think_json(
-            "You triage inbound website enquiries for Tabscanner, a receipt-OCR / data-extraction API for "
-            "developers and businesses (expense, loyalty, fintech, market research). Decide if an enquiry is "
-            "a GENUINE potential customer, partner, or support contact worth a human reply, or JUNK. Be "
-            "strict: random/gibberish sender addresses, mismatched names, off-topic messages (e.g. sports, "
-            "unrelated products), SEO/marketing/link-building solicitations, and obvious bot spam are JUNK.",
+            "You triage inbound website enquiries for this company.\n" + ctx + "\n\n"
+            "Decide if an enquiry is a GENUINE potential customer, partner, or support contact worth a human "
+            "reply, or JUNK. Be strict: random/gibberish sender addresses, mismatched names, off-topic "
+            "messages, SEO / marketing / link-building / web-design solicitations, and obvious bot spam are JUNK.",
             f"From: {inq.get('name')} <{inq.get('email')}>\nSubject: {inq.get('subject')}\n"
             f"Message:\n{(inq.get('message') or inq.get('snippet') or '').strip()}\n\n"
             'Return JSON: {"genuine": boolean, "category": "lead|partner|support|spam|offtopic|unclear", '
             '"reason": "short phrase"}',
-            model=provider.MODEL_ROUTER, purpose="triage", company="tabscanner")
+            model=provider.MODEL_ROUTER, purpose="triage", company=company_slug)
         return {"genuine": bool(out.get("genuine")), "category": out.get("category") or "unclear",
                 "reason": (out.get("reason") or "").strip()}
     except Exception:  # noqa: BLE001
@@ -955,6 +956,80 @@ def poll_inquiries_window(days: int = 2) -> dict:
                 + (f" ({filtered} spam filtered out)" if filtered else "")
                 + f" — drafting {'replies' if made > 1 else 'a reply'} for your approval.")
     return {"made": made, "filtered": filtered}
+
+
+# ---------- generic contact-form intake (per-company, config-driven) ----------
+# Some brands' website contact forms only EMAIL the catch-all inbox (no webhook). This reads those
+# notification emails, parses the lead, triages spam, and routes genuine ones -> CRM + a drafted reply,
+# exactly like Tabscanner's enquiry flow. Add a brand by adding a line to FORM_INTAKE.
+FORM_INTAKE = {
+    "snaprewards": {"rt_key": "gmail_refresh_token:snaprewards", "client": "snaprewards",
+                    "subject": "Site contact form", "skill": "sales-first-response"},
+}
+
+
+def _form_field(body: str, label: str) -> str:
+    m = re.search(rf"^\s*{label}\s*:\s*(.+)$", body, re.I | re.M)
+    return m.group(1).strip() if m else ""
+
+
+def _parse_form_email(e: dict) -> dict:
+    """Pull the lead out of a 'Name:/Email:/Phone:/Message:' contact-form notification email."""
+    body = e.get("body") or e.get("snippet") or ""
+    m = re.search(r"(?is)\bMessage\s*:\s*(.+?)(?:\n--\s|\Z)", body)
+    return {"gmail_id": e.get("gmail_id"), "name": _form_field(body, "Name") or e.get("name"),
+            "email": _form_field(body, "Email"), "phone": _form_field(body, "Phone"),
+            "subject": e.get("subject"), "message": (m.group(1).strip() if m else body.strip())}
+
+
+def _poll_one_form(slug: str, cfg: dict, days: int = 3) -> dict:
+    co = store.get_company_by_slug(slug)
+    skill = store.get_skill_by_key(co["id"], cfg.get("skill", "sales-first-response")) if co else None
+    if not (co and skill):
+        return {"reason": "company/skill missing"}
+    key = f"form_processed:{slug}"
+    seen = set(db.setting_get(key) or [])
+    emails = gmail.list_recent(days=days, limit=30, rt_key=cfg["rt_key"], company=cfg.get("client"),
+                               q=f'subject:"{cfg["subject"]}"', skip=seen)
+    made = filtered = 0
+    for e in emails:
+        gid = e.get("gmail_id")
+        if not gid or gid in seen:
+            continue
+        seen.add(gid)
+        inq = _parse_form_email(e)
+        if not inq.get("email"):     # couldn't parse a lead email -> skip
+            continue
+        if not triage_inquiry(inq, slug)["genuine"]:   # spam (e.g. SEO pitch) -> filed, no CRM, no draft
+            filtered += 1
+            continue
+        try:
+            crm.add_inquiry(inq, slug)
+        except Exception:  # noqa: BLE001
+            pass
+        store.create_task(co["id"], skill["id"], "email_reply", {"brief": _email_brief(inq), "inquiry": inq})
+        made += 1
+        if made >= 10:
+            break
+    db.setting_set(key, list(seen)[-1000:])
+    if made:
+        tg.send(f"{made} genuine {co['name']} contact-form enquir{'ies' if made > 1 else 'y'}"
+                + (f" ({filtered} spam filtered)" if filtered else "") + " — drafting for your approval.")
+    return {"made": made, "filtered": filtered}
+
+
+def poll_company_forms() -> dict:
+    """Read every configured + connected company's contact-form emails; route genuine leads to a drafted
+    reply in the Inbox, filter spam. Runs on the 60s loop alongside the catch-all classifier."""
+    out = {}
+    for slug, cfg in FORM_INTAKE.items():
+        if not db.setting_get(cfg["rt_key"]):
+            continue
+        try:
+            out[slug] = _poll_one_form(slug, cfg)
+        except Exception as ex:  # noqa: BLE001
+            tg.send(f"(form intake hiccup [{slug}]: {ex})")
+    return out
 
 
 # ---------- inbox classifier (the sales-triage universal skill, on Haiku) ----------
@@ -1249,6 +1324,10 @@ def run(poll_idle: float = 1.0) -> None:
                 poll_all_inboxes()  # classify + CRM-route EVERY connected inbox (data-driven registry)
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(inbox classify hiccup: {e})")
+            try:
+                poll_company_forms()  # per-company contact-form intake -> triage -> CRM + drafted reply
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(form intake hiccup: {e})")
             try:
                 reminders.fire_due()    # fire due reminders -> nudge notification or spawn an action task
             except Exception as e:  # noqa: BLE001
