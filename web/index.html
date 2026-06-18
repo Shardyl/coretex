@@ -1166,11 +1166,23 @@ function renderSeg(resp){
   el.innerHTML=segs.map(s=>`<button class="cseg ${inboxSeg===s[0]?'on':''}" onclick="setSeg('${s[0]}')">${s[1]}${s[2]?' '+s[2]:''}</button>`).join('');
 }
 function infoCard(t){
+  const items=t.items||[], grouped=items.length>1;
   const cnt=t.count>1?` <span class="chip">×${t.count}</span>`:'';
+  const coChip=t.company?`<span class="chip cy">${esc(t.company)}</span>`:'';
+  const title=grouped?`${t.count} new contacts captured`:(t.title||'');
+  const did='nd'+t.id;
+  const details=grouped?`
+    <div class="row" style="margin-top:7px"><button class="btn sm" onclick="document.getElementById('${did}').classList.toggle('hidden')">${ic('grid',14)} Show the ${items.length}</button></div>
+    <div id="${did}" class="hidden" style="margin-top:8px;display:flex;flex-direction:column;gap:7px">
+      ${items.slice().reverse().map(it=>`<div style="display:flex;align-items:center;gap:8px;font-size:13px">
+        <span class="chip" style="opacity:.85">${esc(it.cat||'')}</span>
+        <span style="flex:1;min-width:0"><b>${esc(it.name||it.email||'')}</b>${(it.email&&it.name)?` <span style="color:var(--mut)">${esc(it.email)}</span>`:''}</span></div>`).join('')}
+    </div>`:'';
   return `<div class="card" id="n${t.id}" style="border-left:3px solid var(--accent)">
-    <div class="meta"><span class="chip">${esc(t.category||'update')}</span>${cnt}<span style="margin-left:auto;color:var(--mut)">${timeTag(t.ts)}</span></div>
-    <div class="title" style="font-size:15px">${esc(t.title||'')}</div>
-    ${t.body?`<div class="csub">${esc(t.body)}</div>`:''}
+    <div class="meta">${coChip}<span class="chip">${esc(t.category||'update')}</span>${cnt}<span style="margin-left:auto;color:var(--mut)">${timeTag(t.ts)}</span></div>
+    <div class="title" style="font-size:15px">${esc(title)}</div>
+    ${(t.body&&!grouped)?`<div class="csub">${esc(t.body)}</div>`:''}
+    ${details}
     <div class="row" style="margin-top:8px">
       <button class="btn sm" onclick="notifAct(${t.id},'dismiss')">Dismiss</button>
       <button class="btn sm" onclick="notifAct(${t.id},'snooze')">Snooze 1h</button></div></div>`;

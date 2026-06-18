@@ -166,9 +166,12 @@ def add_inbound_contact(reg: dict, company: str, classification: str, stage: str
          not newsletter, "New", stage, Json([ev])))
     try:    # grouped FYI info-card in the Inbox (one rolling card per company until dismissed)
         from . import notifications
+        cid_row = db.one("select id from companies where slug=%s", (company,))
         notifications.notify(f"New {classification} captured", f"{name or email} → {org}",
                              priority="fyi", category="lead", dedup_key=f"lead:{org}",
-                             target_type="contact", target_id=email)
+                             company_id=(cid_row["id"] if cid_row else None),
+                             target_type="contact", target_id=email,
+                             item={"name": name or email, "email": email, "cat": classification})
     except Exception:  # noqa: BLE001
         pass
     return ("added", email)

@@ -289,6 +289,7 @@ def _info_card(n: dict) -> dict:
     """A notification rendered as an Inbox INFO card (swipe-to-dismiss)."""
     return {"card": "info", "id": n["id"], "title": n["title"], "body": n.get("body"),
             "category": n["category"], "priority": n["priority"], "count": n.get("count", 1),
+            "items": n.get("items") or [], "company": ((store.get_company(n["company_id"]) or {}).get("name", "") if n.get("company_id") else ""),
             "target_type": n.get("target_type"), "target_id": n.get("target_id"),
             "state": n["state"], "ts": n.get("fired_at")}
 

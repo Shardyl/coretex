@@ -11,6 +11,8 @@ with open tasks (action cards).
 """
 from __future__ import annotations
 
+from psycopg.types.json import Json
+
 from . import db
 from .integrations import telegram as tg
 
@@ -55,9 +57,10 @@ def _push(notif: dict) -> bool:
 
 def notify(title: str, body: str = "", *, priority: str = "normal", category: str = "system",
            company_id: int | None = None, target_type: str | None = None, target_id=None,
-           dedup_key: str | None = None) -> dict:
+           dedup_key: str | None = None, item: dict | None = None) -> dict:
     """Create + route ONE notification. If `dedup_key` matches an existing UNREAD row, coalesce into it
-    (bumps count + refreshes title/body/time) instead of adding another — this is the FYI grouping."""
+    (bumps count + refreshes title/body/time) instead of adding another — this is the FYI grouping. `item`
+    (a small dict, e.g. a captured contact) is accumulated into the row's `items` so the card can expand."""
     ensure_schema()
     priority = priority if priority in PRIORITIES else "normal"
     tid = target_id if target_id is None else str(target_id)
@@ -66,15 +69,19 @@ def notify(title: str, body: str = "", *, priority: str = "normal", category: st
         existing = db.one("select * from notifications where dedup_key=%s and state='unread' "
                           "order by id desc limit 1", (dedup_key,))
         if existing:
-            row = db.execute("update notifications set count=count+1, title=%s, body=%s, fired_at=now() "
-                             "where id=%s returning *", (title, body, existing["id"]))
+            items = (existing.get("items") or [])
+            if item:
+                items = (items + [item])[-50:]   # keep the most recent 50 in one rolling card
+            row = db.execute("update notifications set count=count+1, title=%s, body=%s, items=%s::jsonb, "
+                             "fired_at=now() where id=%s returning *",
+                             (title, body, Json(items), existing["id"]))
             _route(row, priority)
             return row
 
     row = db.execute(
-        "insert into notifications (title, body, priority, category, company_id, target_type, target_id, dedup_key) "
-        "values (%s,%s,%s,%s,%s,%s,%s,%s) returning *",
-        (title, body, priority, category, company_id, target_type, tid, dedup_key))
+        "insert into notifications (title, body, priority, category, company_id, target_type, target_id, "
+        "dedup_key, items) values (%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *",
+        (title, body, priority, category, company_id, target_type, tid, dedup_key, Json([item] if item else [])))
     _route(row, priority)
     return row
 
