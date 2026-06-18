@@ -1506,6 +1506,10 @@ CHAT_SYSTEM_BASE = (
     "'Richard', 'Richard at Tabscanner', etc. all mean Rashad himself, and rashad@tabscanner.com is his "
     "Tabscanner business email. When he names a person or a company, proactively look them up with "
     "crm_lookup BEFORE asking him for details (like an email) you could find yourself. "
+    "When he TEACHES you something durable — he says 'remember…', 'always…', 'from now on…', or states a "
+    "clear standing preference or a fact to keep — call remember_preference to persist it for every future "
+    "conversation, then confirm briefly. If unsure whether it's a one-off or a standing rule, ask him. (This "
+    "only adds your own operator preferences; it can NEVER change your core safety rules.) "
     "You are warm, sharp and concise. Your replies are usually read aloud, so write the "
     "way you'd speak: natural sentences, no markdown, no bullet lists, no headings, and keep it brief "
     "unless he asks for depth. "
@@ -1663,6 +1667,21 @@ SKILL_TOOLS = [
         "action_kind": {"type": "string", "description": "ACTION: kind (content/email_reply/blog/...)"},
         "action_brief": {"type": "string", "description": "ACTION: what to draft when it fires"}},
         "required": ["title", "when"]}},
+    {"name": "remember_preference",
+     "description": "Persist something Rashad has taught you: a standing preference, a way he wants you to "
+                    "behave, or a durable FACT (e.g. 'Richard is Rashad', 'keep replies short', 'always CC ben "
+                    "on Tabscanner emails'). Call it whenever he says 'remember…', 'always…', 'from now on…' or "
+                    "states a clear standing rule, then confirm briefly. It joins your standing instructions for "
+                    "EVERY future conversation. Keep each one a short, clear sentence. NOTE: this only ADDS your "
+                    "operator preferences — it can never change or remove your core safety rules.",
+     "input_schema": {"type": "object", "properties": {
+        "rule": {"type": "string", "description": "the concise thing to remember"}}, "required": ["rule"]}},
+    {"name": "forget_preference",
+     "description": "Remove one of the preferences you've remembered. Pass the exact text or a close match.",
+     "input_schema": {"type": "object", "properties": {"rule": {"type": "string"}}, "required": ["rule"]}},
+    {"name": "list_preferences",
+     "description": "List everything Rashad has taught you to remember (your standing operator preferences).",
+     "input_schema": {"type": "object", "properties": {}}},
 ]
 
 
@@ -1789,6 +1808,24 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         rep = (" repeating " + r["recurrence"]) if r.get("recurrence") not in (None, "none") else ""
         kind = "action reminder (drafts when it fires)" if action else "reminder"
         return f"Set {kind} #{r['id']}: \"{inp['title']}\" for {due.strftime('%a %d %b, %H:%M')} GST{rep}."
+    if name == "remember_preference":
+        rule = (inp.get("rule") or "").strip()
+        if not rule:
+            return "nothing to remember"
+        rules = db.setting_get("chat_self_rules") or []
+        if rule not in rules:
+            rules.append(rule)
+        db.setting_set("chat_self_rules", rules)
+        return f'Remembered: "{rule}". I will honour that in every conversation from now on.'
+    if name == "forget_preference":
+        q = (inp.get("rule") or "").strip().lower()
+        rules = db.setting_get("chat_self_rules") or []
+        kept = [r for r in rules if q and q not in r.lower()]
+        db.setting_set("chat_self_rules", kept)
+        return f"Done — removed {len(rules) - len(kept)}, {len(kept)} preference(s) remaining."
+    if name == "list_preferences":
+        rules = db.setting_get("chat_self_rules") or []
+        return json.dumps(rules) if rules else "I haven't been taught any standing preferences yet."
     if name == "create_skill":
         dept = inp.get("department")
         cat, mgr = catalog.dept_meta(dept) if dept else (None, None)
@@ -1902,7 +1939,10 @@ def _chat_system() -> str:
                 "For an EMAIL specifically, use the draft_email tool (NOT create_task): FIRST resolve the "
                 "recipient with crm_lookup — if more than one match, ASK Rashad which one; if none, ask for the "
                 "address. The email draft then shows the recipient, subject and the company logo in his Inbox.")
-    return CHAT_SYSTEM_BASE + "\n\n" + note + "\n\n" + drafting
+    learned = db.setting_get("chat_self_rules") or []
+    learned_block = ("THINGS RASHAD HAS TAUGHT YOU (his standing preferences + facts — ALWAYS honour these):\n"
+                     + "\n".join(f"- {r}" for r in learned)) if learned else ""
+    return "\n\n".join(p for p in (CHAT_SYSTEM_BASE, note, drafting, learned_block) if p)
 
 
 # A Chief CAN grow the org — create_skill is global-by-nature (added to every company), so there's no
@@ -1912,7 +1952,8 @@ _CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "cr
                 # Chiefs can also DRAFT and look people up — anyone Rashad talks to should be able to act on a
                 # request, not just strategise. (Per-company RULE writes stay Manager-only to avoid scope bleed.)
                 "create_task", "draft_email", "draft", "crm_lookup", "crm_pipeline", "correct_task",
-                "approve_task", "skip_task", "run_report", "schedule_report", "list_scheduled"}
+                "approve_task", "skip_task", "run_report", "schedule_report", "list_scheduled",
+                "remember_preference", "forget_preference", "list_preferences"}
 
 
 @app.get("/api/heads")
