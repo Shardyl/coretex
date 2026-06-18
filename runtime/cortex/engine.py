@@ -20,6 +20,7 @@ import re
 import secrets
 import threading
 import time
+from datetime import datetime
 
 from psycopg.types.json import Json
 
@@ -385,6 +386,9 @@ def _run_task(task: dict) -> None:
         store.update_task(task["id"], status="drafting")
         _run_report_task(task)
         return
+    if task["kind"] == "newsletter_scheduled":   # a scheduled newsletter's 1st-of-month arrived
+        _run_newsletter_scheduled_task(task, skill, company)
+        return
     if not skill:   # e.g. an action reminder pointed at a skill that doesn't exist — fail cleanly
         store.update_task(task["id"], status="failed",
                           manager={"summary": "No valid skill assigned — nothing drafted.", "aligned": False})
@@ -702,7 +706,7 @@ def approve_task(task_id: int, stepup_token: str | None = None) -> dict:
         action = "schedule" if task["kind"] == "newsletter_review" else "send"
         info = {"ok": False, "needs_confirm": True, "recipients": n, "company": company["name"], "action": action}
         if action == "schedule":
-            info["date"] = schedule.next_monthly_slot(company["slug"]).strftime("%-d %b %Y")
+            info["date"] = _next_newsletter_slot(company["id"]).strftime("%-d %b %Y")
         return info
     gate = _biometric_gate(task["kind"] in _APPROVE_PUBLIC, stepup_token)
     if gate:
@@ -734,12 +738,29 @@ def confirm_send_task(task_id: int, count: int, stepup_token: str | None = None)
     return _dispatch_newsletter(task, skill, company, art, n)
 
 
+def _next_newsletter_slot(company_id: int, hour: int = 9) -> datetime:
+    """Next free 1st-of-month for a company's scheduled newsletters, on the UNIFIED tasks table: if one is
+    already scheduled, take the 1st of the month after its latest; else the next upcoming 1st (so issues stack
+    one per month)."""
+    now = datetime.now(schedule._GST)
+    row = db.one("select run_at from tasks where company_id=%s and kind='newsletter_scheduled' "
+                 "and schedule_kind='once' and status='scheduled' and run_at is not null "
+                 "order by run_at desc limit 1", (company_id,))
+    if row and row["run_at"] and row["run_at"] > now:
+        return schedule.first_of_next_month(row["run_at"], hour)
+    first_this = now.replace(day=1, hour=hour, minute=0, second=0, microsecond=0)
+    return first_this if first_this > now else schedule.first_of_next_month(now, hour)
+
+
 def _schedule_newsletter(task, skill, company, art, n) -> dict:
-    """Stage 2 confirm: put the approved issue on the calendar for the next free 1st-of-month."""
-    slot = schedule.next_monthly_slot(company["slug"])
-    schedule.create_once(company["slug"], "newsletter", art["subject"], slot,
-                         config={"subject": art["subject"], "html": art["html"], "text": art["text"],
-                                 "hero_b64": art.get("hero_b64"), "review_task_id": task["id"]})
+    """Stage 2 confirm: put the approved issue on the calendar as a one-off task for the next free 1st-of-month."""
+    slot = _next_newsletter_slot(company["id"])
+    t = db.execute(
+        "insert into tasks (company_id,skill_id,kind,request,status,origin,title,schedule_kind,run_at,enabled) "
+        "values (%s,%s,'newsletter_scheduled',%s,'scheduled','calendar',%s,'once',%s,true) returning *",
+        (company["id"], skill["id"], Json({"subject": art["subject"], "review_task_id": task["id"]}),
+         art["subject"], slot))
+    db.setting_set(f"newsletter:{t['id']}", art)   # the built issue, keyed by the NEW scheduled task
     store.update_task(task["id"], status="done")
     store.log_decision(task["id"], skill["id"], "owner", "newsletter_scheduled",
                        note=art["subject"], snapshot={"when": slot.isoformat(), "recipients": n})
@@ -1071,7 +1092,7 @@ def _generate_seo_report(company: str, days: int = 28) -> dict:
 
 
 def deliver_seo_report(company: str, days: int = 28) -> dict:
-    """Legacy path (scheduled_tasks): generate the report and drop a fresh card into the Cortex Inbox."""
+    """One-off path (manual 'generate now' / Talk run_report): generate the report and drop a fresh card."""
     g = _generate_seo_report(company, days)
     return db.execute(
         "insert into tasks (company_id,skill_id,kind,request,draft,status) "
@@ -1089,50 +1110,29 @@ def _run_report_task(task: dict) -> None:
                       request=g["request"], draft=g["summary"], status="awaiting_approval")
 
 
-def _execute_scheduled(t: dict) -> None:
-    if t["kind"] == "seo_report":
-        deliver_seo_report(t["company"] or "tabscanner", (t.get("config") or {}).get("days", 28))
-    elif t["kind"] == "newsletter":
-        _fire_scheduled_newsletter(t)
-    else:
-        raise ValueError(f"unknown scheduled kind {t['kind']}")
-
-
-def _fire_scheduled_newsletter(t: dict) -> None:
-    """A scheduled newsletter's 1st-of-month arrived. If the company is on AUTO, drip it out now; else drop
-    a Stage-3 'confirm to send' card in the Inbox (the operator types the count to fire it)."""
-    company = store.get_company_by_slug(t["company"])
-    if not company:
+def _run_newsletter_scheduled_task(task: dict, skill: dict | None, company: dict | None) -> None:
+    """A scheduled newsletter's 1st-of-month arrived (this one-off task was promoted to 'new'). If the company
+    is on AUTO, drip it out now; else turn THIS task into the Stage-3 'confirm to send' card in the Inbox."""
+    company = company or store.get_company(task["company_id"])
+    cid = task["company_id"]
+    art = db.setting_get(f"newsletter:{task['id']}")
+    if not art:
+        store.update_task(task["id"], status="failed", last_status="no built newsletter found")
         return
-    cid = company["id"]
-    cfg = t.get("config") or {}
-    art = {"subject": cfg.get("subject"), "html": cfg.get("html"),
-           "text": cfg.get("text"), "hero_b64": cfg.get("hero_b64")}
-    skill = store.get_skill_by_key(cid, "content-newsletter")
     if db.setting_get(f"nl_auto:{cid}"):
         recips = newsletter.recipients(cid)
         per_hour = int(db.setting_get("newsletter_per_hour") or newsletter.DEFAULT_PER_HOUR)
-        newsletter.enqueue_send(cid, None, art, recips, per_hour)
+        newsletter.enqueue_send(cid, task["id"], art, recips, per_hour)
+        store.update_task(task["id"], kind="newsletter_send", schedule_kind=None, run_at=None,
+                          status="done", last_status="auto-sent")
         tg.send(f"📤 Auto-sending {company['name']} newsletter '{art['subject']}' to {len(recips):,} "
                 f"contacts (drip {per_hour}/hr).")
         return
     n = len(newsletter.recipients(cid))
-    card = store.create_task(cid, skill["id"], "newsletter_send",
-                             {"title": f"Send today: {art['subject']}", "subject": art["subject"]})
-    store.update_task(card["id"], draft=f"Subject: {art['subject']}\n\nScheduled for today. Confirm to send "
-                      f"to the full {company['name']} list ({n:,} contacts).", status="awaiting_approval")
-    db.setting_set(f"newsletter:{card['id']}", art)
+    store.update_task(task["id"], kind="newsletter_send", schedule_kind=None, run_at=None,
+                      draft=f"Subject: {art['subject']}\n\nScheduled for today. Confirm to send to the full "
+                            f"{company['name']} list ({n:,} contacts).", status="awaiting_approval")
     tg.send(f"🗓 {company['name']} newsletter due today: '{art['subject']}'. Confirm the send in your Inbox.")
-
-
-def run_due_tasks() -> None:
-    for t in schedule.due():
-        try:
-            _execute_scheduled(t)
-            schedule.mark_ran(t, "ok")
-        except Exception as e:  # noqa: BLE001
-            schedule.mark_ran(t, f"error: {e}")
-            tg.send(f"(scheduled task '{t.get('title')}' failed: {e})")
 
 
 # ---------- Phase 3: the unified clock (scheduled tasks live in `tasks`, not scheduled_tasks) ----------
@@ -1221,13 +1221,9 @@ def run(poll_idle: float = 1.0) -> None:
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(reminder fire hiccup: {e})")
             try:
-                promote_due_tasks()   # unified clock (tasks-table scheduled work); runs beside the legacy one
+                promote_due_tasks()   # the one unified clock — recurring templates + one-off scheduled tasks
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(promote hiccup: {e})")
-            try:
-                run_due_tasks()
-            except Exception as e:  # noqa: BLE001
-                tg.send(f"(scheduler hiccup: {e})")
             try:
                 drain_newsletter_sends()
             except Exception as e:  # noqa: BLE001

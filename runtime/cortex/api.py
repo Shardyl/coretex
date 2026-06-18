@@ -443,15 +443,11 @@ def push_unsubscribe(body: PushUnsub, _: None = Depends(auth)) -> dict:
     return push.unsubscribe(body.endpoint)
 
 
-# ---------- calendar / scheduled tasks ----------
+# ---------- calendar (unified tasks timeline) ----------
+# Scheduling lives entirely in `tasks` now (Phase 3). The cockpit uses /api/calendar below; the old
+# /api/schedule (scheduled_tasks) endpoints are retired.
 
 KINDS = {"seo_report": "SEO & Traffic report"}
-
-
-@app.get("/api/schedule")
-def schedule_list(company: str | None = None, _: None = Depends(auth)) -> dict:
-    rows = schedule.listing(company)
-    return {"tasks": rows, "kinds": KINDS, "companies": seo_report.available()}
 
 
 class ScheduleBody(BaseModel):
@@ -460,45 +456,9 @@ class ScheduleBody(BaseModel):
     title: str | None = None
     cadence: str = "weekly"     # daily | weekly | monthly
     weekday: int = 0            # 0=Mon .. 6=Sun
-    hour: int = 8
+    hour: int = 12
     minute: int = 0
     days: int = 28             # report look-back window
-
-
-@app.post("/api/schedule")
-def schedule_create(body: ScheduleBody, _: None = Depends(auth)) -> dict:
-    if body.kind not in KINDS:
-        raise HTTPException(status_code=400, detail=f"unknown kind {body.kind}")
-    label = seo_report.available().get(body.company, body.company)
-    title = body.title or f"{label} — {KINDS[body.kind]}"
-    t = schedule.create(body.company, body.kind, title, cadence=body.cadence, weekday=body.weekday,
-                        hour=body.hour, minute=body.minute, config={"days": body.days})
-    return {"ok": True, "task": t}
-
-
-@app.post("/api/schedule/{tid}/toggle")
-def schedule_toggle(tid: int, _: None = Depends(auth)) -> dict:
-    cur = db.one("select enabled from scheduled_tasks where id=%s", (tid,))
-    if not cur:
-        raise HTTPException(status_code=404, detail="not found")
-    return {"ok": True, "task": schedule.toggle(tid, not cur["enabled"])}
-
-
-@app.delete("/api/schedule/{tid}")
-def schedule_delete(tid: int, _: None = Depends(auth)) -> dict:
-    schedule.delete(tid)
-    return {"ok": True}
-
-
-@app.post("/api/schedule/{tid}/run")
-def schedule_run_now(tid: int, _: None = Depends(auth)) -> dict:
-    """Run a scheduled task right now (drops the result straight into the Inbox)."""
-    t = db.one("select * from scheduled_tasks where id=%s", (tid,))
-    if not t:
-        raise HTTPException(status_code=404, detail="not found")
-    engine._execute_scheduled(t)
-    schedule.mark_ran(t, "ok (manual)")
-    return {"ok": True}
 
 
 # ---------- unified Calendar (Phase 3.5): ONE timeline over the tasks table ----------
@@ -1883,15 +1843,28 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
                 + (f" for {inp['company']}" if inp.get("company") else ""))
     if name == "schedule_report":
         slug = inp.get("company", "tabscanner")
+        co = store.get_company_by_slug(slug)
+        if not co:
+            return f"unknown company {slug}"
+        skill = store.get_skill_by_key(co["id"], engine.REPORT_SKILL_KEY)
         label = seo_report.available().get(slug, slug)
-        t = schedule.create(slug, "seo_report", f"{label} — SEO & Traffic report", cadence=inp.get("cadence", "weekly"),
-                            weekday=int(inp.get("weekday", 0)), hour=int(inp.get("hour", 8)), minute=0, config={"days": 28})
-        return f"scheduled the {label} SEO report {inp.get('cadence', 'weekly')}; next run {t['next_run']}"
+        cadence, weekday, hour = inp.get("cadence", "weekly"), int(inp.get("weekday", 0)), int(inp.get("hour", 12))
+        nr = schedule.next_run(cadence, weekday, hour, 0)
+        t = db.execute(
+            "insert into tasks (company_id,skill_id,kind,request,status,origin,title,schedule_kind,cadence,"
+            "weekday,hour,minute,next_run,enabled) values (%s,%s,'seo_report',%s,'scheduled','talk',%s,"
+            "'recurring',%s,%s,0,%s,true) returning *",
+            (co["id"], skill["id"] if skill else None, Json({"kind": "seo_report", "company": slug, "days": 28}),
+             f"{label} — SEO & Traffic report", cadence, weekday, hour, nr))
+        return f"scheduled the {label} SEO report {cadence}; next run {t['next_run']}"
     if name == "run_report":
         t = engine.deliver_seo_report(inp.get("company", "tabscanner"), days=28)
         return f"generated the report — it's in your Inbox now (task #{t['id']})"
     if name == "list_scheduled":
-        rows = schedule.listing(inp.get("company"))
+        co = store.get_company_by_slug(inp["company"]) if inp.get("company") else None
+        flt, p = (" and company_id=%s", (co["id"],)) if co else ("", ())
+        rows = db.query("select title,cadence,next_run,enabled from tasks where schedule_kind='recurring'"
+                        + flt + " order by next_run nulls last", p)
         return json.dumps([{"title": r["title"], "cadence": r["cadence"], "next_run": str(r["next_run"]),
                             "enabled": r["enabled"]} for r in rows]) or "no scheduled tasks"
     if name == "set_reminder":
