@@ -1523,7 +1523,7 @@ function speakCard(id){ const c=document.getElementById('t'+id); if(!c) return;
 
 // ---- chat: talk to Cortex (text + hands-free Free mode) ----
 let chatMsgs=[], freeOn=false, freeUtt='', freeLive='', botSpeaking=false, freeThinking=false, freeTimer=null, bargeInterrupted=false;
-let convs=[], currentConvId=(localStorage.getItem('cortex_conv')||null), currentConvTitle='', routedTo='';
+let convs=[], currentConvId=(localStorage.getItem('cortex_conv')||null), currentConvTitle='', routedTo='', routedLabel='';
 const TURN_SILENCE=1500;  // ms of no new words before Cortex takes its turn
 function armTurn(){
   clearTimeout(freeTimer);
@@ -1603,7 +1603,9 @@ async function fillPersonaSel(){
   sel.innerHTML=html; sel.value=talkingTo; setAutoLbl();
 }
 function setAutoLbl(){ const lbl=document.getElementById('autoLbl'); if(!lbl) return;
-  lbl.textContent = talkingTo ? ('Pinned · '+(headsLabel(talkingTo)||talkingTo)) : 'Auto · routes to the right head'; }
+  if(talkingTo){ lbl.textContent='Pinned · '+(headsLabel(talkingTo)||talkingTo); return; }
+  // auto mode: once the conversation has been routed, show WHO it's with (else the generic hint)
+  lbl.textContent = routedLabel ? ('Auto · '+routedLabel) : 'Auto · routes to the right head'; }
 function setTalkingTo(v){ talkingTo=v||''; localStorage.setItem('cortex_persona',talkingTo); setAutoLbl(); }
 function whoIcon(pk){ pk=pk||''; return ic(pk.indexOf('chief:')===0?'compass':(pk.indexOf('manager:')===0?'tool':'chat'),13); }
 
@@ -1695,13 +1697,13 @@ async function openConv(id){
   if(!id){ newConv(); return; }
   if(demo) return;
   try{ const c=await api('/api/conversations/'+id); chatMsgs=c.messages||[]; currentConvId=String(c.id);
-    currentConvTitle=c.title||''; routedTo='';
+    currentConvTitle=c.title||''; routedTo=''; routedLabel='';
     // resume sticky routing from the last assistant in this chat
-    for(let i=chatMsgs.length-1;i>=0;i--){ if(chatMsgs[i].role==='assistant'){ routedTo=chatMsgs[i].pk||''; break; } }
-    localStorage.setItem('cortex_conv',currentConvId); paintChat(); fillConvSel(convs); }
+    for(let i=chatMsgs.length-1;i>=0;i--){ if(chatMsgs[i].role==='assistant'){ routedTo=chatMsgs[i].pk||''; routedLabel=chatMsgs[i].who||''; break; } }
+    localStorage.setItem('cortex_conv',currentConvId); paintChat(); setAutoLbl(); fillConvSel(convs); }
   catch(e){ currentConvId=null; localStorage.removeItem('cortex_conv'); newConv(); }
 }
-function newConv(){ chatMsgs=[]; currentConvId=null; currentConvTitle=''; routedTo=''; localStorage.removeItem('cortex_conv'); paintChat(); fillConvSel(convs); }
+function newConv(){ chatMsgs=[]; currentConvId=null; currentConvTitle=''; routedTo=''; routedLabel=''; localStorage.removeItem('cortex_conv'); paintChat(); setAutoLbl(); fillConvSel(convs); }
 async function saveConv(){
   if(demo || !chatMsgs.length) return;
   try{
@@ -1746,7 +1748,8 @@ async function sendChat(text, viaVoice){
     const reply=d.reply||'(no reply)';
     const pk=talkingTo||d.persona||'';
     if(!talkingTo) routedTo=d.persona||'';     // remember who the concierge routed to
-    chatMsgs[chatMsgs.length-1]={role:'assistant',content:reply,who:d.persona_label||'Cortex',pk}; paintChat();
+    routedLabel=d.persona_label||'Cortex';     // ...and surface it in the header pill
+    chatMsgs[chatMsgs.length-1]={role:'assistant',content:reply,who:d.persona_label||'Cortex',pk}; paintChat(); setAutoLbl();
     saveConv();
     if(viaVoice && reply) await speakAndWait(reply);
     return reply;
