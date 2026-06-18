@@ -466,6 +466,7 @@ async function boot(){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t==='talk'));
   render();
   refreshBadge(); if(!window._badgeTimer) window._badgeTimer=setInterval(refreshBadge,90000);
+  if(!window._spendTimer) window._spendTimer=setInterval(updateSpendChip,180000);  // every 3 min — DB-only read, no LLM cost
 }
 async function refreshBadge(){
   if(demo) return;
