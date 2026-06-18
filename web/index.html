@@ -1218,7 +1218,7 @@ function actionCard(t){
       ${attachmentStrip(t)}
       <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">${ic('volume',16)} Read aloud</button></div>
       <div class="row">
-        <button class="btn go" onclick="act(${t.id},'approve')">Approve</button>
+        <button class="btn go" onclick="act(${t.id},'approve')">${isEmail?'Approve &amp; send':'Approve'}</button>
         <button class="btn warn" id="cm${t.id}" onclick="voiceCorrect(${t.id},this)">${ic('mic',16)} Tap to talk</button>
         <button class="btn bad" onclick="act(${t.id},'skip')">${t.kind==='blog'?'Discard':'Skip'}</button>
       </div>

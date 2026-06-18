@@ -29,8 +29,8 @@ from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Json
 from pydantic import BaseModel
 
-from . import (catalog, config, crm, db, engine, gmail, knowledge, notifications, personas, profile,
-               provider, push, questionnaire, reminders, schedule, seo_report, skillqa, store,
+from . import (capabilities, catalog, config, crm, db, engine, gmail, knowledge, notifications, personas,
+               profile, provider, push, questionnaire, reminders, schedule, seo_report, skillqa, store,
                webauthn_auth, worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
@@ -1663,12 +1663,13 @@ SKILL_TOOLS = [
         "kind": {"type": "string", "description": "content (default) or blog"}, "brief": {"type": "string"}},
         "required": ["company", "skill", "brief"]}},
     {"name": "draft_email",
-     "description": "Draft an OUTBOUND email (a new email Rashad will send, not a reply). It lands in his Inbox "
-                    "rendered as a proper email — recipient, subject, the company logo + signature. BEFORE calling "
-                    "this you MUST look the recipient up with crm_lookup: if exactly one match, use their email; "
-                    "if MORE THAN ONE match, ASK Rashad which one (never guess); if none, ask him for the address "
-                    "(or proceed with just the name if he says so). Approving it only marks the draft reviewed — "
-                    "Cortex does NOT send it (Rashad sends it himself for now).",
+     "description": "Draft an OUTBOUND email (a new email, not a reply). It lands in his Inbox rendered as a "
+                    "proper email — recipient, subject, the company logo + signature. BEFORE calling this you MUST "
+                    "look the recipient up with crm_lookup: if exactly one match, use their email; if MORE THAN ONE "
+                    "match, ASK Rashad which one (never guess); if none, ask him for the address (or proceed with "
+                    "just the name if he says so). SENDING IS LIVE: when Rashad APPROVES the card it actually SENDS "
+                    "from the company mailbox (gated by his biometric/PIN). So tell him it's in his Inbox and that "
+                    "approving it will send it — do NOT say he has to send it himself.",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string", "description": "your business slug (whose brand/signature/logo to use)"},
         "to_name": {"type": "string", "description": "recipient's name"},
@@ -1709,7 +1710,12 @@ SKILL_TOOLS = [
      "description": "Generate the SEO & traffic report for a business right now; it lands in the Inbox.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}, "required": ["company"]}},
     {"name": "list_scheduled",
-     "description": "List the scheduled calendar tasks.",
+     "description": "List the scheduled recurring jobs (e.g. SEO reports).",
+     "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}}},
+    {"name": "list_calendar",
+     "description": "Read the unified Calendar to answer 'what's on my calendar / what's piling up / what's "
+                    "due'. Returns three lanes: now_to_deal_with (un-dated open work in the Inbox), recurring "
+                    "(jobs on a cadence), and upcoming (dated one-offs). Optional business slug to scope it.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}}},
     {"name": "set_reminder",
      "description": "Set a reminder for Rashad. A NUDGE (no action_*) drops an info card in the Inbox at the "
@@ -1867,6 +1873,20 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
                         + flt + " order by next_run nulls last", p)
         return json.dumps([{"title": r["title"], "cadence": r["cadence"], "next_run": str(r["next_run"]),
                             "enabled": r["enabled"]} for r in rows]) or "no scheduled tasks"
+    if name == "list_calendar":
+        co = store.get_company_by_slug(inp["company"]) if inp.get("company") else None
+        flt, p = (" and company_id=%s", (co["id"],)) if co else ("", ())
+        nowq = db.query("select title,kind,status from tasks where status in ('awaiting_approval',"
+                        "'awaiting_correction') and schedule_kind is null" + flt + " order by created_at", p)
+        recq = db.query("select title,cadence,next_run from tasks where schedule_kind='recurring'" + flt
+                        + " order by next_run nulls last", p)
+        upcq = db.query("select title,kind,run_at from tasks where schedule_kind='once' and status='scheduled'"
+                        + flt + " order by run_at nulls last", p)
+        return json.dumps({
+            "now_to_deal_with": [(r["title"] or r["kind"]) for r in nowq],
+            "recurring": [f"{r['title']} ({r['cadence']}, next {r['next_run']})" for r in recq],
+            "upcoming": [f"{(r['title'] or r['kind'])} ({r['run_at']})" for r in upcq],
+        })
     if name == "set_reminder":
         due = reminders.parse_when(inp.get("when") or "")
         if not due:
@@ -2048,6 +2068,7 @@ def _shared_behaviour() -> str:
         "remember_preference to persist it, then confirm. This only adds operator preferences, never safety rules.",
     ]
     block = "ALWAYS-ON RULES (true no matter which persona is speaking):\n" + "\n".join(f"- {r}" for r in rules)
+    block += "\n\n" + capabilities.manifest()   # live capability registry — always current as features ship
     learned = db.setting_get("chat_self_rules") or []
     if learned:
         block += "\n\nTHINGS RASHAD HAS TAUGHT YOU (always honour these):\n" + "\n".join(f"- {r}" for r in learned)
@@ -2061,7 +2082,7 @@ _CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "cr
                 # Chiefs can also DRAFT and look people up — anyone Rashad talks to should be able to act on a
                 # request, not just strategise. (Per-company RULE writes stay Manager-only to avoid scope bleed.)
                 "create_task", "draft_email", "draft", "crm_lookup", "crm_pipeline", "correct_task",
-                "approve_task", "skip_task", "run_report", "schedule_report", "list_scheduled",
+                "approve_task", "skip_task", "run_report", "schedule_report", "list_scheduled", "list_calendar",
                 "remember_preference", "forget_preference", "list_preferences"}
 
 
