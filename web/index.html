@@ -1253,7 +1253,7 @@ async function openReport(id){
 function compName(id){ const c=companies.find(c=>c.id===id); return c?c.name:''; }
 
 function envHeader(em){
-  const row=(lbl,val)=> val?`<div style="display:flex;gap:8px;margin:1px 0"><span style="color:var(--mut);min-width:46px;flex:none">${lbl}</span><span style="word-break:break-word">${esc(val)}</span></div>`:'';
+  const row=(lbl,val)=> val?`<div style="display:flex;gap:8px;margin:1px 0"><span style="color:#8aa0b4;min-width:46px;flex:none">${lbl}</span><span style="word-break:break-word;color:#e8eef4;font-weight:600">${esc(val)}</span></div>`:'';
   return `<div style="margin:6px 0 10px;padding:9px 12px;background:var(--bg2,#0e1620);border:1px solid var(--ln,#22303f);border-radius:11px;font-size:13px">
     ${row('From',em.from)}${row('To',em.to)}${row('Cc',em.cc)}${row('Bcc',em.bcc)}${row('Subject',em.subject)}</div>`;
 }
