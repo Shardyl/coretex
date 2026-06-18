@@ -255,7 +255,7 @@ def _enrich_action_card(t: dict) -> dict:
     """Enrich a task row as an Inbox ACTION card (the existing approval-card shape)."""
     t["card"] = "action"
     t["wp"] = db.setting_get(f"wp:{t['id']}")   # preview/edit links for blog drafts
-    if t["kind"] in engine.EMAIL_KINDS:         # email replies: show the original enquiry + send envelope
+    if t["kind"] in engine.EMAIL_RENDER_KINDS:  # emails: show the envelope (to/from/subject) + logo HTML
         co = store.get_company(t["company_id"])
         env = engine._email_envelope(t, co)
         inq = (t.get("request") or {}).get("inquiry") or {}
@@ -1590,6 +1590,21 @@ SKILL_TOOLS = [
         "company": {"type": "string"}, "skill": {"type": "string"},
         "kind": {"type": "string", "description": "content (default) or blog"}, "brief": {"type": "string"}},
         "required": ["company", "skill", "brief"]}},
+    {"name": "draft_email",
+     "description": "Draft an OUTBOUND email (a new email Rashad will send, not a reply). It lands in his Inbox "
+                    "rendered as a proper email — recipient, subject, the company logo + signature. BEFORE calling "
+                    "this you MUST look the recipient up with crm_lookup: if exactly one match, use their email; "
+                    "if MORE THAN ONE match, ASK Rashad which one (never guess); if none, ask him for the address "
+                    "(or proceed with just the name if he says so). Approving it only marks the draft reviewed — "
+                    "Cortex does NOT send it (Rashad sends it himself for now).",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug (whose brand/signature/logo to use)"},
+        "to_name": {"type": "string", "description": "recipient's name"},
+        "to_email": {"type": "string", "description": "recipient's email (resolve via crm_lookup if known)"},
+        "subject": {"type": "string"},
+        "brief": {"type": "string", "description": "what the email should say"},
+        "from_email": {"type": "string", "description": "optional: from address (defaults to the company's)"}},
+        "required": ["company", "to_name", "subject", "brief"]}},
     {"name": "correct_task",
      "description": "Give feedback on a pending task's draft; it redrafts and learns the rule.",
      "input_schema": {"type": "object", "properties": {
@@ -1821,6 +1836,24 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         n = len(req.get("attachments", []))
         return (f"created task #{t['id']} — drafting now"
                 + (f" using the {n} attached file(s)" if n else "") + "; it'll appear in the Inbox for approval.")
+    if name == "draft_email":
+        sk = (store.get_skill_by_key(co["id"], "email-handling")
+              or store.get_skill_by_key(co["id"], "general-operations")
+              or db.one("select * from skills where company_id=%s order by id limit 1", (co["id"],)))
+        if not sk:
+            return f"no skill available for {co['slug']}"
+        req = {"brief": inp.get("brief", ""), "outbound": True,
+               "inquiry": {"name": inp.get("to_name", ""), "email": inp.get("to_email", "") or "",
+                           "subject": inp.get("subject", ""), "message": ""}}
+        if inp.get("from_email"):
+            req["from_email"] = inp["from_email"]
+        if inp.get("_images"):
+            req["attachments"] = inp["_images"]
+        t = store.create_task(co["id"], sk["id"], "email_draft", req)
+        to = inp.get("to_name") or inp.get("to_email") or "the recipient"
+        addr = f" <{inp['to_email']}>" if inp.get("to_email") else " (no email on file)"
+        return (f"Drafting an email to {to}{addr} — it's in your Inbox as task #{t['id']} "
+                "with the recipient and logo, for your approval.")
     return f"unknown tool {name}"
 
 
@@ -1842,7 +1875,10 @@ def _chat_system() -> str:
                 "a draft into the chat, and NEVER say 'here's the draft' in the message — the draft lives in the "
                 "Inbox, not the chat. Only use the inline `draft` tool if he EXPLICITLY asks to just see a version "
                 "in the chat without committing it. Always pass a REAL skill_key to create_task (use list_skills "
-                "if unsure); nothing Cortex produces is ever sent or done without his Inbox approval.")
+                "if unsure); nothing Cortex produces is ever sent or done without his Inbox approval. "
+                "For an EMAIL specifically, use the draft_email tool (NOT create_task): FIRST resolve the "
+                "recipient with crm_lookup — if more than one match, ASK Rashad which one; if none, ask for the "
+                "address. The email draft then shows the recipient, subject and the company logo in his Inbox.")
     return CHAT_SYSTEM_BASE + "\n\n" + note + "\n\n" + drafting
 
 

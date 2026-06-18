@@ -1161,20 +1161,21 @@ function actionCard(t){
     const co=t.company||compName(t.company_id), sk=t.skill||'';
     const wp=t.wp||null, em=t.email||null;
     if(t.kind==='report') return reportCard(t,co);
-    const isEmail=t.kind==='email_reply';
-    const kindLabel=t.kind==='blog'?'blog post':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to schedule':t.kind==='newsletter_send'?'newsletter due to send':(isEmail?'email reply':esc(t.kind||'task'));
-    const title=esc(isEmail&&em?('Reply to '+(em.inquiry&&em.inquiry.name||em.to||'enquiry')):(t.title||(wp&&wp.title)||('Task #'+t.id)));
+    const isEmail=t.kind==='email_reply'||t.kind==='email_draft';
+    const isOutbound=t.kind==='email_draft';
+    const kindLabel=t.kind==='blog'?'blog post':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to schedule':t.kind==='newsletter_send'?'newsletter due to send':t.kind==='email_draft'?'email draft':(isEmail?'email reply':esc(t.kind||'task'));
+    const title=esc(isEmail&&em?((isOutbound?'Email to ':'Reply to ')+(em.inquiry&&em.inquiry.name||em.to||'recipient')):(t.title||(wp&&wp.title)||('Task #'+t.id)));
     const body=esc(isEmail&&em&&em.preview?em.preview:(t.body||t.draft||''));
     return `<div class="card" id="t${t.id}">
       <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${esc(sk)}</span>
         <span class="chip">${kindLabel}</span></div>
       <div class="title">${title}</div>
       ${isEmail&&em?envHeader(em):''}
-      ${isEmail&&em?emailBlock(em):''}
+      ${isEmail&&em&&!isOutbound?emailBlock(em):''}
       ${mgrVerdict(t.manager)}
       ${isEmail&&em&&em.html
-        ? `<div class="body"><div class="meta" style="margin-bottom:6px">${ic('file',14)} the email that will send (logo + signature)</div><div style="background:#fff;border-radius:10px;padding:16px 18px;white-space:normal">${em.html}</div></div>`
-        : (body?`<div class="body"${isEmail?' style="white-space:pre-wrap"':''}>${isEmail?'<div class="meta" style="margin-bottom:5px;white-space:normal">'+ic('file',14)+' the email that will send (signature included)</div>':''}${body}</div>`:'')}
+        ? `<div class="body"><div class="meta" style="margin-bottom:6px">${ic('file',14)} ${isOutbound?'your email draft':'the email that will send'} (logo + signature)</div><div style="background:#fff;border-radius:10px;padding:16px 18px;white-space:normal">${em.html}</div></div>`
+        : (body?`<div class="body"${isEmail?' style="white-space:pre-wrap"':''}>${isEmail?'<div class="meta" style="margin-bottom:5px;white-space:normal">'+ic('file',14)+' '+(isOutbound?'your email draft':'the email that will send')+' (signature included)</div>':''}${body}</div>`:'')}
       ${wp&&wp.preview?`<div class="meta">${ic('file',14)} draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
       ${attachmentStrip(t)}
       <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">${ic('volume',16)} Read aloud</button></div>

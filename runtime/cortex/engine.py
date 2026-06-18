@@ -29,6 +29,8 @@ from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
 EMAIL_KINDS = {"email_reply"}              # the reply is sent via Gmail on approval
+EMAIL_RENDER_KINDS = EMAIL_KINDS | {"email_draft"}   # rendered as an email (envelope + logo). email_draft is
+# a REVIEW-ONLY outbound draft (Rashad sends it himself; approving just marks it done) until email-send OAuth lands.
 NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send", "email_reply"}  # outward sends always need the owner
 # PUBLIC actions (go OUT to the public) — approving these needs a biometric step-up (see
 # feedback_public_actions_biometric). Internal items use the normal approve. Split by where the action fires:
@@ -160,9 +162,13 @@ def _email_envelope(task: dict, company: dict) -> dict:
         pass
     cc = ", ".join(dict.fromkeys(cc_list))     # dedupe, keep order
     bcc = ", ".join(dict.fromkeys(bcc_list))
-    return {"to": inq.get("email") or "", "from": (data.get("reply_from") or "").strip() or None,
+    req = task.get("request") or {}
+    outbound = bool(req.get("outbound"))   # a Talk-composed email_draft (not a reply) — no "Re:" prefix
+    subj = inq.get("subject") or "your enquiry"
+    return {"to": inq.get("email") or "", "to_name": inq.get("name") or "",
+            "from": (req.get("from_email") or data.get("reply_from") or "").strip() or None,
             "cc": cc or None, "bcc": bcc or None,
-            "subject": "Re: " + (inq.get("subject") or "your enquiry"),
+            "subject": subj if outbound else ("Re: " + subj),
             "name": inq.get("name") or "", "signature": (data.get("signature") or "").strip()}
 
 
