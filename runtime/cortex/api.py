@@ -2136,14 +2136,10 @@ async def voice_stream(ws: WebSocket):
         await ws.close()
         return
 
-    stats = {"bytes_in": 0, "chunks": 0, "transcripts": 0, "last_text": ""}
-
     async def pump_up():
         try:
             while True:
-                b = await ws.receive_bytes()
-                stats["bytes_in"] += len(b); stats["chunks"] += 1
-                await dg.send(b)
+                await dg.send(await ws.receive_bytes())
         except (WebSocketDisconnect, Exception):  # noqa: BLE001
             pass
         finally:
@@ -2163,8 +2159,6 @@ async def voice_stream(ws: WebSocket):
                     alts = (d.get("channel") or {}).get("alternatives") or [{}]
                     text = alts[0].get("transcript", "")
                     sf = bool(d.get("speech_final"))
-                    if text:
-                        stats["transcripts"] += 1; stats["last_text"] = text
                     if text or sf:
                         await ws.send_json({"final": bool(d.get("is_final")), "speech_final": sf, "text": text})
         except Exception:  # noqa: BLE001
@@ -2173,8 +2167,6 @@ async def voice_stream(ws: WebSocket):
     try:
         await asyncio.gather(pump_up(), pump_down())
     finally:
-        print(f"[voice] rate={rate} chunks={stats['chunks']} bytes_in={stats['bytes_in']} "
-              f"transcripts={stats['transcripts']} last={stats['last_text']!r}", flush=True)
         try:
             await dg.close()
         except Exception:  # noqa: BLE001

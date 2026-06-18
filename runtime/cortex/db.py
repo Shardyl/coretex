@@ -34,6 +34,21 @@ _ALTERS = [
     "alter table skills add column if not exists manager text",
     "alter table skills add column if not exists model text",
     "alter table skills add column if not exists overrides jsonb not null default '[]'::jsonb",
+    # Phase 3 — unified task entity: scheduling + provenance (all nullable/defaulted, so existing rows
+    # become immediate tasks; merges scheduled_tasks into tasks on one timeline). See merged spec §3a.
+    "alter table tasks add column if not exists origin        text",            # talk|calendar|incoming|system
+    "alter table tasks add column if not exists title         text",
+    "alter table tasks add column if not exists schedule_kind text",            # null=now | once | recurring
+    "alter table tasks add column if not exists cadence       text",            # daily|weekly|monthly
+    "alter table tasks add column if not exists weekday       int",             # 0=Mon..6=Sun
+    "alter table tasks add column if not exists hour          int",
+    "alter table tasks add column if not exists minute        int",
+    "alter table tasks add column if not exists run_at        timestamptz",     # one-off fire time
+    "alter table tasks add column if not exists next_run      timestamptz",     # recurring next fire
+    "alter table tasks add column if not exists last_run      timestamptz",
+    "alter table tasks add column if not exists last_status   text",
+    "alter table tasks add column if not exists enabled       boolean default true",
+    "alter table tasks add column if not exists parent_id     bigint references tasks(id)",
 ]
 
 
