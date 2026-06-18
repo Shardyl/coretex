@@ -1389,13 +1389,17 @@ function pollRule(id, tries){
 function proposeRule(id, rule, skillName, co){
   const p=document.getElementById('cp'+id); if(!p){ render(); return; }
   p.style.display='block';
-  p.innerHTML=`<div class="meta" style="margin:1px 0 7px">${ic('check',13)} I read that as a standing rule for ${esc(co||'')}${co?' · ':''}${esc(skillName||'this skill')}:</div>
-    <div style="background:var(--bg2,#0e1620);border:1px solid #2563EB66;border-radius:11px;padding:10px 12px;font-size:14px;color:var(--fg,#dfe7ef);margin-bottom:9px">${esc(rule)}</div>
-    <div class="row"><button class="btn go" onclick="decideRule(${id},true)">${ic('check',15)} Yes, add company rule</button><button class="btn" onclick="decideRule(${id},false)">No, just this once</button></div>`;
+  p.innerHTML=`<div class="meta" style="margin:1px 0 7px">${ic('check',13)} I read that as a standing rule for ${esc(skillName||'this skill')}. Where should it live?</div>
+    <div style="background:var(--bg2,#0e1620);border:1px solid #2563EB66;border-radius:11px;padding:10px 12px;font-size:14px;color:var(--fg,#dfe7ef);margin-bottom:10px">${esc(rule)}</div>
+    <div class="row" style="flex-wrap:wrap;gap:7px">
+      <button class="btn go" onclick="decideRule(${id},true,'company')">${ic('check',15)} ${esc(co||'This company')} only</button>
+      <button class="btn go" onclick="decideRule(${id},true,'universal')">${ic('grid',15)} All companies (universal)</button>
+      <button class="btn" onclick="decideRule(${id},false,'company')">No, just this once</button></div>`;
 }
-async function decideRule(id, add){
-  try{ const r=await api(`/api/tasks/${id}/rule`,{method:'POST',body:JSON.stringify({add})});
-    toast(add&&r.added?'Added as a company rule — I will follow it':'Okay, not a rule'); render(); }
+async function decideRule(id, add, scope){
+  scope=scope||'company';
+  try{ const r=await api(`/api/tasks/${id}/rule`,{method:'POST',body:JSON.stringify({add,scope})});
+    toast(add&&r.added?(r.scope==='universal'?'Added as a universal rule — applies to every company ✓':'Added as a company rule ✓'):'Okay, not a rule'); render(); }
   catch(e){ toast('Error: '+e.message); render(); }
 }
 

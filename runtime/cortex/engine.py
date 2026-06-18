@@ -483,8 +483,8 @@ def _on_callback(cq: dict) -> None:
         store.update_task(task["id"], status="awaiting_correction")
         if task.get("tg_message_id"):
             tg.edit(task["tg_message_id"], f"✎ Correcting '{skill['name']}'. Send me your correction as a message.")
-    elif action in ("ry", "rn"):
-        _confirm_rule(task, skill, yes=(action == "ry"))
+    elif action in ("ry", "rn", "ru"):   # ry=company rule, ru=universal rule, rn=no
+        _confirm_rule(task, skill, yes=(action in ("ry", "ru")), universal=(action == "ru"))
 
 
 def _approve(task: dict, skill: dict, company: dict) -> dict:
@@ -548,9 +548,12 @@ def _infer_rule_offer(task: dict, skill: dict, text: str, old: str, new: str) ->
         return
     if rule.get("is_rule") and rule.get("rule"):
         db.setting_set(f"rule:{task['id']}", rule["rule"])
+        company = store.get_company(task["company_id"])
+        co = company["name"] if company else "this company"
         tg.send(f"I'm reading your correction as a standing rule:\n\n“{rule['rule']}”\n\n"
-                f"Add it to '{skill['name']}'?",
-                [[tg.button("Yes, add rule", f"ry:{task['id']}"), tg.button("No", f"rn:{task['id']}")]])
+                f"Where should it live? '{co}' only, or ALL companies?",
+                [[tg.button(f"{co} only", f"ry:{task['id']}"), tg.button("All companies", f"ru:{task['id']}")],
+                 [tg.button("No, just this once", f"rn:{task['id']}")]])
 
 
 def pending_rule(task_id: int) -> dict:
@@ -622,12 +625,18 @@ def apply_correction(task: dict, text: str) -> None:
     _maybe_propose_rule(task, skill, text, old or "", new or "")
 
 
-def _confirm_rule(task: dict, skill: dict, yes: bool) -> None:
+def _confirm_rule(task: dict, skill: dict, yes: bool, universal: bool = False) -> None:
     rule = db.setting_get(f"rule:{task['id']}")
     if yes and rule:
-        store.add_rule(skill["id"], rule)
-        store.log_decision(task["id"], skill["id"], "owner", "rule_confirmed", note=rule)
-        tg.send(f"Added to '{skill['name']}': “{rule}”. I'll follow it from now on.")
+        if universal:
+            store.add_universal_rule(skill["skill_key"], rule)
+            where = "ALL companies (universal)"
+        else:
+            store.add_rule(skill["id"], rule)
+            where = f"'{skill['name']}'"
+        store.log_decision(task["id"], skill["id"], "owner", "rule_confirmed",
+                           note=("[universal] " if universal else "") + rule)
+        tg.send(f"Added to {where}: “{rule}”. I'll follow it from now on.")
     else:
         tg.send("Okay — not adding a rule.")
     db.setting_set(f"rule:{task['id']}", None)
@@ -769,15 +778,26 @@ def correct_task(task_id: int, text: str) -> dict:
             "company": company["name"] if company else None}
 
 
-def decide_rule(task_id: int, add: bool) -> dict:
-    """Cockpit confirm/dismiss of the rule Cortex inferred from a correction (company-level rule on the task's skill)."""
+def decide_rule(task_id: int, add: bool, scope: str = "company") -> dict:
+    """Cockpit confirm/dismiss of the rule Cortex inferred from a correction. `scope` is the owner's
+    explicit choice: 'company' (this company's skill only) or 'universal' (that skill_key on EVERY company)."""
     rule = db.setting_get(f"rule:{task_id}")
     task = store.get_task(task_id)
+    added = False
     if add and rule and task:
-        store.add_rule(task["skill_id"], rule)
-        store.log_decision(task_id, task["skill_id"], "owner", "rule_confirmed", note=rule)
+        if scope == "universal":
+            skill = store.get_skill(task["skill_id"])
+            if skill:
+                store.add_universal_rule(skill["skill_key"], rule)
+                added = True
+        else:
+            store.add_rule(task["skill_id"], rule)
+            added = True
+        if added:
+            store.log_decision(task_id, task["skill_id"], "owner", "rule_confirmed",
+                               note=("[universal] " if scope == "universal" else "") + rule)
     db.setting_set(f"rule:{task_id}", None)
-    return {"ok": True, "added": bool(add and rule)}
+    return {"ok": True, "added": added, "scope": scope}
 
 
 # ---------- auto-intake: pull new enquiries from Gmail, draft a reply for each ----------
