@@ -105,7 +105,7 @@ def _parse(msg: dict) -> dict:
 def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
                  cc: str | None = None, html: str | None = None,
                  inline_images: list | None = None, bcc: str | None = None,
-                 files: list | None = None) -> dict:
+                 files: list | None = None, file_names: list | None = None) -> dict:
     """Send an email from the connected sending mailbox (gmail.modify) — it lands in that account's Sent
     folder. If `html` is given, sends a multipart/alternative (plain + html); any `inline_images`
     (list of (cid, filepath)) are embedded so a footer logo renders. `from_addr` is honoured when it
@@ -167,7 +167,9 @@ def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
             _enc.encode_base64(part)
             ext = {"image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/webp": "webp",
                    "application/pdf": "pdf"}.get(mime, "bin")
-            part.add_header("Content-Disposition", "attachment", filename=f"attachment{i + 1}.{ext}")
+            fn = (file_names[i] if file_names and i < len(file_names) and file_names[i]
+                  else f"attachment{i + 1}.{ext}")
+            part.add_header("Content-Disposition", "attachment", filename=fn)
             outer.attach(part)
         msg = outer
     msg["To"] = to

@@ -330,6 +330,28 @@ def inbox_count(company: str | None = None, _: None = Depends(auth)) -> dict:
     return {"needs_you": int(n), "unread": notifications.unread_count(cid)}
 
 
+@app.get("/api/tasks/{tid}/attachments")
+def task_attachments(tid: int, _: None = Depends(auth)) -> dict:
+    """A task's attachments, fetched ON DEMAND (they're stripped from the inbox list for weight). Lets a card
+    show image thumbnails + document names so the owner can SEE what they're approving before they send it."""
+    t = db.one("select request from tasks where id=%s", (tid,))
+    if not t:
+        raise HTTPException(status_code=404, detail="not found")
+    req = t["request"] or {}
+    atts = req.get("attachments") or []
+    names = req.get("attachment_names") or []
+    out = []
+    for i, u in enumerate(atts):
+        if not isinstance(u, str) or not u.startswith("data:") or ";base64," not in u:
+            continue
+        head, b64 = u.split(";base64,", 1)
+        media = head[5:] or "application/octet-stream"
+        nm = names[i] if i < len(names) and names[i] else None
+        out.append({"idx": i, "media_type": media, "is_image": media.startswith("image/"),
+                    "size_kb": (len(b64) * 3) // 4 // 1024, "name": nm, "src": u})
+    return {"attachments": out}
+
+
 # ---------- notification actions (info cards) ----------
 
 @app.post("/api/notifications/{nid}/read")
@@ -1971,6 +1993,7 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         req = {"brief": inp.get("brief", "")}
         if inp.get("_images"):
             req["attachments"] = inp["_images"]
+            req["attachment_names"] = inp.get("_image_names")
         text = worker.draft(sk, co, req, correction=inp.get("revision"))
         return "DRAFT (skill craft + rules applied):\n\n" + text
     if name == "create_task":
@@ -1980,6 +2003,7 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         req = {"brief": inp.get("brief", "")}
         if inp.get("_images"):   # files/images shared in this Talk turn -> the worker drafts WITH them
             req["attachments"] = inp["_images"]
+            req["attachment_names"] = inp.get("_image_names")
         t = store.create_task(co["id"], sk["id"], inp.get("kind", "content"), req)
         n = len(req.get("attachments", []))
         return (f"created task #{t['id']} — drafting now"
@@ -2025,6 +2049,7 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
             req["from_email"] = inp["from_email"]
         if inp.get("_images"):
             req["attachments"] = inp["_images"]
+            req["attachment_names"] = inp.get("_image_names")
         t = store.create_task(co["id"], sk["id"], "email_draft", req)
         addr = f" <{to_email}>" if to_email else " (no email resolved)"
         return (f"Drafting an email to {to_name or 'the recipient'}{addr} — it's in your Inbox as task "
@@ -2120,6 +2145,7 @@ class ChatTurn(BaseModel):
     company: str | None = None     # company slug in focus (the global selector)
     current: str | None = None     # who handled the last turn (sticky auto-routing)
     images: list[str] | None = None  # attached photos/files as data: URLs (multimodal context)
+    image_names: list[str] | None = None  # original filenames, parallel to images (for display + send)
 
 
 @app.post("/api/chat")
@@ -2146,7 +2172,7 @@ def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
     # carry the turn's attachments through to the worker when this turn creates/drafts a task
     def _exec(name: str, inp: dict) -> str:
         if name in ("create_task", "draft", "draft_email") and body.images:
-            inp = {**inp, "_images": body.images}
+            inp = {**inp, "_images": body.images, "_image_names": body.image_names}
         return _exec_skill_tool(name, inp)
     reply = provider.chat_tools(system, msgs, tools, _exec,
                                 purpose=f"chat:{chosen}" if chosen else "chat", company=body.company)

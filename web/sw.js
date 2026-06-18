@@ -1,6 +1,6 @@
 // Cortex service worker — makes the cockpit installable + keeps the shell working offline.
 // Network-first for everything; the API is never cached; the app shell falls back to cache.
-const CACHE = 'cortex-v4';
+const CACHE = 'cortex-v5';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -38,10 +38,15 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (x) {}
-  e.waitUntil(self.registration.showNotification(d.title || 'Cortex', {
-    body: d.body || '', tag: d.tag, data: { url: d.url || '/' },
-    icon: '/icon-192.png', badge: '/icon-192.png', renotify: true
-  }));
+  e.waitUntil((async () => {
+    await self.registration.showNotification(d.title || 'Cortex', {
+      body: d.body || '', tag: d.tag, data: { url: d.url || '/' },
+      icon: '/icon-192.png', badge: '/icon-192.png', renotify: true
+    });
+    // nudge any open app window to refresh its Inbox immediately (no need to tap the notification)
+    const cs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    cs.forEach((c) => c.postMessage({ type: 'cortex-refresh' }));
+  })());
 });
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();

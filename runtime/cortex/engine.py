@@ -341,9 +341,12 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         return {"blocked": True, "error": "Email sending is PAUSED. Resume it to send this reply."}
     env = _email_envelope(task, company)
     c = compose_reply_html(task, company, for_preview=False)
-    files = (task.get("request") or {}).get("attachments")   # outbound drafts carry real file attachments
+    req = task.get("request") or {}
+    files = req.get("attachments")            # outbound drafts carry real file attachments
+    file_names = req.get("attachment_names")  # ...with their original filenames
     res = gmail.send_message(env["to"], env["subject"], c["plain"], from_addr=env["from"], cc=env["cc"],
-                             html=c["html"], inline_images=c["inline"], bcc=env.get("bcc"), files=files)
+                             html=c["html"], inline_images=c["inline"], bcc=env.get("bcc"),
+                             files=files, file_names=file_names)
     try:
         crm.log_event(env["to"], "email_sent", f"Email sent: {env['subject']}", company.get("slug"))
     except Exception:  # noqa: BLE001 — CRM history must never block the send

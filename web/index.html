@@ -205,6 +205,15 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .attachprev .thumb button{position:absolute;top:2px;right:2px;width:18px;height:18px;border:none;border-radius:50%;
   background:rgba(0,0,0,.6);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
 .msgimg{max-width:160px;border-radius:12px;margin:4px 0;display:block;border:1px solid var(--line)}
+/* attachment previews on Inbox cards */
+.attwrap{margin-bottom:9px}
+.attrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.attthumb{width:84px;height:84px;object-fit:cover;border-radius:10px;border:1px solid var(--line);cursor:zoom-in;display:block}
+.attfile{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border:1px solid var(--line);border-radius:10px;
+  background:var(--bg2,#0e1620);color:var(--fg,#dfe7ef);font-size:13px;text-decoration:none;max-width:100%}
+.attfile span{word-break:break-all}
+.imgovl{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;cursor:zoom-out}
+.imgovl img{max-width:100%;max-height:100%;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6)}
 /* skills screen */
 .cath{font-family:Poppins;font-weight:700;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:18px 2px 8px}
 .dept{display:flex;align-items:center;justify-content:space-between;background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:13px 15px;margin-bottom:8px;cursor:pointer}
@@ -471,15 +480,19 @@ async function boot(){
   tab='talk'; chatMsgs=[]; currentConvId=null; currentConvTitle=''; routedTo=''; localStorage.removeItem('cortex_conv');
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t==='talk'));
   render();
-  refreshBadge(); if(!window._badgeTimer) window._badgeTimer=setInterval(refreshBadge,25000);
+  refreshBadge(); if(!window._badgeTimer) window._badgeTimer=setInterval(refreshBadge,12000);
   if(!window._spendTimer) window._spendTimer=setInterval(updateSpendChip,180000);  // every 3 min — DB-only read, no LLM cost
 }
 async function refreshBadge(){
   if(demo) return;
   try{ const fco=(document.getElementById('coSel')||{}).value||'';
     const r=await api('/api/inbox/count'+(fco?'?company='+encodeURIComponent(fco):''));   // tiny — never the heavy inbox
-    updateInboxBadge((r.needs_you||0)+(r.unread||0)); }   // pending approvals + unread updates
-  catch(e){}
+    const n=(r.needs_you||0)+(r.unread||0);
+    updateInboxBadge(n);   // pending approvals + unread updates
+    // punchy: if something NEW arrived while you're looking at the Inbox, pull it in straight away
+    if(typeof window._lastInboxN==='number' && n>window._lastInboxN && tab==='inbox') render();
+    window._lastInboxN=n;
+  }catch(e){}
 }
 
 // ---- nav ----
@@ -1145,6 +1158,7 @@ async function renderInbox(v){
   const ib=document.getElementById('ib');
   if(!shown.length){ ib.outerHTML='<div class="empty"><span class="e">✓</span>'+(inboxSeg==='updates'?'No updates right now.':inboxSeg==='needs'?'Nothing needs your yes. Cortex pings you here when it does.':'Inbox zero.')+'</div>'; return; }
   ib.outerHTML = shown.map(it=> it.card==='info'? infoCard(it) : actionCard(it)).join('');
+  hydrateAttachments();   // fill in attachment thumbnails / filenames on the cards
 }
 function renderSeg(resp){
   const el=document.getElementById('ibSeg'); if(!el) return;
@@ -1193,8 +1207,27 @@ async function enablePush(){
 }
 function attachmentStrip(t){
   const n=t.att_count||((t.request&&t.request.attachments)||[]).length; if(!n) return '';
-  return `<div class="meta" style="margin-bottom:9px">${ic('file',14)} ${n} attachment${n>1?'s':''} attached to this draft (sent with the email)</div>`;
+  // placeholder; hydrateAttachments() fetches the actual images/filenames on demand and fills this in
+  return `<div class="attwrap" id="att${t.id}" data-n="${n}"><div class="meta" style="margin-bottom:7px">${ic('file',14)} ${n} attachment${n>1?'s':''} — loading preview…</div></div>`;
 }
+// Fetch each card's attachments on demand (kept out of the inbox list for weight) and show image thumbnails
+// or document names, so the owner sees exactly what they're approving before they send it.
+async function hydrateAttachments(){
+  document.querySelectorAll('.attwrap[data-n]').forEach(async el=>{
+    if(el.dataset.done) return; el.dataset.done='1';
+    const id=el.id.slice(3);
+    try{ const r=await api('/api/tasks/'+id+'/attachments'); const a=r.attachments||[];
+      if(!a.length){ el.innerHTML=''; return; }
+      el.innerHTML=`<div class="meta" style="margin-bottom:7px">${ic('file',14)} sent with this draft:</div><div class="attrow">`
+        + a.map(x=> x.is_image
+            ? `<img class="attthumb" src="${x.src}" title="${esc(x.name||'image')} · ${x.size_kb}KB" onclick="enlargeImg(this)">`
+            : `<a class="attfile" href="${x.src}" download="${esc(x.name||('file-'+x.idx))}">${ic('file',15)} <span>${esc(x.name||x.media_type)}</span> <span style="opacity:.55">${x.size_kb}KB</span></a>`
+          ).join('') + `</div>`;
+    }catch(e){ el.innerHTML=`<div class="meta">${ic('file',14)} attachment (preview unavailable)</div>`; }
+  });
+}
+function enlargeImg(img){ const o=document.createElement('div'); o.className='imgovl'; o.onclick=()=>o.remove();
+  o.innerHTML=`<img src="${img.src}">`; document.body.appendChild(o); }
 function actionCard(t){
     const co=t.company||compName(t.company_id), sk=t.skill||'';
     const wp=t.wp||null, em=t.email||null;
@@ -1206,7 +1239,7 @@ function actionCard(t){
     const body=esc(isEmail&&em&&em.preview?em.preview:(t.body||t.draft||''));
     return `<div class="card" id="t${t.id}">
       <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${esc(sk)}</span>
-        <span class="chip">${kindLabel}</span></div>
+        <span class="chip">${kindLabel}</span><span class="chip" style="margin-left:auto;opacity:.6" title="Task ID — quote this when troubleshooting">#${t.id}</span></div>
       <div class="title">${title}</div>
       ${isEmail&&em?envHeader(em):''}
       ${isEmail&&em&&!isOutbound?emailBlock(em):''}
@@ -1651,13 +1684,13 @@ function toggleGo(){ if(demo){ toast('Voice needs the live app'); return; }
 let pendingImages=[];
 function pickFile(camera){ const inp=document.getElementById(camera?'camIn':'fileIn'); if(inp){ inp.value=''; inp.click(); } }
 function onFilePicked(inp){ const f=inp.files&&inp.files[0]; if(!f) return;
-  const r=new FileReader();
+  const nm=f.name||''; const r=new FileReader();
   r.onload=()=>{ const data=r.result;
     if(typeof data==='string' && data.startsWith('data:image/')){
-      shrinkImage(data, 2000, 0.82, out=>{ pendingImages.push(out); paintAttach(); });   // keep under the 10MB model limit
+      shrinkImage(data, 2000, 0.82, out=>{ pendingImages.push({url:out,name:nm,isImage:true}); paintAttach(); });   // keep under the 10MB model limit
     } else {   // PDFs / other files pass through, but guard the ~10MB API ceiling
       if(typeof data==='string' && data.length>13000000){ toast('That file is too big (max ~10MB) — try a smaller one'); return; }
-      pendingImages.push(data); paintAttach();
+      pendingImages.push({url:data,name:nm,isImage:false}); paintAttach();
     }
   };
   r.readAsDataURL(f); }
@@ -1680,7 +1713,7 @@ function rmAttach(i){ pendingImages.splice(i,1); paintAttach(); }
 function paintAttach(){ const p=document.getElementById('attachPrev'); if(!p) return;
   if(!pendingImages.length){ p.style.display='none'; p.innerHTML=''; layoutChat(); return; }
   p.style.display='flex';
-  p.innerHTML=pendingImages.map((src,i)=>`<div class="thumb">${src.startsWith('data:image/')?`<img src="${src}">`:`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--panel2);color:var(--mut);font-size:10px;font-weight:700">PDF</div>`}<button onclick="rmAttach(${i})" aria-label="Remove">${ic('x',13)}</button></div>`).join('');
+  p.innerHTML=pendingImages.map((a,i)=>`<div class="thumb">${a.isImage?`<img src="${a.url}">`:`<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--panel2);color:var(--mut);font-size:9px;font-weight:700;padding:3px;text-align:center;overflow:hidden">${ic('file',16)}<span style="margin-top:2px;word-break:break-all;line-height:1.1">${esc((a.name||'file').slice(0,22))}</span></div>`}<button onclick="rmAttach(${i})" aria-label="Remove">${ic('x',13)}</button></div>`).join('');
   layoutChat();
 }
 function paintChat(){
@@ -1756,7 +1789,8 @@ async function sendChat(text, viaVoice){
     const u=(freeUtt||freeLive||'').trim(); if(u) msg=(msg?msg+' ':'')+u;
     viaVoice=true; freeStop();
   }
-  const imgs=pendingImages.slice(); pendingImages=[]; paintAttach();
+  const items=pendingImages.slice(); pendingImages=[]; paintAttach();
+  const imgs=items.map(x=>x.url), names=items.map(x=>x.name||'');
   if(!msg && !imgs.length) return '';
   if(inp&&text==null) inp.value='';
   chatMsgs.push({role:'user',content:msg||(imgs.length?'(image)':''),images:imgs});
@@ -1766,7 +1800,7 @@ async function sendChat(text, viaVoice){
     const hist=chatMsgs.filter(m=>m.content!=='…').map(m=>({role:m.role,content:m.content}));
     const fco=(document.getElementById('coSel')||{}).value||'';
     const payload={messages:hist,persona:talkingTo,company:fco};
-    if(imgs.length) payload.images=imgs;        // attached photos/files -> Cortex sees them
+    if(imgs.length){ payload.images=imgs; payload.image_names=names; }        // attached photos/files -> Cortex sees them
     if(!talkingTo) payload.current=routedTo;   // sticky auto-routing
     const d=await api('/api/chat',{method:'POST',body:JSON.stringify(payload)});
     const reply=d.reply||'(no reply)';
@@ -2336,8 +2370,11 @@ document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden'){ hidAt=Date.now(); return; }
   if(IS_MOBILE && token && pinSet && !demo && hidAt && Date.now()-hidAt>300000){ lockNow(); return; }  // re-lock after 5 min away — MOBILE only
   syncWake();                          // re-acquire screen lock (drops when hidden)
-  if(booted) refreshBadge();           // punchy: refresh the inbox marker the moment you reopen the app
+  if(booted){ refreshBadge(); if(tab==='inbox') render(); }   // punchy: refresh the Inbox the moment you reopen the app
 });
+// instant refresh when a push lands while the app is open/foreground (no need to tap the notification)
+if('serviceWorker' in navigator){ navigator.serviceWorker.addEventListener('message',(e)=>{
+  if(e.data&&e.data.type==='cortex-refresh'&&booted){ refreshBadge(); if(tab==='inbox') render(); } }); }
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{})); }
 </script>
 </body>
