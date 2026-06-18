@@ -93,6 +93,25 @@ def _cached_tools(tools: list[dict]) -> list[dict]:
     return out
 
 
+def _cache_history(messages: list[dict]) -> list[dict]:
+    """Put a cache breakpoint at the END of the conversation history so the growing message prefix
+    is read at ~10% on the next round/turn — this is what makes LONG conversations cheap (the prior
+    turns are re-sent every turn; caching them stops paying full price for the whole transcript)."""
+    out = [dict(m) for m in messages]
+    if not out:
+        return out
+    last = dict(out[-1])
+    c = last.get("content")
+    if isinstance(c, str):
+        last["content"] = [{"type": "text", "text": c, "cache_control": {"type": "ephemeral"}}]
+    elif isinstance(c, list) and c and isinstance(c[-1], dict):
+        nc = [dict(b) for b in c]
+        nc[-1] = {**nc[-1], "cache_control": {"type": "ephemeral"}}
+        last["content"] = nc
+    out[-1] = last
+    return out
+
+
 def chat(system: str, messages: list[dict], *, max_tokens: int = 1000,
          purpose: str = "chat", company: str | None = None) -> str:
     """Multi-turn conversation → assistant text. Snappy (no extended thinking) for voice back-and-forth.
@@ -116,7 +135,7 @@ def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
     # PROMPT CACHING: the system prompt + the (static) tool schemas are the big fixed prefix re-sent on
     # every round/turn — cache them so each subsequent call reads them at ~10% instead of full price.
     sys_blocks, cached_tools = _cached_system(system), _cached_tools(tools)
-    msgs = [dict(m) for m in messages]
+    msgs = _cache_history(messages)   # + a 3rd breakpoint at the end of the history → long convos read cheap
     resp = None
     for _ in range(rounds):
         resp = client.messages.create(model=MODEL, max_tokens=max_tokens, system=sys_blocks,
