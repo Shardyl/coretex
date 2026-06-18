@@ -349,12 +349,16 @@ async function api(path, opts={}){
 // ---- auth: the 4-digit PIN keypad IS the login (issues the session); biometric on mobile; passcode = recovery ----
 async function startup(){
   document.getElementById('demoBanner').classList.toggle('hidden',!demo);
-  if(demo || token){ enterUnlocked(); return; }
-  let mode={pin:false,biometric:false};
+  if(demo){ enterUnlocked(); return; }
+  let mode=null;
   try{ mode=await api('/api/auth/mode'); }catch(e){}
-  pinSet=!!mode.pin; biometricReg=!!mode.biometric;
-  if(pinSet){ lockMode='login'; pinBuf=''; pinFirst=''; showLock('Enter your PIN'); }
-  else { document.getElementById('login').classList.remove('hidden'); }   // first run: passcode bootstrap, then set a PIN
+  biometricReg = mode ? !!mode.biometric : biometricReg;
+  const hasPin = mode ? !!mode.pin : !!token;          // a returning user (saved token) expects a PIN
+  // SECURITY: every cold load / hard refresh / cold app-start RE-LOCKS — drop any saved session
+  // so the PIN (or fingerprint on mobile) must re-authenticate. This is deliberate, not "remember me".
+  token=''; localStorage.removeItem('cortex_token');
+  if(hasPin){ pinSet=true; lockMode='login'; pinBuf=''; pinFirst=''; showLock('Enter your PIN'); }
+  else { pinSet=false; document.getElementById('login').classList.remove('hidden'); }   // first run: passcode bootstrap
 }
 // passcode recovery (hidden by default): first-time bootstrap, or if the PIN is ever forgotten
 async function doLogin(){
