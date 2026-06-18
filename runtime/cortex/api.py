@@ -1674,7 +1674,7 @@ class ChatTurn(BaseModel):
 @app.post("/api/chat")
 def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
     msgs = [{"role": m.get("role"), "content": m.get("content", "")} for m in body.messages
-            if m.get("content") and m.get("role") in ("user", "assistant")][-20:]
+            if m.get("content") and m.get("role") in ("user", "assistant")][-100:]   # working memory window (history-cached, so cheap)
     if not msgs or msgs[-1]["role"] != "user":
         raise HTTPException(status_code=400, detail="last message must be from the user")
     pinned = (body.persona or "").strip()
