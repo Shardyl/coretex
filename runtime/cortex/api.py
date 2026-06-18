@@ -1579,13 +1579,13 @@ SKILL_TOOLS = [
      "description": "Full detail of one task, including its current draft and the manager's verdict.",
      "input_schema": {"type": "object", "properties": {"task_id": {"type": "integer"}}, "required": ["task_id"]}},
     {"name": "draft",
-     "description": "Produce a draft NOW using a skill — applies that skill's craft + standing rules + the company voice. Returns the draft text to show Rashad. Use for replies, posts, copy.",
+     "description": "INLINE PREVIEW ONLY — produces a draft and returns it to show in the chat, creating NO task and NO Inbox entry. Use this ONLY when Rashad EXPLICITLY says 'just show me a version here' / 'don't commit it yet'. For anything he wants to keep, send, approve, or that should land in his Inbox, use create_task instead (NOT this).",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string"}, "skill": {"type": "string", "description": "skill_key"},
         "brief": {"type": "string"}, "revision": {"type": "string", "description": "optional: how to change a previous draft"}},
         "required": ["company", "skill", "brief"]}},
     {"name": "create_task",
-     "description": "Queue a task; the engine drafts it and it lands in the Inbox + Telegram for approval.",
+     "description": "THE DEFAULT for any 'draft/write/create' request (emails, notes, posts, replies, copy) and any work to do: it runs through the worker + manager and lands in Rashad's INBOX for approval. Use THIS — never the inline draft tool — whenever he asks you to draft something. After calling it, just tell him it's in his Inbox; do NOT paste a draft into the chat. kind: content (default; emails/notes/copy) or blog. Pick a REAL skill_key (call list_skills if unsure).",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string"}, "skill": {"type": "string"},
         "kind": {"type": "string", "description": "content (default) or blog"}, "brief": {"type": "string"}},
@@ -1828,7 +1828,14 @@ def _chat_system() -> str:
             f"{dept_line}. Most skills are empty (no rules yet) and you tune them one at a time. Use "
             f"list_skills(company, department) to read a department's skills and their rules before "
             f"answering — never assume a skill's rules.")
-    return CHAT_SYSTEM_BASE + "\n\n" + note
+    drafting = ("DRAFTING — CRITICAL: when Rashad asks you to draft / write / create something (an email, "
+                "note, post, reply, copy), you must use the create_task tool so it goes through the worker + "
+                "manager and lands in his INBOX for approval. Then just confirm it's in his Inbox. NEVER paste "
+                "a draft into the chat, and NEVER say 'here's the draft' in the message — the draft lives in the "
+                "Inbox, not the chat. Only use the inline `draft` tool if he EXPLICITLY asks to just see a version "
+                "in the chat without committing it. Always pass a REAL skill_key to create_task (use list_skills "
+                "if unsure); nothing Cortex produces is ever sent or done without his Inbox approval.")
+    return CHAT_SYSTEM_BASE + "\n\n" + note + "\n\n" + drafting
 
 
 # A Chief CAN grow the org — create_skill is global-by-nature (added to every company), so there's no
