@@ -341,7 +341,7 @@ async function api(path, opts={}){
   if(demo) throw new Error('demo');
   const r = await fetch(API+path, {...opts, headers:{'Content-Type':'application/json',
     ...(token?{Authorization:'Bearer '+token}:{}), ...(opts.headers||{})}});
-  if(r.status===401){ logout(); throw new Error('auth'); }
+  if(r.status===401){ if(booted) relock(); throw new Error('auth'); }   // only re-lock on in-session expiry, never pre-auth (avoids a reload loop)
   if(!r.ok){ throw new Error((await r.json().catch(()=>({}))).detail || r.status); }
   return r.status===204?null:r.json();
 }
@@ -375,11 +375,14 @@ async function doLogin(){
   }catch(e){ err.textContent = e.message==='wrong passcode'?'Wrong passcode':'Could not reach Cortex ('+e.message+'). Tip: passcode "demo" to explore.'; }
 }
 function showPasscode(){ document.getElementById('lock').classList.add('hidden'); document.getElementById('login').classList.remove('hidden'); }
-function logout(){ token=''; localStorage.removeItem('cortex_token'); booted=false; location.reload(); }
+function relock(){ token=''; localStorage.removeItem('cortex_token'); booted=false; pinBuf=''; pinFirst='';
+  if(pinSet){ lockMode='login'; showLock('Enter your PIN'); }
+  else { document.getElementById('lock').classList.add('hidden'); document.getElementById('login').classList.remove('hidden'); } }
+function logout(){ relock(); }
 
 // ---- the keypad: login / first-time set / approval step-up — all on the same nice PIN pad ----
 let booted=false, lockMode='login', pinBuf='', pinFirst='', hidAt=0, stepupResolve=null;
-function enterUnlocked(){ document.getElementById('lock').classList.add('hidden'); document.getElementById('login').classList.add('hidden'); document.getElementById('lockCancel').classList.add('hidden'); if(!booted){ booted=true; boot(); } }
+function enterUnlocked(){ document.getElementById('lock').classList.add('hidden'); document.getElementById('login').classList.add('hidden'); document.getElementById('lockCancel').classList.add('hidden'); if(!booted){ booted=true; boot(); } updateSpendChip(); checkBiometric(); }
 function showLock(msg){
   document.getElementById('lock').classList.remove('hidden');
   document.getElementById('lockmsg').textContent=msg;
@@ -524,7 +527,7 @@ function paintIcons(){
 const _money=v=>'$'+(+v||0).toFixed(2);
 const _gstDay=()=>new Date(Date.now()+144e5).toISOString().slice(0,10);  // GST (GMT+4) calendar date
 async function updateSpendChip(){
-  if(demo) return;
+  if(demo || !token) return;
   // calendar "today" (matches the Spend sheet's Today), so it resets at midnight rather than rolling 24h.
   try{ const d=await api('/api/usage?days=1'); const t=_gstDay();
     const today=((d.by_day||[]).find(x=>String(x.d).slice(0,10)===t)||{}).cost||0;
@@ -557,7 +560,7 @@ function closeSpend(){ const sh=document.getElementById('spendSheet'); if(sh) sh
 let biometricReg=false, pinSet=false;
 function _b64uToBuf(s){ s=(s||'').replace(/-/g,'+').replace(/_/g,'/'); s+='='.repeat((4-s.length%4)%4); const b=atob(s),u=new Uint8Array(b.length); for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i); return u.buffer; }
 function _bufToB64u(buf){ const b=new Uint8Array(buf); let s=''; for(let i=0;i<b.length;i++)s+=String.fromCharCode(b[i]); return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
-async function checkBiometric(){ if(demo) return; try{ const r=await api('/api/stepup/status'); biometricReg=!!(r&&r.biometric); pinSet=!!(r&&r.pin); }catch(e){} }
+async function checkBiometric(){ if(demo || !token) return; try{ const r=await api('/api/stepup/status'); biometricReg=!!(r&&r.biometric); pinSet=!!(r&&r.pin); }catch(e){} }
 // (the PIN is now the login PIN — there's no separate PIN to set; approvals reuse it via the keypad)
 async function registerDevice(){
   if(!window.PublicKeyCredential){ toast('This device/browser does not support biometric passkeys'); return; }
