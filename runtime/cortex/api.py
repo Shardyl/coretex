@@ -822,7 +822,8 @@ def intake_registration(body: RegistrationBody, token: str = "", x_token: str = 
     header), NOT the operator passcode. The token maps to {company, source}, so one endpoint serves many
     registration sources (Tabscanner site, Snap Rewards store, etc.)."""
     raw = db.setting_get("intake_tokens")
-    tokens = json.loads(raw) if raw else {}
+    # `raw` is a dict when stored as jsonb (setting_set) or a JSON string (legacy) — handle both.
+    tokens = raw if isinstance(raw, dict) else (json.loads(raw) if raw else {})
     legacy = db.setting_get("registration_intake_token")        # back-compat: original single-token URL
     if legacy and legacy not in tokens:
         tokens[legacy] = {"company": "tabscanner", "source": "Tabscanner registrations"}
@@ -831,7 +832,8 @@ def intake_registration(body: RegistrationBody, token: str = "", x_token: str = 
         raise HTTPException(status_code=403, detail="invalid token")
     reg = {"email": body.email, "first_name": body.first_name, "last_name": body.last_name,
            "name": body.name, "company_name": body.company_name or body.company, "phone": body.phone}
-    status, email = crm.add_registration(reg, company=cfg["company"], source=cfg["source"])
+    status, email = crm.add_registration(reg, company=cfg["company"], source=cfg["source"],
+                                         waitlist=bool(cfg.get("waitlist")))
     return {"ok": status in ("added", "matched"), "status": status, "email": email}
 
 

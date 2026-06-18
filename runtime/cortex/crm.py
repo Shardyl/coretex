@@ -22,6 +22,7 @@ alter table crm_master add column if not exists history jsonb not null default '
 alter table crm_master add column if not exists updated_at timestamptz not null default now();
 alter table crm_master add column if not exists newsletter_opt_out boolean not null default false;
 alter table crm_master add column if not exists newsletter_bounced boolean not null default false;
+alter table crm_master add column if not exists waitlist boolean not null default false;
 alter table crm_master drop column if exists do_not_market;
 """
 
@@ -89,10 +90,11 @@ def add_inquiry(inq: dict, company: str = "tabscanner") -> tuple[str, str | None
 
 
 def add_registration(reg: dict, company: str = "tabscanner",
-                     source: str = "Tabscanner registrations") -> tuple[str, str | None]:
+                     source: str = "Tabscanner registrations", waitlist: bool = False) -> tuple[str, str | None]:
     """Upsert a website registration as an OPTED-IN newsletter subscriber (dedup by email).
     Registering on the site = newsletter opt-in -> newsletter_subscriber='True', newsletter_opt_out=false.
-    Carries over (never clobbers) existing fields; just tags org/source/subscriber and logs the event."""
+    `waitlist=True` also flags `waitlist` (never unsets it on an existing contact). Carries over (never
+    clobbers) existing fields; just tags org/source/subscriber/waitlist and logs the event."""
     ensure_schema()
     email = (reg.get("email") or "").strip().lower()
     if not email:
@@ -106,7 +108,9 @@ def add_registration(reg: dict, company: str = "tabscanner",
     phone = (reg.get("phone") or reg.get("phone_number") or "").strip() or None
     org = _org(company)
     dom = email.split("@")[-1] if "@" in email else None
-    ev = {"ts": _now(), "event": "registration", "text": f"Registered on the {org} website (newsletter opt-in)."}
+    ev_text = (f"Joined the {org} waitlist." if waitlist
+               else f"Registered on the {org} website (newsletter opt-in).")
+    ev = {"ts": _now(), "event": "registration", "text": ev_text}
     existing = db.one("select id, organisation from crm_master where lower(email)=%s limit 1", (email,))
     if existing:
         cur = existing.get("organisation") or ""
@@ -114,16 +118,17 @@ def add_registration(reg: dict, company: str = "tabscanner",
         db.execute(
             "update crm_master set organisation=%s, newsletter_subscriber='True', newsletter_opt_out=false, "
             "lead_source=coalesce(nullif(btrim(lead_source),''), %s), "
-            "company_name=coalesce(company_name, %s), phone=coalesce(phone, %s), updated_at=now() where id=%s",
-            (new_org, source, company_name, phone, existing["id"]))
+            "company_name=coalesce(company_name, %s), phone=coalesce(phone, %s), "
+            "waitlist=(waitlist or %s), updated_at=now() where id=%s",
+            (new_org, source, company_name, phone, bool(waitlist), existing["id"]))
         log_event(email, "registration", ev["text"], company)
         return ("matched", email)
     db.execute(
         "insert into crm_master (organisation, first_name, last_name, email, company_name, phone, website, "
-        "lead_source, newsletter_subscriber, newsletter_opt_out, lead_status, stage, history) "
-        "values (%s,%s,%s,%s,%s,%s,%s,%s,'True',false,%s,%s,%s) on conflict (lower(email)) do nothing",
+        "lead_source, newsletter_subscriber, newsletter_opt_out, waitlist, lead_status, stage, history) "
+        "values (%s,%s,%s,%s,%s,%s,%s,%s,'True',false,%s,%s,%s,%s) on conflict (lower(email)) do nothing",
         (org, first or None, last or None, email, company_name, phone, dom,
-         source, "New", "Engaged", Json([ev])))
+         source, bool(waitlist), "New", "Engaged", Json([ev])))
     return ("added", email)
 
 
