@@ -1083,9 +1083,9 @@ async function delSched(id){ try{ await api('/api/schedule/'+id,{method:'DELETE'
 async function runSched(id){ try{ toast('Running…'); await api('/api/schedule/'+id+'/run',{method:'POST'}); toast('Done — it is in your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
 async function runReportNow(){ try{ toast('Generating…'); await api('/api/report/run?company='+encodeURIComponent(fval('scCo')),{method:'POST'}); toast('Done — check your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
 
-let inboxView='pending', inboxSeg=localStorage.getItem('cortex_ibseg')||'needs';
+let inboxView='pending', inboxSeg=localStorage.getItem('cortex_ibseg2')||'all';
 function setInbox(x){ inboxView=x; render(); }
-function setSeg(s){ inboxSeg=s; localStorage.setItem('cortex_ibseg',s); render(); }
+function setSeg(s){ inboxSeg=s; localStorage.setItem('cortex_ibseg2',s); render(); }
 function timeTag(ts){ if(!ts) return ''; const d=new Date(ts), diff=(Date.now()-d.getTime())/1000;
   if(diff<0) return d.toLocaleDateString([],{day:'numeric',month:'short'})+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
   if(diff<60) return 'just now'; if(diff<3600) return Math.floor(diff/60)+'m ago';
@@ -1114,7 +1114,7 @@ async function renderInbox(v){
 }
 function renderSeg(resp){
   const el=document.getElementById('ibSeg'); if(!el) return;
-  const segs=[['needs','Needs you',resp.needs_you||0],['updates','Updates',resp.updates||0],['all','All',(resp.needs_you||0)+(resp.updates||0)]];
+  const segs=[['all','All',(resp.needs_you||0)+(resp.updates||0)],['needs','Needs you',resp.needs_you||0],['updates','Updates',resp.updates||0]];
   el.innerHTML=segs.map(s=>`<button class="cseg ${inboxSeg===s[0]?'on':''}" onclick="setSeg('${s[0]}')">${s[1]}${s[2]?' '+s[2]:''}</button>`).join('');
 }
 function infoCard(t){
