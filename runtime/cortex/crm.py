@@ -164,6 +164,13 @@ def add_inbound_contact(reg: dict, company: str, classification: str, stage: str
         "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (lower(email)) do nothing",
         (org, first or None, last or None, email, email.split("@")[-1], source,
          not newsletter, "New", stage, Json([ev])))
+    try:    # grouped FYI info-card in the Inbox (one rolling card per company until dismissed)
+        from . import notifications
+        notifications.notify(f"New {classification} captured", f"{name or email} → {org}",
+                             priority="fyi", category="lead", dedup_key=f"lead:{org}",
+                             target_type="contact", target_id=email)
+    except Exception:  # noqa: BLE001
+        pass
     return ("added", email)
 
 

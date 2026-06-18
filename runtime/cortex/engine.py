@@ -23,8 +23,8 @@ import time
 
 from psycopg.types.json import Json
 
-from . import (crm, db, gmail, manager, newsletter, profile, provider, schedule, seo_report, store,
-               webauthn_auth, worker)
+from . import (crm, db, gmail, manager, newsletter, notifications, profile, provider, reminders,
+               schedule, seo_report, store, webauthn_auth, worker)
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -1068,6 +1068,10 @@ def run(poll_idle: float = 1.0) -> None:
                 poll_all_inboxes()  # classify + CRM-route EVERY connected inbox (data-driven registry)
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(inbox classify hiccup: {e})")
+            try:
+                reminders.fire_due()    # fire due reminders -> nudge notification or spawn an action task
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(reminder fire hiccup: {e})")
             try:
                 run_due_tasks()
             except Exception as e:  # noqa: BLE001

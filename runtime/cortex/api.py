@@ -28,8 +28,8 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import (catalog, config, crm, db, engine, gmail, knowledge, personas, profile, provider,
-               questionnaire, schedule, seo_report, skillqa, store, webauthn_auth, worker)
+from . import (catalog, config, crm, db, engine, gmail, knowledge, notifications, personas, profile,
+               provider, questionnaire, reminders, schedule, seo_report, skillqa, store, webauthn_auth, worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -250,35 +250,147 @@ def tasks(status: str | None = None, company: str | None = None, limit: int = 50
     return db.query(f"select * from tasks {clause} order by id desc limit %s", tuple(params))
 
 
+def _enrich_action_card(t: dict) -> dict:
+    """Enrich a task row as an Inbox ACTION card (the existing approval-card shape)."""
+    t["card"] = "action"
+    t["wp"] = db.setting_get(f"wp:{t['id']}")   # preview/edit links for blog drafts
+    if t["kind"] in engine.EMAIL_KINDS:         # email replies: show the original enquiry + send envelope
+        co = store.get_company(t["company_id"])
+        env = engine._email_envelope(t, co)
+        inq = (t.get("request") or {}).get("inquiry") or {}
+        t["email"] = {**env, "preview": engine.compose_reply_body(t, co),  # plain fallback
+                      "html": engine.compose_reply_html(t, co, for_preview=True)["html"],  # rendered, with logo
+                      "inquiry": {"name": inq.get("name"), "email": inq.get("email"),
+                                  "message": inq.get("message") or inq.get("snippet") or ""}}
+    sk = store.get_skill(t["skill_id"])         # the lane's autonomy state for the Inbox UI
+    if sk:
+        offer = (sk["authority"] == "ask" and sk["trust_streak"] >= sk["auto_threshold"]
+                 and t["kind"] != "blog" and sk["stakes"] == "low")
+        t["lane"] = {"skill_id": sk["id"], "name": sk["name"], "trust_streak": sk["trust_streak"],
+                     "auto_threshold": sk["auto_threshold"], "authority": sk["authority"],
+                     "stakes": sk["stakes"], "auto_offer": offer}
+    t["title"] = t.get("title") or (t.get("request") or {}).get("title")
+    t["skill"] = sk["name"] if sk else t.get("skill")
+    t["ts"] = (t.get("updated_at") or t.get("created_at"))
+    return t
+
+
+def _info_card(n: dict) -> dict:
+    """A notification rendered as an Inbox INFO card (swipe-to-dismiss)."""
+    return {"card": "info", "id": n["id"], "title": n["title"], "body": n.get("body"),
+            "category": n["category"], "priority": n["priority"], "count": n.get("count", 1),
+            "target_type": n.get("target_type"), "target_id": n.get("target_id"),
+            "state": n["state"], "ts": n.get("fired_at")}
+
+
 @app.get("/api/inbox")
-def inbox(company: str | None = None, _: None = Depends(auth)) -> list[dict]:
-    where = "status in ('awaiting_approval','awaiting_correction')"
-    params: list = []
+def inbox(company: str | None = None, _: None = Depends(auth)) -> dict:
+    """Unified Inbox stream: open tasks (ACTION cards) + active notifications (INFO cards).
+    Action cards first (Needs-you), then info newest-first. The task IS its own card — notifications
+    are never mirrored for tasks (see merged spec §1)."""
+    cid = None
     if company:
         co = store.get_company_by_slug(company)
+        cid = co["id"] if co else -1
+    where = "status in ('awaiting_approval','awaiting_correction')"
+    params: list = []
+    if cid is not None:
         where += " and company_id = %s"
-        params.append(co["id"] if co else -1)
-    rows = db.query(f"select * from tasks where {where} order by id desc", tuple(params))
-    for t in rows:
-        t["wp"] = db.setting_get(f"wp:{t['id']}")   # preview/edit links for blog drafts
-        if t["kind"] in engine.EMAIL_KINDS:         # email replies: show the original enquiry + send envelope
-            co = store.get_company(t["company_id"])
-            env = engine._email_envelope(t, co)
-            inq = (t.get("request") or {}).get("inquiry") or {}
-            t["email"] = {**env, "preview": engine.compose_reply_body(t, co),  # plain fallback
-                          "html": engine.compose_reply_html(t, co, for_preview=True)["html"],  # rendered, with logo
-                          "inquiry": {"name": inq.get("name"), "email": inq.get("email"),
-                                      "message": inq.get("message") or inq.get("snippet") or ""}}
-        sk = store.get_skill(t["skill_id"])         # the lane's autonomy state for the Inbox UI
-        if sk:
-            offer = (sk["authority"] == "ask" and sk["trust_streak"] >= sk["auto_threshold"]
-                     and t["kind"] != "blog" and sk["stakes"] == "low")
-            t["lane"] = {"skill_id": sk["id"], "name": sk["name"], "trust_streak": sk["trust_streak"],
-                         "auto_threshold": sk["auto_threshold"], "authority": sk["authority"],
-                         "stakes": sk["stakes"], "auto_offer": offer}
-        t["title"] = t.get("title") or (t.get("request") or {}).get("title")
-        t["skill"] = sk["name"] if sk else t.get("skill")
-    return rows
+        params.append(cid)
+    tasks = db.query(f"select * from tasks where {where} order by id desc", tuple(params))
+    actions = [_enrich_action_card(t) for t in tasks]
+    infos = [_info_card(n) for n in notifications.active(cid)]
+    return {"items": actions + infos, "needs_you": len(actions), "updates": len(infos),
+            "unread": notifications.unread_count(cid)}
+
+
+# ---------- notification actions (info cards) ----------
+
+@app.post("/api/notifications/{nid}/read")
+def notif_read(nid: int, _: None = Depends(auth)) -> dict:
+    return {"ok": True, "n": notifications.set_state(nid, "read")}
+
+
+@app.post("/api/notifications/{nid}/dismiss")
+def notif_dismiss(nid: int, _: None = Depends(auth)) -> dict:
+    return {"ok": True, "n": notifications.set_state(nid, "dismissed")}
+
+
+class SnoozeBody(BaseModel):
+    minutes: int = 60
+
+
+@app.post("/api/notifications/{nid}/snooze")
+def notif_snooze(nid: int, body: SnoozeBody, _: None = Depends(auth)) -> dict:
+    from datetime import datetime, timedelta
+    until = datetime.now(schedule._GST) + timedelta(minutes=max(1, body.minutes))
+    return {"ok": True, "n": notifications.set_state(nid, "snoozed", snooze_until=until)}
+
+
+# ---------- reminders ----------
+
+class ReminderBody(BaseModel):
+    title: str
+    when: str | None = None          # natural-language ("next Tuesday 10am") -> parsed
+    due_at: str | None = None        # OR an explicit ISO datetime
+    company: str | None = None
+    target_type: str | None = None
+    target_id: str | None = None
+    recurrence: str = "none"         # none|daily|weekly|monthly|weekday|custom
+    custom_days: int | None = None
+    priority: str = "normal"
+    action: dict | None = None       # null = nudge; else {company, skill, kind, brief}
+
+
+@app.get("/api/reminders")
+def reminders_list(status: str | None = None, company: str | None = None,
+                   _: None = Depends(auth)) -> list[dict]:
+    cid = None
+    if company:
+        co = store.get_company_by_slug(company)
+        cid = co["id"] if co else -1
+    return reminders.listing(status=status, company_id=cid)
+
+
+@app.post("/api/reminders")
+def reminders_create(body: ReminderBody, _: None = Depends(auth)) -> dict:
+    from datetime import datetime
+    due = None
+    if body.due_at:
+        try:
+            due = datetime.fromisoformat(body.due_at)
+            due = due.replace(tzinfo=schedule._GST) if due.tzinfo is None else due
+        except Exception:  # noqa: BLE001
+            due = None
+    if due is None and body.when:
+        due = reminders.parse_when(body.when)
+    if due is None:
+        raise HTTPException(status_code=400, detail="could not work out when to remind you")
+    cid = None
+    if body.company:
+        co = store.get_company_by_slug(body.company)
+        cid = co["id"] if co else None
+    r = reminders.create(body.title, due, company_id=cid, target_type=body.target_type,
+                         target_id=body.target_id, recurrence=body.recurrence, custom_days=body.custom_days,
+                         priority=body.priority, action=body.action)
+    return {"ok": True, "reminder": r}
+
+
+@app.post("/api/reminders/{rid}/snooze")
+def reminder_snooze(rid: int, body: SnoozeBody, _: None = Depends(auth)) -> dict:
+    from datetime import datetime, timedelta
+    until = datetime.now(schedule._GST) + timedelta(minutes=max(1, body.minutes))
+    return {"ok": True, "reminder": reminders.snooze(rid, until)}
+
+
+@app.post("/api/reminders/{rid}/done")
+def reminder_done(rid: int, _: None = Depends(auth)) -> dict:
+    return {"ok": True, "reminder": reminders.mark_done(rid)}
+
+
+@app.post("/api/reminders/{rid}/cancel")
+def reminder_cancel(rid: int, _: None = Depends(auth)) -> dict:
+    return {"ok": True, "reminder": reminders.cancel(rid)}
 
 
 # ---------- calendar / scheduled tasks ----------
@@ -389,12 +501,22 @@ def inbox_history(q: str | None = None, start: str | None = None, end: str | Non
             title = req.get("title") or "Report"
         else:
             title = req.get("title") or (t.get("draft") or "").split("\n")[0][:70] or t["kind"]
-        out.append({"id": t["id"], "kind": t["kind"], "status": t["status"],
+        out.append({"card": "action", "id": t["id"], "kind": t["kind"], "status": t["status"],
                     "company": co["slug"] if co else None, "company_name": co["name"] if co else "",
                     "skill": sk["name"] if sk else "", "title": title,
                     "summary": (t.get("draft") or "")[:160], "body": (t.get("draft") or "")[:4000],
                     "when": t["updated_at"].isoformat() if t.get("updated_at") else None})
-    return out
+    if not q:   # merge in dismissed/read notifications (info cards) by date; skip on a text search
+        cid = None
+        if company:
+            co2 = store.get_company_by_slug(company); cid = co2["id"] if co2 else -1
+        for n in notifications.history(cid, limit):
+            out.append({"card": "info", "id": n["id"], "kind": n["category"], "status": n["state"],
+                        "company": None, "company_name": "", "skill": "", "title": n["title"],
+                        "summary": (n.get("body") or "")[:160], "body": n.get("body") or "",
+                        "when": n["fired_at"].isoformat() if n.get("fired_at") else None})
+    out.sort(key=lambda x: x.get("when") or "", reverse=True)
+    return out[:limit]
 
 
 class AuthorityBody(BaseModel):
@@ -1476,6 +1598,25 @@ SKILL_TOOLS = [
     {"name": "list_scheduled",
      "description": "List the scheduled calendar tasks.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}}},
+    {"name": "set_reminder",
+     "description": "Set a reminder for Rashad. A NUDGE (no action_*) drops an info card in the Inbox at the "
+                    "time, pointing at the target. An ACTION reminder (give action_skill + action_brief) spawns "
+                    "a task at the time that flows through the normal draft -> approval pipeline. Use for "
+                    "'remind me to...', 'follow up with...', 'in N days draft...'. Put the natural-language time "
+                    "in `when` (it's parsed server-side).",
+     "input_schema": {"type": "object", "properties": {
+        "title": {"type": "string", "description": "what it says, e.g. 'Follow up with Seb'"},
+        "when": {"type": "string", "description": "natural-language time, e.g. 'next Tuesday 10am', 'in 3 days'"},
+        "recurrence": {"type": "string", "enum": ["none", "daily", "weekly", "monthly", "weekday", "custom"]},
+        "custom_days": {"type": "integer", "description": "for recurrence=custom: every N days"},
+        "company": {"type": "string", "description": "your business slug, if it relates to one"},
+        "target_type": {"type": "string", "description": "contact|deal|project|account|task if it's about a record"},
+        "target_id": {"type": "string", "description": "the record id or email"},
+        "action_company": {"type": "string", "description": "ACTION: business slug to draft for"},
+        "action_skill": {"type": "string", "description": "ACTION: skill_key the worker uses"},
+        "action_kind": {"type": "string", "description": "ACTION: kind (content/email_reply/blog/...)"},
+        "action_brief": {"type": "string", "description": "ACTION: what to draft when it fires"}},
+        "required": ["title", "when"]}},
 ]
 
 
@@ -1576,6 +1717,24 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         rows = schedule.listing(inp.get("company"))
         return json.dumps([{"title": r["title"], "cadence": r["cadence"], "next_run": str(r["next_run"]),
                             "enabled": r["enabled"]} for r in rows]) or "no scheduled tasks"
+    if name == "set_reminder":
+        due = reminders.parse_when(inp.get("when") or "")
+        if not due:
+            return "Could not work out the time — ask Rashad to restate it (e.g. 'next Tuesday 10am')."
+        cid = None
+        if inp.get("company"):
+            co = store.get_company_by_slug(inp["company"]); cid = co["id"] if co else None
+        action = None
+        if inp.get("action_skill") and inp.get("action_brief"):
+            action = {"company": inp.get("action_company") or inp.get("company"),
+                      "skill": inp["action_skill"], "kind": inp.get("action_kind") or "content",
+                      "brief": inp["action_brief"]}
+        r = reminders.create(inp["title"], due, company_id=cid, target_type=inp.get("target_type"),
+                             target_id=inp.get("target_id"), recurrence=inp.get("recurrence") or "none",
+                             custom_days=inp.get("custom_days"), action=action)
+        rep = (" repeating " + r["recurrence"]) if r.get("recurrence") not in (None, "none") else ""
+        kind = "action reminder (drafts when it fires)" if action else "reminder"
+        return f"Set {kind} #{r['id']}: \"{inp['title']}\" for {due.strftime('%a %d %b, %H:%M')} GST{rep}."
     if name == "create_skill":
         dept = inp.get("department")
         cat, mgr = catalog.dept_meta(dept) if dept else (None, None)
@@ -1641,7 +1800,7 @@ def _chat_system() -> str:
 # A Chief CAN grow the org — create_skill is global-by-nature (added to every company), so there's no
 # scope to bleed. But the scoped, bleed-risky part — writing per-company RULES (add_rule/update_craft)
 # — stays with the Manager (one keeper of rules). Managers + general Cortex get the full set.
-_CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "create_skill"}
+_CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "create_skill", "set_reminder"}
 
 
 @app.get("/api/heads")
