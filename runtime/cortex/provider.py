@@ -64,10 +64,13 @@ def resolve_model(tier: str | None) -> str:
 
 def think(system: str, user: str, *, fast: bool = False, model: str | None = None,
           think_hard: bool = False, max_tokens: int = 6000, purpose: str = "think",
-          company: str | None = None) -> str:
-    """One-shot completion → plain text. `model` overrides the fast/slow default when given."""
+          company: str | None = None, cache: bool = False) -> str:
+    """One-shot completion → plain text. `model` overrides the fast/slow default when given.
+    `cache=True` prompt-caches the system prompt — set it on REPEAT jobs (same big system prefix
+    re-sent often: the inbox classifier, manager reviews, drafts) so the prefix reads at ~10%."""
     mdl = model or (MODEL_FAST if fast else MODEL)
-    kwargs: dict = dict(model=mdl, max_tokens=max_tokens, system=system,
+    kwargs: dict = dict(model=mdl, max_tokens=max_tokens,
+                        system=_cached_system(system) if cache else system,
                         messages=[{"role": "user", "content": user}])
     if think_hard:
         kwargs["thinking"] = {"type": "adaptive"}
@@ -153,11 +156,12 @@ def _loads(raw: str) -> dict:
 
 
 def think_json(system: str, user: str, *, fast: bool = True, model: str | None = None,
-               max_tokens: int = 2000, purpose: str = "think_json", company: str | None = None) -> dict:
-    """Completion that must return a JSON object → parsed dict."""
+               max_tokens: int = 2000, purpose: str = "think_json", company: str | None = None,
+               cache: bool = False) -> dict:
+    """Completion that must return a JSON object → parsed dict. `cache=True` prompt-caches the system."""
     sys = system + "\n\nRespond with ONLY a valid JSON object — no prose, no markdown fences."
     return _loads(think(sys, user, fast=fast, model=model, max_tokens=max_tokens,
-                        purpose=purpose, company=company))
+                        purpose=purpose, company=company, cache=cache))
 
 
 def research_json(system: str, user: str, *, model: str | None = None,

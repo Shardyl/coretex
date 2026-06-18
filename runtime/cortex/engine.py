@@ -859,7 +859,7 @@ def classify_email(company: dict, email: dict) -> dict:
             + (email.get("body") or email.get("snippet") or "").strip()[:2500])
     try:
         out = provider.think_json(system, user, model=provider.MODEL_ROUTER,
-                                  purpose="inbox-classify", company=company.get("slug"))
+                                  purpose="inbox-classify", company=company.get("slug"), cache=True)
     except Exception:  # noqa: BLE001
         return {"category": "unclear", "to_crm": False, "reason": "classify error"}
     cat = (out.get("category") or "unclear").strip().lower()
