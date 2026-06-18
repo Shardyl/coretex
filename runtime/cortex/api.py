@@ -1505,7 +1505,9 @@ CHAT_SYSTEM_BASE = (
     "them. Voice-to-text frequently mis-hears 'Rashad' as 'Richard' — they are the SAME person (him): so "
     "'Richard', 'Richard at Tabscanner', etc. all mean Rashad himself, and rashad@tabscanner.com is his "
     "Tabscanner business email. When he names a person or a company, proactively look them up with "
-    "crm_lookup BEFORE asking him for details (like an email) you could find yourself. "
+    "crm_lookup BEFORE asking him for details (like an email) you could find yourself. If you don't find an "
+    "EXACT match, offer the closest matches as options ('I found a few Goldwaters — Adam, Lee or Stuart?') "
+    "rather than saying you can't find anyone. "
     "When he TEACHES you something durable — he says 'remember…', 'always…', 'from now on…', or states a "
     "clear standing preference or a fact to keep — call remember_preference to persist it for every future "
     "conversation, then confirm briefly. If unsure whether it's a one-off or a standing rule, ask him. (This "
@@ -1735,11 +1737,20 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
     if name == "skip_task":
         return json.dumps(engine.skip_task(int(inp["task_id"])), default=str)
     if name == "crm_lookup":
-        like = f"%{inp.get('query', '')}%"
-        cons = db.query("select first_name,last_name,email,company_name,stage,is_client from crm_master "
-                        "where first_name ilike %s or last_name ilike %s or email ilike %s or company_name ilike %s "
-                        "order by is_client desc, first_name nulls last limit 12", (like, like, like, like))
-        accs = db.query("select id,name,domain from crm_accounts where name ilike %s order by name limit 8", (like,))
+        q = (inp.get("query") or "").strip()
+        toks = [t for t in q.split() if t] or [q]   # match EVERY word across the full name (handles "Adam Goldwater")
+        hay = ("(coalesce(first_name,'')||' '||coalesce(last_name,'')||' '||coalesce(email,'')||' '||"
+               "coalesce(company_name,''))")
+        where = " and ".join([f"{hay} ilike %s"] * len(toks))
+        params = tuple(f"%{t}%" for t in toks)
+        cons = db.query(f"select first_name,last_name,email,company_name,organisation,stage,is_client from crm_master "
+                        f"where {where} order by is_client desc, first_name nulls last limit 12", params)
+        if not cons and len(toks) > 1:   # no exact all-words hit -> loosen to ANY word, so near matches surface
+            owhere = " or ".join([f"{hay} ilike %s"] * len(toks))
+            cons = db.query(f"select first_name,last_name,email,company_name,organisation,stage,is_client from crm_master "
+                            f"where {owhere} order by is_client desc, first_name nulls last limit 12", params)
+        awhere = " and ".join(["(coalesce(name,'')||' '||coalesce(domain,'')) ilike %s"] * len(toks))
+        accs = db.query(f"select id,name,domain from crm_accounts where {awhere} order by name limit 8", params)
         return json.dumps({"contacts": cons, "companies": accs}, default=str)
     if name == "crm_pipeline":
         slug = inp.get("company")
@@ -1883,22 +1894,31 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         to_email = (inp.get("to_email") or "").strip()
         # Resolve the recipient from the CRM SERVER-SIDE so the email is real (never a "[email from CRM]" placeholder).
         if (not to_email or "@" not in to_email or "[" in to_email) and to_name:
-            like = f"%{to_name}%"
-            ms = db.query(
-                "select first_name, last_name, email from crm_master where coalesce(email,'') <> '' and "
-                "(first_name ilike %s or last_name ilike %s or "
-                "(coalesce(first_name,'')||' '||coalesce(last_name,'')) ilike %s) "
-                "order by is_client desc nulls last limit 8", (like, like, like))
+            toks = [t for t in to_name.split() if t] or [to_name]
+            hay = "(coalesce(first_name,'')||' '||coalesce(last_name,''))"
+            params = tuple(f"%{t}%" for t in toks)
+
+            def _fmt(rows):   # name <email> [organisation] — so Rashad can tell them apart
+                return "; ".join((f"{(r.get('first_name') or '').strip()} {(r.get('last_name') or '').strip()} "
+                                  f"<{r['email']}>" + (f" [{r['organisation']}]" if r.get('organisation') else "")).strip()
+                                 for r in rows)
+            and_w = " and ".join([f"{hay} ilike %s"] * len(toks))
+            ms = db.query(f"select first_name,last_name,email,organisation from crm_master where coalesce(email,'')<>'' "
+                          f"and {and_w} order by is_client desc nulls last limit 8", params)
             if len(ms) == 1:
                 to_email = ms[0]["email"]
             elif len(ms) > 1:
-                opts = "; ".join(f"{(m.get('first_name') or '').strip()} {(m.get('last_name') or '').strip()} "
-                                 f"<{m['email']}>".strip() for m in ms)
-                return (f"There's more than one '{to_name}' in the CRM: {opts}. Ask Rashad which one, then "
+                return (f"There's more than one '{to_name}' in the CRM: {_fmt(ms)}. Ask Rashad which one, then "
                         "call draft_email again with that exact to_email.")
-            else:
-                return (f"'{to_name}' isn't in the CRM. Ask Rashad for {to_name}'s email address "
-                        "(then call draft_email with it), or confirm he wants it drafted without a resolved address.")
+            else:   # no exact match — offer the closest (any-word) matches as options instead of giving up
+                or_w = " or ".join([f"{hay} ilike %s"] * len(toks))
+                near = db.query(f"select first_name,last_name,email,organisation from crm_master where "
+                                f"coalesce(email,'')<>'' and ({or_w}) order by is_client desc nulls last limit 6", params)
+                if near:
+                    return (f"No exact '{to_name}' in the CRM, but the closest matches are: {_fmt(near)}. Ask Rashad "
+                            "which one he means (or for the right email), then call draft_email with that to_email.")
+                return (f"'{to_name}' isn't in the CRM. Ask Rashad for {to_name}'s email address, then call "
+                        "draft_email with it.")
         sk = (store.get_skill_by_key(co["id"], "email-handling")
               or store.get_skill_by_key(co["id"], "general-operations")
               or db.one("select * from skills where company_id=%s order by id limit 1", (co["id"],)))
