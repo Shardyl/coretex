@@ -285,7 +285,6 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
     <div class="spacer"></div>
     <button class="chip spend" id="spendChip" title="Cortex spend (tap for detail)" onclick="openSpend()">$—</button>
     <select class="sel" id="coSel" onchange="localStorage.setItem('cortex_company',this.value);render()"></select>
-    <button class="iconbtn" title="Activity" onclick="go('log')" id="hLog"></button>
     <button class="iconbtn" title="Lock Cortex" onclick="lockNow()" id="hLock"></button>
     <button class="iconbtn" id="themeBtn" onclick="toggleTheme()"></button>
   </div>
@@ -497,7 +496,7 @@ const ICON={
 };
 function ic(n,s){ s=s||20; return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle"><path d="${ICON[n]||''}"></path></svg>`; }
 function paintIcons(){
-  const m={hLog:['pulse',20],hLock:['lock',20],themeBtn:['moon',20]};
+  const m={hLock:['lock',20],themeBtn:['moon',20]};
   Object.keys(m).forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=ic(m[id][0],m[id][1]); });
   document.querySelectorAll('[data-ic]').forEach(el=>{ el.innerHTML=ic(el.getAttribute('data-ic'),22); });
   updateSpendChip();
@@ -505,10 +504,11 @@ function paintIcons(){
 
 // ---- Spend chip + sheet (Anthropic cost from /api/usage) ----
 const _money=v=>'$'+(+v||0).toFixed(2);
+const _gstDay=()=>new Date(Date.now()+144e5).toISOString().slice(0,10);  // GST (GMT+4) calendar date
 async function updateSpendChip(){
   if(demo) return;
   // calendar "today" (matches the Spend sheet's Today), so it resets at midnight rather than rolling 24h.
-  try{ const d=await api('/api/usage?days=1'); const t=new Date().toISOString().slice(0,10);
+  try{ const d=await api('/api/usage?days=1'); const t=_gstDay();
     const today=((d.by_day||[]).find(x=>String(x.d).slice(0,10)===t)||{}).cost||0;
     const el=document.getElementById('spendChip'); if(el) el.textContent=_money(today); }
   catch(e){}
@@ -520,7 +520,7 @@ async function openSpend(){
   if(demo){ body.innerHTML='<div class="meta" style="padding:18px 4px">No spend data in demo.</div>'; return; }
   try{
     const d=await api('/api/usage?days=7');
-    const t=new Date().toISOString().slice(0,10);
+    const t=_gstDay();
     const today=((d.by_day||[]).find(x=>String(x.d).slice(0,10)===t)||{}).cost||0;
     const tot=(d.total&&d.total.cost)||0, calls=(d.total&&d.total.calls)||0;
     const rows=(arr,key)=>(arr||[]).map(r=>`<div class="srow"><span>${esc(String(r[key]||'?'))}</span><span class="mut">${r.calls} ${r.calls==1?'call':'calls'}</span><b>${_money(r.cost)}</b></div>`).join('');

@@ -16,8 +16,15 @@ from . import config
 SCHEMA_PATH = pathlib.Path(__file__).resolve().parents[2] / "db" / "schema.sql"
 
 
+# Cortex's standard timezone (GST / Asia/Dubai, GMT+4, no DST). Set on every DB session so now(), ts::date,
+# date_trunc, "today", by_day grouping etc. are all GST — not UTC. Timestamps are still stored as UTC
+# internally (timestamptz); this only changes how they're computed/displayed.
+TZ = config.get("CORTEX_TZ", "Asia/Dubai")
+
+
 def connect() -> psycopg.Connection:
-    return psycopg.connect(config.require("DATABASE_URL"), row_factory=dict_row, autocommit=True)
+    return psycopg.connect(config.require("DATABASE_URL"), row_factory=dict_row, autocommit=True,
+                           options=f"-c timezone={TZ}")
 
 
 # columns added after the first schema shipped — applied to existing DBs on migrate.

@@ -10,6 +10,8 @@ from psycopg.types.json import Json
 
 from . import db
 
+_GST = timezone(timedelta(hours=4))   # Cortex standard time: GST (GMT+4, no DST) — schedules fire on GST clock
+
 _SCHEMA = """
 create table if not exists scheduled_tasks (
   id bigserial primary key,
@@ -30,7 +32,7 @@ def ensure_schema() -> None:
 
 
 def next_run(cadence: str, weekday: int, hour: int, minute: int, after=None) -> datetime:
-    now = after or datetime.now(timezone.utc)
+    now = after or datetime.now(_GST)
     t = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if cadence == "daily":
         return t if t > now else t + timedelta(days=1)
@@ -60,7 +62,7 @@ def next_monthly_slot(company: str, kind: str = "newsletter", hour: int = 9) -> 
     month: if the company already has one scheduled, take the 1st of the month after its latest; else the
     next upcoming 1st."""
     ensure_schema()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(_GST)
     rows = db.query("select next_run from scheduled_tasks where company=%s and kind=%s and enabled=true "
                     "and next_run is not null order by next_run desc limit 1", (company, kind))
     if rows and rows[0]["next_run"] and rows[0]["next_run"] > now:
