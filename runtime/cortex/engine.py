@@ -829,9 +829,11 @@ def poll_inquiries_window(days: int = 2) -> dict:
 
 # ---------- inbox classifier (the sales-triage universal skill, on Haiku) ----------
 
-INBOX_CATEGORIES = ["lead", "partner", "support", "freelancer", "vendor",
+INBOX_CATEGORIES = ["lead", "partner", "support", "freelancer", "vendor", "recruitment",
                     "marketing", "spam", "personal", "automated"]
-_INBOX_CRM = {"lead", "partner", "support", "freelancer", "vendor"}   # these become CRM contacts
+_INBOX_CRM = {"lead", "partner", "support", "freelancer", "vendor", "recruitment"}   # these become CRM contacts
+# of those, only these inbound contacts are newsletter-eligible (soft opt-in); the rest are CRM-only:
+_INBOX_NEWSLETTER = {"lead", "partner", "support"}
 # each company's main catch-all inbox -> used to derive its OWN domain (never CRM our own / internal senders)
 INBOXES = {"tabscanner": "api@tabscanner.com", "sensa": "hello@sensa.digital",
            "snaprewards": "loyalty@snap-rewards.com", "filmspoke": "create@filmspoke.ai",
@@ -852,8 +854,10 @@ def classify_email(company: dict, email: dict) -> dict:
         worker._company_context(company),
         worker._rules_block(skill) if skill else "",
         ("Classify the email into EXACTLY ONE category from: " + ", ".join(INBOX_CATEGORIES) + ". "
+         "Guidance: freelancer = a contractor/agency offering THEIR services to us; recruitment = a person "
+         "seeking a JOB with us (a CV, 'are you hiring?', wants to join the team). "
          'Return JSON {"category":"<one>","to_crm":boolean,"reason":"<short phrase>"}. to_crm is true for '
-         "lead/partner/support/freelancer/vendor, false for marketing/spam/personal/automated."),
+         "lead/partner/support/freelancer/vendor/recruitment, false for marketing/spam/personal/automated."),
     ]))
     user = (f"From: {email.get('name')} <{email.get('email')}>\nSubject: {email.get('subject')}\n\n"
             + (email.get("body") or email.get("snippet") or "").strip()[:2500])
@@ -898,7 +902,8 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                 stage = "Engaged" if cls["category"] in ("lead", "partner", "support") else "Cold"
                 try:
                     st, _ = crm.add_inbound_contact({"email": e["email"], "name": e["name"]},
-                                                    company_slug, cls["category"], stage=stage)
+                                                    company_slug, cls["category"], stage=stage,
+                                                    newsletter=cls["category"] in _INBOX_NEWSLETTER)
                     if st == "added":
                         added += 1
                 except Exception:  # noqa: BLE001

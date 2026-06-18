@@ -133,10 +133,13 @@ def add_registration(reg: dict, company: str = "tabscanner",
 
 
 def add_inbound_contact(reg: dict, company: str, classification: str, stage: str = "Engaged",
-                        source: str = "inbound email") -> tuple[str, str | None]:
+                        source: str = "inbound email", newsletter: bool = False) -> tuple[str, str | None]:
     """Add/dedup a contact from an INBOUND email (someone emailed a catch-all inbox). Org-tagged, the
-    classification logged in history, lead_source set. NOT a newsletter opt-in (emailing us is not
-    subscribing). Carries over existing fields, never clobbers."""
+    classification logged in history, lead_source set. `newsletter` = is this inbound category eligible
+    for the newsletter (leads/customers/partners yes; freelancers/vendors/applicants no). Because the
+    audience is OPT-OUT, a NEW non-eligible contact is inserted newsletter_opt_out=true so it stays
+    CRM-only. EXISTING contacts are never touched on this flag (preserve their real subscription status).
+    Carries over existing fields, never clobbers."""
     ensure_schema()
     email = (reg.get("email") or "").strip().lower()
     if not email or "@" not in email:
@@ -157,8 +160,10 @@ def add_inbound_contact(reg: dict, company: str, classification: str, stage: str
         return ("matched", email)
     db.execute(
         "insert into crm_master (organisation, first_name, last_name, email, website, lead_source, "
-        "lead_status, stage, history) values (%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (lower(email)) do nothing",
-        (org, first or None, last or None, email, email.split("@")[-1], source, "New", stage, Json([ev])))
+        "newsletter_opt_out, lead_status, stage, history) "
+        "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (lower(email)) do nothing",
+        (org, first or None, last or None, email, email.split("@")[-1], source,
+         not newsletter, "New", stage, Json([ev])))
     return ("added", email)
 
 
