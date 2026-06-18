@@ -832,8 +832,9 @@ def poll_inquiries_window(days: int = 2) -> dict:
 INBOX_CATEGORIES = ["lead", "partner", "support", "freelancer", "vendor", "recruitment",
                     "marketing", "spam", "personal", "automated"]
 _INBOX_CRM = {"lead", "partner", "support", "freelancer", "vendor", "recruitment"}   # these become CRM contacts
-# of those, only these inbound contacts are newsletter-eligible (soft opt-in); the rest are CRM-only:
-_INBOX_NEWSLETTER = {"lead", "partner", "support"}
+# every inbound contact we add is newsletter-eligible (Rashad 2026-06-18: they contacted us, it's a general
+# newsletter, and unsubscribe + complaint->opt-out keep it self-correcting). Own knob in case we re-scope.
+_INBOX_NEWSLETTER = set(_INBOX_CRM)
 # each company's main catch-all inbox -> used to derive its OWN domain (never CRM our own / internal senders)
 INBOXES = {"tabscanner": "api@tabscanner.com", "sensa": "hello@sensa.digital",
            "snaprewards": "loyalty@snap-rewards.com", "filmspoke": "create@filmspoke.ai",
