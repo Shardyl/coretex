@@ -28,13 +28,13 @@ from . import (crm, db, gmail, manager, newsletter, notifications, profile, prov
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
-EMAIL_KINDS = {"email_reply"}              # the reply is sent via Gmail on approval
-EMAIL_RENDER_KINDS = EMAIL_KINDS | {"email_draft"}   # rendered as an email (envelope + logo). email_draft is
-# a REVIEW-ONLY outbound draft (Rashad sends it himself; approving just marks it done) until email-send OAuth lands.
-NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send", "email_reply"}  # outward sends always need the owner
+EMAIL_KINDS = {"email_reply"}              # an inbound-reply, sent via Gmail on approval
+EMAIL_SEND_KINDS = {"email_reply", "email_draft"}    # ALL kinds that actually SEND an email on approval
+EMAIL_RENDER_KINDS = EMAIL_KINDS | {"email_draft"}   # rendered as an email (envelope + logo) in the Inbox
+NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send", "email_reply", "email_draft"}  # outward sends always need the owner
 # PUBLIC actions (go OUT to the public) — approving these needs a biometric step-up (see
 # feedback_public_actions_biometric). Internal items use the normal approve. Split by where the action fires:
-_APPROVE_PUBLIC = {"email_reply", "newsletter_idea", "blog"}      # the action happens in approve_task
+_APPROVE_PUBLIC = {"email_reply", "email_draft", "newsletter_idea", "blog"}   # the action happens in approve_task
 _CONFIRM_PUBLIC = {"newsletter_review", "newsletter_send"}        # the action happens in confirm_send_task
 
 
@@ -148,12 +148,13 @@ def _email_envelope(task: dict, company: dict) -> dict:
     except Exception:  # noqa: BLE001
         data = {}
     cc_list, bcc_list = [], []
-    for v in [(data.get("default_cc") or "").strip()]:
-        if "@" in v:
-            cc_list.append(v)
-    for v in [(data.get("default_bcc") or "").strip()]:
-        if "@" in v:
-            bcc_list.append(v)
+    if not (task.get("request") or {}).get("outbound"):   # default CC/BCC apply to inquiry REPLIES only —
+        for v in [(data.get("default_cc") or "").strip()]:  # a Talk-composed OUTBOUND draft never inherits them
+            if "@" in v:
+                cc_list.append(v)
+        for v in [(data.get("default_bcc") or "").strip()]:
+            if "@" in v:
+                bcc_list.append(v)
     try:
         rc, rb = _rule_recipients(store.get_skill(task.get("skill_id")))
         cc_list += rc
@@ -292,10 +293,11 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         return {"blocked": True, "error": "Email sending is PAUSED. Resume it to send this reply."}
     env = _email_envelope(task, company)
     c = compose_reply_html(task, company, for_preview=False)
+    files = (task.get("request") or {}).get("attachments")   # outbound drafts carry real file attachments
     res = gmail.send_message(env["to"], env["subject"], c["plain"], from_addr=env["from"], cc=env["cc"],
-                             html=c["html"], inline_images=c["inline"], bcc=env.get("bcc"))
+                             html=c["html"], inline_images=c["inline"], bcc=env.get("bcc"), files=files)
     try:
-        crm.log_event(env["to"], "reply_sent", f"Reply sent: {env['subject']}", company.get("slug"))
+        crm.log_event(env["to"], "email_sent", f"Email sent: {env['subject']}", company.get("slug"))
     except Exception:  # noqa: BLE001 — CRM history must never block the send
         pass
     store.update_task(task["id"], status="done")
@@ -410,7 +412,7 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         n = len(newsletter.recipients(company["id"]))
         return {"needs_confirm": True, "recipients": n,
                 "error": f"Confirm with the recipient count ({n:,}) in the cockpit."}
-    if task["kind"] in EMAIL_KINDS:
+    if task["kind"] in EMAIL_SEND_KINDS:   # email_reply + email_draft both SEND on approval (after the PIN gate)
         return _send_email_reply(task, skill, company, actor, auto)
     site = _site_for(task, company)
     if site:

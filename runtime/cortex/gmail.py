@@ -104,7 +104,8 @@ def _parse(msg: dict) -> dict:
 
 def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
                  cc: str | None = None, html: str | None = None,
-                 inline_images: list | None = None, bcc: str | None = None) -> dict:
+                 inline_images: list | None = None, bcc: str | None = None,
+                 files: list | None = None) -> dict:
     """Send an email from the connected sending mailbox (gmail.modify) — it lands in that account's Sent
     folder. If `html` is given, sends a multipart/alternative (plain + html); any `inline_images`
     (list of (cid, filepath)) are embedded so a footer logo renders. `from_addr` is honoured when it
@@ -141,6 +142,29 @@ def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
             msg = alt
     else:
         msg = MIMEText(body or "", "plain", "utf-8")
+    if files:   # real file attachments (data: URLs) -> wrap the body in a multipart/mixed
+        from email import encoders as _enc
+        from email.mime.base import MIMEBase
+        outer = MIMEMultipart("mixed")
+        outer.attach(msg)
+        for i, u in enumerate(files):
+            if not isinstance(u, str) or not u.startswith("data:") or ";base64," not in u:
+                continue
+            head, b64 = u.split(";base64,", 1)
+            mime = head[5:] or "application/octet-stream"
+            maintype, _, subtype = mime.partition("/")
+            try:
+                data = base64.b64decode(b64)
+            except Exception:  # noqa: BLE001
+                continue
+            part = MIMEBase(maintype or "application", subtype or "octet-stream")
+            part.set_payload(data)
+            _enc.encode_base64(part)
+            ext = {"image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/webp": "webp",
+                   "application/pdf": "pdf"}.get(mime, "bin")
+            part.add_header("Content-Disposition", "attachment", filename=f"attachment{i + 1}.{ext}")
+            outer.attach(part)
+        msg = outer
     msg["To"] = to
     msg["Subject"] = subject
     if from_addr:
