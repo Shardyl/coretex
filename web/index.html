@@ -507,8 +507,10 @@ function paintIcons(){
 const _money=v=>'$'+(+v||0).toFixed(2);
 async function updateSpendChip(){
   if(demo) return;
-  try{ const d=await api('/api/usage?days=1'); const el=document.getElementById('spendChip');
-    if(el) el.textContent=_money(d&&d.total&&d.total.cost); }
+  // calendar "today" (matches the Spend sheet's Today), so it resets at midnight rather than rolling 24h.
+  try{ const d=await api('/api/usage?days=1'); const t=new Date().toISOString().slice(0,10);
+    const today=((d.by_day||[]).find(x=>String(x.d).slice(0,10)===t)||{}).cost||0;
+    const el=document.getElementById('spendChip'); if(el) el.textContent=_money(today); }
   catch(e){}
 }
 async function openSpend(){
