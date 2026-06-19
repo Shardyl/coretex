@@ -21,7 +21,9 @@ _BLOG_SCHEMA = (
     "title (the post H1, usually = seo.title); dek (one or two sentence standfirst, leads with the point); "
     "byline {author, role, date (ISO), read_time}; "
     "featured_image {use:true, image_prompt (on-brand, NO text/letters/numbers in image), alt, caption} (the hero, on every post); "
-    "key_takeaways {use, points:[2-4 plain lines, the extractable answer, payoff first]}; "
+    "the answer block (use the ONE block the company craft names, same shape): "
+    "key_takeaways {use, points:[2-4 plain lines, the extractable answer, payoff first]} "
+    "OR in_brief {use, points:[2-3 plain lines, the extractable answer, payoff first]}; "
     "lead (opening paragraph, leads with the most important thing); "
     "sections (array of {heading (H2), body (1-3 short paragraphs, PLAIN text), "
     "figure {use, image_prompt, alt, caption}, callout {use, title, text}, "
@@ -88,6 +90,9 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
     bg = col.get("bg", "#0A0A0A"); surface = col.get("surface", "#121212"); line = col.get("line", "#242424")
     ink = col.get("ink", "#F4F4F5"); body = col.get("body", "#CFD0D5"); muted = col.get("muted", "#9A9AA0")
     red = col.get("primary", "#E50914")
+    # text that sits ON the accent (buttons / filled discs): white suits a dark accent (FilmSpoke red),
+    # a bright accent (Sensa cyan) needs dark ink. Kit opts in via accent_ink; default white.
+    accent_ink = col.get("accent_ink", "#fff")
     headf = "'Poppins',-apple-system,'Segoe UI',Arial,sans-serif"
     bodyf = "'Inter',-apple-system,'Segoe UI',Arial,sans-serif"
     title = (c.get("seo") or {}).get("title") or c.get("title") or "Untitled"
@@ -120,21 +125,24 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
         if hero.get("caption"):
             P.append(f'<figcaption style="color:{muted};font-size:13px;margin-top:8px">{_esc(hero["caption"])}</figcaption>')
         P.append('</figure>')
-    # the AEO answer block (accent left rule): key_takeaways (list) or in_brief (text)
-    kt = c.get("key_takeaways") or {}
-    ib = c.get("in_brief") or {}
-    if kt.get("use") and kt.get("points"):
-        items = "".join(f'<li style="color:{ink};font-size:17px;line-height:1.7;margin:0 0 8px">{_esc(p)}</li>'
-                        for p in kt["points"])
+    # the AEO answer block (accent left rule). The company's craft picks the block: key_takeaways -> the
+    # "Key takeaways" label, in_brief -> "In brief"; each takes points[] (bullets) or text (one paragraph).
+    for blk, lbl in ((c.get("key_takeaways") or {}, "Key takeaways"), (c.get("in_brief") or {}, "In brief")):
+        if not blk.get("use"):
+            continue
+        pts = blk.get("points") or []
+        if pts:
+            items = "".join(f'<li style="color:{ink};font-size:17px;line-height:1.7;margin:0 0 8px">{_esc(p)}</li>'
+                            for p in pts)
+            inner = f'<ul style="margin:0;padding-left:18px">{items}</ul>'
+        elif blk.get("text"):
+            inner = f'<div style="color:{ink};font-size:18px;line-height:1.7">{_esc(blk["text"])}</div>'
+        else:
+            continue
         P.append(f'<div style="border-left:2px solid {red};padding:4px 0 4px 18px;margin:0 0 28px">'
                  f'<div style="color:{red};font-family:{headf};font-weight:700;font-size:12px;letter-spacing:.14em;'
-                 f'text-transform:uppercase;margin-bottom:8px">Key takeaways</div>'
-                 f'<ul style="margin:0;padding-left:18px">{items}</ul></div>')
-    elif ib.get("use") and ib.get("text"):
-        P.append(f'<div style="border-left:2px solid {red};padding:4px 0 4px 18px;margin:0 0 28px">'
-                 f'<div style="color:{red};font-family:{headf};font-weight:700;font-size:12px;letter-spacing:.14em;'
-                 f'text-transform:uppercase;margin-bottom:8px">In brief</div>'
-                 f'<div style="color:{ink};font-size:18px;line-height:1.7">{_esc(ib["text"])}</div></div>')
+                 f'text-transform:uppercase;margin-bottom:8px">{lbl}</div>{inner}</div>')
+        break   # only one answer block per post
     # lead
     if c.get("lead"):
         P.append(_paras(c["lead"], body))
@@ -157,7 +165,7 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
             P.append('<div style="margin:0 0 24px">')
             for n, it in enumerate(stp["items"], 1):
                 P.append(f'<div style="display:flex;gap:12px;margin:0 0 12px"><div style="flex:none;width:28px;'
-                         f'height:28px;border-radius:999px;background:{red};color:#fff;font-family:{headf};'
+                         f'height:28px;border-radius:999px;background:{red};color:{accent_ink};font-family:{headf};'
                          f'font-weight:700;font-size:14px;line-height:28px;text-align:center">{n}</div>'
                          f'<div><div style="color:{ink};font-family:{headf};font-weight:700;font-size:16px">'
                          f'{_esc(it.get("title"))}</div><div style="color:{body};font-size:16px;line-height:1.6">'
@@ -211,7 +219,7 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
         pr = cc.get("primary") or {}; se = cc.get("secondary") or {}
         btns = ""
         if pr.get("url"):
-            btns += (f'<a href="{_esc(pr["url"])}" style="display:inline-block;background:{red};color:#fff;'
+            btns += (f'<a href="{_esc(pr["url"])}" style="display:inline-block;background:{red};color:{accent_ink};'
                      f'font-weight:700;font-size:15px;text-decoration:none;padding:13px 22px;border-radius:6px;'
                      f'margin:4px 10px 4px 0">{_esc(pr.get("label") or "Get started")}</a>')
         if se.get("url"):
