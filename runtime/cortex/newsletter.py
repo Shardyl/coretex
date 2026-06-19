@@ -279,8 +279,9 @@ _FS_COMPOSE = (
     "Choose blocks by substance, do not force them. Required: headline, intro, and one primary CTA. "
     "Everything else is optional, use what fits. Scale content sections to the number of real items "
     "(around three or four reads best; more only if each earns its place, otherwise group or link out). "
-    "Each image you want needs a short prompt for a cinematic, dark, high-contrast frame with red as the "
-    "only accent and NO text in the image, plus alt text.\n\n"
+    "Each image you want needs a short prompt for a cinematic, dark, high-contrast frame, mostly black and "
+    "shadow, with red as a single RESTRAINED accent (a rim light or a subtle glow, never a large red fill "
+    "or a big glowing red screen) and NO text in the image, plus alt text.\n\n"
     "Return JSON only with these fields (set any optional block's \"use\" to false when not needed):\n"
     "subject; preheader (~80 chars); header_eyebrow (short issue type); "
     "hero {use, image_prompt, alt}; eyebrow_pill (short red kicker or null); headline; intro; "
@@ -400,8 +401,8 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
     bg = col.get("bg", "#0A0A0A"); surface = col.get("surface", "#121212"); line = col.get("line", "#242424")
     ink = col.get("ink", "#F4F4F5"); body = col.get("body", "#C9CAD0"); muted = col.get("muted", "#9A9AA0")
     red = col.get("primary", "#E50914")
-    headf = f"'{kit.get('fonts', {}).get('heading', 'Poppins')}','Segoe UI',Arial,sans-serif"
-    bodyf = f"'{kit.get('fonts', {}).get('body', 'Inter')}',Arial,sans-serif"
+    headf = f"'{kit.get('fonts', {}).get('heading', 'Poppins')}','Helvetica Neue',Helvetica,Arial,sans-serif"
+    bodyf = f"'{kit.get('fonts', {}).get('body', 'Inter')}','Helvetica Neue',Helvetica,Arial,sans-serif"
     company = store.get_company(company_id)
     prof = _profile(company_id)
 
@@ -562,7 +563,9 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
     return ('<!doctype html><html><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             '<meta name="x-apple-disable-message-reformatting">'
-            '<meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"></head>'
+            '<meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark">'
+            '<link rel="preconnect" href="https://fonts.googleapis.com">'
+            '<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"></head>'
             f'<body style="margin:0;padding:0;background:{bg};">'
             f'<div style="display:none;max-height:0;overflow:hidden;opacity:0;">{preheader}</div>'
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{bg};">'
