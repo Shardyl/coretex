@@ -27,16 +27,34 @@ import time
 sys.path.insert(0, "/opt/coretex/runtime")
 from cortex import crm, db, gmail, provider  # noqa: E402
 
-# ---- scope (Sensa first; add Tabscanner/SkyVision mailboxes here later) ----
-MAILBOXES = [  # (address, rt_key, purpose, company_slug)
-    ("hello@sensa.digital",  "gmail_refresh_token:sensa",      "gmail",      "sensa"),
-    ("rashad@sensa.digital", "gmail_send_refresh_token:sensa", "gmail_send", "sensa"),
-    ("gino@sensa.digital",   "gmail_refresh_token:sensa:gino", "gmail",      "sensa"),
-]
-ORG_SLUG, ORG_LABEL = "sensa", "Sensa"
-OWN_DOMAINS = {"sensa.digital"}
+# ---- per-company scope. Each run is fully isolated (own state dir + report), so they run concurrently. ----
+# mailbox = (address, rt_key, purpose, oauth_client_company)  -- client=None means the legacy Tabscanner client.
+CONFIGS = {
+    "sensa": {"label": "Sensa", "own": {"sensa.digital"}, "mailboxes": [
+        ("hello@sensa.digital",  "gmail_refresh_token:sensa",      "gmail",      "sensa"),
+        ("rashad@sensa.digital", "gmail_send_refresh_token:sensa", "gmail_send", "sensa"),
+        ("gino@sensa.digital",   "gmail_refresh_token:sensa:gino", "gmail",      "sensa")]},
+    "skyvision": {"label": "Sky Vision", "own": {"skyvision.film"}, "mailboxes": [
+        ("fly@skyvision.film",    "gmail_refresh_token:skyvision",      "gmail",      "skyvision"),
+        ("rashad@skyvision.film", "gmail_send_refresh_token:skyvision", "gmail_send", "skyvision")]},
+    "tabscanner": {"label": "Tabscanner", "own": {"tabscanner.com"}, "mailboxes": [
+        ("api@tabscanner.com",    "gmail_refresh_token",      "gmail",      None),
+        ("rashad@tabscanner.com", "gmail_send_refresh_token", "gmail_send", None)]},
+    "snaprewards": {"label": "Snap Rewards", "own": {"snap-rewards.com"}, "mailboxes": [
+        ("loyalty@snap-rewards.com", "gmail_refresh_token:snaprewards",      "gmail",      "snaprewards"),
+        ("rashad@snap-rewards.com",  "gmail_send_refresh_token:snaprewards", "gmail_send", "snaprewards")]},
+    "filmspoke": {"label": "FilmSpoke", "own": {"filmspoke.ai"}, "mailboxes": [
+        ("create@filmspoke.ai", "gmail_refresh_token:filmspoke", "gmail", "filmspoke")]},
+}
 DAYS_BACK = 1825                       # ~5 years
-STATE_DIR = "/opt/coretex/scrape"
+COMPANY = ORG_LABEL = OWN_DOMAINS = MAILBOXES = STATE_DIR = None   # set by set_company() at startup
+
+
+def set_company(slug):
+    global COMPANY, ORG_LABEL, OWN_DOMAINS, MAILBOXES, STATE_DIR
+    cfg = CONFIGS[slug]
+    COMPANY, ORG_LABEL, OWN_DOMAINS = slug, cfg["label"], cfg["own"]
+    MAILBOXES, STATE_DIR = cfg["mailboxes"], f"/opt/coretex/scrape/{slug}"
 ADDR_RE = re.compile(r'(?:"?([^"<]*)"?\s*)?<?([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})>?')
 NOISE = ("noreply", "no-reply", "notification", "mailer", "bounce", "wetransfer", "google.com",
          "docs.google", "drive.google", "linkedin", "facebookmail", "mailchimp", "sendgrid", "intercom",
@@ -67,8 +85,8 @@ def _p(name):
     return os.path.join(STATE_DIR, name)
 
 
-def _tok(rt_key, purpose):
-    return gmail._token_for(rt_key, purpose, ORG_SLUG)
+def _tok(rt_key, purpose, client):
+    return gmail._token_for(rt_key, purpose, client)
 
 
 def _is_own(em):
@@ -99,8 +117,8 @@ def _body(full):
 def fetch(msg_cap=None):
     os.makedirs(STATE_DIR, exist_ok=True)
     contacts = {}
-    for addr, rt, purpose, slug in MAILBOXES:
-        tok = _tok(rt, purpose)
+    for addr, rt, purpose, client in MAILBOXES:
+        tok = _tok(rt, purpose, client)
         page = None; got = 0
         print(f"[fetch] {addr} …", flush=True)
         while True:
@@ -129,7 +147,7 @@ def fetch(msg_cap=None):
                             c["name"] = nm
                         c["count"] += 1
                         if len(c["msgs"]) < 4:
-                            c["msgs"].append([rt, purpose, mid, subj[:90], date])
+                            c["msgs"].append([rt, purpose, client, mid, subj[:90], date])
                 got += 1
                 if got % 500 == 0:
                     print(f"   …{got} messages, {len(contacts)} contacts so far", flush=True)
@@ -157,9 +175,9 @@ def classify(contact_cap=None):
     for i, em in enumerate(todo, 1):
         c = contacts[em]
         bundle = []
-        for rt, purpose, mid, subj, date in c["msgs"][:3]:
+        for rt, purpose, client, mid, subj, date in c["msgs"][:3]:
             try:
-                full = gmail._get(_tok(rt, purpose), f"messages/{mid}", {"format": "full"})
+                full = gmail._get(_tok(rt, purpose, client), f"messages/{mid}", {"format": "full"})
                 bundle.append(f"Subj: {subj}\n{_body(full)[:600]}")
             except Exception:  # noqa: BLE001
                 pass
@@ -187,7 +205,7 @@ def classify(contact_cap=None):
 # ---------- phase 3: report (read-only — the review artifact) ----------
 def report():
     results = json.load(open(_p("classified.json")))
-    path = _p("sensa_scrape_report.csv")
+    path = _p(f"{COMPANY}_scrape_report.csv")
     kept = dropped = 0
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
@@ -218,7 +236,11 @@ def report():
 
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "report"
-    arg = sys.argv[2] if len(sys.argv) > 2 else None
+    company = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] in CONFIGS else "sensa"
+    arg = sys.argv[3] if len(sys.argv) > 3 else None
+    set_company(company)
+    os.makedirs(STATE_DIR, exist_ok=True)
+    print(f"[{COMPANY}] {mode}", flush=True)
     if mode == "fetch":
         fetch(int(arg) if arg and arg.isdigit() else None)
     elif mode == "classify":
