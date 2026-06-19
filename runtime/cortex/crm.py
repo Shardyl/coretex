@@ -95,6 +95,25 @@ def contact_company_state(email: str) -> dict:
     return {"opted_out": opted_out, "companies": comps}
 
 
+def ensure_contact(email: str, company_slug: str, name: str | None = None, subscriber: bool = True) -> str | None:
+    """Ensure a crm_master contact exists and is tagged to the company (subscriber-on by default). Used by
+    the setup wizard when capturing a company's test group. Carries over existing fields, never clobbers."""
+    email = (email or "").strip().lower()
+    if not email or "@" not in email:
+        return None
+    ensure_schema()
+    if db.one("select id from crm_master where lower(email)=lower(%s) limit 1", (email,)):
+        set_membership(email, company_slug, True)
+        return email
+    fn, ln = _split_name(name or "")
+    db.execute("insert into crm_master (organisation, first_name, last_name, email, website, lead_source, "
+               "newsletter_subscriber, newsletter_opt_out, lead_status, stage) "
+               "values (%s,%s,%s,%s,%s,%s,'True',%s,%s,%s) on conflict (lower(email)) do nothing",
+               (_org(company_slug), fn or None, ln or None, email, email.split("@")[-1], "test group",
+                not subscriber, "New", "Engaged"))
+    return email
+
+
 def add_inquiry(inq: dict, company: str = "tabscanner") -> tuple[str, str | None]:
     """Upsert a legitimate inquiry into crm_master (dedup by email), with a note + history event.
     Returns (status, email). Works for ANY company via the `company` slug."""

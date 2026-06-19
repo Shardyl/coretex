@@ -21,9 +21,31 @@ from psycopg.types.json import Json
 
 from . import brand, db, imagegen, mailgun, provider, store, worker
 
-# Each company's verified Mailgun newsletter sending domain (matches the per-company company rules).
+# Seed map of each company's verified Mailgun newsletter sending domain. This is now a FALLBACK only:
+# the live value is data-driven (company_profiles.data['send_domain'], set at onboarding) so a new company
+# wires its own sending without a code change. Read via send_domain(); never read SEND_DOMAINS directly.
 SEND_DOMAINS = {1: "news.tabscanner.com", 3: "news.sensa.digital", 4: "news.skyvision.film",
                 5: "news.filmspoke.ai", 26: "campaigns.snap-rewards.com"}
+
+
+def send_domain(company_id: int) -> str | None:
+    """The company's verified newsletter sending domain — data-driven (company_profiles.data['send_domain']),
+    falling back to the seed map so existing companies keep working before any backfill."""
+    try:
+        d = (_profile(company_id).get("send_domain") or "").strip()
+    except Exception:  # noqa: BLE001
+        d = ""
+    return d or SEND_DOMAINS.get(company_id)
+
+
+def all_send_domains() -> set[str]:
+    """Every configured sending domain across all companies (data + seed map) — for suppression sync."""
+    out = {d for d in SEND_DOMAINS.values() if d}
+    for r in db.query("select data from company_profiles"):
+        d = ((r.get("data") or {}).get("send_domain") or "").strip()
+        if d:
+            out.add(d)
+    return out
 
 _IDEATION = (
     "You are proposing ONE newsletter idea at the IDEATION stage for this company's next issue. "
@@ -192,7 +214,7 @@ def render_html(company_id: int, c: dict, hero_cid: str | None = None) -> str:
     addr = _esc(worker._no_dashes(" ".join((prof.get("address") or "").split())).rstrip(". "))
     legal = _esc(prof.get("legal_name") or company["name"])
     preheader = _esc(c.get("preheader") or "")
-    _root = (SEND_DOMAINS.get(company_id) or "").split(".", 1)   # news.tabscanner.com -> tabscanner.com
+    _root = (send_domain(company_id) or "").split(".", 1)   # news.tabscanner.com -> tabscanner.com
     sitetext = _root[1] if len(_root) == 2 else ""
     site = ("https://" + sitetext) if sitetext else ""
 
@@ -254,7 +276,7 @@ def build(company_id: int, idea_text: str) -> dict:
 
 def _sender(company_id: int) -> tuple[str, str, str | None]:
     company = store.get_company(company_id)
-    domain = SEND_DOMAINS.get(company_id)
+    domain = send_domain(company_id)
     prof = _profile(company_id)
     return domain, f"{company['name']} <news@{domain}>", prof.get("reply_from") or prof.get("inbox_email")
 
@@ -278,7 +300,7 @@ def send_bulk(company_id: int, subject: str, html: str, text: str, recips: list[
 def execute_idea_approval(task: dict, skill: dict, company: dict, actor: str) -> dict:
     """Approve a newsletter IDEA -> build the issue, send to the TEST GROUP, drop a review card."""
     cid = company["id"]
-    if cid not in SEND_DOMAINS:
+    if not send_domain(cid):
         store.update_task(task["id"], status="done")
         return {"error": f"no sending domain configured for {company['name']}"}
     group = test_group(cid)
@@ -353,7 +375,7 @@ def sync_unsubscribes() -> dict:
     re-send to its own suppression lists; this keeps Cortex's CRM + audience counts honest. Idempotent."""
     from . import crm
     out = {}
-    for domain in set(SEND_DOMAINS.values()):
+    for domain in all_send_domains():
         opt_addrs: set[str] = set()
         for kind in ("unsubscribes", "complaints"):
             try:
@@ -407,7 +429,7 @@ def enqueue_send(company_id: int, task_id: int, art: dict, recips: list[dict],
                  per_hour: int = DEFAULT_PER_HOUR) -> int:
     """Queue a full-list send to DRIP OUT over time instead of blasting. The engine drains it."""
     ensure_jobs_table()   # self-heal: works on any box / fresh DB without a manual migration step
-    domain = SEND_DOMAINS.get(company_id)
+    domain = send_domain(company_id)
     try:
         b0 = len(mailgun.suppressions(domain, "bounces"))   # baseline, to attribute NEW bounces to this job
     except Exception:  # noqa: BLE001
@@ -439,7 +461,7 @@ def drain_send_jobs() -> list[dict]:
 def _drain_one(job: dict) -> dict | None:
     cid, jid = job["company_id"], job["id"]
     recips, sent, total = job["recipients"], job["sent"], job["total"]
-    domain = SEND_DOMAINS.get(cid)
+    domain = send_domain(cid)
     if sent > 0:   # auto-pause on a bounce spike attributable to this job
         try:
             bnew = len(mailgun.suppressions(domain, "bounces")) - (job["bounces_at_start"] or 0)

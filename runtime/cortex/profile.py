@@ -52,6 +52,8 @@ QUESTIONS = [
     ("Communications", "default_bcc", "Anyone BCC'd by default on replies? (e.g. an inbox you watch, to keep a copy) — or none", "text"),
     ("Communications", "signature", "Standard email signature — exactly as it should appear.", "long"),
     ("Communications", "social", "Social handles (per platform)?", "text"),
+    ("Communications", "send_domain", "Which verified Mailgun domain does this company send newsletters FROM? (e.g. news.tabscanner.com — the domain must be verified in Mailgun first.)", "text"),
+    ("Communications", "test_group", "Which email addresses should be in this company's TEST GROUP — the people who get a [TEST] copy of every newsletter before it goes to the real list? List them (comma or new-line separated).", "list"),
     # 6. Finance
     ("Finance", "currency", "Currency?", "text"),
     ("Finance", "vat", "VAT / tax rate?", "text"),
@@ -68,6 +70,23 @@ QUESTIONS = [
 def _q(i):
     s, f, t, ty = QUESTIONS[i]
     return {"idx": i, "section": s, "field": f, "text": t, "type": ty}
+
+
+def _sync_test_group(company_id, value):
+    """A test-group answer defines this company's LIVE newsletter test group: parse the emails, ensure each
+    is a CRM contact tagged to the company, add them to newsletter_test_group, and drop any no longer listed."""
+    import re
+    from . import newsletter, crm
+    want = {e.lower() for e in re.findall(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", value or "")}
+    slug_row = db.one("select slug from companies where id=%s", (company_id,))
+    slug = slug_row["slug"] if slug_row else None
+    current = {r["email"].lower() for r in newsletter.test_group(company_id)}
+    for e in want:
+        if slug:
+            crm.ensure_contact(e, slug)
+        newsletter.set_test_group(e, company_id, True)
+    for e in current - want:
+        newsletter.set_test_group(e, company_id, False)
 
 
 def ensure_schema():
@@ -109,11 +128,17 @@ def answer(company_id, value):
     idx = r["idx"]
     data = dict(r["data"] or {})
     if idx < total:
-        data[QUESTIONS[idx][1]] = value
+        field = QUESTIONS[idx][1]
+        data[field] = value
         idx += 1
         status_ = "done" if idx >= total else "in_progress"
         r = db.execute("update company_profiles set data=%s, idx=%s, status=%s, updated_at=now() "
                        "where company_id=%s returning *", (Json(data), idx, status_, company_id))
+        if field == "test_group":
+            try:
+                _sync_test_group(company_id, value)
+            except Exception:  # noqa: BLE001
+                pass
     return _state(r)
 
 
@@ -130,6 +155,11 @@ def set_field(company_id, field, value):
     data = dict(r["data"] or {})
     data[field] = value
     db.execute("update company_profiles set data=%s, updated_at=now() where company_id=%s", (Json(data), company_id))
+    if field == "test_group":
+        try:
+            _sync_test_group(company_id, value)
+        except Exception:  # noqa: BLE001
+            pass
     return data
 
 
