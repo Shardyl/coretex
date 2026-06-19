@@ -563,6 +563,15 @@ def calendar_run(tid: int, _: None = Depends(auth)) -> dict:
     return {"ok": True}
 
 
+@app.post("/api/calendar/{tid}/bump")
+def calendar_bump(tid: int, _: None = Depends(auth)) -> dict:
+    """Bump a queued blog to the FRONT of its company's publishing queue (others shift back one month)."""
+    r = engine.bump_blog_to_front(tid)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "could not bump"))
+    return r
+
+
 @app.delete("/api/calendar/{tid}")
 def calendar_delete(tid: int, _: None = Depends(auth)) -> dict:
     """Delete a scheduled template / one-off (never a normal Inbox task). Detaches any spawned children."""

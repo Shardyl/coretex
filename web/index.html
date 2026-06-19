@@ -540,7 +540,8 @@ const ICON={
   alert:'M12 4l9 16H3zM12 10v4M12 17h.01',
   file:'M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5',
   pause:'M9 5v14M15 5v14',
-  play:'M7 5l12 7-12 7z'
+  play:'M7 5l12 7-12 7z',
+  up:'M6 15l6-6 6 6'
 };
 function ic(n,s){ s=s||20; return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle"><path d="${ICON[n]||''}"></path></svg>`; }
 function paintIcons(){
@@ -1088,7 +1089,7 @@ function cadenceText(t){
   return `Weekly · ${DOW[t.weekday||0]} ${pad2(t.hour)}:${pad2(t.minute)}`;
 }
 function whenText(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString([],{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; } }
-function kindLabel(k){ return {blog:'blog post',newsletter_idea:'newsletter idea',newsletter_review:'newsletter ready to schedule',newsletter_send:'newsletter due to send',email_draft:'email draft',email_reply:'email reply',seo_report:'SEO & Traffic report',report:'report'}[k]||k||'task'; }
+function kindLabel(k){ return {blog:'blog post',blog_scheduled:'blog post (queued)',newsletter_idea:'newsletter idea',newsletter_review:'newsletter ready to schedule',newsletter_send:'newsletter due to send',newsletter_scheduled:'newsletter (queued)',email_draft:'email draft',email_reply:'email reply',seo_report:'SEO & Traffic report',report:'report'}[k]||k||'task'; }
 async function renderCalendar(v){
   v.innerHTML=`<div class="h">Calendar</div><div id="calbody" class="empty">Loading…</div>`;
   const fco=document.getElementById('coSel').value;
@@ -1133,7 +1134,7 @@ async function renderCalendar(v){
       h+=`<div class="card prow"><div style="flex:1;min-width:0">
         <div class="cname">${esc(t.title||t.kind)}</div>
         <div class="csub"><span class="chip cy">${esc(t.company)}</span> ${esc(kindLabel(t.kind))} · ${esc(whenText(t.run_at))}</div></div>
-        <div class="row" style="gap:6px;flex:none"><button class="iconbtn sm" title="Cancel" onclick="delCal(${t.id})">${ic('trash',15)}</button></div></div>`;
+        <div class="row" style="gap:6px;flex:none">${t.kind==='blog_scheduled'?`<button class="iconbtn sm" title="Bump to front of the queue" onclick="bumpCal(${t.id})">${ic('up',15)}</button>`:''}<button class="iconbtn sm" title="Cancel" onclick="delCal(${t.id})">${ic('trash',15)}</button></div></div>`;
     });
   }
 
@@ -1166,6 +1167,7 @@ async function addSched(){
 async function toggleCal(id){ try{ await api('/api/calendar/'+id+'/toggle',{method:'POST'}); renderCalendar(document.getElementById('view')); }catch(e){ toast(e.message); } }
 async function delCal(id){ try{ await api('/api/calendar/'+id,{method:'DELETE'}); renderCalendar(document.getElementById('view')); }catch(e){ toast(e.message); } }
 async function runCal(id){ try{ toast('Running…'); await api('/api/calendar/'+id+'/run',{method:'POST'}); toast('Done — it is heading to your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
+async function bumpCal(id){ try{ const r=await api('/api/calendar/'+id+'/bump',{method:'POST'}); toast('Bumped to front ('+(r.front||'')+')'); renderCalendar(document.getElementById('view')); }catch(e){ toast('Failed: '+e.message); } }
 async function runReportNow(){ try{ toast('Generating…'); await api('/api/report/run?company='+encodeURIComponent(fval('scCo')),{method:'POST'}); toast('Done — check your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
 
 let inboxView='pending', inboxSeg=localStorage.getItem('cortex_ibseg2')||'all';

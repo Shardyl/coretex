@@ -48,6 +48,7 @@ KIND_CLASS = {
     "content": "internal", "draft": "internal", "research": "internal", "summary": "internal",
     "report": "internal", "seo_report": "internal", "crm_update": "internal", "internal_note": "internal",
     "email_reply": "outward", "email_draft": "outward", "email_send": "outward", "blog": "outward",
+    "blog_scheduled": "outward",
     "newsletter_idea": "outward", "newsletter_review": "outward", "newsletter_send": "outward",
     "social_post": "outward", "dm_reply": "outward", "sms": "outward",
     "payment": "money", "invoice_send": "money", "refund": "money",
@@ -63,7 +64,7 @@ def kind_class(kind: str) -> str:
 # is never ambiguous (email sends, blog publishes, newsletter schedules/sends). Add a line when you add a kind.
 APPROVE_ACTION = {
     "email_reply": "Approve & send", "email_draft": "Approve & send",
-    "blog": "Approve & publish",
+    "blog": "Approve & schedule",
     "newsletter_idea": "Approve & build", "newsletter_review": "Approve & schedule",
     "newsletter_send": "Approve & send",
 }
@@ -414,6 +415,9 @@ def _run_task(task: dict) -> None:
     if task["kind"] == "newsletter_scheduled":   # a scheduled newsletter's 1st-of-month arrived
         _run_newsletter_scheduled_task(task, skill, company)
         return
+    if task["kind"] == "blog_scheduled":   # a queued blog's publishing day arrived -> publish it live
+        _run_blog_scheduled_task(task, skill, company)
+        return
     if not skill:   # e.g. an action reminder pointed at a skill that doesn't exist — fail cleanly
         store.update_task(task["id"], status="failed",
                           manager={"summary": "No valid skill assigned — nothing drafted.", "aligned": False})
@@ -522,15 +526,8 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
                 "error": f"Confirm with the recipient count ({n:,}) in the cockpit."}
     if task["kind"] in EMAIL_SEND_KINDS:   # email_reply + email_draft both SEND on approval (after the PIN gate)
         return _send_email_reply(task, skill, company, actor, auto)
-    site = _site_for(task, company)
-    if site:
-        info = db.setting_get(f"wp:{task['id']}") or {}
-        pid = info.get("post_id")
-        result = site.go_live(pid) if pid else {}  # clears the preview password -> public
-        store.update_task(task["id"], status="done")
-        store.log_decision(task["id"], skill["id"], actor, "publish",
-                           snapshot={"post_id": pid, "link": result.get("link"), "title": info.get("title")})
-        return result
+    if task["kind"] == "blog":   # approving a blog QUEUES it to publish on the company's monthly day (not now)
+        return _schedule_blog(task, skill, company, actor)
     # Phase 1 string path: 'execute' = mark done + log.
     store.update_task(task["id"], status="done")
     store.log_decision(task["id"], skill["id"], actor, "auto" if auto else "approve",
@@ -608,6 +605,9 @@ def _approve(task: dict, skill: dict, company: dict) -> dict:
         if result and result.get("link"):
             tg.edit(task["tg_message_id"],
                     f"✅ Approved — published live: {result['link']}  (streak {skill['trust_streak']}).")
+        elif result and result.get("scheduled"):
+            tg.edit(task["tg_message_id"],
+                    f"✅ Approved — queued to publish {result['scheduled']} (on the calendar).")
         elif result and result.get("sent_to"):
             tg.edit(task["tg_message_id"],
                     f"✅ Approved — Cortex sent it to {result['sent_to']} (streak {skill['trust_streak']}).")
@@ -835,6 +835,61 @@ def _schedule_newsletter(task, skill, company, art, n) -> dict:
     when = slot.strftime("%-d %b %Y")
     return {"ok": True, "result": {"scheduled": when,
                                    "sent_to": f"scheduled for {when} ({n:,} contacts) - now on the calendar"}}
+
+
+def _publish_day(company_id: int) -> int:
+    """The company's fixed monthly publishing day (1-28), from company_profiles.data; default 1."""
+    try:
+        d = int(profile.get(company_id).get("publish_day") or 1)
+    except Exception:  # noqa: BLE001
+        d = 1
+    return min(max(d, 1), 28)
+
+
+def _next_blog_slot(company_id: int, hour: int = 9) -> datetime:
+    """Next free monthly slot on the company's publishing day; stacks queued blogs one per month."""
+    now = datetime.now(schedule._GST)
+    day = _publish_day(company_id)
+    row = db.one("select run_at from tasks where company_id=%s and kind='blog_scheduled' "
+                 "and schedule_kind='once' and status='scheduled' and run_at is not null "
+                 "order by run_at desc limit 1", (company_id,))
+    if row and row["run_at"] and row["run_at"] > now:
+        return schedule.next_month_day(row["run_at"], day, hour)
+    return schedule.day_of_month(now, day, hour)
+
+
+def _schedule_blog(task: dict, skill: dict, company: dict, actor: str) -> dict:
+    """Approve a blog -> QUEUE it to publish on the company's next monthly publishing day (instead of going
+    live now). It shows on the calendar 'Upcoming' and auto-publishes on the date via promote_due_tasks."""
+    info = db.setting_get(f"wp:{task['id']}") or {}
+    slot = _next_blog_slot(company["id"])
+    db.execute("update tasks set kind='blog_scheduled', status='scheduled', schedule_kind='once', "
+               "origin='calendar', run_at=%s, title=%s, enabled=true where id=%s",
+               (slot, info.get("title") or "Blog post", task["id"]))
+    store.log_decision(task["id"], skill["id"], actor, "blog_scheduled",
+                       note=info.get("title"), snapshot={"post_id": info.get("post_id"), "when": slot.isoformat()})
+    when = slot.strftime("%-d %b %Y")
+    tg.send(f"[{company['name']}] blog '{info.get('title','')}' queued to publish {when} — now on the calendar.")
+    return {"scheduled": when, "title": info.get("title")}
+
+
+def bump_blog_to_front(task_id: int) -> dict:
+    """Move a queued blog to the FRONT of its company's publishing queue: it takes the next publishing day and
+    every other queued blog shifts back one month (in date order)."""
+    t = db.one("select id, company_id, kind from tasks where id=%s", (task_id,))
+    if not t or t["kind"] != "blog_scheduled":
+        return {"ok": False, "error": "not a queued blog"}
+    cid = t["company_id"]
+    day = _publish_day(cid)
+    front = schedule.day_of_month(datetime.now(schedule._GST), day)
+    others = db.query("select id from tasks where company_id=%s and kind='blog_scheduled' and status='scheduled' "
+                      "and id<>%s and run_at is not null order by run_at", (cid, task_id))
+    db.execute("update tasks set run_at=%s where id=%s", (front, task_id))
+    prev = front
+    for o in others:
+        prev = schedule.next_month_day(prev, day)
+        db.execute("update tasks set run_at=%s where id=%s", (prev, o["id"]))
+    return {"ok": True, "front": front.strftime("%-d %b %Y"), "shifted": len(others)}
 
 
 def _dispatch_newsletter(task, skill, company, art, n) -> dict:
@@ -1366,6 +1421,20 @@ def _run_newsletter_scheduled_task(task: dict, skill: dict | None, company: dict
                       draft=f"Subject: {art['subject']}\n\nScheduled for today. Confirm to send to the full "
                             f"{company['name']} list ({n:,} contacts).", status="awaiting_approval")
     tg.send(f"🗓 {company['name']} newsletter due today: '{art['subject']}'. Confirm the send in your Inbox.")
+
+
+def _run_blog_scheduled_task(task: dict, skill: dict | None, company: dict | None) -> None:
+    """A queued blog's publishing day arrived -> publish the staged WordPress draft live (go_live)."""
+    info = db.setting_get(f"wp:{task['id']}") or {}
+    pid = info.get("post_id")
+    site = wp.for_company(company) if company else None
+    result = site.go_live(pid) if (site and pid) else {}
+    store.update_task(task["id"], status="done", last_status="published")
+    store.log_decision(task["id"], task.get("skill_id"), "system", "blog_published",
+                       snapshot={"post_id": pid, "link": result.get("link"), "title": info.get("title")})
+    if company:
+        tg.send(f"🗓 [{company['name']}] blog '{info.get('title','')}' published live on schedule. "
+                f"{result.get('link','')}")
 
 
 # ---------- Phase 3: the unified clock (scheduled tasks live in `tasks`, not scheduled_tasks) ----------
