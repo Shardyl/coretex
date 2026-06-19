@@ -450,6 +450,43 @@ def _run_task(task: dict) -> None:
         _push_approval(task, skill, company)
 
 
+def _blog_digest_body(company: dict, posts: list[dict]) -> tuple[str, str]:
+    n = len(posts)
+    subject = f"{company['name']}: {n} blog post{'s' if n != 1 else ''} ready to review"
+    lines = [f"Hi,\n\n{n} new {company['name']} blog post{'s are' if n != 1 else ' is'} staged for review. "
+             "Click each link below to read the draft (you'll be asked to log in to WordPress first):\n"]
+    for i, p in enumerate(posts, 1):
+        lines.append(f"{i}. {p['title']}\n   {p.get('preview') or '(no preview link)'}\n")
+    lines.append("\nOnce you've had a look, let Rashad know in Cortex so he can approve. Thanks.")
+    return subject, "\n".join(lines)
+
+
+def send_blog_review_digest(company_id: int, posts: list[dict], dry_run: bool = False) -> dict:
+    """Email the company's TEST GROUP one digest of staged blog drafts (titles + wp-login preview links),
+    via plain Gmail — one message per recipient (the single-send guard forbids fan-out). Used as the
+    test-group review step for a batch of blog drafts; the link logs the reviewer into wp-admin then lands
+    on the rendered draft."""
+    company = store.get_company(company_id)
+    group = newsletter.test_group(company_id)
+    posts = [p for p in (posts or []) if p.get("title")]
+    if not (company and group and posts):
+        return {"sent": 0, "reason": "no company / test group / posts"}
+    subject, body = _blog_digest_body(company, posts)
+    if dry_run:
+        return {"dry_run": True, "recipients": [g["email"] for g in group], "subject": subject, "body": body}
+    slug = company.get("slug")
+    sent = 0
+    for g in group:
+        try:
+            gmail.send_message(g["email"], subject, body, company=slug)
+            sent += 1
+        except Exception:  # noqa: BLE001
+            pass
+    tg.send(f"{company['name']}: emailed {sent}/{len(group)} test-group reviewers about "
+            f"{len(posts)} staged blog post{'s' if len(posts) != 1 else ''}.")
+    return {"sent": sent, "recipients": len(group)}
+
+
 def _run_blog_task(task: dict, skill: dict, company: dict, site) -> None:
     art = worker.draft_article(skill, company, task["request"])
     body = f"TITLE: {art['title']}\n\n{art['html']}"
@@ -467,6 +504,11 @@ def _run_blog_task(task: dict, skill: dict, company: dict, site) -> None:
     msg = tg.send(_fmt_blog(company, skill, art, verdict, post.get("preview")), _blog_buttons(task["id"]))
     store.update_task(task["id"], status="awaiting_approval", tg_message_id=msg["message_id"])
     _push_approval(task, skill, company)
+    # test-group review: email the company's test group the draft (title + wp-login preview link).
+    try:
+        send_blog_review_digest(company["id"], [{"title": art["title"], "preview": post.get("preview")}])
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = False) -> dict:
