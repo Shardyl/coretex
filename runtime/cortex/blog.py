@@ -30,8 +30,10 @@ _BLOG_SCHEMA = (
     "table {use, columns:[...], rows:[[...]]}, steps {use, items:[{title, text}]}, "
     "code {use, filename, language, body}, stat {use, value, text}, "
     "inline_cta {use, text, label, url}}); "
-    "signature_graphic {use, kind:\"control_dials\"|\"real_ai_split\", "
-    "title (dials header), items:[{label (one word), value (0-100 int), accent:\"cyan\"|\"orange\"}] (control_dials, 3-5 rows), "
+    "signature_graphic {use, kind:\"control_dials\"|\"capability_dials\"|\"flight_plan\"|\"real_ai_split\", "
+    "title (the graphic header), "
+    "items:[{label, value (0-100 int, dials only), accent:\"orange\"|\"violet\" for one emphasised item}] "
+    "(dials = 3-5 value rows; flight_plan = 3-5 ordered waypoints, label only), "
     "real_image_prompt, ai_image_prompt (real_ai_split, NO text in image), left_label, right_label (real_ai_split), "
     "caption} (AT MOST ONE per post, only when it earns its place, default use:false); "
     "pull_quote {use, text}; closing_cta {use, heading, text, primary {label, url}, secondary {label, url}}; "
@@ -91,16 +93,17 @@ def _paras(text: str, color: str) -> str:
 _MONOF = "'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,monospace"
 
 
-def _sig_dials(sg: dict, accent: str, surface: str, line: str, muted: str, ink: str, orange: str) -> str:
-    """The 'control dials' signature graphic — pure CSS parameter sliders (label + value bar). Brand device:
-    direction-and-control. Reads the accent from the kit, so it is cyan for Sensa, red for FilmSpoke."""
+def _sig_dials(sg: dict, accent: str, surface: str, line: str, muted: str, ink: str, emph: str) -> str:
+    """The 'control / capability dials' signature graphic — pure CSS parameter sliders (label + value bar).
+    Reads the accent from the kit (cyan for Sensa, yellow for SkyVision, red for FilmSpoke); an item flagged
+    with an `accent` uses the kit's tertiary/emphasis colour (orange for Sensa, violet for SkyVision)."""
     rows = ""
     for it in (sg.get("items") or [])[:6]:
         try:
             v = max(0, min(100, int(it.get("value", 60))))
         except (TypeError, ValueError):
             v = 60
-        bar = orange if str(it.get("accent")).lower() == "orange" else accent
+        bar = emph if (isinstance(it, dict) and it.get("accent")) else accent
         rows += (f'<div style="display:flex;align-items:center;gap:14px;margin:11px 0;font:400 11px/1 {_MONOF};'
                  f'color:{muted};letter-spacing:.06em">'
                  f'<span style="width:96px;flex:none;text-transform:uppercase;color:{ink}">{_esc(it.get("label"))}</span>'
@@ -132,6 +135,32 @@ def _sig_split(sg: dict, imgs: dict, accent: str, line: str) -> str:
             f'transform:rotate(7deg);box-shadow:0 0 18px {accent};z-index:3"></div>'
             f'<span style="{lab};left:16px;color:#fff">{ll}</span>'
             f'<span style="{lab};right:16px;color:{accent}">{rl}</span></div>')
+
+
+def _sig_flight(sg: dict, accent: str, surface: str, line: str, muted: str, bg: str, violet: str) -> str:
+    """The 'flight plan' signature graphic — a dashed accent track with numbered waypoint nodes (the last in
+    the tertiary colour). SkyVision's production-process device; pure CSS, accent from the kit."""
+    items = (sg.get("items") or [])[:6]
+    n = len(items)
+    nodes = ""
+    for i, it in enumerate(items):
+        label = it.get("label") if isinstance(it, dict) else str(it)
+        dot = violet if (i == n - 1 and n > 1) else accent
+        nodes += (f'<div style="flex:1;text-align:center;position:relative">'
+                  f'<div style="width:14px;height:14px;border-radius:50%;background:{bg};border:2px solid {dot};'
+                  f'box-shadow:0 0 10px {dot};margin:0 auto"></div>'
+                  f'<div style="font:500 10px/1 {_MONOF};color:{accent};margin-top:11px;letter-spacing:.06em">'
+                  f'{i + 1:02d}</div>'
+                  f'<div style="margin:6px 0 0;font:400 12px/1.3 \'Inter\',-apple-system,Arial,sans-serif;'
+                  f'color:{muted}">{_esc(label)}</div></div>')
+    track = (f'<div style="position:relative;height:2px;margin:0 8px 0;background:repeating-linear-gradient('
+             f'90deg,{accent} 0 8px,transparent 8px 16px)"></div>')
+    return (f'<div style="border:1px solid {line};border-radius:12px;background:{surface};padding:30px 26px 24px;margin:30px 0">'
+            f'<div style="font:500 11px/1 {_MONOF};letter-spacing:.14em;text-transform:uppercase;color:{accent};'
+            f'margin-bottom:26px;display:flex;align-items:center;gap:9px">'
+            f'<span style="width:7px;height:7px;border-radius:50%;background:{accent};box-shadow:0 0 8px {accent};'
+            f'display:inline-block"></span>{_esc(sg.get("title") or "Flight plan")}</div>'
+            f'{track}<div style="display:flex;justify-content:space-between;margin-top:-7px">{nodes}</div></div>')
 
 
 def render(company_id: int, c: dict, imgs: dict) -> dict:
@@ -261,11 +290,14 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
     # real_ai_split = two clipped frames. Accent comes from the kit (cyan for Sensa, red for FilmSpoke).
     sg = c.get("signature_graphic") or {}
     if sg.get("use"):
-        orange = col.get("tertiary", "#FF6A2C")
+        tertiary = col.get("tertiary", "#FF6A2C")
+        kind = sg.get("kind")
         gfx = ""
-        if sg.get("kind") == "control_dials":
-            gfx = _sig_dials(sg, red, surface, line, muted, ink, orange)
-        elif sg.get("kind") == "real_ai_split":
+        if kind in ("control_dials", "capability_dials"):
+            gfx = _sig_dials(sg, red, surface, line, muted, ink, tertiary)
+        elif kind == "flight_plan":
+            gfx = _sig_flight(sg, red, surface, line, muted, bg, tertiary)
+        elif kind == "real_ai_split":
             gfx = _sig_split(sg, imgs, red, line)
         if gfx:
             P.append(gfx)
