@@ -57,6 +57,44 @@ def log_event(email: str, event: str, text: str = "", company: str | None = None
                "where lower(email)=lower(%s)", (Json([ev]), email))
 
 
+# ---------- per-company membership (the `organisation` tag) ----------
+
+def set_membership(email: str, company_slug: str, on: bool) -> str | None:
+    """Add or remove ONE company tag on a contact's `organisation` field. Touches only that single label;
+    never clobbers the other tags. Returns the new organisation value (or None if the contact is missing)."""
+    label = _org(company_slug)
+    r = db.one("select id, organisation from crm_master where lower(email)=lower(%s) limit 1", (email,))
+    if not r:
+        return None
+    parts = [p.strip() for p in (r.get("organisation") or "").split(",") if p.strip()]
+    has = any(p.lower() == label.lower() for p in parts)
+    if on and not has:
+        parts.append(label)
+    elif not on and has:
+        parts = [p for p in parts if p.lower() != label.lower()]
+    new = ", ".join(parts)
+    db.execute("update crm_master set organisation=%s, updated_at=now() where id=%s", (new, r["id"]))
+    return new
+
+
+def contact_company_state(email: str) -> dict:
+    """Per-company membership / subscriber / test-group state for a contact, across the LIVE companies list
+    (a newly added company appears automatically). subscriber = member AND not globally opted out."""
+    r = db.one("select organisation, newsletter_opt_out from crm_master where lower(email)=lower(%s) limit 1",
+               (email,))
+    orgs = {p.strip().lower() for p in ((r.get("organisation") if r else "") or "").split(",") if p.strip()}
+    opted_out = bool(r and r.get("newsletter_opt_out"))
+    tg = {row["company_id"] for row in
+          db.query("select company_id from newsletter_test_group where active and lower(email)=lower(%s)", (email,))}
+    comps = []
+    for c in db.query("select id, slug, name from companies order by name"):
+        member = _org(c["slug"]).lower() in orgs
+        comps.append({"slug": c["slug"], "name": c["name"], "id": c["id"],
+                      "member": member, "test_group": c["id"] in tg,
+                      "subscriber": member and not opted_out})
+    return {"opted_out": opted_out, "companies": comps}
+
+
 def add_inquiry(inq: dict, company: str = "tabscanner") -> tuple[str, str | None]:
     """Upsert a legitimate inquiry into crm_master (dedup by email), with a note + history event.
     Returns (status, email). Works for ANY company via the `company` slug."""

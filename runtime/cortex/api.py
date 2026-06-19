@@ -978,6 +978,44 @@ def crm_update_contact(body: ContactEditBody, _: None = Depends(auth)) -> dict:
     return r
 
 
+@app.get("/api/crm/contact/companies")
+def crm_contact_companies(email: str, _: None = Depends(auth)) -> dict:
+    """Per-company membership / subscriber / test-group state for a contact (over the live companies list)."""
+    return crm.contact_company_state(email)
+
+
+class CompanyToggleBody(BaseModel):
+    email: str
+    company: str          # company slug
+    field: str            # 'member' | 'test_group'
+    on: bool
+
+
+@app.post("/api/crm/contact/company-toggle")
+def crm_contact_company_toggle(body: CompanyToggleBody, _: None = Depends(auth)) -> dict:
+    """Toggle a contact's membership of, or test-group inclusion for, one company. The test group is the
+    SAME table the [TEST] send reads live, so a change here is in effect immediately."""
+    from . import newsletter
+    co = store.get_company_by_slug(body.company)
+    if not co:
+        raise HTTPException(status_code=404, detail="no such company")
+    c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s) limit 1", (body.email,))
+    if not c:
+        raise HTTPException(status_code=404, detail="contact not found")
+    if body.field == "member":
+        crm.set_membership(body.email, body.company, body.on)
+        if not body.on:                       # leaving the company also leaves its test group
+            newsletter.set_test_group(body.email, co["id"], False)
+    elif body.field == "test_group":
+        if body.on:
+            crm.set_membership(body.email, body.company, True)   # test-group implies membership
+        nm = " ".join(filter(None, [c.get("first_name"), c.get("last_name")])).strip() or None
+        newsletter.set_test_group(body.email, co["id"], body.on, name=nm)
+    else:
+        raise HTTPException(status_code=400, detail="field must be 'member' or 'test_group'")
+    return crm.contact_company_state(body.email)
+
+
 class DealEditBody(BaseModel):
     title: str | None = None
     value: float | None = None

@@ -69,6 +69,24 @@ def test_group(company_id: int) -> list[dict]:
                     "where company_id = %s and active order by id", (company_id,))
 
 
+def set_test_group(email: str, company_id: int, on: bool, name: str | None = None) -> None:
+    """Add or remove a contact from a company's test group — the LIVE source the [TEST] send reads, so a
+    change here lands in the very next test send. Reactivates an existing inactive row rather than duping."""
+    email = (email or "").strip().lower()
+    if not email:
+        return
+    ex = db.one("select id from newsletter_test_group where company_id=%s and lower(email)=lower(%s) limit 1",
+                (company_id, email))
+    if on:
+        if ex:
+            db.execute("update newsletter_test_group set active=true where id=%s", (ex["id"],))
+        else:
+            db.execute("insert into newsletter_test_group (company_id, email, name, active) values (%s,%s,%s,true)",
+                       (company_id, email, name))
+    elif ex:
+        db.execute("update newsletter_test_group set active=false where id=%s", (ex["id"],))
+
+
 # literal % must be doubled for psycopg; org label comes in as a bound param.
 _SUPPRESS = ("newsletter_opt_out is true "
              "or newsletter_bounced is true "

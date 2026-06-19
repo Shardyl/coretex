@@ -713,11 +713,34 @@ async function openContact(email){
     <div class="row" style="margin-bottom:12px">${stageChip(c.stage)}${c.tier?`<span class="chip cy">Tier ${esc(c.tier)}</span>`:''}${c.is_client?'<span class="chip" style="color:#2ad17e">Client</span>':''}<span class="chip" style="cursor:pointer;${c.newsletter_opt_out?'color:#04181d;background:#ff5d6c;border-color:#ff5d6c':'color:#ff5d6c;border-color:#ff5d6c55;background:transparent'}" onclick="toggleOptOut('${esc(c.email)}',${!c.newsletter_opt_out})" title="Tap to ${c.newsletter_opt_out?'re-subscribe to newsletter':'opt out of newsletter'}">${c.newsletter_opt_out?'Opted out':'Mark opted-out'}</span></div>
     ${contactStagePicker(c)}
     ${contactCompanyRow(c)}
+    <div id="ccCompanies" class="dsec"><div class="dlbl">Companies & test groups</div><div class="csub">Loading…</div></div>
     <div class="dgrid">${fieldRows(c)}</div>
     ${noteBox('c',c.email)}
     ${c.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${esc(c.note)}</div></div>`:''}
     ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:${h.event==='reply_sent'?'#2ad17e':'#00DAFF'}"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
     </div>`;
+  loadContactCompanies(email);
+}
+async function loadContactCompanies(email){
+  let st; try{ st=await api('/api/crm/contact/companies?email='+encodeURIComponent(email)); }catch(e){ return; }
+  renderContactCompanies(email,st);
+}
+function renderContactCompanies(email,st){
+  const el=document.getElementById('ccCompanies'); if(!el) return;
+  const rows=(st.companies||[]).map(c=>{
+    const sub = c.member ? (st.opted_out?'Member · opted out of newsletter':'Member · subscriber') : 'Not a member';
+    return `<div class="row" style="align-items:center;gap:6px;margin:7px 0">
+      <div style="flex:1;min-width:0"><div class="cname" style="font-size:14px">${esc(c.name)}</div><div class="csub">${sub}</div></div>
+      <span class="fchip${c.member?' on':''}" onclick="toggleCompanyField('${esc(email)}','${esc(c.slug)}','member',${!c.member})">Member</span>
+      <span class="fchip${c.test_group?' on':''}" style="${c.test_group?'color:#00DAFF;border-color:#00DAFF':''}" onclick="toggleCompanyField('${esc(email)}','${esc(c.slug)}','test_group',${!c.test_group})">Test group</span>
+    </div>`;
+  }).join('');
+  el.innerHTML=`<div class="dlbl">Companies & test groups</div>${rows||'<div class="csub">No companies.</div>'}`;
+}
+async function toggleCompanyField(email,slug,field,on){
+  try{ const st=await api('/api/crm/contact/company-toggle',{method:'POST',body:JSON.stringify({email,company:slug,field,on})});
+    renderContactCompanies(email,st); toast('Updated'); }
+  catch(e){ toast('Could not update ('+e.message+')'); }
 }
 const PROJ_STAGES=['Opportunity','Quote','Booked','Production','Recurring','Delivered','Final Payment','Close & review','Lost'];
 const FORECAST_STAGES=['Opportunity','Quote'];
