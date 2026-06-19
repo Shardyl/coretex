@@ -421,6 +421,9 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
     bg = col.get("bg", "#0A0A0A"); surface = col.get("surface", "#121212"); line = col.get("line", "#242424")
     ink = col.get("ink", "#F4F4F5"); body = col.get("body", "#C9CAD0"); muted = col.get("muted", "#9A9AA0")
     red = col.get("primary", "#E50914")
+    # text colour that sits ON the accent (buttons / filled discs). White is right for a dark accent like
+    # FilmSpoke red; a bright accent like Sensa cyan needs dark ink for contrast. Kit opts in via accent_ink.
+    accent_ink = col.get("accent_ink", "#FFFFFF")
     head_family = kit.get("fonts", {}).get("heading", "Poppins")
     body_family = kit.get("fonts", {}).get("body", "Inter")
     headf = f"'{head_family}','Helvetica Neue',Helvetica,Arial,sans-serif"
@@ -444,7 +447,7 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
     def btn(label, url):
         return (f'<table role="presentation" cellpadding="0" cellspacing="0"><tr>'
                 f'<td style="border-radius:6px;background:{red};">'
-                f'<a href="{_esc(url)}" style="display:inline-block;font:700 16px/1 {headf};color:#FFFFFF;'
+                f'<a href="{_esc(url)}" style="display:inline-block;font:700 16px/1 {headf};color:{accent_ink};'
                 f'padding:16px 32px;border-radius:6px;background:{red};text-decoration:none;">{_esc(label)} &nbsp;&rarr;</a>'
                 f'</td></tr></table>')
 
@@ -526,7 +529,7 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
         trs = ""
         for idx, it in enumerate(items):
             islast = idx == last
-            disc = (f'background:{red};color:#FFFFFF;' if islast else f'border:1px solid {red};color:{red};')
+            disc = (f'background:{red};color:{accent_ink};' if islast else f'border:1px solid {red};color:{red};')
             pad = "0" if islast else "0 0 16px"
             trs += (f'<tr><td width="44" style="vertical-align:top;padding:{pad};"><div style="width:34px;'
                     f'height:34px;border-radius:999px;{disc}text-align:center;font:700 15px/34px {headf};">{idx + 1}</div></td>'
