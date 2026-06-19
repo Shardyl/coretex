@@ -849,6 +849,14 @@ def crm_contacts(company: str | None = None, q: str | None = None, stage: str | 
             clauses.append("is_client = true")          # 'Client' is a flag, not a funnel status
         elif stage == "Opted out":
             clauses.append("newsletter_opt_out = true")  # newsletter opt-out flag, not a status
+        elif stage == "Test group":                      # the company's newsletter/blog test group
+            co = store.get_company_by_slug(company) if company and company not in ("", "all") else None
+            if company and company not in ("", "all"):
+                clauses.append("lower(email) in (select lower(email) from newsletter_test_group "
+                               "where active and company_id=%s)")
+                params.append(co["id"] if co else -1)
+            else:
+                clauses.append("lower(email) in (select lower(email) from newsletter_test_group where active)")
         else:
             clauses.append("stage = %s"); params.append(stage)
     where = ("where " + " and ".join(clauses)) if clauses else ""
