@@ -498,6 +498,10 @@ async function refreshBadge(){
 // ---- nav ----
 function go(t){ if(t!=='talk'&&freeOn) freeStop(); tab=t;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); render(); syncWake(); }
+function inboxContact(email){ if(!email) return; tab='crm'; crmView='contacts';
+  try{ localStorage.setItem('cortex_crm2','contacts'); }catch(e){}
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t==='crm'));
+  openContact(email); }
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 // ---- clean outline line-icons (no emoji anywhere) ----
@@ -1214,9 +1218,9 @@ function infoCard(t){
   const details=grouped?`
     <div class="row" style="margin-top:7px"><button class="btn sm" onclick="document.getElementById('${did}').classList.toggle('hidden')">${ic('grid',14)} Show the ${items.length}</button></div>
     <div id="${did}" class="hidden" style="margin-top:8px;display:flex;flex-direction:column;gap:7px">
-      ${items.slice().reverse().map(it=>`<div style="display:flex;align-items:center;gap:8px;font-size:13px">
+      ${items.slice().reverse().map(it=>`<div ${it.email?`onclick="inboxContact('${esc(it.email)}')" style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:2px 0"`:'style="display:flex;align-items:center;gap:8px;font-size:13px"'} title="${it.email?'Open this contact in the CRM':''}">
         <span class="chip" style="opacity:.85">${esc(it.cat||'')}</span>
-        <span style="flex:1;min-width:0"><b>${esc(it.name||it.email||'')}</b>${(it.email&&it.name)?` <span style="color:var(--mut)">${esc(it.email)}</span>`:''}</span></div>`).join('')}
+        <span style="flex:1;min-width:0"><b>${esc(it.name||it.email||'')}</b>${(it.email&&it.name)?` <span style="color:var(--mut)">${esc(it.email)}</span>`:''}</span>${it.email?ic('arrow',13):''}</div>`).join('')}
     </div>`:'';
   return `<div class="card" id="n${t.id}" style="border-left:3px solid var(--accent)">
     <div class="meta">${coChip}<span class="chip">${esc(t.category||'update')}</span>${cnt}<span style="margin-left:auto;color:var(--mut)">${timeTag(t.ts)}</span></div>
@@ -1224,6 +1228,7 @@ function infoCard(t){
     ${(t.body&&!grouped)?`<div class="csub">${esc(t.body)}</div>`:''}
     ${details}
     <div class="row" style="margin-top:8px">
+      ${(t.target_type==='contact'&&t.target_id&&!grouped)?`<button class="btn sm go" onclick="inboxContact('${esc(t.target_id)}')">${ic('arrow',13)} View contact</button>`:''}
       <button class="btn sm" onclick="notifAct(${t.id},'dismiss')">Dismiss</button>
       <button class="btn sm" onclick="notifAct(${t.id},'snooze')">Snooze 1h</button></div></div>`;
 }
