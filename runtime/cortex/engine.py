@@ -522,12 +522,17 @@ def send_blog_review_digest(company_id: int, posts: list[dict], dry_run: bool = 
 
 
 def _run_blog_task(task: dict, skill: dict, company: dict, site) -> None:
-    art = worker.draft_article(skill, company, task["request"])
-    body = f"TITLE: {art['title']}\n\n{art['html']}"
-    verdict = manager.check(skill, company, body, task["request"])
-    if not verdict["aligned"] and verdict["issues"]:
-        art = worker.draft_article(skill, company, task["request"], manager_feedback=verdict["issues"])
+    from . import blog, brand as _brand
+    rich = str((_brand.get_brand_kit(company["id"]) or {}).get("template") or "").startswith("dark")
+    if rich:   # dark-cinematic brands get the editorial JSON->HTML renderer (hero, In-brief, pull-quote, CTA)
+        art = blog.build(company["id"], (task.get("request") or {}).get("brief", ""))
         verdict = manager.check(skill, company, f"TITLE: {art['title']}\n\n{art['html']}", task["request"])
+    else:
+        art = worker.draft_article(skill, company, task["request"])
+        verdict = manager.check(skill, company, f"TITLE: {art['title']}\n\n{art['html']}", task["request"])
+        if not verdict["aligned"] and verdict["issues"]:
+            art = worker.draft_article(skill, company, task["request"], manager_feedback=verdict["issues"])
+            verdict = manager.check(skill, company, f"TITLE: {art['title']}\n\n{art['html']}", task["request"])
 
     post = site.stage_draft(art["title"], art["html"])  # unpublished WordPress draft
     db.setting_set(f"wp:{task['id']}", {"post_id": post["id"], "preview": post.get("preview"),
