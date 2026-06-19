@@ -857,13 +857,15 @@ def crm_contacts(company: str | None = None, q: str | None = None, stage: str | 
                 params.append(co["id"] if co else -1)
             else:
                 clauses.append("lower(email) in (select lower(email) from newsletter_test_group where active)")
+        elif stage.lower() in crm.CLASSIFICATIONS:           # the inbound classification (lead/vendor/…)
+            clauses.append("lower(classification) = %s"); params.append(stage.lower())
         else:
             clauses.append("stage = %s"); params.append(stage)
     where = ("where " + " and ".join(clauses)) if clauses else ""
     params.append(limit); params.append(offset)
     return db.query(
         "select first_name, last_name, email, organisation, company_name, job_title, stage, tier, "
-        f"is_client, newsletter_opt_out, lead_source from crm_master {where} "
+        f"is_client, newsletter_opt_out, classification, lead_source from crm_master {where} "
         "order by is_client desc, first_name nulls last limit %s offset %s",
         tuple(params))
 
@@ -1163,6 +1165,19 @@ def intake_registration(body: RegistrationBody, token: str = "", x_token: str = 
 class ContactStageBody(BaseModel):
     email: str
     stage: str
+
+
+class ContactClassifyBody(BaseModel):
+    email: str
+    classification: str | None = None
+
+
+@app.post("/api/crm/contact/classify")
+def crm_contact_classify(body: ContactClassifyBody, _: None = Depends(auth)) -> dict:
+    r = crm.set_classification(body.email, body.classification)
+    if not r:
+        raise HTTPException(status_code=404, detail="contact not found, or invalid classification")
+    return r
 
 
 @app.post("/api/crm/contact/stage")

@@ -678,7 +678,7 @@ function filterStage(s){ document.querySelectorAll('.fchip').forEach(c=>c.classL
 async function renderContacts(b,co){
   b.outerHTML=`<div id="crmbody">
     <div class="srch">${ic('search',18)}<input id="cq" placeholder="Search contacts…" oninput="searchContacts()"></div>
-    <div class="chiprow">${['All','Cold','Contacted','Engaged','Qualified','Not interested','Dormant/dead'].map(s=>`<span class="fchip${s==='All'?' on':''}" data-stage="${esc(s)}" onclick="filterStage('${esc(s)}')">${esc(s)}</span>`).join('')}<span class="fchip flag" data-stage="Client" onclick="filterStage('Client')">${ic('check',13)} Client</span><span class="fchip optout" data-stage="Opted out" onclick="filterStage('Opted out')">Opted out</span><span class="fchip" style="border-color:#00DAFF55" data-stage="Test group" onclick="filterStage('Test group')">${ic('check',13)} Test group</span></div>
+    <div class="chiprow">${['All','Cold','Contacted','Engaged','Qualified','Not interested','Dormant/dead'].map(s=>`<span class="fchip${s==='All'?' on':''}" data-stage="${esc(s)}" onclick="filterStage('${esc(s)}')">${esc(s)}</span>`).join('')}<span class="fchip flag" data-stage="Client" onclick="filterStage('Client')">${ic('check',13)} Client</span><span class="fchip optout" data-stage="Opted out" onclick="filterStage('Opted out')">Opted out</span><span class="fchip" style="border-color:#00DAFF55" data-stage="Test group" onclick="filterStage('Test group')">${ic('check',13)} Test group</span>${['lead','partner','support','freelancer','vendor','recruitment'].map(s=>`<span class="fchip" style="border-color:#00DAFF33" data-stage="${s}" onclick="filterStage('${s}')">${s[0].toUpperCase()+s.slice(1)}</span>`).join('')}</div>
     <div class="row" style="margin-bottom:10px"><button class="btn go sm" onclick="openNewContact(null)">${ic('plus',15)} New contact</button></div>
     <div id="clist" class="empty">Loading…</div></div>`;
   loadContacts(co);
@@ -687,7 +687,7 @@ function contactRow(c){ const n=realName(c); return `<div class="card crow" oncl
   <div class="cav">${esc(initials(n))}</div>
   <div style="flex:1;min-width:0"><div class="cname">${esc(n)}</div>
     <div class="csub">${esc(c.organisation||'')}${c.company_name?' · '+esc(c.company_name):''}</div></div>
-  ${c.newsletter_opt_out?'<span class="chip" style="color:#ff5d6c;border-color:#ff5d6c55;font-size:10px">opted out</span>':''}${c.is_client?'<span class="chip" style="color:#2ad17e;border-color:#2ad17e55">Client</span>':stageChip(c.stage)}</div>`; }
+  ${c.classification?`<span class="chip" style="color:#00DAFF;border-color:#00DAFF55;font-size:10px">${esc(c.classification)}</span>`:''}${c.newsletter_opt_out?'<span class="chip" style="color:#ff5d6c;border-color:#ff5d6c55;font-size:10px">opted out</span>':''}${c.is_client?'<span class="chip" style="color:#2ad17e;border-color:#2ad17e55">Client</span>':stageChip(c.stage)}</div>`; }
 const CHIDE=new Set(['id','first_name','last_name','account_id','is_client','stage','note','history','company_name','created_at','updated_at']);
 const CURL=new Set(['linkedin','instagram','facebook','website']);
 function humanizeField(k){ let s=k.replace(/_/g,' '); s=s.charAt(0).toUpperCase()+s.slice(1); return s.replace(/Linkedin/,'LinkedIn'); }
@@ -712,6 +712,7 @@ async function openContact(email){
       <div><div class="cname" style="font-size:17px">${esc(n)}</div><div class="csub">${esc(c.organisation||'')}${c.job_title?' · '+esc(c.job_title):''}</div></div></div>
     <div class="row" style="margin-bottom:12px">${stageChip(c.stage)}${c.tier?`<span class="chip cy">Tier ${esc(c.tier)}</span>`:''}${c.is_client?'<span class="chip" style="color:#2ad17e">Client</span>':''}<span class="chip" style="cursor:pointer;${c.newsletter_opt_out?'color:#04181d;background:#ff5d6c;border-color:#ff5d6c':'color:#ff5d6c;border-color:#ff5d6c55;background:transparent'}" onclick="toggleOptOut('${esc(c.email)}',${!c.newsletter_opt_out})" title="Tap to ${c.newsletter_opt_out?'re-subscribe to newsletter':'opt out of newsletter'}">${c.newsletter_opt_out?'Opted out':'Mark opted-out'}</span></div>
     ${contactStagePicker(c)}
+    ${contactClassPicker(c)}
     ${contactCompanyRow(c)}
     <div id="ccCompanies" class="dsec"><div class="dlbl">Companies & test groups</div><div class="csub">Loading…</div></div>
     <div class="dgrid">${fieldRows(c)}</div>
@@ -754,6 +755,20 @@ function contactStagePicker(c){
 async function setContactStage(email,i){
   const s=CONTACT_STAGES[i];
   try{ await api('/api/crm/contact/stage',{method:'POST',body:JSON.stringify({email,stage:s})}); toast('Status: '+s); openContact(email); }
+  catch(e){ toast('Could not update ('+e.message+')'); }
+}
+const CONTACT_CLASSES=['lead','partner','support','freelancer','vendor','recruitment'];
+const titleCase=s=>s?s[0].toUpperCase()+s.slice(1):'';
+function contactClassPicker(c){
+  const cur=(c.classification||'').toLowerCase();
+  return `<div class="dsec"><div class="dlbl">Classification</div><div class="chiprow">${CONTACT_CLASSES.map(s=>{
+    const on=s===cur;
+    return `<span class="fchip${on?' on':''}" style="${on?'color:#00DAFF;border-color:#00DAFF':''}" onclick="setContactClass('${esc(c.email)}','${s}',${on})">${esc(titleCase(s))}</span>`;
+  }).join('')}</div></div>`;
+}
+async function setContactClass(email,cl,on){
+  try{ await api('/api/crm/contact/classify',{method:'POST',body:JSON.stringify({email,classification:on?null:cl})});
+    toast(on?'Classification cleared':'Classification: '+cl); openContact(email); }
   catch(e){ toast('Could not update ('+e.message+')'); }
 }
 async function toggleOptOut(email,on){

@@ -16,6 +16,20 @@ from . import db
 ORG = {"tabscanner": "Tabscanner", "sensa": "Sensa", "skyvision": "Sky Vision",
        "filmspoke": "FilmSpoke", "snaprewards": "Snap Rewards", "flixton": "Flixton Manor"}
 
+# inbound-email classifications that become CRM contacts (mirrors engine._INBOX_CRM; duplicated here to
+# avoid a circular import). A contact's structured `classification` field is one of these, or null.
+CLASSIFICATIONS = ["lead", "partner", "support", "freelancer", "vendor", "recruitment"]
+
+
+def set_classification(email: str, classification: str | None) -> dict | None:
+    """Set or clear a contact's structured classification. Returns the updated row (None if no such contact
+    or an invalid value)."""
+    cl = (classification or "").strip().lower() or None
+    if cl and cl not in CLASSIFICATIONS:
+        return None
+    return db.execute("update crm_master set classification=%s, updated_at=now() "
+                      "where lower(email)=lower(%s) returning *", (cl, email))
+
 _MIGRATE = """
 alter table crm_master add column if not exists note text;
 alter table crm_master add column if not exists history jsonb not null default '[]'::jsonb;
@@ -23,6 +37,7 @@ alter table crm_master add column if not exists updated_at timestamptz not null 
 alter table crm_master add column if not exists newsletter_opt_out boolean not null default false;
 alter table crm_master add column if not exists newsletter_bounced boolean not null default false;
 alter table crm_master add column if not exists waitlist boolean not null default false;
+alter table crm_master add column if not exists classification text;
 alter table crm_master drop column if exists do_not_market;
 """
 
@@ -211,16 +226,17 @@ def add_inbound_contact(reg: dict, company: str, classification: str, stage: str
         cur = existing.get("organisation") or ""
         new_org = (cur + ", " + org).strip(", ") if (org and org.lower() not in cur.lower()) else (cur or org)
         db.execute("update crm_master set organisation=%s, "
-                   "lead_source=coalesce(nullif(btrim(lead_source),''), %s), updated_at=now() where id=%s",
-                   (new_org, source, existing["id"]))
+                   "lead_source=coalesce(nullif(btrim(lead_source),''), %s), "
+                   "classification=coalesce(classification, %s), updated_at=now() where id=%s",
+                   (new_org, source, classification, existing["id"]))
         log_event(email, "inbound_email", ev["text"], company)
         return ("matched", email)
     db.execute(
         "insert into crm_master (organisation, first_name, last_name, email, website, lead_source, "
-        "newsletter_opt_out, lead_status, stage, history) "
-        "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (lower(email)) do nothing",
+        "classification, newsletter_opt_out, lead_status, stage, history) "
+        "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (lower(email)) do nothing",
         (org, first or None, last or None, email, email.split("@")[-1], source,
-         not newsletter, "New", stage, Json([ev])))
+         classification, not newsletter, "New", stage, Json([ev])))
     try:    # grouped FYI info-card in the Inbox (one rolling card per company until dismissed)
         from . import notifications
         cid_row = db.one("select id from companies where slug=%s", (company,))
