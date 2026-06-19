@@ -18,7 +18,8 @@ ORG = {"tabscanner": "Tabscanner", "sensa": "Sensa", "skyvision": "Sky Vision",
 
 # inbound-email classifications that become CRM contacts (mirrors engine._INBOX_CRM; duplicated here to
 # avoid a circular import). A contact's structured `classification` field is one of these, or null.
-CLASSIFICATIONS = ["lead", "partner", "support", "freelancer", "vendor", "recruitment"]
+# "client" = is_client=true (someone who has been a client at some point — sticky); it wins over any guess.
+CLASSIFICATIONS = ["client", "lead", "partner", "support", "freelancer", "vendor", "recruitment"]
 
 
 def set_classification(email: str, classification: str | None) -> dict | None:
@@ -232,10 +233,11 @@ def add_inbound_contact(reg: dict, company: str, classification: str, stage: str
         new_org = (cur + ", " + org).strip(", ") if (org and org.lower() not in cur.lower()) else (cur or org)
         db.execute("update crm_master set organisation=%s, "
                    "lead_source=coalesce(nullif(btrim(lead_source),''), %s), "
-                   "classification=coalesce(classification, %s), "
+                   "classification=case when %s='client' or classification='client' then 'client' "
+                   "                    else coalesce(classification, %s) end, "
                    "market=coalesce(nullif(btrim(market),''), %s), "
                    "note=coalesce(nullif(btrim(note),''), %s), updated_at=now() where id=%s",
-                   (new_org, source, classification, mkt, note, existing["id"]))
+                   (new_org, source, classification, classification, mkt, note, existing["id"]))
         log_event(email, "inbound_email", ev_text, company)
         return ("matched", email)
     db.execute(

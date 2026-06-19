@@ -52,7 +52,10 @@ def _profile_block(company_id: int) -> str:
     if not data:
         return ""
     labels = _labels()
-    lines = [f"- {labels.get(k, k)}: {v}" for k, v in data.items() if v]
+    # signature_html (rich markup) and the cached brand kit are for rendering, not worker reasoning —
+    # keep them out of the prompt (they'd add noise + tokens). The plain `signature` still conveys the sign-off.
+    _skip = {"signature_html", "brand"}
+    lines = [f"- {labels.get(k, k)}: {v}" for k, v in data.items() if v and k not in _skip]
     return ("COMPANY PROFILE (the standard facts — identity, brand assets, channels, signature, "
             "reply-from, team, CRM):\n" + "\n".join(lines)) if lines else ""
 

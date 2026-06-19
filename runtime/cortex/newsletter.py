@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import html as _html
+from concurrent.futures import ThreadPoolExecutor
 
 from psycopg.types.json import Json
 
@@ -263,13 +264,355 @@ def render_text(company_id: int, c: dict) -> str:
     return worker._no_dashes("\n".join(x for x in lines if x is not None))
 
 
+# ---------- FilmSpoke dark-cinematic template (baked from the approved newsletter guide) ----------
+# A brand kit whose `template` starts with "dark" routes here. The look/voice/flow are firm; the block
+# mix is composed per issue (guide, not straitjacket). Images are generated via Gemini and inlined as cid
+# attachments alongside the real on-dark logo (kept in the brand kit as base64).
+
+_FS_COMPOSE = (
+    "Compose ONE newsletter issue that maps onto the FilmSpoke dark cinematic template (all-black canvas, "
+    "accent red #E50914 used deliberately as the only loud colour, Poppins headings + Inter body, 600px, "
+    "email-safe). This template is a GUIDE, not a straitjacket: hold the look, voice and rough flow firm, "
+    "but compose the blocks freely for what the issue actually has to say. Voice: fast, confident, premium; "
+    "short declarative sentences; one clear point; lead with it. No em-dashes or en-dashes; no emoji; no "
+    "clickbait. The issue MUST read fully with images off.\n\n"
+    "Choose blocks by substance, do not force them. Required: headline, intro, and one primary CTA. "
+    "Everything else is optional, use what fits. Scale content sections to the number of real items "
+    "(around three or four reads best; more only if each earns its place, otherwise group or link out). "
+    "Each image you want needs a short prompt for a cinematic, dark, high-contrast frame with red as the "
+    "only accent and NO text in the image, plus alt text.\n\n"
+    "Return JSON only with these fields (set any optional block's \"use\" to false when not needed):\n"
+    "subject; preheader (~80 chars); header_eyebrow (short issue type); "
+    "hero {use, image_prompt, alt}; eyebrow_pill (short red kicker or null); headline; intro; "
+    "primary_cta {label, url}; format_chips (array, e.g. 30s/9:16/16:9, or empty); "
+    "sections (array of {heading, body, image:{use, kind:\"feature\"|\"grid\", "
+    "items:[{image_prompt, alt, caption}]}}); steps {use, title, items:[{title, text}]}; "
+    "stat_band {use, stats:[{value, label, highlight}]}; quote {use, text, attribution}; "
+    "closing_cta {use, heading, subtext, label, url}. Use real absolute FilmSpoke URLs (https://filmspoke.ai...)."
+)
+
+
+def compose_filmspoke(company_id: int, idea_text: str) -> dict:
+    company = store.get_company(company_id)
+    skill = store.get_skill_by_key(company_id, "content-newsletter")
+    system = "\n\n".join(filter(None, [
+        (f"You are Cortex's newsletter writer and designer for {company['name']}, an AI commercial store: "
+         "broadcast-grade commercials, customised in clicks, delivered in under 24 hours, built by an "
+         "award-winning team. An AI production studio by Sensa."),
+        worker._company_context(company),
+        worker._rules_block(skill),
+        _FS_COMPOSE,
+    ]))
+    user = f"Approved idea:\n{idea_text}\n\nCompose the full issue now as JSON."
+    out = provider.think_json(system, user, model=worker._model_for(skill), max_tokens=2600,
+                              purpose="newsletter_compose", company=company.get("slug"))
+    return out or {}
+
+
+_FS_MAX_IMAGES = 5   # excluding the logo; bounds Gemini cost + latency per issue
+
+
+def _gen_images(jobs: list[tuple[str, str, str]]) -> dict:
+    """jobs = [(key, prompt, aspect)]. Generate concurrently; return {key: bytes|None}."""
+    if not jobs:
+        return {}
+
+    def run(job):
+        k, prompt, aspect = job
+        return k, imagegen.hero(prompt, aspect=aspect)
+
+    out: dict = {}
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        for k, b in ex.map(run, jobs):
+            out[k] = b
+    return out
+
+
+def _optimize_jpeg(data: bytes | None, max_w: int, q: int = 82) -> bytes | None:
+    """Downsize + recompress a generated image to a small, email-friendly JPEG. Best-effort; on any
+    failure (or no Pillow) returns the original bytes so a send is never blocked on optimisation."""
+    if not data:
+        return data
+    try:
+        from io import BytesIO
+
+        from PIL import Image
+        im = Image.open(BytesIO(data)).convert("RGB")
+        if im.width > max_w:
+            im = im.resize((max_w, round(im.height * max_w / im.width)), Image.LANCZOS)
+        buf = BytesIO()
+        im.save(buf, "JPEG", quality=q, optimize=True)
+        return buf.getvalue()
+    except Exception:  # noqa: BLE001
+        return data
+
+
+def _build_filmspoke(company_id: int, idea_text: str, kit: dict) -> dict:
+    company = store.get_company(company_id)
+    c = compose_filmspoke(company_id, idea_text)
+
+    jobs: list[tuple[str, str, str]] = []
+    hero = c.get("hero") or {}
+    if hero.get("use") and hero.get("image_prompt"):
+        jobs.append(("hero", hero["image_prompt"], "16:9"))
+    for i, s in enumerate(c.get("sections") or []):
+        img = s.get("image") or {}
+        if img.get("use"):
+            aspect = "1:1" if (img.get("kind") == "grid") else "16:9"
+            for j, item in enumerate(img.get("items") or []):
+                if item.get("image_prompt"):
+                    jobs.append((f"s{i}_{j}", item["image_prompt"], aspect))
+    gen = _gen_images(jobs[:_FS_MAX_IMAGES])
+
+    images: list[tuple[str, bytes]] = []
+    logo_b64 = kit.get("logo_dark_b64")
+    if logo_b64:
+        images.append(("logo.png", base64.b64decode(logo_b64)))
+    if gen.get("hero"):
+        images.append(("hero.jpg", _optimize_jpeg(gen["hero"], 1200)))
+        c.setdefault("hero", {})["cid"] = "hero.jpg"
+    elif c.get("hero"):
+        c["hero"]["use"] = False
+    for i, s in enumerate(c.get("sections") or []):
+        img = s.get("image") or {}
+        if not img.get("use"):
+            continue
+        max_w = 600 if img.get("kind") == "grid" else 1000
+        kept = []
+        for j, item in enumerate(img.get("items") or []):
+            b = gen.get(f"s{i}_{j}")
+            if b:
+                cid = f"s{i}_{j}.jpg"
+                images.append((cid, _optimize_jpeg(b, max_w)))
+                item["cid"] = cid
+                kept.append(item)
+        img["items"] = kept
+        img["use"] = bool(kept)
+
+    return {"subject": c.get("subject") or f"{company['name']} newsletter",
+            "html": render_filmspoke(company_id, c, "logo.png" if logo_b64 else None),
+            "text": render_text_filmspoke(company_id, c), "images": images, "content": c}
+
+
+def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
+    kit = brand.get_brand_kit(company_id) or {}
+    col = kit.get("colors") or {}
+    bg = col.get("bg", "#0A0A0A"); surface = col.get("surface", "#121212"); line = col.get("line", "#242424")
+    ink = col.get("ink", "#F4F4F5"); body = col.get("body", "#C9CAD0"); muted = col.get("muted", "#9A9AA0")
+    red = col.get("primary", "#E50914")
+    headf = f"'{kit.get('fonts', {}).get('heading', 'Poppins')}','Segoe UI',Arial,sans-serif"
+    bodyf = f"'{kit.get('fonts', {}).get('body', 'Inter')}',Arial,sans-serif"
+    company = store.get_company(company_id)
+    prof = _profile(company_id)
+
+    def para(text, color=None, size=16):
+        color = color or body
+        ps = [x.strip() for x in str(text or "").split("\n\n") if x.strip()]
+        return "".join(f'<p style="margin:0 0 14px;font:400 {size}px/1.65 {bodyf};color:{color};">{_esc(x)}</p>'
+                       for x in ps)
+
+    def btn(label, url):
+        return (f'<table role="presentation" cellpadding="0" cellspacing="0"><tr>'
+                f'<td style="border-radius:6px;background:{red};">'
+                f'<a href="{_esc(url)}" style="display:inline-block;font:700 16px/1 {headf};color:#FFFFFF;'
+                f'padding:16px 32px;border-radius:6px;background:{red};text-decoration:none;">{_esc(label)} &nbsp;&rarr;</a>'
+                f'</td></tr></table>')
+
+    def divider():
+        return (f'<tr><td style="padding:30px 44px 0;"><div style="border-top:1px solid {line};'
+                f'font-size:0;line-height:0;">&nbsp;</div></td></tr>')
+
+    rows = []
+    eyebrow = _esc(c.get("header_eyebrow") or "AI Commercial Store")
+    if logo_cid:
+        logo_html = (f'<img src="cid:{logo_cid}" alt="{_esc(company["name"])}" height="26" '
+                     f'style="display:block;height:26px;width:auto;border:0;">')
+    else:
+        logo_html = (f'<span style="font:800 22px/1 {headf};color:{ink};">FILM'
+                     f'<span style="color:{red};">SPOKE.</span></span>')
+    rows.append(f'<tr><td style="padding:24px 36px 18px;"><table role="presentation" width="100%" '
+                f'cellpadding="0" cellspacing="0"><tr><td align="left" style="vertical-align:middle;">{logo_html}</td>'
+                f'<td align="right" style="vertical-align:middle;font:600 11px/1 {bodyf};letter-spacing:.22em;'
+                f'color:{muted};text-transform:uppercase;">{eyebrow}</td></tr></table></td></tr>')
+
+    hero = c.get("hero") or {}
+    if hero.get("use") and hero.get("cid"):
+        rows.append(f'<tr><td style="padding:0;"><img src="cid:{hero["cid"]}" width="600" '
+                    f'alt="{_esc(hero.get("alt"))}" style="display:block;width:100%;max-width:600px;'
+                    f'height:auto;border:0;"></td></tr>')
+
+    if c.get("eyebrow_pill"):
+        rows.append(f'<tr><td style="padding:28px 44px 0;"><span style="display:inline-block;'
+                    f'font:700 11px/1 {bodyf};letter-spacing:.2em;text-transform:uppercase;color:{red};'
+                    f'border:1px solid {red};border-radius:999px;padding:7px 13px;">{_esc(c["eyebrow_pill"])}</span></td></tr>')
+
+    if c.get("headline"):
+        rows.append(f'<tr><td style="padding:16px 44px 0;"><h1 style="margin:0;font:800 36px/1.14 {headf};'
+                    f'color:{ink};letter-spacing:-.5px;">{_esc(c["headline"])}</h1></td></tr>')
+    if c.get("intro"):
+        rows.append(f'<tr><td style="padding:16px 44px 0;">{para(c.get("intro"))}</td></tr>')
+
+    cta = c.get("primary_cta") or {}
+    if cta.get("label") and cta.get("url"):
+        rows.append(f'<tr><td style="padding:24px 44px 0;">{btn(cta["label"], cta["url"])}</td></tr>')
+
+    chips = "".join(f'<span style="display:inline-block;font:600 12px/1 {bodyf};color:{muted};'
+                    f'border:1px solid {line};border-radius:999px;padding:7px 12px;margin:0 6px 6px 0;">{_esc(ch)}</span>'
+                    for ch in (c.get("format_chips") or []))
+    if chips:
+        rows.append(f'<tr><td style="padding:18px 44px 0;">{chips}</td></tr>')
+
+    secs = c.get("sections") or []
+    if secs:
+        rows.append(divider())
+    for s in secs:
+        rows.append(f'<tr><td style="padding:26px 44px 0;"><h2 style="margin:0 0 10px;font:700 22px/1.25 {headf};'
+                    f'color:{ink};">{_esc(s.get("heading"))}</h2>{para(s.get("body"))}</td></tr>')
+        img = s.get("image") or {}
+        if img.get("use") and img.get("items"):
+            if img.get("kind") == "grid":
+                items = img["items"]
+                w = round(100 / max(1, len(items)), 2)
+                cells = ""
+                for it in items:
+                    cap = (f'<div style="font:600 12px/1 {bodyf};color:{body};padding:9px 2px 0;">'
+                           f'{_esc(it.get("caption"))}</div>') if it.get("caption") else ""
+                    cells += (f'<td width="{w}%" style="vertical-align:top;padding:0 5px;">'
+                              f'<img src="cid:{it["cid"]}" width="168" alt="{_esc(it.get("alt"))}" '
+                              f'style="display:block;width:100%;height:auto;border-radius:12px;border:0;">{cap}</td>')
+                rows.append(f'<tr><td style="padding:18px 40px 0;"><table role="presentation" width="100%" '
+                            f'cellpadding="0" cellspacing="0"><tr>{cells}</tr></table></td></tr>')
+            else:
+                it = img["items"][0]
+                rows.append(f'<tr><td style="padding:16px 44px 0;"><img src="cid:{it["cid"]}" width="512" '
+                            f'alt="{_esc(it.get("alt"))}" style="display:block;width:100%;height:auto;'
+                            f'border-radius:12px;border:0;"></td></tr>')
+
+    st = c.get("steps") or {}
+    if st.get("use") and st.get("items"):
+        rows.append(divider())
+        rows.append(f'<tr><td style="padding:26px 44px 0;"><h2 style="margin:0 0 4px;font:700 22px/1.25 {headf};'
+                    f'color:{ink};">{_esc(st.get("title") or "How it works")}</h2></td></tr>')
+        items = st["items"]; last = len(items) - 1
+        trs = ""
+        for idx, it in enumerate(items):
+            islast = idx == last
+            disc = (f'background:{red};color:#FFFFFF;' if islast else f'border:1px solid {red};color:{red};')
+            pad = "0" if islast else "0 0 16px"
+            trs += (f'<tr><td width="44" style="vertical-align:top;padding:{pad};"><div style="width:34px;'
+                    f'height:34px;border-radius:999px;{disc}text-align:center;font:700 15px/34px {headf};">{idx + 1}</div></td>'
+                    f'<td style="vertical-align:top;padding:{pad};"><div style="font:700 16px/1.3 {headf};'
+                    f'color:{ink};">{_esc(it.get("title"))}</div><div style="font:400 14px/1.55 {bodyf};'
+                    f'color:{muted};padding-top:3px;">{_esc(it.get("text"))}</div></td></tr>')
+        rows.append(f'<tr><td style="padding:14px 44px 0;"><table role="presentation" width="100%" '
+                    f'cellpadding="0" cellspacing="0">{trs}</table></td></tr>')
+
+    sb = c.get("stat_band") or {}
+    if sb.get("use") and sb.get("stats"):
+        stats = sb["stats"][:3]; n = len(stats); w = round(100 / max(1, n), 2)
+        cells = ""
+        for k, stt in enumerate(stats):
+            br = f'border-right:1px solid {line};' if k < n - 1 else ""
+            vcol = red if stt.get("highlight") else ink
+            cells += (f'<td width="{w}%" align="center" style="padding:22px 8px;{br}">'
+                      f'<div style="font:800 24px/1 {headf};color:{vcol};">{_esc(stt.get("value"))}</div>'
+                      f'<div style="font:500 12px/1.4 {bodyf};color:{muted};padding-top:6px;">{_esc(stt.get("label"))}</div></td>')
+        rows.append(f'<tr><td style="padding:30px 40px 0;"><table role="presentation" width="100%" '
+                    f'cellpadding="0" cellspacing="0" style="background:{surface};border:1px solid {line};'
+                    f'border-radius:14px;"><tr>{cells}</tr></table></td></tr>')
+
+    q = c.get("quote") or {}
+    if q.get("use") and q.get("text"):
+        attr = (f'<p style="margin:8px 0 0;font:400 13px/1.4 {bodyf};color:{muted};">{_esc(q.get("attribution"))}</p>'
+                if q.get("attribution") else "")
+        rows.append(f'<tr><td style="padding:28px 44px 0;"><div style="font:800 30px/1 {headf};color:{red};">&ldquo;</div>'
+                    f'<p style="margin:2px 0 0;font:500 18px/1.5 {headf};color:{ink};">{_esc(q.get("text"))}</p>{attr}</td></tr>')
+
+    cc = c.get("closing_cta") or {}
+    if cc.get("use") and cc.get("label") and cc.get("url"):
+        rows.append(f'<tr><td style="padding:30px 40px 0;"><table role="presentation" width="100%" '
+                    f'cellpadding="0" cellspacing="0" style="border-radius:16px;background:{surface};'
+                    f'border:1px solid {line};"><tr><td align="center" style="padding:34px 30px 36px;">'
+                    f'<h2 style="margin:0;font:800 26px/1.2 {headf};color:{ink};">{_esc(cc.get("heading"))}</h2>'
+                    f'<p style="margin:12px 0 22px;font:400 15px/1.6 {bodyf};color:{muted};">{_esc(cc.get("subtext"))}</p>'
+                    f'{btn(cc["label"], cc["url"])}</td></tr></table></td></tr>')
+
+    legal = _esc(prof.get("legal_name") or company["name"])
+    addr = _esc(worker._no_dashes(" ".join((prof.get("address") or "").split())).rstrip(". "))
+    _root = (send_domain(company_id) or "").split(".", 1)
+    sitetext = _root[1] if len(_root) == 2 else ""
+    site = ("https://" + sitetext) if sitetext else ""
+    social = prof.get("social") or ""
+    flogo = (f'<img src="cid:{logo_cid}" alt="{_esc(company["name"])}" height="20" '
+             f'style="display:block;height:20px;width:auto;border:0;">' if logo_cid else
+             f'<span style="font:800 16px/1 {headf};color:{ink};">FILM<span style="color:{red};">SPOKE.</span></span>')
+    rows.append(f'<tr><td style="padding:34px 44px 8px;">{flogo}<p style="margin:14px 0 0;font:600 10px/1.5 {bodyf};'
+                f'color:#6F7078;letter-spacing:.22em;text-transform:uppercase;">An AI production studio by Sensa</p></td></tr>')
+    links = ""
+    if site:
+        links += f'<a href="{site}" style="color:{muted};text-decoration:underline;">{_esc(sitetext)}</a> &nbsp;&middot;&nbsp; '
+    if social:
+        links += f'<a href="{_esc(social)}" style="color:{muted};text-decoration:underline;">YouTube</a> &nbsp;&middot;&nbsp; '
+    rows.append(f'<tr><td style="padding:14px 44px 30px;"><p style="margin:0 0 6px;font:400 12px/1.6 {bodyf};'
+                f'color:#6F7078;">You are receiving this email from {legal}{(", " + addr) if addr else ""}.</p>'
+                f'<p style="margin:0;font:400 12px/1.6 {bodyf};color:#6F7078;">{links}'
+                f'<a href="%unsubscribe_url%" style="color:{muted};text-decoration:underline;">Unsubscribe</a></p></td></tr>')
+
+    preheader = _esc(c.get("preheader") or "")
+    return ('<!doctype html><html><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            '<meta name="x-apple-disable-message-reformatting">'
+            '<meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"></head>'
+            f'<body style="margin:0;padding:0;background:{bg};">'
+            f'<div style="display:none;max-height:0;overflow:hidden;opacity:0;">{preheader}</div>'
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{bg};">'
+            f'<tr><td align="center" style="padding:24px 12px;">'
+            f'<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;'
+            f'max-width:600px;background:{bg};border:1px solid {line};border-radius:18px;overflow:hidden;">'
+            f'{"".join(rows)}</table></td></tr></table></body></html>')
+
+
+def render_text_filmspoke(company_id: int, c: dict) -> str:
+    company = store.get_company(company_id)
+    prof = _profile(company_id)
+    L = [c.get("headline") or company["name"], "", (c.get("intro") or "").strip(), ""]
+    cta = c.get("primary_cta") or {}
+    if cta.get("label") and cta.get("url"):
+        L += [f"{cta['label']}: {cta['url']}", ""]
+    for s in (c.get("sections") or []):
+        L += [str(s.get("heading") or "").upper(), (s.get("body") or "").strip(), ""]
+    st = c.get("steps") or {}
+    if st.get("use") and st.get("items"):
+        L += [str(st.get("title") or "How it works").upper()]
+        for i, it in enumerate(st["items"]):
+            L += [f"{i + 1}. {it.get('title')}: {it.get('text')}"]
+        L += [""]
+    sb = c.get("stat_band") or {}
+    if sb.get("use") and sb.get("stats"):
+        L += [" / ".join(f"{x.get('value')} {x.get('label')}" for x in sb["stats"]), ""]
+    q = c.get("quote") or {}
+    if q.get("use") and q.get("text"):
+        L += [f"\"{q.get('text')}\" {q.get('attribution') or ''}".strip(), ""]
+    cc = c.get("closing_cta") or {}
+    if cc.get("use") and cc.get("label") and cc.get("url"):
+        L += [f"{cc['label']}: {cc['url']}", ""]
+    L += ["-" * 40, f"You are receiving this email from {prof.get('legal_name') or company['name']}.",
+          prof.get("address") or "", "Unsubscribe: %unsubscribe_url%"]
+    return worker._no_dashes("\n".join(x for x in L if x is not None))
+
+
 def build(company_id: int, idea_text: str) -> dict:
+    """Compose + render one issue. Dispatches on the brand kit's `template`: a 'dark*' template (FilmSpoke)
+    uses the dark cinematic renderer with multiple inline images; everything else uses the light card."""
+    kit = brand.get_brand_kit(company_id) or {}
+    if str(kit.get("template") or "").startswith("dark"):
+        return _build_filmspoke(company_id, idea_text, kit)
     c = compose(company_id, idea_text)
     hero = imagegen.hero(c.get("hero_prompt") or "") if c.get("hero_prompt") else None
-    cid = "hero.jpg" if hero else None
+    images = [("hero.jpg", hero)] if hero else []
     return {"subject": c.get("subject") or f"{store.get_company(company_id)['name']} newsletter",
-            "html": render_html(company_id, c, hero_cid=cid), "text": render_text(company_id, c),
-            "hero": hero, "content": c}
+            "html": render_html(company_id, c, hero_cid="hero.jpg" if hero else None),
+            "text": render_text(company_id, c), "images": images, "content": c}
 
 
 # ---------- send ----------
@@ -282,9 +625,9 @@ def _sender(company_id: int) -> tuple[str, str, str | None]:
 
 
 def send_bulk(company_id: int, subject: str, html: str, text: str, recips: list[dict],
-              hero: bytes | None, tag: str) -> int:
+              images: list[tuple[str, bytes]] | None, tag: str) -> int:
     domain, sender, reply_to = _sender(company_id)
-    inline = [("hero.jpg", hero)] if hero else None
+    inline = [(cid, b) for cid, b in (images or []) if b] or None
     sent = 0
     for i in range(0, len(recips), 900):
         chunk = recips[i:i + 900]
@@ -293,6 +636,20 @@ def send_bulk(company_id: int, subject: str, html: str, text: str, recips: list[
                      inline=inline, recipient_vars=rvars, reply_to=reply_to, tag=tag)
         sent += len(chunk)
     return sent
+
+
+def _decode_images(images_b64, hero_b64=None) -> list[tuple[str, bytes]]:
+    """Artifact/job image list -> [(cid, bytes)]. Falls back to a legacy single hero_b64 (pre-multi-image)."""
+    out: list[tuple[str, bytes]] = []
+    for pair in (images_b64 or []):
+        try:
+            cid, b64 = pair
+            out.append((cid, base64.b64decode(b64)))
+        except Exception:  # noqa: BLE001
+            pass
+    if not out and hero_b64:
+        out.append(("hero.jpg", base64.b64decode(hero_b64)))
+    return out
 
 
 # ---------- approval handlers (called from engine._execute) ----------
@@ -310,7 +667,7 @@ def execute_idea_approval(task: dict, skill: dict, company: dict, actor: str) ->
     built = build(cid, task.get("draft") or "")
     send_bulk(cid, "[TEST] " + built["subject"], built["html"], built["text"],
               [{"email": g["email"], "first_name": g.get("name")} for g in group],
-              built["hero"], tag="newsletter-test")
+              built["images"], tag="newsletter-test")
     store.update_task(task["id"], status="done")
     store.log_decision(task["id"], skill["id"], actor, "newsletter_test_sent",
                        note=built["subject"], snapshot={"to": [g["email"] for g in group]})
@@ -323,7 +680,7 @@ def execute_idea_approval(task: dict, skill: dict, company: dict, actor: str) ->
     store.update_task(rev["id"], draft=summary, status="awaiting_approval")
     db.setting_set(f"newsletter:{rev['id']}", {
         "subject": built["subject"], "html": built["html"], "text": built["text"],
-        "hero_b64": base64.b64encode(built["hero"]).decode() if built["hero"] else None})
+        "images_b64": [[cid, base64.b64encode(b).decode()] for cid, b in built["images"]]})
     return {"sent_to": f"the test group ({len(group)})", "review_task": rev["id"]}
 
 
@@ -358,8 +715,8 @@ def execute_send_all(task: dict, skill: dict, company: dict, actor: str, confirm
         store.update_task(task["id"], status="awaiting_approval")
         return {"needs_confirm": True, "recipients": n}
     recips = recipients(cid)
-    hero = base64.b64decode(art["hero_b64"]) if art.get("hero_b64") else None
-    sent = send_bulk(cid, art["subject"], art["html"], art["text"], recips, hero, tag="newsletter")
+    images = _decode_images(art.get("images_b64"), art.get("hero_b64"))
+    sent = send_bulk(cid, art["subject"], art["html"], art["text"], recips, images, tag="newsletter")
     store.update_task(task["id"], status="done")
     store.log_decision(task["id"], skill["id"], actor, "newsletter_sent",
                        note=art["subject"], snapshot={"recipients": sent})
@@ -413,7 +770,7 @@ _BOUNCE_PAUSE_PCT = 0.08          # auto-pause a job if >8% of what it has sent 
 _JOBS_DDL = """
 create table if not exists newsletter_send_jobs (
   id bigserial primary key, company_id bigint not null, task_id bigint,
-  subject text not null, html text not null, body_text text not null, hero_b64 text,
+  subject text not null, html text not null, body_text text not null, hero_b64 text, images_b64 jsonb,
   recipients jsonb not null, total int not null, sent int not null default 0,
   per_hour int not null default 250, status text not null default 'running',
   bounces_at_start int not null default 0, last_batch_at timestamptz,
@@ -423,6 +780,7 @@ create table if not exists newsletter_send_jobs (
 
 def ensure_jobs_table() -> None:
     db.execute(_JOBS_DDL)
+    db.execute("alter table newsletter_send_jobs add column if not exists images_b64 jsonb")
 
 
 def enqueue_send(company_id: int, task_id: int, art: dict, recips: list[dict],
@@ -436,9 +794,10 @@ def enqueue_send(company_id: int, task_id: int, art: dict, recips: list[dict],
         b0 = 0
     row = db.execute(
         "insert into newsletter_send_jobs (company_id, task_id, subject, html, body_text, hero_b64, "
-        "recipients, total, per_hour, bounces_at_start) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id",
+        "images_b64, recipients, total, per_hour, bounces_at_start) "
+        "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id",
         (company_id, task_id, art["subject"], art["html"], art["text"], art.get("hero_b64"),
-         Json(recips), len(recips), int(per_hour), b0))
+         Json(art.get("images_b64") or []), Json(recips), len(recips), int(per_hour), b0))
     return row["id"]
 
 
@@ -477,9 +836,9 @@ def _drain_one(job: dict) -> dict | None:
         db.execute("update newsletter_send_jobs set status='done', updated_at=now() where id=%s", (jid,))
         return {"status": "done", "job_id": jid, "task_id": job["task_id"], "company_id": cid,
                 "subject": job["subject"], "sent": sent, "total": total}
-    hero = base64.b64decode(job["hero_b64"]) if job["hero_b64"] else None
+    images = _decode_images(job.get("images_b64"), job.get("hero_b64"))
     try:
-        n = send_bulk(cid, job["subject"], job["html"], job["body_text"], chunk, hero, tag="newsletter")
+        n = send_bulk(cid, job["subject"], job["html"], job["body_text"], chunk, images, tag="newsletter")
     except Exception:  # noqa: BLE001 — transient; don't advance, retry next tick
         db.execute("update newsletter_send_jobs set last_batch_at=now(), updated_at=now() where id=%s", (jid,))
         return None

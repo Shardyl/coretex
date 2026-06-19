@@ -219,7 +219,8 @@ def _email_envelope(task: dict, company: dict) -> dict:
             "from": (req.get("from_email") or data.get("reply_from") or "").strip() or None,
             "cc": cc or None, "bcc": bcc or None,
             "subject": subj if outbound else ("Re: " + subj),
-            "name": inq.get("name") or "", "signature": (data.get("signature") or "").strip()}
+            "name": inq.get("name") or "", "signature": (data.get("signature") or "").strip(),
+            "signature_html": (data.get("signature_html") or "").strip()}
 
 
 def _fmt_email(task: dict, skill: dict, company: dict, verdict: dict | None) -> str:
@@ -281,6 +282,25 @@ def compose_reply_body(task: dict, company: dict) -> str:
 LOGO_PATH = os.environ.get("CORTEX_TAB_LOGO", "/opt/cortex/assets/tabscanner-logo.png")
 
 
+def _logo_path(company: dict | None) -> str | None:
+    """The local logo file for a company's email signature (attached inline via cid). Per-company file at
+    /opt/cortex/assets/<slug>-logo.png; Tabscanner keeps its legacy env override + filename. The file should
+    be the brand's LIGHT-BACKGROUND logo (sigs render on white), sourced from the company's Drive asset folder."""
+    slug = (company or {}).get("slug") or ""
+    candidates = []
+    if slug == "tabscanner":
+        env = os.environ.get("CORTEX_TAB_LOGO")
+        if env:
+            candidates.append(env)
+        candidates.append("/opt/cortex/assets/tabscanner-logo.png")
+    if slug:
+        candidates.append(f"/opt/cortex/assets/{slug}-logo.png")
+    for p in candidates:
+        if p and os.path.isfile(p):
+            return p
+    return None
+
+
 def _linkify(s: str) -> str:
     return re.sub(r"(https?://[^\s<]+)", r'<a href="\1" style="color:#1E9BD7">\1</a>', s)
 
@@ -300,7 +320,7 @@ def _body_to_html(text: str) -> str:
     return "".join(blocks)   # no stray newlines between tags (would show as gaps in a pre-wrap context)
 
 
-def _signature_html(plain_sig: str, logo_src: str | None) -> str:
+def _signature_html(plain_sig: str, logo_src: str | None, alt: str = "") -> str:
     lines = (plain_sig or "").split("\n")
     while lines and (not lines[0].strip()
                      or re.match(r"(?i)^(best regards|kind regards|regards|thanks)[,.]?$", lines[0].strip())):
@@ -312,7 +332,7 @@ def _signature_html(plain_sig: str, logo_src: str | None) -> str:
         cell = _linkify(_html.escape(ln))
         rows.append(f"<strong>{cell}</strong>" if first else cell)
         first = False
-    logo = (f"<img src='{logo_src}' alt='Tabscanner' width='150' "
+    logo = (f"<img src='{logo_src}' alt='{_html.escape(alt)}' width='150' "
             "style='display:block;border:0;margin:0 0 10px 0'>") if logo_src else ""
     return ("<div style='margin-top:20px;font-family:Arial,Helvetica,sans-serif;font-size:13px;"
             "color:#0A1828;line-height:1.55'><p style='margin:0 0 14px 0'>Best regards,</p>"
@@ -324,15 +344,25 @@ def compose_reply_html(task: dict, company: dict, for_preview: bool = False) -> 
     the browser); for the real send it's a cid inline image."""
     env = _email_envelope(task, company)
     clean = _strip_signoff(_clean_email_text(task.get("draft") or ""))
+    sig_html = (env.get("signature_html") or "").strip()
+    if sig_html:
+        # Stored rich-HTML signature (its logo is referenced by a public URL) — render it verbatim
+        # after the body. No cid attachment needed; the same markup renders in the cockpit preview.
+        html_body = ("<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#0A1828;"
+                     f"line-height:1.6'>{_body_to_html(clean)}"
+                     f"<div style='margin-top:20px'><p style='margin:0 0 14px 0'>Best regards,</p>{sig_html}</div></div>")
+        return {"plain": compose_reply_body(task, company), "html": html_body, "inline": []}
     plain_sig = (env.get("signature") or "").strip()
+    logo_file = _logo_path(company)
     logo_src, inline = None, []
-    if os.path.isfile(LOGO_PATH):
+    if logo_file:
         if for_preview:
-            logo_src = "data:image/png;base64," + _b64.b64encode(open(LOGO_PATH, "rb").read()).decode()
+            logo_src = "data:image/png;base64," + _b64.b64encode(open(logo_file, "rb").read()).decode()
         else:
-            logo_src, inline = "cid:tabscannerlogo", [("tabscannerlogo", LOGO_PATH)]
+            cid = re.sub(r"[^a-z0-9]", "", (company or {}).get("slug") or "company") + "logo"
+            logo_src, inline = f"cid:{cid}", [(cid, logo_file)]
     html_body = ("<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#0A1828;"
-                 f"line-height:1.6'>{_body_to_html(clean)}{_signature_html(plain_sig, logo_src)}</div>")
+                 f"line-height:1.6'>{_body_to_html(clean)}{_signature_html(plain_sig, logo_src, (company or {}).get('name') or '')}</div>")
     return {"plain": compose_reply_body(task, company), "html": html_body, "inline": inline}
 
 
@@ -1214,9 +1244,11 @@ def poll_waitlists() -> dict:
 
 # ---------- inbox classifier (the sales-triage universal skill, on Haiku) ----------
 
-INBOX_CATEGORIES = ["lead", "partner", "support", "freelancer", "vendor", "recruitment",
+INBOX_CATEGORIES = ["client", "lead", "partner", "support", "freelancer", "vendor", "recruitment",
                     "marketing", "spam", "personal", "automated"]
-_INBOX_CRM = {"lead", "partner", "support", "freelancer", "vendor", "recruitment"}   # these become CRM contacts
+# these become CRM contacts. "client" = an existing is_client contact, set deterministically from the CRM
+# (see classify_email) rather than guessed — it overrides the content-based category.
+_INBOX_CRM = {"client", "lead", "partner", "support", "freelancer", "vendor", "recruitment"}
 # every inbound contact we add is newsletter-eligible (Rashad 2026-06-18: they contacted us, it's a general
 # newsletter, and unsubscribe + complaint->opt-out keep it self-correcting). Own knob in case we re-scope.
 _INBOX_NEWSLETTER = set(_INBOX_CRM)

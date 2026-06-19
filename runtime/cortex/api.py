@@ -794,6 +794,20 @@ def profile_full(company: str, _: None = Depends(auth)) -> dict:
     return {"company": company, "profile": profile.get(co["id"])}
 
 
+class OnboardBody(BaseModel):
+    slug: str
+    name: str | None = None
+    kind: str = "owned"
+
+
+@app.post("/api/company/onboard")
+def company_onboard(body: OnboardBody, _: None = Depends(auth)) -> dict:
+    """Apply the Company Standard to a (new or existing) company — see docs/COMPANY-STANDARD.md.
+    Idempotent: seeds the uniform roster, ensures a profile, refreshes the brand kit, returns a checklist."""
+    from . import onboard
+    return onboard.onboard_company(body.slug, body.name, kind=body.kind)
+
+
 @app.get("/api/usage")
 def usage(days: int = 7, _: None = Depends(auth)) -> dict:
     """Anthropic spend from the cost log: total + breakdown by model, purpose, day, company."""
@@ -842,9 +856,8 @@ def crm_summary(company: str | None = None, _: None = Depends(auth)) -> dict:
             "projects": won["n"], "project_value": float(won["v"] or 0)}
 
 
-@app.get("/api/crm/contacts")
-def crm_contacts(company: str | None = None, q: str | None = None, stage: str | None = None,
-                 limit: int = 50, offset: int = 0, _: None = Depends(auth)) -> list[dict]:
+def _contact_filter(company: str | None, q: str | None, stage: str | None):
+    """Shared WHERE + params for the contacts list AND its count, so the number always matches the rows."""
     clauses, params = [], []
     f, p = _org_like(company)
     if f:
@@ -871,13 +884,28 @@ def crm_contacts(company: str | None = None, q: str | None = None, stage: str | 
             clauses.append("lower(classification) = %s"); params.append(stage.lower())
         else:
             clauses.append("stage = %s"); params.append(stage)
-    where = ("where " + " and ".join(clauses)) if clauses else ""
-    params.append(limit); params.append(offset)
+    return (("where " + " and ".join(clauses)) if clauses else ""), params
+
+
+@app.get("/api/crm/contacts")
+def crm_contacts(company: str | None = None, q: str | None = None, stage: str | None = None,
+                 limit: int = 50, offset: int = 0, _: None = Depends(auth)) -> list[dict]:
+    where, params = _contact_filter(company, q, stage)
+    params = list(params) + [limit, offset]
     return db.query(
         "select first_name, last_name, email, organisation, company_name, job_title, stage, tier, "
         f"is_client, newsletter_opt_out, classification, lead_source from crm_master {where} "
         "order by is_client desc, first_name nulls last limit %s offset %s",
         tuple(params))
+
+
+@app.get("/api/crm/contacts/count")
+def crm_contacts_count(company: str | None = None, q: str | None = None, stage: str | None = None,
+                       _: None = Depends(auth)) -> dict:
+    """Total contacts matching the SAME filters as /api/crm/contacts (for the count shown above the list)."""
+    where, params = _contact_filter(company, q, stage)
+    r = db.one(f"select count(*) n from crm_master {where}", tuple(params))
+    return {"count": int(r["n"]) if r and r.get("n") is not None else 0}
 
 
 @app.get("/api/crm/contact")
@@ -2381,9 +2409,10 @@ def _google_client(company: str | None = None) -> tuple[str, str, str]:
 
 
 @app.get("/oauth/google/start")
-def google_start(purpose: str = "drive", company: str = "") -> RedirectResponse:
+def google_start(purpose: str = "drive", company: str = "", mailbox: str = "") -> RedirectResponse:
     from urllib.parse import urlencode
     company = (company or "").strip().lower()
+    mailbox = (mailbox or "").strip().lower()   # an EXTRA named mailbox for the company (e.g. gino) — stored separately
     cid, _, redirect = _google_client(company or None)
     if purpose in ("gmail", "gmail_send"):   # a Tabscanner mailbox — its own login, stored separately.
         # gmail.modify = read + draft + SEND + label/archive (NOT permanent delete). One consent, full flow;
@@ -2402,6 +2431,8 @@ def google_start(purpose: str = "drive", company: str = "") -> RedirectResponse:
         scope = ("https://www.googleapis.com/auth/drive.file "
                  "https://www.googleapis.com/auth/drive.readonly")
     state = f"{purpose}|{company}" if company else purpose   # carry WHICH company is authorising
+    if mailbox:
+        state = f"{purpose}|{company}|{mailbox}"   # extra mailbox: purpose|company|mailbox -> separate token key
     q = urlencode({"client_id": cid, "redirect_uri": redirect, "response_type": "code",
                    "scope": scope, "state": state, "access_type": "offline",
                    "prompt": "consent", "include_granted_scopes": "true"})
@@ -2415,10 +2446,11 @@ def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLRes
         "padding-top:80px'><h2>" + msg + "</h2></body>")
     if error or not code:
         return page("Authorisation cancelled.")
-    purpose, _, company = state.partition("|")   # 'gmail' (legacy) or 'gmail|filmspoke' (per-company)
-    company = company.strip().lower()
-    sfx = f":{company}" if company else ""       # per-company storage suffix (legacy keys unchanged)
-    who = (company.title() if company else "Tabscanner")
+    purpose, _, rest = state.partition("|")   # 'gmail' | 'gmail|sensa' | 'gmail|sensa|gino' (an extra mailbox)
+    company, _, mailbox = rest.partition("|")
+    company = company.strip().lower(); mailbox = mailbox.strip().lower()
+    sfx = (f":{company}" if company else "") + (f":{mailbox}" if mailbox else "")   # legacy keys unchanged
+    who = (company.title() if company else "Tabscanner") + (f" / {mailbox}" if mailbox else "")
     cid, secret, redirect = _google_client(company or None)
     r = httpx.post("https://oauth2.googleapis.com/token", data={
         "code": code, "client_id": cid, "client_secret": secret,
@@ -2467,6 +2499,11 @@ def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLRes
     db.setting_set("google_refresh_token" + sfx, rt)
     return page("✓ Cortex is connected to your Google Drive. You can close this tab — backups run nightly.")
 
+
+# ---- public static assets (e.g. email-signature logos referenced by URL in sent mail) ----
+_ASSETS = "/opt/cortex/assets"
+if os.path.isdir(_ASSETS):
+    app.mount("/assets", StaticFiles(directory=_ASSETS), name="assets")
 
 # ---- serve the cockpit (same origin as the API: no CORS, one domain) ----
 # Mounted LAST so the /api/* routes above take precedence; "/" serves web/index.html.
