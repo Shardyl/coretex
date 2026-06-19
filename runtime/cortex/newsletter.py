@@ -421,8 +421,17 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
     bg = col.get("bg", "#0A0A0A"); surface = col.get("surface", "#121212"); line = col.get("line", "#242424")
     ink = col.get("ink", "#F4F4F5"); body = col.get("body", "#C9CAD0"); muted = col.get("muted", "#9A9AA0")
     red = col.get("primary", "#E50914")
-    headf = f"'{kit.get('fonts', {}).get('heading', 'Poppins')}','Helvetica Neue',Helvetica,Arial,sans-serif"
-    bodyf = f"'{kit.get('fonts', {}).get('body', 'Inter')}','Helvetica Neue',Helvetica,Arial,sans-serif"
+    head_family = kit.get("fonts", {}).get("heading", "Poppins")
+    body_family = kit.get("fonts", {}).get("body", "Inter")
+    headf = f"'{head_family}','Helvetica Neue',Helvetica,Arial,sans-serif"
+    bodyf = f"'{body_family}','Helvetica Neue',Helvetica,Arial,sans-serif"
+    # light vs dark chrome follows the brand template, so the email matches the company look
+    _tmpl = str(kit.get("template") or "")
+    scheme = "light" if _tmpl == "light-saas" else "dark"
+    _fams = []
+    for _f, _w in [(head_family, "600;700;800"), (body_family, "400;500;600;700")]:
+        _fams.append(f"family={_f.replace(' ', '+')}:wght@{_w}")
+    font_link = "https://fonts.googleapis.com/css2?" + "&".join(_fams) + "&display=swap"
     company = store.get_company(company_id)
     prof = _profile(company_id)
 
@@ -444,13 +453,12 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
                 f'font-size:0;line-height:0;">&nbsp;</div></td></tr>')
 
     rows = []
-    eyebrow = _esc(c.get("header_eyebrow") or "AI Commercial Store")
+    eyebrow = _esc(c.get("header_eyebrow") or company["name"])
     if logo_cid:
         logo_html = (f'<img src="cid:{logo_cid}" alt="{_esc(company["name"])}" height="26" '
                      f'style="display:block;height:26px;width:auto;border:0;">')
     else:
-        logo_html = (f'<span style="font:800 22px/1 {headf};color:{ink};">FILM'
-                     f'<span style="color:{red};">SPOKE.</span></span>')
+        logo_html = (f'<span style="font:800 22px/1 {headf};color:{ink};">{_esc(company["name"])}</span>')
     rows.append(f'<tr><td style="padding:24px 36px 18px;"><table role="presentation" width="100%" '
                 f'cellpadding="0" cellspacing="0"><tr><td align="left" style="vertical-align:middle;">{logo_html}</td>'
                 f'<td align="right" style="vertical-align:middle;font:600 11px/1 {bodyf};letter-spacing:.22em;'
@@ -566,9 +574,11 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
     social = prof.get("social") or ""
     flogo = (f'<img src="cid:{logo_cid}" alt="{_esc(company["name"])}" height="20" '
              f'style="display:block;height:20px;width:auto;border:0;">' if logo_cid else
-             f'<span style="font:800 16px/1 {headf};color:{ink};">FILM<span style="color:{red};">SPOKE.</span></span>')
-    rows.append(f'<tr><td style="padding:34px 44px 8px;">{flogo}<p style="margin:14px 0 0;font:600 10px/1.5 {bodyf};'
-                f'color:#6F7078;letter-spacing:.22em;text-transform:uppercase;">An AI production studio by Sensa</p></td></tr>')
+             f'<span style="font:800 16px/1 {headf};color:{ink};">{_esc(company["name"])}</span>')
+    _tagline = prof.get("tagline") or prof.get("strapline") or ""
+    _tag_html = (f'<p style="margin:14px 0 0;font:600 10px/1.5 {bodyf};color:{muted};'
+                 f'letter-spacing:.22em;text-transform:uppercase;">{_esc(_tagline)}</p>' if _tagline else "")
+    rows.append(f'<tr><td style="padding:34px 44px 8px;">{flogo}{_tag_html}</td></tr>')
     links = ""
     if site:
         links += f'<a href="{site}" style="color:{muted};text-decoration:underline;">{_esc(sitetext)}</a> &nbsp;&middot;&nbsp; '
@@ -583,9 +593,9 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
     return ('<!doctype html><html><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             '<meta name="x-apple-disable-message-reformatting">'
-            '<meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark">'
+            f'<meta name="color-scheme" content="{scheme}"><meta name="supported-color-schemes" content="{scheme}">'
             '<link rel="preconnect" href="https://fonts.googleapis.com">'
-            '<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"></head>'
+            f'<link href="{font_link}" rel="stylesheet"></head>'
             f'<body style="margin:0;padding:0;background:{bg};">'
             f'<div style="display:none;max-height:0;overflow:hidden;opacity:0;">{preheader}</div>'
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{bg};">'
@@ -628,7 +638,8 @@ def build(company_id: int, idea_text: str) -> dict:
     """Compose + render one issue. Dispatches on the brand kit's `template`: a 'dark*' template (FilmSpoke)
     uses the dark cinematic renderer with multiple inline images; everything else uses the light card."""
     kit = brand.get_brand_kit(company_id) or {}
-    if str(kit.get("template") or "").startswith("dark"):
+    _tmpl = str(kit.get("template") or "")
+    if _tmpl.startswith("dark") or _tmpl == "light-saas":   # rich, brand-kit-driven renderer (dark OR light)
         return _build_filmspoke(company_id, idea_text, kit)
     c = compose(company_id, idea_text)
     hero = imagegen.hero(c.get("hero_prompt") or "") if c.get("hero_prompt") else None

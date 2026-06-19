@@ -16,18 +16,21 @@ from .newsletter import _optimize_jpeg
 
 # Structural output contract — the renderer parses these exact fields, so it stays in code.
 _BLOG_SCHEMA = (
-    "Return JSON only (set any optional block's \"use\" to false when the post does not need it):\n"
+    "Return JSON only (set any optional block's \"use\" to false when not needed; most optional blocks are false):\n"
     "seo {title, meta_description (~155 chars), primary_keyword, slug (kebab-case)}; category (short kicker); "
     "title (the post H1, usually = seo.title); dek (one or two sentence standfirst, leads with the point); "
-    "byline {author, role, date (ISO), read_time (e.g. '5 min read')}; "
-    "hero {use, image_prompt (cinematic dark, red as the only accent, NO text in image), alt, caption}; "
-    "in_brief {use, text (2-3 plain sentences, the extractable answer, payoff first)}; "
+    "byline {author, role, date (ISO), read_time}; "
+    "featured_image {use:true, image_prompt (on-brand, NO text/letters/numbers in image), alt, caption} (the hero, on every post); "
+    "key_takeaways {use, points:[2-4 plain lines, the extractable answer, payoff first]}; "
     "lead (opening paragraph, leads with the most important thing); "
-    "sections (array of {heading (H2), body (1-3 short paragraphs separated by a blank line), "
-    "inline_cta {use, text, label, url}, figure {use, image_prompt, alt, caption}}); "
+    "sections (array of {heading (H2), body (1-3 short paragraphs, PLAIN text), "
+    "figure {use, image_prompt, alt, caption}, callout {use, title, text}, "
+    "table {use, columns:[...], rows:[[...]]}, steps {use, items:[{title, text}]}, "
+    "code {use, filename, language, body}, stat {use, value, text}, "
+    "inline_cta {use, text, label, url}}); "
     "pull_quote {use, text}; closing_cta {use, heading, text, primary {label, url}, secondary {label, url}}; "
     "author_bio (one short credible E-E-A-T bio); keep_reading (array of {title, url}). "
-    "Body text is PLAIN text (no HTML, no markdown). No em-dashes or en-dashes anywhere."
+    "Body text is PLAIN text (no HTML, no markdown). No em-dashes or en-dashes. No FAQ / Q&A block."
 )
 
 _MAX_IMAGES = 4   # hero + up to 3 figures; bounds Gemini cost/latency
@@ -111,18 +114,26 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
                  f'border-bottom:1px solid {line};padding:12px 0;margin:0 0 26px">{bits}</div>')
     # hero
     if imgs.get("hero"):
-        hero = c.get("hero") or {}
+        hero = c.get("featured_image") or c.get("hero") or {}
         P.append(f'<figure style="margin:0 0 28px"><img src="{imgs["hero"]}" alt="{_esc(hero.get("alt"))}" '
                  f'style="width:100%;height:auto;border-radius:12px;display:block">')
         if hero.get("caption"):
             P.append(f'<figcaption style="color:{muted};font-size:13px;margin-top:8px">{_esc(hero["caption"])}</figcaption>')
         P.append('</figure>')
-    # in brief (the AEO answer — 2px red left rule)
+    # the AEO answer block (accent left rule): key_takeaways (list) or in_brief (text)
+    kt = c.get("key_takeaways") or {}
     ib = c.get("in_brief") or {}
-    if ib.get("use") and ib.get("text"):
+    if kt.get("use") and kt.get("points"):
+        items = "".join(f'<li style="color:{ink};font-size:17px;line-height:1.7;margin:0 0 8px">{_esc(p)}</li>'
+                        for p in kt["points"])
         P.append(f'<div style="border-left:2px solid {red};padding:4px 0 4px 18px;margin:0 0 28px">'
-                 f'<div style="color:{red};font-family:{headf};font-weight:700;font-size:12px;'
-                 f'letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px">In brief</div>'
+                 f'<div style="color:{red};font-family:{headf};font-weight:700;font-size:12px;letter-spacing:.14em;'
+                 f'text-transform:uppercase;margin-bottom:8px">Key takeaways</div>'
+                 f'<ul style="margin:0;padding-left:18px">{items}</ul></div>')
+    elif ib.get("use") and ib.get("text"):
+        P.append(f'<div style="border-left:2px solid {red};padding:4px 0 4px 18px;margin:0 0 28px">'
+                 f'<div style="color:{red};font-family:{headf};font-weight:700;font-size:12px;letter-spacing:.14em;'
+                 f'text-transform:uppercase;margin-bottom:8px">In brief</div>'
                  f'<div style="color:{ink};font-size:18px;line-height:1.7">{_esc(ib["text"])}</div></div>')
     # lead
     if c.get("lead"):
@@ -134,6 +145,48 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
                      f'line-height:1.25;margin:36px 0 14px">{_esc(s["heading"])}</h2>')
         if s.get("body"):
             P.append(_paras(s["body"], body))
+        cal = s.get("callout") or {}
+        if cal.get("use") and (cal.get("text") or cal.get("title")):
+            P.append(f'<div style="background:{surface};border:1px solid {line};border-left:3px solid {red};'
+                     f'border-radius:10px;padding:16px 18px;margin:0 0 24px">'
+                     + (f'<div style="color:{ink};font-family:{headf};font-weight:700;font-size:15px;'
+                        f'margin-bottom:5px">{_esc(cal.get("title"))}</div>' if cal.get("title") else "")
+                     + f'<div style="color:{body};font-size:16px;line-height:1.65">{_esc(cal.get("text"))}</div></div>')
+        stp = s.get("steps") or {}
+        if stp.get("use") and stp.get("items"):
+            P.append('<div style="margin:0 0 24px">')
+            for n, it in enumerate(stp["items"], 1):
+                P.append(f'<div style="display:flex;gap:12px;margin:0 0 12px"><div style="flex:none;width:28px;'
+                         f'height:28px;border-radius:999px;background:{red};color:#fff;font-family:{headf};'
+                         f'font-weight:700;font-size:14px;line-height:28px;text-align:center">{n}</div>'
+                         f'<div><div style="color:{ink};font-family:{headf};font-weight:700;font-size:16px">'
+                         f'{_esc(it.get("title"))}</div><div style="color:{body};font-size:16px;line-height:1.6">'
+                         f'{_esc(it.get("text"))}</div></div></div>')
+            P.append('</div>')
+        cd = s.get("code") or {}
+        if cd.get("use") and cd.get("body"):
+            P.append(f'<div style="background:#0A1828;border-radius:10px;margin:0 0 24px;overflow:hidden">'
+                     f'<div style="color:#8494A6;font-family:monospace;font-size:12px;padding:10px 16px;'
+                     f'border-bottom:1px solid #1b2b3d">{_esc(cd.get("filename") or cd.get("language") or "code")}</div>'
+                     f'<pre style="margin:0;padding:16px;color:#D6E2F0;font-family:monospace;font-size:13px;'
+                     f'line-height:1.6;overflow-x:auto;white-space:pre-wrap">{_esc(cd["body"])}</pre></div>')
+        tb = s.get("table") or {}
+        if tb.get("use") and tb.get("rows"):
+            thead = "".join(f'<th style="text-align:left;padding:10px 14px;color:{muted};font-family:{headf};'
+                            f'font-size:13px;border-bottom:1px solid {line}">{_esc(col)}</th>'
+                            for col in (tb.get("columns") or []))
+            trows = "".join("<tr>" + "".join(f'<td style="padding:10px 14px;color:{body};font-size:15px;'
+                            f'border-bottom:1px solid {line}">{_esc(cell)}</td>' for cell in row) + "</tr>"
+                            for row in tb["rows"])
+            P.append(f'<table style="width:100%;border-collapse:collapse;margin:0 0 24px;background:{surface};'
+                     f'border:1px solid {line};border-radius:10px;overflow:hidden">'
+                     + (f"<thead><tr>{thead}</tr></thead>" if thead else "") + f"<tbody>{trows}</tbody></table>")
+        sta = s.get("stat") or {}
+        if sta.get("use") and sta.get("value"):
+            P.append(f'<div style="text-align:center;margin:0 0 24px;padding:18px;background:{surface};'
+                     f'border:1px solid {line};border-radius:12px"><div style="color:{red};font-family:{headf};'
+                     f'font-weight:800;font-size:40px;line-height:1">{_esc(sta["value"])}</div>'
+                     f'<div style="color:{muted};font-size:14px;margin-top:6px">{_esc(sta.get("text"))}</div></div>')
         fig = s.get("figure") or {}
         if fig.get("use") and imgs.get(f"fig{i}"):
             P.append(f'<figure style="margin:24px 0"><img src="{imgs[f"fig{i}"]}" alt="{_esc(fig.get("alt"))}" '
@@ -201,8 +254,8 @@ def build(company_id: int, brief: str) -> dict:
     company = store.get_company(company_id)
     c = compose(company_id, brief)
     jobs: list[tuple[str, str, str]] = []
-    hero = c.get("hero") or {}
-    if hero.get("use") and hero.get("image_prompt"):
+    hero = c.get("featured_image") or c.get("hero") or {}
+    if hero.get("image_prompt") and hero.get("use", True):   # featured_image is mandatory (use defaults True)
         jobs.append(("hero", hero["image_prompt"], "16:9"))
     for i, s in enumerate(c.get("sections") or []):
         fig = s.get("figure") or {}
