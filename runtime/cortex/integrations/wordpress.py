@@ -73,11 +73,20 @@ def configured() -> bool:
 
 
 def for_company(company: dict) -> "WordPress | None":
-    """Wires Tabscanner today. Later: per-company connection rows (every site is WordPress)."""
-    if (company.get("slug") != "tabscanner") or not configured():
+    """Per-company WordPress connection from env creds. Tabscanner keeps the legacy unsuffixed keys;
+    every other company uses `<SLUG>_WP_URL` / `<SLUG>_WP_USER` / `<SLUG>_WP_APP_PASSWORD` (slug upper-cased,
+    hyphens to underscores, e.g. FILMSPOKE_WP_*, SNAP_REWARDS_WP_*). Returns None if no app password is set,
+    so a company with no WP connected simply doesn't get the publish/test-group-digest path."""
+    slug = company.get("slug") or ""
+    if slug == "tabscanner":
+        pw = config.get("TABSCANNER_APP_PASSWORD")
+        if not pw:
+            return None
+        return WordPress(config.get("TABSCANNER_WP_URL", "https://tabscanner.com"),
+                         config.get("TABSCANNER_WP_USER", "tabscanner"), pw)
+    pre = slug.upper().replace("-", "_")
+    pw = config.get(f"{pre}_WP_APP_PASSWORD")
+    url = config.get(f"{pre}_WP_URL")
+    if not pw or not url:
         return None
-    return WordPress(
-        config.get("TABSCANNER_WP_URL", "https://tabscanner.com"),
-        config.get("TABSCANNER_WP_USER", "tabscanner"),
-        config.require("TABSCANNER_APP_PASSWORD"),
-    )
+    return WordPress(url, config.get(f"{pre}_WP_USER", slug), pw)
