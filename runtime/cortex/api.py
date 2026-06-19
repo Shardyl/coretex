@@ -851,8 +851,9 @@ def crm_contacts(company: str | None = None, q: str | None = None, stage: str | 
         clauses.append(f); params += p
     if q:
         clauses.append("(first_name ilike %s or last_name ilike %s or email ilike %s or company_name ilike %s "
-                       "or (coalesce(first_name,'')||' '||coalesce(last_name,'')) ilike %s)")
-        params += [f"%{q}%"] * 5
+                       "or (coalesce(first_name,'')||' '||coalesce(last_name,'')) ilike %s "
+                       "or market ilike %s or note ilike %s)")
+        params += [f"%{q}%"] * 7
     if stage and stage != "All":
         if stage == "Client":
             clauses.append("is_client = true")          # 'Client' is a flag, not a funnel status

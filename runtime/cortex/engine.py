@@ -1242,7 +1242,10 @@ def classify_email(company: dict, email: dict) -> dict:
         ("Classify the email into EXACTLY ONE category from: " + ", ".join(INBOX_CATEGORIES) + ". "
          "Guidance: freelancer = a contractor/agency offering THEIR services to us; recruitment = a person "
          "seeking a JOB with us (a CV, 'are you hiring?', wants to join the team). "
-         'Return JSON {"category":"<one>","to_crm":boolean,"reason":"<short phrase>"}. to_crm is true for '
+         'Return JSON {"category":"<one>","to_crm":boolean,"reason":"<short phrase>",'
+         '"summary":"<1-2 sentences for the CRM note: who the sender is and what they want>",'
+         '"market":"<a short industry/market label, e.g. video production, e-commerce, real estate, '
+         'music/audio, hospitality; empty string if genuinely unclear>"}. to_crm is true for '
          "lead/partner/support/freelancer/vendor/recruitment, false for marketing/spam/personal/automated."),
     ]))
     user = (f"From: {email.get('name')} <{email.get('email')}>\nSubject: {email.get('subject')}\n\n"
@@ -1255,7 +1258,8 @@ def classify_email(company: dict, email: dict) -> dict:
     cat = (out.get("category") or "unclear").strip().lower()
     if cat not in INBOX_CATEGORIES:
         cat = "unclear"
-    return {"category": cat, "to_crm": cat in _INBOX_CRM, "reason": (out.get("reason") or "").strip()}
+    return {"category": cat, "to_crm": cat in _INBOX_CRM, "reason": (out.get("reason") or "").strip(),
+            "summary": (out.get("summary") or "").strip(), "market": (out.get("market") or "").strip()}
 
 
 def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_token",
@@ -1291,7 +1295,8 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                 try:
                     st, _ = crm.add_inbound_contact({"email": e["email"], "name": e["name"]},
                                                     company_slug, cls["category"], stage=stage,
-                                                    newsletter=cls["category"] in _INBOX_NEWSLETTER)
+                                                    newsletter=cls["category"] in _INBOX_NEWSLETTER,
+                                                    summary=cls.get("summary"), market=cls.get("market"))
                     if st == "added":
                         added += 1
                 except Exception:  # noqa: BLE001

@@ -38,6 +38,7 @@ alter table crm_master add column if not exists newsletter_opt_out boolean not n
 alter table crm_master add column if not exists newsletter_bounced boolean not null default false;
 alter table crm_master add column if not exists waitlist boolean not null default false;
 alter table crm_master add column if not exists classification text;
+alter table crm_master add column if not exists market text;
 alter table crm_master drop column if exists do_not_market;
 """
 
@@ -205,13 +206,15 @@ def add_registration(reg: dict, company: str = "tabscanner",
 
 
 def add_inbound_contact(reg: dict, company: str, classification: str, stage: str = "Engaged",
-                        source: str = "inbound email", newsletter: bool = False) -> tuple[str, str | None]:
+                        source: str = "inbound email", newsletter: bool = False,
+                        summary: str | None = None, market: str | None = None) -> tuple[str, str | None]:
     """Add/dedup a contact from an INBOUND email (someone emailed a catch-all inbox). Org-tagged, the
     classification logged in history, lead_source set. `newsletter` = is this inbound category eligible
     for the newsletter (leads/customers/partners yes; freelancers/vendors/applicants no). Because the
     audience is OPT-OUT, a NEW non-eligible contact is inserted newsletter_opt_out=true so it stays
     CRM-only. EXISTING contacts are never touched on this flag (preserve their real subscription status).
-    Carries over existing fields, never clobbers."""
+    `summary` = the email's gist (who/what), saved as the contact's note + logged to history; `market` = a
+    sub-classification (industry/market). Both fill-if-blank, never clobber existing context."""
     ensure_schema()
     email = (reg.get("email") or "").strip().lower()
     if not email or "@" not in email:
@@ -219,24 +222,28 @@ def add_inbound_contact(reg: dict, company: str, classification: str, stage: str
     name = (reg.get("name") or "").strip()
     first, last = _split_name(name) if name else ("", "")
     org = _org(company)
-    ev = {"ts": _now(), "event": "inbound_email",
-          "text": f"Inbound email to {org}, classified as: {classification}."}
+    note = (summary or "").strip() or None
+    mkt = (market or "").strip() or None
+    ev_text = f"Inbound email to {org}, classified as: {classification}." + (f" {note}" if note else "")
+    ev = {"ts": _now(), "event": "inbound_email", "text": ev_text}
     existing = db.one("select id, organisation from crm_master where lower(email)=%s limit 1", (email,))
     if existing:
         cur = existing.get("organisation") or ""
         new_org = (cur + ", " + org).strip(", ") if (org and org.lower() not in cur.lower()) else (cur or org)
         db.execute("update crm_master set organisation=%s, "
                    "lead_source=coalesce(nullif(btrim(lead_source),''), %s), "
-                   "classification=coalesce(classification, %s), updated_at=now() where id=%s",
-                   (new_org, source, classification, existing["id"]))
-        log_event(email, "inbound_email", ev["text"], company)
+                   "classification=coalesce(classification, %s), "
+                   "market=coalesce(nullif(btrim(market),''), %s), "
+                   "note=coalesce(nullif(btrim(note),''), %s), updated_at=now() where id=%s",
+                   (new_org, source, classification, mkt, note, existing["id"]))
+        log_event(email, "inbound_email", ev_text, company)
         return ("matched", email)
     db.execute(
         "insert into crm_master (organisation, first_name, last_name, email, website, lead_source, "
-        "classification, newsletter_opt_out, lead_status, stage, history) "
-        "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (lower(email)) do nothing",
+        "classification, market, note, newsletter_opt_out, lead_status, stage, history) "
+        "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (lower(email)) do nothing",
         (org, first or None, last or None, email, email.split("@")[-1], source,
-         classification, not newsletter, "New", stage, Json([ev])))
+         classification, mkt, note, not newsletter, "New", stage, Json([ev])))
     try:    # grouped FYI info-card in the Inbox (one rolling card per company until dismissed)
         from . import notifications
         cid_row = db.one("select id from companies where slug=%s", (company,))

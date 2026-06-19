@@ -689,7 +689,7 @@ function contactRow(c){ const n=realName(c); return `<div class="card crow" oncl
   <div style="flex:1;min-width:0"><div class="cname">${esc(n)}</div>
     <div class="csub">${esc(c.organisation||'')}${c.company_name?' · '+esc(c.company_name):''}</div></div>
   ${c.classification?`<span class="chip" style="color:#00DAFF;border-color:#00DAFF55;font-size:10px">${esc(c.classification)}</span>`:''}${c.newsletter_opt_out?'<span class="chip" style="color:#ff5d6c;border-color:#ff5d6c55;font-size:10px">opted out</span>':''}${c.is_client?'<span class="chip" style="color:#2ad17e;border-color:#2ad17e55">Client</span>':stageChip(c.stage)}</div>`; }
-const CHIDE=new Set(['id','first_name','last_name','account_id','is_client','stage','note','history','company_name','created_at','updated_at']);
+const CHIDE=new Set(['id','first_name','last_name','account_id','is_client','stage','classification','note','history','company_name','created_at','updated_at']);
 const CURL=new Set(['linkedin','instagram','facebook','website']);
 function humanizeField(k){ let s=k.replace(/_/g,' '); s=s.charAt(0).toUpperCase()+s.slice(1); return s.replace(/Linkedin/,'LinkedIn'); }
 function fieldRows(c){
