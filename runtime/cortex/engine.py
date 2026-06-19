@@ -1041,6 +1041,80 @@ def poll_company_forms() -> dict:
     return out
 
 
+# ---------- website waitlist / registration intake (opt-in, NOT an enquiry) ----------
+# Some brands' websites email a "New <brand> waitlist signup" notification on each signup. This reads
+# those, parses the person, and captures them to the CRM as a waitlist subscriber (org-tagged, waitlist
+# flag set, newsletter opt-in). NO spam triage and NO drafted reply — a signup is an explicit opt-in, not
+# an enquiry. Add a brand by adding a line to WAITLIST_INTAKE.
+WAITLIST_INTAKE = {
+    "filmspoke": {"rt_key": "gmail_refresh_token:filmspoke", "client": "filmspoke",
+                  "subject": "waitlist signup", "source": "FilmSpoke waitlist"},
+}
+
+
+def _parse_waitlist_email(e: dict) -> dict:
+    """Pull the signup out of a 'Name:/Email:/Company:' waitlist notification email."""
+    body = e.get("body") or e.get("snippet") or ""
+    return {"gmail_id": e.get("gmail_id"), "name": _form_field(body, "Name"),
+            "email": _form_field(body, "Email"), "company": _form_field(body, "Company")}
+
+
+def _poll_one_waitlist(slug: str, cfg: dict, days: int = 30) -> dict:
+    co = store.get_company_by_slug(slug)
+    if not co:
+        return {"reason": "company missing"}
+    key = f"waitlist_processed:{slug}"
+    seen = set(db.setting_get(key) or [])
+    emails = gmail.list_recent(days=days, limit=30, rt_key=cfg["rt_key"], company=cfg.get("client"),
+                               q=f'subject:"{cfg["subject"]}"', skip=seen)
+    cid_row = db.one("select id from companies where slug=%s", (slug,))
+    made = 0
+    for e in emails:
+        gid = e.get("gmail_id")
+        if not gid or gid in seen:
+            continue
+        seen.add(gid)
+        reg = _parse_waitlist_email(e)
+        if not reg.get("email"):                 # couldn't parse a signup email -> skip
+            continue
+        try:
+            res, _ = crm.add_registration(reg, slug, source=cfg.get("source", f"{co['name']} waitlist"),
+                                          waitlist=True)
+        except Exception:  # noqa: BLE001
+            continue
+        if res not in ("added", "matched"):
+            continue
+        made += 1
+        try:    # grouped FYI card in the Inbox (one rolling card per company until dismissed)
+            from . import notifications
+            notifications.notify(
+                "New waitlist signup", f"{reg.get('name') or reg['email']} → {co['name']} waitlist",
+                priority="fyi", category="lead", dedup_key=f"waitlist:{slug}",
+                company_id=(cid_row["id"] if cid_row else None),
+                target_type="contact", target_id=reg["email"],
+                item={"name": reg.get("name") or reg["email"], "email": reg["email"], "cat": "waitlist"})
+        except Exception:  # noqa: BLE001
+            pass
+    db.setting_set(key, list(seen)[-1000:])
+    if made:
+        tg.send(f"{made} new {co['name']} waitlist signup{'s' if made > 1 else ''} — added to the CRM.")
+    return {"made": made}
+
+
+def poll_waitlists() -> dict:
+    """Read every configured + connected brand's waitlist-signup emails; capture each as a CRM waitlist
+    subscriber. Runs on the 60s loop alongside the classifier and contact-form intake."""
+    out = {}
+    for slug, cfg in WAITLIST_INTAKE.items():
+        if not db.setting_get(cfg["rt_key"]):
+            continue
+        try:
+            out[slug] = _poll_one_waitlist(slug, cfg)
+        except Exception as ex:  # noqa: BLE001
+            tg.send(f"(waitlist intake hiccup [{slug}]: {ex})")
+    return out
+
+
 # ---------- inbox classifier (the sales-triage universal skill, on Haiku) ----------
 
 INBOX_CATEGORIES = ["lead", "partner", "support", "freelancer", "vendor", "recruitment",
@@ -1337,6 +1411,10 @@ def run(poll_idle: float = 1.0) -> None:
                 poll_company_forms()  # per-company contact-form intake -> triage -> CRM + drafted reply
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(form intake hiccup: {e})")
+            try:
+                poll_waitlists()  # website waitlist signups -> CRM waitlist subscribers (opt-in, no reply)
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(waitlist intake hiccup: {e})")
             try:
                 reminders.fire_due()    # fire due reminders -> nudge notification or spawn an action task
             except Exception as e:  # noqa: BLE001
