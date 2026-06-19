@@ -139,22 +139,33 @@ def recipients(company_id: int) -> list[dict]:
 
 # ---------- build ----------
 
+# EDITABLE writing brief (default/fallback) for the LIGHT-card path — the live copy lives in each company's
+# `content-newsletter` skill CRAFT, which drives drafting. Edit the SKILL, not this constant.
+_LIGHT_GUIDE = (
+    "Compose the newsletter issue from the approved idea, in the company voice. Lead with the point, keep it "
+    "tight and value-first, one clear primary message. No em-dashes or en-dashes; no emoji; no clickbait. "
+    "The issue MUST make full sense with images off."
+)
+# STRUCTURAL output schema (light card) — the renderer parses these exact fields, so it stays in code.
+_LIGHT_SCHEMA = (
+    "Return a JSON object with EXACTLY these fields: "
+    "subject (compelling, specific, never clickbait), preheader (preview text, ~80 chars), "
+    "headline (the in-email H1), intro (1-2 short sentences), sections (array of 2-4 objects, each "
+    "{heading, body} where body is 1-3 short plain-text paragraphs separated by a blank line), "
+    "cta_label (short button text), cta_url (a real, on-brand absolute URL for this company), "
+    "hero_prompt (a short Imagen prompt for a clean, product-led, on-brand hero image with NO text in it)."
+)
+
+
 def compose(company_id: int, idea_text: str) -> dict:
     company = store.get_company(company_id)
     skill = store.get_skill_by_key(company_id, "content-newsletter")
     system = "\n\n".join(filter(None, [
-        f"You are Cortex's worker for the '{skill['name']}' skill, composing ONE newsletter issue for "
-        f"{company['name']}.",
+        f"You are composing ONE newsletter issue for {company['name']}.",
+        skill.get("craft") or _LIGHT_GUIDE,       # the editable skill craft drives the writing
         worker._company_context(company),
         worker._rules_block(skill),
-        ("Compose the issue from the approved idea. Return a JSON object with EXACTLY these fields: "
-         "subject (compelling, specific, never clickbait), preheader (preview text, ~80 chars), "
-         "headline (the in-email H1), intro (1-2 short sentences), sections (array of 2-4 objects, each "
-         "{heading, body} where body is 1-3 short plain-text paragraphs separated by a blank line), "
-         "cta_label (short button text), cta_url (a real, on-brand absolute URL for this company), "
-         "hero_prompt (a short Imagen prompt for a clean, product-led, on-brand hero image with NO text "
-         "in it). Write in the company voice. No em-dashes or en-dashes. The issue MUST make full sense "
-         "with images off."),
+        _LIGHT_SCHEMA,                            # structural output the renderer parses — stays in code
     ]))
     user = f"Approved idea:\n{idea_text}\n\nCompose the full issue now as JSON."
     out = provider.think_json(system, user, model=worker._model_for(skill), max_tokens=2200,
@@ -269,7 +280,13 @@ def render_text(company_id: int, c: dict) -> str:
 # mix is composed per issue (guide, not straitjacket). Images are generated via Gemini and inlined as cid
 # attachments alongside the real on-dark logo (kept in the brand kit as base64).
 
-_FS_COMPOSE = (
+# EDITABLE writing brief (voice / look / guidance) — this constant is only the DEFAULT/fallback. The live
+# copy lives in the FilmSpoke `content-newsletter` skill CRAFT, which is what actually drives drafting. To
+# change how FilmSpoke newsletters are written, edit the SKILL, not this code. See docs/COMPANY-STANDARD.md.
+_FS_GUIDE = (
+    "You are FilmSpoke's newsletter writer and designer. FilmSpoke is an AI commercial store: broadcast-grade "
+    "commercials, customised in clicks, delivered in under 24 hours, built by an award-winning team. An AI "
+    "production studio by Sensa.\n\n"
     "Compose ONE newsletter issue that maps onto the FilmSpoke dark cinematic template (all-black canvas, "
     "accent red #E50914 used deliberately as the only loud colour, Poppins headings + Inter body, 600px, "
     "email-safe). This template is a GUIDE, not a straitjacket: hold the look, voice and rough flow firm, "
@@ -281,7 +298,10 @@ _FS_COMPOSE = (
     "(around three or four reads best; more only if each earns its place, otherwise group or link out). "
     "Each image you want needs a short prompt for a cinematic, dark, high-contrast frame, mostly black and "
     "shadow, with red as a single RESTRAINED accent (a rim light or a subtle glow, never a large red fill "
-    "or a big glowing red screen) and NO text in the image, plus alt text.\n\n"
+    "or a big glowing red screen) and NO text in the image, plus alt text."
+)
+# STRUCTURAL output schema — the renderer parses these exact fields, so it stays in code (NOT editable).
+_FS_SCHEMA = (
     "Return JSON only with these fields (set any optional block's \"use\" to false when not needed):\n"
     "subject; preheader (~80 chars); header_eyebrow (short issue type); "
     "hero {use, image_prompt, alt}; eyebrow_pill (short red kicker or null); headline; intro; "
@@ -291,18 +311,18 @@ _FS_COMPOSE = (
     "stat_band {use, stats:[{value, label, highlight}]}; quote {use, text, attribution}; "
     "closing_cta {use, heading, subtext, label, url}. Use real absolute FilmSpoke URLs (https://filmspoke.ai...)."
 )
+_FS_COMPOSE = _FS_GUIDE + "\n\n" + _FS_SCHEMA   # back-compat alias
 
 
 def compose_filmspoke(company_id: int, idea_text: str) -> dict:
     company = store.get_company(company_id)
     skill = store.get_skill_by_key(company_id, "content-newsletter")
     system = "\n\n".join(filter(None, [
-        (f"You are Cortex's newsletter writer and designer for {company['name']}, an AI commercial store: "
-         "broadcast-grade commercials, customised in clicks, delivered in under 24 hours, built by an "
-         "award-winning team. An AI production studio by Sensa."),
+        f"You are composing ONE newsletter issue for {company['name']}.",
+        skill.get("craft") or _FS_GUIDE,          # the editable skill craft drives the writing
         worker._company_context(company),
         worker._rules_block(skill),
-        _FS_COMPOSE,
+        _FS_SCHEMA,                               # structural output the renderer parses — stays in code
     ]))
     user = f"Approved idea:\n{idea_text}\n\nCompose the full issue now as JSON."
     out = provider.think_json(system, user, model=worker._model_for(skill), max_tokens=2600,
