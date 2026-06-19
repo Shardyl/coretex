@@ -30,6 +30,10 @@ _BLOG_SCHEMA = (
     "table {use, columns:[...], rows:[[...]]}, steps {use, items:[{title, text}]}, "
     "code {use, filename, language, body}, stat {use, value, text}, "
     "inline_cta {use, text, label, url}}); "
+    "signature_graphic {use, kind:\"control_dials\"|\"real_ai_split\", "
+    "title (dials header), items:[{label (one word), value (0-100 int), accent:\"cyan\"|\"orange\"}] (control_dials, 3-5 rows), "
+    "real_image_prompt, ai_image_prompt (real_ai_split, NO text in image), left_label, right_label (real_ai_split), "
+    "caption} (AT MOST ONE per post, only when it earns its place, default use:false); "
     "pull_quote {use, text}; closing_cta {use, heading, text, primary {label, url}, secondary {label, url}}; "
     "author_bio (one short credible E-E-A-T bio); keep_reading (array of {title, url}). "
     "Body text is PLAIN text (no HTML, no markdown). No em-dashes or en-dashes. No FAQ / Q&A block."
@@ -82,6 +86,52 @@ def _paras(text: str, color: str) -> str:
     blocks = [p.strip() for p in (text or "").split("\n\n") if p.strip()]
     return "".join(f'<p style="margin:0 0 20px;color:{color};font-size:18px;line-height:1.8">'
                    f'{_esc(p)}</p>' for p in blocks)
+
+
+_MONOF = "'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,monospace"
+
+
+def _sig_dials(sg: dict, accent: str, surface: str, line: str, muted: str, ink: str, orange: str) -> str:
+    """The 'control dials' signature graphic — pure CSS parameter sliders (label + value bar). Brand device:
+    direction-and-control. Reads the accent from the kit, so it is cyan for Sensa, red for FilmSpoke."""
+    rows = ""
+    for it in (sg.get("items") or [])[:6]:
+        try:
+            v = max(0, min(100, int(it.get("value", 60))))
+        except (TypeError, ValueError):
+            v = 60
+        bar = orange if str(it.get("accent")).lower() == "orange" else accent
+        rows += (f'<div style="display:flex;align-items:center;gap:14px;margin:11px 0;font:400 11px/1 {_MONOF};'
+                 f'color:{muted};letter-spacing:.06em">'
+                 f'<span style="width:96px;flex:none;text-transform:uppercase;color:{ink}">{_esc(it.get("label"))}</span>'
+                 f'<div style="flex:1;height:5px;border-radius:3px;background:#202020;overflow:hidden">'
+                 f'<div style="height:100%;width:{v}%;background:{bar};box-shadow:0 0 8px {bar}"></div></div></div>')
+    return (f'<div style="border:1px solid {line};border-radius:12px;background:{surface};padding:22px 24px;margin:30px 0">'
+            f'<div style="font:500 11px/1 {_MONOF};letter-spacing:.14em;text-transform:uppercase;color:{accent};'
+            f'margin-bottom:16px;display:flex;align-items:center;gap:9px">'
+            f'<span style="width:7px;height:7px;border-radius:50%;background:{accent};box-shadow:0 0 8px {accent};'
+            f'display:inline-block"></span>{_esc(sg.get("title") or "The dials")}</div>{rows}</div>')
+
+
+def _sig_split(sg: dict, imgs: dict, accent: str, line: str) -> str:
+    """The 'real / AI clip-split' signature graphic — two frames clipped on a diagonal with a glowing accent
+    seam. Image-driven (build() generates sig_real / sig_ai); falls back to tonal panels when images absent."""
+    real, ai = imgs.get("sig_real"), imgs.get("sig_ai")
+    real_bg = (f"background-image:url({real});background-size:cover;background-position:center" if real
+               else "background:linear-gradient(135deg,#1c1c1c,#0d0d0d)")
+    ai_bg = (f"background-image:url({ai});background-size:cover;background-position:center" if ai
+             else "background:linear-gradient(135deg,#0c2731,#0a1418)")
+    ll, rl = _esc(sg.get("left_label") or "LIVE ACTION"), _esc(sg.get("right_label") or "AI")
+    lab = ("position:absolute;top:16px;font:500 12px/1 " + _MONOF + ";letter-spacing:.14em;z-index:4;"
+           "background:rgba(10,10,10,.5);padding:6px 10px;border-radius:5px")
+    return (f'<div style="position:relative;border-radius:12px;overflow:hidden;aspect-ratio:16/9;background:#000;'
+            f'border:1px solid {line};margin:30px 0">'
+            f'<div style="position:absolute;inset:0;{real_bg};clip-path:polygon(0 0,56% 0,44% 100%,0 100%)"></div>'
+            f'<div style="position:absolute;inset:0;{ai_bg};clip-path:polygon(56% 0,100% 0,100% 100%,44% 100%)"></div>'
+            f'<div style="position:absolute;top:-10%;left:50%;width:2px;height:120%;background:{accent};'
+            f'transform:rotate(7deg);box-shadow:0 0 18px {accent};z-index:3"></div>'
+            f'<span style="{lab};left:16px;color:#fff">{ll}</span>'
+            f'<span style="{lab};right:16px;color:{accent}">{rl}</span></div>')
 
 
 def render(company_id: int, c: dict, imgs: dict) -> dict:
@@ -207,6 +257,21 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
             P.append(f'<p style="margin:6px 0 24px;color:{body};font-size:18px">{_esc(cta.get("text"))} '
                      f'<a href="{_esc(cta["url"])}" style="color:{red};font-weight:600;text-decoration:none">'
                      f'{_esc(cta.get("label") or "Learn more")} &rarr;</a></p>')
+    # signature graphic (at most one per post): a brand device. control_dials = pure CSS;
+    # real_ai_split = two clipped frames. Accent comes from the kit (cyan for Sensa, red for FilmSpoke).
+    sg = c.get("signature_graphic") or {}
+    if sg.get("use"):
+        orange = col.get("tertiary", "#FF6A2C")
+        gfx = ""
+        if sg.get("kind") == "control_dials":
+            gfx = _sig_dials(sg, red, surface, line, muted, ink, orange)
+        elif sg.get("kind") == "real_ai_split":
+            gfx = _sig_split(sg, imgs, red, line)
+        if gfx:
+            P.append(gfx)
+            if sg.get("caption"):
+                P.append(f'<p style="color:{muted};font-size:13px;margin:-14px 0 24px">{_esc(sg["caption"])}</p>')
+
     # pull quote
     pq = c.get("pull_quote") or {}
     if pq.get("use") and pq.get("text"):
@@ -269,5 +334,12 @@ def build(company_id: int, brief: str) -> dict:
         fig = s.get("figure") or {}
         if fig.get("use") and fig.get("image_prompt") and len(jobs) < _MAX_IMAGES:
             jobs.append((f"fig{i}", fig["image_prompt"], "16:9"))
+    # the real/AI split signature graphic needs its two frames generated (the dials are pure CSS)
+    sg = c.get("signature_graphic") or {}
+    if sg.get("use") and sg.get("kind") == "real_ai_split":
+        if sg.get("real_image_prompt"):
+            jobs.append(("sig_real", sg["real_image_prompt"], "16:9"))
+        if sg.get("ai_image_prompt"):
+            jobs.append(("sig_ai", sg["ai_image_prompt"], "16:9"))
     imgs = _gen_and_host(company.get("slug") or "filmspoke", jobs)
     return render(company_id, c, imgs)
