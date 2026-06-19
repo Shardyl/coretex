@@ -6,7 +6,7 @@ every interaction (enquiry received, reply sent, correction, etc.). There is no 
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from psycopg.types.json import Json
 
@@ -196,14 +196,34 @@ def add_registration(reg: dict, company: str = "tabscanner",
             "waitlist=(waitlist or %s), updated_at=now() where id=%s",
             (new_org, source, company_name, phone, bool(waitlist), existing["id"]))
         log_event(email, "registration", ev["text"], company)
-        return ("matched", email)
-    db.execute(
-        "insert into crm_master (organisation, first_name, last_name, email, company_name, phone, website, "
-        "lead_source, newsletter_subscriber, newsletter_opt_out, waitlist, lead_status, stage, history) "
-        "values (%s,%s,%s,%s,%s,%s,%s,%s,'True',false,%s,%s,%s,%s) on conflict (lower(email)) do nothing",
-        (org, first or None, last or None, email, company_name, phone, dom,
-         source, bool(waitlist), "New", "Engaged", Json([ev])))
-    return ("added", email)
+        status = "matched"
+    else:
+        db.execute(
+            "insert into crm_master (organisation, first_name, last_name, email, company_name, phone, website, "
+            "lead_source, newsletter_subscriber, newsletter_opt_out, waitlist, lead_status, stage, history) "
+            "values (%s,%s,%s,%s,%s,%s,%s,%s,'True',false,%s,%s,%s,%s) on conflict (lower(email)) do nothing",
+            (org, first or None, last or None, email, company_name, phone, dom,
+             source, bool(waitlist), "New", "Engaged", Json([ev])))
+        status = "added"
+    # Notify Rashad of registrations: ONE rolling card PER DAY (resets daily, so he sees exactly who
+    # registered today) plus a phone push. Mirrors the inbound-classifier card; priority=normal so it
+    # reaches the lock screen. Dedup_key carries the Dubai-local day (UAE = UTC+4, no DST).
+    try:
+        from . import notifications
+        cid_row = db.one("select id from companies where slug=%s", (company,))
+        day = (datetime.now(timezone.utc) + timedelta(hours=4)).strftime("%Y-%m-%d")
+        who = (f"{first} {last}".strip() or name or email)
+        label = "waitlist signup" if waitlist else "registration"
+        body = f"{who} ({email})" + (f", {company_name}" if company_name else "") + f" → {org}"
+        notifications.notify(
+            f"New {org} {label}", body, priority="normal", category="registration",
+            dedup_key=f"registration:{company}:{day}",
+            company_id=(cid_row["id"] if cid_row else None),
+            target_type="contact", target_id=email,
+            item={"name": who, "email": email, "company_name": company_name})
+    except Exception:  # noqa: BLE001 — notifying must never break the webhook
+        pass
+    return (status, email)
 
 
 def add_inbound_contact(reg: dict, company: str, classification: str, stage: str = "Engaged",
