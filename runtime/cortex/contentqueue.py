@@ -95,7 +95,6 @@ def check_refills() -> list[dict]:
         return []
     db.setting_set("refill_check_day", today)
     target, refill_at, batch = _cfg()
-    month = datetime.now(schedule._GST).strftime("%Y-%m")
     fired: list[dict] = []
     for co in db.query("select id, name from companies order by id"):
         cid = co["id"]
@@ -107,10 +106,10 @@ def check_refills() -> list[dict]:
             d = depth(cid, kind)
             if d > refill_at:
                 continue
-            guard = f"refill_fired:{kind}:{cid}"
-            if db.setting_get(guard) == month:   # one nudge per queue per month
-                continue
-            db.setting_set(guard, month)
+            # Nag DAILY while the queue is low (Rashad 2026-06-20: "nag me about important things; it's my
+            # job to get it done so it doesn't nag me"). The daily gate above means this fires once per day;
+            # the dedup_key coalesces into the same card if it is still UNREAD, but if Rashad DISMISSED
+            # yesterday's a fresh one appears today — so it keeps coming back until the queue is topped up.
             need = max(batch, target - d)
             notifications.notify(
                 f"Top up the {co['name']} {meta['plural']} queue",
