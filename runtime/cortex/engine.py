@@ -24,8 +24,8 @@ from datetime import datetime
 
 from psycopg.types.json import Json
 
-from . import (crm, db, gmail, manager, newsletter, notifications, profile, provider, reminders,
-               schedule, seo_report, store, webauthn_auth, worker)
+from . import (contentqueue, crm, db, gmail, manager, newsletter, notifications, profile, provider,
+               reminders, schedule, seo_report, store, webauthn_auth, worker)
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -842,17 +842,9 @@ def confirm_send_task(task_id: int, count: int, stepup_token: str | None = None)
 
 
 def _next_newsletter_slot(company_id: int, hour: int = 9) -> datetime:
-    """Next free 1st-of-month for a company's scheduled newsletters, on the UNIFIED tasks table: if one is
-    already scheduled, take the 1st of the month after its latest; else the next upcoming 1st (so issues stack
-    one per month)."""
-    now = datetime.now(schedule._GST)
-    row = db.one("select run_at from tasks where company_id=%s and kind='newsletter_scheduled' "
-                 "and schedule_kind='once' and status='scheduled' and run_at is not null "
-                 "order by run_at desc limit 1", (company_id,))
-    if row and row["run_at"] and row["run_at"] > now:
-        return schedule.first_of_next_month(row["run_at"], hour)
-    first_this = now.replace(day=1, hour=hour, minute=0, second=0, microsecond=0)
-    return first_this if first_this > now else schedule.first_of_next_month(now, hour)
+    """Next free monthly newsletter slot on the company's publishing day; stacks one issue per month.
+    Newsletters follow the same per-company publishing day as blogs (delegates to the universal queue)."""
+    return contentqueue.next_slot(company_id, "newsletter_scheduled", hour)
 
 
 def _schedule_newsletter(task, skill, company, art, n) -> dict:
@@ -874,24 +866,14 @@ def _schedule_newsletter(task, skill, company, art, n) -> dict:
 
 
 def _publish_day(company_id: int) -> int:
-    """The company's fixed monthly publishing day (1-28), from company_profiles.data; default 1."""
-    try:
-        d = int(profile.get(company_id).get("publish_day") or 1)
-    except Exception:  # noqa: BLE001
-        d = 1
-    return min(max(d, 1), 28)
+    """The company's fixed monthly publishing day (1-28). Canonical home is contentqueue (shared by every
+    content type); kept here as a thin alias for existing callers."""
+    return contentqueue.publish_day(company_id)
 
 
 def _next_blog_slot(company_id: int, hour: int = 9) -> datetime:
-    """Next free monthly slot on the company's publishing day; stacks queued blogs one per month."""
-    now = datetime.now(schedule._GST)
-    day = _publish_day(company_id)
-    row = db.one("select run_at from tasks where company_id=%s and kind='blog_scheduled' "
-                 "and schedule_kind='once' and status='scheduled' and run_at is not null "
-                 "order by run_at desc limit 1", (company_id,))
-    if row and row["run_at"] and row["run_at"] > now:
-        return schedule.next_month_day(row["run_at"], day, hour)
-    return schedule.day_of_month(now, day, hour)
+    """Next free monthly blog slot on the company's publishing day (delegates to the universal queue)."""
+    return contentqueue.next_slot(company_id, "blog_scheduled", hour)
 
 
 def _schedule_blog(task: dict, skill: dict, company: dict, actor: str) -> dict:
@@ -910,22 +892,9 @@ def _schedule_blog(task: dict, skill: dict, company: dict, actor: str) -> dict:
 
 
 def bump_blog_to_front(task_id: int) -> dict:
-    """Move a queued blog to the FRONT of its company's publishing queue: it takes the next publishing day and
-    every other queued blog shifts back one month (in date order)."""
-    t = db.one("select id, company_id, kind from tasks where id=%s", (task_id,))
-    if not t or t["kind"] != "blog_scheduled":
-        return {"ok": False, "error": "not a queued blog"}
-    cid = t["company_id"]
-    day = _publish_day(cid)
-    front = schedule.day_of_month(datetime.now(schedule._GST), day)
-    others = db.query("select id from tasks where company_id=%s and kind='blog_scheduled' and status='scheduled' "
-                      "and id<>%s and run_at is not null order by run_at", (cid, task_id))
-    db.execute("update tasks set run_at=%s where id=%s", (front, task_id))
-    prev = front
-    for o in others:
-        prev = schedule.next_month_day(prev, day)
-        db.execute("update tasks set run_at=%s where id=%s", (prev, o["id"]))
-    return {"ok": True, "front": front.strftime("%-d %b %Y"), "shifted": len(others)}
+    """Bump a queued item to the front of its company's queue (others slide back a month). Now generic over
+    every content kind — kept under this name for existing callers; delegates to the universal queue."""
+    return contentqueue.bump_to_front(task_id)
 
 
 def _dispatch_newsletter(task, skill, company, art, n) -> dict:
@@ -1577,6 +1546,10 @@ def run(poll_idle: float = 1.0) -> None:
                 promote_due_tasks()   # the one unified clock — recurring templates + one-off scheduled tasks
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(promote hiccup: {e})")
+            try:
+                contentqueue.check_refills()   # rolling-N: nudge to ideate more when any content queue runs low
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(queue refill hiccup: {e})")
             try:
                 drain_newsletter_sends()
             except Exception as e:  # noqa: BLE001

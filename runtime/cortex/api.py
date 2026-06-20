@@ -29,9 +29,9 @@ from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Json
 from pydantic import BaseModel
 
-from . import (capabilities, catalog, config, crm, db, engine, gmail, knowledge, notifications, personas,
-               profile, provider, push, questionnaire, reminders, schedule, seo_report, skillqa, store,
-               webauthn_auth, worker)
+from . import (capabilities, catalog, config, contentqueue, crm, db, engine, gmail, knowledge, notifications,
+               personas, profile, provider, push, questionnaire, reminders, schedule, seo_report, skillqa,
+               store, webauthn_auth, worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -565,8 +565,9 @@ def calendar_run(tid: int, _: None = Depends(auth)) -> dict:
 
 @app.post("/api/calendar/{tid}/bump")
 def calendar_bump(tid: int, _: None = Depends(auth)) -> dict:
-    """Bump a queued blog to the FRONT of its company's publishing queue (others shift back one month)."""
-    r = engine.bump_blog_to_front(tid)
+    """Bump a queued content item (blog, newsletter, any kind) to the FRONT of its company's queue for that
+    kind; every other queued item of the same kind shifts back one month."""
+    r = contentqueue.bump_to_front(tid)
     if not r.get("ok"):
         raise HTTPException(status_code=400, detail=r.get("error", "could not bump"))
     return r
