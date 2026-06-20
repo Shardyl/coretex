@@ -1452,9 +1452,15 @@ async function act(id,what){
 // count. Stage 2 (action 'schedule') queues it for the 1st; Stage 3 (action 'send') sends it now.
 async function confirmLiveSend(id, r){
   const n=r.recipients, co=r.company||'';
-  const msg = r.action==='schedule'
-    ? `SCHEDULE THIS NEWSLETTER\n\nIt will be queued to send to ${n} ${co} contacts on ${r.date}, then go out automatically that day.\nType the number ${n} to confirm, or Cancel.`
-    : `SEND TO THE LIVE LIST\n\nThis sends to ${n} REAL ${co} contacts now (drip 250/hr) — cannot be undone.\nType the number ${n} to confirm, or Cancel.`;
+  let msg;
+  if(r.action==='test'){
+    const list=(r.to||[]).map(x=>'  • '+(x.name?(x.name+' <'+x.email+'>'):x.email)).join('\n');
+    msg = `SEND A TEST OF THIS NEWSLETTER\n\nThis builds the issue and emails a TEST copy to your ${n} ${co} reviewer${n===1?'':'s'}:\n${list||'  (no reviewers configured)'}\n\nType the number ${n} to confirm, or Cancel.`;
+  } else if(r.action==='schedule'){
+    msg = `SCHEDULE THIS NEWSLETTER\n\nIt will be queued to send to ${n} ${co} contacts on ${r.date}, then go out automatically that day.\nType the number ${n} to confirm, or Cancel.`;
+  } else {
+    msg = `SEND TO THE LIVE LIST\n\nThis sends to ${n} REAL ${co} contacts now (drip 250/hr) — cannot be undone.\nType the number ${n} to confirm, or Cancel.`;
+  }
   const c=prompt(msg);
   if(c===null){ toast('Cancelled — nothing done'); return; }
   try{ let cr=await api(`/api/tasks/${id}/confirm-send`,{method:'POST',body:JSON.stringify({count:Number(c)})});

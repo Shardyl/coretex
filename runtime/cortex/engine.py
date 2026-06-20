@@ -552,14 +552,15 @@ def _run_blog_task(task: dict, skill: dict, company: dict, site) -> None:
 
 
 def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = False) -> dict:
-    if task["kind"] == "newsletter_idea":   # approve the idea -> build + send to the test group + review card
-        return newsletter.execute_idea_approval(task, skill, company, actor)
-    if task["kind"] in ("newsletter_review", "newsletter_send"):
-        # real-list newsletter actions route through the cockpit count-confirm (schedule / send); a plain
-        # approve (incl. Telegram) never fires one.
-        n = len(newsletter.recipients(company["id"]))
+    if task["kind"] in ("newsletter_idea", "newsletter_review", "newsletter_send"):
+        # EVERY outward newsletter send (the test send to reviewers, the schedule, the live send) routes
+        # through the cockpit confirm — it shows exactly who it reaches + takes the PIN/fingerprint. A plain
+        # approve (cockpit OR Telegram) NEVER fires one.
+        n = (len(newsletter.test_group(company["id"])) if task["kind"] == "newsletter_idea"
+             else len(newsletter.recipients(company["id"])))
+        who = "test-group" if task["kind"] == "newsletter_idea" else "recipient"
         return {"needs_confirm": True, "recipients": n,
-                "error": f"Confirm with the recipient count ({n:,}) in the cockpit."}
+                "error": f"Confirm with the {who} count ({n:,}) in the cockpit."}
     if task["kind"] in EMAIL_SEND_KINDS:   # email_reply + email_draft both SEND on approval (after the PIN gate)
         return _send_email_reply(task, skill, company, actor, auto)
     if task["kind"] == "blog":   # approving a blog QUEUES it to publish on the company's monthly day (not now)
@@ -804,6 +805,12 @@ def approve_task(task_id: int, stepup_token: str | None = None) -> dict:
     # SAFEGUARD: a newsletter that touches the real list NEVER goes on a plain approve. Stage 2
     # (newsletter_review) SCHEDULES for the 1st; Stage 3 (newsletter_send) SENDS. Both require the
     # operator to echo the exact recipient count first.
+    if task["kind"] == "newsletter_idea":
+        # the test send goes to real people (your reviewers) — surface exactly WHO, and require the same
+        # count-confirm + PIN/fingerprint as any outbound send so a plain approve never fires it.
+        g = newsletter.test_group(task["company_id"])
+        return {"ok": False, "needs_confirm": True, "action": "test", "company": company["name"],
+                "recipients": len(g), "to": [{"email": x["email"], "name": x.get("name")} for x in g]}
     if task["kind"] in ("newsletter_review", "newsletter_send"):
         n = len(newsletter.recipients(task["company_id"]))
         action = "schedule" if task["kind"] == "newsletter_review" else "send"
@@ -822,17 +829,22 @@ def confirm_send_task(task_id: int, count: int, stepup_token: str | None = None)
     """Confirm a newsletter with the EXACT recipient count. Stage 2 (newsletter_review) -> SCHEDULE for the
     next free 1st; Stage 3 (newsletter_send) -> SEND now (drip). Count must match, so a misclick can't fire."""
     task, skill, company = _load(task_id)
-    if not task or task["kind"] not in ("newsletter_review", "newsletter_send"):
+    if not task or task["kind"] not in ("newsletter_idea", "newsletter_review", "newsletter_send"):
         return {"ok": False, "error": "not a newsletter card"}
-    n = len(newsletter.recipients(task["company_id"]))
+    is_test = task["kind"] == "newsletter_idea"
+    n = (len(newsletter.test_group(task["company_id"])) if is_test
+         else len(newsletter.recipients(task["company_id"])))
     try:
         if int(count) != n:
-            return {"ok": False, "error": f"Count mismatch: you entered {count}, the list is {n}. Nothing done."}
+            label = "test group" if is_test else "list"
+            return {"ok": False, "error": f"Count mismatch: you entered {count}, the {label} is {n}. Nothing done."}
     except (TypeError, ValueError):
         return {"ok": False, "error": "Enter the exact recipient count to confirm."}
-    gate = _biometric_gate(True, stepup_token)   # a newsletter schedule/send is always a public action
+    gate = _biometric_gate(True, stepup_token)   # every outward newsletter send is a public action
     if gate:
         return gate
+    if is_test:   # build the issue + send the test to the (now-confirmed) reviewers + drop the review card
+        return {"ok": True, "result": newsletter.execute_idea_approval(task, skill, company, "owner")}
     art = db.setting_get(f"newsletter:{task_id}")
     if not art:
         return {"ok": False, "error": "no built newsletter found for this card"}
