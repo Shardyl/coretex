@@ -9,6 +9,7 @@ the structural JSON schema + the renderer live here (see [[feedback_logic_lives_
 from __future__ import annotations
 
 import html as _html
+import json
 from concurrent.futures import ThreadPoolExecutor
 
 from . import brand, imagegen, media, provider, store, worker
@@ -385,10 +386,8 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
     return {"title": title, "html": "".join(P), "dek": (c.get("dek") or "").strip()}
 
 
-def build(company_id: int, brief: str) -> dict:
-    """Compose -> generate + host imagery on R2 -> render. Returns {title, html} for stage_draft."""
-    company = store.get_company(company_id)
-    c = compose(company_id, brief)
+def _image_jobs(c: dict) -> list[tuple[str, str, str]]:
+    """The image-generation jobs a post needs (hero + figures + the real/AI split frames)."""
     jobs: list[tuple[str, str, str]] = []
     hero = c.get("featured_image") or c.get("hero") or {}
     if hero.get("image_prompt") and hero.get("use", True):   # featured_image is mandatory (use defaults True)
@@ -397,12 +396,52 @@ def build(company_id: int, brief: str) -> dict:
         fig = s.get("figure") or {}
         if fig.get("use") and fig.get("image_prompt") and len(jobs) < _MAX_IMAGES:
             jobs.append((f"fig{i}", fig["image_prompt"], "16:9"))
-    # the real/AI split signature graphic needs its two frames generated (the dials are pure CSS)
     sg = c.get("signature_graphic") or {}
-    if sg.get("use") and sg.get("kind") == "real_ai_split":
+    if sg.get("use") and sg.get("kind") == "real_ai_split":   # the dials are pure CSS; the split needs frames
         if sg.get("real_image_prompt"):
             jobs.append(("sig_real", sg["real_image_prompt"], "16:9"))
         if sg.get("ai_image_prompt"):
             jobs.append(("sig_ai", sg["ai_image_prompt"], "16:9"))
-    imgs = _gen_and_host(company.get("slug") or "filmspoke", jobs)
-    return render(company_id, c, imgs)
+    return jobs
+
+
+def build_from_content(company_id: int, c: dict) -> dict:
+    """Generate + host the imagery, then render the GIVEN content. Returns {title, html, dek, content, images}
+    — content + images are returned so a later REVISION can reuse the same images (no regeneration)."""
+    company = store.get_company(company_id)
+    imgs = _gen_and_host(company.get("slug") or "filmspoke", _image_jobs(c))
+    out = render(company_id, c, imgs)
+    out["content"], out["images"] = c, imgs
+    return out
+
+
+def build(company_id: int, brief: str) -> dict:
+    """Compose -> generate + host imagery on R2 -> render. Returns {title, html, dek, content, images}."""
+    return build_from_content(company_id, compose(company_id, brief))
+
+
+def revise_surgical(company_id: int, c: dict, correction: str) -> dict:
+    """Apply ONLY the owner's requested change to an existing post's content, keeping everything else exactly
+    as it was — so a revision never re-drafts the whole post or loses formatting. Returns the revised content
+    (the caller re-renders it with the SAME images, no regeneration)."""
+    company = store.get_company(company_id)
+    skill = store.get_skill_by_key(company_id, "content-blog-posts")
+    system = "\n\n".join(filter(None, [
+        f"You are making a SMALL, TARGETED revision to an EXISTING blog post for {company['name']}.",
+        skill.get("craft") or "",
+        worker._rules_block(skill),
+        _BLOG_SCHEMA,
+        ("CRITICAL: apply ONLY the change the owner asks for. Keep EVERY other field exactly as given — the "
+         "title, dek, byline, every section heading and body, their order, the image fields (image_prompt/alt/"
+         "caption), the takeaways and the CTAs — all UNCHANGED unless the requested change directly requires "
+         "it. Do NOT rewrite, re-style, re-order or 'improve' anything else. Return the FULL post JSON."),
+    ]))
+    user = (f"Current post (JSON):\n{json.dumps(c, ensure_ascii=False)}\n\nThe ONLY change to make:\n"
+            f"{correction}\n\nReturn the full post JSON with just that change applied, everything else identical.")
+    out = provider.think_json(system, user, model=worker._model_for(skill), max_tokens=8000,
+                              purpose="blog:revise", company=company.get("slug"))
+    if not out or not out.get("title"):
+        return c
+    # belt-and-suspenders: reuse the existing image fields verbatim (we render with the SAME images anyway)
+    out["featured_image"] = c.get("featured_image") or c.get("hero") or out.get("featured_image")
+    return out

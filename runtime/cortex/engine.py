@@ -591,6 +591,8 @@ def _build_blog_from_concept(task: dict, skill: dict, company: dict) -> dict:
     post = site.stage_draft(art["title"], art["html"])   # unpublished, noindex WordPress draft
     db.setting_set(f"wp:{task['id']}", {"post_id": post["id"], "preview": post.get("preview"),
                                         "edit": post.get("edit"), "title": art["title"]})
+    # stash the content + image URLs so a REVISION edits this exact post (reusing the same images), never rebuilds
+    db.setting_set(f"blog_build:{task['id']}", {"content": art.get("content"), "images": art.get("images")})
     dek = (art.get("dek") or "").strip() or "The formatted post is ready to review."
     store.update_task(task["id"], kind="blog", title=art["title"],
                       draft=f"{dek}\n\nThe formatted post is staged as a hidden draft. Open the preview link "
@@ -725,21 +727,28 @@ def _approve(task: dict, skill: dict, company: dict) -> dict:
 
 
 def _skip(task: dict, skill: dict, company: dict) -> None:
-    site = _site_for(task, company)
-    note = "Skipped"
-    if site:
+    # Blog drafts (concept or formatted): a skip AUTO-DELETES — trash the staged WP draft AND remove the card
+    # + its stashed content, so a discarded blog leaves nothing behind (Rashad: skipped drafts auto-delete).
+    if task["kind"] in ("blog", "blog_idea"):
         info = db.setting_get(f"wp:{task['id']}") or {}
+        note = "Discarded"
         if info.get("post_id"):
             try:
-                site.trash(info["post_id"])
-                note = "Discarded — draft removed from Tabscanner"
+                wp.for_company(company).trash(info["post_id"])
+                note = "Discarded — draft removed from the site"
             except Exception:  # noqa: BLE001
-                note = "Discarded (couldn't remove the WP draft — check manually)"
+                note = "Discarded (couldn't remove the WP draft — check it manually)"
+        store.reset_streak(skill["id"])
+        if task.get("tg_message_id"):
+            tg.edit(task["tg_message_id"], f"✗ {note} and deleted.")
+        db.execute("delete from settings where key in (%s,%s)", (f"wp:{task['id']}", f"blog_build:{task['id']}"))
+        db.execute("delete from tasks where id=%s", (task["id"],))
+        return
     store.update_task(task["id"], status="rejected")
     store.reset_streak(skill["id"])   # a rejection breaks the clean-approval streak
     store.log_decision(task["id"], skill["id"], "owner", "reject", snapshot={"draft": task.get("draft")})
     if task.get("tg_message_id"):
-        tg.edit(task["tg_message_id"], f"✗ {note} — '{skill['name']}'.")
+        tg.edit(task["tg_message_id"], f"✗ Skipped — '{skill['name']}'.")
 
 
 def _maybe_propose_rule(task: dict, skill: dict, text: str, old: str, new: str) -> None:
@@ -794,11 +803,19 @@ def apply_correction(task: dict, text: str) -> None:
     site = _site_for(task, company)
 
     if site:
-        art = worker.draft_article(skill, company, task["request"], correction=text)
+        from . import blog
         info = db.setting_get(f"wp:{task['id']}") or {}
+        stored = db.setting_get(f"blog_build:{task['id']}") or {}
+        c, imgs = stored.get("content"), stored.get("images")
+        if c:   # SURGICAL revision: change ONLY what was asked, REUSE the same images, UPDATE the same WP post
+            new_c = blog.revise_surgical(company["id"], c, text)
+            art = blog.render(company["id"], new_c, imgs or {})
+            db.setting_set(f"blog_build:{task['id']}", {"content": new_c, "images": imgs})
+        else:   # legacy card with no stored content — fall back to a full redraft (old behaviour)
+            art = worker.draft_article(skill, company, task["request"], correction=text)
         pid = info.get("post_id")
         if pid:
-            r = site.update(pid, art["title"], art["html"])  # stays a draft
+            r = site.update(pid, art["title"], art["html"])  # edit the EXISTING draft in place
             preview = r.get("preview") or info.get("preview")
         else:
             post = site.stage_draft(art["title"], art["html"])
@@ -807,7 +824,7 @@ def apply_correction(task: dict, text: str) -> None:
                                             "edit": info.get("edit"), "title": art["title"]})
         # the card body is READABLE text + the preview link — NEVER the raw post HTML (it was showing as code)
         task = store.update_task(task["id"],
-                                 draft="Updated with your changes. Open the preview link below to review the "
+                                 draft="Updated with your change. Open the preview link below to review the "
                                        "formatted post, then approve to schedule.",
                                  status="awaiting_approval", attempts=task["attempts"] + 1)
         store.log_decision(task["id"], skill["id"], "owner", "correct", note=text)
