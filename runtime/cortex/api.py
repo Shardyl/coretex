@@ -817,13 +817,17 @@ def usage(days: int = 7, _: None = Depends(auth)) -> dict:
     tot = db.one(f"select coalesce(sum(cost_usd),0) cost, count(*) calls, "
                  f"coalesce(sum(input_tokens),0) in_tok, coalesce(sum(output_tokens),0) out_tok "
                  f"from usage_log {w}", p)
+    by_provider = db.query(
+        f"select case when model like 'imagen%%' or model like 'gemini%%' then 'Gemini' else 'Anthropic' end "
+        f"provider, sum(cost_usd) cost, count(*) calls from usage_log {w} group by provider order by cost desc", p)
     by_model = db.query(f"select model, sum(cost_usd) cost, count(*) calls from usage_log {w} "
                         f"group by model order by cost desc", p)
     by_purpose = db.query(f"select purpose, sum(cost_usd) cost, count(*) calls from usage_log {w} "
                           f"group by purpose order by cost desc limit 25", p)
     by_day = db.query("select ts::date d, sum(cost_usd) cost, count(*) calls from usage_log "
                       "group by d order by d desc limit %s", (days,))
-    return {"days": days, "total": tot, "by_model": by_model, "by_purpose": by_purpose, "by_day": by_day}
+    return {"days": days, "total": tot, "by_provider": by_provider, "by_model": by_model,
+            "by_purpose": by_purpose, "by_day": by_day}
 
 
 # ---------- CRM: contacts / projects / opportunities (read views for the cockpit pages) ----------

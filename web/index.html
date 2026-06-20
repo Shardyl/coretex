@@ -582,6 +582,7 @@ async function openSpend(){
       `<div class="srow big"><div><div class="sk">Today</div><div class="sv">${_money(today)}</div></div>`+
       `<div><div class="sk">7-day</div><div class="sv">${_money(tot)}</div></div>`+
       `<div><div class="sk">Calls</div><div class="sv">${calls}</div></div></div>`+
+      `<div class="sk2">Anthropic vs Gemini</div>`+rows(d.by_provider,'provider')+
       `<div class="sk2">By model</div>`+rows(d.by_model,'model')+
       `<div class="sk2">By purpose</div>`+rows((d.by_purpose||[]).slice(0,12),'purpose')+
       `<div class="sk2">Daily</div>`+(d.by_day||[]).map(x=>`<div class="srow"><span>${esc(String(x.d).slice(0,10))}</span><span class="mut">${x.calls}</span><b>${_money(x.cost)}</b></div>`).join('');
