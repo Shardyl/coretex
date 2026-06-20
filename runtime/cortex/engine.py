@@ -48,7 +48,7 @@ KIND_CLASS = {
     "content": "internal", "draft": "internal", "research": "internal", "summary": "internal",
     "report": "internal", "seo_report": "internal", "crm_update": "internal", "internal_note": "internal",
     "email_reply": "outward", "email_draft": "outward", "email_send": "outward", "blog": "outward",
-    "blog_scheduled": "outward",
+    "blog_idea": "internal", "blog_scheduled": "outward",
     "newsletter_idea": "outward", "newsletter_review": "outward", "newsletter_send": "outward",
     "social_post": "outward", "dm_reply": "outward", "sms": "outward",
     "payment": "money", "invoice_send": "money", "refund": "money",
@@ -64,7 +64,7 @@ def kind_class(kind: str) -> str:
 # is never ambiguous (email sends, blog publishes, newsletter schedules/sends). Add a line when you add a kind.
 APPROVE_ACTION = {
     "email_reply": "Approve & send", "email_draft": "Approve & send",
-    "blog": "Approve & schedule",
+    "blog_idea": "Approve & build", "blog": "Approve & schedule",
     "newsletter_idea": "Approve & build", "newsletter_review": "Approve & schedule",
     "newsletter_send": "Approve & send",
 }
@@ -455,9 +455,8 @@ def _run_task(task: dict) -> None:
         return
     store.update_task(task["id"], status="drafting")
 
-    site = _site_for(task, company)
-    if site:
-        _run_blog_task(task, skill, company, site)
+    if task["kind"] == "blog":   # a blog request -> IDEATION: propose readable concept(s) to approve first
+        _run_blog_ideation(task, skill, company)   # NO HTML built/staged yet; the build happens on approval
         return
 
     draft = worker.draft(skill, company, task["request"])
@@ -521,34 +520,75 @@ def send_blog_review_digest(company_id: int, posts: list[dict], dry_run: bool = 
     return {"sent": sent, "recipients": len(group)}
 
 
-def _run_blog_task(task: dict, skill: dict, company: dict, site) -> None:
+def _run_blog_ideation(task: dict, skill: dict, company: dict) -> None:
+    """IDEATION: turn a blog request into N readable CONCEPT cards (a working title + a paragraph summary of
+    the angle and talking points). NO HTML is built or staged — approving a concept is what triggers the
+    formatted build. One idea -> one card; six ideas -> six numbered cards."""
+    from . import blog
+    req = task.get("request") or {}
+    ideas = blog.concepts(company["id"], req.get("brief", ""), int(req.get("count") or 1))
+    if not ideas:
+        store.update_task(task["id"], status="failed", last_status="no blog ideas generated")
+        tg.send(f"[{company['name']}] couldn't generate a blog idea — try again or give a brief.")
+        return
+    total = len(ideas)
+    for i, idea in enumerate(ideas, 1):
+        title = (idea.get("title") or "Blog idea").strip()
+        body = (f"Idea {i} of {total}\n\n{idea.get('summary','').strip()}" if total > 1
+                else idea.get("summary", "").strip())
+        if i == 1:   # reuse the original request task for the first concept
+            store.update_task(task["id"], kind="blog_idea", title=title, draft=body,
+                              request={"brief": req.get("brief", ""), "concept": idea}, status="awaiting_approval")
+            t = store.get_task(task["id"])
+        else:
+            t = store.create_task(company["id"], skill["id"], "blog_idea",
+                                  {"brief": req.get("brief", ""), "concept": idea})
+            store.update_task(t["id"], title=title, draft=body, status="awaiting_approval")
+        _push_approval(t, skill, company)
+    tg.send(f"[{company['name']}] {total} blog idea{'s' if total > 1 else ''} ready in your Inbox "
+            f"(title + summary). Approve one to build the formatted post.")
+
+
+def _build_blog_from_concept(task: dict, skill: dict, company: dict) -> dict:
+    """Approve a blog CONCEPT -> build the formatted post, stage it as a hidden (noindex) WordPress draft, and
+    turn THIS card into the 'review the formatted post' card (kind='blog'). The card body stays readable text
+    + a preview link to the formatted page — NEVER raw HTML."""
     from . import blog, brand as _brand
+    site = wp.for_company(company)
+    if not site:
+        store.update_task(task["id"], status="failed", last_status="WordPress not connected")
+        return {"error": f"WordPress not connected for {company['name']}."}
+    concept = (task.get("request") or {}).get("concept") or {}
+    brief = (f"Title: {concept.get('title', '')}\nConcept: {concept.get('summary', '')}\n\n"
+             f"{(task.get('request') or {}).get('brief', '')}").strip()
     _tmpl = str((_brand.get_brand_kit(company["id"]) or {}).get("template") or "")
     rich = _tmpl.startswith("dark") or _tmpl == "light-saas"
-    if rich:   # brand-kit-driven editorial renderer (dark or light): hero, takeaways, sections, blocks, CTA
-        art = blog.build(company["id"], (task.get("request") or {}).get("brief", ""))
-        verdict = manager.check(skill, company, f"TITLE: {art['title']}\n\n{art['html']}", task["request"])
+    if rich:   # brand-kit-driven editorial renderer (dark or light)
+        art = blog.build(company["id"], brief)
+        verdict = manager.check(skill, company, f"TITLE: {art['title']}\n\n{art['html']}", {"brief": brief})
     else:
-        art = worker.draft_article(skill, company, task["request"])
-        verdict = manager.check(skill, company, f"TITLE: {art['title']}\n\n{art['html']}", task["request"])
+        art = worker.draft_article(skill, company, {"brief": brief})
+        verdict = manager.check(skill, company, f"TITLE: {art['title']}\n\n{art['html']}", {"brief": brief})
         if not verdict["aligned"] and verdict["issues"]:
-            art = worker.draft_article(skill, company, task["request"], manager_feedback=verdict["issues"])
-            verdict = manager.check(skill, company, f"TITLE: {art['title']}\n\n{art['html']}", task["request"])
-
-    post = site.stage_draft(art["title"], art["html"])  # unpublished WordPress draft
+            art = worker.draft_article(skill, company, {"brief": brief}, manager_feedback=verdict["issues"])
+            verdict = manager.check(skill, company, f"TITLE: {art['title']}\n\n{art['html']}", {"brief": brief})
+    post = site.stage_draft(art["title"], art["html"])   # unpublished, noindex WordPress draft
     db.setting_set(f"wp:{task['id']}", {"post_id": post["id"], "preview": post.get("preview"),
                                         "edit": post.get("edit"), "title": art["title"]})
-
-    task = store.update_task(task["id"], draft=art["html"], manager=verdict, attempts=task["attempts"] + 1)
-    # blog tasks ALWAYS go to the owner — never auto-publish (golden rule).
+    dek = (art.get("dek") or "").strip() or "The formatted post is ready to review."
+    store.update_task(task["id"], kind="blog", title=art["title"],
+                      draft=f"{dek}\n\nThe formatted post is staged as a hidden draft. Open the preview link "
+                            f"below to review it, then approve to schedule.",
+                      manager=verdict, attempts=task["attempts"] + 1, status="awaiting_approval")
+    t = store.get_task(task["id"])
     msg = tg.send(_fmt_blog(company, skill, art, verdict, post.get("preview")), _blog_buttons(task["id"]))
-    store.update_task(task["id"], status="awaiting_approval", tg_message_id=msg["message_id"])
-    _push_approval(task, skill, company)
-    # test-group review: email the company's test group the draft (title + wp-login preview link).
-    try:
+    store.update_task(task["id"], tg_message_id=msg["message_id"])
+    _push_approval(t, skill, company)   # blog tasks ALWAYS go to the owner — never auto-publish (golden rule)
+    try:   # test-group review: email the company's test group the title + wp-login preview link
         send_blog_review_digest(company["id"], [{"title": art["title"], "preview": post.get("preview")}])
     except Exception:  # noqa: BLE001
         pass
+    return {"built": art["title"], "preview": post.get("preview")}
 
 
 def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = False) -> dict:
@@ -563,7 +603,9 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
                 "error": f"Confirm with the {who} count ({n:,}) in the cockpit."}
     if task["kind"] in EMAIL_SEND_KINDS:   # email_reply + email_draft both SEND on approval (after the PIN gate)
         return _send_email_reply(task, skill, company, actor, auto)
-    if task["kind"] == "blog":   # approving a blog QUEUES it to publish on the company's monthly day (not now)
+    if task["kind"] == "blog_idea":   # approve the CONCEPT -> build the formatted post -> review card
+        return _build_blog_from_concept(task, skill, company)
+    if task["kind"] == "blog":   # approving the BUILT post QUEUES it to publish on the company's monthly day
         return _schedule_blog(task, skill, company, actor)
     # Phase 1 string path: 'execute' = mark done + log.
     store.update_task(task["id"], status="done")

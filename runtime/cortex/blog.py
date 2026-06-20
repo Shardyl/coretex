@@ -44,6 +44,32 @@ _BLOG_SCHEMA = (
 _MAX_IMAGES = 4   # hero + up to 3 figures; bounds Gemini cost/latency
 
 
+def concepts(company_id: int, brief: str, n: int = 1) -> list[dict]:
+    """IDEATION stage — propose N blog CONCEPTS as plain readable text (a working title + a paragraph
+    summary of the angle and main talking points). NO HTML, no full post: this is what the owner approves
+    before anything is built. Returns [{title, summary}]."""
+    company = store.get_company(company_id)
+    skill = store.get_skill_by_key(company_id, "content-blog-posts")
+    n = max(1, min(int(n or 1), 10))
+    system = "\n\n".join(filter(None, [
+        f"You are proposing {n} blog post idea(s) for {company['name']}.",
+        skill.get("craft") or "",          # the editable craft sets the voice/angle even at ideation
+        worker._company_context(company),
+        worker._rules_block(skill),
+        store.examples_block(company_id, "blog"),
+        (f"Propose EXACTLY {n} distinct, on-brand blog post concept(s). For EACH concept give: a specific, "
+         "compelling working TITLE, and a SUMMARY of 3 to 5 sentences describing the angle and the main "
+         "talking points the post will cover. Plain, readable prose only. NO HTML, NO markdown, NO headings, "
+         "NO code, NO em-dashes or en-dashes. This is a concept for approval, NOT the post itself. "
+         'Return JSON {"ideas":[{"title":"...","summary":"..."}]} with exactly ' + str(n) + " item(s)."),
+    ]))
+    out = provider.think_json(system, brief or "Propose strong, on-brand blog ideas.",
+                              model=worker._model_for(skill), max_tokens=2000,
+                              purpose="blog:ideate", company=company.get("slug"))
+    ideas = [i for i in ((out or {}).get("ideas") or []) if i.get("title") and i.get("summary")]
+    return ideas[:n]
+
+
 def compose(company_id: int, brief: str) -> dict:
     company = store.get_company(company_id)
     skill = store.get_skill_by_key(company_id, "content-blog-posts")
@@ -356,7 +382,7 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
         P.append('</div>')
 
     P.append('</div>')
-    return {"title": title, "html": "".join(P)}
+    return {"title": title, "html": "".join(P), "dek": (c.get("dek") or "").strip()}
 
 
 def build(company_id: int, brief: str) -> dict:

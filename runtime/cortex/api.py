@@ -1497,6 +1497,7 @@ class NewTask(BaseModel):
     skill: str
     kind: str = "content"
     brief: str
+    count: int = 1   # blog ideation: how many concepts to propose (1 -> one title+summary, 6 -> six)
 
 
 @app.post("/api/tasks")
@@ -1507,7 +1508,10 @@ def create_task(body: NewTask, _: None = Depends(auth)) -> dict:
     sk = store.get_skill_by_key(co["id"], body.skill)
     if not sk:
         raise HTTPException(status_code=404, detail="no such skill")
-    t = store.create_task(co["id"], sk["id"], body.kind, {"brief": body.brief})
+    req = {"brief": body.brief}
+    if body.kind == "blog":
+        req["count"] = max(1, min(int(body.count or 1), 10))   # N blog concepts to propose
+    t = store.create_task(co["id"], sk["id"], body.kind, req)
     return {"ok": True, "task": t}  # the engine service will draft it on its next poll
 
 
@@ -1781,10 +1785,11 @@ SKILL_TOOLS = [
         "brief": {"type": "string"}, "revision": {"type": "string", "description": "optional: how to change a previous draft"}},
         "required": ["company", "skill", "brief"]}},
     {"name": "create_task",
-     "description": "THE DEFAULT for any 'draft/write/create' request (emails, notes, posts, replies, copy) and any work to do: it runs through the worker + manager and lands in Rashad's INBOX for approval. Use THIS — never the inline draft tool — whenever he asks you to draft something. After calling it, just tell him it's in his Inbox; do NOT paste a draft into the chat. kind: content (default; emails/notes/copy) or blog. Pick a REAL skill_key (call list_skills if unsure).",
+     "description": "THE DEFAULT for any 'draft/write/create' request (emails, notes, posts, replies, copy) and any work to do: it runs through the worker + manager and lands in Rashad's INBOX for approval. Use THIS — never the inline draft tool — whenever he asks you to draft something. After calling it, just tell him it's in his Inbox; do NOT paste a draft into the chat. kind: content (default; emails/notes/copy) or blog. For kind=blog it proposes readable CONCEPT(S) (title + summary) to approve first, then builds the formatted post — set count to how many ideas he asked for (e.g. 6). Pick a REAL skill_key (call list_skills if unsure).",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string"}, "skill": {"type": "string"},
-        "kind": {"type": "string", "description": "content (default) or blog"}, "brief": {"type": "string"}},
+        "kind": {"type": "string", "description": "content (default) or blog"}, "brief": {"type": "string"},
+        "count": {"type": "integer", "description": "blog only: how many concepts to propose (1 default; 6 if he asks for six ideas)"}},
         "required": ["company", "skill", "brief"]}},
     {"name": "draft_email",
      "description": "Draft an OUTBOUND email (a new email, not a reply). It lands in his Inbox rendered as a "
@@ -2102,6 +2107,8 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         if not sk:
             return f"no skill '{inp.get('skill')}' for {co['slug']}"
         req = {"brief": inp.get("brief", "")}
+        if inp.get("kind") == "blog":   # blog ideation: how many concepts to propose (default 1)
+            req["count"] = max(1, min(int(inp.get("count") or 1), 10))
         if inp.get("_images"):   # files/images shared in this Talk turn -> the worker drafts WITH them
             req["attachments"] = inp["_images"]
             req["attachment_names"] = inp.get("_image_names")

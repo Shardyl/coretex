@@ -1288,15 +1288,18 @@ async function hydrateAttachments(){
 }
 function enlargeImg(img){ const o=document.createElement('div'); o.className='imgovl'; o.onclick=()=>o.remove();
   o.innerHTML=`<img src="${img.src}">`; document.body.appendChild(o); }
+// belt-and-suspenders: a card body must NEVER show raw HTML. If anything HTML-ish slips into a text body,
+// strip the tags to readable text (the only place we render real HTML is the email preview box below).
+function plainText(s){ s=String(s||''); return /<\/?[a-z!][^>]*>/i.test(s) ? s.replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/[ \t]+/g,' ').replace(/\n /g,'\n').trim() : s; }
 function actionCard(t){
     const co=t.company||compName(t.company_id), sk=t.skill||'';
     const wp=t.wp||null, em=t.email||null;
     if(t.kind==='report') return reportCard(t,co);
     const isEmail=t.kind==='email_reply'||t.kind==='email_draft';
     const isOutbound=t.kind==='email_draft';
-    const kindLabel=t.kind==='blog'?'blog post':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to schedule':t.kind==='newsletter_send'?'newsletter due to send':t.kind==='email_draft'?'email draft':(isEmail?'email reply':esc(t.kind||'task'));
+    const kindLabel=t.kind==='blog_idea'?'blog idea':t.kind==='blog'?'blog post — review':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to schedule':t.kind==='newsletter_send'?'newsletter due to send':t.kind==='email_draft'?'email draft':(isEmail?'email reply':esc(t.kind||'task'));
     const title=esc(isEmail&&em?((isOutbound?'Email to ':'Reply to ')+(em.inquiry&&em.inquiry.name||em.to||'recipient')):(t.title||(wp&&wp.title)||('Task #'+t.id)));
-    const body=esc(isEmail&&em&&em.preview?em.preview:(t.body||t.draft||''));
+    const body=esc(plainText(isEmail&&em&&em.preview?em.preview:(t.body||t.draft||'')));
     return `<div class="card" id="t${t.id}">
       <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${esc(sk)}</span>
         <span class="chip">${kindLabel}</span><span class="chip" style="margin-left:auto;opacity:.6" title="Task ID — quote this when troubleshooting">#${t.id}</span></div>
