@@ -805,12 +805,34 @@ def apply_correction(task: dict, text: str) -> None:
             pid, preview = post["id"], post.get("preview")
         db.setting_set(f"wp:{task['id']}", {"post_id": pid, "preview": preview,
                                             "edit": info.get("edit"), "title": art["title"]})
-        task = store.update_task(task["id"], draft=art["html"], status="awaiting_approval",
-                                 attempts=task["attempts"] + 1)
+        # the card body is READABLE text + the preview link — NEVER the raw post HTML (it was showing as code)
+        task = store.update_task(task["id"],
+                                 draft="Updated with your changes. Open the preview link below to review the "
+                                       "formatted post, then approve to schedule.",
+                                 status="awaiting_approval", attempts=task["attempts"] + 1)
         store.log_decision(task["id"], skill["id"], "owner", "correct", note=text)
         msg2 = tg.send(_fmt_blog(company, skill, art, None, preview), _blog_buttons(task["id"]))
         store.update_task(task["id"], tg_message_id=msg2["message_id"])
-        _maybe_propose_rule(task, skill, text, old or "", art["html"])
+        _maybe_propose_rule(task, skill, text, old or "", _html_to_text(art["html"]))   # text, not tags
+        return
+
+    if task["kind"] == "blog_idea":   # concept stage: refine the CONCEPT text only (title + summary), NO HTML
+        concept = (task.get("request") or {}).get("concept") or {}
+        out = provider.think_json(
+            "You refine a blog post CONCEPT at the ideation stage. Return JSON {\"title\":\"...\",\"summary\":"
+            "\"...\"}: a working title and a short summary paragraph of the angle and main talking points. "
+            "Plain readable text ONLY — never HTML, markup or code, and do NOT write the post itself.",
+            f"Company: {company['name']}.\nCurrent concept:\nTitle: {concept.get('title', '')}\n"
+            f"Summary: {concept.get('summary', '')}\n\nOwner's revision:\n{text}\n\nRewrite the concept.",
+            model=worker._model_for(skill))
+        title = ((out or {}).get("title") or concept.get("title") or task.get("title") or "Blog idea").strip()
+        summary = ((out or {}).get("summary") or "").strip() or concept.get("summary", "")
+        store.update_task(task["id"], title=title, draft=summary, status="awaiting_approval",
+                          request={"brief": (task.get("request") or {}).get("brief", ""),
+                                   "concept": {"title": title, "summary": summary}},
+                          attempts=task["attempts"] + 1)
+        store.log_decision(task["id"], skill["id"], "owner", "correct", note=text, snapshot={"old": old, "new": summary})
+        _maybe_propose_rule(task, skill, text, old or "", summary or "")
         return
 
     if task["kind"] == "newsletter_idea":   # ideation stage: refine the TEXT idea only; HTML build is a LATER stage
