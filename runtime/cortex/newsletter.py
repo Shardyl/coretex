@@ -424,6 +424,11 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
     # text colour that sits ON the accent (buttons / filled discs). White is right for a dark accent like
     # FilmSpoke red; a bright accent like Sensa cyan needs dark ink for contrast. Kit opts in via accent_ink.
     accent_ink = col.get("accent_ink", "#FFFFFF")
+    # optional brand gradient on buttons (e.g. Snap Rewards magenta->purple). Email-safe: a solid colour
+    # underneath (Outlook ignores the gradient and shows that) + the linear-gradient on top for the rest.
+    _grad = col.get("gradient")
+    btn_bg = (f"background:{col.get('purple') or red};background-image:linear-gradient({_grad});"
+              if _grad else f"background:{red};")
     head_family = kit.get("fonts", {}).get("heading", "Poppins")
     body_family = kit.get("fonts", {}).get("body", "Inter")
     headf = f"'{head_family}','Helvetica Neue',Helvetica,Arial,sans-serif"
@@ -446,9 +451,9 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
 
     def btn(label, url):
         return (f'<table role="presentation" cellpadding="0" cellspacing="0"><tr>'
-                f'<td style="border-radius:6px;background:{red};">'
+                f'<td style="border-radius:6px;{btn_bg}">'
                 f'<a href="{_esc(url)}" style="display:inline-block;font:700 16px/1 {headf};color:{accent_ink};'
-                f'padding:16px 32px;border-radius:6px;background:{red};text-decoration:none;">{_esc(label)} &nbsp;&rarr;</a>'
+                f'padding:16px 32px;border-radius:6px;{btn_bg}text-decoration:none;">{_esc(label)} &nbsp;&rarr;</a>'
                 f'</td></tr></table>')
 
     def divider():

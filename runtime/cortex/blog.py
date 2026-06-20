@@ -172,6 +172,10 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
     # text that sits ON the accent (buttons / filled discs): white suits a dark accent (FilmSpoke red),
     # a bright accent (Sensa cyan) needs dark ink. Kit opts in via accent_ink; default white.
     accent_ink = col.get("accent_ink", "#fff")
+    # optional brand gradient on the primary CTA (e.g. Snap Rewards magenta->purple); solid fallback under it
+    _grad = col.get("gradient")
+    btn_bg = (f"background:{col.get('purple') or red};background-image:linear-gradient({_grad});"
+              if _grad else f"background:{red};")
     headf = "'Poppins',-apple-system,'Segoe UI',Arial,sans-serif"
     bodyf = "'Inter',-apple-system,'Segoe UI',Arial,sans-serif"
     title = (c.get("seo") or {}).get("title") or c.get("title") or "Untitled"
@@ -316,7 +320,7 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
         pr = cc.get("primary") or {}; se = cc.get("secondary") or {}
         btns = ""
         if pr.get("url"):
-            btns += (f'<a href="{_esc(pr["url"])}" style="display:inline-block;background:{red};color:{accent_ink};'
+            btns += (f'<a href="{_esc(pr["url"])}" style="display:inline-block;{btn_bg}color:{accent_ink};'
                      f'font-weight:700;font-size:15px;text-decoration:none;padding:13px 22px;border-radius:6px;'
                      f'margin:4px 10px 4px 0">{_esc(pr.get("label") or "Get started")}</a>')
         if se.get("url"):
