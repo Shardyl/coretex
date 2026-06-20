@@ -342,7 +342,7 @@ def _gen_images(jobs: list[tuple[str, str, str]]) -> dict:
 
     def run(job):
         k, prompt, aspect = job
-        return k, imagegen.hero(prompt, aspect=aspect)
+        return k, imagegen.hero(prompt, aspect=aspect, purpose="image:newsletter")
 
     out: dict = {}
     with ThreadPoolExecutor(max_workers=5) as ex:
@@ -652,7 +652,7 @@ def build(company_id: int, idea_text: str) -> dict:
     if _tmpl.startswith("dark") or _tmpl == "light-saas":   # rich, brand-kit-driven renderer (dark OR light)
         return _build_filmspoke(company_id, idea_text, kit)
     c = compose(company_id, idea_text)
-    hero = imagegen.hero(c.get("hero_prompt") or "") if c.get("hero_prompt") else None
+    hero = imagegen.hero(c.get("hero_prompt") or "", purpose="image:newsletter") if c.get("hero_prompt") else None
     images = [("hero.jpg", hero)] if hero else []
     return {"subject": c.get("subject") or f"{store.get_company(company_id)['name']} newsletter",
             "html": render_html(company_id, c, hero_cid="hero.jpg" if hero else None),

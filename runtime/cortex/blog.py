@@ -95,7 +95,7 @@ def _gen_and_host(slug: str, jobs: list[tuple[str, str, str]]) -> dict:
 
     def run(job):
         k, prompt, aspect = job
-        return k, imagegen.hero(prompt, aspect=aspect)
+        return k, imagegen.hero(prompt, aspect=aspect, purpose="image:blog", company=slug)
 
     urls: dict = {}
     with ThreadPoolExecutor(max_workers=4) as ex:
