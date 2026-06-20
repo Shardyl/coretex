@@ -45,6 +45,56 @@ _BLOG_SCHEMA = (
 _MAX_IMAGES = 4   # hero + up to 3 figures; bounds Gemini cost/latency
 
 
+def content_text(c: dict) -> str:
+    """Render the composed post as clean readable PLAIN TEXT for the Inbox card — the FULL content to read
+    and revise BEFORE any formatting or images are built. No HTML, no markup beyond simple # / ## markers."""
+    L: list[str] = []
+    if c.get("category"):
+        L.append(str(c["category"]).upper())
+    if c.get("title"):
+        L.append("# " + str(c["title"]))
+    if c.get("dek"):
+        L.append(str(c["dek"]))
+    b = c.get("byline") or {}
+    if b.get("author"):
+        L.append("By " + str(b["author"]) + (", " + str(b["role"]) if b.get("role") else ""))
+    ans = c.get("key_takeaways") or c.get("in_brief") or {}
+    if ans.get("points"):
+        L.append("KEY TAKEAWAYS\n" + "\n".join("- " + str(p) for p in ans["points"]))
+    elif ans.get("text"):
+        L.append("IN BRIEF: " + str(ans["text"]))
+    if c.get("lead"):
+        L.append(str(c["lead"]))
+    for s in c.get("sections") or []:
+        if s.get("heading"):
+            L.append("## " + str(s["heading"]))
+        if s.get("body"):
+            L.append(str(s["body"]))
+        cal = s.get("callout") or {}
+        if cal.get("use") and cal.get("text"):
+            L.append("[" + str(cal.get("title") or "Note") + "] " + str(cal["text"]))
+        stp = s.get("steps") or {}
+        if stp.get("use") and stp.get("items"):
+            L.append("\n".join(f"{i + 1}. {it.get('title', '')}: {it.get('text', '')}"
+                               for i, it in enumerate(stp["items"])))
+        tb = s.get("table") or {}
+        if tb.get("use") and tb.get("rows"):
+            L.append(" | ".join(str(x) for x in (tb.get("columns") or []))
+                     + "\n" + "\n".join(" | ".join(str(x) for x in row) for row in tb["rows"]))
+        sta = s.get("stat") or {}
+        if sta.get("use") and sta.get("value"):
+            L.append(str(sta["value"]) + " — " + str(sta.get("text") or ""))
+    pq = c.get("pull_quote") or {}
+    if pq.get("use") and pq.get("text"):
+        L.append('"' + str(pq["text"]) + '"')
+    cc = c.get("closing_cta") or {}
+    if cc.get("use") and cc.get("heading"):
+        L.append("CTA: " + str(cc["heading"]) + (("\n" + str(cc["text"])) if cc.get("text") else ""))
+    if c.get("author_bio"):
+        L.append("Bio: " + str(c["author_bio"]))
+    return "\n\n".join(x for x in L if x)
+
+
 def concepts(company_id: int, brief: str, n: int = 1) -> list[dict]:
     """IDEATION stage — propose N blog CONCEPTS as plain readable text (a working title + a paragraph
     summary of the angle and main talking points). NO HTML, no full post: this is what the owner approves
