@@ -1447,8 +1447,9 @@ async function act(id,what){
     if(card) card.style.opacity=1;
     if(r&&r.blocked){ toast('🔒 '+r.error); return; }                         // emergency-paused — nothing sent
     if(r&&r.needs_confirm){ await confirmLiveSend(id, r); return; }            // require explicit count (schedule or send)
-    const sent=r&&r.result&&r.result.sent_to, err=r&&r.result&&r.result.error;
-    toast(err? ('Note: '+err) : sent? ('Sent to '+sent+' ✓') : (what==='approve'?'Approved ✓':'Done ✓')); render(); }
+    const building=r&&r.result&&r.result.building, sent=r&&r.result&&r.result.sent_to, err=r&&r.result&&r.result.error;
+    toast(err? ('Note: '+err) : building? 'Building the post — it returns to your Inbox for review when ready ✓'
+          : sent? ('Sent to '+sent+' ✓') : (what==='approve'?'Approved ✓':'Done ✓')); render(); }
   catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
 }
 // A real-list newsletter action is NEVER a plain approve: the operator must type the exact recipient

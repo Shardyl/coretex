@@ -549,6 +549,22 @@ def _run_blog_ideation(task: dict, skill: dict, company: dict) -> None:
             f"(title + summary). Approve one to build the formatted post.")
 
 
+def _build_blog_bg(task_id: int) -> None:
+    """Run the formatted build OFF the approval request (in a thread), so the concept card leaves the Inbox
+    immediately and the review card reappears (via the approval push) only when the post is actually ready."""
+    try:
+        task = store.get_task(task_id)
+        if not task:
+            return
+        _build_blog_from_concept(task, store.get_skill(task["skill_id"]), store.get_company(task["company_id"]))
+    except Exception as e:  # noqa: BLE001 — a build error must not vanish the task silently
+        try:
+            store.update_task(task_id, status="failed", last_status=f"build error: {e}"[:120])
+            tg.send(f"Blog build failed (#{task_id}) — concept kept, nothing sent: {e}")
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _build_blog_from_concept(task: dict, skill: dict, company: dict) -> dict:
     """Approve a blog CONCEPT -> build the formatted post, stage it as a hidden (noindex) WordPress draft, and
     turn THIS card into the 'review the formatted post' card (kind='blog'). The card body stays readable text
@@ -584,9 +600,13 @@ def _build_blog_from_concept(task: dict, skill: dict, company: dict) -> dict:
     msg = tg.send(_fmt_blog(company, skill, art, verdict, post.get("preview")), _blog_buttons(task["id"]))
     store.update_task(task["id"], tg_message_id=msg["message_id"])
     _push_approval(t, skill, company)   # blog tasks ALWAYS go to the owner — never auto-publish (golden rule)
-    # NOTE: building a blog NEVER auto-emails anyone. The owner reviews via the preview link above. Sharing
-    # the draft to the test group is a SEPARATE, deliberate, gated step (show the reviewers + confirm +
-    # PIN/fingerprint, like the newsletter test send) — never an automatic side effect of the build.
+    # The build only runs on the owner's Cortex approval, so the test-group review email IS authorised — send
+    # the company's reviewers the title + preview link (the designed test-group review step). The rule is "no
+    # sends from a BUILD/TEST without approval"; a real operator approval through Cortex is that approval.
+    try:
+        send_blog_review_digest(company["id"], [{"title": art["title"], "preview": post.get("preview")}])
+    except Exception:  # noqa: BLE001
+        pass
     return {"built": art["title"], "preview": post.get("preview")}
 
 
@@ -602,8 +622,11 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
                 "error": f"Confirm with the {who} count ({n:,}) in the cockpit."}
     if task["kind"] in EMAIL_SEND_KINDS:   # email_reply + email_draft both SEND on approval (after the PIN gate)
         return _send_email_reply(task, skill, company, actor, auto)
-    if task["kind"] == "blog_idea":   # approve the CONCEPT -> build the formatted post -> review card
-        return _build_blog_from_concept(task, skill, company)
+    if task["kind"] == "blog_idea":   # approve the CONCEPT -> build OFF the request so the concept card LEAVES
+        store.update_task(task["id"], status="drafting")   # the Inbox at once; the review card returns when ready
+        threading.Thread(target=_build_blog_bg, args=(task["id"],), daemon=True).start()
+        return {"building": True,
+                "sent_to": "the build — the formatted post returns to your Inbox for review when ready"}
     if task["kind"] == "blog":   # approving the BUILT post QUEUES it to publish on the company's monthly day
         return _schedule_blog(task, skill, company, actor)
     # Phase 1 string path: 'execute' = mark done + log.
@@ -691,8 +714,8 @@ def _approve(task: dict, skill: dict, company: dict) -> dict:
                     f"✅ Approved — Cortex sent it to {result['sent_to']} (streak {skill['trust_streak']}).")
         else:
             tg.edit(task["tg_message_id"], f"✅ Approved — '{skill['name']}' (streak {skill['trust_streak']}). Done.")
-    # Offer auto only for non-blog skills (blog publishing must never go auto).
-    if task["kind"] != "blog" and skill["authority"] == "ask" and skill["trust_streak"] >= skill["auto_threshold"]:
+    # Offer auto only for non-blog skills (blog ideation + publishing must never go auto).
+    if task["kind"] not in ("blog", "blog_idea") and skill["authority"] == "ask" and skill["trust_streak"] >= skill["auto_threshold"]:
         higher = skill["trust_streak"] + 20
         tg.send(f"'{skill['name']}' has {skill['trust_streak']} clean approvals. "
                 f"Put it on auto for low-stakes work, or raise the bar for extra confidence?",
