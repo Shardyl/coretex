@@ -9,6 +9,7 @@ will look, but it is not public and not indexed. The owner then approves to publ
 from __future__ import annotations
 
 import base64
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 import httpx
@@ -57,8 +58,11 @@ class WordPress:
         return {"id": p["id"], "link": link, "preview": preview, "edit": edit, "status": p.get("status")}
 
     def go_live(self, post_id: int) -> dict:
-        """Publish the draft -> public + indexable (only on the owner's approval)."""
-        p = self._req("POST", f"/posts/{post_id}", json={"status": "publish"})
+        """Publish the draft -> public + indexable (only on the owner's approval). Stamp the post date to the
+        publish MOMENT (go_live runs on the scheduled publishing day), so the live post carries the day it
+        actually goes out, not the day the draft was created."""
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        p = self._req("POST", f"/posts/{post_id}", json={"status": "publish", "date_gmt": now})
         return {"id": p["id"], "link": p.get("link"), "status": p.get("status")}
 
     def trash(self, post_id: int) -> dict:
