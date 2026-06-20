@@ -165,6 +165,7 @@ def compose(company_id: int, idea_text: str) -> dict:
         skill.get("craft") or _LIGHT_GUIDE,       # the editable skill craft drives the writing
         worker._company_context(company),
         worker._rules_block(skill),
+        store.examples_block(company_id, "newsletters"),   # distilled approved exemplars
         _LIGHT_SCHEMA,                            # structural output the renderer parses — stays in code
     ]))
     user = f"Approved idea:\n{idea_text}\n\nCompose the full issue now as JSON."
@@ -322,6 +323,7 @@ def compose_filmspoke(company_id: int, idea_text: str) -> dict:
         skill.get("craft") or _FS_GUIDE,          # the editable skill craft drives the writing
         worker._company_context(company),
         worker._rules_block(skill),
+        store.examples_block(company_id, "newsletters"),   # distilled approved exemplars
         _FS_SCHEMA,                               # structural output the renderer parses — stays in code
     ]))
     user = f"Approved idea:\n{idea_text}\n\nCompose the full issue now as JSON."

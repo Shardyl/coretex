@@ -52,6 +52,23 @@ def add_rule(skill_id, rule: str) -> dict:
     )
 
 
+def examples_block(company_id: int, content_type: str, limit: int = 2, cap: int = 3500) -> str:
+    """Reference exemplars for the drafter: a few APPROVED past pieces, distilled to their editorial skeleton
+    (headings + prose + answer block + CTAs, no markup/CSS/images), so the model can see 'what good looks like'
+    cheaply. Source = `content_examples:{cid}:{type}` (full HTML lives on R2; this is the compact digest). Kept
+    small + stable so it prompt-caches across drafts. Returns "" when none. content_type = 'blog'|'newsletters'."""
+    ex = db.setting_get(f"content_examples:{company_id}:{content_type}") or []
+    parts = []
+    for e in ex[:limit]:
+        d = (e.get("digest") or "").strip()[:cap]
+        if d:
+            parts.append(f"--- EXAMPLE: {e.get('name')} ---\n{d}")
+    if not parts:
+        return ""
+    return ("REFERENCE EXAMPLES — approved past pieces showing the target calibre, structure and voice. Match "
+            "this quality and shape; do NOT reuse their topic, headline or wording:\n\n" + "\n\n".join(parts))
+
+
 # ---- universal rules (apply to every company for a skill_key) ----
 def get_universal_rules(skill_key: str) -> list:
     row = db.one("select rules from universal_skill_rules where skill_key=%s", (skill_key,))

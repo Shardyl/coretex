@@ -52,6 +52,7 @@ def compose(company_id: int, brief: str) -> dict:
         skill.get("craft") or "",          # the editable craft drives the writing
         worker._company_context(company),
         worker._rules_block(skill),
+        store.examples_block(company_id, "blog"),   # distilled approved exemplars (what good looks like)
         _BLOG_SCHEMA,                       # structural output the renderer parses
     ]))
     out = provider.think_json(system, f"Brief: {brief}\n\nWrite the full post now as JSON.",
