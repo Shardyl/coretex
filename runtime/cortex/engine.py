@@ -584,10 +584,9 @@ def _build_blog_from_concept(task: dict, skill: dict, company: dict) -> dict:
     msg = tg.send(_fmt_blog(company, skill, art, verdict, post.get("preview")), _blog_buttons(task["id"]))
     store.update_task(task["id"], tg_message_id=msg["message_id"])
     _push_approval(t, skill, company)   # blog tasks ALWAYS go to the owner — never auto-publish (golden rule)
-    try:   # test-group review: email the company's test group the title + wp-login preview link
-        send_blog_review_digest(company["id"], [{"title": art["title"], "preview": post.get("preview")}])
-    except Exception:  # noqa: BLE001
-        pass
+    # NOTE: building a blog NEVER auto-emails anyone. The owner reviews via the preview link above. Sharing
+    # the draft to the test group is a SEPARATE, deliberate, gated step (show the reviewers + confirm +
+    # PIN/fingerprint, like the newsletter test send) — never an automatic side effect of the build.
     return {"built": art["title"], "preview": post.get("preview")}
 
 
