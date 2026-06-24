@@ -117,15 +117,20 @@ def push_only(title: str, body: str = "", url: str = "/", category: str = "appro
         return False
 
 
-def active(company_id: int | None = None) -> list[dict]:
-    """Live info cards for the Inbox: unread + snoozed-now-due. Newest first."""
+def _cid_filter(company_id):
+    """Accept a single company_id OR a list (multi-company scope). Returns (sql, params) or ('', [])."""
+    if company_id is None:
+        return "", []
+    cids = list(company_id) if isinstance(company_id, (list, tuple)) else [company_id]
+    return " and (company_id = any(%s) or company_id is null)", [cids]
+
+
+def active(company_id=None) -> list[dict]:
+    """Live info cards for the Inbox: unread + snoozed-now-due. Newest first. company_id may be a list (scope)."""
     ensure_schema()
     where = "(state='unread' or (state='snoozed' and (snooze_until is null or snooze_until <= now())))"
-    params: list = []
-    if company_id is not None:
-        where += " and (company_id = %s or company_id is null)"
-        params.append(company_id)
-    return db.query(f"select * from notifications where {where} order by fired_at desc", tuple(params))
+    f, params = _cid_filter(company_id)
+    return db.query(f"select * from notifications where {where}{f} order by fired_at desc", tuple(params))
 
 
 def history(company_id: int | None = None, limit: int = 80) -> list[dict]:
@@ -139,13 +144,10 @@ def history(company_id: int | None = None, limit: int = 80) -> list[dict]:
     return db.query(f"select * from notifications where {where} order by fired_at desc limit %s", tuple(params))
 
 
-def unread_count(company_id: int | None = None) -> int:
+def unread_count(company_id=None) -> int:
     ensure_schema()
-    if company_id is not None:
-        r = db.one("select count(*) n from notifications where state='unread' and "
-                   "(company_id=%s or company_id is null)", (company_id,))
-    else:
-        r = db.one("select count(*) n from notifications where state='unread'")
+    f, params = _cid_filter(company_id)
+    r = db.one(f"select count(*) n from notifications where state='unread'{f}", tuple(params))
     return int(r["n"]) if r else 0
 
 

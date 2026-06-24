@@ -180,7 +180,8 @@ def listing(status: str | None = None, company_id: int | None = None, limit: int
     if status:
         where.append("status=%s"); params.append(status)
     if company_id is not None:
-        where.append("(company_id=%s or company_id is null)"); params.append(company_id)
+        cids = list(company_id) if isinstance(company_id, (list, tuple)) else [company_id]
+        where.append("(company_id = any(%s) or company_id is null)"); params.append(cids)
     clause = (" where " + " and ".join(where)) if where else ""
     params.append(limit)
     return db.query(f"select * from reminders{clause} order by due_at limit %s", tuple(params))

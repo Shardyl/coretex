@@ -10,35 +10,76 @@ from __future__ import annotations
 
 import html as _html
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 
-from . import brand, imagegen, media, provider, store, worker
+from . import brand, imagegen, media, profile, provider, store, worker
 from .newsletter import _optimize_jpeg
+
+_DUBAI = timezone(timedelta(hours=4))   # Cortex TZ (GST, no DST)
+
+
+def _today_iso() -> str:
+    return datetime.now(_DUBAI).date().isoformat()
+
+
+def _read_time(c: dict) -> str:
+    """~200 wpm over the post body. Computed in code, never trusted to the model."""
+    parts = [c.get("title", ""), c.get("dek", ""), c.get("lead", "")]
+    for s in (c.get("sections") or []):
+        parts += [s.get("heading", ""), s.get("body", "")]
+    for blk in ("key_takeaways", "in_brief"):
+        parts += (c.get(blk) or {}).get("points") or []
+    if (c.get("pull_quote") or {}).get("text"):
+        parts.append(c["pull_quote"]["text"])
+    words = sum(len(str(p).split()) for p in parts)
+    return f"{max(1, round(words / 200))} min read"
+
+
+def _stamp_byline(c: dict) -> dict:
+    """Date + read-time are STRUCTURAL plumbing, set in code. The LLM used to invent the date (e.g. a
+    hallucinated 2025-07-05); it no longer supplies either field."""
+    b = dict(c.get("byline") or {})
+    b["date"] = _today_iso()
+    b["read_time"] = _read_time(c)
+    c["byline"] = b
+    return c
 
 # Structural output contract — the renderer parses these exact fields, so it stays in code.
 _BLOG_SCHEMA = (
     "Return JSON only (set any optional block's \"use\" to false when not needed; most optional blocks are false):\n"
     "seo {title, meta_description (~155 chars), primary_keyword, slug (kebab-case)}; category (short kicker); "
     "title (the post H1, usually = seo.title); dek (one or two sentence standfirst, leads with the point); "
-    "byline {author, role, date (ISO), read_time}; "
+    "byline {author, role}; "
     "featured_image {use:true, image_prompt (on-brand, NO text/letters/numbers in image), alt, caption} (the hero, on every post); "
     "the answer block (use the ONE block the company craft names, same shape): "
     "key_takeaways {use, points:[2-4 plain lines, the extractable answer, payoff first]} "
     "OR in_brief {use, points:[2-3 plain lines, the extractable answer, payoff first]}; "
     "lead (opening paragraph, leads with the most important thing); "
+    "drop_cap (true to open the lead with a large decorative first letter, an editorial touch); "
     "sections (array of {heading (H2), body (1-3 short paragraphs, PLAIN text), "
     "figure {use, image_prompt, alt, caption}, callout {use, title, text}, "
     "table {use, columns:[...], rows:[[...]]}, steps {use, items:[{title, text}]}, "
     "code {use, filename, language, body}, stat {use, value, text}, "
+    "video {use, youtube_url, vertical (true for a 9:16 short), caption}, "
     "inline_cta {use, text, label, url}}); "
-    "signature_graphic {use, kind:\"control_dials\"|\"capability_dials\"|\"flight_plan\"|\"real_ai_split\", "
+    "signature_graphic {use, kind:\"custom\"|\"control_dials\"|\"capability_dials\"|\"flight_plan\"|\"real_ai_split\", "
     "title (the graphic header), "
+    "html (for kind=custom ONLY: a self-contained ORIGINAL on-brand graphic you HAND-CODE for THIS post using "
+    "INLINE-STYLED HTML elements only. EVERY style goes in an inline style=\"...\" attribute ON ITS OWN element "
+    "(CSS gradients, borders, flex or positioned layout, the brand colours and fonts). Do NOT use CSS class names "
+    "(class=\"...\") or a <style> block, do NOT use <svg>, @keyframes/animation, <script>, event handlers or "
+    "external resources: WordPress strips all of those and the graphic collapses to plain text. Keep it ONE block "
+    "on a single line, no line breaks), "
     "items:[{label, value (0-100 int, dials only), accent:\"orange\"|\"violet\" for one emphasised item}] "
     "(dials = 3-5 value rows; flight_plan = 3-5 ordered waypoints, label only), "
     "real_image_prompt, ai_image_prompt (real_ai_split, NO text in image), left_label, right_label (real_ai_split), "
     "caption} (AT MOST ONE per post, only when it earns its place, default use:false); "
     "pull_quote {use, text}; closing_cta {use, heading, text, primary {label, url}, secondary {label, url}}; "
-    "author_bio (one short credible E-E-A-T bio); keep_reading (array of {title, url}). "
+    "author_bio (one short credible E-E-A-T bio). "
+    "(Do NOT output keep_reading or any related-post links, titles or URLs: those are filled from the site's "
+    "REAL published posts in code, never invented.) "
     "Body text is PLAIN text (no HTML, no markdown). No em-dashes or en-dashes. No FAQ / Q&A block."
 )
 
@@ -90,9 +131,182 @@ def content_text(c: dict) -> str:
     cc = c.get("closing_cta") or {}
     if cc.get("use") and cc.get("heading"):
         L.append("CTA: " + str(cc["heading"]) + (("\n" + str(cc["text"])) if cc.get("text") else ""))
-    if c.get("author_bio"):
-        L.append("Bio: " + str(c["author_bio"]))
+    il = c.get("internal_links") or []
+    if il:
+        L.append("INTERNAL LINKS:\n" + "\n".join(f'- "{l.get("anchor")}" -> {l.get("url")}' for l in il))
+    ab = c.get("author_bio")
+    if isinstance(ab, dict):                      # author_bio can be a structured object — show only its prose
+        ab = ab.get("bio") or ab.get("text") or ""
+    if ab:
+        L.append("Bio: " + str(ab))
     return "\n\n".join(x for x in L if x)
+
+
+def _linkable_pages(company: dict, limit: int = 40) -> list:
+    """The company's EXISTING published posts + key pages (title + real URL) that a new post can link to."""
+    from .integrations import wordpress as wp
+    site = wp.for_company(company)
+    if not site:
+        return []
+    out, seen = [], set()
+    for typ in ("posts", "pages"):
+        try:
+            rows = site._req("GET", f"/{typ}?status=publish&per_page={limit}&_fields=link,title")
+        except Exception:  # noqa: BLE001
+            rows = []
+        for r in (rows or []):
+            url = r.get("link")
+            t = re.sub(r"<[^>]+>", "", ((r.get("title") or {}).get("rendered") or "")).strip()
+            if url and t and url not in seen:
+                seen.add(url)
+                out.append({"title": t, "url": url})
+    return out
+
+
+def add_internal_links(company_id: int, content: dict) -> dict:
+    """OUTBOUND internal linking (draft-time): weave 1-3 contextual links from THIS post's body to the most
+    relevant EXISTING pages on the company's site. URLs come ONLY from the real published list (never invented);
+    the anchor must already appear verbatim in the body. Reads the content-internal-linking skill for guidance.
+    Stores them on content['internal_links']; the renderer turns them into in-body links. Never raises."""
+    from . import store, provider
+    company = store.get_company(company_id)
+    if not company:
+        return content
+    pages = _linkable_pages(company)
+    sections = content.get("sections") or []
+    body_txt = "\n\n".join(f"[{i}] {s.get('body', '')}" for i, s in enumerate(sections) if s.get("body"))
+    if not pages or not body_txt.strip():
+        return content
+    skill = store.get_skill_by_key(company_id, "content-internal-linking")
+    rules = "\n".join("- " + r for r in (skill.get("rules") or [])) if skill else ""
+    pages_txt = "\n".join(f"- {p['title']} -> {p['url']}" for p in pages[:30])
+    system = (
+        f"You add INTERNAL links to a {company.get('name')} blog post body. Choose 1 to 3 of the EXISTING pages "
+        "that are genuinely relevant to this post; for each pick a SHORT phrase that appears VERBATIM in that "
+        "section's body to use as the anchor. Descriptive anchors (the natural phrase), never 'click here'; at most "
+        "one link per section; only link where it truly helps the reader. Never invent URLs or anchors. "
+        + (rules + "\n\n" if rules else "")
+        + "Return JSON {\"links\":[{\"section\":<int>,\"anchor\":\"exact phrase from that section\",\"url\":\"one listed URL\"}]}.")
+    user = f"EXISTING PAGES (use these URLs only):\n{pages_txt}\n\nPOST BODY (by section index):\n{body_txt}"
+    try:
+        out = provider.think_json(system, user, model=provider.MODEL_FAST, max_tokens=500,
+                                  purpose="internal_links", company=company.get("slug"))
+    except Exception:  # noqa: BLE001 — linking must never break the draft
+        return content
+    valid = {p["url"] for p in pages}
+    links, used = [], set()
+    for l in (out.get("links") or []):
+        si, anchor, url = l.get("section"), (l.get("anchor") or "").strip(), l.get("url")
+        if (url in valid and url not in used and isinstance(si, int) and 0 <= si < len(sections)
+                and anchor and anchor in (sections[si].get("body") or "")):
+            used.add(url)
+            links.append({"section": si, "anchor": anchor, "url": url})
+    content["internal_links"] = links[:3]
+    return content
+
+
+def seed_inbound_links(company: dict, new_post_id: int, new_url: str, new_title: str,
+                       max_links: int = 3, dry_run: bool = False) -> list:
+    """INBOUND internal linking (runs AFTER the post is published): find the most relevant EXISTING published
+    posts and add a contextual link FROM each TO the new post. Edits each existing post in place (first verbatim
+    occurrence of a real anchor phrase; skips one that already links to the new URL). Reads the
+    content-internal-linking skill. Returns a report [{id,title,anchor}] of what was linked. dry_run computes the
+    report WITHOUT editing. Never raises."""
+    from .integrations import wordpress as wp
+    from . import store, provider
+    site = wp.for_company(company)
+    if not site or not new_url:
+        return []
+    try:
+        posts = site._req("GET", "/posts?status=publish&per_page=40&_fields=id,title,content")
+    except Exception:  # noqa: BLE001
+        return []
+    cands = [p for p in (posts or []) if p.get("id") != new_post_id]
+    if not cands:
+        return []
+    skill = store.get_skill_by_key(company["id"], "content-internal-linking")
+    rules = "\n".join("- " + r for r in (skill.get("rules") or [])) if skill else ""
+    blocks = []
+    for p in cands[:30]:
+        txt = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", (p.get("content") or {}).get("rendered") or "")).strip()
+        title = re.sub(r"<[^>]+>", "", (p.get("title") or {}).get("rendered") or "").strip()
+        blocks.append(f"[{p['id']}] {title}\n{txt[:700]}")
+    system = (
+        f"A new {company.get('name')} blog post was just published: \"{new_title}\". From the EXISTING posts below, "
+        f"choose the 1 to {max_links} MOST RELEVANT that should link TO the new post; for each pick a SHORT phrase "
+        "that appears VERBATIM in that post's text to use as the anchor (a natural lead-in to the new post's topic). "
+        "Descriptive anchors, never generic, one per post, only where genuinely relevant. "
+        + (rules + " " if rules else "")
+        + "Return JSON {\"links\":[{\"post_id\":<int>,\"anchor\":\"verbatim phrase from that post\"}]}.")
+    try:
+        out = provider.think_json(system, "\n\n".join(blocks), model=provider.MODEL_FAST, max_tokens=500,
+                                  purpose="inbound_links", company=company.get("slug"))
+    except Exception:  # noqa: BLE001
+        return []
+    report = []
+    for l in (out.get("links") or [])[:max_links]:
+        pid, anchor = l.get("post_id"), (l.get("anchor") or "").strip()
+        if not pid or not anchor:
+            continue
+        try:
+            edit = site.get(pid)                       # context=edit -> content.raw + title.raw
+            raw = (edit.get("content") or {}).get("raw") or ""
+            title = (edit.get("title") or {}).get("raw") or ""
+        except Exception:  # noqa: BLE001
+            continue
+        if not raw or new_url in raw:                  # post already links to the new one -> skip
+            continue
+        ea = _esc(anchor)
+        target = ea if ea in raw else (anchor if anchor in raw else None)
+        if not target:
+            continue
+        if not dry_run:
+            newraw = raw.replace(target, f'<a href="{_esc(new_url)}" style="color:inherit;text-decoration:underline">'
+                                         f'{target}</a>', 1)
+            try:
+                site._req("POST", f"/posts/{pid}", json={"content": newraw})
+            except Exception:  # noqa: BLE001
+                continue
+        report.append({"id": pid, "title": title, "anchor": anchor})
+    return report
+
+
+def add_service_logos(company_id: int, content: dict) -> dict:
+    """Detect EXTERNAL third-party services/products/websites genuinely mentioned by name in the post, and attach
+    each one's brand logo (Google favicon CDN, reliably hotlinkable) + its website. The renderer shows a
+    'Tools & services mentioned' row of logos, each linking out. Excludes the company itself. Never raises."""
+    from . import store, provider
+    company = store.get_company(company_id)
+    if not company:
+        return content
+    sections = content.get("sections") or []
+    body = (content.get("lead") or "") + "\n" + "\n".join(
+        ((s.get("heading") or "") + " " + (s.get("body") or "")) for s in sections)
+    if not body.strip():
+        return content
+    system = (
+        f"From this {company.get('name')} blog post, list the EXTERNAL third-party services, products, tools or "
+        "websites that are genuinely mentioned BY NAME (e.g. Stripe, OpenAI, Shopify, QuickBooks, Xero). For each, "
+        f"give its display name and its official ROOT domain (e.g. stripe.com). EXCLUDE {company.get('name')} "
+        "itself, generic terms, and anything that is not a real named product/company. If none are mentioned, "
+        "return an empty list. Return JSON {\"services\":[{\"name\":\"...\",\"domain\":\"example.com\"}]}.")
+    try:
+        out = provider.think_json(system, body[:4000], model=provider.MODEL_FAST, max_tokens=400,
+                                  purpose="service_logos", company=company.get("slug"))
+    except Exception:  # noqa: BLE001 — enrichment must never break the draft
+        return content
+    own = (company.get("slug") or "").lower()
+    seen, svc = set(), []
+    for s in (out.get("services") or [])[:6]:
+        name = (s.get("name") or "").strip()
+        dom = (s.get("domain") or "").strip().lower().replace("https://", "").replace("http://", "").strip("/").split("/")[0]
+        if not name or not re.match(r"^[a-z0-9.-]+\.[a-z]{2,}$", dom) or dom in seen or own in dom:
+            continue
+        seen.add(dom)
+        svc.append({"name": name, "website": f"https://{dom}",
+                    "logo": f"https://www.google.com/s2/favicons?domain={dom}&sz=128"})
+    content["service_logos"] = svc
+    return content
 
 
 def concepts(company_id: int, brief: str, n: int = 1) -> list[dict]:
@@ -135,11 +349,13 @@ def compose(company_id: int, brief: str) -> dict:
     out = provider.think_json(system, f"Brief: {brief}\n\nWrite the full post now as JSON.",
                               model=worker._model_for(skill), max_tokens=8000,
                               purpose="blog:filmspoke", company=company.get("slug"))
-    return out or {}
+    return _stamp_byline(out or {})
 
 
-def _gen_and_host(slug: str, jobs: list[tuple[str, str, str]]) -> dict:
-    """jobs = [(key, prompt, aspect)] -> {key: public R2 url}. Gemini -> optimise JPEG -> R2."""
+def _gen_and_host(slug: str, jobs: list[tuple[str, str, str]], prefix: str = "") -> dict:
+    """jobs = [(key, prompt, aspect)] -> {key: public R2 url}. Gemini -> optimise JPEG -> R2. `prefix` (the post
+    slug) makes the R2 filename unique PER POST, so two posts of the same company never overwrite each other's
+    hero/figures at a shared `<slug>/blog/published/hero.jpg`."""
     if not jobs:
         return {}
 
@@ -147,12 +363,14 @@ def _gen_and_host(slug: str, jobs: list[tuple[str, str, str]]) -> dict:
         k, prompt, aspect = job
         return k, imagegen.hero(prompt, aspect=aspect, purpose="image:blog", company=slug)
 
+    pre = re.sub(r"[^a-z0-9-]", "", (prefix or "").lower())[:60]
     urls: dict = {}
     with ThreadPoolExecutor(max_workers=4) as ex:
         for k, data in ex.map(run, jobs):
             data = _optimize_jpeg(data, max_w=(1600 if k == "hero" else 1200))
             if data:
-                urls[k] = media.put(slug, "blog", f"{k}.jpg", data, content_type="image/jpeg")
+                name = f"{pre}-{k}.jpg" if pre else f"{k}.jpg"
+                urls[k] = media.put(slug, "blog", name, data, content_type="image/jpeg")
     return urls
 
 
@@ -166,6 +384,84 @@ def _paras(text: str, color: str) -> str:
     blocks = [p.strip() for p in (text or "").split("\n\n") if p.strip()]
     return "".join(f'<p style="margin:0 0 20px;color:{color};font-size:18px;line-height:1.8">'
                    f'{_esc(p)}</p>' for p in blocks)
+
+
+def _paras_linked(text: str, color: str, links: list, accent: str) -> str:
+    """Like _paras, but weaves in contextual internal links: for each {anchor,url}, the FIRST verbatim occurrence
+    of the anchor phrase becomes a link. Matched on the ESCAPED text so the rest of the body stays safe."""
+    blocks = [p.strip() for p in (text or "").split("\n\n") if p.strip()]
+    out = []
+    for p in blocks:
+        ep = _esc(p)
+        for l in links:
+            a = _esc((l.get("anchor") or "").strip())
+            if a and a in ep:
+                href = _esc(l.get("url") or "")
+                ep = ep.replace(a, f'<a href="{href}" style="color:{accent};text-decoration:none;'
+                                   f'border-bottom:1px solid {accent}55">{a}</a>', 1)
+        out.append(f'<p style="margin:0 0 20px;color:{color};font-size:18px;line-height:1.8">{ep}</p>')
+    return "".join(out)
+
+
+def _sanitize_graphic_html(html: str) -> str:
+    """A HAND-AUTHORED, on-brand graphic built from INLINE-STYLED HTML (divs/spans) — the writer designs it per
+    post, like a web page. We STRIP <svg> and <style> outright: WordPress's wpautop injects </p>/<br> inside
+    inline SVG and style blocks and corrupts them (black gap + spilled text), so those formats can't be used in
+    post content. Also strip scripts, event handlers, javascript:, @import, expression(), breakout tags, and
+    collapse newlines so wpautop has nothing to act on."""
+    if not html:
+        return ""
+    h = html
+    bad = r"svg|style|script|iframe|object|embed|link|meta|base|form|input|button|textarea|select"
+    h = re.sub(rf"(?is)<({bad})\b.*?</\1\s*>", "", h)     # paired tags + their content (incl. <svg>..</svg>, <style>..)
+    h = re.sub(rf"(?is)<({bad})\b[^>]*/?>", "", h)        # self-closing / unclosed ones
+    h = re.sub(r'(?is)\son\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)', "", h)   # on* event handlers
+    h = re.sub(r"(?i)javascript:", "", h)
+    h = re.sub(r"(?i)@import\b[^;]*;?", "", h)
+    h = re.sub(r"(?i)expression\s*\(", "(", h)
+    h = re.sub(r"\s*\n\s*", " ", h)                       # one line -> wpautop can't inject <p>/<br>
+    # WordPress strips <style>, so a graphic styled with CSS CLASSES loses all styling and renders as plain text.
+    # If what remains leans on classes with almost no inline styles, drop it (better no graphic than broken text).
+    if h.count("class=") >= 2 and h.count("style=") < 3:
+        return ""
+    return h.strip()
+
+
+def _yt_id(url: str) -> str:
+    m = re.search(r"(?:youtube\.com/(?:shorts/|watch\?v=|embed/|live/)|youtu\.be/)([A-Za-z0-9_-]{6,})", url or "")
+    return m.group(1) if m else ""
+
+
+def _video_embed(url: str, vertical: bool, caption: str, muted: str) -> str:
+    """Responsive YouTube embed. `vertical` for 9:16 shorts (centred, narrower); else 16:9 full width."""
+    vid = _yt_id(url)
+    if not vid:
+        return ""
+    pad = "177.78%" if vertical else "56.25%"
+    maxw = "340px" if vertical else "100%"
+    cap = (f'<figcaption style="color:{muted};font-size:13px;margin-top:8px;text-align:center">{_esc(caption)}'
+           "</figcaption>") if caption else ""
+    return (f'<figure style="margin:26px auto;max-width:{maxw}"><div style="position:relative;padding-top:{pad};'
+            'border-radius:12px;overflow:hidden;background:#000">'
+            f'<iframe src="https://www.youtube.com/embed/{vid}" style="position:absolute;inset:0;width:100%;'
+            'height:100%;border:0" loading="lazy" allow="accelerometer;autoplay;clipboard-write;encrypted-media;'
+            'gyroscope;picture-in-picture" allowfullscreen></iframe></div>' + cap + "</figure>")
+
+
+def _paras_dropcap(text: str, color: str, accent: str, headf: str) -> str:
+    """Like _paras but opens with a large decorative drop-cap on the lead's first letter (editorial touch).
+    Inline-styled (floated span) so it works without a stylesheet, like the rest of the self-contained body."""
+    blocks = [p.strip() for p in (text or "").split("\n\n") if p.strip()]
+    if not blocks:
+        return ""
+    first = blocks[0]
+    cap, rest = (first[:1], first[1:]) if first else ("", "")
+    dc = (f'<span style="float:left;font-family:{headf};font-size:60px;line-height:0.8;font-weight:800;'
+          f'color:{accent};margin:8px 11px -2px 0">{_esc(cap)}</span>')
+    out = [f'<p style="margin:0 0 20px;color:{color};font-size:18px;line-height:1.8">{dc}{_esc(rest)}</p>']
+    out += [f'<p style="margin:0 0 20px;color:{color};font-size:18px;line-height:1.8">{_esc(p)}</p>'
+            for p in blocks[1:]]
+    return "".join(out)
 
 
 _MONOF = "'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,monospace"
@@ -241,8 +537,44 @@ def _sig_flight(sg: dict, accent: str, surface: str, line: str, muted: str, bg: 
             f'{track}<div style="display:flex;justify-content:space-between;margin-top:-7px">{nodes}</div></div>')
 
 
+def _apply_cta_links(prof: dict, c: dict) -> dict:
+    """Code-stamp blog CTA button URLs to the company's REAL destinations by classifying each label/text — so CTA
+    links are never LLM-invented. Reads prof['cta_links'] e.g. {'demo': url, 'get_started': url}; safe no-op
+    without it. e.g. Snap Rewards: a 'Book a demo' button -> the contact form, 'Get started free' -> Shopify."""
+    cfg = (prof or {}).get("cta_links") or {}
+    if not cfg:
+        return c
+    demo_url = cfg.get("demo") or cfg.get("contact")
+    start_url = cfg.get("get_started") or cfg.get("shopify") or cfg.get("install")
+
+    def route(label, text=""):
+        s = (str(label or "") + " " + str(text or "")).lower()
+        if demo_url and re.search(r"demo|contact|talk|call|get in touch|speak|enquir|inquir", s):
+            return demo_url
+        if start_url and re.search(r"start|install|free|try|sign ?up|launch|download|get going|add to", s):
+            return start_url
+        return None
+
+    cc = c.get("closing_cta") or {}
+    for key in ("primary", "secondary"):
+        b = cc.get(key)
+        if isinstance(b, dict) and b.get("label"):
+            u = route(b.get("label"), cc.get("text") or cc.get("heading"))
+            if u:
+                b["url"] = u
+    for s in c.get("sections") or []:
+        ic = s.get("inline_cta") if isinstance(s, dict) else None
+        if isinstance(ic, dict) and ic.get("use"):
+            u = route(ic.get("label"), ic.get("text"))
+            if u:
+                ic["url"] = u
+    return c
+
+
 def render(company_id: int, c: dict, imgs: dict) -> dict:
     kit = brand.get_brand_kit(company_id) or {}
+    prof = profile.get(company_id) or {}
+    c = _apply_cta_links(prof, c)   # CTA buttons -> the company's real destinations (code-stamped, never LLM-chosen)
     col = kit.get("colors") or {}
     bg = col.get("bg", "#0A0A0A"); surface = col.get("surface", "#121212"); line = col.get("line", "#242424")
     ink = col.get("ink", "#F4F4F5"); body = col.get("body", "#CFD0D5"); muted = col.get("muted", "#9A9AA0")
@@ -271,21 +603,23 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
     if c.get("dek"):
         P.append(f'<p style="color:{ink};font-family:{headf};font-weight:600;font-size:23px;line-height:1.5;'
                  f'margin:0 0 18px">{_esc(c["dek"])}</p>')
-    # byline
+    # byline — prefer the company's designated REAL blog author (name + role + LinkedIn), code-set so it is
+    # NEVER LLM-invented; the name links to LinkedIn at the top (E-E-A-T).
+    ba = prof.get("blog_author") or {}
+    _ab = c.get("author_bio") if isinstance(c.get("author_bio"), dict) else {}
     b = c.get("byline") or {}
-    if b.get("author"):
-        bits = " &nbsp;&middot;&nbsp; ".join(_esc(x) for x in
-                                             [b.get("author"), b.get("role"), b.get("date"), b.get("read_time")] if x)
+    _author = ba.get("name") or _ab.get("name") or b.get("author")
+    _role = ba.get("role") or _ab.get("role") or b.get("role")
+    _li = ba.get("linkedin") or _ab.get("linkedin")
+    if _author:
+        _name = (f'<a href="{_esc(_li)}" target="_blank" rel="noopener" style="color:{ink};text-decoration:none;'
+                 f'border-bottom:1px solid {red}">{_esc(_author)}</a>') if _li else _esc(_author)
+        _rest = " &nbsp;&middot;&nbsp; ".join(_esc(x) for x in [_role, _today_iso(), _read_time(c)] if x)
+        _bits = _name + ((" &nbsp;&middot;&nbsp; " + _rest) if _rest else "")
         P.append(f'<div style="color:{muted};font-size:13px;border-top:1px solid {line};'
-                 f'border-bottom:1px solid {line};padding:12px 0;margin:0 0 26px">{bits}</div>')
-    # hero
-    if imgs.get("hero"):
-        hero = c.get("featured_image") or c.get("hero") or {}
-        P.append(f'<figure style="margin:0 0 28px"><img src="{imgs["hero"]}" alt="{_esc(hero.get("alt"))}" '
-                 f'style="width:100%;height:auto;border-radius:12px;display:block">')
-        if hero.get("caption"):
-            P.append(f'<figcaption style="color:{muted};font-size:13px;margin-top:8px">{_esc(hero["caption"])}</figcaption>')
-        P.append('</figure>')
+                 f'border-bottom:1px solid {line};padding:12px 0;margin:0 0 26px">{_bits}</div>')
+    # hero: NOT inlined in the body — it is set as the WordPress FEATURED IMAGE (featured_media) on publish, so
+    # the theme renders it as the post banner (e.g. Sensa single.php .phead). Inlining it too would double it.
     # the AEO answer block (accent left rule). The company's craft picks the block: key_takeaways -> the
     # "Key takeaways" label, in_brief -> "In brief"; each takes points[] (bullets) or text (one paragraph).
     for blk, lbl in ((c.get("key_takeaways") or {}, "Key takeaways"), (c.get("in_brief") or {}, "In brief")):
@@ -304,16 +638,17 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
                  f'<div style="color:{red};font-family:{headf};font-weight:700;font-size:12px;letter-spacing:.14em;'
                  f'text-transform:uppercase;margin-bottom:8px">{lbl}</div>{inner}</div>')
         break   # only one answer block per post
-    # lead
+    # lead (optionally with an editorial drop-cap on the opening letter)
     if c.get("lead"):
-        P.append(_paras(c["lead"], body))
+        P.append(_paras_dropcap(c["lead"], body, red, headf) if c.get("drop_cap") else _paras(c["lead"], body))
     # sections
     for i, s in enumerate(c.get("sections") or []):
         if s.get("heading"):
             P.append(f'<h2 style="color:{ink};font-family:{headf};font-weight:700;font-size:27px;'
                      f'line-height:1.25;margin:36px 0 14px">{_esc(s["heading"])}</h2>')
         if s.get("body"):
-            P.append(_paras(s["body"], body))
+            _il = [l for l in (c.get("internal_links") or []) if l.get("section") == i]
+            P.append(_paras_linked(s["body"], body, _il, red) if _il else _paras(s["body"], body))
         cal = s.get("callout") or {}
         if cal.get("use") and (cal.get("text") or cal.get("title")):
             P.append(f'<div style="background:{surface};border:1px solid {line};border-left:3px solid {red};'
@@ -363,6 +698,9 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
             if fig.get("caption"):
                 P.append(f'<figcaption style="color:{muted};font-size:13px;margin-top:8px">{_esc(fig["caption"])}</figcaption>')
             P.append('</figure>')
+        vid = s.get("video") or {}
+        if vid.get("use") and vid.get("youtube_url"):
+            P.append(_video_embed(vid["youtube_url"], vid.get("vertical"), vid.get("caption"), muted))
         cta = s.get("inline_cta") or {}
         if cta.get("use") and cta.get("url"):
             P.append(f'<p style="margin:6px 0 24px;color:{body};font-size:18px">{_esc(cta.get("text"))} '
@@ -381,6 +719,9 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
             gfx = _sig_flight(sg, red, surface, line, muted, bg, tertiary)
         elif kind == "real_ai_split":
             gfx = _sig_split(sg, imgs, red, line)
+        elif kind == "custom":                          # a bespoke, hand-authored SVG/HTML graphic for THIS post
+            inner = _sanitize_graphic_html(sg.get("html") or "")
+            gfx = f'<div style="margin:0 0 24px">{inner}</div>' if inner else ""
         if gfx:
             P.append(gfx)
             if sg.get("caption"):
@@ -413,12 +754,35 @@ def render(company_id: int, c: dict, imgs: dict) -> dict:
         if cc.get("text"):
             P.append(f'<p style="color:{body};font-size:17px;line-height:1.7;margin:0 0 16px">{_esc(cc["text"])}</p>')
         P.append(btns + '</div>')
-    # author bio (E-E-A-T)
-    if c.get("author_bio"):
-        who = (c.get("byline") or {}).get("author") or ""
+    # author bio (E-E-A-T) — prefer the profile blog_author bio + a LinkedIn link on the name
+    # external services/tools mentioned in the post -> a row of brand logos, each linking out (universal rule)
+    svc = c.get("service_logos") or []
+    if svc:
+        chips = "".join(
+            f'<a href="{_esc(s.get("website"))}" target="_blank" rel="noopener" style="display:inline-flex;'
+            f'align-items:center;gap:8px;text-decoration:none;color:{ink};border:1px solid {line};border-radius:8px;'
+            f'padding:6px 12px;margin:0 8px 8px 0"><img src="{_esc(s.get("logo"))}" alt="{_esc(s.get("name"))}" '
+            f'style="width:20px;height:20px;border-radius:4px;object-fit:contain">'
+            f'<span style="font-size:14px;font-weight:600">{_esc(s.get("name"))}</span></a>'
+            for s in svc if s.get("website") and s.get("logo") and s.get("name"))
+        if chips:
+            P.append(f'<div style="border-top:1px solid {line};margin-top:30px;padding-top:18px">'
+                     f'<div style="color:{muted};font-family:{headf};font-weight:700;font-size:12px;letter-spacing:.14em;'
+                     f'text-transform:uppercase;margin-bottom:10px">Tools &amp; services mentioned</div>'
+                     f'<div style="display:flex;flex-wrap:wrap;align-items:center">{chips}</div></div>')
+    _biotext = ba.get("bio") or _ab.get("bio") or (c.get("author_bio") if isinstance(c.get("author_bio"), str) else "")
+    _shot = ba.get("headshot") or _ab.get("headshot")
+    if _biotext:
+        _who = _author or ""
+        _whoh = (f'<a href="{_esc(_li)}" target="_blank" rel="noopener" style="color:{ink};text-decoration:none;'
+                 f'border-bottom:1px solid {red}">{_esc(_who)}</a>') if (_who and _li) else _esc(_who)
+        _img = (f'<img src="{_esc(_shot)}" alt="{_esc(_who)}" style="width:56px;height:56px;border-radius:50%;'
+                f'object-fit:cover;float:left;margin:2px 16px 8px 0">') if _shot else ""
+        _liln = (f'<br><a href="{_esc(_li)}" target="_blank" rel="noopener" style="color:{red};'
+                 f'text-decoration:none;font-weight:600">Connect on LinkedIn &rarr;</a>') if _li else ""
         P.append(f'<div style="background:{surface};border:1px solid {line};border-radius:14px;padding:20px;'
-                 f'margin:30px 0 0;color:{muted};font-size:14px;line-height:1.65">'
-                 f'{("<b style=color:"+ink+">"+_esc(who)+"</b><br>") if who else ""}{_esc(c["author_bio"])}</div>')
+                 f'margin:30px 0 0;color:{muted};font-size:14px;line-height:1.65;overflow:hidden">'
+                 f'{_img}{("<b style=color:"+ink+">"+_whoh+"</b><br>") if _who else ""}{_esc(_biotext)}{_liln}</div>')
     # keep reading
     kr = c.get("keep_reading") or []
     if kr:
@@ -455,11 +819,50 @@ def _image_jobs(c: dict) -> list[tuple[str, str, str]]:
     return jobs
 
 
+def _keep_reading(company: dict, c: dict, exclude_id=None, n: int = 3) -> list:
+    """REAL 'keep reading' links: actual PUBLISHED posts on the company's site (same category first, then most
+    recent), never invented. Returns [] when there are no real posts, so the block is simply skipped."""
+    try:
+        from .integrations import wordpress as _wp
+        site = _wp.for_company(company)
+    except Exception:  # noqa: BLE001
+        site = None
+    if not site:
+        return []
+    out, seen = [], ({exclude_id} if exclude_id else set())
+    queries = []
+    cat = (c.get("category") or "").split("·")[0].strip()
+    if cat:
+        cidn = site.ensure_category(cat)
+        if cidn:
+            queries.append(f"/posts?categories={cidn}&per_page=6&status=publish&orderby=date&_fields=id,title,link")
+    queries.append("/posts?per_page=6&status=publish&orderby=date&_fields=id,title,link")   # fallback: most recent
+    for q in queries:
+        if len(out) >= n:
+            break
+        try:
+            for p in (site._req("GET", q) or []):
+                if p["id"] in seen:
+                    continue
+                title = _html.unescape((p.get("title") or {}).get("rendered") or "").strip()
+                if title and p.get("link"):
+                    out.append({"title": title, "url": p["link"]})
+                    seen.add(p["id"])
+                if len(out) >= n:
+                    break
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
 def build_from_content(company_id: int, c: dict) -> dict:
     """Generate + host the imagery, then render the GIVEN content. Returns {title, html, dek, content, images}
     — content + images are returned so a later REVISION can reuse the same images (no regeneration)."""
     company = store.get_company(company_id)
-    imgs = _gen_and_host(company.get("slug") or "filmspoke", _image_jobs(c))
+    c = dict(c)
+    c["keep_reading"] = _keep_reading(company, c)   # REAL published posts only, never the model's invented links
+    post_slug = (c.get("seo") or {}).get("slug") or c.get("title") or ""
+    imgs = _gen_and_host(company.get("slug") or "filmspoke", _image_jobs(c), prefix=post_slug)
     out = render(company_id, c, imgs)
     out["content"], out["images"] = c, imgs
     return out

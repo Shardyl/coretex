@@ -122,12 +122,14 @@ _SUPPRESS = ("newsletter_opt_out is true "
 def recipients(company_id: int) -> list[dict]:
     """The full newsletter audience for a company: its contacts minus opt-out / bounced / not-interested,
     valid email only, de-duplicated. Returns [{email, first_name}]."""
-    org = store.get_company(company_id)["name"]
+    co = store.get_company(company_id)
+    org, slug = co["name"], co.get("slug")
     rows = db.query(
         "select email, first_name from crm_master where organisation ilike %s "
         "and email ~ '^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$' "
+        "and not (do_not_market @> %s::jsonb) "   # per-company DO NOT MARKET
         f"and not ({_SUPPRESS}) order by email",
-        (f"%{org}%",))
+        (f"%{org}%", Json([slug])))
     seen, out = set(), []
     for r in rows:
         e = (r["email"] or "").strip().lower()

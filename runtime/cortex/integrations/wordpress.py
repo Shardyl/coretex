@@ -42,18 +42,73 @@ class WordPress:
         edit = f"{self.site}/wp-admin/post.php?post={p.get('id')}&action=edit"
         return link, preview, edit
 
-    def stage_draft(self, title: str, html: str, excerpt: str = "") -> dict:
-        """Create an unpublished WordPress draft. Returns a preview link (view it logged into wp-admin)."""
+    def upload_media(self, src_url: str, filename: str = "featured.jpg", alt: str = "") -> int | None:
+        """Fetch an image from its (public R2) URL and upload it into the WP media library so it can be the
+        post's FEATURED IMAGE. Returns the attachment id, or None on any failure (never blocks the publish)."""
+        if not src_url:
+            return None
+        try:
+            with httpx.Client(timeout=_TIMEOUT) as c:
+                img = c.get(src_url, headers={"User-Agent": _UA})
+                img.raise_for_status()
+                ctype = img.headers.get("content-type", "image/jpeg")
+                h = {"User-Agent": _UA, "Authorization": self._headers["Authorization"],
+                     "Content-Type": ctype, "Content-Disposition": f'attachment; filename="{filename}"'}
+                m = c.post(self.base + "/media", headers=h, content=img.content)
+                m.raise_for_status()
+                mid = m.json().get("id")
+            if mid and alt:
+                self._req("POST", f"/media/{mid}", json={"alt_text": alt})
+            return mid
+        except Exception:   # noqa: BLE001 — a missing featured image must never fail the draft
+            return None
+
+    def _set_featured(self, post_id: int, featured_url: str | None, alt: str = "") -> None:
+        if not featured_url:
+            return
+        mid = self.upload_media(featured_url, "featured.jpg", alt)
+        if mid:
+            self._req("POST", f"/posts/{post_id}", json={"featured_media": mid})
+
+    def ensure_category(self, name: str) -> int | None:
+        """Find a WordPress category by name (case-insensitive, HTML-entity tolerant: WP stores '&' as '&amp;')
+        or create it; returns its id. Never raises."""
+        name = (name or "").strip()
+        if not name:
+            return None
+        key = name.replace("&amp;", "&").lower()
+        try:
+            for cat in (self._req("GET", "/categories?per_page=100&_fields=id,name") or []):
+                if (cat.get("name") or "").replace("&amp;", "&").strip().lower() == key:
+                    return cat["id"]
+            c = self._req("POST", "/categories", json={"name": name})
+            return c.get("id")
+        except Exception:   # noqa: BLE001 — categorisation must never block a publish
+            return None
+
+    def _set_category(self, post_id: int, category: str | None) -> None:
+        cid = self.ensure_category(category) if category else None
+        if cid:
+            self._req("POST", f"/posts/{post_id}", json={"categories": [cid]})
+
+    def stage_draft(self, title: str, html: str, excerpt: str = "", featured_url: str | None = None,
+                    featured_alt: str = "", category: str | None = None) -> dict:
+        """Create an unpublished WordPress draft + set its featured image (theme banner) + its category."""
         body = {"title": title, "content": html, "status": "draft"}
         if excerpt:
             body["excerpt"] = excerpt
         p = self._req("POST", "/posts", json=body)
+        self._set_featured(p["id"], featured_url, featured_alt)
+        self._set_category(p["id"], category)
         link, preview, edit = self._links(p)
         return {"id": p["id"], "link": link, "preview": preview, "edit": edit, "status": p.get("status")}
 
-    def update(self, post_id: int, title: str, html: str) -> dict:
-        # title + content only; the post stays a draft.
+    def update(self, post_id: int, title: str, html: str, featured_url: str | None = None,
+               featured_alt: str = "", category: str | None = None) -> dict:
+        # title + content; the post stays a draft. Re-set featured image / category only if passed.
         p = self._req("POST", f"/posts/{post_id}", json={"title": title, "content": html})
+        self._set_featured(post_id, featured_url, featured_alt)
+        self._set_category(post_id, category)
         link, preview, edit = self._links(p)
         return {"id": p["id"], "link": link, "preview": preview, "edit": edit, "status": p.get("status")}
 

@@ -19,11 +19,13 @@
 <style>
 :root{
   --bg:#0B0F14; --panel:#11171F; --panel2:#161E28; --line:#1F2A36;
+  --bg2:#161E28; --fg:#EAF2F8; --ln:#1F2A36;
   --ink:#EAF2F8; --mut:#8597A6; --accent:#00DAFF; --accent2:#00C4E0;
   --good:#2ad17e; --warn:#ffb020; --bad:#ff5d6c; --shadow:0 10px 30px rgba(0,0,0,.45);
 }
 html[data-theme="light"]{
   --bg:#EEF2F6; --panel:#FFFFFF; --panel2:#F4F8FB; --line:#DCE5EC;
+  --bg2:#F4F8FB; --fg:#0C1620; --ln:#DCE5EC;
   --ink:#0C1620; --mut:#5A6B79; --accent:#00C4E0; --accent2:#0098B3; --shadow:0 10px 30px rgba(20,40,60,.12);
 }
 *{box-sizing:border-box}
@@ -272,13 +274,25 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 <div class="login hidden" id="login">
   <div class="box">
     <div class="brand"><span class="dot"></span>Cortex</div>
-    <p>Recovery sign-in</p>
+    <p>Sign in</p>
+    <input id="lemail" type="email" inputmode="email" placeholder="email (team members — leave blank for owner)" autocomplete="username" style="margin-bottom:8px">
     <input id="pc" type="password" inputmode="text" placeholder="passcode" autocomplete="current-password">
     <button class="btn go" style="width:100%" onclick="doLogin()">Enter</button>
     <div id="loginerr" style="color:var(--bad);font-size:13px;margin-top:12px;min-height:18px"></div>
   </div>
 </div>
 
+<div class="login hidden" id="onboard">
+  <div class="box">
+    <div class="brand"><span class="dot"></span>Cortex</div>
+    <p id="obhi">Welcome — set up your account</p>
+    <input id="obpass" type="password" placeholder="create a password (min 6)" autocomplete="new-password" style="margin-bottom:8px">
+    <input id="obpass2" type="password" placeholder="confirm password" autocomplete="new-password" style="margin-bottom:8px">
+    <input id="obpin" type="password" inputmode="numeric" maxlength="8" placeholder="create a 4-digit PIN" autocomplete="off">
+    <button class="btn go" style="width:100%;margin-top:10px" onclick="doOnboard()">Save & enter</button>
+    <div id="oberr" style="color:var(--bad);font-size:13px;margin-top:12px;min-height:18px"></div>
+  </div>
+</div>
 <div class="lock hidden" id="lock">
   <div class="lbox">
     <div class="brand"><span class="dot"></span>Cortex</div>
@@ -287,12 +301,14 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
     <div class="keypad" id="keypad"></div>
     <div id="lockerr"></div>
     <button id="lockCancel" class="btn sm hidden" style="margin-top:16px" onclick="cancelStepup()">Cancel</button>
+    <div id="teamSignin" style="margin-top:18px"><a href="#" onclick="showPasscode();return false" style="color:var(--mut);font-size:12px;text-decoration:underline">Sign in with email / passcode</a></div>
   </div>
 </div>
 
 <header>
   <div class="bar">
     <div class="brand"><span class="dot"></span>Cortex</div>
+    <span id="userTag" style="font-size:11px;color:var(--mut);margin-left:9px;white-space:nowrap;align-self:center"></span>
     <div class="spacer"></div>
     <button class="chip spend" id="spendChip" title="Cortex spend (tap for detail)" onclick="openSpend()">$—</button>
     <select class="sel" id="coSel" onchange="localStorage.setItem('cortex_company',this.value);render()"></select>
@@ -362,6 +378,12 @@ async function startup(){
   if(demo){ enterUnlocked(); return; }
   // SECURITY: every cold load RE-LOCKS — drop any saved session so the PIN must re-authenticate.
   token=''; localStorage.removeItem('cortex_token');
+  // A named team member on THIS device unlocks with their OWN per-user PIN (keypad submit sends their email).
+  if(localStorage.getItem('cortex_user_email')){
+    pinSet=true; lockMode='login'; pinBuf=''; pinFirst=''; showLock('Enter your PIN'); renderKeypad();
+    try{ const mode=await api('/api/auth/mode'); biometricReg=!!(mode&&mode.biometric); }catch(e){}
+    return;
+  }
   // RESILIENCE: show the PIN keypad IMMEDIATELY — never block the unlock screen on a network call. On a
   // wedged/slow connection the old code awaited /api/auth/mode and hung forever on the loading screen.
   pinSet=true; lockMode='login'; pinBuf=''; pinFirst='';
@@ -378,31 +400,57 @@ async function startup(){
 // passcode recovery (hidden by default): first-time bootstrap, or if the PIN is ever forgotten
 async function doLogin(){
   const pc = document.getElementById('pc').value.trim();
+  const email = (document.getElementById('lemail').value||'').trim();
   const err = document.getElementById('loginerr'); err.textContent='';
   if(pc==='demo'){ demo=true; enterUnlocked(); return; }
   try{
-    const d = await api('/api/login',{method:'POST',body:JSON.stringify({passcode:pc})});
+    const d = await api('/api/login',{method:'POST',body:JSON.stringify(email?{passcode:pc,email}:{passcode:pc})});
     token = d.token; localStorage.setItem('cortex_token',token);
+    if(d.user) localStorage.setItem('cortex_user', JSON.stringify(d.user));
     document.getElementById('login').classList.add('hidden');
+    if(email){
+      localStorage.setItem('cortex_user_email', email);
+      if(d.user && d.user.must_onboard){ showOnboard((d.user||{}).name); return; }   // force first-login setup
+      enterUnlocked(); return;
+    }
     let ps=false; try{ const s=await api('/api/lock/status'); ps=!!s.pin_set; }catch(e){}
     pinSet=ps;
     if(ps){ enterUnlocked(); } else { lockMode='set'; pinBuf=''; pinFirst=''; showLock('Set a 4-digit PIN'); }
-  }catch(e){ err.textContent = e.message==='wrong passcode'?'Wrong passcode':'Could not reach Cortex ('+e.message+'). Tip: passcode "demo" to explore.'; }
+  }catch(e){ const m=(e.message||''); err.textContent = m.indexOf('wrong')>=0?(m.charAt(0).toUpperCase()+m.slice(1)):'Could not reach Cortex ('+m+'). Tip: passcode "demo" to explore.'; }
 }
-function showPasscode(){ document.getElementById('lock').classList.add('hidden'); document.getElementById('login').classList.remove('hidden'); }
+function showOnboard(name){
+  document.getElementById('login').classList.add('hidden'); document.getElementById('lock').classList.add('hidden');
+  document.getElementById('onboard').classList.remove('hidden');
+  document.getElementById('obhi').textContent='Welcome'+(name?', '+name:'')+' — set your password + PIN';
+}
+async function doOnboard(){
+  const p1=document.getElementById('obpass').value, p2=document.getElementById('obpass2').value, pin=(document.getElementById('obpin').value||'').trim();
+  const err=document.getElementById('oberr'); err.textContent='';
+  if((p1||'').length<6){ err.textContent='Password must be at least 6 characters'; return; }
+  if(p1!==p2){ err.textContent='Passwords do not match'; return; }
+  if(!/^\d{4,8}$/.test(pin)){ err.textContent='PIN must be 4-8 digits'; return; }
+  try{ await api('/api/user/onboard',{method:'POST',body:JSON.stringify({password:p1,pin})});
+    document.getElementById('onboard').classList.add('hidden'); enterUnlocked(); }
+  catch(e){ err.textContent=e.message||'Could not save'; }
+}
+function showPasscode(){ document.getElementById('onboard').classList.add('hidden'); document.getElementById('lock').classList.add('hidden'); document.getElementById('login').classList.remove('hidden'); const e=localStorage.getItem('cortex_user_email'); if(e){ const f=document.getElementById('lemail'); if(f) f.value=e; } }
 function relock(){ token=''; localStorage.removeItem('cortex_token'); booted=false; pinBuf=''; pinFirst='';
   if(pinSet){ lockMode='login'; showLock('Enter your PIN'); }
   else { document.getElementById('lock').classList.add('hidden'); document.getElementById('login').classList.remove('hidden'); } }
-function logout(){ relock(); }
+function logout(){ localStorage.removeItem('cortex_user_email'); localStorage.removeItem('cortex_user'); token=''; localStorage.removeItem('cortex_token'); booted=false; pinBuf=''; pinFirst=''; document.getElementById('lock').classList.add('hidden'); const f=document.getElementById('lemail'); if(f) f.value=''; showPasscode(); }
 
 // ---- the keypad: login / first-time set / approval step-up — all on the same nice PIN pad ----
 let booted=false, lockMode='login', pinBuf='', pinFirst='', hidAt=0, stepupResolve=null;
-function enterUnlocked(){ document.getElementById('lock').classList.add('hidden'); document.getElementById('login').classList.add('hidden'); document.getElementById('lockCancel').classList.add('hidden'); if(!booted){ booted=true; boot(); } updateSpendChip(); checkBiometric(); }
+function paintUserTag(){ const el=document.getElementById('userTag'); if(!el) return;
+  let u={}; try{ u=JSON.parse(localStorage.getItem('cortex_user')||'{}'); }catch(e){}
+  el.textContent = (u&&u.name) ? ('· '+u.name) : (demo?'· demo':''); }
+function enterUnlocked(){ document.getElementById('lock').classList.add('hidden'); document.getElementById('login').classList.add('hidden'); document.getElementById('lockCancel').classList.add('hidden'); if(!booted){ booted=true; boot(); } updateSpendChip(); checkBiometric(); paintUserTag(); }
 function showLock(msg){
   document.getElementById('lock').classList.remove('hidden');
   document.getElementById('lockmsg').textContent=msg;
   document.getElementById('lockerr').textContent=''; renderDots(); renderKeypad();
   document.getElementById('lockCancel').classList.toggle('hidden', lockMode!=='stepup');
+  const tsi=document.getElementById('teamSignin'); if(tsi) tsi.classList.toggle('hidden', lockMode==='stepup');
   if((lockMode==='login'||lockMode==='stepup') && biometricReg && IS_MOBILE) setTimeout(bioAuth,300);
 }
 function renderDots(){ let h=''; for(let i=0;i<4;i++) h+=`<span class="pd ${i<pinBuf.length?'on':''}"></span>`; document.getElementById('pindots').innerHTML=h; }
@@ -439,8 +487,9 @@ async function pinSubmit(){
     return;
   }
   // login: the PIN issues the session token
-  try{ const r=await api('/api/login/pin',{method:'POST',body:JSON.stringify({pin})});
-    token=r.token; localStorage.setItem('cortex_token',token); enterUnlocked();
+  try{ const ue=localStorage.getItem('cortex_user_email');
+    const r=await api('/api/login/pin',{method:'POST',body:JSON.stringify(ue?{pin,email:ue}:{pin})});
+    token=r.token; localStorage.setItem('cortex_token',token); if(r.user) localStorage.setItem('cortex_user',JSON.stringify(r.user)); enterUnlocked();
   }catch(e){ err.textContent = e.message==='wrong PIN'?'Wrong PIN':'Error: '+e.message; pinBuf=''; renderDots(); }
 }
 // offer to register THIS phone's platform biometric as a server passkey — after the first PIN is set
@@ -471,11 +520,17 @@ function lockNow(){ if(token && !demo){ token=''; localStorage.removeItem('corte
 async function boot(){
   try{ companies = demo?SAMPLE.companies:await api('/api/companies'); }
   catch(e){ demo=true; document.getElementById('demoBanner').classList.remove('hidden'); companies=SAMPLE.companies; }
-  const sel=document.getElementById('coSel'); sel.innerHTML='<option value="">All companies</option>'+
+  const sel=document.getElementById('coSel'); const single=companies.length===1;
+  // a scoped (single-company) user: no "All companies" option — they only ever see their company
+  sel.innerHTML=(single?'':'<option value="">All companies</option>')+
     companies.map(c=>`<option value="${c.slug}">${c.name}</option>`).join('');
-  // remember the last company; default to Tabscanner the first time
-  let savedCo=localStorage.getItem('cortex_company'); if(savedCo===null) savedCo='tabscanner';
+  const slugs=companies.map(c=>c.slug);
+  let savedCo=localStorage.getItem('cortex_company');
+  if(single){ savedCo=companies[0].slug; }                       // pin to their company
+  else if(savedCo===null){ savedCo='tabscanner'; }
+  else if(savedCo!=='' && !slugs.includes(savedCo)){ savedCo=''; }  // stale company -> All
   if([...sel.options].some(o=>o.value===savedCo)) sel.value=savedCo;
+  localStorage.setItem('cortex_company', sel.value);
   // default to the Talk tab with a clean NEW chat (old chats via the dropdown)
   tab='talk'; chatMsgs=[]; currentConvId=null; currentConvTitle=''; routedTo=''; localStorage.removeItem('cortex_conv');
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t==='talk'));
@@ -545,7 +600,8 @@ const ICON={
   file:'M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5',
   pause:'M9 5v14M15 5v14',
   play:'M7 5l12 7-12 7z',
-  up:'M6 15l6-6 6 6'
+  up:'M6 15l6-6 6 6',
+  down:'M6 9l6 6 6-6'
 };
 function ic(n,s){ s=s||20; return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle"><path d="${ICON[n]||''}"></path></svg>`; }
 function paintIcons(){
@@ -652,7 +708,7 @@ async function renderCRM(v){
   return renderContacts(b,co);
 }
 let cqTimer=null, contactOrder=[], cState={co:'',stage:'',q:'',page:0,more:false,loading:false}, cObserver=null;
-function searchContacts(){ clearTimeout(cqTimer); cqTimer=setTimeout(()=>{ const co=document.getElementById('coSel').value; loadContacts(co); },280); }
+function searchContacts(){ clearTimeout(cqTimer); cqTimer=setTimeout(()=>{ const co=document.getElementById('coSel').value; loadContacts(co); },150); }
 function contactsQuery(off){ return `/api/crm/contacts?company=${encodeURIComponent(cState.co||'all')}&q=${encodeURIComponent(cState.q)}${cState.stage&&cState.stage!=='All'?'&stage='+encodeURIComponent(cState.stage):''}&limit=40&offset=${off}`; }
 function countQuery(){ return `/api/crm/contacts/count?company=${encodeURIComponent(cState.co||'all')}&q=${encodeURIComponent(cState.q)}${cState.stage&&cState.stage!=='All'?'&stage='+encodeURIComponent(cState.stage):''}`; }
 async function updateContactCount(){ const el=document.getElementById('ccount'); if(!el) return; el.textContent='…'; try{ const r=await api(countQuery()); const n=(r&&r.count)||0; el.textContent=n.toLocaleString()+' contact'+(n===1?'':'s'); }catch(e){ el.textContent=''; } }
@@ -687,7 +743,7 @@ function filterStage(s){ document.querySelectorAll('.fchip').forEach(c=>c.classL
 async function renderContacts(b,co){
   b.outerHTML=`<div id="crmbody">
     <div class="srch">${ic('search',18)}<input id="cq" placeholder="Search contacts…" oninput="searchContacts()"><span id="ccount" style="margin-left:auto;font-size:12px;color:var(--mut);white-space:nowrap;padding-left:8px">&nbsp;</span></div>
-    <div class="chiprow">${['All','Cold','Contacted','Engaged','Qualified','Not interested','Dormant/dead'].map(s=>`<span class="fchip${s==='All'?' on':''}" data-stage="${esc(s)}" onclick="filterStage('${esc(s)}')">${esc(s)}</span>`).join('')}<span class="fchip flag" data-stage="Client" onclick="filterStage('Client')">${ic('check',13)} Client</span><span class="fchip optout" data-stage="Opted out" onclick="filterStage('Opted out')">Opted out</span><span class="fchip" style="border-color:#00DAFF55" data-stage="Test group" onclick="filterStage('Test group')">${ic('check',13)} Test group</span>${['lead','partner','support','freelancer','vendor','recruitment'].map(s=>`<span class="fchip" style="border-color:#00DAFF33" data-stage="${s}" onclick="filterStage('${s}')">${s[0].toUpperCase()+s.slice(1)}</span>`).join('')}</div>
+    <div class="chiprow">${['All','Cold','Contacted','Engaged','Qualified','Not interested','Dormant/dead'].map(s=>`<span class="fchip${s==='All'?' on':''}" data-stage="${esc(s)}" onclick="filterStage('${esc(s)}')">${esc(s)}</span>`).join('')}<span class="fchip flag" data-stage="Client" onclick="filterStage('Client')">${ic('check',13)} Client</span><span class="fchip optout" data-stage="Opted out" onclick="filterStage('Opted out')">Opted out</span><span class="fchip" style="border-color:#b81e1e55;color:#b81e1e" data-stage="Do not market" onclick="filterStage('Do not market')">Do not market</span><span class="fchip" style="border-color:#00DAFF55" data-stage="Test group" onclick="filterStage('Test group')">${ic('check',13)} Test group</span><span class="fchip flag" data-stage="Quote sent" onclick="filterStage('Quote sent')">${ic('check',13)} Quote sent</span>${['past_client','past_opportunity','lead','partner','support','freelancer','vendor','recruitment'].map(s=>`<span class="fchip" style="border-color:#00DAFF33" data-stage="${s}" onclick="filterStage('${s}')">${esc(classLabel(s))}</span>`).join('')}</div>
     <div class="row" style="margin-bottom:10px"><button class="btn go sm" onclick="openNewContact(null)">${ic('plus',15)} New contact</button></div>
     <div id="clist" class="empty">Loading…</div></div>`;
   loadContacts(co);
@@ -696,7 +752,7 @@ function contactRow(c){ const n=realName(c); return `<div class="card crow" oncl
   <div class="cav">${esc(initials(n))}</div>
   <div style="flex:1;min-width:0"><div class="cname">${esc(n)}</div>
     <div class="csub">${esc(c.organisation||'')}${c.company_name?' · '+esc(c.company_name):''}</div></div>
-  ${c.classification?`<span class="chip" style="color:#00DAFF;border-color:#00DAFF55;font-size:10px">${esc(c.classification)}</span>`:''}${c.newsletter_opt_out?'<span class="chip" style="color:#ff5d6c;border-color:#ff5d6c55;font-size:10px">opted out</span>':''}${c.is_client?'<span class="chip" style="color:#2ad17e;border-color:#2ad17e55">Client</span>':stageChip(c.stage)}</div>`; }
+  ${c.classification?`<span class="chip" style="color:#00DAFF;border-color:#00DAFF55;font-size:10px">${esc(classLabel(c.classification))}</span>`:''}${c.quote_sent?'<span class="chip" style="color:#f5a623;border-color:#f5a62355;font-size:10px">quote sent</span>':''}${(c.do_not_market&&c.do_not_market.length)?'<span class="chip" style="color:#fff;background:#b81e1e;border-color:#b81e1e;font-size:10px">do not market</span>':''}${c.newsletter_opt_out?'<span class="chip" style="color:#ff5d6c;border-color:#ff5d6c55;font-size:10px">opted out</span>':''}${c.is_client?'<span class="chip" style="color:#2ad17e;border-color:#2ad17e55">Client</span>':stageChip(c.stage)}</div>`; }
 const CHIDE=new Set(['id','first_name','last_name','account_id','is_client','stage','classification','note','history','company_name','created_at','updated_at']);
 const CURL=new Set(['linkedin','instagram','facebook','website']);
 function humanizeField(k){ let s=k.replace(/_/g,' '); s=s.charAt(0).toUpperCase()+s.slice(1); return s.replace(/Linkedin/,'LinkedIn'); }
@@ -719,7 +775,7 @@ async function openContact(email){
     <div style="margin-left:auto;display:flex;gap:6px"><button class="iconbtn sm" title="Edit" onclick="openEditContact('${esc(email)}')">${ic('edit',16)}</button><button class="iconbtn sm" title="Delete" onclick="deleteContact('${esc(email)}')">${ic('trash',16)}</button></div></div>
     <div class="card"><div class="crow" style="padding:0;margin-bottom:12px"><div class="cav" style="width:44px;height:44px;font-size:15px">${esc(initials(n))}</div>
       <div><div class="cname" style="font-size:17px">${esc(n)}</div><div class="csub">${esc(c.organisation||'')}${c.job_title?' · '+esc(c.job_title):''}</div></div></div>
-    <div class="row" style="margin-bottom:12px">${stageChip(c.stage)}${c.tier?`<span class="chip cy">Tier ${esc(c.tier)}</span>`:''}${c.is_client?'<span class="chip" style="color:#2ad17e">Client</span>':''}<span class="chip" style="cursor:pointer;${c.newsletter_opt_out?'color:#04181d;background:#ff5d6c;border-color:#ff5d6c':'color:#ff5d6c;border-color:#ff5d6c55;background:transparent'}" onclick="toggleOptOut('${esc(c.email)}',${!c.newsletter_opt_out})" title="Tap to ${c.newsletter_opt_out?'re-subscribe to newsletter':'opt out of newsletter'}">${c.newsletter_opt_out?'Opted out':'Mark opted-out'}</span></div>
+    <div class="row" style="margin-bottom:12px">${stageChip(c.stage)}${c.tier?`<span class="chip cy">Tier ${esc(c.tier)}</span>`:''}${c.is_client?'<span class="chip" style="color:#2ad17e">Client</span>':''}<span class="chip" style="cursor:pointer;${c.newsletter_opt_out?'color:#04181d;background:#ff5d6c;border-color:#ff5d6c':'color:#ff5d6c;border-color:#ff5d6c55;background:transparent'}" onclick="toggleOptOut('${esc(c.email)}',${!c.newsletter_opt_out})" title="Tap to ${c.newsletter_opt_out?'re-subscribe to newsletter':'opt out of newsletter'}">${c.newsletter_opt_out?'Opted out':'Mark opted-out'}</span>${dnmChip(c)}${qualifyChips(c)}</div>
     ${contactStagePicker(c)}
     ${contactClassPicker(c)}
     ${contactCompanyRow(c)}
@@ -743,6 +799,7 @@ function renderContactCompanies(email,st){
       <div style="flex:1;min-width:0"><div class="cname" style="font-size:14px">${esc(c.name)}</div><div class="csub">${sub}</div></div>
       <span class="fchip${c.member?' on':''}" onclick="toggleCompanyField('${esc(email)}','${esc(c.slug)}','member',${!c.member})">Member</span>
       <span class="fchip${c.test_group?' on':''}" style="${c.test_group?'color:#00DAFF;border-color:#00DAFF':''}" onclick="toggleCompanyField('${esc(email)}','${esc(c.slug)}','test_group',${!c.test_group})">Test group</span>
+      <span class="fchip" title="${c.do_not_market?'Do not market for '+esc(c.name)+' — tap to allow marketing':'Tap to stop ALL marketing for '+esc(c.name)}" style="${c.do_not_market?'color:#fff;background:#b81e1e;border-color:#b81e1e':'color:#b81e1e99;border-color:#b81e1e33'}" onclick="toggleCompanyDnm('${esc(email)}','${esc(c.slug)}',${!c.do_not_market})">${c.do_not_market?'✕ no marketing':'no marketing'}</span>
     </div>`;
   }).join('');
   el.innerHTML=`<div class="dlbl">Companies & test groups</div>${rows||'<div class="csub">No companies.</div>'}`;
@@ -750,6 +807,12 @@ function renderContactCompanies(email,st){
 async function toggleCompanyField(email,slug,field,on){
   try{ const st=await api('/api/crm/contact/company-toggle',{method:'POST',body:JSON.stringify({email,company:slug,field,on})});
     renderContactCompanies(email,st); toast('Updated'); }
+  catch(e){ toast('Could not update ('+e.message+')'); }
+}
+async function toggleCompanyDnm(email,slug,on){
+  try{ await api('/api/crm/contact/donotmarket',{method:'POST',body:JSON.stringify({email,company:slug,on})});
+    const st=await api('/api/crm/contact/companies?email='+encodeURIComponent(email));
+    renderContactCompanies(email,st); toast(on?('No marketing — '+slug):('Marketing allowed — '+slug)); }
   catch(e){ toast('Could not update ('+e.message+')'); }
 }
 const PROJ_STAGES=['Opportunity','Quote','Booked','Production','Recurring','Delivered','Final Payment','Close & review','Lost'];
@@ -766,13 +829,15 @@ async function setContactStage(email,i){
   try{ await api('/api/crm/contact/stage',{method:'POST',body:JSON.stringify({email,stage:s})}); toast('Status: '+s); openContact(email); }
   catch(e){ toast('Could not update ('+e.message+')'); }
 }
-const CONTACT_CLASSES=['lead','partner','support','freelancer','vendor','recruitment'];
+const CONTACT_CLASSES=['past_client','past_opportunity','lead','partner','support','freelancer','vendor','recruitment'];
 const titleCase=s=>s?s[0].toUpperCase()+s.slice(1):'';
+const CLASS_LABELS={past_client:'Past client',past_opportunity:'Past opportunity'};
+const classLabel=s=>s?(CLASS_LABELS[(''+s).toLowerCase()]||titleCase(s)):'';
 function contactClassPicker(c){
   const cur=(c.classification||'').toLowerCase();
   return `<div class="dsec"><div class="dlbl">Classification</div><div class="chiprow">${CONTACT_CLASSES.map(s=>{
     const on=s===cur;
-    return `<span class="fchip${on?' on':''}" style="${on?'color:#00DAFF;border-color:#00DAFF':''}" onclick="setContactClass('${esc(c.email)}','${s}',${on})">${esc(titleCase(s))}</span>`;
+    return `<span class="fchip${on?' on':''}" style="${on?'color:#00DAFF;border-color:#00DAFF':''}" onclick="setContactClass('${esc(c.email)}','${s}',${on})">${esc(classLabel(s))}</span>`;
   }).join('')}</div></div>`;
 }
 async function setContactClass(email,cl,on){
@@ -782,6 +847,40 @@ async function setContactClass(email,cl,on){
 }
 async function toggleOptOut(email,on){
   try{ await api('/api/crm/contact/optout',{method:'POST',body:JSON.stringify({email,on})}); toast(on?'Opted out of newsletter':'Re-subscribed to newsletter'); openContact(email); }
+  catch(e){ toast('Could not update ('+e.message+')'); }
+}
+function qualifyChips(c){
+  const co=(document.getElementById('coSel')||{}).value||'';
+  const nq=(c.classification||'')==='not_qualified';
+  const qs=c.qual_suggest; let sug='';
+  if(qs&&qs.verdict){
+    const m=({qualified:['Suggest: Qualify','#2ad17e'],not_qualified:['Suggest: not qualified','#f5a623'],needs_info:['Suggest: gauge first','#7aa2ff']})[qs.verdict];
+    if(m) sug=`<span class="chip" style="color:${m[1]};border-color:${m[1]}55;background:transparent" title="${esc((qs.reason||'')+(qs.confidence?'  ('+qs.confidence+' confidence)':''))}">${m[0]}${qs.confidence?' · '+esc(qs.confidence):''}</span>`;
+  }
+  return sug+`<span class="chip" style="cursor:pointer;color:#2ad17e;border-color:#2ad17e;background:transparent" onclick="qualifyLead('${esc(c.email)}','${co}')" title="Tap to qualify — creates an opportunity + starts the chase cadence">+ Qualify → Opportunity</span>`
+    +`<span class="chip" style="cursor:pointer;${nq?'color:#04181d;background:#f5a623;border-color:#f5a623':'color:#f5a623;border-color:#f5a62355;background:transparent'}" onclick="disqualifyLead('${esc(c.email)}')" title="Mark not qualified — no opportunity created">${nq?'Not qualified':'Mark not qualified'}</span>`;
+}
+async function qualifyLead(email,company){
+  if(!company){ company=prompt('Which business? (slug: sensa / tabscanner / skyvision / filmspoke / snaprewards)','sensa'); if(!company) return; }
+  try{ const r=await api('/api/crm/contact/qualify',{method:'POST',body:JSON.stringify({email,company})}); toast('Opportunity created — chase started'); openProject(r.opportunity.id); }
+  catch(e){ toast('Could not qualify: '+e.message); }
+}
+async function disqualifyLead(email){
+  try{ await api('/api/crm/contact/disqualify',{method:'POST',body:JSON.stringify({email})}); toast('Marked not qualified'); openContact(email); }
+  catch(e){ toast('Could not update: '+e.message); }
+}
+function dnmChip(c){
+  const co=(document.getElementById('coSel')||{}).value||'';
+  const dm=c.do_not_market||[];
+  const on= co ? dm.includes(co) : dm.length>=5;
+  const lbl= co ? (on?'Do not market':'Mark do-not-market') : (on?'Do not market: ALL':'Mark do-not-market (all)');
+  const ttl= co ? ('Tap to '+(on?'allow marketing again for':'stop ALL marketing for')+' '+co) : ('Tap to '+(on?'allow marketing again across':'stop ALL marketing across')+' EVERY company');
+  const st= on?'color:#fff;background:#b81e1e;border-color:#b81e1e':'color:#b81e1e;border-color:#b81e1e55;background:transparent';
+  return `<span class="chip" style="cursor:pointer;${st}" onclick="toggleDoNotMarket('${esc(c.email)}','${co}',${!on})" title="${ttl}">${esc(lbl)}</span>`;
+}
+async function toggleDoNotMarket(email,company,on){
+  try{ await api('/api/crm/contact/donotmarket',{method:'POST',body:JSON.stringify({email,company:company||null,on})});
+    toast(on?('Do not market'+(company?' ('+company+')':' (all companies)')):'Marketing re-enabled'); openContact(email); }
   catch(e){ toast('Could not update ('+e.message+')'); }
 }
 function noteBox(kind,id){
@@ -1002,11 +1101,42 @@ async function openProject(id){
       <div class="row" style="margin-bottom:12px">${stageChip(p.stage)}<span class="chip cy">${money(p.value)} ${esc(p.currency||'')}</span></div>
       ${projStagePicker(p)}
       ${dealCompany(p)}
+      ${dealAutomation(p)}
       ${noteBox('p',p.id)}
       <div class="dgrid">${fld('briefcase',p.owner&&('Owner: '+p.owner))}${fld('file',p.quote_ref&&('Quote ref '+p.quote_ref))}</div>
       ${p.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${esc(p.note)}</div></div>`:''}
       ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
     </div>`;
+}
+function dealAutomation(p){
+  const mode = p.automation || 'off';
+  const next = p.next_followup ? whenText(p.next_followup) : '';
+  const btn=(m,lbl)=>`<span class="fchip${mode===m||(m==='off'&&!p.automation)?' on':''}" onclick="setDealAutomation(${p.id},'${m}')">${lbl}</span>`;
+  const rems=(p.reminders||[]).map(r=>`<div class="row" style="align-items:center;gap:6px;margin:5px 0">
+    <div style="flex:1;min-width:0"><div class="cname" style="font-size:13px">${esc(r.title)}</div>
+    <div class="csub">${esc(whenText(r.due_at))}${r.recurrence&&r.recurrence!=='none'?' · '+esc(r.recurrence):''} · ${r.drafts?'drafts a reply':'nudge'}</div></div>
+    <span class="fchip" onclick="cancelDealReminder(${r.id},${p.id})">Cancel</span></div>`).join('') || '<div class="csub">No reminders set.</div>';
+  return `<div class="dsec"><div class="dlbl">Follow-up automation</div>
+    <div class="row" style="gap:6px;margin:4px 0 6px">${btn('auto','Auto')}${btn('manual','Manual')}${btn('off','Off')}</div>
+    ${mode==='auto'?`<div class="csub" style="margin-bottom:8px">${next?'Next chase: '+esc(next)+' · step '+((p.followup_step||0)+1):'arming…'}</div>`:''}
+    <div class="dlbl" style="margin-top:8px">Reminders</div>${rems}
+    <div class="row" style="margin-top:7px"><button class="btn sm" onclick="addDealReminder(${p.id})">${ic('plus',15)} Add reminder</button></div></div>`;
+}
+async function setDealAutomation(id,mode){
+  try{ await api('/api/crm/project/'+id+'/automation',{method:'POST',body:JSON.stringify({mode:mode==='off'?null:mode})});
+    toast(mode==='auto'?'Auto follow-ups on':(mode==='manual'?'Switched to manual':'Automation off')); openProject(id); }
+  catch(e){ toast('Could not update: '+e.message); }
+}
+async function addDealReminder(id){
+  const when=prompt('When? (e.g. "in 3 days", "next Tuesday 10am", or a date)'); if(!when) return;
+  const note=prompt('Reminder — what to do / chase'); if(!note) return;
+  const draft=confirm('Draft a follow-up email when it fires?\n\nOK = draft a reply for approval · Cancel = just a nudge');
+  try{ await api('/api/crm/project/'+id+'/reminder',{method:'POST',body:JSON.stringify({when,note,draft})}); toast('Reminder set'); openProject(id); }
+  catch(e){ toast('Could not set: '+e.message); }
+}
+async function cancelDealReminder(rid,pid){
+  try{ await api('/api/reminders/'+rid+'/cancel',{method:'POST'}); toast('Reminder cancelled'); openProject(pid); }
+  catch(e){ toast('Could not cancel: '+e.message); }
 }
 const dmoney=n=>Math.round(n||0).toLocaleString();
 function fmtAmt(v){ v=+v||0; return v>=1e6 ? (v/1e6).toFixed(2)+'M' : Math.round(v).toLocaleString(); }
@@ -1045,23 +1175,70 @@ async function renderOpps(b,co){
   if(d.lost&&d.lost.length){ h+=`<div class="h" style="color:var(--mut)">Lost · ${d.lost.length}</div><div style="opacity:.55">`+d.lost.map(dealCard).join('')+'</div>'; }
   b.outerHTML='<div id="crmbody">'+h+'</div>';
 }
-let clTimer=null;
-function searchClients(){ clearTimeout(clTimer); clTimer=setTimeout(loadClients,280); }
-async function renderClients(b){
-  b.outerHTML=`<div id="crmbody">
-    <div class="srch">${ic('search',18)}<input id="clq" placeholder="Search organisations…" oninput="searchClients()"></div>
-    <div class="row" style="margin-bottom:10px"><button class="btn go sm" onclick="openNewCompany()">${ic('plus',15)} New organisation</button></div>
-    <div id="cllist" class="empty">Loading…</div></div>`;
-  loadClients();
-}
-async function loadClients(){
-  const co=document.getElementById('coSel').value||''; const q=(document.getElementById('clq')||{}).value||''; const list=document.getElementById('cllist'); if(!list) return;
-  let rows; try{ rows=await api('/api/crm/accounts?company='+encodeURIComponent(co)+'&q='+encodeURIComponent(q)); }catch(e){ rows=[]; }
-  list.innerHTML = rows.length? rows.map(a=>`<div class="card crow" style="cursor:pointer" onclick="openAccount(${a.id})">
+let clTimer=null, clState={}, clObserver=null;
+function searchClients(){ clearTimeout(clTimer); clTimer=setTimeout(loadClients,150); }
+function accountsListQuery(off){ const co=document.getElementById('coSel').value||''; return `/api/crm/accounts?company=${encodeURIComponent(co)}&q=${encodeURIComponent(clState.q)}&limit=40&offset=${off}`; }
+function accountCard(a){ return `<div class="card crow" style="cursor:pointer" onclick="openAccount(${a.id})">
     <div class="cav">${esc(initials(a.name))}</div>
     <div style="flex:1;min-width:0"><div class="cname">${esc(a.name)}</div>
       <div class="csub">${a.contacts} contact${a.contacts==1?'':'s'} · ${a.deals} deal${a.deals==1?'':'s'}${a.won_value?' · '+dmoney(a.won_value)+' won':''}</div></div>
-    ${ic('chevron',18)}</div>`).join('') : '<div class="empty">No organisations yet</div>';
+    ${ic('chevron',18)}</div>`; }
+async function renderClients(b){
+  b.outerHTML=`<div id="crmbody">
+    <div class="srch">${ic('search',18)}<input id="clq" placeholder="Search organisations…" oninput="searchClients()"><span id="clcount" style="margin-left:auto;font-size:12px;color:var(--mut);white-space:nowrap;padding-left:8px">&nbsp;</span></div>
+    <div class="row" style="margin-bottom:10px;gap:8px"><button class="btn go sm" onclick="openNewCompany()">${ic('plus',15)} New organisation</button><button class="btn sm" onclick="openDupes()">${ic('copy',15)} Merge duplicates</button></div>
+    <div id="cllist" class="empty">Loading…</div></div>`;
+  loadClients();
+}
+async function openDupes(){
+  const v=document.getElementById('view'); v.innerHTML='<div class="empty">Finding duplicate organisations…</div>';
+  let data; try{ data=await api('/api/crm/account-dupes'); }catch(e){ data={groups:[]}; }
+  const g=data.groups||[];
+  const head=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>Duplicate organisations</b><span class="csub" style="margin-left:auto">${g.length} groups · ${data.auto_safe||0} clearly safe</span></div>`;
+  if(!g.length){ v.innerHTML=head+'<div class="empty">No duplicate candidates found.</div>'; return; }
+  v.innerHTML=head+'<div class="csub" style="margin:0 2px 10px">Same email domain = likely the same organisation. Pick the record to keep; the rest merge into it. Own-brand and chain/conglomerate groups are flagged for your judgement.</div><div id="dupelist">'+g.map(dupeCard).join('')+'</div>';
+}
+function dupeCard(grp,i){
+  const gid='dg'+i;
+  const rows=grp.accounts.map((a,j)=>`<label class="crow" style="gap:8px;cursor:pointer;padding:5px 0"><input type="radio" name="${gid}" value="${a.id}" ${j===0?'checked':''}><div style="flex:1;min-width:0"><div class="cname" style="font-size:13.5px">${esc(a.name)}${a.own_brand?' <span class="chip" style="font-size:9px;color:#ff5d6c;border-color:#ff5d6c55">own brand</span>':''}</div><div class="csub">${a.contacts} contact${a.contacts==1?'':'s'} · ${a.deals} deal${a.deals==1?'':'s'}</div></div></label>`).join('');
+  const badge = grp.own_brand?'<span class="chip" style="font-size:10px;color:#ff5d6c;border-color:#ff5d6c55">own-brand — review</span>':(grp.auto_safe?'<span class="chip" style="font-size:10px;color:#2ad17e;border-color:#2ad17e55">clearly safe</span>':'<span class="chip" style="font-size:10px;color:#f5a623;border-color:#f5a62355">review</span>');
+  return `<div class="card" id="${gid}_card" style="margin-bottom:10px"><div class="row" style="justify-content:space-between;align-items:center"><b style="font-size:13px">${esc(grp.domain)}</b>${badge}</div>${rows}<div class="row" style="margin-top:8px;gap:8px"><button class="btn go sm" onclick="mergeGroup('${gid}')">Merge into selected</button><button class="btn sm" onclick="document.getElementById('${gid}_card').remove()">Skip</button></div></div>`;
+}
+async function mergeGroup(gid){
+  const sel=document.querySelector(`input[name="${gid}"]:checked`); if(!sel) return;
+  const winner=parseInt(sel.value); const card=document.getElementById(gid+'_card');
+  const losers=[...card.querySelectorAll(`input[name="${gid}"]`)].map(x=>parseInt(x.value)).filter(x=>x!==winner);
+  if(!losers.length) return; card.style.opacity=.5;
+  try{ const r=await api('/api/crm/accounts/merge',{method:'POST',body:JSON.stringify({winner_id:winner,loser_ids:losers,reason:'cockpit review'})});
+    toast('Merged '+(r.removed||losers.length)+' into one'); card.remove(); ACCOUNTS=[]; }
+  catch(e){ toast('Merge failed: '+e.message); card.style.opacity=1; }
+}
+async function updateOrgCount(){ const el=document.getElementById('clcount'); if(!el) return; el.textContent='…'; try{ const co=document.getElementById('coSel').value||''; const r=await api(`/api/crm/accounts/count?company=${encodeURIComponent(co)}&q=${encodeURIComponent(clState.q)}`); const n=(r&&r.count)||0; el.textContent=n.toLocaleString()+' organisation'+(n===1?'':'s'); }catch(e){ el.textContent=''; } }
+async function loadClients(){
+  const list=document.getElementById('cllist'); if(!list) return;
+  clState={q:(document.getElementById('clq')||{}).value||'',page:0,more:false,loading:false};
+  updateOrgCount();
+  list.innerHTML='<div class="empty">Loading…</div>';
+  let rows; try{ rows=await api(accountsListQuery(0)); }catch(e){ rows=[]; }
+  list.innerHTML = rows.length? rows.map(accountCard).join('')+'<div id="clmore" style="height:1px"></div>' : '<div class="empty">No organisations yet</div>';
+  clState.page=1; clState.more = rows.length===40;
+  if(clState.more) setupClientObserver();
+}
+async function loadMoreClients(){
+  if(!clState.more||clState.loading) return;
+  const sentinel=document.getElementById('clmore'); if(!sentinel) return;
+  clState.loading=true;
+  let rows; try{ rows=await api(accountsListQuery(clState.page*40)); }catch(e){ rows=[]; }
+  if(rows.length){ sentinel.insertAdjacentHTML('beforebegin', rows.map(accountCard).join('')); clState.page++; }
+  clState.more = rows.length===40;
+  if(!clState.more){ if(clObserver) clObserver.disconnect(); sentinel.remove(); }
+  clState.loading=false;
+}
+function setupClientObserver(){
+  if(clObserver) clObserver.disconnect();
+  const s=document.getElementById('clmore'); if(!s||!('IntersectionObserver' in window)) return;
+  clObserver=new IntersectionObserver(es=>{ if(es[0].isIntersecting) loadMoreClients(); }, {rootMargin:'500px'});
+  clObserver.observe(s);
 }
 async function openAccount(id){
   const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
@@ -1098,6 +1275,22 @@ function cadenceText(t){
 }
 function whenText(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString([],{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; } }
 function kindLabel(k){ return {blog:'blog post',blog_scheduled:'blog post (queued)',newsletter_idea:'newsletter idea',newsletter_review:'newsletter ready to schedule',newsletter_send:'newsletter due to send',newsletter_scheduled:'newsletter (queued)',email_draft:'email draft',email_reply:'email reply',seo_report:'SEO & Traffic report',report:'report'}[k]||k||'task'; }
+let calLinks={};
+function calLinkBtn(t){
+  if(!t.link) return '';
+  calLinks[t.id]={url:t.link, fetch:!!t.link_fetch};
+  return `<button class="iconbtn sm" style="width:auto;padding:0 9px;font-size:11px;font-weight:600" title="${esc(t.link_label||'View content')}" onclick="event.stopPropagation();openContent(${t.id})">${esc(t.link_label||'View')}</button>`;
+}
+async function openContent(id){
+  const L=calLinks[id]; if(!L) return;
+  if(L.fetch){
+    try{ const r=await fetch(API+'/api/content/preview/'+id,{headers:token?{Authorization:'Bearer '+token}:{}});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const html=await r.text(); const w=window.open('','_blank');
+      if(w){ w.document.write(html); w.document.close(); } else toast('Allow popups to view it'); }
+    catch(e){ toast('Could not open ('+e.message+')'); }
+  } else { window.open(L.url,'_blank'); }
+}
 async function renderCalendar(v){
   v.innerHTML=`<div class="h">Calendar</div><div id="calbody" class="empty">Loading…</div>`;
   const fco=document.getElementById('coSel').value;
@@ -1116,7 +1309,7 @@ async function renderCalendar(v){
       h+=`<div class="card prow" style="cursor:pointer;border-left:3px solid var(--cy)" onclick="go('inbox')">
         <div style="flex:1;min-width:0"><div class="cname">${esc(t.title||t.kind)}</div>
         <div class="csub"><span class="chip cy">${esc(t.company)}</span> ${esc(kindLabel(t.kind))} · ${st} · ${esc(whenText(t.when))}</div></div>
-        <div class="row" style="flex:none">${ic('back',16)}</div></div>`;
+        <div class="row" style="flex:none;gap:6px">${calLinkBtn(t)}${ic('back',16)}</div></div>`;
     });
   } else { h+='<div class="csub" style="padding:2px 4px 12px">Nothing waiting — inbox zero on un-dated work.</div>'; }
 
@@ -1142,10 +1335,22 @@ async function renderCalendar(v){
       h+=`<div class="card prow"><div style="flex:1;min-width:0">
         <div class="cname">${esc(t.title||t.kind)}</div>
         <div class="csub"><span class="chip cy">${esc(t.company)}</span> ${esc(kindLabel(t.kind))} · ${esc(whenText(t.run_at))}</div></div>
-        <div class="row" style="gap:6px;flex:none">${t.kind==='blog_scheduled'?`<button class="iconbtn sm" title="Bump to front of the queue" onclick="bumpCal(${t.id})">${ic('up',15)}</button>`:''}<button class="iconbtn sm" title="Cancel" onclick="delCal(${t.id})">${ic('trash',15)}</button></div></div>`;
+        <div class="row" style="gap:6px;flex:none">${calLinkBtn(t)}${t.kind==='blog_scheduled'?`<button class="iconbtn sm" title="Move up one slot (earlier)" onclick="moveCal(${t.id},'up')">${ic('up',15)}</button><button class="iconbtn sm" title="Move down one slot (later)" onclick="moveCal(${t.id},'down')">${ic('down',15)}</button>`:''}<button class="iconbtn sm" title="Cancel" onclick="delCal(${t.id})">${ic('trash',15)}</button></div></div>`;
     });
   }
 
+  // REMINDERS — manual reminders + opportunity follow-ups, so everything scheduled is on the calendar
+  const rems=d.reminders||[];
+  if(rems.length){
+    h+=`<div class="h">Reminders</div>`;
+    rems.forEach(t=>{
+      const opp=t.opportunity?` · <span class="chip">${esc(t.opportunity)}</span>`:'';
+      h+=`<div class="card prow"${t.deal_id?` style="cursor:pointer" onclick="openProject(${t.deal_id})"`:''}><div style="flex:1;min-width:0">
+        <div class="cname">${esc(t.title)}</div>
+        <div class="csub"><span class="chip cy">${esc(t.company||'')}</span> ${esc(whenText(t.run_at))} · ${t.drafts?'drafts a reply':'nudge'}${opp}</div></div>
+        <div class="row" style="gap:6px;flex:none"><button class="iconbtn sm" title="Cancel" onclick="event.stopPropagation();cancelReminderCal(${t.id})">${ic('trash',15)}</button></div></div>`;
+    });
+  }
   h+=`<div class="h">Schedule a recurring job</div><div class="card">
     <label>Organisation</label>
     <select id="scCo" class="fsel">${cos.map(([s,l])=>`<option value="${esc(s)}"${s===fco?' selected':''}>${esc(l)}</option>`).join('')}</select>
@@ -1174,8 +1379,10 @@ async function addSched(){
 }
 async function toggleCal(id){ try{ await api('/api/calendar/'+id+'/toggle',{method:'POST'}); renderCalendar(document.getElementById('view')); }catch(e){ toast(e.message); } }
 async function delCal(id){ try{ await api('/api/calendar/'+id,{method:'DELETE'}); renderCalendar(document.getElementById('view')); }catch(e){ toast(e.message); } }
+async function cancelReminderCal(rid){ try{ await api('/api/reminders/'+rid+'/cancel',{method:'POST'}); toast('Reminder cancelled'); renderCalendar(document.getElementById('view')); }catch(e){ toast(e.message); } }
 async function runCal(id){ try{ toast('Running…'); await api('/api/calendar/'+id+'/run',{method:'POST'}); toast('Done — it is heading to your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
 async function bumpCal(id){ try{ const r=await api('/api/calendar/'+id+'/bump',{method:'POST'}); toast('Bumped to front ('+(r.front||'')+')'); renderCalendar(document.getElementById('view')); }catch(e){ toast('Failed: '+e.message); } }
+async function moveCal(id,dir){ try{ const r=await api('/api/calendar/'+id+'/move?dir='+dir,{method:'POST'}); if(r&&r.noop){ toast(dir==='up'?'Already at the top':'Already at the bottom'); return; } renderCalendar(document.getElementById('view')); }catch(e){ toast('Failed: '+e.message); } }
 async function runReportNow(){ try{ toast('Generating…'); await api('/api/report/run?company='+encodeURIComponent(fval('scCo')),{method:'POST'}); toast('Done — check your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
 
 let inboxView='pending', inboxSeg=localStorage.getItem('cortex_ibseg2')||'all';
@@ -1195,6 +1402,7 @@ async function renderInbox(v){
     ${(!demo && IS_MOBILE && !biometricReg)?`<div class="banner" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>${ic('finger',15)} Faster approvals: unlock with your fingerprint on this phone</span><button class="btn sm go" style="flex:none" onclick="registerDevice()">Enable fingerprint</button></div>`:''}
     ${(!demo && IS_MOBILE && localStorage.getItem('cortex_push')!=='1')?`<div class="banner" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>${ic('alert',15)} Get Cortex alerts on your lock screen</span><button class="btn sm go" style="flex:none" onclick="enablePush()">Enable alerts</button></div>`:''}
     <div class="convbar" id="ibSeg" style="margin:0 0 10px"></div>
+    <div id="pendingRules"></div>
     <div id="ib" class="empty">Loading…</div>`;
   const fco=document.getElementById('coSel').value;
   let resp;
@@ -1207,6 +1415,24 @@ async function renderInbox(v){
   if(!shown.length){ ib.outerHTML='<div class="empty"><span class="e">✓</span>'+(inboxSeg==='updates'?'No updates right now.':inboxSeg==='needs'?'Nothing needs your yes. Cortex pings you here when it does.':'Inbox zero.')+'</div>'; return; }
   ib.outerHTML = shown.map(it=> it.card==='info'? infoCard(it) : actionCard(it)).join('');
   hydrateAttachments();   // fill in attachment thumbnails / filenames on the cards
+  // surface any standing rule a correction inferred but that wasn't decided yet — persistent, not poll-dependent
+  shown.forEach(it=>{ if(it.card!=='info' && it.proposed_rule) proposeRule(it.id, it.proposed_rule, it.rule_skill, it.rule_company); });
+  renderPendingRules(new Set(shown.map(it=>it.id)));   // every un-decided proposal -> a taught rule can never be lost
+}
+async function renderPendingRules(skipIds){
+  const el=document.getElementById('pendingRules'); if(!el || demo) return;
+  let pend=[]; try{ const r=await api('/api/rules/pending'); pend=r.pending||[]; }catch(e){ el.innerHTML=''; return; }
+  if(skipIds) pend=pend.filter(p=>!skipIds.has(p.task_id));   // shown on its own card already -> don't duplicate here
+  if(!pend.length){ el.innerHTML=''; return; }
+  el.innerHTML=`<div class="banner" style="background:color-mix(in srgb,var(--accent) 13%,var(--panel));border:1px solid color-mix(in srgb,var(--accent) 38%,var(--line));color:var(--ink);margin-bottom:10px">${ic('check',15)} <b>${pend.length} rule${pend.length>1?'s':''} you taught me — confirm where ${pend.length>1?'each':'it'} should live</b></div>`
+    + pend.map(p=>`<div class="card" style="border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:11px;padding:11px 13px;margin-bottom:9px">
+        <div class="meta" style="margin:0 0 6px;color:var(--mut)">${ic('check',13)} Standing rule for <b style="color:var(--ink)">${esc(p.skill_name||'a skill')}</b>${p.company?(' &middot; '+esc(p.company)):''}</div>
+        <div style="background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:14px;margin-bottom:9px">${esc(p.rule)}</div>
+        <div class="row" style="flex-wrap:wrap;gap:7px">
+          <button class="btn go sm" onclick="decideRule(${p.task_id},true,'company')">${ic('check',14)} ${esc(p.company||'This company')} only</button>
+          <button class="btn go sm" onclick="decideRule(${p.task_id},true,'universal')">${ic('grid',14)} All companies</button>
+          <button class="btn sm" onclick="decideRule(${p.task_id},false,'company')">Dismiss</button></div>
+      </div>`).join('');
 }
 function renderSeg(resp){
   const el=document.getElementById('ibSeg'); if(!el) return;
@@ -1317,6 +1543,7 @@ function actionCard(t){
       <div class="row">
         <button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||'Approve')}</button>
         <button class="btn warn" id="cm${t.id}" onclick="voiceCorrect(${t.id},this)">${ic('mic',16)} Tap to talk</button>
+        <button class="btn" id="ty${t.id}" onclick="typeCorrect(${t.id})">${ic('edit',16)} Type</button>
         <button class="btn bad" onclick="act(${t.id},'skip')">${t.kind==='blog'?'Discard':'Skip'}</button>
       </div>
       <div class="corr" id="cp${t.id}" style="display:none;margin-top:9px">
@@ -1487,6 +1714,10 @@ function voiceCorrect(id, btn){
   const p=document.getElementById('cp'+id); if(p) p.style.display='block';
   dictate(btn, 'corr'+id);   // toggles: first tap starts listening, next tap stops
 }
+function typeCorrect(id){    // open the SAME feedback box to TYPE — no mic, no recording
+  const p=document.getElementById('cp'+id); if(p) p.style.display='block';
+  const ta=document.getElementById('corr'+id); if(ta) ta.focus();
+}
 function closeCorr(id){
   const btn=document.getElementById('cm'+id);
   if(recording) stopDictation(btn);
@@ -1511,12 +1742,13 @@ async function sendCorr(id){
 }
 // The 'is this a standing rule?' check runs in the background after a correction; poll a few times for its offer.
 function pollRule(id, tries){
-  if(tries>6) return;
+  if(tries>8) return;
   setTimeout(async()=>{
+    let got=false;
     try{ const r=await api(`/api/tasks/${id}/pending-rule`);
-      if(r&&r.proposed_rule) proposeRule(id,r.proposed_rule,r.skill_name,r.company);
-      else pollRule(id,tries+1);
+      if(r&&r.proposed_rule){ got=true; proposeRule(id,r.proposed_rule,r.skill_name,r.company); }
     }catch(e){}
+    if(!got) pollRule(id,tries+1);   // keep polling through transient errors; the rule lands a few seconds later
   }, 2500);
 }
 function proposeRule(id, rule, skillName, co){
@@ -1618,7 +1850,9 @@ async function speak(text){
     if(!r.ok) throw new Error(r.status);
     const blob=await r.blob();
     if(audioEl){ try{ audioEl.pause(); }catch(e){} }
-    audioEl=new Audio(URL.createObjectURL(blob)); audioEl.play();
+    audioEl=new Audio(URL.createObjectURL(blob));
+    audioEl.onended=()=>showSilence(false); audioEl.onpause=()=>showSilence(false); audioEl.onerror=()=>showSilence(false);
+    audioEl.play(); showSilence(true);
   }catch(e){ toast('Speak failed: '+e.message); }
 }
 function speakCard(id){ const c=document.getElementById('t'+id); if(!c) return;
@@ -1638,7 +1872,25 @@ function armTurn(){
   }, TURN_SILENCE);
 }
 function setHint(s){ const h=document.getElementById('freehint'); if(h) h.textContent=s; }
-function interruptSpeech(){ bargeInterrupted=true; try{ if(audioEl) audioEl.pause(); }catch(e){} botSpeaking=false; }
+function interruptSpeech(){ bargeInterrupted=true; try{ if(audioEl) audioEl.pause(); }catch(e){} botSpeaking=false; showSilence(false); }
+// Universal STOP-AUDIO: silence any TTS playing ANYWHERE — Talk free mode, on-the-go mode, or a spoken Inbox card.
+function showSilence(on){
+  let b=document.getElementById('silenceFab');
+  if(!b){
+    b=document.createElement('button'); b.id='silenceFab'; b.onclick=stopAudio; b.setAttribute('aria-label','Stop audio');
+    b.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:9999;display:none;'
+      +'align-items:center;gap:8px;background:#0B0F14;color:#fff;border:1px solid rgba(255,255,255,.18);'
+      +'border-radius:999px;padding:11px 18px;font:600 14px/1 Inter,system-ui;box-shadow:0 8px 28px rgba(0,0,0,.4);cursor:pointer';
+    b.innerHTML='<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>Stop audio';
+    document.body.appendChild(b);
+  }
+  b.style.display = on ? 'inline-flex' : 'none';
+}
+function stopAudio(){
+  try{ if(audioEl){ audioEl.pause(); audioEl.currentTime=0; } }catch(e){}
+  botSpeaking=false; if(freeOn) bargeInterrupted=true;     // in voice mode, behaves like a barge-in (stops, keeps listening)
+  showSilence(false); try{ setVoiceButtons&&setVoiceButtons(); }catch(e){}
+}
 function renderChat(v){
   v.innerHTML=`<div class="h">Talk to Cortex</div>
     <div class="convbar">
@@ -1832,19 +2084,33 @@ async function openConv(id){
   catch(e){ currentConvId=null; localStorage.removeItem('cortex_conv'); newConv(); }
 }
 function newConv(){ chatMsgs=[]; currentConvId=null; currentConvTitle=''; routedTo=''; routedLabel=''; localStorage.removeItem('cortex_conv'); paintChat(); setAutoLbl(); fillConvSel(convs); }
-async function saveConv(){
-  if(demo || !chatMsgs.length) return;
+async function saveConv(quick){
+  // `quick` = persist the turn-so-far IMMEDIATELY (no auto-title LLM call) so a slow/dropped request can never
+  // lose the conversation. The full save (with auto-title) runs again once the reply lands.
+  if(demo) return;
+  const toSave=chatMsgs.filter(m=>!(m.role==='assistant'&&m.content==='…'));   // never persist the typing placeholder
+  if(!toSave.length) return;
   try{
     if(!currentConvId){
-      // name the chat by its subject (auto-naming) on first save
-      try{ const r=await api('/api/chat/title',{method:'POST',body:JSON.stringify({messages:chatMsgs})}); currentConvTitle=r.title||''; }
-      catch(e){ currentConvTitle=((chatMsgs.find(m=>m.role==='user')||{}).content||'New chat').slice(0,48); }
+      if(!quick){ // name the chat by its subject (auto-naming) on first full save
+        try{ const r=await api('/api/chat/title',{method:'POST',body:JSON.stringify({messages:toSave})}); currentConvTitle=r.title||''; }catch(e){}
+      }
+      if(!currentConvTitle) currentConvTitle=((toSave.find(m=>m.role==='user')||{}).content||'New chat').slice(0,48);
       const c=await api('/api/conversations',{method:'POST'}); currentConvId=String(c.id); localStorage.setItem('cortex_conv',currentConvId);
     }
-    const title=currentConvTitle||((chatMsgs.find(m=>m.role==='user')||{}).content||'New chat').slice(0,48);
-    await api('/api/conversations/'+currentConvId,{method:'PUT',body:JSON.stringify({messages:chatMsgs,title})});
-    loadConvs();
+    const title=currentConvTitle||((toSave.find(m=>m.role==='user')||{}).content||'New chat').slice(0,48);
+    await api('/api/conversations/'+currentConvId,{method:'PUT',body:JSON.stringify({messages:toSave,title})});
+    if(!quick) loadConvs();
   }catch(e){}
+}
+function parseSSE(block){
+  let event='message', data='';
+  for(const line of block.split('\n')){
+    if(line.indexOf('event:')===0) event=line.slice(6).trim();
+    else if(line.indexOf('data:')===0) data+=line.slice(5).trim();
+  }
+  if(!data) return null;
+  try{ return {event,data:JSON.parse(data)}; }catch(e){ return null; }
 }
 async function delConv(){
   if(!currentConvId){ newConv(); return; }
@@ -1867,22 +2133,50 @@ async function sendChat(text, viaVoice){
   chatMsgs.push({role:'user',content:msg||(imgs.length?'(image)':''),images:imgs});
   chatMsgs.push({role:'assistant',content:'…'}); paintChat();
   if(demo){ chatMsgs[chatMsgs.length-1]={role:'assistant',content:'(demo) Log in with your passcode to chat for real.'}; paintChat(); return ''; }
+  saveConv(true);   // persist the user's turn NOW so a slow/dropped reply can never lose the conversation
+  const idx=chatMsgs.length-1;
   try{
     const hist=chatMsgs.filter(m=>m.content!=='…').map(m=>({role:m.role,content:m.content}));
     const fco=(document.getElementById('coSel')||{}).value||'';
     const payload={messages:hist,persona:talkingTo,company:fco};
     if(imgs.length){ payload.images=imgs; payload.image_names=names; }        // attached photos/files -> Cortex sees them
     if(!talkingTo) payload.current=routedTo;   // sticky auto-routing
-    const d=await api('/api/chat',{method:'POST',body:JSON.stringify(payload)});
-    const reply=d.reply||'(no reply)';
-    const pk=talkingTo||d.persona||'';
-    if(!talkingTo) routedTo=d.persona||'';     // remember who the concierge routed to
-    routedLabel=d.persona_label||'Cortex';     // ...and surface it in the header pill
-    chatMsgs[chatMsgs.length-1]={role:'assistant',content:reply,who:d.persona_label||'Cortex',pk}; paintChat(); setAutoLbl();
+    // STREAM the reply (SSE): paints live AND keeps the connection alive past Cloudflare's ~100s ceiling
+    const resp=await fetch(API+'/api/chat/stream',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(payload)});
+    if(!resp.ok||!resp.body) throw new Error('HTTP '+resp.status);
+    const reader=resp.body.getReader(), dec=new TextDecoder();
+    let buf='', reply='', persona='', plabel='Cortex';
+    while(true){
+      const {value,done}=await reader.read(); if(done) break;
+      buf+=dec.decode(value,{stream:true});
+      const parts=buf.split('\n\n'); buf=parts.pop();
+      for(const blk of parts){
+        const ev=parseSSE(blk); if(!ev) continue;
+        if(ev.event==='meta'){ persona=ev.data.persona||''; plabel=ev.data.persona_label||'Cortex'; }
+        else if(ev.event==='delta'){ reply+=(ev.data.text||''); chatMsgs[idx]={role:'assistant',content:reply||'…',who:plabel,pk:talkingTo||persona}; paintChat(); }
+        else if(ev.event==='done'){ if(ev.data.reply) reply=ev.data.reply; }
+        else if(ev.event==='error'){ throw new Error(ev.data.error||'stream error'); }
+      }
+    }
+    const pk=talkingTo||persona||'';
+    if(!talkingTo) routedTo=persona||'';       // remember who the concierge routed to
+    routedLabel=plabel;                         // ...and surface it in the header pill
+    chatMsgs[idx]={role:'assistant',content:reply||'(no reply)',who:plabel,pk}; paintChat(); setAutoLbl();
     saveConv();
     if(viaVoice && reply) await speakAndWait(reply);
     return reply;
-  }catch(e){ chatMsgs[chatMsgs.length-1]={role:'assistant',content:'Error: '+e.message}; paintChat(); return ''; }
+  }catch(e){
+    const m=(e&&e.message)||'';
+    // A dropped connection throws a TypeError 'Failed to fetch'. The user's turn is already saved, so don't scare them.
+    const netDrop=(e instanceof TypeError)||/failed to fetch|networkerror|load failed|aborted|timed? ?out/i.test(m);
+    if(netDrop){
+      chatMsgs[idx]={role:'assistant',who:'Cortex',content:'Network hiccup — the connection dropped before my reply finished. Your message is saved; give it a moment and check your Inbox. No need to resend unless it’s missing.'};
+      try{ refreshBadge(); }catch(_){}
+    } else {
+      chatMsgs[idx]={role:'assistant',content:'Error: '+m};
+    }
+    paintChat(); saveConv(); return '';
+  }
 }
 function speakAndWait(text){
   return new Promise(async(resolve)=>{
@@ -1893,9 +2187,9 @@ function speakAndWait(text){
       const blob=await r.blob();
       if(audioEl){ try{audioEl.pause();}catch(e){} }
       audioEl=new Audio(URL.createObjectURL(blob));
-      let settled=false; const done=()=>{ if(settled) return; settled=true; botSpeaking=false; resolve(); };
+      let settled=false; const done=()=>{ if(settled) return; settled=true; botSpeaking=false; showSilence(false); resolve(); };
       audioEl.onended=done; audioEl.onerror=done; audioEl.onpause=done;   // pause = barge-in interrupt
-      audioEl.play().catch(done);
+      audioEl.play().catch(done); showSilence(true);
     }catch(e){ botSpeaking=false; resolve(); }
   });
 }
@@ -2396,6 +2690,13 @@ async function pfReview(){
     }
     html+=`<div class="qrule" onclick="pfEdit('${q.field}')" style="cursor:pointer">
       <div class="qinc" style="margin-bottom:3px">${esc(q.text)}</div>${valHtml}</div>`;
+    if(q.field==='signature_html'){   // each person's send-signature, rendered right UNDER the company signature
+      const psigs=pf._data.signatures||{};
+      Object.keys(psigs).forEach(em=>{ const s=psigs[em]||{};
+        html+=`<div class="qrule"><div class="qinc" style="margin-bottom:3px">Team signature · ${esc(s.name||em)}${s.role?' · '+esc(s.role):''} <span style="color:var(--mut);font-size:11px">&nbsp;${esc(em)}</span></div>
+          <div style="background:#fff;border-radius:8px;padding:14px 16px;margin-top:5px;color:#1a1a1a;overflow:auto">${s.signature_html||esc(s.signature||'')}</div></div>`;
+      });
+    }
   });
   v.innerHTML=html;
 }

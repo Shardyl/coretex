@@ -1,6 +1,8 @@
 """The worker — does the task per its skill (produces the deliverable)."""
 from __future__ import annotations
 
+import re
+
 from . import grounding, provider, store
 
 
@@ -23,9 +25,16 @@ def _model_for(skill: dict) -> str:
     return provider.resolve_model(skill.get("model")) or provider.MODEL_FAST
 
 
+# A Cc/Bcc SENDING directive anywhere in a rule, e.g. "...CC ben@x.com and BCC me@y.com". Same shape the
+# envelope reads (engine._rule_recipients). These are actioned by the sending system, NOT instructions for the
+# writer — hide any rule that sets a recipient from the drafter so the model can never echo it into the email
+# body as a visible "system note".
+_CC_DIRECTIVE = re.compile(r"\bb?cc\b\s+[\w.+-]+@", re.I)
+
+
 def _rules_block(skill: dict) -> str:
     universal, local = store.effective_rules(skill)  # universal minus this company's overrides, then local
-    rules = list(universal) + list(local)
+    rules = [r for r in (list(universal) + list(local)) if not _CC_DIRECTIVE.search(r or "")]
     if not rules:
         return ""
     return "Standing rules you MUST follow:\n" + "\n".join(f"- {r}" for r in rules)
@@ -33,10 +42,12 @@ def _rules_block(skill: dict) -> str:
 
 _EMAIL_BODY_RULE = (
     "This is an EMAIL. Write ONLY the email body — the greeting and the message. Do NOT write From/To/Subject "
-    "headers. Do NOT add a sign-off (no 'Best regards', no your name) and do NOT add a signature or contact "
+    "headers, and do NOT write any Cc/Bcc line, recipient list, routing note, 'sending note' or 'system note' in "
+    "the body — Cc/Bcc and recipients are actioned by the sending system, never written into the message. Do NOT "
+    "add a sign-off (no 'Best regards', no your name) and do NOT add a signature or contact "
     "details — the recipient, signature and logo are attached automatically, so adding them yourself doubles "
     "them up. Do NOT mention, describe or instruct anyone to add attachments — any attached files are shown to "
-    "the owner separately. Just the message itself, ready to send.")
+    "the owner separately. Output is exactly the message a human reads, nothing else, ready to send.")
 
 
 def draft(skill: dict, company: dict, request: dict,

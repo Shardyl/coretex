@@ -44,6 +44,22 @@ def _token(cfg):
         "https://oauth2.googleapis.com/token", data=data)))["access_token"]
 
 
+def _company_token(company: str) -> str:
+    """Per-company analytics access token: the company's OWN Internal OAuth client + analytics_refresh_token:<company>.
+    Falls back to the legacy shared google-ads.yaml creds (personal Gmail) for any company not yet migrated, so
+    reports never break mid-migration."""
+    try:
+        from . import db
+        rt = db.setting_get(f"analytics_refresh_token:{company}")
+        cf = f"/etc/cortex/google_oauth_client_{company}.json"
+        if rt and os.path.exists(cf):
+            c = json.load(open(cf))["web"]
+            return _token({"client_id": c["client_id"], "client_secret": c["client_secret"], "refresh_token": rt})
+    except Exception:  # noqa: BLE001 — never break a report on the per-company path; fall back to shared creds
+        pass
+    return _token(yaml.safe_load(open(_YAML, encoding="utf-8")))
+
+
 def _post(url, body):
     try:
         return json.load(urllib.request.urlopen(urllib.request.Request(
@@ -92,9 +108,8 @@ def generate(company: str, days: int = 28, out_dir: str = "/tmp") -> str:
     if company not in SITES:
         raise ValueError(f"no site for {company}")
     label, key, url = SITES[company]
-    cfg = yaml.safe_load(open(_YAML, encoding="utf-8"))
     ids = json.load(open(_IDS))
-    _H = {"Authorization": f"Bearer {_token(cfg)}", "Content-Type": "application/json"}
+    _H = {"Authorization": f"Bearer {_company_token(company)}", "Content-Type": "application/json"}
     pid = ids[key]["property"].split("/")[1]
     dr = [{"startDate": f"{days}daysAgo", "endDate": "today"}]
     tot = _ga(pid, {"dateRanges": dr, "metrics": [{"name": "activeUsers"}, {"name": "sessions"},
@@ -167,7 +182,11 @@ def generate(company: str, days: int = 28, out_dir: str = "/tmp") -> str:
     top_q = ""
     if queries:
         top_q = f" Top query: “{queries[0][0]}” ({queries[0][1]} clicks)."
+    ga_err = (f" [GA4 ACCESS ERROR {tot['_error']} - check property access + Analytics Data API enabled]"
+              if isinstance(tot, dict) and tot.get("_error") else "")
+    gsc_note = ("" if queries is not None
+                else " [Search Console: no access - check Full/Owner grant + Search Console API enabled]")
     summary = (f"{label}, last {days} days: {_first(tot, 0)} users, {_first(tot, 1)} sessions, "
-               f"{_first(tot, 2)} new, {_first(tot, 3)} pageviews.{top_q}")
+               f"{_first(tot, 2)} new, {_first(tot, 3)} pageviews.{top_q}{ga_err}{gsc_note}")
     return {"path": out, "title": f"{label} — SEO & Traffic Report", "summary": summary,
             "company": company, "label": label, "days": days}

@@ -86,6 +86,28 @@ def bump_to_front(task_id: int) -> dict:
     return {"ok": True, "front": front.strftime("%-d %b %Y"), "shifted": len(others), "kind": kind}
 
 
+def move_one(task_id: int, direction: str) -> dict:
+    """Nudge a queued content item ONE slot up (earlier) or down (later) in its company's queue for its kind, by
+    swapping its publish date with the immediately adjacent item. Lets the owner fine-tune the order one step at
+    a time. No-op if it is already at the top/bottom."""
+    t = db.one("select id, company_id, kind from tasks where id=%s", (task_id,))
+    if not t or t.get("kind") not in KINDS:
+        return {"ok": False, "error": "not a queued content task"}
+    q = db.query("select id, run_at from tasks where company_id=%s and kind=%s and status='scheduled' "
+                 "and run_at is not null order by run_at", (t["company_id"], t["kind"]))
+    ids = [r["id"] for r in q]
+    if task_id not in ids:
+        return {"ok": False, "error": "not in the queue"}
+    i = ids.index(task_id)
+    j = i - 1 if direction == "up" else i + 1
+    if j < 0 or j >= len(q):
+        return {"ok": True, "noop": True}            # already at the top / bottom
+    a, b = q[i], q[j]
+    db.execute("update tasks set run_at=%s where id=%s", (b["run_at"], a["id"]))   # swap the two publish dates
+    db.execute("update tasks set run_at=%s where id=%s", (a["run_at"], b["id"]))
+    return {"ok": True, "moved": direction}
+
+
 def check_refills() -> list[dict]:
     """Rolling-N refill. Once a day, for every company x content kind that is ALREADY running a program, if the
     queue has dropped to the threshold, fire ONE reminder to ideate the next batch. Guarded to at most one

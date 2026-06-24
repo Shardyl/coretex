@@ -6,27 +6,181 @@ every interaction (enquiry received, reply sent, correction, etc.). There is no 
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 
+import psycopg
+from psycopg.rows import dict_row
 from psycopg.types.json import Json
 
-from . import db
+from . import config, db
 
 # company slug -> the Organisation label used in crm_master (matches the imported master sheet)
 ORG = {"tabscanner": "Tabscanner", "sensa": "Sensa", "skyvision": "Sky Vision",
        "filmspoke": "FilmSpoke", "snaprewards": "Snap Rewards", "flixton": "Flixton Manor"}
 
+# ---- Organisation de-dup: a shared CUSTOM email domain implies the same org. Free/shared providers do NOT. ----
+FREE_EMAIL = {
+    "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.uk", "yahoo.co.in", "yahoo.fr", "yahoo.de", "ymail.com",
+    "rocketmail.com", "hotmail.com", "hotmail.co.uk", "hotmail.fr", "outlook.com", "live.com", "live.co.uk", "msn.com",
+    "icloud.com", "me.com", "mac.com", "aol.com", "protonmail.com", "proton.me", "gmx.com", "gmx.net", "gmx.de",
+    "mail.com", "mail.ru", "yandex.com", "yandex.ru", "qq.com", "163.com", "126.com", "sina.com", "foxmail.com",
+    "zoho.com", "fastmail.com", "hey.com", "rediffmail.com", "web.de", "t-online.de", "orange.fr", "free.fr",
+    "btinternet.com", "comcast.net", "sbcglobal.net", "verizon.net", "att.net", "cox.net", "sky.com",
+    "virginmedia.com", "emirates.net.ae", "eim.ae", "etisalat.ae", "du.ae",
+}
+# your own brands/entities — a group containing one is flagged and never auto-merged.
+OWN_BRAND_TOKENS = ("sensa", "sky vision", "skyvision", "filmspoke", "tabscanner", "snap rewards", "snaprewards",
+                    "three digital", "3 digital")
+_LEGAL = re.compile(r"\b(l\.?l\.?c\.?|ltd|limited|fz-?llc|fzco|fze|fz|llp|inc|corp|co|plc|pjsc|psc|est|gen|general|"
+                    r"trading|holdings?|group)\b")
+
+
+def _basename(s: str) -> str:
+    """Normalised name with parentheticals + legal suffixes stripped, so 'Emaar Entertainment' == 'Emaar Entertainment LLC'."""
+    s = re.sub(r"\(.*?\)", "", (s or "").lower())
+    return re.sub(r"[^a-z0-9]", "", _LEGAL.sub("", s))
+
+
+def _is_own_brand(name: str) -> bool:
+    n = (name or "").lower()
+    return any(t in n for t in OWN_BRAND_TOKENS)
+
+
+def ensure_merge_schema() -> None:
+    with db.connect() as c:
+        c.execute("create table if not exists account_merges("
+                  "id bigserial primary key, winner_id bigint, reason text, "
+                  "reversed boolean not null default false, created_at timestamptz not null default now())")
+        c.execute("create table if not exists account_merge_log("
+                  "id bigserial primary key, merge_id bigint references account_merges(id), "
+                  "action text, crm_id bigint, before jsonb)")
+
+
+def account_dupe_groups() -> list[dict]:
+    """Domain-based duplicate-organisation candidates: a non-free email domain shared by 2+ accounts. Each group =
+    {domain, accounts[{id,name,contacts,deals,own_brand}], own_brand, auto_safe, size}. auto_safe = exactly 2
+    accounts, no own-brand, and identical base names (legal suffix / parenthetical stripped)."""
+    from collections import defaultdict
+    dmap: dict[str, set] = defaultdict(set)
+    for r in db.query("select lower(split_part(email,'@',2)) d, account_id aid from crm_master "
+                      "where account_id is not null and position('@' in email) > 0"):
+        d = r["d"]
+        if d and "." in d and d not in FREE_EMAIL:
+            dmap[d].add(r["aid"])
+    groups = []
+    for d, aids in dmap.items():
+        if len(aids) < 2:
+            continue
+        accts = db.query(
+            "select a.id, a.name, (select count(*) from crm_master m where m.account_id=a.id) contacts, "
+            "(select count(*) from crm_projects p where p.account_id=a.id) deals "
+            "from crm_accounts a where a.id = any(%s) order by 3 desc, id", (list(aids),))
+        for a in accts:
+            a["own_brand"] = _is_own_brand(a["name"])
+        any_own = any(a["own_brand"] for a in accts)
+        bases = {_basename(a["name"]) for a in accts}
+        auto_safe = len(accts) == 2 and not any_own and len(bases) == 1 and "" not in bases
+        groups.append({"domain": d, "accounts": accts, "own_brand": any_own, "auto_safe": auto_safe, "size": len(accts)})
+    groups.sort(key=lambda g: (not g["auto_safe"], g["own_brand"], -g["size"], g["domain"]))
+    return groups
+
+
+def merge_accounts(winner_id: int, loser_ids: list[int], reason: str = "") -> dict:
+    """Merge loser accounts into the winner: carry over every non-empty field, move all contacts + deals, then
+    delete the losers. Reversible via account_merge_log (see reverse_account_merge). Returns a summary."""
+    ensure_merge_schema()
+    winner_id = int(winner_id)
+    loser_ids = [int(x) for x in loser_ids if int(x) != winner_id]
+    if not loser_ids:
+        return {"merged": 0}
+    conn = psycopg.connect(config.require("DATABASE_URL"), row_factory=dict_row, autocommit=False)
+    try:
+        w = conn.execute("select * from crm_accounts where id=%s", (winner_id,)).fetchone()
+        if not w:
+            return {"error": "winner not found"}
+        mid = conn.execute("insert into account_merges(winner_id, reason) values (%s,%s) returning id",
+                           (winner_id, reason)).fetchone()["id"]
+        conn.execute("insert into account_merge_log(merge_id,action,crm_id,before) values (%s,'winner_enriched',%s,%s)",
+                     (mid, winner_id, Json({k: w.get(k) for k in ("domain", "website", "phone", "note")}
+                                           | {"history": w.get("history")})))
+        losers = conn.execute("select * from crm_accounts where id = any(%s)", (loser_ids,)).fetchall()
+        carry = {}
+        for f in ("domain", "website", "phone", "note"):
+            if not (w.get(f) or "").strip():
+                for l in losers:
+                    if (l.get(f) or "").strip():
+                        carry[f] = l[f]; break
+        hist = list(w.get("history") or [])
+        for l in losers:
+            hist += list(l.get("history") or [])
+        hist.append({"event": "merge", "text": "merged: " + ", ".join(l["name"] for l in losers)})
+        conn.execute("update crm_accounts set domain=%s, website=%s, phone=%s, note=%s, history=%s where id=%s",
+                     (carry.get("domain", w.get("domain")), carry.get("website", w.get("website")),
+                      carry.get("phone", w.get("phone")), carry.get("note", w.get("note")), Json(hist), winner_id))
+        cm = dm = 0
+        for l in losers:
+            for r in conn.execute("select id from crm_master where account_id=%s", (l["id"],)).fetchall():
+                conn.execute("insert into account_merge_log(merge_id,action,crm_id,before) values (%s,'contact_moved',%s,%s)",
+                             (mid, r["id"], Json({"account_id": l["id"]}))); cm += 1
+            conn.execute("update crm_master set account_id=%s, updated_at=now() where account_id=%s", (winner_id, l["id"]))
+            for r in conn.execute("select id from crm_projects where account_id=%s", (l["id"],)).fetchall():
+                conn.execute("insert into account_merge_log(merge_id,action,crm_id,before) values (%s,'deal_moved',%s,%s)",
+                             (mid, r["id"], Json({"account_id": l["id"]}))); dm += 1
+            conn.execute("update crm_projects set account_id=%s where account_id=%s", (winner_id, l["id"]))
+            row = {"id": l["id"], "name": l["name"], "domain": l.get("domain"), "website": l.get("website"),
+                   "phone": l.get("phone"), "note": l.get("note"), "history": l.get("history"),
+                   "created_at": l["created_at"].isoformat() if l.get("created_at") else None, "company": l.get("company")}
+            conn.execute("insert into account_merge_log(merge_id,action,crm_id,before) values (%s,'acct_deleted',%s,%s)",
+                         (mid, l["id"], Json(row)))
+            conn.execute("delete from crm_accounts where id=%s", (l["id"],))
+        conn.commit()
+        return {"merge_id": mid, "winner_id": winner_id, "removed": len(losers), "contacts_moved": cm, "deals_moved": dm}
+    finally:
+        conn.close()
+
+
+def reverse_account_merge(merge_id: int) -> dict:
+    """Undo a merge_accounts() call exactly: re-create the deleted accounts, move contacts + deals back, restore
+    the winner's carried-over fields."""
+    conn = psycopg.connect(config.require("DATABASE_URL"), row_factory=dict_row, autocommit=False)
+    try:
+        log = conn.execute("select * from account_merge_log where merge_id=%s order by id", (merge_id,)).fetchall()
+        for r in (x for x in log if x["action"] == "acct_deleted"):
+            b = r["before"]
+            conn.execute("insert into crm_accounts (id,name,domain,website,phone,note,history,created_at,company) "
+                         "values (%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (id) do nothing",
+                         (b["id"], b["name"], b.get("domain"), b.get("website"), b.get("phone"), b.get("note"),
+                          Json(b.get("history") or []), b.get("created_at"), b.get("company")))
+        for r in (x for x in log if x["action"] == "contact_moved"):
+            conn.execute("update crm_master set account_id=%s, updated_at=now() where id=%s", (r["before"]["account_id"], r["crm_id"]))
+        for r in (x for x in log if x["action"] == "deal_moved"):
+            conn.execute("update crm_projects set account_id=%s where id=%s", (r["before"]["account_id"], r["crm_id"]))
+        for r in (x for x in log if x["action"] == "winner_enriched"):
+            b = r["before"]
+            conn.execute("update crm_accounts set domain=%s, website=%s, phone=%s, note=%s, history=%s where id=%s",
+                         (b.get("domain"), b.get("website"), b.get("phone"), b.get("note"), Json(b.get("history") or []), r["crm_id"]))
+        conn.execute("update account_merges set reversed=true where id=%s", (merge_id,))
+        conn.commit()
+        return {"reversed": merge_id}
+    finally:
+        conn.close()
+
 # inbound-email classifications that become CRM contacts (mirrors engine._INBOX_CRM; duplicated here to
 # avoid a circular import). A contact's structured `classification` field is one of these, or null.
 # "client" = is_client=true (someone who has been a client at some point — sticky); it wins over any guess.
-CLASSIFICATIONS = ["client", "lead", "partner", "support", "freelancer", "vendor", "recruitment"]
+CLASSIFICATIONS = ["client", "lead", "partner", "support", "freelancer", "vendor", "recruitment", "not_qualified"]
+# scrape-derived HISTORICAL labels (Sensa email-history merge). NOT assigned by the inbound classifier,
+# but valid to set by hand and to filter on. Kept distinct from the hard is_client flag.
+PAST_CLASSIFICATIONS = ["past_client", "past_opportunity"]
+ALL_CLASSIFICATIONS = CLASSIFICATIONS + PAST_CLASSIFICATIONS
 
 
 def set_classification(email: str, classification: str | None) -> dict | None:
     """Set or clear a contact's structured classification. Returns the updated row (None if no such contact
     or an invalid value)."""
     cl = (classification or "").strip().lower() or None
-    if cl and cl not in CLASSIFICATIONS:
+    if cl and cl not in ALL_CLASSIFICATIONS:
         return None
     return db.execute("update crm_master set classification=%s, updated_at=now() "
                       "where lower(email)=lower(%s) returning *", (cl, email))
@@ -40,7 +194,8 @@ alter table crm_master add column if not exists newsletter_bounced boolean not n
 alter table crm_master add column if not exists waitlist boolean not null default false;
 alter table crm_master add column if not exists classification text;
 alter table crm_master add column if not exists market text;
-alter table crm_master drop column if exists do_not_market;
+alter table crm_master add column if not exists quote_sent boolean not null default false;
+alter table crm_master add column if not exists do_not_market jsonb not null default '[]'::jsonb;
 """
 
 
@@ -97,10 +252,11 @@ def set_membership(email: str, company_slug: str, on: bool) -> str | None:
 def contact_company_state(email: str) -> dict:
     """Per-company membership / subscriber / test-group state for a contact, across the LIVE companies list
     (a newly added company appears automatically). subscriber = member AND not globally opted out."""
-    r = db.one("select organisation, newsletter_opt_out from crm_master where lower(email)=lower(%s) limit 1",
+    r = db.one("select organisation, newsletter_opt_out, do_not_market from crm_master where lower(email)=lower(%s) limit 1",
                (email,))
     orgs = {p.strip().lower() for p in ((r.get("organisation") if r else "") or "").split(",") if p.strip()}
     opted_out = bool(r and r.get("newsletter_opt_out"))
+    dnm = set((r.get("do_not_market") if r else None) or [])
     tg = {row["company_id"] for row in
           db.query("select company_id from newsletter_test_group where active and lower(email)=lower(%s)", (email,))}
     comps = []
@@ -108,7 +264,7 @@ def contact_company_state(email: str) -> dict:
         member = _org(c["slug"]).lower() in orgs
         comps.append({"slug": c["slug"], "name": c["name"], "id": c["id"],
                       "member": member, "test_group": c["id"] in tg,
-                      "subscriber": member and not opted_out})
+                      "subscriber": member and not opted_out, "do_not_market": c["slug"] in dnm})
     return {"opted_out": opted_out, "companies": comps}
 
 
@@ -287,6 +443,12 @@ create table if not exists crm_accounts (
   id bigserial primary key, name text not null, domain text, website text, phone text,
   note text, history jsonb not null default '[]'::jsonb, created_at timestamptz default now());
 alter table crm_accounts add column if not exists company text;
+-- opportunity follow-up automation (Cortex system-wide; cadence is config, never code)
+alter table crm_projects add column if not exists automation text;             -- 'auto' | 'manual' | null(off)
+alter table crm_projects add column if not exists followup_step int not null default 0;
+alter table crm_projects add column if not exists next_followup timestamptz;    -- when the next auto follow-up fires
+alter table crm_projects add column if not exists cadence jsonb;               -- per-opportunity override of the company cadence
+alter table tasks add column if not exists deal_id bigint;                     -- link a reminder/follow-up card to an opportunity
 """
 
 
@@ -383,6 +545,26 @@ def set_newsletter_opt_out(email: str, on: bool) -> dict | None:
     return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
 
 
+ALL_COMPANY_SLUGS = ["tabscanner", "sensa", "skyvision", "filmspoke", "snaprewards"]
+
+
+def set_do_not_market(email: str, company: str | None, on: bool) -> dict | None:
+    """DO NOT MARKET, PER COMPANY. `do_not_market` is a list of company SLUGS the contact is suppressed for
+    (off ALL outbound marketing for that company: newsletter + Instantly + automation; a manual 1:1 reply is
+    still fine). `company` = one slug (per-company) or ''/None/'all' (across EVERY company). on=add, off=remove."""
+    ensure_schema()
+    c = db.one("select id, do_not_market from crm_master where lower(email)=lower(%s)", (email,))
+    if not c:
+        return None
+    cur = set(c["do_not_market"] or [])
+    targets = set(ALL_COMPANY_SLUGS) if (not company or company in ("all", "")) else {company}
+    cur = (cur | targets) if on else (cur - targets)
+    db.execute("update crm_master set do_not_market=%s, updated_at=now() where id=%s", (Json(sorted(cur)), c["id"]))
+    scope = "ALL companies" if (not company or company == "all") else company
+    log_event(email, "do_not_market", f"Do-not-market {'ON' if on else 'removed'} for {scope}")
+    return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
+
+
 def set_newsletter_bounced(email: str, on: bool) -> dict | None:
     """Flag/unflag a contact's email as a NEWSLETTER hard-bounce (dead address). Distinct from
     newsletter_opt_out (chose to leave) and from Instantly's 'Bounced' status (cold-campaign channel).
@@ -431,6 +613,160 @@ def set_project_stage(project_id: int, stage: str) -> dict | None:
     if p.get("contact_email"):
         log_event(p["contact_email"], "deal_stage", f"{p['title']}: {old} -> {stage}")
     return db.one("select * from crm_projects where id=%s", (project_id,))
+
+
+# ---- Opportunity follow-up automation — SYSTEM-WIDE. The CADENCE is config (a per-company override on the
+#      profile, else this default), never code; the engine just runs whatever sequence it is handed. ----------
+DEFAULT_CADENCE = {
+    "skip_weekends": True,
+    "steps": [
+        {"after_days": 3, "repeat": 4, "action": "chase"},      # 4 chases, 3 days apart
+        {"after_days": 14, "repeat": 2, "action": "checkin"},   # then 2 fortnightly check-ins
+        {"after_days": 14, "repeat": 1, "action": "lost"},      # then mark the opportunity Lost
+    ],
+}
+
+
+def _slug_for_org(label: str | None) -> str:
+    for slug, lbl in ORG.items():
+        if lbl == label:
+            return slug
+    return (label or "").lower()
+
+
+def get_cadence(company_org_label: str | None) -> dict:
+    """The follow-up cadence for a company — its own override on the profile (`followup_cadence`), else the
+    system default. Behaviour lives in CONFIG so any company can have its own sequence without touching code."""
+    try:
+        from . import profile, store
+        co = store.get_company_by_slug(_slug_for_org(company_org_label))
+        cad = (profile.get(co["id"]) or {}).get("followup_cadence") if co else None
+        if cad and cad.get("steps"):
+            return cad
+    except Exception:  # noqa: BLE001
+        pass
+    return DEFAULT_CADENCE
+
+
+def cadence_points(cadence: dict) -> list[dict]:
+    """Flatten the cadence steps into individual fire-points, each carrying the gap (after_days) before it."""
+    pts: list[dict] = []
+    for s in (cadence.get("steps") or []):
+        for _ in range(int(s.get("repeat", 1))):
+            pts.append({"action": s.get("action", "chase"), "after_days": int(s.get("after_days", 3))})
+    return pts
+
+
+def _roll_weekend(dt: datetime, skip: bool) -> datetime:
+    while skip and dt.weekday() >= 5:        # 5=Sat, 6=Sun -> roll to Monday
+        dt += timedelta(days=1)
+    return dt
+
+
+def _schedule_point(cadence: dict, idx: int, base: datetime | None = None) -> datetime | None:
+    pts = cadence_points(cadence)
+    if idx >= len(pts):
+        return None
+    base = base or datetime.now(timezone.utc)
+    return _roll_weekend(base + timedelta(days=pts[idx]["after_days"]), bool(cadence.get("skip_weekends")))
+
+
+def start_opportunity_followups(deal_id: int) -> dict | None:
+    """Put an opportunity into AUTO and arm its first follow-up per the company cadence."""
+    p = db.one("select * from crm_projects where id=%s", (deal_id,))
+    if not p:
+        return None
+    when = _schedule_point(get_cadence(p["company"]), 0)
+    db.execute("update crm_projects set automation='auto', followup_step=0, next_followup=%s, updated_at=now() where id=%s",
+               (when, deal_id))
+    return db.one("select * from crm_projects where id=%s", (deal_id,))
+
+
+def set_opportunity_automation(deal_id: int, mode: str | None) -> dict | None:
+    """'auto' re-arms the cadence; 'manual'/None stop it (manual reminders still work either way)."""
+    if mode == "auto":
+        return start_opportunity_followups(deal_id)
+    db.execute("update crm_projects set automation=%s, next_followup=null, updated_at=now() where id=%s",
+               ("manual" if mode == "manual" else None, deal_id))
+    return db.one("select * from crm_projects where id=%s", (deal_id,))
+
+
+def advance_followup(deal_id: int) -> dict | None:
+    """Engine calls this when an auto opportunity's next_followup is due: returns the action to fire
+    ('chase'/'checkin') and arms the NEXT step, or marks the opportunity Lost when the sequence ends."""
+    p = db.one("select * from crm_projects where id=%s", (deal_id,))
+    if not p or p.get("automation") != "auto":
+        return None
+    cad = get_cadence(p["company"])
+    pts = cadence_points(cad)
+    i = p.get("followup_step") or 0
+    action = pts[i]["action"] if i < len(pts) else "lost"
+    if action == "lost":
+        set_project_stage(deal_id, LOST_STAGE)
+        db.execute("update crm_projects set automation=null, next_followup=null, updated_at=now() where id=%s", (deal_id,))
+        return {"action": "lost", "done": True, "step": i}
+    nxt = _schedule_point(cad, i + 1)
+    db.execute("update crm_projects set followup_step=%s, next_followup=%s, updated_at=now() where id=%s",
+               (i + 1, nxt, deal_id))
+    return {"action": action, "done": False, "step": i}
+
+
+def _deal_name_from_inquiry(c: dict) -> str:
+    """A short, punchy deal name from the enquiry context — '<Company> - <project/inquiry type>'."""
+    name = ((c.get("first_name") or "") + " " + (c.get("last_name") or "")).strip()
+    comp = (c.get("company_name") or name or "Lead").strip()
+    note = (c.get("note") or "")[:600]
+    try:
+        from . import provider
+        out = provider.think(
+            "Generate a SHORT, punchy CRM deal name from a sales enquiry, format '<Company> - <project/inquiry "
+            "type>' (e.g. 'Noon - brand launch film', 'RAK Ceramics - product video'). Max ~6 words, no quotes, "
+            "no trailing punctuation. Use the company name + the kind of work. If the work is unclear, '<Company> - enquiry'.",
+            f"Company: {comp}\nEnquiry: {note}", model="claude-haiku-4-5", max_tokens=24)
+        t = (out or "").strip().strip('"').splitlines()[0].strip()[:80]
+        if t:
+            return t
+    except Exception:  # noqa: BLE001
+        pass
+    return f"{comp} - enquiry"
+
+
+def qualify_opportunity(email: str, company_slug: str, title: str | None = None) -> dict | None:
+    """Qualify a lead: create an Opportunity linked to their organisation, attach the contact as primary, and
+    start the Auto follow-up cadence. This is the decision point — an opportunity only exists once qualified."""
+    c = db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
+    if not c:
+        return None
+    title = (title or _deal_name_from_inquiry(c)).strip()
+    d = create_deal(company_slug, title, stage="Opportunity", account_id=c.get("account_id"))
+    add_deal_contact(d["id"], email, primary=True)
+    if (c.get("classification") or "") == "not_qualified":
+        set_classification(email, "lead")        # re-qualifying clears a prior not-qualified flag
+    db.execute("delete from settings where key like %s", (f"lead_fu:%:{email.lower()}",))  # the lead is now an opportunity
+    q = db.setting_get(f"qual:email:{email.lower()}") or {}
+    if q.get("ball_in_our_court"):                # they asked US for a proposal/quote -> we owe them: don't auto-chase
+        db.execute("update crm_projects set automation='manual', next_followup=null, updated_at=now() where id=%s", (d["id"],))
+        try:
+            from . import reminders, store
+            cidx = (store.get_company_by_slug(company_slug) or {}).get("id")
+            reminders.create(f"Prepare and send the proposal — {title}",
+                             _roll_weekend(datetime.now(timezone.utc) + timedelta(days=1), True),
+                             company_id=cidx, target_type="deal", target_id=d["id"], priority="high")
+        except Exception:  # noqa: BLE001 — the reminder is a convenience; never fail the qualify
+            pass
+    else:                                          # we're waiting on THEM -> start the Auto chase cadence
+        start_opportunity_followups(d["id"])
+    log_event(email, "qualified", f"Qualified -> opportunity #{d['id']}: {title}")
+    return db.one("select * from crm_projects where id=%s", (d["id"],))
+
+
+def disqualify(email: str) -> dict | None:
+    """Mark a lead NOT qualified — no opportunity is created. Reversible (re-qualify any time)."""
+    r = set_classification(email, "not_qualified")
+    if r:
+        log_event(email, "not_qualified", "Marked not qualified")
+    db.execute("delete from settings where key like %s", (f"lead_fu:%:{email.lower()}",))  # stop chasing a disqualified lead
+    return r
 
 
 def flag_clients_for_deal(p: dict) -> int:

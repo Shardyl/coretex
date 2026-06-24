@@ -16,6 +16,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import time
 
@@ -24,7 +25,7 @@ import websockets
 from fastapi import (Body, Depends, FastAPI, File, Header, HTTPException, Response,
                      UploadFile, WebSocket, WebSocketDisconnect)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Json
 from pydantic import BaseModel
@@ -61,39 +62,128 @@ def _sign(payload: str) -> str:
     return base64.urlsafe_b64encode(sig).decode().rstrip("=")
 
 
-def _make_token() -> str:
+def _make_token(subject: str = "owner") -> str:
     exp = str(int(time.time()) + TOKEN_TTL)
-    return f"{exp}.{_sign(exp)}"
+    payload = f"{subject}.{exp}"
+    return f"{payload}.{_sign(payload)}"
 
 
-def _valid_token(token: str) -> bool:
-    try:
-        exp, sig = token.split(".", 1)
-    except ValueError:
-        return False
-    if not hmac.compare_digest(sig, _sign(exp)):
-        return False
-    return int(exp) > time.time()
+def _token_subject(token: str) -> str | None:
+    """The token's subject ('owner' or a user id) if valid + unexpired, else None. Accepts the legacy
+    2-part owner token (exp.sig) for back-compat."""
+    parts = (token or "").split(".")
+    if len(parts) == 3:
+        subject, exp, sig = parts
+        if exp.isdigit() and hmac.compare_digest(sig, _sign(f"{subject}.{exp}")) and int(exp) > time.time():
+            return subject
+        return None
+    if len(parts) == 2:                       # legacy owner token
+        exp, sig = parts
+        if exp.isdigit() and hmac.compare_digest(sig, _sign(exp)) and int(exp) > time.time():
+            return "owner"
+    return None
 
 
 def auth(authorization: str = Header(default="")) -> None:
     token = authorization[7:] if authorization.lower().startswith("bearer ") else authorization
-    if not _valid_token(token):
+    if _token_subject(token) is None:
         raise HTTPException(status_code=401, detail="not authenticated")
+
+
+def current_user(authorization: str = Header(default="")) -> dict:
+    """The acting user. 'owner' (Rashad's passcode) = full access, companies=None. A named user = their row +
+    company scope (the slugs they may access)."""
+    token = authorization[7:] if authorization.lower().startswith("bearer ") else authorization
+    subj = _token_subject(token)
+    if subj is None:
+        raise HTTPException(status_code=401, detail="not authenticated")
+    if subj == "owner":
+        return {"id": None, "name": "Owner", "role": "owner", "companies": None}
+    u = db.one("select id, name, email, role, companies, active from users where id=%s", (int(subj),)) if subj.isdigit() else None
+    if not u or not u.get("active"):
+        raise HTTPException(status_code=401, detail="account disabled")
+    return u
+
+
+def _ensure_users() -> None:
+    db.execute("create table if not exists users (id bigserial primary key, name text not null, "
+               "email text unique not null, passcode_hash text not null, role text not null default 'admin', "
+               "companies jsonb not null default '[]'::jsonb, active boolean not null default true, "
+               "created_at timestamptz default now())")
+    db.execute("alter table users add column if not exists must_onboard boolean not null default true")
+    db.execute("alter table users add column if not exists pin_hash text")    # the user's OWN quick-unlock PIN
 
 
 class Login(BaseModel):
     passcode: str
+    email: str | None = None          # named team user; omit for the owner passcode
 
 
 @app.post("/api/login")
 def login(body: Login) -> dict:
-    expected = config.get("CORTEX_PASSCODE")
-    if not expected:
-        raise HTTPException(status_code=503, detail="passcode not configured on the server")
-    if not hmac.compare_digest(body.passcode.strip(), expected.strip()):
-        raise HTTPException(status_code=401, detail="wrong passcode")
-    return {"token": _make_token(), "ttl": TOKEN_TTL}
+    _ensure_users()
+    if body.email:                                       # a named team member (e.g. Gino)
+        u = db.one("select * from users where lower(email)=lower(%s) and active", (body.email.strip(),))
+        if u and hmac.compare_digest(_pin_hash(body.passcode.strip()), u["passcode_hash"]):
+            return {"token": _make_token(str(u["id"])), "ttl": TOKEN_TTL,
+                    "user": {"name": u["name"], "email": u["email"], "role": u["role"],
+                             "companies": u["companies"], "must_onboard": bool(u.get("must_onboard"))}}
+        raise HTTPException(status_code=401, detail="wrong email or passcode")
+    expected = config.get("CORTEX_PASSCODE")              # the owner (Rashad)
+    if expected and hmac.compare_digest(body.passcode.strip(), expected.strip()):
+        return {"token": _make_token("owner"), "ttl": TOKEN_TTL,
+                "user": {"name": "Owner", "role": "owner", "companies": None}}
+    raise HTTPException(status_code=401, detail="wrong passcode")
+
+
+class UserBody(BaseModel):
+    name: str
+    email: str
+    passcode: str
+    companies: list[str] = []
+    role: str = "admin"
+
+
+@app.post("/api/users")
+def create_user(body: UserBody, u: dict = Depends(current_user)) -> dict:
+    """Owner-only: create or update a team member's login + their company scope."""
+    if u.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="owner only")
+    _ensure_users()
+    db.execute("insert into users (name,email,passcode_hash,role,companies,must_onboard) values (%s,%s,%s,%s,%s,true) "
+               "on conflict (email) do update set name=excluded.name, passcode_hash=excluded.passcode_hash, "
+               "role=excluded.role, companies=excluded.companies, active=true, must_onboard=true, pin_hash=null",
+               (body.name.strip(), body.email.lower().strip(), _pin_hash(body.passcode.strip()),
+                body.role, Json(body.companies)))
+    return {"ok": True, "email": body.email.lower().strip(), "companies": body.companies, "temp_passcode": True}
+
+
+@app.get("/api/users")
+def list_users(u: dict = Depends(current_user)) -> list:
+    if u.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="owner only")
+    _ensure_users()
+    return db.query("select id, name, email, role, companies, active, must_onboard from users order by name")
+
+
+class UserOnboardBody(BaseModel):
+    password: str
+    pin: str
+
+
+@app.post("/api/user/onboard")
+def user_onboard(body: UserOnboardBody, u: dict = Depends(current_user)) -> dict:
+    """First-login security setup: the user sets THEIR OWN password + quick-unlock PIN (the owner never holds them)."""
+    if u.get("role") == "owner" or not u.get("id"):
+        raise HTTPException(status_code=400, detail="the owner signs in with the server passcode")
+    pw, pin = (body.password or "").strip(), (body.pin or "").strip()
+    if len(pw) < 6:
+        raise HTTPException(status_code=400, detail="password must be at least 6 characters")
+    if not (pin.isdigit() and 4 <= len(pin) <= 8):
+        raise HTTPException(status_code=400, detail="PIN must be 4-8 digits")
+    db.execute("update users set passcode_hash=%s, pin_hash=%s, must_onboard=false where id=%s",
+               (_pin_hash(pw), _pin_hash(pin), u["id"]))
+    return {"ok": True}
 
 
 @app.get("/api/me")
@@ -150,14 +240,26 @@ def auth_mode() -> dict:
     return {"pin": bool(db.setting_get("pin_hash")), "biometric": webauthn_auth.is_registered()}
 
 
+class PinLogin(BaseModel):
+    pin: str
+    email: str | None = None        # a named user's per-user PIN; omit for the owner's PIN
+
+
 @app.post("/api/login/pin")
-def login_pin(body: Pin) -> dict:
-    h = db.setting_get("pin_hash")
+def login_pin(body: PinLogin) -> dict:
+    pin = (body.pin or "").strip()
+    if body.email:                                       # named user -> their own PIN
+        u = db.one("select id, name, role, companies, pin_hash, active from users where lower(email)=lower(%s)", (body.email.strip(),))
+        if not (u and u.get("active") and u.get("pin_hash") and hmac.compare_digest(u["pin_hash"], _pin_hash(pin))):
+            raise HTTPException(status_code=401, detail="wrong PIN")
+        return {"token": _make_token(str(u["id"])), "ttl": TOKEN_TTL,
+                "user": {"name": u["name"], "role": u["role"], "companies": u["companies"]}}
+    h = db.setting_get("pin_hash")                        # owner PIN
     if not h:
         raise HTTPException(status_code=503, detail="no PIN set")
-    if not hmac.compare_digest(h, _pin_hash((body.pin or "").strip())):
+    if not hmac.compare_digest(h, _pin_hash(pin)):
         raise HTTPException(status_code=401, detail="wrong PIN")
-    return {"token": _make_token(), "ttl": TOKEN_TTL}
+    return {"token": _make_token("owner"), "ttl": TOKEN_TTL, "user": {"name": "Owner", "role": "owner", "companies": None}}
 
 
 @app.post("/api/login/webauthn/options")
@@ -178,12 +280,99 @@ def login_wa_verify(credential: dict = Body(...)) -> dict:
 # ---------- read views ----------
 
 @app.get("/api/companies")
-def companies(_: None = Depends(auth)) -> list[dict]:
-    return db.query("select * from companies order by name")
+def companies(u: dict = Depends(current_user)) -> list[dict]:
+    rows = db.query("select * from companies order by name")
+    if u.get("companies") is None:                    # owner -> every company
+        return rows
+    allowed = set(u.get("companies") or [])           # a scoped user -> only their companies
+    return [r for r in rows if r["slug"] in allowed]
+
+
+def _user_cids(u: dict) -> list[int] | None:
+    """The company_ids a user may access. None = owner (all). A list = their scope."""
+    if u.get("companies") is None:
+        return None
+    out = []
+    for slug in (u.get("companies") or []):
+        co = store.get_company_by_slug(slug)
+        if co:
+            out.append(co["id"])
+    return out or [-1]
+
+
+def _request_cids(u: dict, company: str | None) -> list[int] | None:
+    """The company_ids a request may touch, CLAMPED to the user's scope. None = no filter (owner, all
+    companies). A list = restrict to these company_ids. A scoped user can NEVER widen past their companies:
+    a specific in-scope company -> just that one; empty/'all'/out-of-scope -> ALL their companies."""
+    req_cid = None
+    if company and company not in ("", "all"):
+        co = store.get_company_by_slug(company)
+        req_cid = co["id"] if co else -1
+    cids = _user_cids(u)
+    if cids is None:                                  # owner
+        return [req_cid] if req_cid is not None else None
+    if req_cid is not None and req_cid in cids:       # scoped user asking for one of their companies
+        return [req_cid]
+    return cids                                       # else -> all THEIR companies
+
+
+def _assert_company_allowed(u: dict, company_id) -> None:
+    """For per-ID detail endpoints: 403 if the item's company is outside the user's scope."""
+    cids = _user_cids(u)
+    if cids is not None and company_id not in cids:
+        raise HTTPException(status_code=403, detail="not in your company scope")
+
+
+def _company_labels(u: dict) -> set:
+    """The org-text labels (+ slugs) a scoped user may touch. Empty set is never returned for owner (use None)."""
+    return {_CRM_ORG.get(s, str(s).title()).lower() for s in (u.get("companies") or [])} | set(u.get("companies") or [])
+
+
+def _guard_task(u: dict, tid) -> None:
+    t = db.one("select company_id from tasks where id=%s", (tid,))
+    if t:
+        _assert_company_allowed(u, t["company_id"])
+
+
+def _guard_reminder(u: dict, rid) -> None:
+    r = db.one("select company_id from reminders where id=%s", (rid,))
+    if r and r.get("company_id") is not None:
+        _assert_company_allowed(u, r["company_id"])
+
+
+def _guard_deal(u: dict, deal_id) -> None:
+    if u.get("companies") is None:
+        return
+    p = db.one("select company from crm_projects where id=%s", (deal_id,))
+    if p and (p.get("company") or "").lower() not in _company_labels(u):
+        raise HTTPException(status_code=403, detail="not in your company scope")
+
+
+def _guard_contact(u: dict, email: str) -> None:
+    if u.get("companies") is None:
+        return
+    c = db.one("select organisation from crm_master where lower(email)=lower(%s)", (email,))
+    if c:
+        orgs = {p.strip().lower() for p in ((c.get("organisation") or "")).split(",") if p.strip()}
+        if not (orgs & _company_labels(u)):
+            raise HTTPException(status_code=403, detail="not in your company scope")
+
+
+def _scoped_companies(u: dict, company: str | None) -> list[str] | None:
+    """The company SLUGS an org-text query should match, clamped to scope. None = owner + all (no filter).
+    A scoped user: the requested company if in scope, else ALL their companies (OR-matched)."""
+    if u.get("companies") is None:                    # owner
+        return [company] if (company and company not in ("", "all")) else None
+    allowed = u.get("companies") or []
+    if company and company in allowed:
+        return [company]
+    return allowed or ["__none__"]                    # all THEIR companies; never widen to everyone
 
 
 @app.get("/api/companies/{slug}/skills")
-def skills(slug: str, _: None = Depends(auth)) -> list[dict]:
+def skills(slug: str, u: dict = Depends(current_user)) -> list[dict]:
+    if u.get("companies") is not None and slug not in (u.get("companies") or []):
+        raise HTTPException(status_code=403, detail="not in your company scope")
     co = store.get_company_by_slug(slug)
     if not co:
         raise HTTPException(status_code=404, detail="no such company")
@@ -282,6 +471,12 @@ def _enrich_action_card(t: dict) -> dict:
     t["att_count"] = len(atts)
     if atts:
         t["request"] = {**req, "attachments": []}
+    pr = db.setting_get(f"rule:{t['id']}")     # a correction inferred a standing rule, not yet decided -> persist it on the card
+    if pr:
+        _p = pr if isinstance(pr, dict) else {}
+        t["proposed_rule"] = _p.get("rule") if _p else pr
+        t["rule_skill"] = _p.get("skill_name") or (sk["name"] if sk else None)
+        t["rule_company"] = _p.get("company") or ((store.get_company(t["company_id"]) or {}).get("name") if t.get("company_id") else None)
     return t
 
 
@@ -295,44 +490,39 @@ def _info_card(n: dict) -> dict:
 
 
 @app.get("/api/inbox")
-def inbox(company: str | None = None, _: None = Depends(auth)) -> dict:
+def inbox(company: str | None = None, u: dict = Depends(current_user)) -> dict:
     """Unified Inbox stream: open tasks (ACTION cards) + active notifications (INFO cards).
     Action cards first (Needs-you), then info newest-first. The task IS its own card — notifications
-    are never mirrored for tasks (see merged spec §1)."""
-    cid = None
-    if company:
-        co = store.get_company_by_slug(company)
-        cid = co["id"] if co else -1
+    are never mirrored for tasks (see merged spec §1). Scoped to the user's company(ies)."""
+    cids = _request_cids(u, company)
     where = "status in ('awaiting_approval','awaiting_correction')"
     params: list = []
-    if cid is not None:
-        where += " and company_id = %s"
-        params.append(cid)
+    if cids is not None:
+        where += " and company_id = any(%s)"
+        params.append(cids)
     tasks = db.query(f"select * from tasks where {where} order by id desc", tuple(params))
     actions = [_enrich_action_card(t) for t in tasks]
-    infos = [_info_card(n) for n in notifications.active(cid)]
+    infos = [_info_card(n) for n in notifications.active(cids)]
     return {"items": actions + infos, "needs_you": len(actions), "updates": len(infos),
-            "unread": notifications.unread_count(cid)}
+            "unread": notifications.unread_count(cids)}
 
 
 @app.get("/api/inbox/count")
-def inbox_count(company: str | None = None, _: None = Depends(auth)) -> dict:
+def inbox_count(company: str | None = None, u: dict = Depends(current_user)) -> dict:
     """Tiny counts for the tab badge — so the 25s badge poll never drags the whole (heavy) inbox down."""
-    cid = None
-    if company:
-        co = store.get_company_by_slug(company)
-        cid = co["id"] if co else -1
+    cids = _request_cids(u, company)
     where = "status in ('awaiting_approval','awaiting_correction')"
     params: list = []
-    if cid is not None:
-        where += " and company_id = %s"
-        params.append(cid)
+    if cids is not None:
+        where += " and company_id = any(%s)"
+        params.append(cids)
     n = db.one(f"select count(*) c from tasks where {where}", tuple(params))["c"]
-    return {"needs_you": int(n), "unread": notifications.unread_count(cid)}
+    return {"needs_you": int(n), "unread": notifications.unread_count(cids)}
 
 
 @app.get("/api/tasks/{tid}/attachments")
-def task_attachments(tid: int, _: None = Depends(auth)) -> dict:
+def task_attachments(tid: int, u: dict = Depends(current_user)) -> dict:
+    _guard_task(u, tid)
     """A task's attachments, fetched ON DEMAND (they're stripped from the inbox list for weight). Lets a card
     show image thumbnails + document names so the owner can SEE what they're approving before they send it."""
     t = db.one("select request from tasks where id=%s", (tid,))
@@ -393,12 +583,9 @@ class ReminderBody(BaseModel):
 
 @app.get("/api/reminders")
 def reminders_list(status: str | None = None, company: str | None = None,
-                   _: None = Depends(auth)) -> list[dict]:
-    cid = None
-    if company:
-        co = store.get_company_by_slug(company)
-        cid = co["id"] if co else -1
-    return reminders.listing(status=status, company_id=cid)
+                   u: dict = Depends(current_user)) -> list[dict]:
+    cids = _request_cids(u, company)
+    return reminders.listing(status=status, company_id=cids)
 
 
 @app.post("/api/reminders")
@@ -426,19 +613,22 @@ def reminders_create(body: ReminderBody, _: None = Depends(auth)) -> dict:
 
 
 @app.post("/api/reminders/{rid}/snooze")
-def reminder_snooze(rid: int, body: SnoozeBody, _: None = Depends(auth)) -> dict:
+def reminder_snooze(rid: int, body: SnoozeBody, u: dict = Depends(current_user)) -> dict:
+    _guard_reminder(u, rid)
     from datetime import datetime, timedelta
     until = datetime.now(schedule._GST) + timedelta(minutes=max(1, body.minutes))
     return {"ok": True, "reminder": reminders.snooze(rid, until)}
 
 
 @app.post("/api/reminders/{rid}/done")
-def reminder_done(rid: int, _: None = Depends(auth)) -> dict:
+def reminder_done(rid: int, u: dict = Depends(current_user)) -> dict:
+    _guard_reminder(u, rid)
     return {"ok": True, "reminder": reminders.mark_done(rid)}
 
 
 @app.post("/api/reminders/{rid}/cancel")
-def reminder_cancel(rid: int, _: None = Depends(auth)) -> dict:
+def reminder_cancel(rid: int, u: dict = Depends(current_user)) -> dict:
+    _guard_reminder(u, rid)
     return {"ok": True, "reminder": reminders.cancel(rid)}
 
 
@@ -494,32 +684,76 @@ def _cal_company_name(r: dict) -> str:
 
 
 def _cal_card(r: dict) -> dict:
-    return {"id": r["id"], "company": _cal_company_name(r), "company_id": r["company_id"],
+    card = {"id": r["id"], "company": _cal_company_name(r), "company_id": r["company_id"],
             "kind": r["kind"], "title": r.get("title") or KINDS.get(r["kind"], r["kind"])}
+    k = str(r["kind"])
+    # always give content cards a link to the actual content (blog draft / newsletter issue)
+    if k in ("blog", "blog_scheduled"):
+        wp = db.setting_get(f"wp:{r['id']}") or {}
+        if wp.get("preview"):
+            card["link"] = wp["preview"]                    # external WordPress draft preview (opens directly)
+            card["link_label"] = "View post"
+    elif k.startswith("newsletter"):
+        if (db.setting_get(f"newsletter:{r['id']}") or {}).get("html"):
+            card["link"] = f"/api/content/preview/{r['id']}"   # rendered HTML, fetched in-app (needs auth)
+            card["link_label"] = "View issue"
+            card["link_fetch"] = True
+    return card
 
 
 @app.get("/api/calendar")
-def calendar_view(company: str | None = None, _: None = Depends(auth)) -> dict:
-    cid = None
-    if company and company not in ("", "all"):
-        co = store.get_company_by_slug(company)
-        cid = co["id"] if co else -1          # -1 = a real filter that matches nothing
-    flt = "" if cid is None else " and company_id=%s"
-    p: tuple = () if cid is None else (cid,)
+def calendar_view(company: str | None = None, u: dict = Depends(current_user)) -> dict:
+    cids = _request_cids(u, company)          # clamped to the user's company scope (a list, or None=all)
+    flt = "" if cids is None else " and company_id = any(%s)"
+    p: tuple = () if cids is None else (cids,)
     now = db.query("select * from tasks where status in ('awaiting_approval','awaiting_correction') "
                    "and schedule_kind is null" + flt + " order by created_at", p)
     rec = db.query("select * from tasks where schedule_kind='recurring'" + flt
                    + " order by next_run nulls last", p)
     upc = db.query("select * from tasks where schedule_kind='once' and status='scheduled'" + flt
                    + " order by run_at nulls last", p)
+    rflt = "" if cids is None else " and (company_id = any(%s) or company_id is null)"
+    rp: tuple = () if cids is None else (cids,)
+    rems = db.query("select id, title, due_at, target_type, target_id, company_id, (action is not null) as drafts "
+                    "from reminders where status in ('pending','snoozed')" + rflt + " order by due_at limit 100", rp)
+    rem_cards = []
+    for r in rems:
+        co = store.get_company(r["company_id"]) if r.get("company_id") else None
+        opp, deal_id = None, None
+        if r["target_type"] == "deal" and str(r.get("target_id") or "").isdigit():
+            deal_id = int(r["target_id"])
+            d = db.one("select title from crm_projects where id=%s", (deal_id,))
+            opp = d["title"] if d else None
+        rem_cards.append({"id": r["id"], "kind": "reminder", "title": r["title"], "company": co["name"] if co else "",
+                          "run_at": r["due_at"], "drafts": r["drafts"], "opportunity": opp, "deal_id": deal_id})
     return {
         "now": [{**_cal_card(r), "status": r["status"], "when": r["created_at"]} for r in now],
         "recurring": [{**_cal_card(r), "cadence": r["cadence"], "weekday": r["weekday"], "hour": r["hour"],
                        "minute": r["minute"], "next_run": r["next_run"], "enabled": r["enabled"],
                        "last_run": r["last_run"], "last_status": r["last_status"]} for r in rec],
         "upcoming": [{**_cal_card(r), "run_at": r["run_at"], "status": r["status"]} for r in upc],
+        "reminders": rem_cards,
         "kinds": KINDS, "companies": seo_report.available(),
     }
+
+
+@app.get("/api/content/preview/{tid}")
+def content_preview(tid: int, _: None = Depends(auth)):
+    """View the actual content behind a calendar/Inbox card: a blog draft (redirect to the WordPress preview)
+    or a newsletter issue (its rendered HTML). So every scheduled blog/newsletter is one click from its content."""
+    t = store.get_task(tid)
+    if not t:
+        raise HTTPException(status_code=404, detail="no such item")
+    k = str(t["kind"])
+    if k.startswith("newsletter"):
+        art = db.setting_get(f"newsletter:{tid}") or {}
+        if art.get("html"):
+            return HTMLResponse(content=art["html"])
+    if k in ("blog", "blog_scheduled"):
+        wp = db.setting_get(f"wp:{tid}") or {}
+        if wp.get("preview"):
+            return RedirectResponse(wp["preview"])
+    raise HTTPException(status_code=404, detail="no preview available for this item yet")
 
 
 @app.post("/api/calendar")
@@ -545,7 +779,8 @@ def calendar_create(body: ScheduleBody, _: None = Depends(auth)) -> dict:
 
 
 @app.post("/api/calendar/{tid}/toggle")
-def calendar_toggle(tid: int, _: None = Depends(auth)) -> dict:
+def calendar_toggle(tid: int, u: dict = Depends(current_user)) -> dict:
+    _guard_task(u, tid)
     cur = db.one("select enabled from tasks where id=%s and schedule_kind='recurring'", (tid,))
     if not cur:
         raise HTTPException(status_code=404, detail="not found")
@@ -555,7 +790,8 @@ def calendar_toggle(tid: int, _: None = Depends(auth)) -> dict:
 
 
 @app.post("/api/calendar/{tid}/run")
-def calendar_run(tid: int, _: None = Depends(auth)) -> dict:
+def calendar_run(tid: int, u: dict = Depends(current_user)) -> dict:
+    _guard_task(u, tid)
     """Fire a template now — spawns a child instance the engine drafts into the Inbox."""
     child = engine.run_template_now(tid)
     if not child:
@@ -564,7 +800,8 @@ def calendar_run(tid: int, _: None = Depends(auth)) -> dict:
 
 
 @app.post("/api/calendar/{tid}/bump")
-def calendar_bump(tid: int, _: None = Depends(auth)) -> dict:
+def calendar_bump(tid: int, u: dict = Depends(current_user)) -> dict:
+    _guard_task(u, tid)
     """Bump a queued content item (blog, newsletter, any kind) to the FRONT of its company's queue for that
     kind; every other queued item of the same kind shifts back one month."""
     r = contentqueue.bump_to_front(tid)
@@ -573,8 +810,20 @@ def calendar_bump(tid: int, _: None = Depends(auth)) -> dict:
     return r
 
 
+@app.post("/api/calendar/{tid}/move")
+def calendar_move(tid: int, dir: str = "up", u: dict = Depends(current_user)) -> dict:
+    """Nudge a queued item ONE slot up (earlier) or down (later) in its queue, swapping its publish date with
+    the adjacent item. `dir`=up|down."""
+    _guard_task(u, tid)
+    r = contentqueue.move_one(tid, "down" if dir == "down" else "up")
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "could not move"))
+    return r
+
+
 @app.delete("/api/calendar/{tid}")
-def calendar_delete(tid: int, _: None = Depends(auth)) -> dict:
+def calendar_delete(tid: int, u: dict = Depends(current_user)) -> dict:
+    _guard_task(u, tid)
     """Delete a scheduled template / one-off (never a normal Inbox task). Detaches any spawned children."""
     db.execute("update tasks set parent_id=null where parent_id=%s", (tid,))
     db.execute("delete from tasks where id=%s and schedule_kind is not null", (tid,))
@@ -604,13 +853,13 @@ def report_pdf(tid: int, _: None = Depends(auth)) -> FileResponse:
 
 @app.get("/api/inbox/history")
 def inbox_history(q: str | None = None, start: str | None = None, end: str | None = None,
-                  company: str | None = None, limit: int = 80, _: None = Depends(auth)) -> list[dict]:
-    """Past Inbox items (approved/sent/skipped/seen) with free-text search + a date range."""
+                  company: str | None = None, limit: int = 80, u: dict = Depends(current_user)) -> list[dict]:
+    """Past Inbox items (approved/sent/skipped/seen) with free-text search + a date range. Scoped to the user."""
     where = ["status not in ('awaiting_approval','awaiting_correction','new','drafting')"]
     params: list = []
-    if company:
-        co = store.get_company_by_slug(company)
-        where.append("company_id=%s"); params.append(co["id"] if co else -1)
+    cids = _request_cids(u, company)
+    if cids is not None:
+        where.append("company_id = any(%s)"); params.append(cids)
     if q:
         where.append("(draft ilike %s or request::text ilike %s or kind ilike %s)")
         like = f"%{q}%"; params += [like, like, like]
@@ -836,11 +1085,20 @@ _CRM_ORG = {"tabscanner": "Tabscanner", "sensa": "Sensa", "skyvision": "Sky Visi
             "filmspoke": "FilmSpoke", "snaprewards": "Snap Rewards"}
 
 
-def _org_like(company: str | None, col: str = "organisation"):
-    """(sql_fragment, params) filtering a company by its Organisation label; '' / all = no filter."""
-    if not company or company in ("all", ""):
+def _org_like(company, col: str = "organisation"):
+    """(sql_fragment, params) filtering by company Organisation label(s). `company` may be a single slug,
+    a LIST of slugs (OR-matched, for multi-company scoped users), or ''/all/None (no filter)."""
+    if isinstance(company, (list, tuple)):
+        slugs = [s for s in company if s]
+    elif company and company not in ("all", ""):
+        slugs = [company]
+    else:
+        slugs = []
+    if not slugs:
         return "", []
-    return f"{col} ilike %s", [f"%{_CRM_ORG.get(company, company.title())}%"]
+    labels = [_CRM_ORG.get(s, str(s).title()) for s in slugs]
+    frag = "(" + " or ".join([f"{col} ilike %s"] * len(labels)) + ")"
+    return frag, [f"%{l}%" for l in labels]
 
 
 @app.get("/api/crm/summary")
@@ -868,15 +1126,22 @@ def _contact_filter(company: str | None, q: str | None, stage: str | None):
     if f:
         clauses.append(f); params += p
     if q:
-        clauses.append("(first_name ilike %s or last_name ilike %s or email ilike %s or company_name ilike %s "
-                       "or (coalesce(first_name,'')||' '||coalesce(last_name,'')) ilike %s "
-                       "or market ilike %s or note ilike %s)")
-        params += [f"%{q}%"] * 7
+        # tokenise: every word must match SOME field (AND across words) so more words = narrower
+        for tok in q.split():
+            clauses.append("(first_name ilike %s or last_name ilike %s or email ilike %s or company_name ilike %s "
+                           "or (coalesce(first_name,'')||' '||coalesce(last_name,'')) ilike %s "
+                           "or organisation ilike %s or market ilike %s or note ilike %s)")
+            params += [f"%{tok}%"] * 8
     if stage and stage != "All":
         if stage == "Client":
             clauses.append("is_client = true")          # 'Client' is a flag, not a funnel status
         elif stage == "Opted out":
             clauses.append("newsletter_opt_out = true")  # newsletter opt-out flag, not a status
+        elif stage == "Do not market":                  # off all outbound marketing, per company
+            if company and company not in ("all", ""):
+                clauses.append("do_not_market @> %s::jsonb"); params.append(Json([company]))
+            else:
+                clauses.append("jsonb_array_length(do_not_market) > 0")
         elif stage == "Test group":                      # the company's newsletter/blog test group
             co = store.get_company_by_slug(company) if company and company not in ("", "all") else None
             if company and company not in ("", "all"):
@@ -885,7 +1150,9 @@ def _contact_filter(company: str | None, q: str | None, stage: str | None):
                 params.append(co["id"] if co else -1)
             else:
                 clauses.append("lower(email) in (select lower(email) from newsletter_test_group where active)")
-        elif stage.lower() in crm.CLASSIFICATIONS:           # the inbound classification (lead/vendor/…)
+        elif stage == "Quote sent":
+            clauses.append("quote_sent = true")              # a quote was sent (own field, not a classification)
+        elif stage.lower() in crm.ALL_CLASSIFICATIONS:       # classification (lead/vendor/… + past_client/past_opportunity)
             clauses.append("lower(classification) = %s"); params.append(stage.lower())
         else:
             clauses.append("stage = %s"); params.append(stage)
@@ -894,33 +1161,52 @@ def _contact_filter(company: str | None, q: str | None, stage: str | None):
 
 @app.get("/api/crm/contacts")
 def crm_contacts(company: str | None = None, q: str | None = None, stage: str | None = None,
-                 limit: int = 50, offset: int = 0, _: None = Depends(auth)) -> list[dict]:
+                 limit: int = 50, offset: int = 0, u: dict = Depends(current_user)) -> list[dict]:
+    company = _scoped_companies(u, company)
     where, params = _contact_filter(company, q, stage)
-    params = list(params) + [limit, offset]
+    # relevance: name OR email that STARTS WITH the query floats to the top as you type
+    qq = (q or "").strip().lower()
+    if qq:
+        order = ("order by ((coalesce(lower(first_name),'')||' '||coalesce(lower(last_name),'')) like %s "
+                 "or lower(email) like %s) desc, is_client desc, first_name nulls last")
+        oparams = [qq + "%", qq + "%"]
+    else:
+        order, oparams = "order by is_client desc, first_name nulls last", []
     return db.query(
         "select first_name, last_name, email, organisation, company_name, job_title, stage, tier, "
-        f"is_client, newsletter_opt_out, classification, lead_source from crm_master {where} "
-        "order by is_client desc, first_name nulls last limit %s offset %s",
-        tuple(params))
+        f"is_client, newsletter_opt_out, do_not_market, classification, quote_sent, lead_source from crm_master {where} "
+        f"{order} limit %s offset %s",
+        tuple(list(params) + oparams + [limit, offset]))
 
 
 @app.get("/api/crm/contacts/count")
 def crm_contacts_count(company: str | None = None, q: str | None = None, stage: str | None = None,
-                       _: None = Depends(auth)) -> dict:
+                       u: dict = Depends(current_user)) -> dict:
     """Total contacts matching the SAME filters as /api/crm/contacts (for the count shown above the list)."""
+    company = _scoped_companies(u, company)
     where, params = _contact_filter(company, q, stage)
     r = db.one(f"select count(*) n from crm_master {where}", tuple(params))
     return {"count": int(r["n"]) if r and r.get("n") is not None else 0}
 
 
 @app.get("/api/crm/contact")
-def crm_contact(email: str, _: None = Depends(auth)) -> dict:
+def crm_contact(email: str, u: dict = Depends(current_user)) -> dict:
     r = db.one("select * from crm_master where lower(email)=lower(%s) limit 1", (email,))
+    if r and u.get("companies") is not None:          # scoped user: only contacts owned by one of their companies
+        orgs = {p.strip().lower() for p in ((r.get("organisation") or "")).split(",") if p.strip()}
+        allowed_labels = {_CRM_ORG.get(s, s).lower() for s in (u.get("companies") or [])} | set(u.get("companies") or [])
+        if not (orgs & allowed_labels):
+            raise HTTPException(status_code=403, detail="not in your company scope")
+    if r:
+        qs = db.setting_get(f"qual:email:{(email or '').strip().lower()}")
+        if qs:
+            r = {**r, "qual_suggest": qs}
     return r or {}
 
 
 @app.get("/api/crm/projects")
-def crm_projects(company: str | None = None, _: None = Depends(auth)) -> dict:
+def crm_projects(company: str | None = None, u: dict = Depends(current_user)) -> dict:
+    company = _scoped_companies(u, company)
     f, p = _org_like(company, "company")
     conds = ["stage = any(%s)"]; params: list = [crm.WON_STAGES]
     if f:
@@ -940,15 +1226,23 @@ def crm_projects(company: str | None = None, _: None = Depends(auth)) -> dict:
 
 
 @app.get("/api/crm/project")
-def crm_project(id: int, _: None = Depends(auth)) -> dict:
+def crm_project(id: int, u: dict = Depends(current_user)) -> dict:
     p = db.one("select * from crm_projects where id=%s", (id,))
     if not p:
         return {}
+    if u.get("companies") is not None:           # scoped user: only deals owned by one of their companies
+        allowed = {_CRM_ORG.get(s, s).lower() for s in (u.get("companies") or [])} | set(u.get("companies") or [])
+        if (p.get("company") or "").lower() not in allowed:
+            raise HTTPException(status_code=403, detail="not in your company scope")
     if p.get("account_id"):                  # company-mediated: a deal's people = its client company's contacts
         p["account"] = db.one("select id, name, domain from crm_accounts where id=%s", (p["account_id"],))
         p["account_contacts"] = db.query(
             "select first_name, last_name, email, job_title, stage, is_client from crm_master "
             "where account_id=%s order by first_name nulls last", (p["account_id"],))
+    # opportunity follow-up schedule: its open reminders (manual or auto) — automation/next_followup are columns on p
+    p["reminders"] = db.query(
+        "select id, title, due_at, recurrence, priority, (action is not null) as drafts, status from reminders "
+        "where target_type='deal' and target_id=%s and status in ('pending','snoozed') order by due_at", (str(id),))
     return p
 
 
@@ -1017,7 +1311,8 @@ class ContactEditBody(BaseModel):
 
 
 @app.post("/api/crm/contact/update")
-def crm_update_contact(body: ContactEditBody, _: None = Depends(auth)) -> dict:
+def crm_update_contact(body: ContactEditBody, u: dict = Depends(current_user)) -> dict:
+    _guard_contact(u, body.email)
     fields = {"first_name": body.first_name, "last_name": body.last_name,
               "job_title": body.job_title, "phone": body.phone}
     if body.new_email:
@@ -1045,7 +1340,8 @@ class CompanyToggleBody(BaseModel):
 
 
 @app.post("/api/crm/contact/company-toggle")
-def crm_contact_company_toggle(body: CompanyToggleBody, _: None = Depends(auth)) -> dict:
+def crm_contact_company_toggle(body: CompanyToggleBody, u: dict = Depends(current_user)) -> dict:
+    _guard_contact(u, body.email)
     """Toggle a contact's membership of, or test-group inclusion for, one company. The test group is the
     SAME table the [TEST] send reads live, so a change here is in effect immediately."""
     from . import newsletter
@@ -1076,7 +1372,8 @@ class DealEditBody(BaseModel):
 
 
 @app.post("/api/crm/project/{id}/update")
-def crm_update_deal(id: int, body: DealEditBody, _: None = Depends(auth)) -> dict:
+def crm_update_deal(id: int, body: DealEditBody, u: dict = Depends(current_user)) -> dict:
+    _guard_deal(u, id)
     r = crm.update_deal(id, title=body.title, value=body.value, currency=body.currency)
     if not r:
         raise HTTPException(status_code=404, detail="deal not found")
@@ -1096,7 +1393,8 @@ def crm_delete_account(id: int, _: None = Depends(auth)) -> dict:
 
 
 @app.delete("/api/crm/project/{id}")
-def crm_delete_deal(id: int, _: None = Depends(auth)) -> dict:
+def crm_delete_deal(id: int, u: dict = Depends(current_user)) -> dict:
+    _guard_deal(u, id)
     crm.delete_deal(id)
     return {"ok": True}
 
@@ -1107,7 +1405,8 @@ class AssignAccountBody(BaseModel):
 
 
 @app.post("/api/crm/contact/company")
-def crm_contact_company(body: AssignAccountBody, _: None = Depends(auth)) -> dict:
+def crm_contact_company(body: AssignAccountBody, u: dict = Depends(current_user)) -> dict:
+    _guard_contact(u, body.email)
     if not body.email:
         raise HTTPException(status_code=400, detail="email required")
     r = crm.set_contact_account(body.email, body.account_id)
@@ -1117,7 +1416,8 @@ def crm_contact_company(body: AssignAccountBody, _: None = Depends(auth)) -> dic
 
 
 @app.post("/api/crm/project/{id}/account")
-def crm_deal_company(id: int, body: AssignAccountBody, _: None = Depends(auth)) -> dict:
+def crm_deal_company(id: int, body: AssignAccountBody, u: dict = Depends(current_user)) -> dict:
+    _guard_deal(u, id)
     r = crm.set_deal_account(id, body.account_id)
     if not r:
         raise HTTPException(status_code=404, detail="deal not found")
@@ -1129,7 +1429,8 @@ class ProjectStageBody(BaseModel):
 
 
 @app.post("/api/crm/project/{id}/stage")
-def crm_project_stage(id: int, body: ProjectStageBody, _: None = Depends(auth)) -> dict:
+def crm_project_stage(id: int, body: ProjectStageBody, u: dict = Depends(current_user)) -> dict:
+    _guard_deal(u, id)
     if body.stage not in crm.DEAL_STAGES:
         raise HTTPException(status_code=400, detail=f"stage must be one of {crm.DEAL_STAGES}")
     r = crm.set_project_stage(id, body.stage)
@@ -1138,10 +1439,56 @@ def crm_project_stage(id: int, body: ProjectStageBody, _: None = Depends(auth)) 
     return r
 
 
+class AutomationBody(BaseModel):
+    mode: str | None = None          # 'auto' (re-arm the cadence) | 'manual' | None/'off' (stop)
+
+
+@app.post("/api/crm/project/{id}/automation")
+def crm_project_automation(id: int, body: AutomationBody, u: dict = Depends(current_user)) -> dict:
+    _guard_deal(u, id)
+    """Set an opportunity's follow-up automation. 'auto' arms the company cadence; 'manual'/off stops it."""
+    r = crm.set_opportunity_automation(id, body.mode)
+    if not r:
+        raise HTTPException(status_code=404, detail="no such opportunity")
+    return r
+
+
+class DealReminderBody(BaseModel):
+    when: str                        # natural language ("in 3 days") or ISO
+    note: str
+    recurrence: str = "none"         # none|daily|weekly|monthly|weekday|custom
+    draft: bool = False              # true = spawn a drafted follow-up on fire; false = a plain nudge
+
+
+@app.post("/api/crm/project/{id}/reminder")
+def crm_project_reminder(id: int, body: DealReminderBody, u: dict = Depends(current_user)) -> dict:
+    _guard_deal(u, id)
+    """Add a MANUAL reminder to an opportunity (deal-linked) — surfaces in the Inbox + Calendar at its time."""
+    from . import reminders as _rem
+    p = db.one("select company, title from crm_projects where id=%s", (id,))
+    if not p:
+        raise HTTPException(status_code=404, detail="no such opportunity")
+    when = _rem.parse_when(body.when)
+    if not when:
+        try:
+            from datetime import datetime as _dt
+            when = _dt.fromisoformat(body.when)
+        except Exception:
+            raise HTTPException(status_code=400, detail="couldn't understand the time — try 'in 3 days' or a date")
+    slug = crm._slug_for_org(p["company"])
+    co = store.get_company_by_slug(slug)
+    action = ({"company": slug, "skill": "sales-first-response", "kind": "email_reply", "brief": body.note}
+              if body.draft else None)
+    r = _rem.create(body.note, when, company_id=(co["id"] if co else None), target_type="deal", target_id=id,
+                    recurrence=body.recurrence, action=action)
+    return {"ok": True, "reminder": {"id": r["id"], "title": r["title"], "due_at": r["due_at"]}}
+
+
 @app.get("/api/crm/opportunities")
-def crm_opportunities(company: str | None = None, _: None = Depends(auth)) -> dict:
+def crm_opportunities(company: str | None = None, u: dict = Depends(current_user)) -> dict:
     """Forecast deals (Opportunity/Quote) with values + a running total — same deal records as Projects,
     just on the pre-Booked side of the line. Lost deals come back separately (not in the forecast total)."""
+    company = _scoped_companies(u, company)
     f, p = _org_like(company, "company")
     base = ["stage = any(%s)"]
     if f:
@@ -1167,8 +1514,24 @@ class OptOutBody(BaseModel):
 
 
 @app.post("/api/crm/contact/optout")
-def crm_contact_optout(body: OptOutBody, _: None = Depends(auth)) -> dict:
+def crm_contact_optout(body: OptOutBody, u: dict = Depends(current_user)) -> dict:
+    _guard_contact(u, body.email)
     r = crm.set_newsletter_opt_out(body.email, body.on)
+    if not r:
+        raise HTTPException(status_code=404, detail="contact not found")
+    return r
+
+
+class DoNotMarketBody(BaseModel):
+    email: str
+    on: bool = True
+    company: str | None = None   # a company slug (per-company), or null/''/'all' for every company
+
+
+@app.post("/api/crm/contact/donotmarket")
+def crm_contact_donotmarket(body: DoNotMarketBody, u: dict = Depends(current_user)) -> dict:
+    _guard_contact(u, body.email)
+    r = crm.set_do_not_market(body.email, body.company, body.on)
     if not r:
         raise HTTPException(status_code=404, detail="contact not found")
     return r
@@ -1205,6 +1568,33 @@ def intake_registration(body: RegistrationBody, token: str = "", x_token: str = 
     return {"ok": status in ("added", "matched"), "status": status, "email": email}
 
 
+class EnquiryBody(BaseModel):
+    email: str
+    name: str = ""
+    company_name: str = ""
+    company: str = ""        # client company text (kept for parity with the form fields)
+    phone: str = ""
+    message: str = ""
+    subject: str = ""
+
+
+@app.post("/api/intake/enquiry")
+def intake_enquiry_webhook(body: EnquiryBody, token: str = "", x_token: str = Header(default="")) -> dict:
+    """Public webhook for website CONTACT-FORM enquiries (direct POST, no email round-trip). Auth = a PER-SOURCE
+    token (?token=... or X-Token) -> {company, draft}. The enquiry is TRIAGED server-side (sales-triage): a genuine
+    one becomes a CRM lead (+ optional drafted reply); spam/junk is filed but never CRM'd. Always 200 to the site."""
+    raw = db.setting_get("enquiry_tokens")
+    tokens = raw if isinstance(raw, dict) else (json.loads(raw) if raw else {})
+    cfg = tokens.get(token) or tokens.get(x_token)
+    if not cfg:
+        raise HTTPException(status_code=403, detail="invalid token")
+    inq = {"name": body.name, "email": body.email, "phone": body.phone,
+           "subject": body.subject or "Website enquiry", "message": body.message,
+           "company_name": body.company_name or body.company}
+    res = engine.intake_enquiry(cfg["company"], inq, draft=bool(cfg.get("draft", True)))
+    return {"ok": True, "captured": bool(res.get("captured"))}
+
+
 class ContactStageBody(BaseModel):
     email: str
     stage: str
@@ -1216,15 +1606,45 @@ class ContactClassifyBody(BaseModel):
 
 
 @app.post("/api/crm/contact/classify")
-def crm_contact_classify(body: ContactClassifyBody, _: None = Depends(auth)) -> dict:
+def crm_contact_classify(body: ContactClassifyBody, u: dict = Depends(current_user)) -> dict:
+    _guard_contact(u, body.email)
     r = crm.set_classification(body.email, body.classification)
     if not r:
         raise HTTPException(status_code=404, detail="contact not found, or invalid classification")
     return r
 
 
+class QualifyBody(BaseModel):
+    email: str
+    company: str                    # which of YOUR businesses (slug)
+    title: str | None = None
+
+
+@app.post("/api/crm/contact/qualify")
+def crm_contact_qualify(body: QualifyBody, u: dict = Depends(current_user)) -> dict:
+    """Qualify a lead -> create an Opportunity (linked to their org) + start the Auto follow-up cadence."""
+    _guard_contact(u, body.email)
+    if u.get("companies") is not None and body.company not in (u.get("companies") or []):
+        raise HTTPException(status_code=403, detail="not in your company scope")
+    d = crm.qualify_opportunity(body.email, body.company, body.title)
+    if not d:
+        raise HTTPException(status_code=404, detail="contact not found")
+    return {"ok": True, "opportunity": {"id": d["id"], "title": d["title"], "stage": d["stage"]}}
+
+
+@app.post("/api/crm/contact/disqualify")
+def crm_contact_disqualify(body: ContactClassifyBody, u: dict = Depends(current_user)) -> dict:
+    """Mark a lead NOT qualified (no opportunity). Only `email` is used."""
+    _guard_contact(u, body.email)
+    r = crm.disqualify(body.email)
+    if not r:
+        raise HTTPException(status_code=404, detail="contact not found")
+    return r
+
+
 @app.post("/api/crm/contact/stage")
-def crm_contact_stage(body: ContactStageBody, _: None = Depends(auth)) -> dict:
+def crm_contact_stage(body: ContactStageBody, u: dict = Depends(current_user)) -> dict:
+    _guard_contact(u, body.email)
     if body.stage not in crm.CONTACT_STAGES:
         raise HTTPException(status_code=400, detail=f"status must be one of {crm.CONTACT_STAGES}")
     r = crm.set_contact_stage(body.email, body.stage)
@@ -1239,7 +1659,8 @@ class NoteBody(BaseModel):
 
 
 @app.post("/api/crm/contact/note")
-def crm_contact_note(body: NoteBody, _: None = Depends(auth)) -> dict:
+def crm_contact_note(body: NoteBody, u: dict = Depends(current_user)) -> dict:
+    _guard_contact(u, body.email)
     if not (body.note or "").strip() or not body.email:
         raise HTTPException(status_code=400, detail="email and note required")
     r = crm.add_contact_note(body.email, body.note.strip())
@@ -1249,7 +1670,8 @@ def crm_contact_note(body: NoteBody, _: None = Depends(auth)) -> dict:
 
 
 @app.post("/api/crm/project/{id}/note")
-def crm_project_note(id: int, body: NoteBody, _: None = Depends(auth)) -> dict:
+def crm_project_note(id: int, body: NoteBody, u: dict = Depends(current_user)) -> dict:
+    _guard_deal(u, id)
     if not (body.note or "").strip():
         raise HTTPException(status_code=400, detail="note required")
     r = crm.add_project_note(id, body.note.strip())
@@ -1265,7 +1687,8 @@ class DealContactBody(BaseModel):
 
 
 @app.post("/api/crm/project/{id}/contacts")
-def crm_deal_add_contact(id: int, body: DealContactBody, _: None = Depends(auth)) -> dict:
+def crm_deal_add_contact(id: int, body: DealContactBody, u: dict = Depends(current_user)) -> dict:
+    _guard_deal(u, id)
     if not (body.email or "").strip():
         raise HTTPException(status_code=400, detail="email required")
     r = crm.add_deal_contact(id, body.email.strip(), body.role, body.primary)
@@ -1275,7 +1698,8 @@ def crm_deal_add_contact(id: int, body: DealContactBody, _: None = Depends(auth)
 
 
 @app.post("/api/crm/project/{id}/contacts/primary")
-def crm_deal_set_primary(id: int, body: DealContactBody, _: None = Depends(auth)) -> dict:
+def crm_deal_set_primary(id: int, body: DealContactBody, u: dict = Depends(current_user)) -> dict:
+    _guard_deal(u, id)
     r = crm.set_deal_primary(id, body.email.strip())
     if not r:
         raise HTTPException(status_code=404, detail="deal not found")
@@ -1283,33 +1707,97 @@ def crm_deal_set_primary(id: int, body: DealContactBody, _: None = Depends(auth)
 
 
 @app.delete("/api/crm/project/{id}/contacts")
-def crm_deal_remove_contact(id: int, email: str, _: None = Depends(auth)) -> dict:
+def crm_deal_remove_contact(id: int, email: str, u: dict = Depends(current_user)) -> dict:
+    _guard_deal(u, id)
     r = crm.remove_deal_contact(id, email)
     if not r:
         raise HTTPException(status_code=404, detail="deal not found")
     return r
 
 
-@app.get("/api/crm/accounts")
-def crm_accounts(q: str | None = None, company: str | None = None, _: None = Depends(auth)) -> list[dict]:
-    """The client-organisation directory. Scoped to a business when `company` is given (orgs that have a deal
-    owned by that business OR a contact tagged to it); global when omitted (used by the create/link search)."""
+def _accounts_where(q: str | None, company: str | None):
+    """Shared WHERE + params for the organisations list AND its count, so the number matches the rows."""
     conds, params = [], []
     if q:
-        conds.append("a.name ilike %s"); params.append(f"%{q}%")
-    if company and company not in ("all", ""):
-        label = _CRM_ORG.get(company, company.title())
-        conds.append("(exists (select 1 from crm_projects p where p.account_id=a.id and p.company ilike %s) "
-                     "or exists (select 1 from crm_master m where m.account_id=a.id and m.organisation ilike %s) "
-                     "or a.company ilike %s)")
-        params += [f"%{label}%", f"%{label}%", f"%{label}%"]
-    where = ("where " + " and ".join(conds)) if conds else ""
+        # space/punctuation-insensitive, tokenised: strip non-alphanumerics from BOTH the query and the
+        # name, so "filmquip" matches "Film Quip Media" and word order doesn't matter. Each token must hit.
+        toks = [t for t in (re.sub(r"[^a-z0-9]", "", w.lower()) for w in q.split()) if t]
+        if toks:
+            for t in toks:
+                conds.append("regexp_replace(lower(a.name), '[^a-z0-9]', '', 'g') like %s")
+                params.append(f"%{t}%")
+        else:
+            conds.append("a.name ilike %s"); params.append(f"%{q}%")
+    cos = company if isinstance(company, (list, tuple)) else ([] if (not company or company in ("all", "")) else [company])
+    cos = [c for c in cos if c]
+    if cos:
+        ors = []
+        for c in cos:                                 # OR across the user's companies (multi-company scope)
+            label = _CRM_ORG.get(c, str(c).title())
+            ors.append("(exists (select 1 from crm_projects p where p.account_id=a.id and p.company ilike %s) "
+                       "or exists (select 1 from crm_master m where m.account_id=a.id and m.organisation ilike %s) "
+                       "or a.company ilike %s)")
+            params += [f"%{label}%", f"%{label}%", f"%{label}%"]
+        conds.append("(" + " or ".join(ors) + ")")
+    return (("where " + " and ".join(conds)) if conds else ""), params
+
+
+@app.get("/api/crm/accounts")
+def crm_accounts(q: str | None = None, company: str | None = None, limit: int | None = None,
+                 offset: int = 0, u: dict = Depends(current_user)) -> list[dict]:
+    """The client-organisation directory. Scoped to a business when `company` is given (orgs that have a deal
+    owned by that business OR a contact tagged to it); global when omitted. `limit` paginates the LIST view;
+    omit it (the create/link dropdowns) to get every match."""
+    company = _scoped_companies(u, company)
+    where, params = _accounts_where(q, company)
+    qparams = [crm.WON_STAGES] + params
+    # relevance: exact (normalised) match first, then prefix, then alphabetical -> best match rises as you type
+    nq = re.sub(r"[^a-z0-9]", "", (q or "").lower())
+    if nq:
+        order = ("order by (regexp_replace(lower(a.name),'[^a-z0-9]','','g')=%s) desc, "
+                 "(regexp_replace(lower(a.name),'[^a-z0-9]','','g') like %s) desc, a.name")
+        qparams += [nq, nq + "%"]
+    else:
+        order = "order by a.name"
+    tail = ""
+    if limit is not None:
+        tail = " limit %s offset %s"; qparams += [limit, offset]
     return db.query(
         "select a.id, a.name, a.domain, "
         "(select count(*) from crm_master m where m.account_id=a.id) contacts, "
         "(select count(*) from crm_projects p where p.account_id=a.id) deals, "
         "(select coalesce(sum(value),0) from crm_projects p where p.account_id=a.id and p.stage = any(%s)) won_value "
-        f"from crm_accounts a {where} order by a.name", tuple([crm.WON_STAGES] + params))
+        f"from crm_accounts a {where} {order}{tail}", tuple(qparams))
+
+
+@app.get("/api/crm/accounts/count")
+def crm_accounts_count(q: str | None = None, company: str | None = None, u: dict = Depends(current_user)) -> dict:
+    company = _scoped_companies(u, company)
+    where, params = _accounts_where(q, company)
+    return {"count": db.one(f"select count(*) c from crm_accounts a {where}", tuple(params))["c"]}
+
+
+@app.get("/api/crm/account-dupes")
+def crm_account_dupes(_: None = Depends(auth)) -> dict:
+    """Domain-based duplicate-organisation candidates for the review flow (own-brand + free-email aware)."""
+    g = crm.account_dupe_groups()
+    return {"groups": g, "auto_safe": sum(1 for x in g if x["auto_safe"]), "total": len(g)}
+
+
+class MergeBody(BaseModel):
+    winner_id: int
+    loser_ids: list[int]
+    reason: str | None = ""
+
+
+@app.post("/api/crm/accounts/merge")
+def crm_accounts_merge(body: MergeBody, _: None = Depends(auth)) -> dict:
+    return crm.merge_accounts(body.winner_id, body.loser_ids, body.reason or "manual merge")
+
+
+@app.post("/api/crm/account-merge/{mid}/reverse")
+def crm_account_merge_reverse(mid: int, _: None = Depends(auth)) -> dict:
+    return crm.reverse_account_merge(mid)
 
 
 @app.get("/api/crm/account")
@@ -1524,17 +2012,20 @@ class Correction(BaseModel):
 
 
 @app.post("/api/tasks/{task_id}/approve")
-def approve(task_id: int, x_stepup: str = Header(default=""), _: None = Depends(auth)) -> dict:
+def approve(task_id: int, x_stepup: str = Header(default=""), u: dict = Depends(current_user)) -> dict:
+    _guard_task(u, task_id)
     return engine.approve_task(task_id, stepup_token=x_stepup or None)
 
 
 @app.post("/api/tasks/{task_id}/skip")
-def skip(task_id: int, _: None = Depends(auth)) -> dict:
+def skip(task_id: int, u: dict = Depends(current_user)) -> dict:
+    _guard_task(u, task_id)
     return engine.skip_task(task_id)
 
 
 @app.post("/api/tasks/{task_id}/correct")
-def correct(task_id: int, body: Correction, _: None = Depends(auth)) -> dict:
+def correct(task_id: int, body: Correction, u: dict = Depends(current_user)) -> dict:
+    _guard_task(u, task_id)
     return engine.correct_task(task_id, body.text)
 
 
@@ -1544,13 +2035,21 @@ def task_pending_rule(task_id: int, _: None = Depends(auth)) -> dict:
     return engine.pending_rule(task_id)
 
 
+@app.get("/api/rules/pending")
+def rules_pending(_: None = Depends(auth)) -> dict:
+    """EVERY un-decided rule proposal across all companies — the cockpit surfaces these as standalone
+    'confirm this rule' cards so a taught rule is never silently lost, even if its task has been archived."""
+    return {"pending": engine.pending_rules()}
+
+
 class RuleDecision(BaseModel):
     add: bool
     scope: str = "company"   # 'company' = this company only | 'universal' = every company
 
 
 @app.post("/api/tasks/{task_id}/rule")
-def task_rule(task_id: int, body: RuleDecision, _: None = Depends(auth)) -> dict:
+def task_rule(task_id: int, body: RuleDecision, u: dict = Depends(current_user)) -> dict:
+    _guard_task(u, task_id)
     """Confirm/dismiss the rule Cortex inferred from a correction, at the owner's chosen scope (from the cockpit)."""
     return engine.decide_rule(task_id, body.add, body.scope)
 
@@ -1561,7 +2060,8 @@ class SendConfirm(BaseModel):
 
 @app.post("/api/tasks/{task_id}/confirm-send")
 def task_confirm_send(task_id: int, body: SendConfirm, x_stepup: str = Header(default=""),
-                      _: None = Depends(auth)) -> dict:
+                      u: dict = Depends(current_user)) -> dict:
+    _guard_task(u, task_id)
     """Confirm a newsletter card with the exact count: Stage 2 schedules for the 1st, Stage 3 sends."""
     return engine.confirm_send_task(task_id, body.count, stepup_token=x_stepup or None)
 
@@ -1650,22 +2150,45 @@ def newsletter_auto_set(body: AutoToggle, _: None = Depends(auth)) -> dict:
 
 # ---- voice: speech-to-text (Deepgram) + text-to-speech (ElevenLabs Flash) ----
 
+# Brand vocabulary — Deepgram keyterm-boosts these so dictation hears them right, and a backstop normaliser
+# rewrites the common mishearings (e.g. "Sensor Productions" -> "Sensa Productions") on EVERY transcript, so a
+# misheard name never reaches a draft, a Talk turn, or a taught rule.
+_STT_KEYTERMS = ["Sensa", "Sensa Productions", "Sensa Studio", "Tabscanner", "Snap Rewards", "SkyVision",
+                 "FilmSpoke", "Cortex"]
+_BRAND_FIXES = [
+    (re.compile(r"\b[cs]ensor\s+doc\s+digital\b", re.I), "Sensa Digital"),
+    (re.compile(r"\b[cs]ensor\s+productions\b", re.I), "Sensa Productions"),
+    (re.compile(r"\b[cs]ensor\s+studio\b", re.I), "Sensa Studio"),
+    (re.compile(r"\b[cs]ensor[\s.]+digital\b", re.I), "Sensa Digital"),
+    (re.compile(r"\btab\s+scanner\b", re.I), "Tabscanner"),
+    (re.compile(r"\bfilm\s+spoke\b", re.I), "FilmSpoke"),
+]
+
+
+def normalize_brand_names(text: str) -> str:
+    """Fix the common speech-to-text mishearings of the company/product names."""
+    for rx, repl in _BRAND_FIXES:
+        text = rx.sub(repl, text or "")
+    return text
+
+
 @app.post("/api/voice/stt")
 def stt(audio: UploadFile = File(...), _: None = Depends(auth)) -> dict:
-    """Transcribe a recorded audio clip -> text (Deepgram Nova-3)."""
+    """Transcribe a recorded audio clip -> text (Deepgram Nova-3): keyterm-boosted + brand-name-normalised."""
     key = config.require("DEEPGRAM_API_KEY")
     data = audio.file.read()
     ct = audio.content_type or "audio/webm"
-    r = httpx.post(
-        "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&punctuate=true",
-        headers={"Authorization": f"Token {key}", "Content-Type": ct}, content=data, timeout=60)
+    params = [("model", "nova-3"), ("smart_format", "true"), ("punctuate", "true")]
+    params += [("keyterm", k) for k in _STT_KEYTERMS]
+    r = httpx.post("https://api.deepgram.com/v1/listen", params=params,
+                   headers={"Authorization": f"Token {key}", "Content-Type": ct}, content=data, timeout=60)
     r.raise_for_status()
     j = r.json()
     try:
         text = j["results"]["channels"][0]["alternatives"][0]["transcript"]
     except (KeyError, IndexError):
         text = ""
-    return {"text": text}
+    return {"text": normalize_brand_names(text)}
 
 
 class Speak(BaseModel):
@@ -1834,8 +2357,8 @@ SKILL_TOOLS = [
      "description": "Create a contact (a person). 'company' = the client company they work at (linked/created automatically). 'business' = which of YOUR businesses (slug) it relates to.",
      "input_schema": {"type": "object", "properties": {"first_name": {"type": "string"}, "last_name": {"type": "string"}, "email": {"type": "string"}, "company": {"type": "string", "description": "client company name"}, "business": {"type": "string", "description": "your business slug"}, "phone": {"type": "string"}, "job_title": {"type": "string"}}, "required": ["email"]}},
     {"name": "create_deal",
-     "description": "Create a deal. 'business' = which of YOUR businesses (slug). 'company' = the client company (linked/created). Defaults to the Opportunity stage; a deal's people come from its client company.",
-     "input_schema": {"type": "object", "properties": {"business": {"type": "string"}, "title": {"type": "string"}, "value": {"type": "number"}, "currency": {"type": "string"}, "stage": {"type": "string"}, "company": {"type": "string", "description": "client company name"}}, "required": ["business", "title"]}},
+     "description": "Create a deal. 'business' = which of YOUR businesses (slug). 'company' = the CLIENT ORGANISATION name — a real company, NEVER the deal/project title. The deal links to that organisation (its people come from there). If you don't know the client organisation, OMIT company (the deal is created unlinked) — do NOT pass the deal title as the company, or invent an org. Defaults to the Opportunity stage.",
+     "input_schema": {"type": "object", "properties": {"business": {"type": "string"}, "title": {"type": "string", "description": "the deal/project name"}, "value": {"type": "number"}, "currency": {"type": "string"}, "stage": {"type": "string"}, "company": {"type": "string", "description": "the CLIENT ORGANISATION (real company), distinct from the deal title; omit if unknown"}}, "required": ["business", "title"]}},
     {"name": "schedule_report",
      "description": "Schedule the per-business SEO & traffic report to run on a cadence; it lands in the Inbox. weekday 0=Mon..6=Sun.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string", "description": "your business slug"}, "cadence": {"type": "string", "enum": ["daily", "weekly", "monthly"]}, "weekday": {"type": "integer"}, "hour": {"type": "integer"}}, "required": ["company"]}},
@@ -1971,15 +2494,28 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
                                job_title=inp.get("job_title"))
         return f"created contact {c['email']}" + (f" at {inp['company']}" if inp.get("company") else "")
     if name == "create_deal":
-        aid = crm.get_or_create_account(inp["company"].strip()) if inp.get("company") else None
+        comp = (inp.get("company") or "").strip()
+        title = (inp.get("title") or "").strip()
+        aid, link_note = None, ""
+        if comp:
+            existing = db.one("select id from crm_accounts where lower(name)=lower(%s)", (comp,))
+            if existing:
+                aid = existing["id"]                          # link to the real client organisation
+            elif crm._basename(comp) and crm._basename(comp) != crm._basename(title):
+                aid = crm.get_or_create_account(comp)         # a genuinely NEW client company (distinct from the deal title)
+            else:
+                # a deal must NOT spawn an organisation named after itself (operator rule 2026-06-22)
+                link_note = (f" — note: did NOT create an organisation from '{comp}' (it matches the deal title). "
+                             "A deal links to a client ORGANISATION, never to its own title. Pick or create the "
+                             "client organisation, then link the deal to it.")
         stage = inp.get("stage") if inp.get("stage") in crm.DEAL_STAGES else "Opportunity"
         try:
-            d = crm.create_deal(inp.get("business", "sensa"), inp["title"], value=inp.get("value"),
+            d = crm.create_deal(inp.get("business", "sensa"), title, value=inp.get("value"),
                                 currency=inp.get("currency", "AED"), stage=stage, account_id=aid)
         except crm.DuplicateDeal as e:
             return str(e)
         return (f"created deal '{d['title']}' ({d['stage']}, {d.get('value') or 'no value'} {d['currency']})"
-                + (f" for {inp['company']}" if inp.get("company") else ""))
+                + (f" for {comp}" if comp and aid else "") + link_note)
     if name == "schedule_report":
         slug = inp.get("company", "tabscanner")
         co = store.get_company_by_slug(slug)
@@ -2202,6 +2738,11 @@ def _shared_behaviour() -> str:
         "worker + manager and lands in his INBOX for approval. NEVER paste a draft in chat or say 'here's the "
         "draft' — it lives in the Inbox. Use the inline `draft` tool only if he explicitly asks to just see a "
         "version inline. Nothing is ever sent or done without his Inbox approval.",
+        "NEVER fabricate a confirmation. Do NOT tell him something is created, drafted, queued, scheduled or "
+        "'in your Inbox', and NEVER state or invent a task number, unless you ACTUALLY called create_task / "
+        "draft_email / run_report THIS turn and saw a 'created task #N' result. When he pastes a brief or "
+        "finished content to turn into a post or email, you MUST pass that text to create_task — never "
+        "summarise it or paste it back instead of calling the tool. A made-up confirmation silently loses his work.",
         "When he teaches you a durable preference or fact ('remember…', 'always…', 'from now on…'), call "
         "remember_preference to persist it, then confirm. This only adds operator preferences, never safety rules.",
     ]
@@ -2260,10 +2801,11 @@ class ChatTurn(BaseModel):
     image_names: list[str] | None = None  # original filenames, parallel to images (for display + send)
 
 
-@app.post("/api/chat")
-def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
+def _chat_prepare(body: ChatTurn):
+    """Shared prep for /api/chat and /api/chat/stream: build the working-memory window, route to a persona,
+    attach images, resolve (system, tools), and build the tool executor. Returns (msgs, chosen, system, tools, exec)."""
     msgs = [{"role": m.get("role"), "content": m.get("content", "")} for m in body.messages
-            if m.get("content") and m.get("role") in ("user", "assistant")][-100:]   # working memory window (history-cached, so cheap)
+            if m.get("content") and m.get("role") in ("user", "assistant")][-100:]   # working memory window (history-cached, cheap)
     if not msgs or msgs[-1]["role"] != "user":
         raise HTTPException(status_code=400, detail="last message must be from the user")
     pinned = (body.persona or "").strip()
@@ -2277,18 +2819,48 @@ def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
     if chosen:
         psys, _model, is_chief = personas.persona_system(chosen, body.company)
         if psys:
-            system = psys + "\n\n" + _shared_behaviour()   # personas get the always-on rules too (identity, attachments, drafting, lookup, learned)
+            system = psys + "\n\n" + _shared_behaviour()   # personas get the always-on rules too
             tools = [t for t in SKILL_TOOLS if t["name"] in _CHIEF_TOOLS] if is_chief else SKILL_TOOLS
         else:
             chosen = ""
-    # carry the turn's attachments through to the worker when this turn creates/drafts a task
-    def _exec(name: str, inp: dict) -> str:
+    def _exec(name: str, inp: dict) -> str:   # carry the turn's attachments through when a tool drafts/creates
         if name in ("create_task", "draft", "draft_email") and body.images:
             inp = {**inp, "_images": body.images, "_image_names": body.image_names}
         return _exec_skill_tool(name, inp)
+    return msgs, chosen, system, tools, _exec
+
+
+@app.post("/api/chat")
+def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
+    msgs, chosen, system, tools, _exec = _chat_prepare(body)
     reply = provider.chat_tools(system, msgs, tools, _exec,
                                 purpose=f"chat:{chosen}" if chosen else "chat", company=body.company)
     return {"reply": reply, "persona": chosen, "persona_label": personas.label(chosen)}
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+@app.post("/api/chat/stream")
+def chat_stream(body: ChatTurn, _: None = Depends(auth)) -> StreamingResponse:
+    """Streaming chat: the SAME agentic loop as /api/chat, emitted as Server-Sent Events so the reply paints live
+    AND the connection never idles past a proxy's ~100s ceiling (the Cloudflare 524 that caused the timeouts).
+    Events: meta (persona) -> delta* (text) / tool (name) -> done (full reply) -> [error]."""
+    msgs, chosen, system, tools, _exec = _chat_prepare(body)   # 400s raised here, before streaming starts
+
+    def gen():
+        yield _sse("meta", {"persona": chosen, "persona_label": personas.label(chosen)})
+        try:
+            for kind, data in provider.chat_tools_stream(
+                    system, msgs, tools, _exec,
+                    purpose=f"chat:{chosen}" if chosen else "chat", company=body.company):
+                yield _sse(kind, data)
+        except Exception as e:  # noqa: BLE001 — surface a clean error event instead of a broken stream
+            yield _sse("error", {"error": str(e)[:200]})
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 class TitleReq(BaseModel):
@@ -2344,7 +2916,7 @@ def delete_conversation(cid: int, _: None = Depends(auth)) -> dict:
 
 @app.websocket("/api/voice/stream")
 async def voice_stream(ws: WebSocket):
-    if not _valid_token(ws.query_params.get("token", "")):
+    if _token_subject(ws.query_params.get("token", "")) is None:   # accepts owner + named-user tokens
         await ws.close(code=4401)
         return
     rate = ws.query_params.get("rate", "48000")
@@ -2352,7 +2924,8 @@ async def voice_stream(ws: WebSocket):
     key = config.require("DEEPGRAM_API_KEY")
     url = ("wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16"
            f"&sample_rate={rate}&channels=1&interim_results=true&smart_format=true&punctuate=true"
-           "&endpointing=300")  # finalize words promptly; the cockpit ends the turn on a silence timer
+           "&endpointing=300"  # finalize words promptly; the cockpit ends the turn on a silence timer
+           + "".join(f"&keyterm={k.replace(' ', '%20')}" for k in _STT_KEYTERMS))
     hdr = [("Authorization", f"Token {key}")]
     try:
         try:
@@ -2385,7 +2958,7 @@ async def voice_stream(ws: WebSocket):
                     continue
                 if d.get("type") == "Results":
                     alts = (d.get("channel") or {}).get("alternatives") or [{}]
-                    text = alts[0].get("transcript", "")
+                    text = normalize_brand_names(alts[0].get("transcript", ""))
                     sf = bool(d.get("speech_final"))
                     if text or sf:
                         await ws.send_json({"final": bool(d.get("is_final")), "speech_final": sf, "text": text})
@@ -2433,11 +3006,22 @@ def google_start(purpose: str = "drive", company: str = "", mailbox: str = "") -
         # 'gmail_send' = the mailbox Cortex SENDS replies from, so they land in YOUR Sent folder, as you.
         scope = ("https://www.googleapis.com/auth/gmail.modify openid "
                  "https://www.googleapis.com/auth/userinfo.email")
+    elif purpose == "analytics":   # per-company GA4 + Search Console (the SEO/traffic reports), READ-ONLY
+        scope = ("https://www.googleapis.com/auth/analytics.readonly "
+                 "https://www.googleapis.com/auth/webmasters.readonly openid "
+                 "https://www.googleapis.com/auth/userinfo.email")
     elif purpose == "youtube":   # per-company YouTube: upload + manage + read + analytics (channel binding = the token)
         scope = ("https://www.googleapis.com/auth/youtube.upload "
                  "https://www.googleapis.com/auth/youtube.force-ssl "
                  "https://www.googleapis.com/auth/youtube.readonly "
                  "https://www.googleapis.com/auth/yt-analytics.readonly openid "
+                 "https://www.googleapis.com/auth/userinfo.email")
+    elif purpose == "calendar":   # Google Calendar (availability + booking) + Drive-read to harvest Gemini meeting-notes Docs
+        scope = ("https://www.googleapis.com/auth/calendar "
+                 "https://www.googleapis.com/auth/drive.readonly openid "
+                 "https://www.googleapis.com/auth/userinfo.email")
+    elif purpose == "google_ads":   # per-company Google Ads API (Keyword Planner) on the Internal token -> never expires
+        scope = ("https://www.googleapis.com/auth/adwords openid "
                  "https://www.googleapis.com/auth/userinfo.email")
     else:
         scope = ("https://www.googleapis.com/auth/drive.file "
@@ -2489,6 +3073,42 @@ def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLRes
         db.setting_set("gmail_refresh_token" + sfx, rt)
         db.setting_set("gmail_account" + sfx, email)
         return page(f"✓ Cortex reads {who} enquiries from the {email or 'Gmail'} mailbox. You can close this tab.")
+    if purpose == "analytics":   # per-company GA4 + Search Console token for the SEO/traffic reports
+        em = ""
+        try:
+            em = httpx.get("https://www.googleapis.com/oauth2/v2/userinfo",
+                           headers={"Authorization": "Bearer " + body.get("access_token", "")},
+                           timeout=15).json().get("email", "")
+        except Exception:  # noqa: BLE001
+            pass
+        db.setting_set("analytics_refresh_token" + sfx, rt)
+        db.setting_set("analytics_account" + sfx, em)
+        return page(f"✓ Cortex will pull {who}'s SEO reports (GA4 + Search Console) via {em or 'this account'}. "
+                    "You can close this tab.")
+    if purpose == "calendar":   # per-company Google Calendar (read availability + create booking events)
+        em = ""
+        try:
+            em = httpx.get("https://www.googleapis.com/oauth2/v2/userinfo",
+                           headers={"Authorization": "Bearer " + body.get("access_token", "")},
+                           timeout=15).json().get("email", "")
+        except Exception:  # noqa: BLE001
+            pass
+        db.setting_set("calendar_refresh_token" + sfx, rt)
+        db.setting_set("calendar_account" + sfx, em)
+        return page(f"✓ Cortex can read {who}'s calendar availability and propose booking slots "
+                    f"via {em or 'this account'}. You can close this tab.")
+    if purpose == "google_ads":   # per-company Google Ads API (Keyword Planner) — Internal token, never expires
+        em = ""
+        try:
+            em = httpx.get("https://www.googleapis.com/oauth2/v2/userinfo",
+                           headers={"Authorization": "Bearer " + body.get("access_token", "")},
+                           timeout=15).json().get("email", "")
+        except Exception:  # noqa: BLE001
+            pass
+        db.setting_set("google_ads_refresh_token" + sfx, rt)
+        db.setting_set("google_ads_account" + sfx, em)
+        return page(f"✓ Cortex can run Google Ads keyword research for {who} via {em or 'this account'}. "
+                    "You can close this tab.")
     if purpose == "youtube":   # per-company YouTube channel access (upload/manage/read/analytics)
         db.setting_set("youtube_refresh_token" + sfx, rt)
         ch_name = ch_id = ""

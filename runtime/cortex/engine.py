@@ -20,7 +20,7 @@ import re
 import secrets
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from psycopg.types.json import Json
 
@@ -158,17 +158,43 @@ def _approval_buttons(task_id: int) -> list[list[dict]]:
 
 # ---------- email replies ----------
 
-def _email_brief(inq: dict) -> str:
+def _booking_slots_brief(co: dict | None) -> str:
+    """If the company has a booking calendar configured, fetch a few REAL open slots and return an instruction to
+    offer them when a call is the next step (exact times, never invented). Empty string otherwise (safe no-op for
+    companies without booking set up, so it never changes their drafts)."""
+    if not co:
+        return ""
+    slug = co.get("slug")
+    try:
+        bk = (profile.get(co["id"]) or {}).get("booking")
+        if not bk or not db.setting_get(f"calendar_refresh_token:{slug}"):
+            return ""
+        from . import calendar as _cal
+        slots = _cal.format_slots(_cal.free_slots(slug))
+        if not slots:
+            return ""
+        line = bk.get("email_line") or "or let us know what works for you and we'll do our best to meet it."
+        return ("\n\nWHEN you propose a call: instead of a generic booking link, offer ONLY these real open times "
+                "(GST), quoting them EXACTLY (never invent, shift or add a time):\n  - " + "\n  - ".join(slots) +
+                f"\nOffer two or three of them naturally (a sentence reads better than a raw list), then add, in "
+                f"your own words: \"{line}\"")
+    except Exception:  # noqa: BLE001 — availability must never break drafting
+        return ""
+
+
+def _email_brief(inq: dict, co: dict | None = None) -> str:
     """Frame a website enquiry as a reply-drafting brief for the worker."""
     return ("Draft a reply to this website enquiry. Write it as a clean, professional plain-text email: "
             "normal sentences in short paragraphs. Do NOT use any markdown, no **bold**, no #headings, no "
             "[text](link) markdown links (write URLs plainly). Avoid bullet lists unless genuinely needed, "
             "and if so use a simple hyphen. Do NOT add any closing, sign-off, name or signature, those are "
-            "appended automatically. Output ONLY the email body, no subject or headers. Reply directly to "
-            "the person, in the company voice, following the standing rules.\n\n"
+            "appended automatically. Output ONLY the email body, no subject or headers, and never a Cc/Bcc line "
+            "or any 'sending note'/'system note' (recipients and Cc/Bcc are handled by the sending system). Reply "
+            "directly to the person, in the company voice, following the standing rules.\n\n"
             f"Their name: {inq.get('name') or 'there'}\n"
             f"Their email: {inq.get('email') or '(unknown)'}\n"
-            f"Their message:\n{(inq.get('message') or inq.get('snippet') or '').strip()}")
+            f"Their message:\n{(inq.get('message') or inq.get('snippet') or '').strip()}"
+            ) + _booking_slots_brief(co)
 
 
 _EMAIL_RE = r"([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})"
@@ -215,12 +241,16 @@ def _email_envelope(task: dict, company: dict) -> dict:
     req = task.get("request") or {}
     outbound = bool(req.get("outbound"))   # a Talk-composed email_draft (not a reply) — no "Re:" prefix
     subj = inq.get("subject") or "your enquiry"
-    return {"to": inq.get("email") or "", "to_name": inq.get("name") or "",
-            "from": (req.get("from_email") or data.get("reply_from") or "").strip() or None,
+    from_addr = (req.get("from_email") or data.get("reply_from") or "").strip() or None
+    # per-sender signature: a reply sent FROM a specific person (e.g. gino@sensa.digital) carries THEIR
+    # signature (profile.signatures[email]); otherwise the company default.
+    sender_sig = (data.get("signatures") or {}).get((from_addr or "").lower()) or {}
+    sig_plain = (sender_sig.get("signature") or data.get("signature") or "").strip()
+    sig_html = (sender_sig.get("signature_html") or data.get("signature_html") or "").strip()
+    return {"to": inq.get("email") or "", "to_name": inq.get("name") or "", "from": from_addr,
             "cc": cc or None, "bcc": bcc or None,
             "subject": subj if outbound else ("Re: " + subj),
-            "name": inq.get("name") or "", "signature": (data.get("signature") or "").strip(),
-            "signature_html": (data.get("signature_html") or "").strip()}
+            "name": inq.get("name") or "", "signature": sig_plain, "signature_html": sig_html}
 
 
 def _fmt_email(task: dict, skill: dict, company: dict, verdict: dict | None) -> str:
@@ -266,6 +296,29 @@ def _strip_signoff(s: str) -> str:
     return _SIGNOFF.sub("", s or "").rstrip()
 
 
+_ENQUIRY_REF_LABEL = "For your reference, here is the enquiry you sent us:"
+
+
+def _inquiry_reference_block(task: dict) -> tuple[str, str]:
+    """The prospect's ORIGINAL enquiry, reproduced VERBATIM after the signature, so a first-response reply
+    carries the context of what they asked. Web contact-form enquiries have no email thread to reply into, so
+    we quote their submitted message instead. Done HERE (not via a worker prompt) so the text is reproduced
+    exactly, never paraphrased or invented by the model. Returns (plain, html); ('','') when not applicable."""
+    req = task.get("request") or {}
+    if req.get("outbound"):                                   # Talk-composed outbound draft, not a reply
+        return "", ""
+    inq = req.get("inquiry") or {}
+    msg = (inq.get("message") or inq.get("snippet") or "").strip()
+    if not msg:
+        return "", ""
+    plain = f"\n\n----------\n{_ENQUIRY_REF_LABEL}\n\n{msg}"
+    html_block = ("<div style='margin-top:22px;padding:12px 14px;border-left:3px solid #d9d9d9;"
+                  "background:#f6f6f6;color:#555;font-size:13px;line-height:1.55'>"
+                  f"<div style='color:#888;margin-bottom:7px'>{_html.escape(_ENQUIRY_REF_LABEL)}</div>"
+                  f"<div style='white-space:pre-wrap'>{_html.escape(msg)}</div></div>")
+    return plain, html_block
+
+
 def compose_reply_body(task: dict, company: dict) -> str:
     """The plain-text body that will be sent: the cleaned reply plus the company signature (text). Also the
     fallback part of the multipart email, so non-HTML clients still get a clean message."""
@@ -274,6 +327,7 @@ def compose_reply_body(task: dict, company: dict) -> str:
     sig = (env.get("signature") or "").strip()
     if sig:
         body = body + "\n\n" + sig
+    body += _inquiry_reference_block(task)[0]                 # quote the original enquiry AFTER the signature
     return body
 
 
@@ -344,13 +398,15 @@ def compose_reply_html(task: dict, company: dict, for_preview: bool = False) -> 
     the browser); for the real send it's a cid inline image."""
     env = _email_envelope(task, company)
     clean = _strip_signoff(_clean_email_text(task.get("draft") or ""))
+    ref_html = _inquiry_reference_block(task)[1]              # original enquiry, quoted after the signature
     sig_html = (env.get("signature_html") or "").strip()
     if sig_html:
         # Stored rich-HTML signature (its logo is referenced by a public URL) — render it verbatim
         # after the body. No cid attachment needed; the same markup renders in the cockpit preview.
         html_body = ("<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#0A1828;"
                      f"line-height:1.6'>{_body_to_html(clean)}"
-                     f"<div style='margin-top:20px'><p style='margin:0 0 14px 0'>Best regards,</p>{sig_html}</div></div>")
+                     f"<div style='margin-top:20px'><p style='margin:0 0 14px 0'>Best regards,</p>{sig_html}</div>"
+                     f"{ref_html}</div>")
         return {"plain": compose_reply_body(task, company), "html": html_body, "inline": []}
     plain_sig = (env.get("signature") or "").strip()
     logo_file = _logo_path(company)
@@ -362,7 +418,8 @@ def compose_reply_html(task: dict, company: dict, for_preview: bool = False) -> 
             cid = re.sub(r"[^a-z0-9]", "", (company or {}).get("slug") or "company") + "logo"
             logo_src, inline = f"cid:{cid}", [(cid, logo_file)]
     html_body = ("<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#0A1828;"
-                 f"line-height:1.6'>{_body_to_html(clean)}{_signature_html(plain_sig, logo_src, (company or {}).get('name') or '')}</div>")
+                 f"line-height:1.6'>{_body_to_html(clean)}{_signature_html(plain_sig, logo_src, (company or {}).get('name') or '')}"
+                 f"{ref_html}</div>")
     return {"plain": compose_reply_body(task, company), "html": html_body, "inline": inline}
 
 
@@ -380,9 +437,17 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     send_company = _inbox_client_company(slug) if slug else None
     send_rt_key, from_addr = None, env["from"]
     if send_company:
-        send_rt_key = (f"gmail_send_refresh_token:{slug}" if db.setting_get(f"gmail_send_refresh_token:{slug}")
-                       else f"gmail_refresh_token:{slug}")
-        from_addr = from_addr or db.setting_get(f"gmail_send_account:{slug}") or db.setting_get(f"gmail_account:{slug}")
+        # per-company send ONLY if that brand actually has its own mailbox token; otherwise fall back to the
+        # legacy global send mailbox (e.g. Tabscanner has its own OAuth client file but sends via the shared
+        # gmail_send_refresh_token / read inbox — never 500 just because the :slug token was never minted).
+        if db.setting_get(f"gmail_send_refresh_token:{slug}"):
+            send_rt_key = f"gmail_send_refresh_token:{slug}"
+        elif db.setting_get(f"gmail_refresh_token:{slug}"):
+            send_rt_key = f"gmail_refresh_token:{slug}"
+        if send_rt_key:
+            from_addr = from_addr or db.setting_get(f"gmail_send_account:{slug}") or db.setting_get(f"gmail_account:{slug}")
+        else:
+            send_company = None     # no brand token -> legacy global path (_send_token uses gmail_send_refresh_token)
     res = gmail.send_message(env["to"], env["subject"], c["plain"], from_addr=from_addr, cc=env["cc"],
                              html=c["html"], inline_images=c["inline"], bcc=env.get("bcc"),
                              files=files, file_names=file_names, company=send_company, send_rt_key=send_rt_key)
@@ -394,6 +459,15 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     store.log_decision(task["id"], skill["id"], actor, "send",
                        snapshot={"to": env["to"], "cc": env["cc"], "bcc": env.get("bcc"),
                                  "from": env["from"], "subject": env["subject"], "gmail_id": res.get("id")})
+    # pre-qualification chase clock: a reply to a FUNNEL LEAD (came via intake, qual:email exists) that is NOT an
+    # opportunity chase (no deal_id) -> (re)arm the silence chase, so a lead who then goes quiet gets followed up.
+    try:
+        to = (env.get("to") or "").lower()
+        q = db.setting_get(f"qual:email:{to}") if to else None
+        if q and q.get("company_id") == company["id"] and not req.get("deal_id"):
+            _arm_lead_followup(company["id"], to)
+    except Exception:  # noqa: BLE001
+        pass
     if auto:
         tg.send(f"[{company['name']} · {skill['name']}] auto-sent a reply to {env['to']}. #{task['id']} done.")
     return {"sent_to": env["to"], "id": res.get("id")}
@@ -535,6 +609,8 @@ def _run_blog_ideation(task: dict, skill: dict, company: dict) -> None:
         return
     total = len(drafts)
     for i, c in enumerate(drafts, 1):
+        c = blog.add_internal_links(company["id"], c)   # weave contextual internal links into the draft (outbound)
+        c = blog.add_service_logos(company["id"], c)    # logos for any external services mentioned + link out
         title = (c.get("title") or "Blog draft").strip()
         text = blog.content_text(c)
         body = (f"Draft {i} of {total}\n\n{text}") if total > 1 else text
@@ -589,15 +665,30 @@ def _build_blog_from_concept(task: dict, skill: dict, company: dict) -> dict:
     else:
         art = worker.draft_article(skill, company, {"brief": req.get("brief", "")})
         verdict = manager.check(skill, company, f"TITLE: {art['title']}\n\n{art['html']}", {"brief": req.get("brief", "")})
-    post = site.stage_draft(art["title"], art["html"])   # unpublished, noindex WordPress draft
+    hero_url = (art.get("images") or {}).get("hero")     # set it as the WP featured image -> the theme banner
+    _fi = (art.get("content") or {}).get("featured_image") or art.get("featured_image") or {}
+    _cat = ((art.get("content") or {}).get("category") or "").split("·")[0].strip()   # WP category (the kicker)
+    post = site.stage_draft(art["title"], art["html"], featured_url=hero_url,
+                            featured_alt=(_fi.get("alt") or art["title"]), category=_cat)   # unpublished noindex draft
     db.setting_set(f"wp:{task['id']}", {"post_id": post["id"], "preview": post.get("preview"),
                                         "edit": post.get("edit"), "title": art["title"]})
     # stash the content + image URLs so a REVISION edits this exact post (reusing the same images), never rebuilds
     db.setting_set(f"blog_build:{task['id']}", {"content": art.get("content"), "images": art.get("images")})
+    # Inbound links are seeded ONLY on publish (never on a draft URL — that would create dead links). Record the
+    # PLAN now as stored knowledge + surface it on the review card so the owner sees what will happen on publish.
+    inbound_note = ""
+    try:
+        plan = blog.seed_inbound_links(company, post["id"], post.get("link") or "", art["title"], dry_run=True)
+        if plan:
+            db.setting_set(f"inbound_plan:{task['id']}", {"post_id": post["id"], "links": plan})
+            inbound_note = ("\n\nOn publish, these existing posts will automatically link back to this one:\n"
+                            + "\n".join(f"- {p['title']} (anchor: \"{p['anchor']}\")" for p in plan))
+    except Exception:  # noqa: BLE001
+        pass
     dek = (art.get("dek") or "").strip() or "The formatted post is ready to review."
     store.update_task(task["id"], kind="blog", title=art["title"],
                       draft=f"{dek}\n\nThe formatted post is staged as a hidden draft. Open the preview link "
-                            f"below to review it, then approve to schedule.",
+                            f"below to review it, then approve to schedule." + inbound_note,
                       manager=verdict, attempts=task["attempts"] + 1, status="awaiting_approval")
     t = store.get_task(task["id"])
     msg = tg.send(_fmt_blog(company, skill, art, verdict, post.get("preview")), _blog_buttons(task["id"]))
@@ -766,23 +857,54 @@ def _infer_rule_offer(task: dict, skill: dict, text: str, old: str, new: str) ->
     except Exception:  # noqa: BLE001 — background; never surface
         return
     if rule.get("is_rule") and rule.get("rule"):
-        db.setting_set(f"rule:{task['id']}", rule["rule"])
         company = store.get_company(task["company_id"])
         co = company["name"] if company else "this company"
+        # store the proposal SELF-CONTAINED (skill + company baked in) so it survives the task being archived/
+        # deleted and can always be decided + landed in the right skill, even days later.
+        db.setting_set(f"rule:{task['id']}", {
+            "rule": rule["rule"], "skill_id": skill["id"], "skill_key": skill.get("skill_key"),
+            "company_id": task["company_id"], "company": co,
+            "skill_name": skill.get("name"), "kind": task.get("kind")})
         tg.send(f"I'm reading your correction as a standing rule:\n\n“{rule['rule']}”\n\n"
                 f"Where should it live? '{co}' only, or ALL companies?",
                 [[tg.button(f"{co} only", f"ry:{task['id']}"), tg.button("All companies", f"ru:{task['id']}")],
                  [tg.button("No, just this once", f"rn:{task['id']}")]])
 
 
+def _norm_proposal(task_id: int, raw) -> dict:
+    """Normalise a rule:{id} proposal — a self-contained dict, or a legacy plain string enriched from the task."""
+    if isinstance(raw, dict):
+        return {**raw, "task_id": task_id}
+    t = store.get_task(task_id)
+    sk = store.get_skill(t["skill_id"]) if t else None
+    co = store.get_company(t["company_id"]) if t else None
+    return {"task_id": task_id, "rule": raw, "skill_id": (t or {}).get("skill_id"),
+            "skill_key": (sk or {}).get("skill_key"), "company_id": (t or {}).get("company_id"),
+            "company": (co or {}).get("name"), "skill_name": (sk or {}).get("name"), "kind": (t or {}).get("kind")}
+
+
 def pending_rule(task_id: int) -> dict:
     """Cockpit polls this after a correction: returns the rule the background inference proposed (if any)."""
-    task = store.get_task(task_id)
-    skill = store.get_skill(task["skill_id"]) if task else None
-    company = store.get_company(task["company_id"]) if task else None
-    return {"ok": True, "proposed_rule": db.setting_get(f"rule:{task_id}"),
-            "skill_name": skill["name"] if skill else None,
-            "company": company["name"] if company else None}
+    raw = db.setting_get(f"rule:{task_id}")
+    p = _norm_proposal(task_id, raw) if raw else {}
+    return {"ok": True, "proposed_rule": p.get("rule"),
+            "skill_name": p.get("skill_name"), "company": p.get("company")}
+
+
+def pending_rules() -> list[dict]:
+    """EVERY un-decided rule proposal across all companies — so a taught rule can never be silently lost. The
+    cockpit surfaces these as standalone 'confirm this rule' cards until the owner decides (company/universal/no)."""
+    out = []
+    for r in db.query("select key from settings where key like %s", ("rule:%",)):
+        tid = r["key"].split(":", 1)[1]
+        if not tid.isdigit():
+            continue
+        raw = db.setting_get(r["key"])
+        if raw:
+            p = _norm_proposal(int(tid), raw)
+            if p.get("rule"):
+                out.append(p)
+    return out
 
 
 def _on_message(msg: dict) -> None:
@@ -869,17 +991,18 @@ def apply_correction(task: dict, text: str) -> None:
 
 
 def _confirm_rule(task: dict, skill: dict, yes: bool, universal: bool = False) -> None:
-    rule = db.setting_get(f"rule:{task['id']}")
-    if yes and rule:
+    raw = db.setting_get(f"rule:{task['id']}")
+    rt = raw.get("rule") if isinstance(raw, dict) else raw
+    if yes and rt:
         if universal:
-            store.add_universal_rule(skill["skill_key"], rule)
+            store.add_universal_rule(skill["skill_key"], rt)
             where = "ALL companies (universal)"
         else:
-            store.add_rule(skill["id"], rule)
+            store.add_rule(skill["id"], rt)
             where = f"'{skill['name']}'"
         store.log_decision(task["id"], skill["id"], "owner", "rule_confirmed",
-                           note=("[universal] " if universal else "") + rule)
-        tg.send(f"Added to {where}: “{rule}”. I'll follow it from now on.")
+                           note=("[universal] " if universal else "") + rt)
+        tg.send(f"Added to {where}: “{rt}”. I'll follow it from now on.")
     else:
         tg.send("Okay — not adding a rule.")
     db.setting_set(f"rule:{task['id']}", None)
@@ -1076,21 +1199,23 @@ def correct_task(task_id: int, text: str) -> dict:
 def decide_rule(task_id: int, add: bool, scope: str = "company") -> dict:
     """Cockpit confirm/dismiss of the rule Cortex inferred from a correction. `scope` is the owner's
     explicit choice: 'company' (this company's skill only) or 'universal' (that skill_key on EVERY company)."""
-    rule = db.setting_get(f"rule:{task_id}")
-    task = store.get_task(task_id)
+    raw = db.setting_get(f"rule:{task_id}")
     added = False
-    if add and rule and task:
-        if scope == "universal":
-            skill = store.get_skill(task["skill_id"])
-            if skill:
-                store.add_universal_rule(skill["skill_key"], rule)
-                added = True
-        else:
-            store.add_rule(task["skill_id"], rule)
+    if add and raw:
+        p = _norm_proposal(task_id, raw)
+        rule, skill_key, skill_id = p.get("rule"), p.get("skill_key"), p.get("skill_id")
+        if rule and scope == "universal" and skill_key:
+            store.add_universal_rule(skill_key, rule)
+            added = True
+        elif rule and skill_id:
+            store.add_rule(skill_id, rule)
             added = True
         if added:
-            store.log_decision(task_id, task["skill_id"], "owner", "rule_confirmed",
-                               note=("[universal] " if scope == "universal" else "") + rule)
+            try:
+                store.log_decision(task_id, skill_id, "owner", "rule_confirmed",
+                                   note=("[universal] " if scope == "universal" else "") + rule)
+            except Exception:  # noqa: BLE001 — the originating task may be gone; the rule still lands
+                pass
     db.setting_set(f"rule:{task_id}", None)
     return {"ok": True, "added": added, "scope": scope}
 
@@ -1099,6 +1224,8 @@ def decide_rule(task_id: int, add: bool, scope: str = "company") -> dict:
 
 def poll_inquiries() -> dict:
     """The automatic intake (recent window), called on the engine loop."""
+    if not EMAIL_ENQUIRY_FALLBACK:                       # sites POST enquiries direct now; email poller off
+        return {"made": 0, "filtered": 0, "reason": "direct-webhook"}
     return poll_inquiries_window(days=2)
 
 
@@ -1156,7 +1283,7 @@ def poll_inquiries_window(days: int = 2) -> dict:
         except Exception:  # noqa: BLE001
             pass
         store.create_task(co["id"], skill["id"], "email_reply",
-                          {"brief": _email_brief(inq), "inquiry": inq, "triage": verdict})
+                          {"brief": _email_brief(inq, co), "inquiry": inq, "triage": verdict})
         made += 1
         if made >= 10:
             break
@@ -1174,6 +1301,10 @@ def poll_inquiries_window(days: int = 2) -> dict:
 # Some brands' website contact forms only EMAIL the catch-all inbox (no webhook). This reads those
 # notification emails, parses the lead, triages spam, and routes genuine ones -> CRM + a drafted reply,
 # exactly like Tabscanner's enquiry flow. Add a brand by adding a line to FORM_INTAKE.
+# NOTE: all five sites now POST enquiries straight to /api/intake/enquiry (direct webhook), which triages +
+# captures via the SAME intake_enquiry() core. The email pollers below are OFF (flag) to avoid double-capture;
+# flip EMAIL_ENQUIRY_FALLBACK back on to use them as an email backstop.
+EMAIL_ENQUIRY_FALLBACK = False
 FORM_INTAKE = {
     "snaprewards": {"rt_key": "gmail_refresh_token:snaprewards", "client": "snaprewards",
                     "subject": "Site contact form", "skill": "sales-first-response"},
@@ -1199,6 +1330,100 @@ def _parse_form_email(e: dict) -> dict:
             "subject": e.get("subject"), "message": (m.group(1).strip() if m else body.strip())}
 
 
+_FREE_EMAIL_DOMAINS = {
+    "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "hotmail.co.uk", "live.com", "live.co.uk",
+    "yahoo.com", "yahoo.co.uk", "icloud.com", "me.com", "mac.com", "aol.com", "proton.me", "protonmail.com",
+    "gmx.com", "mail.com", "yandex.com", "msn.com", "ymail.com", "zoho.com",
+}
+
+
+def qualify_suggest(co: dict, inq: dict) -> dict | None:
+    """Run the company's `lead-qualification` skill over ONE genuine enquiry and return a suggested verdict
+    {verdict, confidence, reason}. The sender's DOMAIN is the lead signal: a real corporate domain (especially
+    UAE) with a genuine request can suggest 'qualified' straight away; a free-email / vague one is gauged. For a
+    corporate but unfamiliar domain the model gets live web search so it can judge the company's standing.
+    The owner still makes the final call (Qualify / Not qualified). Never raises into the caller."""
+    skill = store.get_skill_by_key(co["id"], "lead-qualification")
+    if not skill:
+        return None
+    email = (inq.get("email") or "").strip().lower()
+    domain = email.split("@")[-1] if "@" in email else ""
+    free = (domain in _FREE_EMAIL_DOMAINS) or not domain
+    rules = "\n".join(f"- {r}" for r in (skill.get("rules") or [])) or (skill.get("craft") or "")
+    system = (
+        f"You qualify inbound sales enquiries for {co.get('name')}, a video production company. "
+        f"Apply these qualification rules exactly:\n{rules}\n\n"
+        "Decide whether THIS enquiry is a qualified opportunity, weighing the sender's email domain as the "
+        "primary signal. Return a JSON object: {\"verdict\": \"qualified\" | \"not_qualified\" | \"needs_info\", "
+        "\"confidence\": \"low\" | \"medium\" | \"high\", \"reason\": one short sentence under 25 words, "
+        "\"ball_in_our_court\": true if their message asks US to do something next (send a proposal, quotation, "
+        "pricing, samples or more info) or otherwise puts the next step on us, false if we are waiting on them}.")
+    user = (
+        f"Sender: {inq.get('name') or ''} <{email}>\n"
+        f"Email domain: {domain or '(none)'} ({'free/personal email' if free else 'corporate domain'})\n"
+        f"Company stated: {inq.get('company_name') or '(none)'}\n"
+        f"Enquiry: {(inq.get('message') or '')[:1200]}")
+    model = provider.resolve_model(skill.get("model"))
+    try:
+        if free:
+            out = provider.think_json(system, user, model=model, max_tokens=240,
+                                      purpose="qualify", company=co.get("slug"))
+        else:                                          # corporate domain -> let it look the company up
+            out = provider.research_json(system, user, model=model, max_searches=4, max_tokens=600)
+    except Exception:                                  # noqa: BLE001 -- a failed suggestion must never block intake
+        try:
+            out = provider.think_json(system, user, model=model, max_tokens=240)
+        except Exception:                              # noqa: BLE001
+            return None
+    if not isinstance(out, dict) or not out:
+        return None
+    v = (out.get("verdict") or "needs_info").strip().lower()
+    if v not in ("qualified", "not_qualified", "needs_info"):
+        v = "needs_info"
+    conf = (out.get("confidence") or "medium").strip().lower()
+    return {"verdict": v, "confidence": conf if conf in ("low", "medium", "high") else "medium",
+            "reason": (out.get("reason") or "").strip()[:300], "ball_in_our_court": bool(out.get("ball_in_our_court")),
+            "domain": domain, "free_email": free}
+
+
+def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
+    """Triage ONE website enquiry (parsed fields {name,email,phone,subject,message}) and route it: genuine ->
+    CRM contact (+ optional drafted reply); spam/junk -> filed, NEVER CRM'd. Shared by the email FORM_INTAKE
+    poller AND the /api/intake/enquiry webhook, so a direct-POST enquiry is classified identically to an emailed one."""
+    co = store.get_company_by_slug(slug)
+    if not co:
+        return {"ok": False, "reason": "unknown company"}
+    if not (inq.get("email") or "").strip():
+        return {"ok": False, "reason": "no email"}
+    verdict = triage_inquiry(inq, slug)
+    if not verdict["genuine"]:                       # spam/junk -> filed for audit, NOT CRM'd, NOT drafted
+        flog = db.setting_get("enquiry_filtered") or []
+        flog.append({"company": slug, "name": inq.get("name"), "email": inq.get("email"),
+                     "category": verdict.get("category"), "reason": verdict.get("reason")})
+        db.setting_set("enquiry_filtered", flog[-300:])
+        return {"ok": True, "captured": False, "category": verdict.get("category"), "reason": verdict.get("reason")}
+    try:
+        crm.add_inquiry(inq, slug)                   # genuine -> verified CRM contact (dedup by email)
+    except Exception:  # noqa: BLE001
+        pass
+    sug = None                                       # domain-led qualification suggestion (owner still decides)
+    try:
+        sug = qualify_suggest(co, inq)
+        if sug:
+            em = (inq.get("email") or "").strip().lower()
+            db.setting_set(f"qual:{co['id']}:{em}", sug)
+            db.setting_set(f"qual:email:{em}", {**sug, "company_id": co["id"]})
+    except Exception:  # noqa: BLE001
+        pass
+    if draft:                                        # full mode -> also draft a reply for approval
+        skill = store.get_skill_by_key(co["id"], "sales-first-response")
+        if skill:
+            store.create_task(co["id"], skill["id"], "email_reply",
+                              {"brief": _email_brief(inq, co), "inquiry": inq, "triage": verdict, "qual_suggest": sug})
+    return {"ok": True, "captured": True, "category": verdict.get("category"),
+            "qualification": (sug or {}).get("verdict")}
+
+
 def _poll_one_form(slug: str, cfg: dict, days: int = 3) -> dict:
     co = store.get_company_by_slug(slug)
     skill = store.get_skill_by_key(co["id"], cfg.get("skill", "sales-first-response")) if co else None
@@ -1217,18 +1442,13 @@ def _poll_one_form(slug: str, cfg: dict, days: int = 3) -> dict:
         if re.match(r"(?i)^\s*(re|fwd|fw)\s*:", e.get("subject") or ""):   # a reply/forward, not a fresh enquiry
             continue
         inq = _parse_form_email(e)
-        if not inq.get("email"):     # couldn't parse a lead email -> skip
+        res = intake_enquiry(slug, inq, draft=cfg.get("draft", True))   # shared triage+capture core
+        if not res.get("ok") or res.get("reason") == "no email":
             continue
-        if not triage_inquiry(inq, slug)["genuine"]:   # spam (e.g. SEO/directory pitch) -> filed, no CRM, no draft
+        if res.get("captured"):
+            made += 1
+        else:
             filtered += 1
-            continue
-        try:
-            crm.add_inquiry(inq, slug)            # genuine -> verified CRM contact (always)
-        except Exception:  # noqa: BLE001
-            pass
-        if cfg.get("draft", True):               # full mode -> also draft a reply; CRM-only mode -> skip
-            store.create_task(co["id"], skill["id"], "email_reply", {"brief": _email_brief(inq), "inquiry": inq})
-        made += 1
         if made >= 10:
             break
     db.setting_set(key, list(seen)[-1000:])
@@ -1242,6 +1462,8 @@ def _poll_one_form(slug: str, cfg: dict, days: int = 3) -> dict:
 def poll_company_forms() -> dict:
     """Read every configured + connected company's contact-form emails; route genuine leads to a drafted
     reply in the Inbox, filter spam. Runs on the 60s loop alongside the catch-all classifier."""
+    if not EMAIL_ENQUIRY_FALLBACK:                       # sites POST enquiries direct now; email poller off
+        return {"reason": "direct-webhook"}
     out = {}
     for slug, cfg in FORM_INTAKE.items():
         if not db.setting_get(cfg["rt_key"]):
@@ -1262,6 +1484,52 @@ WAITLIST_INTAKE = {
     "filmspoke": {"rt_key": "gmail_refresh_token:filmspoke", "client": "filmspoke",
                   "subject": "waitlist signup", "source": "FilmSpoke waitlist"},
 }
+
+
+def run_opportunity_followups() -> dict:
+    """SYSTEM-WIDE: walk every AUTO opportunity whose next follow-up is due. Each fires the cadence's action
+    (chase/checkin) as a deal-linked drafted card for approval, then arms the next step; when the sequence is
+    exhausted the opportunity is marked Lost. The cadence is per-company config (crm.get_cadence), not code."""
+    due = db.query("select * from crm_projects where automation='auto' and next_followup is not null "
+                   "and next_followup <= now() order by next_followup limit 50")
+    fired = []
+    for opp in due:
+        try:
+            r = crm.advance_followup(opp["id"])
+            if not r:
+                continue
+            if r.get("action") == "lost":
+                tg.send(f"Opportunity '{opp['title']}' marked Lost — follow-up sequence exhausted.")
+                continue
+            _spawn_followup_card(opp, r["action"])
+            fired.append([opp["id"], r["action"]])
+        except Exception as e:  # noqa: BLE001
+            tg.send(f"(follow-up #{opp.get('id')} hiccup: {e})")
+    return {"fired": fired}
+
+
+def _spawn_followup_card(opp: dict, action: str) -> None:
+    """Create a deal-linked follow-up card. Drafts a chase via the company's first-response skill when there's a
+    contact to chase; otherwise drops a nudge notification on the opportunity. Drafting quality is the skill's job."""
+    co = store.get_company_by_slug(crm._slug_for_org(opp.get("company")))
+    if not co:
+        return
+    contacts = opp.get("contacts") or []
+    primary = next((c for c in contacts if c.get("primary")), contacts[0] if contacts else None)
+    email = (primary or {}).get("email") or opp.get("contact_email")
+    skill = store.get_skill_by_key(co["id"], "sales-first-response")
+    label = "check-in" if action == "checkin" else "follow-up"
+    if email and skill:
+        inq = {"name": (primary or {}).get("name") or "", "email": email,
+               "message": f"(Automated {label} on the opportunity '{opp['title']}'. No reply yet — chase to move it forward / book a meeting.)"}
+        t = store.create_task(co["id"], skill["id"], "email_reply",
+                              {"brief": f"{label.title()} on '{opp['title']}'. Goal: get a reply / book a meeting.",
+                               "inquiry": inq, "followup": action, "deal_id": opp["id"]})
+        if t:
+            db.execute("update tasks set deal_id=%s where id=%s", (opp["id"], t["id"]))
+    else:
+        notifications.notify(f"Follow-up due ({label}) — {opp['title']}", "Opportunity follow-up",
+                             category="reminder", company_id=co["id"], target_type="deal", target_id=str(opp["id"]))
 
 
 def _parse_waitlist_email(e: dict) -> dict:
@@ -1343,9 +1611,36 @@ INBOXES = {"tabscanner": "api@tabscanner.com", "sensa": "hello@sensa.digital",
            "skyvision": "fly@skyvision.film"}
 
 
-def _is_internal(addr: str, own_domain: str) -> bool:
-    d = (addr or "").split("@")[-1].lower().strip()
-    return bool(own_domain) and (d == own_domain or d.endswith("." + own_domain))
+# our own company domains (a sender on any of these is US, never a customer) — kept in sync with the scrape rules
+OWN_COMPANY_DOMAINS = {"sensa.digital", "skyvision.film", "tabscanner.com", "snap-rewards.com",
+                       "filmspoke.ai", "coretex.uk", "sensa.film", "sensafilms.com"}
+_PLACEHOLDER_RE = re.compile(r"^linked\d+@")
+
+
+def _internal_index() -> dict:
+    """Everything that means 'this sender is US / internal' on inbound, so the classifier never CRMs ourselves:
+    own company domains, the Instantly burner SENDING domains (settings.own_sending_domains), the named internal
+    roster (settings.internal_people), and every active newsletter test-group member. Read live so it stays current."""
+    domains = set(OWN_COMPANY_DOMAINS)
+    domains |= {str(d).lower().strip() for d in (db.setting_get("own_sending_domains") or [])}
+    emails = {str(e).lower().strip() for e in (db.setting_get("internal_people") or [])}
+    try:
+        emails |= {r["email"].lower() for r in db.query("select lower(email) email from newsletter_test_group where active")}
+    except Exception:  # noqa: BLE001
+        pass
+    return {"domains": domains, "emails": emails}
+
+
+def _is_internal(addr: str, own_domain: str = "", index: dict | None = None) -> bool:
+    a = (addr or "").lower().strip()
+    d = a.split("@")[-1]
+    if own_domain and (d == own_domain or d.endswith("." + own_domain)):
+        return True
+    if _PLACEHOLDER_RE.match(a):                 # LinkedIn placeholder identity, not a real inbound sender
+        return True
+    if index and (d in index["domains"] or a in index["emails"]):
+        return True
+    return False
 
 
 def classify_email(company: dict, email: dict) -> dict:
@@ -1391,6 +1686,7 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
         return {"processed": 0, "results": [], "reason": "no company / inbox not connected"}
     q = f'in:inbox newer_than:{days}d -subject:"New enquiry from"'
     own_domain = INBOXES.get(company_slug, "").split("@")[-1].lower()
+    intl = _internal_index()                       # own/burner domains + internal roster + test group
     key = f"inbox_processed:{company_slug}"
     seen = set(db.setting_get(key) or [])
     emails = gmail.list_recent(days=days, limit=limit, rt_key=rt_key, q=q, skip=seen, company=company)
@@ -1399,7 +1695,7 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
         gid = e.get("gmail_id")
         if not gid or gid in seen:
             continue
-        if _is_internal(e.get("email"), own_domain):   # our own / internal address: never classify or CRM
+        if _is_internal(e.get("email"), own_domain, intl):   # our own / internal address: never classify or CRM
             if commit:
                 seen.add(gid)
             results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
@@ -1432,8 +1728,9 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
 # plan fills in: today = a stored Gmail refresh token; could become domain-wide delegation.)
 
 def _default_rt_key(slug: str) -> str:
-    # Tabscanner keeps the legacy key; every other inbox gets its own namespaced token key.
-    return "gmail_refresh_token" if slug == "tabscanner" else f"gmail_refresh_token:{slug}"
+    # Every inbox gets its own namespaced token key (Tabscanner migrated off the legacy global key 2026-06-23,
+    # so it now uses its own per-company Internal OAuth client + :tabscanner token like every other company).
+    return f"gmail_refresh_token:{slug}"
 
 
 def _inbox_client_company(slug: str) -> str | None:
@@ -1480,6 +1777,182 @@ def poll_all_inboxes() -> dict:
         except Exception as ex:  # noqa: BLE001
             tg.send(f"(inbox classify hiccup [{e.get('slug')}]: {ex})")
     return {"polled": polled}
+
+
+def _bare_email(s: str) -> str:
+    m = re.search(r"<([^>]+@[^>]+)>", s or "")
+    if m:
+        return m.group(1).strip().lower()
+    m = re.search(r"[\w.+-]+@[\w.-]+\.\w+", s or "")
+    return m.group(0).strip().lower() if m else ""
+
+
+def _reply_followup_brief(inq: dict, co: dict | None = None) -> str:
+    """Frame a lead's REPLY (ongoing thread) as a 'draft the next message' brief for the worker."""
+    return ("This is a REPLY from a lead in an ONGOING sales conversation (not a new website enquiry). Read their "
+            "message and draft OUR next reply, continuing the thread. Friendly, helpful, in the company voice; "
+            "address exactly what they said; keep gauging scope, timeline and budget; and push for a short call "
+            "(offer the meeting link) UNLESS they have clearly declined one. If they have declined a call and are "
+            "only asking for a quotation or proposal, do NOT write or promise a quote — acknowledge warmly and say "
+            "the team will follow up with it (a human takes the quote over). Plain-text email body ONLY: no "
+            "markdown, no subject, no sign-off/name/signature (appended automatically), never a Cc/Bcc or system "
+            "note.\n\n"
+            f"Their name: {inq.get('name') or 'there'}\n"
+            f"Their email: {inq.get('email') or '(unknown)'}\n"
+            f"Their latest message:\n{(inq.get('message') or '').strip()}"
+            ) + _booking_slots_brief(co)
+
+
+def poll_sales_replies(slug: str = "sensa") -> dict:
+    """Read the SALES mailbox where replies to our outbound land (e.g. gino@sensa.digital, via the send token) for
+    NEW replies from leads we are ALREADY in conversation with, and for each: draft OUR next reply (continue the
+    qualifying thread) + re-run qualification on the new info, both into the Inbox. Tightly filtered — only acts on
+    a 'Re:' from a captured lead of THIS company, never the rest of the mailbox. Drafts only; nothing auto-sends."""
+    co = store.get_company_by_slug(slug)
+    if not co:
+        return {"reason": "no company"}
+    send_rt = f"gmail_send_refresh_token:{slug}"
+    if not db.setting_get(send_rt):
+        return {"reason": "no sales mailbox token"}
+    seen = list(db.setting_get(f"sales_replies_seen:{slug}") or [])
+    seen_set = set(seen)
+    idx = _internal_index()
+    own_domain = (INBOXES.get(slug, "") or "").split("@")[-1]
+    try:
+        msgs = gmail.list_recent(days=14, limit=30, rt_key=send_rt, company=slug, q="newer_than:14d", skip=seen_set)
+    except Exception as e:  # noqa: BLE001
+        return {"reason": f"read failed: {e}"}
+    skill = store.get_skill_by_key(co["id"], "sales-first-response")
+    made = 0
+    for m in msgs:
+        gid = m.get("gmail_id")
+        if not gid or gid in seen_set:
+            continue
+        seen.append(gid); seen_set.add(gid)
+        frm = _bare_email(m.get("from") or m.get("from_email") or "")
+        subj = (m.get("subject") or "").strip()
+        body = (m.get("body") or m.get("snippet") or "").strip()
+        if not frm or _is_internal(frm, own_domain, idx):           # never us / internal
+            continue
+        if not subj.lower().startswith("re:"):                       # only a reply to a thread we started
+            continue
+        prior = db.setting_get(f"qual:email:{frm}")                  # ONLY continue threads with leads from OUR
+        if not prior or prior.get("company_id") != co["id"]:         # sales funnel (came through enquiry intake) —
+            continue                                                 # never cold mail / vendors pitching us
+        c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (frm,))
+        nm = ((((c or {}).get("first_name")) or "") + " " + (((c or {}).get("last_name")) or "")).strip()
+        name = nm if re.search(r"[A-Za-z]", nm) else frm.split("@")[0]
+        inq = {"name": name, "email": frm, "message": body,
+               "subject": subj if subj.lower().startswith("re:") else f"Re: {subj}"}
+        if skill:
+            store.create_task(co["id"], skill["id"], "email_reply",
+                              {"brief": _reply_followup_brief(inq, co), "inquiry": inq, "thread_reply": True})
+        try:                                                         # re-qualify on the new info
+            sug = qualify_suggest(co, inq)
+            if sug:
+                db.setting_set(f"qual:{co['id']}:{frm}", sug)
+                db.setting_set(f"qual:email:{frm}", {**sug, "company_id": co["id"]})
+        except Exception:  # noqa: BLE001
+            pass
+        db.setting_set(f"lead_fu:{co['id']}:{frm}", None)   # they replied -> stop the silence chase
+        made += 1
+    db.setting_set(f"sales_replies_seen:{slug}", seen[-500:])
+    if made:
+        tg.send(f"[{co['name']}] {made} lead repl{'y' if made == 1 else 'ies'} -> drafted the next message in your Inbox.")
+    return {"drafted": made}
+
+
+# ---------- pre-qualification SILENCE chase: don't let a captured lead fade away -----------------------
+# A lead got in touch, we replied, they went quiet (and aren't qualified yet). Chase them on a cadence until
+# they respond, then drop. CADENCE IS CONFIG (per-company `lead_followup_cadence` override else this default).
+LEAD_CADENCE = {
+    "skip_weekends": True,
+    "steps": [
+        {"after_days": 3, "repeat": 3, "action": "chase"},   # 3 chases, 3 days apart (skipping weekends)
+        {"after_days": 7, "repeat": 2, "action": "chase"},   # then weekly for two weeks
+    ],                                                       # then drop (mark dormant)
+}
+
+
+def _lead_cadence(co: dict) -> dict:
+    cad = (profile.get(co["id"]) or {}).get("lead_followup_cadence") if co else None
+    return cad if (cad and cad.get("steps")) else LEAD_CADENCE
+
+
+def _arm_lead_followup(cid: int, email: str, step: int | None = None) -> None:
+    """Arm/refresh the silence-chase clock for a funnel lead (we just contacted them). Keeps the current step,
+    restarting the gap from now, unless a step is given. No-op once the cadence is exhausted."""
+    co = store.get_company(cid)
+    key = f"lead_fu:{cid}:{email.lower()}"
+    cur = db.setting_get(key) or {}
+    s = step if step is not None else int(cur.get("step") or 0)
+    nxt = crm._schedule_point(_lead_cadence(co), s)
+    if nxt is not None:
+        db.setting_set(key, {"step": s, "next_at": nxt.isoformat()})
+
+
+def _lead_chase_brief(inq: dict, co: dict | None = None) -> str:
+    return ("This is a FOLLOW-UP to a lead who got in touch and whom we already replied to, but who has NOT "
+            "responded yet. Draft a SHORT, warm, low-pressure nudge: gently check they saw our message, say we'd "
+            "love a quick call to understand their project (offer the meeting link), and invite them to reply with "
+            "any details whenever suits. Never pushy or guilt-trippy; one short paragraph. Plain-text body ONLY: no "
+            "markdown, no subject, no sign-off/name/signature (appended automatically), never a Cc/Bcc or system note.\n\n"
+            f"Their name: {inq.get('name') or 'there'}\n"
+            f"Their email: {inq.get('email')}"
+            ) + _booking_slots_brief(co)
+
+
+def _spawn_lead_chase(co: dict, email: str) -> None:
+    skill = store.get_skill_by_key(co["id"], "sales-first-response")
+    if not skill:
+        return
+    c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (email,))
+    nm = ((((c or {}).get("first_name")) or "") + " " + (((c or {}).get("last_name")) or "")).strip()
+    name = nm if re.search(r"[A-Za-z]", nm) else email.split("@")[0]
+    inq = {"name": name, "email": email, "subject": "Re: your enquiry",
+           "message": "(No reply yet to our last message.)"}
+    store.create_task(co["id"], skill["id"], "email_reply",
+                      {"brief": _lead_chase_brief(inq, co), "inquiry": inq, "lead_chase": True})
+
+
+def run_lead_followups() -> dict:
+    """Chase funnel leads who went silent BEFORE qualifying: per LEAD_CADENCE draft a gentle nudge into the Inbox,
+    then DROP (mark dormant) once exhausted. Self-clears a lead that has since been qualified or disqualified."""
+    now = datetime.now(timezone.utc)
+    fired = []
+    for r in db.query("select key, value from settings where key like %s", ("lead_fu:%",)):
+        v = r["value"] or {}
+        try:
+            if not v.get("next_at") or datetime.fromisoformat(v["next_at"]) > now:
+                continue
+        except Exception:  # noqa: BLE001
+            continue
+        parts = r["key"].split(":")                       # lead_fu:{cid}:{email}
+        if len(parts) < 3:
+            db.setting_set(r["key"], None); continue
+        cid, email = int(parts[1]), parts[2]
+        co = store.get_company(cid)
+        if not co:
+            continue
+        cl = (db.one("select classification from crm_master where lower(email)=lower(%s)", (email,)) or {}).get("classification")
+        if cl == "not_qualified":                          # disqualified -> stop chasing
+            db.setting_set(r["key"], None); continue
+        pts = crm.cadence_points(_lead_cadence(co))
+        step = int(v.get("step") or 0)
+        if step >= len(pts):                               # cadence exhausted -> drop them
+            db.setting_set(r["key"], None)
+            try:
+                crm.set_contact_stage(email, "Dormant/dead")
+            except Exception:  # noqa: BLE001
+                pass
+            tg.send(f"[{co['name']}] lead {email} dropped — no reply after {len(pts)} chases.")
+            continue
+        _spawn_lead_chase(co, email)
+        nstep = step + 1
+        nxt = crm._schedule_point(_lead_cadence(co), nstep) or crm._roll_weekend(now + timedelta(days=7), True)
+        db.setting_set(r["key"], {"step": nstep, "next_at": nxt.isoformat()})
+        fired.append([email, step])
+    return {"fired": fired}
 
 
 # ---------- scheduled tasks (recurring jobs -> Inbox) ----------
@@ -1557,6 +2030,23 @@ def _run_blog_scheduled_task(task: dict, skill: dict | None, company: dict | Non
     if company:
         tg.send(f"🗓 [{company['name']}] blog '{info.get('title','')}' published live on schedule. "
                 f"{result.get('link','')}")
+        # INBOUND internal linking: now it is a real published URL, seed back-links from relevant existing posts.
+        if pid and result.get("link"):
+            try:
+                from . import blog
+                rep = blog.seed_inbound_links(company, pid, result["link"], info.get("title") or "")
+                title = info.get("title", "")
+                if rep:
+                    lines = "\n".join(f"- {r['title']} (anchor: \"{r['anchor']}\")" for r in rep)
+                    body = f"{len(rep)} existing post(s) now link to '{title}':\n{lines}"
+                    tg.send(f"🔗 [{company['name']}] {body}")
+                    notifications.notify(f"Internal links seeded: {len(rep)} post(s) now link to '{title}'",
+                                         body, category="report", company_id=company["id"],
+                                         target_type="task", target_id=str(task["id"]))
+                else:
+                    tg.send(f"🔗 [{company['name']}] no inbound links seeded for '{title}' (no clearly relevant posts).")
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(inbound link seeding hiccup: {e})")
 
 
 # ---------- Phase 3: the unified clock (scheduled tasks live in `tasks`, not scheduled_tasks) ----------
@@ -1617,8 +2107,23 @@ def drain_newsletter_sends() -> None:
                     f"{ev['sent']:,}/{ev['total']:,} {coname}, {ev.get('bounces')} bounces. Check the list/domain.")
 
 
+def _recover_stranded_tasks() -> None:
+    """On startup, rescue any task orphaned in 'drafting' by the previous process. The engine restarts on every
+    deploy; a long compose caught mid-flight would otherwise sit in 'drafting' forever and never reach the Inbox.
+    Already has a draft -> surface it for approval; nothing drafted yet -> requeue it to run again cleanly."""
+    rows = db.query("select id, draft from tasks where status='drafting'")
+    for r in rows:
+        store.update_task(r["id"], status="awaiting_approval" if (r.get("draft") or "").strip() else "new")
+    if rows:
+        tg.send(f"Recovered {len(rows)} task(s) stranded in 'drafting' by a restart.")
+
+
 def run(poll_idle: float = 1.0) -> None:
     tg.send("\U0001F9E0 Cortex engine online.")
+    try:
+        _recover_stranded_tasks()
+    except Exception as e:  # noqa: BLE001
+        tg.send(f"(startup recovery hiccup: {e})")
     last_poll = 0.0
     while True:
         try:
@@ -1652,6 +2157,18 @@ def run(poll_idle: float = 1.0) -> None:
                 reminders.fire_due()    # fire due reminders -> nudge notification or spawn an action task
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(reminder fire hiccup: {e})")
+            try:
+                run_opportunity_followups()   # advance AUTO opportunities' chase cadence -> drafted follow-up cards
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(opportunity follow-up hiccup: {e})")
+            try:
+                poll_sales_replies("sensa")   # read the sales mailbox for lead replies -> draft the next message
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(sales reply poll hiccup: {e})")
+            try:
+                run_lead_followups()   # chase funnel leads who went silent BEFORE qualifying -> drafted nudge
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(lead follow-up hiccup: {e})")
             try:
                 promote_due_tasks()   # the one unified clock — recurring templates + one-off scheduled tasks
             except Exception as e:  # noqa: BLE001

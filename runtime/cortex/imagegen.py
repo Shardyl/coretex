@@ -10,6 +10,7 @@ wanted; Ultra @ ~$0.06 the sharper one.)
 from __future__ import annotations
 
 import base64
+import re
 
 import httpx
 
@@ -31,10 +32,70 @@ def _log_image(purpose: str, company: str | None) -> None:
         pass
 
 
+_TEXT_HINT = re.compile(r"receipt|invoice|\btext\b|label|number|price|total|menu|sign|screen|document|field|form|barcode|stamp", re.I)
+
+
+def _text_accurate_prompt(prompt: str, company: str | None) -> str:
+    """Backstop for text-heavy images (e.g. Tabscanner receipts): image models HALLUCINATE gibberish text unless
+    given the exact words. If the prompt implies any text/numbers/receipt fields, Claude rewrites it so EVERY such
+    piece of text is specified VERBATIM (realistic, legible sample content) -> accurate render, not gibberish.
+    No text implied -> unchanged. Never raises."""
+    if not _TEXT_HINT.search(prompt or ""):
+        return prompt
+    try:
+        from . import provider
+        directive = _company_image_directives(company)
+        sysmsg = (
+            "You prepare prompts for an AI IMAGE generator that renders TEXT badly unless given the exact words. "
+            "If this image will contain ANY text, receipt fields, numbers, labels, prices or UI copy, REWRITE the "
+            "prompt so EVERY such piece of text is written VERBATIM in double quotes with realistic, plausible, "
+            "legible sample content (for a receipt: a real-sounding store name, 2-4 line items with prices, a "
+            "subtotal/total and a date). Keep the visual style and composition direction intact. If the image "
+            "genuinely has no text, return the prompt unchanged.")
+        if directive:
+            sysmsg += (
+                " COMPANY RULE you MUST obey while rewriting: " + directive +
+                " Therefore any receipt or printed item MUST stay a small, realistic, true-to-life-SIZED everyday "
+                "receipt: do NOT enumerate a long fully-legible itemised list, and do NOT enlarge, elongate or "
+                "make it prominent to fit text. Describe its print as ordinary small receipt text at natural scale "
+                "(a store name and a couple of faint lines is plenty); realism and correct small size take "
+                "PRIORITY over text legibility, and keep any 'true-to-life proportions' direction in the prompt.")
+        sysmsg += " Return ONLY the final image prompt, nothing else."
+        out = provider.think(sysmsg, prompt, fast=True, max_tokens=700,
+                             purpose="image_text_prepass", company=company)
+        return (out or "").strip() or prompt
+    except Exception:  # noqa: BLE001 — the prepass is a quality boost; never block image-gen
+        return prompt
+
+
+def _company_image_directives(company: str | None) -> str:
+    """Per-company image guidance kept as EDITABLE blog-skill rules: any content-blog-posts rule that begins
+    'IMAGE PROMPT DIRECTIVE:' is appended to every generated image prompt for that company (so e.g. Snap Rewards
+    can force normal, realistic receipts). Applied at generation time, so it also takes effect on a re-run."""
+    if not company:
+        return ""
+    try:
+        from . import store
+        co = store.get_company_by_slug(company)
+        if not co:
+            return ""
+        sk = store.get_skill_by_key(co["id"], "content-blog-posts")
+        if not sk:
+            return ""
+        uni, loc = store.effective_rules(sk)
+        ds = [r.split(":", 1)[1].strip() for r in (list(uni) + list(loc))
+              if r.strip().upper().startswith("IMAGE PROMPT DIRECTIVE:")]
+        return (" " + " ".join(ds)) if ds else ""
+    except Exception:  # noqa: BLE001 — directives are optional; never block image-gen
+        return ""
+
+
 def hero(prompt: str, aspect: str = "16:9", purpose: str = "image", company: str | None = None) -> bytes | None:
     key = config.get("GEMINI_API_KEY")
     if not key or not prompt:
         return None
+    prompt = _text_accurate_prompt(prompt, company)   # specify any receipt/text content verbatim before Gemini
+    prompt = prompt + _company_image_directives(company)   # append company image rules (e.g. realistic receipts)
     try:
         r = httpx.post(ENDPOINT, params={"key": key}, timeout=120, json={
             "instances": [{"prompt": prompt}],

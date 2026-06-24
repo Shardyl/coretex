@@ -93,7 +93,13 @@ def think(system: str, user: str, *, fast: bool = False, model: str | None = Non
                         messages=[{"role": "user", "content": content}])
     if think_hard:
         kwargs["thinking"] = {"type": "adaptive"}
-    resp = _client().messages.create(**kwargs)
+    client = _client()
+    if max_tokens >= 4000:   # long generation (e.g. a full blog compose) -> STREAM with a generous timeout so a
+        # slow, lengthy response can't hit the short fail-fast per-request timeout (the #101/#116 compose failures).
+        with client.with_options(timeout=600.0).messages.stream(**kwargs) as _s:
+            resp = _s.get_final_message()
+    else:
+        resp = client.messages.create(**kwargs)
     _log_usage(mdl, getattr(resp, "usage", None), purpose, company)
     return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
 
@@ -141,6 +147,40 @@ def chat(system: str, messages: list[dict], *, max_tokens: int = 1000,
     return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
 
 
+# ---- anti-hallucination guard for the chat agent --------------------------------------------------------
+# The conversational agent occasionally TELLS Rashad something was created/queued/"in your Inbox" (even
+# inventing a task number) WITHOUT calling the tool that actually does it — silently losing his work. These
+# helpers let chat_tools / chat_tools_stream detect a creation CLAIM with no creating-tool call, force one
+# real corrective attempt, and never let a false confirmation stand.
+_CREATING_TOOLS = {"create_task", "draft_email", "run_report", "schedule_report",
+                   "set_reminder", "create_contact", "create_deal"}
+_CLAIM_RE = re.compile(
+    r"(?:task\s*#?\s*\d+"
+    r"|in your inbox"
+    r"|drafting (?:it|this|that|now)"
+    r"|i'?ve (?:created|drafted|queued|added|staged|scheduled|set up|put)"
+    r"|i have (?:created|drafted|queued|added|staged|scheduled|set up|put)"
+    r"|ready (?:to (?:read|review)|in your inbox))",
+    re.I)
+
+
+def _claims_action(text: str) -> bool:
+    """True if the reply asserts it created/queued/drafted something (or names a task number)."""
+    return bool(text and _CLAIM_RE.search(text))
+
+
+_ACT_DONT_CLAIM = (
+    "SYSTEM CHECK (not from Rashad): your reply told him something was created, drafted, queued, scheduled "
+    "or is in his Inbox (or it named a task number), but you did NOT call create_task, draft_email or "
+    "run_report this turn — so NOTHING was actually saved. Fix it now: if he wants a post/email/draft "
+    "created, call the correct tool (create_task with the FULL brief or content) immediately. If nothing was "
+    "actually meant to be created, reply honestly and do NOT claim anything was created or name any task number."
+)
+
+_GUARD_NOTE = ("\n\n(Cortex note: I could not confirm a new task was created this turn — if you asked me to "
+               "create or draft something, please re-send it so it's saved to your Inbox.)")
+
+
 def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
                *, max_tokens: int = 1500, rounds: int = 6, purpose: str = "chat",
                company: str | None = None) -> str:
@@ -156,16 +196,26 @@ def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
     sys_blocks, cached_tools = _cached_system(system), _cached_tools(tools)
     msgs = _cache_history(messages)   # + a 3rd breakpoint at the end of the history → long convos read cheap
     resp = None
+    called: set = set()       # tool names actually executed this turn
+    nudged = False            # have we already forced a corrective round?
     for _ in range(rounds):
         resp = client.messages.create(model=MODEL, max_tokens=max_tokens, system=sys_blocks,
                                        tools=cached_tools, messages=msgs)
         _log_usage(MODEL, getattr(resp, "usage", None), purpose, company)
         if resp.stop_reason != "tool_use":
+            text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+            # GUARD: it claims it created/queued something but never called a tool that does -> force one real attempt
+            if not nudged and _claims_action(text) and not (called & _CREATING_TOOLS):
+                nudged = True
+                msgs.append({"role": "assistant", "content": resp.content})
+                msgs.append({"role": "user", "content": [{"type": "text", "text": _ACT_DONT_CLAIM}]})
+                continue
             break
         msgs.append({"role": "assistant", "content": resp.content})
         results = []
         for b in resp.content:
             if getattr(b, "type", None) == "tool_use":
+                called.add(b.name)
                 try:
                     out = executor(b.name, b.input or {})
                 except Exception as e:  # noqa: BLE001
@@ -174,7 +224,64 @@ def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
         msgs.append({"role": "user", "content": results})
     if not resp:
         return ""
-    return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+    text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+    # FINAL SAFETY NET: never hand back a false confirmation
+    if _claims_action(text) and not (called & _CREATING_TOOLS):
+        text += _GUARD_NOTE
+    return text
+
+
+def chat_tools_stream(system: str, messages: list[dict], tools: list[dict], executor,
+                      *, max_tokens: int = 1500, rounds: int = 6, purpose: str = "chat",
+                      company: str | None = None):
+    """Streaming twin of chat_tools: a generator that yields (kind, data) events as the agentic loop runs, so the
+    HTTP layer can keep the connection alive (no proxy 100s timeout) and paint the reply live. kinds: 'delta'
+    {text}, 'tool' {name}, 'done' {reply}. Text from every round is streamed AND accumulated into the final reply.
+    Each round streams with a generous 600s timeout (a long turn can't hit the short fail-fast per-call limit)."""
+    client = _client()
+    sys_blocks, cached_tools = _cached_system(system), _cached_tools(tools)
+    msgs = _cache_history(messages)
+    final_text = ""
+    called: set = set()       # tool names actually executed this turn
+    nudged = False            # have we already forced a corrective round?
+    for _ in range(rounds):
+        round_text = ""
+        final = None
+        with client.with_options(timeout=600.0).messages.stream(
+                model=MODEL, max_tokens=max_tokens, system=sys_blocks, tools=cached_tools, messages=msgs) as stream:
+            for ev in stream:
+                if ev.type == "content_block_delta" and getattr(ev.delta, "type", "") == "text_delta":
+                    round_text += ev.delta.text
+                    yield ("delta", {"text": ev.delta.text})
+            final = stream.get_final_message()
+        _log_usage(MODEL, getattr(final, "usage", None), purpose, company)
+        final_text += round_text
+        if final.stop_reason != "tool_use":
+            # GUARD: claimed an action but no creating tool ran -> force one real corrective round (live)
+            if not nudged and _claims_action(final_text) and not (called & _CREATING_TOOLS):
+                nudged = True
+                msgs.append({"role": "assistant", "content": final.content})
+                msgs.append({"role": "user", "content": [{"type": "text", "text": _ACT_DONT_CLAIM}]})
+                continue
+            break
+        msgs.append({"role": "assistant", "content": final.content})
+        results = []
+        for b in final.content:
+            if getattr(b, "type", None) == "tool_use":
+                called.add(b.name)
+                yield ("tool", {"name": b.name})
+                try:
+                    out = executor(b.name, b.input or {})
+                except Exception as e:  # noqa: BLE001
+                    out = f"error: {e}"
+                results.append({"type": "tool_result", "tool_use_id": b.id, "content": str(out)})
+        msgs.append({"role": "user", "content": results})
+    reply = final_text.strip()
+    # FINAL SAFETY NET: never end the stream on a false confirmation
+    if _claims_action(reply) and not (called & _CREATING_TOOLS):
+        yield ("delta", {"text": _GUARD_NOTE})
+        reply += _GUARD_NOTE
+    yield ("done", {"reply": reply})
 
 
 def _loads(raw: str) -> dict:

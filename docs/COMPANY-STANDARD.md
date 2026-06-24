@@ -91,6 +91,11 @@ lockstep with `cortex/onboard.py` (the routine that applies the standard).
 ### 7. Content & web standards
 - Every page/blog ships **noindex by default** + **comments OFF**; CMS-wired; staggered monthly publish
   day; brand-fidelity on all visuals; no em/en dashes in copy.
+- **Facts are never the model's to invent.** Dates, times, read-times, counts, prices, totals, IDs and any
+  must-be-real/current value are **computed in code (from data or the clock) and stamped at render** — they are
+  NEVER fields in an LLM output schema. The model writes prose only. (Origin: a blog byline asked the LLM for
+  the date and it hallucinated `2025-07-05`; fixed by computing date + read-time in `blog.py` and dropping them
+  from the schema. Reinforced by a universal rule on the content/social output skills.)
 - **Brand guidelines doc** generated from the house template (`docs` family format: dark doc, numbered
   sections Logo/Colour/Typography/Components/Surfaces) with the company's REAL brand (logos from the asset
   folder, colours/fonts from the live theme). Output HTML + PDF to the operator + the company's Drive folder.
