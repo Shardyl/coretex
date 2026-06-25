@@ -32,7 +32,7 @@ from pydantic import BaseModel
 
 from . import (capabilities, catalog, config, contentqueue, crm, db, engine, gmail, knowledge, notifications,
                personas, profile, provider, push, questionnaire, reminders, schedule, seo_report, skillqa,
-               store, webauthn_auth, worker)
+               social, store, webauthn_auth, worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -541,6 +541,64 @@ def task_attachments(tid: int, u: dict = Depends(current_user)) -> dict:
         out.append({"idx": i, "media_type": media, "is_image": media.startswith("image/"),
                     "size_kb": (len(b64) * 3) // 4 // 1024, "name": nm, "src": u})
     return {"attachments": out}
+
+
+# ---------- social runner (LinkedIn automation: brain <-> office-box hands) ----------
+
+def _runner_auth(x_runner_key: str = Header(default="")) -> None:
+    """The office-box runner authenticates with a shared key (setting 'runner_key'), not the operator passcode."""
+    key = db.setting_get("runner_key")
+    if not key or x_runner_key != key:
+        raise HTTPException(status_code=403, detail="invalid runner key")
+
+
+class ShiftBody(BaseModel):
+    account: str
+    persona: str
+    company_id: int
+    plan: dict
+    strategy: str = ""
+    connect_targets: list = []
+    engage_targets: list = []
+    date: str = ""
+    week: int | None = None
+    phase: str = ""
+
+
+@app.post("/api/social/shift")
+def social_post_shift(body: ShiftBody, _: None = Depends(_runner_auth)) -> dict:
+    """The runner posts the day's governed plan -> the approve-the-shift card (deduped per account+date)."""
+    dup = db.one("select id from tasks where kind='social_shift' "
+                 "and status in ('awaiting_approval','awaiting_correction') "
+                 "and request->>'account'=%s and request->>'date'=%s order by id desc limit 1",
+                 (body.account, body.date))
+    if dup:
+        return {"ok": True, "task_id": dup["id"], "deduped": True}
+    t = social.post_shift_card(body.company_id, body.account, body.persona, body.plan, body.strategy,
+                               connect_targets=body.connect_targets, engage_targets=body.engage_targets,
+                               date=body.date, week=body.week, phase=body.phase)
+    return {"ok": True, "task_id": t["id"]}
+
+
+class ReloginBody(BaseModel):
+    account: str
+    persona: str
+    company_id: int
+
+
+@app.post("/api/social/relogin")
+def social_post_relogin(body: ReloginBody, _: None = Depends(_runner_auth)) -> dict:
+    """The runner reports a dropped session -> the logged-out alert card (the auto-reopen happens runner-side)."""
+    t = social.post_relogin_card(body.company_id, body.account, body.persona)
+    return {"ok": True, "task_id": t["id"]}
+
+
+@app.get("/api/social/state")
+def social_state(account: str, date: str = "", _: None = Depends(_runner_auth)) -> dict:
+    """The runner reads its green light: is today's shift approved, and is the account flagged logged-out."""
+    ok = db.setting_get(f"social_shift_ok:{account}:{date}") or {}
+    return {"approved": bool(ok.get("approved")), "plan": ok.get("plan"),
+            "logged_out": bool(db.setting_get(f"social_loggedout:{account}"))}
 
 
 # ---------- notification actions (info cards) ----------
