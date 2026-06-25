@@ -1522,6 +1522,8 @@ function actionCard(t){
     const co=t.company||compName(t.company_id), sk=t.skill||'';
     const wp=t.wp||null, em=t.email||null;
     if(t.kind==='report') return reportCard(t,co);
+    if(t.kind==='social_shift') return socialShiftCard(t,co);
+    if(t.kind==='social_relogin') return socialReloginCard(t,co);
     const isEmail=t.kind==='email_reply'||t.kind==='email_draft';
     const isOutbound=t.kind==='email_draft';
     const kindLabel=t.kind==='blog_idea'?'blog idea':t.kind==='blog'?'blog post — review':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to schedule':t.kind==='newsletter_send'?'newsletter due to send':t.kind==='email_draft'?'email draft':(isEmail?'email reply':esc(t.kind||'task'));
@@ -1600,6 +1602,58 @@ function reportCard(t,co){
     <div class="row" style="margin:4px 0 9px"><button class="btn go" onclick="openReport(${t.id})">${ic('file',16)} Open report (PDF)</button></div>
     <div class="row">
       <button class="btn" onclick="act(${t.id},'approve')">${ic('check',16)} Mark as seen</button>
+      <button class="btn bad" onclick="act(${t.id},'skip')">Dismiss</button>
+    </div></div>`;
+}
+function socialShiftCard(t,co){
+  const r=t.request||{}, p=r.plan||{}, sk=t.skill||'LinkedIn outreach';
+  const warm=String(r.phase||'').toLowerCase().indexOf('warm')>=0;
+  const rs='display:flex;gap:9px;align-items:flex-start;padding:3px 0;font-size:14px;line-height:1.4';
+  const acts=[];
+  if(p.invites)       acts.push([ic('users',15),`<b>${p.invites} connection invites</b> <span style="opacity:.6">silent, mutual-connected targets</span>`]);
+  if(p.messages)      acts.push([ic('mail',15),`<b>${p.messages} messages</b> <span style="opacity:.6">only to people who accepted</span>`]);
+  if(p.likes)         acts.push([ic('spark',15),`<b>${p.likes} likes</b>`]);
+  if(p.comments)      acts.push([ic('chat',15),`<b>${p.comments} comments</b>`]);
+  if(p.profile_views) acts.push([ic('search',15),`<b>${p.profile_views} profile views</b>`]);
+  const actsHtml=(acts.length?acts:[[ic('check',15),'No actions queued today']])
+    .map(a=>`<div style="${rs}">${a[0]}<span>${a[1]}</span></div>`).join('');
+  const ct=r.connect_targets||[];
+  const conn=ct.length
+    ? `<div class="meta" style="margin:12px 0 4px">${ic('users',14)} Who it will try to connect with</div>`
+      + ct.map(c=>`<div style="${rs}"><span><b>${esc(c.name||'')}</b>${c.headline?` <span style="opacity:.65">${esc(c.headline)}</span>`:''}${c.mutuals?` <span class="chip" style="opacity:.8">${esc(String(c.mutuals))} mutual</span>`:''}</span></div>`).join('')
+    : (warm?`<div class="meta" style="margin:12px 0 2px">${ic('users',14)} No connection requests yet (warm-up)</div>`:'');
+  const et=r.engage_targets||[];
+  const eng=et.length
+    ? `<div class="meta" style="margin:12px 0 4px">${ic('spark',14)} Whose posts it will engage</div>`
+      + et.map(e=>`<div style="${rs}"><span><b>${esc(e.name||'')}</b>${e.what?` <span style="opacity:.65">${esc(e.what)}</span>`:''}</span></div>`).join('')
+    : '';
+  return `<div class="card" id="t${t.id}">
+    <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${esc(sk)}</span>
+      <span class="chip">${ic('pulse',13)} LinkedIn daily shift</span>
+      <span class="chip" style="margin-left:auto;opacity:.6">#${t.id}</span></div>
+    <div class="title">${esc(t.title||'LinkedIn daily shift')}</div>
+    ${r.phase?`<div class="meta">${ic('calendar',13)} Week ${esc(String(r.week||''))} · ${esc(r.phase)}</div>`:''}
+    ${r.strategy?`<div class="body" style="white-space:pre-wrap">${esc(r.strategy)}</div>`:''}
+    <div class="meta" style="margin:10px 0 3px">${ic('route',14)} Planned actions</div>
+    ${actsHtml}
+    ${conn}
+    ${eng}
+    ${r.invites_week?`<div class="meta" style="margin-top:11px">${ic('trend',13)} Weekly invite budget: ${esc(String(r.invites_week))}</div>`:''}
+    <div class="row" style="margin-top:12px">
+      <button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||'Approve')}</button>
+      <button class="btn bad" onclick="act(${t.id},'skip')">Skip today</button>
+    </div></div>`;
+}
+function socialReloginCard(t,co){
+  const r=t.request||{};
+  return `<div class="card" id="t${t.id}" style="border-left:3px solid #ffb020">
+    <div class="meta"><span class="chip cy">${esc(co)}</span>
+      <span class="chip" style="color:#ffb020;border-color:#ffb02055">${ic('lock',13)} action needed</span>
+      <span class="chip" style="margin-left:auto;opacity:.6">#${t.id}</span></div>
+    <div class="title">${esc(t.title||'LinkedIn logged out')}</div>
+    <div class="body" style="white-space:pre-wrap">${esc(t.body||'')}</div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||"I've logged back in")}</button>
       <button class="btn bad" onclick="act(${t.id},'skip')">Dismiss</button>
     </div></div>`;
 }
