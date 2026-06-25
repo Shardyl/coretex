@@ -1524,6 +1524,7 @@ function actionCard(t){
     if(t.kind==='report') return reportCard(t,co);
     if(t.kind==='social_shift') return socialShiftCard(t,co);
     if(t.kind==='social_relogin') return socialReloginCard(t,co);
+    if(t.kind==='social_action') return socialActionCard(t,co);
     const isEmail=t.kind==='email_reply'||t.kind==='email_draft';
     const isOutbound=t.kind==='email_draft';
     const kindLabel=t.kind==='blog_idea'?'blog idea':t.kind==='blog'?'blog post — review':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to schedule':t.kind==='newsletter_send'?'newsletter due to send':t.kind==='email_draft'?'email draft':(isEmail?'email reply':esc(t.kind||'task'));
@@ -1655,6 +1656,20 @@ function socialReloginCard(t,co){
     <div class="row" style="margin-top:12px">
       <button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||"I've logged back in")}</button>
       <button class="btn bad" onclick="act(${t.id},'skip')">Dismiss</button>
+    </div></div>`;
+}
+function socialActionCard(t,co){
+  const r=t.request||{};
+  const verb={post:'publish a post',like:'like a post',comment:'comment on a post',connect:'send a connection invite',view:'view a profile',dm:'send a message'}[r.action]||r.action||'action';
+  return `<div class="card" id="t${t.id}">
+    <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${esc(t.skill||'LinkedIn')}</span>
+      <span class="chip">${ic('pulse',13)} manual action${r.action?' · '+esc(r.action):''}</span>
+      <span class="chip" style="margin-left:auto;opacity:.6">#${t.id}</span></div>
+    <div class="title">${esc(t.title||((r.persona||'Paul')+': '+verb))}</div>
+    <div class="body" style="white-space:pre-wrap">${esc(t.draft||t.body||'')}</div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||'Approve & run')}</button>
+      <button class="btn bad" onclick="act(${t.id},'skip')">Discard</button>
     </div></div>`;
 }
 async function openReport(id){

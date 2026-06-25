@@ -33,6 +33,29 @@ def post_shift_card(company_id, account, persona, plan, strategy,
     return t
 
 
+_ACTION_VERB = {
+    "post": "publish a post", "like": "like a post", "comment": "comment on a post",
+    "connect": "send a connection invite", "view": "view a profile", "dm": "send a message",
+}
+
+
+def post_action_card(company_id, account, persona, action, target="", content=""):
+    """Create a one-off MANUAL-action approval card (post|like|comment|connect|view|dm). The owner approves
+    it (biometric step-up, outward), then the runner picks it up from the job queue and performs it."""
+    req = {"account": account, "persona": persona, "action": action, "target": target, "content": content}
+    t = store.create_task(company_id, _skill_id(company_id), "social_action", req)
+    verb = _ACTION_VERB.get(action, action)
+    parts = []
+    if target:
+        parts.append(("Profile: " if action in ("connect", "view", "dm") else "Post: ") + target)
+    if content:
+        label = "Post text" if action == "post" else ("Comment" if action == "comment" else "Message")
+        parts.append(f"{label}:\n{content}")
+    body = "\n\n".join(parts) if parts else f"{persona} will {verb}."
+    store.update_task(t["id"], title=f"{persona}: {verb}", draft=body, status="awaiting_approval")
+    return t
+
+
 def post_relogin_card(company_id, account, persona,
                       machine="the office computer (Chrome Remote Desktop)"):
     """Raise the logged-out alert, deduped per account (one open card at a time)."""

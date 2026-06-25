@@ -601,6 +601,59 @@ def social_state(account: str, date: str = "", _: None = Depends(_runner_auth)) 
             "logged_out": bool(db.setting_get(f"social_loggedout:{account}"))}
 
 
+_SOCIAL_ACTIONS = ("post", "like", "comment", "connect", "view", "dm")
+
+
+class ActionRequest(BaseModel):
+    account: str
+    company_id: int
+    persona: str = "Paul Anderson"
+    action: str                  # post | like | comment | connect | view | dm
+    target: str = ""             # profile/post URL (like/comment/connect/view/dm)
+    content: str = ""            # text (post/comment/dm)
+
+
+@app.post("/api/social/request")
+def social_request(body: ActionRequest, u: dict = Depends(current_user)) -> dict:
+    """Operator requests a one-off manual action -> a social_action approval card in the Inbox. The owner
+    approves it (fingerprint), which queues it for the runner to perform."""
+    if body.action not in _SOCIAL_ACTIONS:
+        raise HTTPException(status_code=400, detail=f"unknown action (use {', '.join(_SOCIAL_ACTIONS)})")
+    t = social.post_action_card(body.company_id, body.account, body.persona, body.action,
+                                target=body.target, content=body.content)
+    return {"ok": True, "task_id": t["id"]}
+
+
+@app.get("/api/social/jobs")
+def social_jobs(account: str, _: None = Depends(_runner_auth)) -> dict:
+    """The runner pulls APPROVED one-off actions to perform (the queued social_action cards)."""
+    rows = db.query("select id, request from tasks where kind='social_action' and status='queued' "
+                    "and request->>'account'=%s order by id", (account,))
+    return {"jobs": [{"id": r["id"], **(r["request"] or {})} for r in rows]}
+
+
+class JobResult(BaseModel):
+    ok: bool
+    detail: str = ""
+
+
+@app.post("/api/social/jobs/{tid}/result")
+def social_job_result(tid: int, body: JobResult, _: None = Depends(_runner_auth)) -> dict:
+    """The runner reports the outcome of a one-off action -> mark the card done/failed + notify the owner."""
+    t = store.get_task(tid)
+    if not t or t["kind"] != "social_action":
+        raise HTTPException(status_code=404, detail="no such job")
+    store.update_task(tid, status="done" if body.ok else "failed", last_status=body.detail[:300])
+    req = t.get("request") or {}
+    try:
+        notifications.notify(f"{req.get('persona', 'Paul')}: {req.get('action', 'action')} "
+                             + ("done" if body.ok else "failed"),
+                             body.detail[:300], category="social", company_id=t["company_id"])
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True}
+
+
 # ---------- notification actions (info cards) ----------
 
 @app.post("/api/notifications/{nid}/read")
