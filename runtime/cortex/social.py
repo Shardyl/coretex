@@ -29,7 +29,7 @@ def post_shift_card(company_id, account, persona, plan, strategy,
     }
     t = store.create_task(company_id, _skill_id(company_id), "social_shift", req)
     title = f"{persona} - today's LinkedIn shift" + (f"  (Week {week}, {phase})" if week else "")
-    store.update_task(t["id"], title=title, body=strategy, status="awaiting_approval")
+    store.update_task(t["id"], title=title, draft=strategy, status="awaiting_approval")
     return t
 
 
@@ -49,5 +49,5 @@ def post_relogin_card(company_id, account, persona,
             f"Chrome is already open on {machine} at the LinkedIn login page. Connect remotely, "
             f"type the password and hit Sign in, then mark this done. Nothing else runs until the "
             f"session is back, so this never silently stalls.")
-    store.update_task(t["id"], title=title, body=body, status="awaiting_approval")
+    store.update_task(t["id"], title=title, draft=body, status="awaiting_approval")
     return t

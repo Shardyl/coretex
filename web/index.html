@@ -1651,7 +1651,7 @@ function socialReloginCard(t,co){
       <span class="chip" style="color:#ffb020;border-color:#ffb02055">${ic('lock',13)} action needed</span>
       <span class="chip" style="margin-left:auto;opacity:.6">#${t.id}</span></div>
     <div class="title">${esc(t.title||'LinkedIn logged out')}</div>
-    <div class="body" style="white-space:pre-wrap">${esc(t.body||'')}</div>
+    <div class="body" style="white-space:pre-wrap">${esc(t.draft||t.body||'')}</div>
     <div class="row" style="margin-top:12px">
       <button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||"I've logged back in")}</button>
       <button class="btn bad" onclick="act(${t.id},'skip')">Dismiss</button>
