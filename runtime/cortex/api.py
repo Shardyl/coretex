@@ -1410,6 +1410,8 @@ def crm_create_deal(body: NewDealBody, _: None = Depends(auth)) -> dict:
         return crm.create_deal(body.company, body.title, body.value, body.currency, body.stage, body.account_id)
     except crm.DuplicateDeal as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except crm.DealNeedsCompany as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 class ContactEditBody(BaseModel):

@@ -212,6 +212,22 @@ def _org(company: str | None) -> str:
     return ORG.get((company or "").lower(), (company or "").title())
 
 
+class DealNeedsCompany(ValueError):
+    """Raised when a deal/opportunity is created without one of YOUR businesses set."""
+
+
+def _require_business(company: str | None) -> str:
+    """A deal/opportunity MUST belong to one of YOUR businesses. Returns the canonical org name, else raises.
+    Accepts a slug (sensa) or display name (Sensa); rejects empty, 'all', or any non-business (e.g. a client name)."""
+    key = (company or "").strip().lower()
+    valid = set(ORG) | {v.lower() for v in ORG.values()}
+    if key not in valid:
+        raise DealNeedsCompany(
+            "An opportunity must be set to one of your businesses (Tabscanner, Sensa, Sky Vision, FilmSpoke "
+            "or Snap Rewards). Pick a specific company, not 'All companies'.")
+    return _org(company)
+
+
 def _split_name(name: str) -> tuple[str, str]:
     parts = (name or "").strip().split()
     if not parts:
@@ -786,7 +802,7 @@ def create_project(company: str, contact_email: str, title: str, value=None,
                    currency: str = "AED", stage: str = "Booked", owner: str | None = None,
                    quote_ref: str | None = None, note: str | None = None) -> int:
     """Create a project (the cash pipeline). Marks the contact an existing client + logs it on their history."""
-    org = _org(company)
+    org = _require_business(company)
     row = db.execute(
         "insert into crm_projects (company, contact_email, title, value, currency, stage, owner, quote_ref, "
         "note, history) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id",
@@ -890,7 +906,7 @@ def create_deal(company: str, title: str, value=None, currency: str = "AED", sta
                 account_id=None, owner: str | None = None) -> dict:
     """A deal belongs to one of YOUR businesses (company) and one CLIENT company (account). Its people are
     that account's contacts (company-mediated — no per-deal contact list). Blocks an active same-name duplicate."""
-    org = _org(company)
+    org = _require_business(company)
     title = (title or "").strip()
     dup = db.one("select id from crm_projects where company=%s and lower(title)=lower(%s) and stage <> %s limit 1",
                  (org, title, LOST_STAGE))

@@ -1065,7 +1065,8 @@ async function saveNewCompany(){
 }
 async function openNewDeal(accountId){
   await accountsCache(); const co=document.getElementById('coSel').value||'';
-  const biz=companies.map(c=>`<option value="${c.slug}"${c.slug===co?' selected':''}>${esc(c.name)}</option>`).join('');
+  const biz=(co?'':`<option value="" selected disabled>— pick a business —</option>`)
+    +companies.map(c=>`<option value="${c.slug}"${c.slug===co?' selected':''}>${esc(c.name)}</option>`).join('');
   const stages=PROJ_STAGES.map(s=>`<option value="${s}"${s==='Opportunity'?' selected':''}>${s}</option>`).join('');
   document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')">${ic('back',18)}</button><b>New deal</b></div>
     <div class="card">
@@ -1079,6 +1080,7 @@ async function openNewDeal(accountId){
 }
 async function saveNewDeal(){
   const title=fval('nd_title').trim(); if(!title){ toast('Deal name is required'); return; }
+  if(!fval('nd_biz')){ toast('Pick which of your businesses this opportunity is for'); return; }
   if(_saving) return; _saving=true;
   try{ let acc=fval('nd_acc'); if(acc==='__new'){ const name=prompt('New organisation name:'); if(name){ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); acc=a.id; } else acc=''; }
     const value=parseFloat(fval('nd_value'))||null;
