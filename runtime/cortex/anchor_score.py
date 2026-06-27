@@ -36,18 +36,24 @@ def _system(company_id: int, key: str) -> str:
         "ICP RULES:\n" + _icp_rules(company_id))
 
 
-def classify_leads(leads: list[dict], company_id: int = 5) -> list[dict]:
+def classify_leads(leads: list[dict], company_id: int = 5, chunk: int = 35) -> list[dict]:
     """Classify RAW harvested leads (headline + comment) BEFORE insert. Returns a list aligned to the input
     order; each item is {classification, type, score, reason} (or {} if the model returned none). The caller
-    stores only classification=='lead' and counts the rest toward the anchor's hit-rate."""
+    stores only classification=='lead' and counts the rest toward the anchor's hit-rate. CHUNKED so a big
+    post doesn't blow the token budget (truncated JSON) or the runner's HTTP timeout."""
     if not leads:
         return []
-    items = [{"i": i, "title": (l.get("headline") or "")[:160], "comment": (l.get("engagement") or "")[:280]}
-             for i, l in enumerate(leads)]
-    out = provider.think_json(_system(company_id, "i"), "Classify these leads:\n" + json.dumps(items),
-                              fast=True, cache=True, purpose="anchor-classify", company="filmspoke", max_tokens=3500)
-    by_i = {r.get("i"): r for r in (out.get("results") or []) if isinstance(r.get("i"), int)}
-    return [by_i.get(i, {}) for i in range(len(leads))]
+    sysmsg = _system(company_id, "i")
+    annotated: list[dict] = []
+    for start in range(0, len(leads), chunk):
+        part = leads[start:start + chunk]
+        items = [{"i": j, "title": (l.get("headline") or "")[:160], "comment": (l.get("engagement") or "")[:280]}
+                 for j, l in enumerate(part)]
+        out = provider.think_json(sysmsg, "Classify these leads:\n" + json.dumps(items), fast=True, cache=True,
+                                  purpose="anchor-classify", company="filmspoke", max_tokens=3500)
+        by_i = {r.get("i"): r for r in (out.get("results") or []) if isinstance(r.get("i"), int)}
+        annotated.extend(by_i.get(j, {}) for j in range(len(part)))
+    return annotated
 
 
 def score_harvested(company_id: int = 5, limit: int = 40) -> dict:
