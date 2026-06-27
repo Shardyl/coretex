@@ -553,6 +553,8 @@ def upsert_anchor_lead(lead: dict, persona: str, region: str, anchor: str, compa
     tags = ["anchor-harvest", f"anchor:{anchor}"[:80], f"segment:{(region or '').lower()}-marketing"]
     if lead.get("type"):
         tags.append(f"type:{lead['type']}")
+    if lead.get("classification"):          # classified at ingest -> already scored
+        tags.append("scored")
     existing = db.one("select id, tags from crm_master where lower(linkedin)=%s", (url,))
     if existing:
         merged = sorted(set(existing.get("tags") or []) | set(tags))
@@ -563,15 +565,38 @@ def upsert_anchor_lead(lead: dict, persona: str, region: str, anchor: str, compa
     note = (lead.get("engagement") or "").strip()
     if lead.get("post"):
         note = (note + f"  [post: {lead['post']}]").strip()
+    cls = lead.get("classification")
+    tier = str(lead["score"]) if lead.get("score") is not None else None
     db.execute(
         "insert into crm_master (organisation, first_name, last_name, job_title, linkedin, location, country, "
-        "city, lead_status, lead_source, stage, note, tags, history) "
-        "values (%s,%s,%s,%s,%s,%s,%s,%s,'new',%s,'Cold',%s,%s::jsonb,%s::jsonb)",
+        "city, lead_status, lead_source, stage, classification, tier, note, tags, history) "
+        "values (%s,%s,%s,%s,%s,%s,%s,%s,'new',%s,'Cold',%s,%s,%s,%s::jsonb,%s::jsonb)",
         (_org(company), fn or None, ln or None, lead.get("headline"), url, lead.get("location"),
          lead.get("country"), lead.get("city"),
-         f"{_org(company)} LinkedIn Anchor - {persona} ({region})", note or None,
+         f"{_org(company)} LinkedIn Anchor - {persona} ({region})", cls, tier, note or None,
          Json(sorted(set(tags))), Json([prov])))
     return "inserted"
+
+
+def record_anchor_stats(company_id: int, anchor: str, post: str, engagers: int, buyers: int,
+                        vendors: int, scores: list) -> None:
+    """Accumulate one harvest's outcome onto the anchor's lifetime grade row (so the per-anchor HIT-RATE is
+    captured permanently, BEFORE any vendor drop, and never recomputed from deleted rows again)."""
+    db.execute("""create table if not exists social_anchors (
+        id bigserial primary key, company_id int, name text, posts int default 0, engagers int default 0,
+        buyers int default 0, vendors int default 0, sum_score numeric default 0, last_post text,
+        last_harvest timestamptz, created_at timestamptz default now(), unique(company_id, name))""")
+    s = float(sum(x for x in scores if isinstance(x, (int, float)))) if scores else 0.0
+    db.execute("""insert into social_anchors (company_id, name, posts, engagers, buyers, vendors, sum_score,
+        last_post, last_harvest) values (%s,%s,1,%s,%s,%s,%s,%s,now())
+        on conflict (company_id, name) do update set
+          posts = social_anchors.posts + 1,
+          engagers = social_anchors.engagers + excluded.engagers,
+          buyers = social_anchors.buyers + excluded.buyers,
+          vendors = social_anchors.vendors + excluded.vendors,
+          sum_score = social_anchors.sum_score + excluded.sum_score,
+          last_post = excluded.last_post, last_harvest = now()""",
+        (company_id, anchor, engagers, buyers, vendors, s, post))
 
 
 # ---- Deals = the full lifecycle in crm_projects. Forecast stages show on the Opportunities screen;

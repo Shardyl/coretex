@@ -666,27 +666,45 @@ class HarvestBody(BaseModel):
 
 @app.post("/api/social/harvest")
 def social_harvest(body: HarvestBody, _: None = Depends(_runner_auth)) -> dict:
-    """The runner pushes a batch of harvested anchor engagers -> upserted into crm_master (deduped on the
-    LinkedIn URL, never overwriting). Reads + CRM writes only - no outward action fires from here."""
+    """The runner pushes a batch of harvested anchor engagers. They are CLASSIFIED at ingest (Haiku: lead vs
+    vendor) and ONLY the buyers are stored in crm_master; vendors are DROPPED but counted, so the anchor's
+    hit-rate is captured permanently. Reads + CRM writes only - no outward action fires from here."""
     slug = (store.get_company(body.company_id) or {}).get("slug", "filmspoke")
-    ins = upd = skp = 0
-    for lead in body.leads:
-        lead = {**lead, "post": lead.get("post") or body.post}
+    classified = anchor_score.classify_leads(body.leads, body.company_id)
+    ins = upd = buyers = vendors = 0
+    scores: list = []
+    for lead, cl in zip(body.leads, classified):
+        c = (cl.get("classification") or "").strip().lower()
+        if c == "vendor":
+            vendors += 1
+            continue
+        if c != "lead":
+            continue                          # unclassifiable -> not stored, not counted as a buyer
+        buyers += 1
+        sc = cl.get("score")
+        if isinstance(sc, (int, float)):
+            scores.append(sc)
+        lead2 = {**lead, "post": lead.get("post") or body.post,
+                 "classification": "lead", "type": cl.get("type"), "score": sc}
         try:
-            r = crm.upsert_anchor_lead(lead, body.persona, body.region, body.anchor, company=slug)
+            r = crm.upsert_anchor_lead(lead2, body.persona, body.region, body.anchor, company=slug)
         except Exception:  # noqa: BLE001 - one bad lead must never kill the batch
             r = "skipped"
         ins += r == "inserted"
         upd += r == "updated"
-        skp += r == "skipped"
-    if ins or upd:
+    try:
+        crm.record_anchor_stats(body.company_id, body.anchor, body.post, len(body.leads), buyers, vendors, scores)
+    except Exception:  # noqa: BLE001
+        pass
+    hr = round(100 * buyers / (buyers + vendors)) if (buyers + vendors) else None
+    if buyers:
         try:
             notifications.notify(f"Anchor harvest: {body.anchor}",
-                                 f"{ins} new, {upd} updated from {body.persona} ({body.region}).",
+                                 f"{buyers} buyers kept ({ins} new), {vendors} vendors dropped, {hr}% hit-rate.",
                                  category="social", company_id=body.company_id, priority="fyi")
         except Exception:  # noqa: BLE001
             pass
-    return {"ok": True, "inserted": ins, "updated": upd, "skipped": skp}
+    return {"ok": True, "inserted": ins, "updated": upd, "buyers": buyers, "vendors_dropped": vendors, "hit_rate": hr}
 
 
 class ScoreBody(BaseModel):
@@ -703,6 +721,22 @@ def social_score(body: ScoreBody, _: None = Depends(_runner_auth)) -> dict:
         return {"ok": True, **anchor_score.score_harvested(body.company_id, limit=body.limit)}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)}
+
+
+@app.get("/api/social/anchors")
+def social_anchors(company_id: int = 5, _: None = Depends(auth)) -> dict:
+    """The ANCHOR-GRADE REPORT: every harvested anchor ranked by HIT-RATE (buyer-fraction of its audience),
+    with avg buyer score + counts. High hit-rate = the partner shortlist. Stats are captured at harvest time
+    (before any vendor drop), so this is durable and never recomputed from deleted rows."""
+    try:
+        rows = db.query(
+            "select name, posts, engagers, buyers, vendors, "
+            "case when (buyers+vendors)>0 then round(100.0*buyers/(buyers+vendors)) else null end as hit_rate, "
+            "case when buyers>0 then round(sum_score/buyers,1) else null end as avg_score, last_harvest "
+            "from social_anchors where company_id=%s order by hit_rate desc nulls last, buyers desc", (company_id,))
+    except Exception:  # noqa: BLE001 - table may not exist until the first harvest
+        rows = []
+    return {"anchors": rows}
 
 
 # ---------- notification actions (info cards) ----------
