@@ -1369,8 +1369,8 @@ def crm_contacts(company: str | None = None, q: str | None = None, stage: str | 
     else:
         order, oparams = "order by is_client desc, first_name nulls last", []
     return db.query(
-        "select first_name, last_name, email, organisation, company_name, job_title, stage, tier, "
-        f"is_client, newsletter_opt_out, do_not_market, classification, quote_sent, lead_source from crm_master {where} "
+        "select id, first_name, last_name, email, organisation, company_name, job_title, stage, tier, "
+        f"is_client, newsletter_opt_out, do_not_market, classification, quote_sent, lead_source, linkedin from crm_master {where} "
         f"{order} limit %s offset %s",
         tuple(list(params) + oparams + [limit, offset]))
 
