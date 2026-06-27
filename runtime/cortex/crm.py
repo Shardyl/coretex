@@ -561,7 +561,7 @@ def upsert_anchor_lead(lead: dict, persona: str, region: str, anchor: str, compa
     db.execute(
         "insert into crm_master (organisation, first_name, last_name, job_title, linkedin, location, country, "
         "city, lead_status, lead_source, stage, note, tags, history) "
-        "values (%s,%s,%s,%s,%s,%s,%s,%s,'new',%s,'harvested',%s,%s::jsonb,%s::jsonb)",
+        "values (%s,%s,%s,%s,%s,%s,%s,%s,'new',%s,'Cold',%s,%s::jsonb,%s::jsonb)",
         (_org(company), fn or None, ln or None, lead.get("headline"), url, lead.get("location"),
          lead.get("country"), lead.get("city"),
          f"{_org(company)} LinkedIn Anchor - {persona} ({region})", note or None,
