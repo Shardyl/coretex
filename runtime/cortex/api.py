@@ -30,9 +30,9 @@ from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Json
 from pydantic import BaseModel
 
-from . import (capabilities, catalog, config, contentqueue, crm, db, engine, gmail, knowledge, notifications,
-               personas, profile, provider, push, questionnaire, reminders, schedule, seo_report, skillqa,
-               social, store, webauthn_auth, worker)
+from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, engine, gmail, knowledge,
+               notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
+               skillqa, social, store, webauthn_auth, worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -687,6 +687,22 @@ def social_harvest(body: HarvestBody, _: None = Depends(_runner_auth)) -> dict:
         except Exception:  # noqa: BLE001
             pass
     return {"ok": True, "inserted": ins, "updated": upd, "skipped": skp}
+
+
+class ScoreBody(BaseModel):
+    company_id: int = 5
+    limit: int = 60
+
+
+@app.post("/api/social/score")
+def social_score(body: ScoreBody, _: None = Depends(_runner_auth)) -> dict:
+    """Score+type the untyped harvested leads (whale/amplifier/decision-maker) via the Haiku batch. Called by
+    the runner at the end of a harvest run so the pipeline is one pass: harvest -> CRM -> scored. Safe to re-run
+    (only touches rows without a 'scored' tag)."""
+    try:
+        return {"ok": True, **anchor_score.score_harvested(body.company_id, limit=body.limit)}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
 
 
 # ---------- notification actions (info cards) ----------
