@@ -1352,15 +1352,17 @@ def crm_contacts_count(company: str | None = None, q: str | None = None, stage: 
 
 
 @app.get("/api/crm/contact")
-def crm_contact(email: str, u: dict = Depends(current_user)) -> dict:
-    r = db.one("select * from crm_master where lower(email)=lower(%s) limit 1", (email,))
+def crm_contact(email: str | None = None, id: int | None = None, u: dict = Depends(current_user)) -> dict:
+    # Load by id (harvested LinkedIn contacts have NO email) or by email (the legacy 33k).
+    r = (db.one("select * from crm_master where id=%s", (id,)) if id is not None
+         else db.one("select * from crm_master where lower(email)=lower(%s) limit 1", (email or "",)))
     if r and u.get("companies") is not None:          # scoped user: only contacts owned by one of their companies
         orgs = {p.strip().lower() for p in ((r.get("organisation") or "")).split(",") if p.strip()}
         allowed_labels = {_CRM_ORG.get(s, s).lower() for s in (u.get("companies") or [])} | set(u.get("companies") or [])
         if not (orgs & allowed_labels):
             raise HTTPException(status_code=403, detail="not in your company scope")
-    if r:
-        qs = db.setting_get(f"qual:email:{(email or '').strip().lower()}")
+    if r and r.get("email"):
+        qs = db.setting_get(f"qual:email:{(r.get('email') or '').strip().lower()}")
         if qs:
             r = {**r, "qual_suggest": qs}
     return r or {}
@@ -1491,9 +1493,9 @@ def crm_update_contact(body: ContactEditBody, u: dict = Depends(current_user)) -
 
 
 @app.get("/api/crm/contact/companies")
-def crm_contact_companies(email: str, _: None = Depends(auth)) -> dict:
+def crm_contact_companies(email: str | None = None, id: int | None = None, _: None = Depends(auth)) -> dict:
     """Per-company membership / subscriber / test-group state for a contact (over the live companies list)."""
-    return crm.contact_company_state(email)
+    return crm.contact_company_state(email, id)
 
 
 class CompanyToggleBody(BaseModel):

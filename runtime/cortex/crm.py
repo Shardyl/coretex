@@ -265,16 +265,21 @@ def set_membership(email: str, company_slug: str, on: bool) -> str | None:
     return new
 
 
-def contact_company_state(email: str) -> dict:
+def contact_company_state(email: str | None = None, id: int | None = None) -> dict:
     """Per-company membership / subscriber / test-group state for a contact, across the LIVE companies list
-    (a newly added company appears automatically). subscriber = member AND not globally opted out."""
-    r = db.one("select organisation, newsletter_opt_out, do_not_market from crm_master where lower(email)=lower(%s) limit 1",
-               (email,))
+    (a newly added company appears automatically). subscriber = member AND not globally opted out.
+    Loads by id (emailless harvested contacts) or by email (the legacy book)."""
+    if id is not None:
+        r = db.one("select organisation, newsletter_opt_out, do_not_market, email from crm_master where id=%s", (id,))
+    else:
+        r = db.one("select organisation, newsletter_opt_out, do_not_market, email from crm_master "
+                   "where lower(email)=lower(%s) limit 1", (email,))
     orgs = {p.strip().lower() for p in ((r.get("organisation") if r else "") or "").split(",") if p.strip()}
     opted_out = bool(r and r.get("newsletter_opt_out"))
     dnm = set((r.get("do_not_market") if r else None) or [])
+    em = (r.get("email") if r else None) or email
     tg = {row["company_id"] for row in
-          db.query("select company_id from newsletter_test_group where active and lower(email)=lower(%s)", (email,))}
+          db.query("select company_id from newsletter_test_group where active and lower(email)=lower(%s)", (em,))} if em else set()
     comps = []
     for c in db.query("select id, slug, name from companies order by name"):
         member = _org(c["slug"]).lower() in orgs

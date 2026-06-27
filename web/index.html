@@ -748,7 +748,7 @@ async function renderContacts(b,co){
     <div id="clist" class="empty">Loading…</div></div>`;
   loadContacts(co);
 }
-function contactRow(c){ const n=realName(c); return `<div class="card crow" onclick="openContact('${esc(c.email)}')">
+function contactRow(c){ const n=realName(c); return `<div class="card crow" onclick="openContact('${esc(c.email||'')}',${c.id||'null'})">
   <div class="cav">${esc(initials(n))}</div>
   <div style="flex:1;min-width:0"><div class="cname">${esc(n)}</div>
     <div class="csub">${esc(c.organisation||'')}${c.company_name?' · '+esc(c.company_name):''}</div></div>
@@ -766,9 +766,10 @@ function fieldRows(c){
   });
   return rows.join('') || '<div class="csub">No other details on file</div>';
 }
-async function openContact(email){
+async function openContact(email,id){
   const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
-  let c; try{ c=await api('/api/crm/contact?email='+encodeURIComponent(email)); }catch(e){ c={}; }
+  const key=(email&&email!=='null')?'email='+encodeURIComponent(email):'id='+encodeURIComponent(id);
+  let c; try{ c=await api('/api/crm/contact?'+key); }catch(e){ c={}; }
   const n=realName(c); const hist=(c.history||[]);
   const fld=(ic_,t)=>t?`<div class="dfld">${ic(ic_,15)} ${esc(t)}</div>`:'';
   v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>Contact</b>
@@ -783,12 +784,13 @@ async function openContact(email){
     <div class="dgrid">${fieldRows(c)}</div>
     ${noteBox('c',c.email)}
     ${c.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${esc(c.note)}</div></div>`:''}
-    ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:${h.event==='reply_sent'?'#2ad17e':'#00DAFF'}"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
+    ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>{const lbl=h.event?(h.event||'').replace(/_/g,' '):(h.anchor?'engaged · '+h.anchor:(h.post?'engaged':'note'));const txt=h.text||h.engagement||'';return `<div class="hitem"><span class="hled" style="background:${h.event==='reply_sent'?'#2ad17e':'#00DAFF'}"></span><div><b>${esc(lbl)}</b><div class="csub">${esc(String(txt).slice(0,160))}</div></div></div>`;}).join('')}</div>`:''}
     </div>`;
-  loadContactCompanies(email);
+  loadContactCompanies(email,c.id);
 }
-async function loadContactCompanies(email){
-  let st; try{ st=await api('/api/crm/contact/companies?email='+encodeURIComponent(email)); }catch(e){ return; }
+async function loadContactCompanies(email,id){
+  const key=(email&&email!=='null')?'email='+encodeURIComponent(email):'id='+encodeURIComponent(id);
+  let st; try{ st=await api('/api/crm/contact/companies?'+key); }catch(e){ return; }
   renderContactCompanies(email,st);
 }
 function renderContactCompanies(email,st){
