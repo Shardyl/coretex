@@ -21,9 +21,8 @@ def _icp_rules(company_id: int) -> str:
 
 def score_harvested(company_id: int = 5, limit: int = 40) -> dict:
     """Score the untyped harvested leads for the company. Returns {scored, of}."""
-    org = crm._org("filmspoke")
-    rows = db.query("select id, job_title, note, tags from crm_master where organisation=%s and stage='harvested' "
-                    "order by id desc limit %s", (org, limit * 3))
+    rows = db.query("select id, job_title, note, tags from crm_master where tags @> %s::jsonb "
+                    "order by id desc limit %s", ('["anchor-harvest"]', limit * 3))
     rows = [r for r in rows if "scored" not in (r.get("tags") or [])][:limit]
     if not rows:
         return {"scored": 0, "of": 0}
