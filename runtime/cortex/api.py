@@ -654,6 +654,41 @@ def social_job_result(tid: int, body: JobResult, _: None = Depends(_runner_auth)
     return {"ok": True}
 
 
+class HarvestBody(BaseModel):
+    account: str
+    persona: str = "Paul Anderson"
+    company_id: int = 5
+    region: str = "UK"
+    anchor: str                 # the source anchor (name or profile URL)
+    post: str = ""              # source post URL
+    leads: list[dict] = []      # [{name, headline, linkedin, location, engagement, type?}]
+
+
+@app.post("/api/social/harvest")
+def social_harvest(body: HarvestBody, _: None = Depends(_runner_auth)) -> dict:
+    """The runner pushes a batch of harvested anchor engagers -> upserted into crm_master (deduped on the
+    LinkedIn URL, never overwriting). Reads + CRM writes only - no outward action fires from here."""
+    slug = (store.get_company(body.company_id) or {}).get("slug", "filmspoke")
+    ins = upd = skp = 0
+    for lead in body.leads:
+        lead = {**lead, "post": lead.get("post") or body.post}
+        try:
+            r = crm.upsert_anchor_lead(lead, body.persona, body.region, body.anchor, company=slug)
+        except Exception:  # noqa: BLE001 - one bad lead must never kill the batch
+            r = "skipped"
+        ins += r == "inserted"
+        upd += r == "updated"
+        skp += r == "skipped"
+    if ins or upd:
+        try:
+            notifications.notify(f"Anchor harvest: {body.anchor}",
+                                 f"{ins} new, {upd} updated from {body.persona} ({body.region}).",
+                                 category="social", company_id=body.company_id, priority="fyi")
+        except Exception:  # noqa: BLE001
+            pass
+    return {"ok": True, "inserted": ins, "updated": upd, "skipped": skp}
+
+
 # ---------- notification actions (info cards) ----------
 
 @app.post("/api/notifications/{nid}/read")

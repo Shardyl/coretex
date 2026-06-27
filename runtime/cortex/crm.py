@@ -526,6 +526,49 @@ def set_deal_primary(deal_id: int, email: str) -> dict | None:
     return db.one("select * from crm_projects where id=%s", (deal_id,))
 
 
+# ---- Anchor harvest = read an anchor's engagers (commenters/reactors) into crm_master. Reads + CRM write
+#      only; outward actions stay with outreach-linkedin-sequences. Keyed on the LinkedIn profile URL
+#      (email is usually empty for harvested leads). Never overwrites existing fields.
+
+def _norm_linkedin(url):
+    """Normalise a profile URL for the dedupe key: strip query, trailing slash, lowercase. Requires /in/."""
+    u = (url or "").strip().split("?")[0].rstrip("/").lower()
+    return u if "/in/" in u else ""
+
+
+def upsert_anchor_lead(lead: dict, persona: str, region: str, anchor: str, company: str = "filmspoke") -> str:
+    """Upsert one harvested anchor lead into crm_master, keyed on the LinkedIn URL. On a re-capture it appends
+    a provenance object to history + unions tags and NEVER overwrites a field. Returns inserted|updated|skipped."""
+    ensure_schema()
+    url = _norm_linkedin(lead.get("linkedin"))
+    if not url:
+        return "skipped"
+    prov = {"at": _now(), "anchor": anchor, "persona": persona, "post": lead.get("post", ""),
+            "engagement": (lead.get("engagement") or "")[:600]}
+    tags = ["anchor-harvest", f"anchor:{anchor}"[:80], f"segment:{(region or '').lower()}-marketing"]
+    if lead.get("type"):
+        tags.append(f"type:{lead['type']}")
+    existing = db.one("select id, tags from crm_master where lower(linkedin)=%s", (url,))
+    if existing:
+        merged = sorted(set(existing.get("tags") or []) | set(tags))
+        db.execute("update crm_master set history = history || %s::jsonb, tags = %s::jsonb, updated_at=now() "
+                   "where id=%s", (Json([prov]), Json(merged), existing["id"]))
+        return "updated"
+    fn, ln = _split_name(lead.get("name") or "")
+    note = (lead.get("engagement") or "").strip()
+    if lead.get("post"):
+        note = (note + f"  [post: {lead['post']}]").strip()
+    db.execute(
+        "insert into crm_master (organisation, first_name, last_name, job_title, linkedin, location, country, "
+        "city, lead_status, lead_source, stage, note, tags, history) "
+        "values (%s,%s,%s,%s,%s,%s,%s,%s,'new',%s,'harvested',%s,%s::jsonb,%s::jsonb)",
+        (_org(company), fn or None, ln or None, lead.get("headline"), url, lead.get("location"),
+         lead.get("country"), lead.get("city"),
+         f"{_org(company)} LinkedIn Anchor - {persona} ({region})", note or None,
+         Json(sorted(set(tags))), Json([prov])))
+    return "inserted"
+
+
 # ---- Deals = the full lifecycle in crm_projects. Forecast stages show on the Opportunities screen;
 #      won/ongoing stages show on the Projects screen. Crossing 'Booked' promotes an opportunity to a project.
 FORECAST_STAGES = ["Opportunity", "Quote"]
