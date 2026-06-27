@@ -536,9 +536,11 @@ def set_deal_primary(deal_id: int, email: str) -> dict | None:
 #      (email is usually empty for harvested leads). Never overwrites existing fields.
 
 def _norm_linkedin(url):
-    """Normalise a profile URL for the dedupe key: strip query, trailing slash, lowercase. Requires /in/."""
-    u = (url or "").strip().split("?")[0].rstrip("/").lower()
-    return u if "/in/" in u else ""
+    """Normalise a profile URL: strip query + trailing slash but PRESERVE CASE (member-id '/in/ACoAA…' URLs
+    are case-sensitive and break if lowercased; vanity URLs are already lowercase). Dedupe is case-insensitive
+    via lower() in the query. Requires /in/."""
+    u = (url or "").strip().split("?")[0].rstrip("/")
+    return u if "/in/" in u.lower() else ""
 
 
 def upsert_anchor_lead(lead: dict, persona: str, region: str, anchor: str, company: str = "filmspoke") -> str:
@@ -555,7 +557,7 @@ def upsert_anchor_lead(lead: dict, persona: str, region: str, anchor: str, compa
         tags.append(f"type:{lead['type']}")
     if lead.get("classification"):          # classified at ingest -> already scored
         tags.append("scored")
-    existing = db.one("select id, tags from crm_master where lower(linkedin)=%s", (url,))
+    existing = db.one("select id, tags from crm_master where lower(linkedin)=lower(%s)", (url,))
     if existing:
         merged = sorted(set(existing.get("tags") or []) | set(tags))
         db.execute("update crm_master set history = history || %s::jsonb, tags = %s::jsonb, updated_at=now() "
