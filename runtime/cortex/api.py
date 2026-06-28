@@ -32,7 +32,7 @@ from pydantic import BaseModel
 
 from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, engine, gmail, knowledge,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
-               skillqa, social, store, webauthn_auth, worker)
+               skillqa, social, social_config, store, webauthn_auth, worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -756,6 +756,19 @@ def social_anchors_reset(body: ScoreBody, _: None = Depends(_runner_auth)) -> di
     except Exception:  # noqa: BLE001
         pass
     return {"ok": True}
+
+
+@app.get("/api/social/account")
+def social_account(account: str, _: None = Depends(_runner_auth)) -> dict:
+    """SOURCE OF TRUTH: the runner reads its per-account strategy/config (caps, ICP, goal, flywheel, geo,
+    persona) from Cortex here instead of a local JSON file. Cortex is the brain; the runner is the hands."""
+    return {"account": social_config.get_account(account) or {}}
+
+
+@app.get("/api/social/library")
+def social_library(account: str, harvestable: int = 0, _: None = Depends(_runner_auth)) -> dict:
+    """SOURCE OF TRUTH: the runner reads its anchor slice from Cortex here. harvestable=1 -> only live|queued."""
+    return {"anchors": social_config.list_anchors(account, harvestable=bool(harvestable))}
 
 
 # ---------- notification actions (info cards) ----------
