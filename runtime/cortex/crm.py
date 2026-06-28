@@ -543,16 +543,27 @@ def _norm_linkedin(url):
     return u if "/in/" in u.lower() else ""
 
 
-def upsert_anchor_lead(lead: dict, persona: str, region: str, anchor: str, company: str = "filmspoke") -> str:
+def upsert_anchor_lead(lead: dict, persona: str, region: str, anchor: str, company: str = "filmspoke",
+                       segment: str | None = None, audience: str | None = None,
+                       platform: str | None = None) -> str:
     """Upsert one harvested anchor lead into crm_master, keyed on the LinkedIn URL. On a re-capture it appends
-    a provenance object to history + unions tags and NEVER overwrites a field. Returns inserted|updated|skipped."""
+    a provenance object to history + unions tags and NEVER overwrites a field. Returns inserted|updated|skipped.
+    The buyer is STAMPED with its source anchor's segment / audience / platform so the CRM can cleanly separate
+    targeted-marketer leads from wide business-owner leads, and one platform's leads from another's."""
     ensure_schema()
     url = _norm_linkedin(lead.get("linkedin"))
     if not url:
         return "skipped"
     prov = {"at": _now(), "anchor": anchor, "persona": persona, "post": lead.get("post", ""),
+            "platform": (platform or "linkedin"), "segment": segment, "audience": audience,
             "engagement": (lead.get("engagement") or "")[:600]}
-    tags = ["anchor-harvest", f"anchor:{anchor}"[:80], f"segment:{(region or '').lower()}-marketing"]
+    tags = ["anchor-harvest", f"anchor:{anchor}"[:80]]
+    if platform:
+        tags.append(f"platform:{platform.lower()}"[:40])
+    if segment:
+        tags.append(f"segment:{segment.lower()}"[:60])
+    if audience:
+        tags.append(f"audience:{audience.lower()}"[:60])
     if lead.get("type"):
         tags.append(f"type:{lead['type']}")
     if lead.get("classification"):          # classified at ingest -> already scored
@@ -581,24 +592,44 @@ def upsert_anchor_lead(lead: dict, persona: str, region: str, anchor: str, compa
 
 
 def record_anchor_stats(company_id: int, anchor: str, post: str, engagers: int, buyers: int,
-                        vendors: int, scores: list) -> None:
-    """Accumulate one harvest's outcome onto the anchor's lifetime grade row (so the per-anchor HIT-RATE is
-    captured permanently, BEFORE any vendor drop, and never recomputed from deleted rows again)."""
+                        vendors: int, scores: list, segment: str | None = None, audience: str | None = None,
+                        platform: str | None = None, fresh: bool = False) -> None:
+    """Record one post's harvest outcome onto the anchor's grade row (the per-anchor HIT-RATE, captured BEFORE
+    any vendor drop). fresh=True on the FIRST post of a fresh harvest of this anchor OVERWRITES the row (so a
+    re-harvest in rotation REPLACES last time's numbers, never inflates); subsequent posts of the same run
+    accumulate. Also stamps the anchor's segment / audience / platform."""
     db.execute("""create table if not exists social_anchors (
         id bigserial primary key, company_id int, name text, posts int default 0, engagers int default 0,
         buyers int default 0, vendors int default 0, sum_score numeric default 0, last_post text,
-        last_harvest timestamptz, created_at timestamptz default now(), unique(company_id, name))""")
+        last_harvest timestamptz, segment text, audience text, platform text,
+        created_at timestamptz default now(), unique(company_id, name))""")
+    for col in ("segment", "audience", "platform"):
+        db.execute(f"alter table social_anchors add column if not exists {col} text")
     s = float(sum(x for x in scores if isinstance(x, (int, float)))) if scores else 0.0
-    db.execute("""insert into social_anchors (company_id, name, posts, engagers, buyers, vendors, sum_score,
-        last_post, last_harvest) values (%s,%s,1,%s,%s,%s,%s,%s,now())
-        on conflict (company_id, name) do update set
-          posts = social_anchors.posts + 1,
-          engagers = social_anchors.engagers + excluded.engagers,
-          buyers = social_anchors.buyers + excluded.buyers,
-          vendors = social_anchors.vendors + excluded.vendors,
-          sum_score = social_anchors.sum_score + excluded.sum_score,
-          last_post = excluded.last_post, last_harvest = now()""",
-        (company_id, anchor, engagers, buyers, vendors, s, post))
+    if fresh:                       # first post of this run -> REPLACE the anchor's numbers (rotation-safe)
+        db.execute("""insert into social_anchors (company_id, name, posts, engagers, buyers, vendors, sum_score,
+            last_post, last_harvest, segment, audience, platform)
+            values (%s,%s,1,%s,%s,%s,%s,%s,now(),%s,%s,%s)
+            on conflict (company_id, name) do update set
+              posts=1, engagers=excluded.engagers, buyers=excluded.buyers, vendors=excluded.vendors,
+              sum_score=excluded.sum_score, last_post=excluded.last_post, last_harvest=now(),
+              segment=excluded.segment, audience=excluded.audience, platform=excluded.platform""",
+            (company_id, anchor, engagers, buyers, vendors, s, post, segment, audience, platform))
+    else:                           # later posts of the same run -> accumulate onto this run's row
+        db.execute("""insert into social_anchors (company_id, name, posts, engagers, buyers, vendors, sum_score,
+            last_post, last_harvest, segment, audience, platform)
+            values (%s,%s,1,%s,%s,%s,%s,%s,now(),%s,%s,%s)
+            on conflict (company_id, name) do update set
+              posts=social_anchors.posts+1,
+              engagers=social_anchors.engagers+excluded.engagers,
+              buyers=social_anchors.buyers+excluded.buyers,
+              vendors=social_anchors.vendors+excluded.vendors,
+              sum_score=social_anchors.sum_score+excluded.sum_score,
+              last_post=excluded.last_post, last_harvest=now(),
+              segment=coalesce(excluded.segment, social_anchors.segment),
+              audience=coalesce(excluded.audience, social_anchors.audience),
+              platform=coalesce(excluded.platform, social_anchors.platform)""",
+            (company_id, anchor, engagers, buyers, vendors, s, post, segment, audience, platform))
 
 
 # ---- Deals = the full lifecycle in crm_projects. Forecast stages show on the Opportunities screen;

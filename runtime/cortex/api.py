@@ -662,6 +662,10 @@ class HarvestBody(BaseModel):
     anchor: str                 # the source anchor (name or profile URL)
     post: str = ""              # source post URL
     leads: list[dict] = []      # [{name, headline, linkedin, location, engagement, type?}]
+    segment: str | None = None      # anchor's segment: marketing | founders | creators
+    audience: str | None = None     # anchor's audience: marketers | business-owners | creators | mixed
+    platform: str = "linkedin"      # source platform (linkedin now; x/facebook/... later)
+    fresh: bool = False             # True on the FIRST post of a fresh anchor harvest -> resets the grade row
 
 
 @app.post("/api/social/harvest")
@@ -687,13 +691,16 @@ def social_harvest(body: HarvestBody, _: None = Depends(_runner_auth)) -> dict:
         lead2 = {**lead, "post": lead.get("post") or body.post,
                  "classification": "lead", "type": cl.get("type"), "score": sc}
         try:
-            r = crm.upsert_anchor_lead(lead2, body.persona, body.region, body.anchor, company=slug)
+            r = crm.upsert_anchor_lead(lead2, body.persona, body.region, body.anchor, company=slug,
+                                       segment=body.segment, audience=body.audience, platform=body.platform)
         except Exception:  # noqa: BLE001 - one bad lead must never kill the batch
             r = "skipped"
         ins += r == "inserted"
         upd += r == "updated"
     try:
-        crm.record_anchor_stats(body.company_id, body.anchor, body.post, len(body.leads), buyers, vendors, scores)
+        crm.record_anchor_stats(body.company_id, body.anchor, body.post, len(body.leads), buyers, vendors,
+                                scores, segment=body.segment, audience=body.audience, platform=body.platform,
+                                fresh=body.fresh)
     except Exception:  # noqa: BLE001
         pass
     hr = round(100 * buyers / (buyers + vendors)) if (buyers + vendors) else None
