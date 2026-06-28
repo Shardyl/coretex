@@ -739,6 +739,18 @@ def social_anchors(company_id: int = 5, _: None = Depends(auth)) -> dict:
     return {"anchors": rows}
 
 
+@app.post("/api/social/anchors/reset")
+def social_anchors_reset(body: ScoreBody, _: None = Depends(_runner_auth)) -> dict:
+    """Clear the company's anchor grades at the START of a fresh harvest run, so each run's hit-rates reflect
+    the LATEST harvest (the current recent posts) instead of an ever-accumulating total across daily re-runs.
+    Called by run_harvest before it harvests. crm_master buyers are untouched (deduped on the LinkedIn url)."""
+    try:
+        db.execute("delete from social_anchors where company_id=%s", (body.company_id,))
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True}
+
+
 # ---------- notification actions (info cards) ----------
 
 @app.post("/api/notifications/{nid}/read")
