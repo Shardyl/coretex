@@ -167,3 +167,30 @@ def set_field(company_id, field, value):
 def get(company_id):
     """The full structured profile (for workers/skills to read)."""
     return (_row(company_id)["data"]) or {}
+
+
+def resolve_voice(company_id, author=None):
+    """Resolve the WRITING voice for a piece of content.
+
+    author given (a person KEY like 'rashad', or that person's email) -> their PERSONAL voice from
+    data.voice.people.<author>. Otherwise / no match -> the company (masthead) voice from
+    data.voice.company, if set. Returns the voice-instruction string, or None.
+
+    Voice is keyed by person (like signatures), so one person's voice is shared across the brand-family
+    companies. Personal voice = first-person/bylined content (LinkedIn comments, outreach, inbox replies,
+    opinion posts); company voice = neutral/institutional content.
+    """
+    v = (get(company_id) or {}).get("voice") or {}
+    people = v.get("people") or {}
+    if author:
+        a = str(author).strip().lower()
+        for key, person in people.items():
+            if not isinstance(person, dict):
+                continue
+            emails = [str(e).lower() for e in (person.get("emails") or [])]
+            if a == str(key).lower() or a in emails:
+                return person.get("profile") or person.get("voice")
+    comp = v.get("company")
+    if isinstance(comp, dict):
+        return comp.get("profile") or comp.get("voice")
+    return comp or None

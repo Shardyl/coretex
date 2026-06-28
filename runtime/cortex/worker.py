@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import re
 
-from . import grounding, provider, store
+from . import grounding, profile, provider, store
 
 
-def _company_context(company: dict) -> str:
+def _company_context(company: dict, author: str | None = None) -> str:
     ctx = company.get("context") or {}
     parts = [f"Company: {company['name']}"]
     if company.get("north_star"):
@@ -17,7 +17,19 @@ def _company_context(company: dict) -> str:
             parts.append(f"{label}: {ctx[k]}")
     base = "\n".join(parts)
     ground = grounding.for_company(company)   # Company Profile + brand guidelines + site source
-    return base + ("\n\n" + ground if ground else "")
+    out = base + ("\n\n" + ground if ground else "")
+    # Personal voice: when a piece is written AS a specific person (a LinkedIn comment/outreach/inbox reply,
+    # a bylined or opinion post), write in THAT author's own voice (profile.voice.people.<author>). Neutral /
+    # institutional content passes author=None and stays in the company voice above. Keyed like signatures.
+    if author:
+        try:
+            pv = profile.resolve_voice(company.get("id"), author)
+        except Exception:  # noqa: BLE001
+            pv = None
+        if pv:
+            out += ("\n\nWrite this in the author's OWN first-person voice. Match it closely, keep the "
+                    "personality, just keep it clean and professional:\n" + pv)
+    return out
 
 
 def _model_for(skill: dict) -> str:
@@ -51,11 +63,12 @@ _EMAIL_BODY_RULE = (
 
 
 def draft(skill: dict, company: dict, request: dict,
-          correction: str | None = None, manager_feedback: list[str] | None = None) -> str:
+          correction: str | None = None, manager_feedback: list[str] | None = None,
+          author: str | None = None) -> str:
     is_email = isinstance(request, dict) and bool(request.get("outbound") or request.get("inquiry"))
     system = "\n\n".join(filter(None, [
         f"You are Cortex's worker for the '{skill['name']}' skill.",
-        _company_context(company),
+        _company_context(company, author),
         skill.get("craft") or "",
         _rules_block(skill),
         _EMAIL_BODY_RULE if is_email else
