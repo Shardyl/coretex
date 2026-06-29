@@ -177,10 +177,11 @@ def _booking_slots_brief(co: dict | None) -> str:
         if not slots:
             return ""
         line = bk.get("email_line") or "or let us know what works for you and we'll do our best to meet it."
-        return ("\n\nWHEN you propose a call: instead of a generic booking link, offer ONLY these real open times "
+        return ("\n\nWHEN you propose a call: offer ONLY these real open times "
                 "(GST), quoting them EXACTLY (never invent, shift or add a time):\n  - " + "\n  - ".join(slots) +
                 f"\nOffer two or three of them naturally (a sentence reads better than a raw list), then add, in "
-                f"your own words: \"{line}\"")
+                f"your own words: \"{line}\". Do NOT include any booking link, calendar URL or scheduling link of "
+                f"any kind, and do NOT invite them to 'book directly' anywhere; give the times in words only.")
     except Exception:  # noqa: BLE001 — availability must never break drafting
         return ""
 
