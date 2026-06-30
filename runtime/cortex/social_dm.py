@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 
-from . import db, engine, social_config, store, worker
+from . import db, provider, social_config, store, worker
 
 # Whose inbound DMs route to which company. rashad's personal inbox -> Sensa (his production company);
 # default Sensa(3). (Harvest routes to FilmSpoke(5); inbound routes to Sensa(3) - source decides company.)
@@ -29,6 +29,25 @@ def _parse(snippet: str) -> tuple[bool, str]:
 
 def _key(account: str, name: str, msg: str) -> str:
     return hashlib.sha1(f"{account}|{name}|{msg}".encode("utf-8", "replace")).hexdigest()[:16]
+
+
+def _classify_dm(name: str, msg: str, slug: str) -> dict:
+    """DM-appropriate triage (NOT the strict website-enquiry filter). The owner WANTS to reply to real people;
+    only obvious automated spam is skipped. Returns {reply, category, reason}."""
+    try:
+        out = provider.think_json(
+            "You triage LinkedIn DIRECT MESSAGES for the account owner, who WANTS to reply to real people: "
+            "potential buyers/clients, peers in the industry, people congratulating them, genuine networking, "
+            "and even a sales pitch FROM A REAL HUMAN (a short polite reply keeps the relationship warm). Only "
+            "decline to reply to OBVIOUS automated spam: bots, mass-blast templates with zero personalisation, "
+            "scams, crypto, or clearly automated outreach sequences.",
+            f"From: {name}\nTheir message: {msg}\n\n"
+            'Return JSON: {"reply": boolean, "category": "buyer|talent|supporter|peer|spam", "reason": "short"}',
+            model=provider.MODEL_ROUTER, purpose="dm_triage", company=slug)
+        return {"reply": bool(out.get("reply")), "category": (out.get("category") or "supporter"),
+                "reason": (out.get("reason") or "").strip()}
+    except Exception:  # noqa: BLE001
+        return {"reply": True, "category": "supporter", "reason": "triage unavailable -> default to reply"}
 
 
 def ingest_threads(account: str, threads: list[dict]) -> dict:
@@ -53,16 +72,14 @@ def ingest_threads(account: str, threads: list[dict]) -> dict:
             continue
         fresh.append(k)
         inq = {"name": name, "email": "", "subject": "LinkedIn message", "message": msg}
-        try:
-            verdict = engine.triage_inquiry(inq, slug)
-        except Exception:  # noqa: BLE001
-            verdict = {"genuine": True, "category": "unclear", "reason": "triage unavailable"}
-        if not verdict.get("genuine"):        # obvious spam/junk pitch -> filed, not drafted
+        verdict = _classify_dm(name, msg, slug)
+        if not verdict.get("reply"):          # obvious automated spam -> filed, not drafted
             skipped += 1
             continue
         brief = ("Draft a reply to this LinkedIn direct message. Write a SHORT, natural LinkedIn DM reply "
                  "(1 to 4 sentences, conversational, no email formatting, no subject, no sign-off, no signature). "
-                 f"Reply directly to {name}.\n\nTheir message: {msg}")
+                 f"This is a '{verdict.get('category')}' message. Reply directly to {name}.\n\n"
+                 f"Their message: {msg}")
         try:
             draft = worker.draft(skill, co, {"brief": brief}, author=person_key)   # author -> the owner's voice
         except Exception:  # noqa: BLE001
