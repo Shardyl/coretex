@@ -704,14 +704,41 @@ def social_harvest(body: HarvestBody, _: None = Depends(_runner_auth)) -> dict:
     except Exception:  # noqa: BLE001
         pass
     hr = round(100 * buyers / (buyers + vendors)) if (buyers + vendors) else None
-    if buyers:
-        try:
-            notifications.notify(f"Anchor harvest: {body.anchor}",
-                                 f"{buyers} buyers kept ({ins} new), {vendors} vendors dropped, {hr}% hit-rate.",
-                                 category="social", company_id=body.company_id, priority="fyi")
-        except Exception:  # noqa: BLE001
-            pass
+    # NO per-post notification (it spammed ~one per post = dozens per run). ONE summary notification fires per
+    # RUN via /api/social/harvest/summary, which the runner calls once at the end of the harvest.
     return {"ok": True, "inserted": ins, "updated": upd, "buyers": buyers, "vendors_dropped": vendors, "hit_rate": hr}
+
+
+class HarvestSummaryBody(BaseModel):
+    account: str
+    company_id: int = 5
+    anchors: int = 0
+    buyers: int = 0
+    new: int = 0
+
+
+@app.post("/api/social/harvest/summary")
+def social_harvest_summary(body: HarvestSummaryBody, _: None = Depends(_runner_auth)) -> dict:
+    """ONE notification per harvest RUN (replaces the per-post spam). The runner calls this once at the end with
+    the run totals; we look up the current top anchor grades server-side for the headline."""
+    top = ""
+    try:
+        rows = db.query(
+            "select name, case when (buyers+vendors)>0 then round(100.0*buyers/(buyers+vendors)) else null end hr "
+            "from social_anchors where company_id=%s order by hr desc nulls last, buyers desc limit 4",
+            (body.company_id,))
+        top = ", ".join(f"{r['name']} {r['hr']}%" for r in rows if r.get("hr") is not None)
+    except Exception:  # noqa: BLE001
+        pass
+    msg = f"{body.buyers} buyers kept ({body.new} new) across {body.anchors} anchors."
+    if top:
+        msg += f" Top anchors: {top}."
+    try:
+        notifications.notify(f"Anchor harvest done ({body.account})", msg, category="social",
+                             company_id=body.company_id, priority="fyi")
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True}
 
 
 class ScoreBody(BaseModel):
