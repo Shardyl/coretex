@@ -723,18 +723,21 @@ def social_harvest_summary(body: HarvestSummaryBody, _: None = Depends(_runner_a
     the run totals; we look up the current top anchor grades server-side for the headline."""
     top = ""
     try:
+        names = [a.get("name") for a in social_config.list_anchors(body.account) if a.get("name")]
         rows = db.query(
             "select name, case when (buyers+vendors)>0 then round(100.0*buyers/(buyers+vendors)) else null end hr "
-            "from social_anchors where company_id=%s order by hr desc nulls last, buyers desc limit 4",
-            (body.company_id,))
+            "from social_anchors where company_id=%s and name = any(%s) order by hr desc nulls last, buyers desc "
+            "limit 4", (body.company_id, names)) if names else []
         top = ", ".join(f"{r['name']} {r['hr']}%" for r in rows if r.get("hr") is not None)
     except Exception:  # noqa: BLE001
         pass
+    acct = social_config.get_account(body.account) or {}
+    who = acct.get("persona") or body.account          # the PERSONA name (Rashad Al-Safar / Paul Anderson)
     msg = f"{body.buyers} buyers kept ({body.new} new) across {body.anchors} anchors."
     if top:
         msg += f" Top anchors: {top}."
     try:
-        notifications.notify(f"Anchor harvest done ({body.account})", msg, category="social",
+        notifications.notify(f"{who}: anchor harvest done", msg, category="social",
                              company_id=body.company_id, priority="fyi")
     except Exception:  # noqa: BLE001
         pass
