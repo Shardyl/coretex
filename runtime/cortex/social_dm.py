@@ -9,8 +9,63 @@ reliable than the unread dot (it clears the moment the owner glances at the thre
 from __future__ import annotations
 
 import hashlib
+import re
+from datetime import datetime, timedelta, timezone
 
 from . import db, provider, social_config, store, worker
+
+_MONTHS = {m: i + 1 for i, m in enumerate(
+    ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"])}
+
+
+def _is_recent(ts: str, days: int = 7) -> bool:
+    """Is this conversation's last-activity timestamp within `days`? CONSERVATIVE: if it can't be confidently
+    read as recent, return False (better to miss a reply than answer a months-old message). Handles an ISO
+    datetime attr, a time-of-day (today), 'now'/'yesterday', weekday names, relative (Nm/Nh/Nd/Nw/Nmo), and
+    absolute 'Apr 17' / '17 Apr' dates parsed against today."""
+    t = (ts or "").strip()
+    if not t:
+        return False
+    try:                                              # ISO datetime attr (most reliable)
+        dt = datetime.fromisoformat(t.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt) <= timedelta(days=days)
+    except Exception:  # noqa: BLE001
+        pass
+    tl = t.lower()
+    if re.match(r"^\d{1,2}:\d{2}", tl):               # a time of day -> today
+        return True
+    if tl in ("now", "just now", "yesterday"):
+        return True
+    if tl[:3] in ("mon", "tue", "wed", "thu", "fri", "sat", "sun"):   # a weekday -> this week
+        return days >= 6
+    m = re.match(r"^(\d+)\s*(mo|month|min|m|hr|hour|h|day|d|week|wk|w|year|yr|y)\b", tl)
+    if m:
+        n, u = int(m.group(1)), m.group(2)
+        if u in ("mo", "month", "year", "yr", "y"):
+            return False
+        if u in ("min", "m", "hr", "hour", "h"):
+            return True
+        if u in ("day", "d"):
+            return n <= days
+        if u in ("week", "wk", "w"):
+            return n * 7 <= days
+    mm = re.match(r"^([a-z]{3,9})\.?\s+(\d{1,2})$|^(\d{1,2})\s+([a-z]{3,9})", tl)   # 'Apr 17' / '17 Apr'
+    if mm:
+        mon = (mm.group(1) or mm.group(4) or "")[:3]
+        day = int(mm.group(2) or mm.group(3))
+        mi = _MONTHS.get(mon)
+        if mi:
+            now = datetime.now(timezone.utc)
+            try:
+                d = datetime(now.year, mi, day, tzinfo=timezone.utc)
+                if d > now:                            # e.g. 'Dec 30' seen in early Jan -> last year
+                    d = datetime(now.year - 1, mi, day, tzinfo=timezone.utc)
+                return (now - d) <= timedelta(days=days)
+            except Exception:  # noqa: BLE001
+                return False
+    return False
 
 # Whose inbound DMs route to which company. rashad's personal inbox -> Sensa (his production company);
 # default Sensa(3). (Harvest routes to FilmSpoke(5); inbound routes to Sensa(3) - source decides company.)
@@ -60,12 +115,15 @@ def ingest_threads(account: str, threads: list[dict]) -> dict:
         return {"drafted": 0, "skipped": 0, "reason": "company/skill missing"}
     slug = co.get("slug", "sensa")
     seen = set(db.setting_get(f"dm_seen:{account}") or [])
-    drafted = skipped = 0
+    drafted = skipped = stale = 0
     fresh: list[str] = []
     for t in threads or []:
         name = (t.get("name") or "").strip()
         ok, msg = _parse(t.get("snippet"))
         if not ok or not name:
+            continue
+        if not _is_recent(t.get("ts")):      # CURRENT messages only: skip the old backlog entirely
+            stale += 1
             continue
         k = _key(account, name, msg)
         if k in seen or k in fresh:          # dedupe: never re-draft the same message twice
@@ -92,4 +150,4 @@ def ingest_threads(account: str, threads: list[dict]) -> dict:
         drafted += 1
     if fresh:
         db.setting_set(f"dm_seen:{account}", (list(seen) + fresh)[-800:])
-    return {"drafted": drafted, "skipped": skipped}
+    return {"drafted": drafted, "skipped": skipped, "stale": stale}
