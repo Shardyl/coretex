@@ -32,7 +32,7 @@ from pydantic import BaseModel
 
 from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, engine, gmail, knowledge,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
-               skillqa, social, social_config, social_dm, store, webauthn_auth, worker)
+               skillqa, social, social_config, social_dm, social_warm, store, webauthn_auth, worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -811,6 +811,23 @@ def social_inbox(body: InboxBody, _: None = Depends(_runner_auth)) -> dict:
     """The runner pushes the account's LinkedIn DM thread previews; Cortex drafts replies (in the owner's voice)
     for the ones that need one and lands them in the Inbox for approval. Reads + drafts only, never auto-sends."""
     return social_dm.ingest_threads(body.account, body.threads)
+
+
+class WarmBody(BaseModel):
+    account: str
+    items: list[dict] = []     # [{name, profile, post_url, post_text}] from the runner's warm reader
+
+
+@app.get("/api/social/warm/targets")
+def social_warm_targets(account: str, n: int = 5, _: None = Depends(_runner_auth)) -> dict:
+    """The next N harvested buyers for this persona to warm (read their recent post on the runner)."""
+    return {"targets": social_warm.warm_targets(account, n)}
+
+
+@app.post("/api/social/warm")
+def social_warm_queue(body: WarmBody, _: None = Depends(_runner_auth)) -> dict:
+    """Draft a comment (persona's voice) per target post + create the approval cards (post + comment shown)."""
+    return social_warm.queue_warm(body.account, body.items)
 
 
 # ---------- notification actions (info cards) ----------
