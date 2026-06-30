@@ -53,13 +53,20 @@ def _rules_block(skill: dict) -> str:
 
 
 _EMAIL_BODY_RULE = (
-    "This is an EMAIL. Write ONLY the email body — the greeting and the message. Do NOT write From/To/Subject "
-    "headers, and do NOT write any Cc/Bcc line, recipient list, routing note, 'sending note' or 'system note' in "
-    "the body — Cc/Bcc and recipients are actioned by the sending system, never written into the message. Do NOT "
-    "add a sign-off (no 'Best regards', no your name) and do NOT add a signature or contact "
-    "details — the recipient, signature and logo are attached automatically, so adding them yourself doubles "
-    "them up. Do NOT mention, describe or instruct anyone to add attachments — any attached files are shown to "
-    "the owner separately. Output is exactly the message a human reads, nothing else, ready to send.")
+    "This is an EMAIL. Write ONLY the email body, the greeting and the message, nothing else. These are hard "
+    "rules, never break them:\n"
+    "- NO From/To/Subject headers, NO Cc/Bcc line, NO recipient list, and NO routing note, 'sending note', "
+    "'system note', or ANY meta/instruction text whatsoever (e.g. never write 'CC ... add via the sending "
+    "system' or 'replace this'). Cc/Bcc and recipients are handled entirely by the sending system and must NEVER "
+    "be mentioned in the message.\n"
+    "- NEVER invent or include a booking link, scheduling link, calendar link, any URL, or a PLACEHOLDER for one "
+    "(e.g. 'https://your-meeting-link-here'). If you were not given a real link, do NOT write one, just invite "
+    "them to reply with a few details or to suggest a time that suits them. Never write a 'replace with your "
+    "link' style instruction.\n"
+    "- NO sign-off, NO your name, NO signature or contact details, the signature and logo are attached "
+    "automatically, so adding them doubles them up.\n"
+    "- Do NOT mention or instruct anyone to add attachments.\n"
+    "Output is exactly the message the recipient reads, ready to send.")
 
 
 def draft(skill: dict, company: dict, request: dict,
