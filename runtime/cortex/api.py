@@ -32,7 +32,7 @@ from pydantic import BaseModel
 
 from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, engine, gmail, knowledge,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
-               skillqa, social, social_config, store, webauthn_auth, worker)
+               skillqa, social, social_config, social_dm, store, webauthn_auth, worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -769,6 +769,18 @@ def social_account(account: str, _: None = Depends(_runner_auth)) -> dict:
 def social_library(account: str, harvestable: int = 0, _: None = Depends(_runner_auth)) -> dict:
     """SOURCE OF TRUTH: the runner reads its anchor slice from Cortex here. harvestable=1 -> only live|queued."""
     return {"anchors": social_config.list_anchors(account, harvestable=bool(harvestable))}
+
+
+class InboxBody(BaseModel):
+    account: str
+    threads: list[dict] = []      # [{name, snippet, thread, unread}] from the runner's inbox reader
+
+
+@app.post("/api/social/inbox")
+def social_inbox(body: InboxBody, _: None = Depends(_runner_auth)) -> dict:
+    """The runner pushes the account's LinkedIn DM thread previews; Cortex drafts replies (in the owner's voice)
+    for the ones that need one and lands them in the Inbox for approval. Reads + drafts only, never auto-sends."""
+    return social_dm.ingest_threads(body.account, body.threads)
 
 
 # ---------- notification actions (info cards) ----------
