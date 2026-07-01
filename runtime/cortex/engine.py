@@ -2011,29 +2011,44 @@ QUOTE_SKILL_KEY = "sales-quotation"        # quotes land under the company's Sal
 
 def deliver_quotation(company: str, *, preset: str = "ai-production", customer: str = "",
                       total: float | None = None, total_inclusive: bool = False, sections: list | None = None,
-                      title: str | None = None, note: str | None = None) -> dict:
-    """Render a quotation PDF and drop it in the Inbox as a downloadable card (kind='quotation'). Also stores
-    the delivery copy in R2 under <slug>/quotations/draft/. Prices come from the request (a stated total split
-    by weight, or explicit line units); the model never invents a figure. See quotation.py."""
+                      title: str | None = None, note: str | None = None, fmt: str = "both") -> dict:
+    """Render a quotation and drop it in the Inbox as a downloadable card (kind='quotation'). `fmt` = 'both'
+    (default: editable .xlsx + ready-to-send .pdf), 'xlsx', or 'pdf'; both share one quote number. Delivery
+    copies stored in R2 under <slug>/quotations/draft/. Prices come from the request (a stated total split by
+    weight, or explicit line units); the model never invents a figure. See quotation.py."""
     os.makedirs(QUOTES_DIR, exist_ok=True)
     co = store.get_company_by_slug(company)
     if not co:
         raise ValueError(f"unknown company {company}")
-    q = quotation.generate(company, preset, customer=customer, total=total, total_inclusive=total_inclusive,
-                           sections=sections, title=title, note=note, out_dir=QUOTES_DIR)
-    r2_url = None
-    try:   # R2 is the delivery library (Company Standard); never let an upload hiccup lose the Inbox card
-        r2_url = media.put_file(company, "quotations", q["path"], status="draft")
-    except Exception as e:  # noqa: BLE001
-        tg.send(f"Quotation {q['number']} rendered but R2 upload failed ({e}); the Inbox download still works.")
+    kw = dict(customer=customer, total=total, total_inclusive=total_inclusive, sections=sections,
+              title=title, note=note, out_dir=QUOTES_DIR)
+    want_pdf = fmt in ("both", "pdf")
+    want_xlsx = fmt in ("both", "xlsx")
+    q = quotation.generate(company, preset, **kw) if want_pdf else None
+    number = q["number"] if q else None
+    x = quotation.generate_xlsx(company, preset, number=number, **kw) if want_xlsx else None
+    base = q or x   # whichever ran carries the shared number/title/summary/total
+    number = base["number"]
+
+    def _r2(res, kind):
+        if not res:
+            return None
+        try:   # R2 is the delivery library (Company Standard); never let an upload hiccup lose the Inbox card
+            return media.put_file(company, "quotations", res["path"], status="draft")
+        except Exception as e:  # noqa: BLE001
+            tg.send(f"Quotation {number} {kind} rendered but R2 upload failed ({e}); the Inbox download works.")
+            return None
+
     skill = store.get_skill_by_key(co["id"], QUOTE_SKILL_KEY)
-    req = {"kind": "quotation", "company": company, "file": q["path"], "r2_url": r2_url,
-           "number": q["number"], "title": q["title"], "summary": q["summary"], "customer": customer,
-           "preset": preset, "total": q["total"], "currency": q["currency"], "blanks": q["blanks"]}
+    req = {"kind": "quotation", "company": company,
+           "file": q["path"] if q else None, "r2_url": _r2(q, "pdf"),
+           "xlsx_file": x["path"] if x else None, "xlsx_r2_url": _r2(x, "xlsx"),
+           "number": number, "title": base["title"], "summary": base["summary"], "customer": customer,
+           "preset": preset, "total": base["total"], "currency": base["currency"], "blanks": base["blanks"]}
     return db.execute(
         "insert into tasks (company_id,skill_id,kind,request,draft,status,origin,title) "
         "values (%s,%s,'quotation',%s,%s,'awaiting_approval','talk',%s) returning *",
-        (co["id"], skill["id"] if skill else None, Json(req), q["summary"], q["title"]))
+        (co["id"], skill["id"] if skill else None, Json(req), base["summary"], base["title"]))
 
 
 def _run_report_task(task: dict) -> None:

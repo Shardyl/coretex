@@ -1159,6 +1159,18 @@ def quotation_pdf(tid: int, _: None = Depends(auth)) -> FileResponse:
     return FileResponse(path, media_type="application/pdf", filename=os.path.basename(path))
 
 
+@app.get("/api/quotation/{tid}/xlsx")
+def quotation_xlsx(tid: int, _: None = Depends(auth)) -> FileResponse:
+    t = store.get_task(tid)
+    if not t or t["kind"] != "quotation":
+        raise HTTPException(status_code=404, detail="not a quotation")
+    path = (t.get("request") or {}).get("xlsx_file")
+    if not path or not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="quotation spreadsheet missing")
+    return FileResponse(path, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        filename=os.path.basename(path))
+
+
 @app.get("/api/inbox/history")
 def inbox_history(q: str | None = None, start: str | None = None, end: str | None = None,
                   company: str | None = None, limit: int = 80, u: dict = Depends(current_user)) -> list[dict]:
@@ -2678,8 +2690,9 @@ SKILL_TOOLS = [
      "description": "Generate the SEO & traffic report for a business right now; it lands in the Inbox.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}, "required": ["company"]}},
     {"name": "create_quotation",
-     "description": "Produce a branded, house-format QUOTATION PDF and drop it in the Inbox as a downloadable "
-                    "card. Use when Rashad asks to 'quote', 'do a quotation / quote', or 'price up' a job. Prices: "
+     "description": "Produce a branded, house-format QUOTATION (an editable .xlsx spreadsheet plus a ready-to-"
+                    "send .pdf by default) and drop it in the Inbox as a downloadable card. Use when Rashad asks "
+                    "to 'quote', 'do a quotation / quote', or 'price up' a job. Prices: "
                     "pass `total` = the overall figure he states and Cortex splits it fairly across the line items "
                     "(NEVER invent or guess a total — if he hasn't given one, omit it and the quote renders with "
                     "blank prices). `total_inclusive`=true if the figure he gave already includes VAT (default is "
@@ -2691,7 +2704,8 @@ SKILL_TOOLS = [
         "preset": {"type": "string", "description": "line-item breakdown; default 'ai-production'"},
         "customer": {"type": "string", "description": "the client name for the quote"},
         "total": {"type": "number", "description": "the overall figure Rashad states; split into fair line rates. Omit if he gave none."},
-        "total_inclusive": {"type": "boolean", "description": "true if `total` already includes VAT"}},
+        "total_inclusive": {"type": "boolean", "description": "true if `total` already includes VAT"},
+        "fmt": {"type": "string", "enum": ["both", "xlsx", "pdf"], "description": "which files to deliver; default 'both' (spreadsheet + PDF)"}},
         "required": ["company"]}},
     {"name": "list_scheduled",
      "description": "List the scheduled recurring jobs (e.g. SEO reports).",
@@ -2869,7 +2883,8 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
             return f"unknown business '{slug}' — tell me which of your businesses this quote is for"
         t = engine.deliver_quotation(slug, preset=inp.get("preset") or "ai-production",
                                      customer=inp.get("customer", ""), total=inp.get("total"),
-                                     total_inclusive=bool(inp.get("total_inclusive")))
+                                     total_inclusive=bool(inp.get("total_inclusive")),
+                                     fmt=inp.get("fmt") or "both")
         req = t.get("request") or {}
         return (f"created quotation {req.get('number')} — it's in your Inbox now to download (task #{t['id']}). "
                 f"{req.get('summary', '')}")

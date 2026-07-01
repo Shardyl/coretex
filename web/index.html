@@ -1618,7 +1618,7 @@ function quotationCard(t,co){
     <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${ic('file',13)} quotation</span>${r.number?`<span class="chip">${esc(r.number)}</span>`:''}</div>
     <div class="title">${esc(r.title||'Quotation')}</div>
     <div class="body">${esc(t.draft||r.summary||'')}</div>${blanks}
-    <div class="row" style="margin:4px 0 9px"><button class="btn go" onclick="openQuotation(${t.id})">${ic('file',16)} Open quotation (PDF)</button></div>
+    <div class="row" style="margin:4px 0 9px">${r.xlsx_file?`<button class="btn go" onclick="openQuotation(${t.id},'xlsx')">${ic('file',16)} Open spreadsheet</button>`:''}${r.file?`<button class="btn${r.xlsx_file?'':' go'}" onclick="openQuotation(${t.id},'pdf')">${ic('file',16)} Open PDF</button>`:''}</div>
     <div class="row">
       <button class="btn" onclick="act(${t.id},'approve')">${ic('check',16)} Mark as seen</button>
       <button class="btn bad" onclick="act(${t.id},'skip')">Dismiss</button>
@@ -1698,12 +1698,16 @@ async function openReport(id){
     const u=URL.createObjectURL(await r.blob()); window.open(u,'_blank'); setTimeout(()=>URL.revokeObjectURL(u),60000);
   }catch(e){ toast('Could not open report ('+e.message+')'); }
 }
-async function openQuotation(id){
+async function openQuotation(id,kind){
+  kind=kind||'pdf';
   try{
     toast('Opening…');
-    const r=await fetch(API+'/api/quotation/'+id+'/pdf',{headers:token?{Authorization:'Bearer '+token}:{}});
+    const r=await fetch(API+'/api/quotation/'+id+'/'+kind,{headers:token?{Authorization:'Bearer '+token}:{}});
     if(!r.ok) throw new Error(r.status);
-    const u=URL.createObjectURL(await r.blob()); window.open(u,'_blank'); setTimeout(()=>URL.revokeObjectURL(u),60000);
+    const blob=await r.blob(), u=URL.createObjectURL(blob);
+    if(kind==='xlsx'){ const a=document.createElement('a'); a.href=u; a.download='quotation.xlsx'; a.click(); }
+    else window.open(u,'_blank');
+    setTimeout(()=>URL.revokeObjectURL(u),60000);
   }catch(e){ toast('Could not open quotation ('+e.message+')'); }
 }
 function compName(id){ const c=companies.find(c=>c.id===id); return c?c.name:''; }

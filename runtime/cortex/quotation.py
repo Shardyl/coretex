@@ -76,6 +76,14 @@ DEFAULT_PRESETS = {
         "title": "AI VIDEO PRODUCTION QUOTATION",
         "agency_fee": False,
         "note": "Prices are added per the agreed scope; subtotal, VAT and total calculate automatically.",
+        # What the client actually receives — shown in a Deliverables block at the top (editable data).
+        "deliverables": [
+            "1 x AI-generated video, up to 30 seconds",
+            "Master file in 4K (3840 x 2160), MP4 (H.264)",
+            "Aspect versions: 16:9 landscape, 9:16 vertical, 1:1 square",
+            "Licensed music track (single-project licence)",
+            "Delivered as a download link",
+        ],
         # Each item is {desc, weight}: `weight` is the relative share used to split a stated total into
         # "fair rates" (editable data — tune these to reshape the breakdown, no code change).
         "sections": [
@@ -141,24 +149,15 @@ def _next_number() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Render
+# Resolve — the shared model both renderers (PDF + XLSX) build from
 # ---------------------------------------------------------------------------
 
-def generate(company: str, preset: str = "ai-production", *, customer: str = "", sections: list | None = None,
-             total: float | None = None, total_inclusive: bool = False, title: str | None = None,
-             note: str | None = None, agency_fee: bool | None = None, terms: dict | None = None,
-             out_dir: str = "/tmp") -> dict:
-    """Build the house-format quotation PDF for `company`.
+def _resolve(company: str, preset: str, *, customer: str, sections, total, total_inclusive, title, note,
+             agency_fee, terms, deliverables, number=None) -> dict:
+    """Resolve house data + preset + priced line items into one model dict, stamping every figure in code.
 
-    Three pricing modes:
-      * `total` given  -> "fair rates": the stated total is split across the preset's line items by their
-        stored `weight` (all arithmetic in code; the total is the operator's real number, the split is
-        editable data). `total_inclusive` treats the stated figure as VAT-inclusive; default is the ex-VAT
-        subtotal with VAT added on top.
-      * `sections` with per-item `unit`/`qty` -> explicit line pricing.
-      * neither -> the preset skeleton with blank price cells.
-
-    Returns {path, number, title, summary, company, customer, total, currency, blanks, stated}.
+    Pricing modes: `total` given -> "fair rates" split by per-item weight; `sections` with unit/qty ->
+    explicit lines; neither -> blank skeleton. `total_inclusive` treats the stated figure as VAT-inclusive.
     """
     company = (company or "").lower()
     co = store.get_company_by_slug(company)
@@ -171,6 +170,7 @@ def generate(company: str, preset: str = "ai-production", *, customer: str = "",
     note = note if note is not None else pset.get("note", "")
     agency_fee = pset.get("agency_fee", False) if agency_fee is None else agency_fee
     terms = terms or pset.get("terms") or {}
+    deliverables = deliverables if deliverables is not None else list(pset.get("deliverables") or [])
     cur = (data.get("currency") or "AED").upper()
     vat_rate = _vat_rate(data)
 
@@ -180,11 +180,9 @@ def generate(company: str, preset: str = "ai-production", *, customer: str = "",
                      "items": [({**it} if isinstance(it, dict) else {"desc": it}) for it in s["items"]]}
                     for s in pset.get("sections", [])]
 
-    # ---- maths (code stamps every figure; the model never invents one) ----
     stated = None
     blanks = 0
     if total is not None:
-        # "fair rates": split the operator's stated total across items by weight.
         stated = float(total)
         subtotal = round(stated / (1 + vat_rate), 2) if total_inclusive else stated
         flat = [it for s in sections for it in s.get("items", [])]
@@ -213,8 +211,43 @@ def generate(company: str, preset: str = "ai-production", *, customer: str = "",
         fee = round(subtotal * 0.15, 2) if agency_fee else 0.0
     vat = round((subtotal + fee) * vat_rate, 2)
     grand = round(subtotal + fee + vat, 2)
+    number = number or _next_number()   # reuse a pinned number when rendering both formats of one quote
+    n_items = len([1 for s in sections for _ in s.get("items", [])])
+    blank_note = f" {blanks} price(s) left blank." if blanks else ""
+    summary = (f"{co['name']} {preset} quotation {number}" + (f" for {customer}" if customer else "")
+               + f": {n_items} line items, total {_money(grand, cur)} incl. VAT.{blank_note}")
+    return {"company": company, "co": co, "data": data, "preset": preset, "title": title, "note": note,
+            "agency_fee": agency_fee, "terms": terms, "deliverables": deliverables, "customer": customer,
+            "cur": cur, "vat_rate": vat_rate, "sections": sections, "subtotal": subtotal, "fee": fee,
+            "vat": vat, "grand": grand, "number": number, "stated": stated, "blanks": blanks,
+            "summary": summary}
 
-    number = _next_number()
+
+def _return(m: dict, path: str) -> dict:
+    return {"path": path, "number": m["number"], "title": m["title"], "summary": m["summary"],
+            "company": m["company"], "customer": m["customer"], "total": m["grand"], "currency": m["cur"],
+            "blanks": m["blanks"], "stated": m["stated"], "preset": m["preset"]}
+
+
+# ---------------------------------------------------------------------------
+# Render — PDF
+# ---------------------------------------------------------------------------
+
+def generate(company: str, preset: str = "ai-production", *, customer: str = "", sections: list | None = None,
+             total: float | None = None, total_inclusive: bool = False, title: str | None = None,
+             note: str | None = None, agency_fee: bool | None = None, terms: dict | None = None,
+             deliverables: list | None = None, number: str | None = None, out_dir: str = "/tmp") -> dict:
+    """Build the house-format quotation PDF for `company`. See `_resolve` for the pricing modes.
+    Returns {path, number, title, summary, company, customer, total, currency, blanks, stated, preset}.
+    """
+    m = _resolve(company, preset, customer=customer, sections=sections, total=total,
+                 total_inclusive=total_inclusive, title=title, note=note, agency_fee=agency_fee,
+                 terms=terms, deliverables=deliverables, number=number)
+    company, co, data, title, note = m["company"], m["co"], m["data"], m["title"], m["note"]
+    agency_fee, terms, deliverables = m["agency_fee"], m["terms"], m["deliverables"]
+    cur, vat_rate, sections = m["cur"], m["vat_rate"], m["sections"]
+    subtotal, fee, vat, grand = m["subtotal"], m["fee"], m["vat"], m["grand"]
+    number, blanks, stated, customer = m["number"], m["blanks"], m["stated"], m["customer"]
     today = datetime.date.today().strftime("%d %b %Y")
 
     # ---- brand ----
@@ -277,6 +310,14 @@ def generate(company: str, preset: str = "ai-production", *, customer: str = "",
 
     story: list = [band, Spacer(1, 8), meta,
                    HRFlowable(width="100%", thickness=1, color=ACCENT, spaceBefore=8, spaceAfter=8)]
+
+    # ---- deliverables (what the client receives) ----
+    if deliverables:
+        story.append(Paragraph("DELIVERABLES", TH))
+        for d in deliverables:
+            story.append(Paragraph(f"•&nbsp;&nbsp;{d}", TD))
+        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#dde"),
+                                spaceBefore=7, spaceAfter=8))
 
     # ---- line-item table ----
     rows = [[Paragraph("DESCRIPTION", TH), Paragraph("QTY", THR), Paragraph("UNIT", THR),
@@ -377,3 +418,205 @@ def generate(company: str, preset: str = "ai-production", *, customer: str = "",
     return {"path": path, "number": number, "title": title, "summary": summary, "company": company,
             "customer": customer, "total": grand, "currency": cur, "blanks": blanks, "stated": stated,
             "preset": preset}
+
+
+# ---------------------------------------------------------------------------
+# Render — XLSX (same house format, editable, with live-recalculating totals)
+# ---------------------------------------------------------------------------
+
+def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str = "",
+                  sections: list | None = None, total: float | None = None, total_inclusive: bool = False,
+                  title: str | None = None, note: str | None = None, agency_fee: bool | None = None,
+                  terms: dict | None = None, deliverables: list | None = None, number: str | None = None,
+                  out_dir: str = "/tmp") -> dict:
+    """Build the house-format quotation as an editable .xlsx: brand band, a Deliverables block, the line-item
+    table, then Subtotal/VAT/Total as live formulas (edit a line amount and it recalculates), payment + bank
+    band, acceptance, and Terms on a second sheet. Same model as the PDF (see `_resolve`)."""
+    from openpyxl import Workbook
+    from openpyxl.drawing.image import Image as XLImage
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    m = _resolve(company, preset, customer=customer, sections=sections, total=total,
+                 total_inclusive=total_inclusive, title=title, note=note, agency_fee=agency_fee,
+                 terms=terms, deliverables=deliverables, number=number)
+    co, data, cur, vat_rate = m["co"], m["data"], m["cur"], m["vat_rate"]
+    brand = data.get("brand") or {}
+    palette = brand.get("colors") or {}
+    BG = palette.get("bg", "#0A0A0A").lstrip("#")
+    ACCENT = palette.get("primary", "#00DAFF").lstrip("#")
+    INK, GREY, LIGHT, DDE, WHITE = "15202B", "667788", "EEF3F5", "DDDDEE", "FFFFFF"
+    money = f'"{cur}" #,##0.00'
+    L = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    Rt = Alignment(horizontal="right", vertical="center")
+    C = Alignment(horizontal="center", vertical="center")
+    fillOf = lambda h: PatternFill("solid", fgColor=h)  # noqa: E731
+    accent_b = Border(bottom=Side(style="medium", color=ACCENT))
+    dde_b = Border(bottom=Side(style="thin", color=DDE))
+    grey_b = Border(bottom=Side(style="thin", color="AAB1BA"))
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Quotation"
+    ws.sheet_view.showGridLines = False
+    for c, w in {"A": 56, "B": 8, "C": 17, "D": 17}.items():
+        ws.column_dimensions[c].width = w
+
+    # --- header band (rows 1-2): dark fill, logo left, QUOTATION right ---
+    for rr in (1, 2):
+        ws.row_dimensions[rr].height = 22
+        for cc in "ABCD":
+            ws[f"{cc}{rr}"].fill = fillOf(BG)
+    ws["D2"] = "QUOTATION"; ws["D2"].font = Font(bold=True, size=15, color=WHITE); ws["D2"].alignment = Rt
+    b64 = brand.get("logo_dark_b64")
+    if b64:
+        try:
+            xi = XLImage(io.BytesIO(base64.b64decode(b64.split(",")[-1])))
+            ratio = xi.width / float(xi.height or 1)
+            xi.height = 30; xi.width = 30 * ratio
+            xi.anchor = "A1"
+            ws.add_image(xi)
+        except Exception:  # noqa: BLE001 — bad/absent logo must never break the sheet
+            pass
+
+    r = 4
+    ws[f"A{r}"] = m["title"]; ws[f"A{r}"].font = Font(bold=True, size=15, color=INK)
+    ws[f"D{r}"] = "PREPARED FOR"; ws[f"D{r}"].font = Font(bold=True, size=8, color=ACCENT); ws[f"D{r}"].alignment = Rt
+    ws[f"A{r+1}"] = f"Quotation {m['number']}  ·  {datetime.date.today().strftime('%d %b %Y')}"
+    ws[f"A{r+1}"].font = Font(size=9, color=GREY)
+    ws[f"D{r+1}"] = m["customer"] or ""; ws[f"D{r+1}"].alignment = Rt; ws[f"D{r+1}"].font = Font(size=10, color=INK)
+    ws[f"D{r+2}"] = "VALID FOR 30 DAYS"; ws[f"D{r+2}"].font = Font(bold=True, size=8, color=ACCENT); ws[f"D{r+2}"].alignment = Rt
+    r += 3
+
+    # --- deliverables ---
+    if m["deliverables"]:
+        r += 1
+        ws[f"A{r}"] = "DELIVERABLES"; ws[f"A{r}"].font = Font(bold=True, size=9, color=ACCENT)
+        r += 1
+        for d in m["deliverables"]:
+            ws.merge_cells(f"A{r}:D{r}")
+            ws[f"A{r}"] = f"•  {d}"; ws[f"A{r}"].font = Font(size=10, color=INK); ws[f"A{r}"].alignment = L
+            r += 1
+        for cc in "ABCD":
+            ws[f"{cc}{r}"].border = dde_b
+        r += 1
+
+    # --- line-item table header ---
+    hdr = {"A": "DESCRIPTION", "B": "QTY", "C": "UNIT", "D": "AMOUNT"}
+    for cc, lab in hdr.items():
+        cell = ws[f"{cc}{r}"]; cell.value = lab; cell.font = Font(bold=True, size=8, color=ACCENT)
+        cell.border = accent_b; cell.alignment = Rt if cc in "BCD" else L
+    r += 1
+    amt_first = None
+    for s in m["sections"]:
+        ws.merge_cells(f"A{r}:D{r}")
+        ws[f"A{r}"] = s["header"]; ws[f"A{r}"].font = Font(bold=True, size=9, color=WHITE)
+        for cc in "ABCD":
+            ws[f"{cc}{r}"].fill = fillOf(INK)
+        r += 1
+        for it in s.get("items", []):
+            unit = it.get("unit"); qty = it.get("qty") or 1; amt = it.get("_amount")
+            ws[f"A{r}"] = it["desc"]; ws[f"A{r}"].font = Font(size=10, color=INK); ws[f"A{r}"].alignment = L
+            if unit not in (None, ""):        # explicit unit pricing -> editable qty x unit formula
+                ws[f"B{r}"] = qty; ws[f"B{r}"].alignment = C
+                ws[f"C{r}"] = float(unit); ws[f"C{r}"].number_format = money; ws[f"C{r}"].alignment = Rt
+                ws[f"D{r}"] = f"=B{r}*C{r}"
+            elif amt is not None:             # allocation ("fair rates") -> fixed line amount
+                ws[f"D{r}"] = amt
+            else:                             # blank template -> editable formula (0 until qty+unit typed)
+                ws[f"C{r}"].number_format = money; ws[f"C{r}"].alignment = Rt; ws[f"B{r}"].alignment = C
+                ws[f"D{r}"] = f"=B{r}*C{r}"
+            ws[f"D{r}"].number_format = money; ws[f"D{r}"].alignment = Rt
+            for cc in "ABCD":
+                ws[f"{cc}{r}"].border = dde_b
+            amt_first = amt_first or r
+            r += 1
+    amt_last = r - 1
+
+    # --- totals (live formulas over the amount column) ---
+    rng = f"D{amt_first}:D{amt_last}" if amt_first else "D1:D1"
+    r += 1
+    ws[f"C{r}"] = "Subtotal"; ws[f"C{r}"].alignment = Rt; ws[f"C{r}"].font = Font(size=10, color=INK)
+    ws[f"D{r}"] = f"=SUM({rng})"; ws[f"D{r}"].number_format = money; ws[f"D{r}"].alignment = Rt
+    sub_row = r
+    if m["agency_fee"]:
+        r += 1
+        ws[f"C{r}"] = "Agency fee (15%)"; ws[f"C{r}"].alignment = Rt; ws[f"C{r}"].font = Font(size=10, color=INK)
+        ws[f"D{r}"] = f"=D{sub_row}*0.15"; ws[f"D{r}"].number_format = money; ws[f"D{r}"].alignment = Rt
+        fee_row = r
+        base = f"(D{sub_row}+D{fee_row})"
+    else:
+        base = f"D{sub_row}"
+    r += 1
+    ws[f"C{r}"] = f"VAT ({int(vat_rate*100)}%)"; ws[f"C{r}"].alignment = Rt; ws[f"C{r}"].font = Font(size=10, color=INK)
+    ws[f"D{r}"] = f"={base}*{vat_rate}"; ws[f"D{r}"].number_format = money; ws[f"D{r}"].alignment = Rt
+    vat_row = r
+    r += 1
+    ws[f"C{r}"] = "Total"; ws[f"C{r}"].alignment = Rt; ws[f"C{r}"].font = Font(bold=True, size=11, color=INK)
+    ws[f"D{r}"] = f"={base}+D{vat_row}"; ws[f"D{r}"].number_format = money; ws[f"D{r}"].alignment = Rt
+    ws[f"D{r}"].font = Font(bold=True, size=11, color=INK)
+    ws[f"C{r}"].border = accent_b; ws[f"D{r}"].border = accent_b
+    if m["note"]:
+        r += 1
+        ws.merge_cells(f"A{r}:D{r}")
+        ws[f"A{r}"] = m["note"]; ws[f"A{r}"].font = Font(italic=True, size=8, color=GREY); ws[f"A{r}"].alignment = L
+
+    # --- payment + bank band ---
+    r += 2
+    pay_top = r
+    ws[f"A{r}"] = "PAYMENT"; ws[f"A{r}"].font = Font(bold=True, size=8, color=ACCENT)
+    ws[f"C{r}"] = "BANK DETAILS"; ws[f"C{r}"].font = Font(bold=True, size=8, color=ACCENT)
+    r += 1
+    ws.merge_cells(f"A{r}:B{r+2}")
+    ws[f"A{r}"] = ("70% down payment to commence; 30% balance before final delivery, on approval.\n"
+                   f"All prices in {cur}, exclusive of {int(vat_rate*100)}% VAT.")
+    ws[f"A{r}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+    ws[f"A{r}"].font = Font(size=9, color=INK)
+    ws.merge_cells(f"C{r}:D{r+2}")
+    ws[f"C{r}"] = data.get("bank_details") or ""
+    ws[f"C{r}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+    ws[f"C{r}"].font = Font(size=8, color=INK)
+    for rr in range(pay_top, r + 3):
+        ws.row_dimensions[rr].height = 15
+        for cc in "ABCD":
+            ws[f"{cc}{rr}"].fill = fillOf(LIGHT)
+    r += 3
+
+    # --- acceptance ---
+    r += 2
+    ws[f"A{r}"] = "Accepted by (name & signature)"; ws[f"A{r}"].font = Font(size=8, color=GREY)
+    ws[f"C{r}"] = "Date"; ws[f"C{r}"].font = Font(size=8, color=GREY)
+    r += 2
+    ws[f"A{r}"].border = grey_b; ws[f"B{r}"].border = grey_b
+    ws[f"C{r}"].border = grey_b; ws[f"D{r}"].border = grey_b
+
+    # --- footer line ---
+    r += 2
+    phone = (data.get("phone") or "").split(";")[0].strip()
+    ws.merge_cells(f"A{r}:D{r}")
+    ws[f"A{r}"] = " · ".join(x for x in [co["name"], phone, data.get("inbox_email") or ""] if x)
+    ws[f"A{r}"].font = Font(size=7, color=GREY)
+
+    # --- sheet 2: terms ---
+    terms = m["terms"]
+    if terms:
+        t2 = wb.create_sheet("Terms & Conditions")
+        t2.sheet_view.showGridLines = False
+        t2.column_dimensions["A"].width = 118
+        tr = 1
+        t2[f"A{tr}"] = "Terms & Conditions"; t2[f"A{tr}"].font = Font(bold=True, size=14, color=INK); tr += 2
+        if terms.get("intro"):
+            t2[f"A{tr}"] = terms["intro"]; t2[f"A{tr}"].font = Font(size=9, color=INK)
+            t2[f"A{tr}"].alignment = Alignment(wrap_text=True, vertical="top"); t2.row_dimensions[tr].height = 30
+            tr += 1
+        for g in terms.get("groups", []):
+            tr += 1
+            t2[f"A{tr}"] = g["heading"]; t2[f"A{tr}"].font = Font(bold=True, size=10, color=ACCENT); tr += 1
+            for ln in g.get("lines", []):
+                t2[f"A{tr}"] = ln; t2[f"A{tr}"].font = Font(size=9, color=INK)
+                t2[f"A{tr}"].alignment = Alignment(wrap_text=True, vertical="top")
+                t2.row_dimensions[tr].height = 26; tr += 1
+
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"quotation-{m['company']}-{m['number']}.xlsx")
+    wb.save(path)
+    return _return(m, path)
