@@ -1278,7 +1278,7 @@ function cadenceText(t){
   return `Weekly · ${DOW[t.weekday||0]} ${pad2(t.hour)}:${pad2(t.minute)}`;
 }
 function whenText(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString([],{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; } }
-function kindLabel(k){ return {blog:'blog post',blog_scheduled:'blog post (queued)',newsletter_idea:'newsletter idea',newsletter_review:'newsletter ready to schedule',newsletter_send:'newsletter due to send',newsletter_scheduled:'newsletter (queued)',email_draft:'email draft',email_reply:'email reply',seo_report:'SEO & Traffic report',report:'report'}[k]||k||'task'; }
+function kindLabel(k){ return {blog:'blog post',blog_scheduled:'blog post (queued)',newsletter_idea:'newsletter idea',newsletter_review:'newsletter ready to schedule',newsletter_send:'newsletter due to send',newsletter_scheduled:'newsletter (queued)',email_draft:'email draft',email_reply:'email reply',seo_report:'SEO & Traffic report',report:'report',quotation:'quotation'}[k]||k||'task'; }
 let calLinks={};
 function calLinkBtn(t){
   if(!t.link) return '';
@@ -1526,6 +1526,7 @@ function actionCard(t){
     const co=t.company||compName(t.company_id), sk=t.skill||'';
     const wp=t.wp||null, em=t.email||null;
     if(t.kind==='report') return reportCard(t,co);
+    if(t.kind==='quotation') return quotationCard(t,co);
     if(t.kind==='social_shift') return socialShiftCard(t,co);
     if(t.kind==='social_relogin') return socialReloginCard(t,co);
     if(t.kind==='social_action') return socialActionCard(t,co);
@@ -1610,6 +1611,19 @@ function reportCard(t,co){
       <button class="btn bad" onclick="act(${t.id},'skip')">Dismiss</button>
     </div></div>`;
 }
+function quotationCard(t,co){
+  const r=t.request||{};
+  const blanks=r.blanks?`<div class="meta" style="margin:2px 0 0;opacity:.8">${ic('spark',12)} ${r.blanks} price(s) left blank — reply with the figures to re-render</div>`:'';
+  return `<div class="card" id="t${t.id}">
+    <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${ic('file',13)} quotation</span>${r.number?`<span class="chip">${esc(r.number)}</span>`:''}</div>
+    <div class="title">${esc(r.title||'Quotation')}</div>
+    <div class="body">${esc(t.draft||r.summary||'')}</div>${blanks}
+    <div class="row" style="margin:4px 0 9px"><button class="btn go" onclick="openQuotation(${t.id})">${ic('file',16)} Open quotation (PDF)</button></div>
+    <div class="row">
+      <button class="btn" onclick="act(${t.id},'approve')">${ic('check',16)} Mark as seen</button>
+      <button class="btn bad" onclick="act(${t.id},'skip')">Dismiss</button>
+    </div></div>`;
+}
 function socialShiftCard(t,co){
   const r=t.request||{}, p=r.plan||{}, sk=t.skill||'LinkedIn outreach';
   const warm=String(r.phase||'').toLowerCase().indexOf('warm')>=0;
@@ -1683,6 +1697,14 @@ async function openReport(id){
     if(!r.ok) throw new Error(r.status);
     const u=URL.createObjectURL(await r.blob()); window.open(u,'_blank'); setTimeout(()=>URL.revokeObjectURL(u),60000);
   }catch(e){ toast('Could not open report ('+e.message+')'); }
+}
+async function openQuotation(id){
+  try{
+    toast('Opening…');
+    const r=await fetch(API+'/api/quotation/'+id+'/pdf',{headers:token?{Authorization:'Bearer '+token}:{}});
+    if(!r.ok) throw new Error(r.status);
+    const u=URL.createObjectURL(await r.blob()); window.open(u,'_blank'); setTimeout(()=>URL.revokeObjectURL(u),60000);
+  }catch(e){ toast('Could not open quotation ('+e.message+')'); }
 }
 function compName(id){ const c=companies.find(c=>c.id===id); return c?c.name:''; }
 

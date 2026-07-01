@@ -14,7 +14,8 @@ import mimetypes
 from . import config
 
 PUBLIC_BASE = "https://media.coretex.uk"
-TYPES = {"logos", "signatures", "newsletters", "blog", "pages", "social", "video", "brand", "misc"}
+TYPES = {"logos", "signatures", "newsletters", "blog", "pages", "social", "video", "brand", "quotations",
+         "misc"}
 STATUSES = {"published", "draft", "archived"}
 
 

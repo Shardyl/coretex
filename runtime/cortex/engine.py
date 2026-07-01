@@ -24,8 +24,8 @@ from datetime import datetime, timedelta, timezone
 
 from psycopg.types.json import Json
 
-from . import (contentqueue, crm, db, gmail, manager, newsletter, notifications, profile, provider,
-               reminders, schedule, seo_report, store, webauthn_auth, worker)
+from . import (contentqueue, crm, db, gmail, manager, media, newsletter, notifications, profile, provider,
+               quotation, reminders, schedule, seo_report, store, webauthn_auth, worker)
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -47,6 +47,7 @@ _CONFIRM_PUBLIC = {"newsletter_review", "newsletter_send"}        # the action h
 KIND_CLASS = {
     "content": "internal", "draft": "internal", "research": "internal", "summary": "internal",
     "report": "internal", "seo_report": "internal", "crm_update": "internal", "internal_note": "internal",
+    "quotation": "internal",   # a downloadable quote card; SENDING it to a client is a separate outward step
     "email_reply": "outward", "email_draft": "outward", "email_send": "outward", "blog": "outward",
     "blog_idea": "internal", "blog_scheduled": "outward",
     "newsletter_idea": "outward", "newsletter_review": "outward", "newsletter_send": "outward",
@@ -2002,6 +2003,37 @@ def deliver_seo_report(company: str, days: int = 28) -> dict:
         "insert into tasks (company_id,skill_id,kind,request,draft,status) "
         "values (%s,%s,'report',%s,%s,'awaiting_approval') returning *",
         (g["company_id"], g["skill_id"], Json(g["request"]), g["summary"]))
+
+
+QUOTES_DIR = "/opt/coretex/quotations"     # generated quotation PDFs (persisted, served to the Inbox)
+QUOTE_SKILL_KEY = "sales-quotation"        # quotes land under the company's Sales & Inquiries lane
+
+
+def deliver_quotation(company: str, *, preset: str = "ai-production", customer: str = "",
+                      total: float | None = None, total_inclusive: bool = False, sections: list | None = None,
+                      title: str | None = None, note: str | None = None) -> dict:
+    """Render a quotation PDF and drop it in the Inbox as a downloadable card (kind='quotation'). Also stores
+    the delivery copy in R2 under <slug>/quotations/draft/. Prices come from the request (a stated total split
+    by weight, or explicit line units); the model never invents a figure. See quotation.py."""
+    os.makedirs(QUOTES_DIR, exist_ok=True)
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise ValueError(f"unknown company {company}")
+    q = quotation.generate(company, preset, customer=customer, total=total, total_inclusive=total_inclusive,
+                           sections=sections, title=title, note=note, out_dir=QUOTES_DIR)
+    r2_url = None
+    try:   # R2 is the delivery library (Company Standard); never let an upload hiccup lose the Inbox card
+        r2_url = media.put_file(company, "quotations", q["path"], status="draft")
+    except Exception as e:  # noqa: BLE001
+        tg.send(f"Quotation {q['number']} rendered but R2 upload failed ({e}); the Inbox download still works.")
+    skill = store.get_skill_by_key(co["id"], QUOTE_SKILL_KEY)
+    req = {"kind": "quotation", "company": company, "file": q["path"], "r2_url": r2_url,
+           "number": q["number"], "title": q["title"], "summary": q["summary"], "customer": customer,
+           "preset": preset, "total": q["total"], "currency": q["currency"], "blanks": q["blanks"]}
+    return db.execute(
+        "insert into tasks (company_id,skill_id,kind,request,draft,status,origin,title) "
+        "values (%s,%s,'quotation',%s,%s,'awaiting_approval','talk',%s) returning *",
+        (co["id"], skill["id"] if skill else None, Json(req), q["summary"], q["title"]))
 
 
 def _run_report_task(task: dict) -> None:

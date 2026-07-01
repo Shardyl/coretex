@@ -152,7 +152,7 @@ def chat(system: str, messages: list[dict], *, max_tokens: int = 1000,
 # inventing a task number) WITHOUT calling the tool that actually does it — silently losing his work. These
 # helpers let chat_tools / chat_tools_stream detect a creation CLAIM with no creating-tool call, force one
 # real corrective attempt, and never let a false confirmation stand.
-_CREATING_TOOLS = {"create_task", "draft_email", "run_report", "schedule_report",
+_CREATING_TOOLS = {"create_task", "draft_email", "run_report", "schedule_report", "create_quotation",
                    "set_reminder", "create_contact", "create_deal"}
 _CLAIM_RE = re.compile(
     r"(?:task\s*#?\s*\d+"

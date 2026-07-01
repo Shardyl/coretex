@@ -1138,6 +1138,27 @@ def report_pdf(tid: int, _: None = Depends(auth)) -> FileResponse:
     return FileResponse(path, media_type="application/pdf", filename=name)
 
 
+@app.post("/api/quotation/run")
+def quotation_run(company: str, preset: str = "ai-production", customer: str = "",
+                  total: float | None = None, _: None = Depends(auth)) -> dict:
+    """Render a one-off quotation now and put it in the Inbox as a downloadable card."""
+    if not store.get_company_by_slug(company):
+        raise HTTPException(status_code=400, detail=f"unknown company {company}")
+    t = engine.deliver_quotation(company, preset=preset, customer=customer, total=total)
+    return {"ok": True, "task_id": t["id"], "summary": t.get("draft")}
+
+
+@app.get("/api/quotation/{tid}/pdf")
+def quotation_pdf(tid: int, _: None = Depends(auth)) -> FileResponse:
+    t = store.get_task(tid)
+    if not t or t["kind"] != "quotation":
+        raise HTTPException(status_code=404, detail="not a quotation")
+    path = (t.get("request") or {}).get("file")
+    if not path or not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="quotation file missing")
+    return FileResponse(path, media_type="application/pdf", filename=os.path.basename(path))
+
+
 @app.get("/api/inbox/history")
 def inbox_history(q: str | None = None, start: str | None = None, end: str | None = None,
                   company: str | None = None, limit: int = 80, u: dict = Depends(current_user)) -> list[dict]:
@@ -2656,6 +2677,22 @@ SKILL_TOOLS = [
     {"name": "run_report",
      "description": "Generate the SEO & traffic report for a business right now; it lands in the Inbox.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}, "required": ["company"]}},
+    {"name": "create_quotation",
+     "description": "Produce a branded, house-format QUOTATION PDF and drop it in the Inbox as a downloadable "
+                    "card. Use when Rashad asks to 'quote', 'do a quotation / quote', or 'price up' a job. Prices: "
+                    "pass `total` = the overall figure he states and Cortex splits it fairly across the line items "
+                    "(NEVER invent or guess a total — if he hasn't given one, omit it and the quote renders with "
+                    "blank prices). `total_inclusive`=true if the figure he gave already includes VAT (default is "
+                    "the pre-VAT fee, VAT added on top). `preset` selects the line-item breakdown; 'ai-production' "
+                    "(AI video: concept/treatment/scripting/storyboard/frames/generation/sound/music/render) is "
+                    "the default. `customer` is the client name for the PREPARED FOR field.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"},
+        "preset": {"type": "string", "description": "line-item breakdown; default 'ai-production'"},
+        "customer": {"type": "string", "description": "the client name for the quote"},
+        "total": {"type": "number", "description": "the overall figure Rashad states; split into fair line rates. Omit if he gave none."},
+        "total_inclusive": {"type": "boolean", "description": "true if `total` already includes VAT"}},
+        "required": ["company"]}},
     {"name": "list_scheduled",
      "description": "List the scheduled recurring jobs (e.g. SEO reports).",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}}},
@@ -2826,6 +2863,16 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
     if name == "run_report":
         t = engine.deliver_seo_report(inp.get("company", "tabscanner"), days=28)
         return f"generated the report — it's in your Inbox now (task #{t['id']})"
+    if name == "create_quotation":
+        slug = inp.get("company")
+        if not slug or not store.get_company_by_slug(slug):
+            return f"unknown business '{slug}' — tell me which of your businesses this quote is for"
+        t = engine.deliver_quotation(slug, preset=inp.get("preset") or "ai-production",
+                                     customer=inp.get("customer", ""), total=inp.get("total"),
+                                     total_inclusive=bool(inp.get("total_inclusive")))
+        req = t.get("request") or {}
+        return (f"created quotation {req.get('number')} — it's in your Inbox now to download (task #{t['id']}). "
+                f"{req.get('summary', '')}")
     if name == "list_scheduled":
         co = store.get_company_by_slug(inp["company"]) if inp.get("company") else None
         flt, p = (" and company_id=%s", (co["id"],)) if co else ("", ())
@@ -3052,7 +3099,8 @@ _CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "cr
                 # Chiefs can also DRAFT and look people up — anyone Rashad talks to should be able to act on a
                 # request, not just strategise. (Per-company RULE writes stay Manager-only to avoid scope bleed.)
                 "create_task", "draft_email", "draft", "crm_lookup", "crm_pipeline", "correct_task",
-                "approve_task", "skip_task", "run_report", "schedule_report", "list_scheduled", "list_calendar",
+                "approve_task", "skip_task", "run_report", "schedule_report", "create_quotation",
+                "list_scheduled", "list_calendar",
                 "remember_preference", "forget_preference", "list_preferences"}
 
 
