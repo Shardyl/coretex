@@ -2024,31 +2024,37 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
               title=title, note=note, out_dir=QUOTES_DIR)
     want_pdf = fmt in ("both", "pdf")
     want_xlsx = fmt in ("both", "xlsx")
-    q = quotation.generate(company, preset, **kw) if want_pdf else None
-    number = q["number"] if q else None
-    x = quotation.generate_xlsx(company, preset, number=number, **kw) if want_xlsx else None
-    base = q or x   # whichever ran carries the shared number/title/summary/total
-    number = base["number"]
+    # The house-format .xlsx is the single source of truth; the PDF is that same sheet converted by
+    # LibreOffice, so both files match exactly (fonts + layout). Always render the xlsx (it's the PDF source).
+    x = quotation.generate_xlsx(company, preset, **kw)
+    number = x["number"]
+    pdf_path = None
+    if want_pdf:
+        try:
+            pdf_path = quotation.xlsx_to_pdf(x["path"], QUOTES_DIR)
+        except Exception as e:  # noqa: BLE001 — never lose the card if the converter hiccups
+            tg.send(f"Quotation {number} PDF conversion failed ({e}); the spreadsheet is still delivered.")
+    xlsx_path = x["path"] if want_xlsx else None   # pdf-only still renders the xlsx as the source, just not delivered
 
-    def _r2(res, kind):
-        if not res:
+    def _r2(path, kind):
+        if not path:
             return None
         try:   # R2 is the delivery library (Company Standard); never let an upload hiccup lose the Inbox card
-            return media.put_file(company, "quotations", res["path"], status="draft")
+            return media.put_file(company, "quotations", path, status="draft")
         except Exception as e:  # noqa: BLE001
             tg.send(f"Quotation {number} {kind} rendered but R2 upload failed ({e}); the Inbox download works.")
             return None
 
     skill = store.get_skill_by_key(co["id"], QUOTE_SKILL_KEY)
     req = {"kind": "quotation", "company": company,
-           "file": q["path"] if q else None, "r2_url": _r2(q, "pdf"),
-           "xlsx_file": x["path"] if x else None, "xlsx_r2_url": _r2(x, "xlsx"),
-           "number": number, "title": base["title"], "summary": base["summary"], "customer": customer,
-           "preset": preset, "total": base["total"], "currency": base["currency"], "blanks": base["blanks"]}
+           "file": pdf_path, "r2_url": _r2(pdf_path, "pdf"),
+           "xlsx_file": xlsx_path, "xlsx_r2_url": _r2(xlsx_path, "xlsx"),
+           "number": number, "title": x["title"], "summary": x["summary"], "customer": customer,
+           "preset": preset, "total": x["total"], "currency": x["currency"], "blanks": x["blanks"]}
     return db.execute(
         "insert into tasks (company_id,skill_id,kind,request,draft,status,origin,title) "
         "values (%s,%s,'quotation',%s,%s,'awaiting_approval','talk',%s) returning *",
-        (co["id"], skill["id"] if skill else None, Json(req), base["summary"], base["title"]))
+        (co["id"], skill["id"] if skill else None, Json(req), x["summary"], x["title"]))
 
 
 def _run_report_task(task: dict) -> None:

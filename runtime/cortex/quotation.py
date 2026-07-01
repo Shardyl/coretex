@@ -421,202 +421,306 @@ def generate(company: str, preset: str = "ai-production", *, customer: str = "",
 
 
 # ---------------------------------------------------------------------------
-# Render — XLSX (same house format, editable, with live-recalculating totals)
+# Render — XLSX (the Sensa house quotation format: Poppins/Calibri, teal banners,
+# terms directly underneath on the same sheet; a faithful port of the sensa-quotation
+# skill's make_quote.js so a Cortex-requested quote matches the operator's template).
+# The quotation STYLE is fixed house design; company DATA comes from the profile.
 # ---------------------------------------------------------------------------
+
+# ARGB palette + type (matches make_quote.js)
+_BLACK, _CYAN, _TEAL, _TEALTX = "FF0A0A0A", "FF00DAFF", "FF0E2A30", "FF0A7C8C"
+_INK, _MUTE, _ALT, _ENTER, _WHT = "FF1A1A1A", "FF5F6B70", "FFEEF7F9", "FFFFFDF0", "FFFFFFFF"
+_DISP, _BODYF = "Poppins", "Calibri"
+
+
+def _house_bits(m: dict) -> dict:
+    """Per-company house details for the quotation header/footer, read from the profile."""
+    data, co = m["data"], m["co"]
+    addr = (data.get("address") or "").replace("\n", ", ")
+    web = data.get("live_site") or (("https://" + (data.get("domains") or [""])[0]) if data.get("domains") else "")
+    bank_raw = (data.get("bank_details") or "").replace(" - ", "\n")
+    bank = [ln.strip() for ln in bank_raw.split("\n") if ln.strip()]
+    right = [f"Phone:  {data.get('phone','').split(';')[0].strip()}",
+             f"Email:  {data.get('inbox_email','')}"]
+    if web:
+        right.append(f"Web:  {web}")
+    return {"name": co["name"], "addr": addr, "right": right, "bank": bank}
+
+
+def _logo_on_black(b64: str):
+    """Decode the brand logo and flatten it onto an opaque black tile (avoids the transparent-PNG green
+    fringing that Google/Excel PDF export shows). Returns a BytesIO PNG or None."""
+    if not b64:
+        return None
+    try:
+        from PIL import Image as PILImage
+        raw = base64.b64decode(b64.split(",")[-1])
+        logo = PILImage.open(io.BytesIO(raw)).convert("RGBA")
+        tile = PILImage.new("RGBA", logo.size, (10, 10, 10, 255))   # #0A0A0A
+        tile.alpha_composite(logo)
+        out = io.BytesIO()
+        tile.convert("RGB").save(out, format="PNG")
+        out.seek(0)
+        return out, logo.size
+    except Exception:  # noqa: BLE001 — a bad logo must never break the sheet
+        return None
+
 
 def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str = "",
                   sections: list | None = None, total: float | None = None, total_inclusive: bool = False,
                   title: str | None = None, note: str | None = None, agency_fee: bool | None = None,
                   terms: dict | None = None, deliverables: list | None = None, number: str | None = None,
                   out_dir: str = "/tmp") -> dict:
-    """Build the house-format quotation as an editable .xlsx: brand band, a Deliverables block, the line-item
-    table, then Subtotal/VAT/Total as live formulas (edit a line amount and it recalculates), payment + bank
-    band, acceptance, and Terms on a second sheet. Same model as the PDF (see `_resolve`)."""
+    """Build the quotation as the Sensa house-format .xlsx (single sheet, brand band, optional Deliverables
+    block, line-item table with =IF(D="",...) auto-totals, payment + bank, acceptance, then Terms directly
+    underneath). Same model + pricing modes as the PDF (see `_resolve`)."""
     from openpyxl import Workbook
     from openpyxl.drawing.image import Image as XLImage
-    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.styles import Alignment, Font, PatternFill
 
     m = _resolve(company, preset, customer=customer, sections=sections, total=total,
                  total_inclusive=total_inclusive, title=title, note=note, agency_fee=agency_fee,
                  terms=terms, deliverables=deliverables, number=number)
-    co, data, cur, vat_rate = m["co"], m["data"], m["cur"], m["vat_rate"]
-    brand = data.get("brand") or {}
-    palette = brand.get("colors") or {}
-    BG = palette.get("bg", "#0A0A0A").lstrip("#")
-    ACCENT = palette.get("primary", "#00DAFF").lstrip("#")
-    INK, GREY, LIGHT, DDE, WHITE = "15202B", "667788", "EEF3F5", "DDDDEE", "FFFFFF"
-    money = f'"{cur}" #,##0.00'
-    L = Alignment(horizontal="left", vertical="center", wrap_text=True)
-    Rt = Alignment(horizontal="right", vertical="center")
-    C = Alignment(horizontal="center", vertical="center")
-    fillOf = lambda h: PatternFill("solid", fgColor=h)  # noqa: E731
-    accent_b = Border(bottom=Side(style="medium", color=ACCENT))
-    dde_b = Border(bottom=Side(style="thin", color=DDE))
-    grey_b = Border(bottom=Side(style="thin", color="AAB1BA"))
+    hb = _house_bits(m)
+    cur, vat_rate = m["cur"], m["vat_rate"]
+    fee_on = m["agency_fee"]
+
+    def F(**kw):
+        return Font(name=kw.get("f", _BODYF), size=kw.get("s", 10), bold=kw.get("b", False),
+                    italic=kw.get("i", False), color=kw.get("c", _INK))
+
+    def fill(c, argb):
+        c.fill = PatternFill("solid", fgColor=argb)
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Quotation"
+    ws.title = (m["preset"][:31] or "Quotation")
     ws.sheet_view.showGridLines = False
-    for c, w in {"A": 56, "B": 8, "C": 17, "D": 17}.items():
-        ws.column_dimensions[c].width = w
+    for i, w in enumerate([4, 56, 6, 14, 15]):
+        ws.column_dimensions["ABCDE"[i]].width = w
+    money = "#,##0"
+    span = lambda rr: f"A{rr}:E{rr}"  # noqa: E731
 
-    # --- header band (rows 1-2): dark fill, logo left, QUOTATION right ---
-    for rr in (1, 2):
-        ws.row_dimensions[rr].height = 22
-        for cc in "ABCD":
-            ws[f"{cc}{rr}"].fill = fillOf(BG)
-    ws["D2"] = "QUOTATION"; ws["D2"].font = Font(bold=True, size=15, color=WHITE); ws["D2"].alignment = Rt
-    b64 = brand.get("logo_dark_b64")
-    if b64:
-        try:
-            xi = XLImage(io.BytesIO(base64.b64decode(b64.split(",")[-1])))
-            ratio = xi.width / float(xi.height or 1)
-            xi.height = 30; xi.width = 30 * ratio
-            xi.anchor = "A1"
-            ws.add_image(xi)
-        except Exception:  # noqa: BLE001 — bad/absent logo must never break the sheet
-            pass
+    # ---- header band ----
+    ws.merge_cells("A1:E4")
+    for i in range(1, 5):
+        ws.row_dimensions[i].height = 16
+    band = ws["A1"]
+    fill(band, _BLACK)
+    ttl = (m["title"] or "QUOTATION").upper()
+    band.value = ttl
+    band.font = F(f=_DISP, s=15 if len(ttl) > 28 else 18, b=True, c=_WHT)
+    band.alignment = Alignment(horizontal="right", vertical="center", indent=1)
+    ws.merge_cells("A5:E5"); ws.row_dimensions[5].height = 4; fill(ws["A5"], _CYAN)
+    ws.row_dimensions[6].height = 6
 
-    r = 4
-    ws[f"A{r}"] = m["title"]; ws[f"A{r}"].font = Font(bold=True, size=15, color=INK)
-    ws[f"D{r}"] = "PREPARED FOR"; ws[f"D{r}"].font = Font(bold=True, size=8, color=ACCENT); ws[f"D{r}"].alignment = Rt
-    ws[f"A{r+1}"] = f"Quotation {m['number']}  ·  {datetime.date.today().strftime('%d %b %Y')}"
-    ws[f"A{r+1}"].font = Font(size=9, color=GREY)
-    ws[f"D{r+1}"] = m["customer"] or ""; ws[f"D{r+1}"].alignment = Rt; ws[f"D{r+1}"].font = Font(size=10, color=INK)
-    ws[f"D{r+2}"] = "VALID FOR 30 DAYS"; ws[f"D{r+2}"].font = Font(bold=True, size=8, color=ACCENT); ws[f"D{r+2}"].alignment = Rt
-    r += 3
+    # ---- contact ----
+    r = 7
+    left = [(hb["name"], True), (hb["addr"], False), ("", False)]
+    for i in range(3):
+        ws.merge_cells(f"A{r}:B{r}"); ws.merge_cells(f"D{r}:E{r}")
+        a, d = ws[f"A{r}"], ws[f"D{r}"]
+        a.value = left[i][0]; a.font = F(s=11, b=left[i][1], c=_INK)
+        a.alignment = Alignment(vertical="center", wrap_text=True)
+        if i < len(hb["right"]):
+            d.value = hb["right"][i]; d.font = F(s=10, c=_MUTE); d.alignment = Alignment(horizontal="right")
+        r += 1
 
-    # --- deliverables ---
+    # ---- quotation to / details ----
+    ws.merge_cells(f"A{r}:B{r}"); ws.merge_cells(f"D{r}:E{r}")
+    for cc, lab in ((f"A{r}", "QUOTATION TO"), (f"D{r}", "QUOTATION DETAILS")):
+        ws[cc].value = lab; fill(ws[cc], _TEAL); ws[cc].font = F(s=10, b=True, c=_WHT)
+        ws[cc].alignment = Alignment(horizontal="left", indent=1)
+    r += 1
+    today = datetime.date.today()
+    valid = (today + datetime.timedelta(days=30)).strftime("%d %b %Y")
+    to_rows = [("Customer", customer or ""), ("Contact person", ""), ("Contact no.", ""), ("Email", "")]
+    det_rows = [("Quotation no.", m["number"]), ("Date", today.strftime("%d %b %Y")),
+                ("Valid until", valid), ("Currency", cur)]
+    for i in range(4):
+        ws.merge_cells(f"A{r}:B{r}"); ws.merge_cells(f"D{r}:E{r}")
+        for cc, (lab, val) in ((f"A{r}", to_rows[i]), (f"D{r}", det_rows[i])):
+            ws[cc].value = f"{lab}:  {val}" if val else f"{lab}:  "
+            ws[cc].font = F(s=11, c=_INK)
+            ws[cc].alignment = Alignment(indent=1, vertical="center")
+        ws.row_dimensions[r].height = 17
+        r += 1
+
+    # ---- deliverables (optional, above the line items) ----
     if m["deliverables"]:
-        r += 1
-        ws[f"A{r}"] = "DELIVERABLES"; ws[f"A{r}"].font = Font(bold=True, size=9, color=ACCENT)
-        r += 1
+        ws.merge_cells(span(r)); ws[f"A{r}"].value = "DELIVERABLES"; fill(ws[f"A{r}"], _ALT)
+        ws[f"A{r}"].font = F(s=10, b=True, c=_TEALTX); ws[f"A{r}"].alignment = Alignment(indent=1)
+        ws.row_dimensions[r].height = 18; r += 1
         for d in m["deliverables"]:
-            ws.merge_cells(f"A{r}:D{r}")
-            ws[f"A{r}"] = f"•  {d}"; ws[f"A{r}"].font = Font(size=10, color=INK); ws[f"A{r}"].alignment = L
-            r += 1
-        for cc in "ABCD":
-            ws[f"{cc}{r}"].border = dde_b
-        r += 1
+            ws.merge_cells(span(r)); ws[f"A{r}"].value = f"•  {d}"; ws[f"A{r}"].font = F(s=10, c=_INK)
+            ws[f"A{r}"].alignment = Alignment(indent=1, wrap_text=True, vertical="center")
+            ws.row_dimensions[r].height = 15; r += 1
+        ws.row_dimensions[r].height = 6; r += 1
 
-    # --- line-item table header ---
-    hdr = {"A": "DESCRIPTION", "B": "QTY", "C": "UNIT", "D": "AMOUNT"}
-    for cc, lab in hdr.items():
-        cell = ws[f"{cc}{r}"]; cell.value = lab; cell.font = Font(bold=True, size=8, color=ACCENT)
-        cell.border = accent_b; cell.alignment = Rt if cc in "BCD" else L
-    r += 1
-    amt_first = None
+    # ---- line-item header ----
+    for i, h in enumerate(["#", "Description", "Qty", "Unit (AED)", "Total (AED)"]):
+        c = ws.cell(row=r, column=i + 1, value=h); fill(c, _TEAL); c.font = F(s=10, b=True, c=_WHT)
+        c.alignment = Alignment(horizontal="center" if i >= 2 else "left", vertical="center",
+                                indent=0 if i >= 2 else 1)
+    ws.row_dimensions[r].height = 20; r += 1
+
+    idx = 0
+    item_start = r
     for s in m["sections"]:
-        ws.merge_cells(f"A{r}:D{r}")
-        ws[f"A{r}"] = s["header"]; ws[f"A{r}"].font = Font(bold=True, size=9, color=WHITE)
-        for cc in "ABCD":
-            ws[f"{cc}{r}"].fill = fillOf(INK)
-        r += 1
+        ws.merge_cells(span(r)); ws[f"A{r}"].value = s["header"]; fill(ws[f"A{r}"], _ALT)
+        ws[f"A{r}"].font = F(s=10.5, b=True, c=_TEALTX); ws[f"A{r}"].alignment = Alignment(indent=1, vertical="center")
+        ws.row_dimensions[r].height = 18; r += 1
         for it in s.get("items", []):
+            idx += 1
             unit = it.get("unit"); qty = it.get("qty") or 1; amt = it.get("_amount")
-            ws[f"A{r}"] = it["desc"]; ws[f"A{r}"].font = Font(size=10, color=INK); ws[f"A{r}"].alignment = L
-            if unit not in (None, ""):        # explicit unit pricing -> editable qty x unit formula
-                ws[f"B{r}"] = qty; ws[f"B{r}"].alignment = C
-                ws[f"C{r}"] = float(unit); ws[f"C{r}"].number_format = money; ws[f"C{r}"].alignment = Rt
-                ws[f"D{r}"] = f"=B{r}*C{r}"
-            elif amt is not None:             # allocation ("fair rates") -> fixed line amount
-                ws[f"D{r}"] = amt
-            else:                             # blank template -> editable formula (0 until qty+unit typed)
-                ws[f"C{r}"].number_format = money; ws[f"C{r}"].alignment = Rt; ws[f"B{r}"].alignment = C
-                ws[f"D{r}"] = f"=B{r}*C{r}"
-            ws[f"D{r}"].number_format = money; ws[f"D{r}"].alignment = Rt
-            for cc in "ABCD":
-                ws[f"{cc}{r}"].border = dde_b
-            amt_first = amt_first or r
-            r += 1
-    amt_last = r - 1
+            ws[f"A{r}"].value = idx; ws[f"A{r}"].alignment = Alignment(horizontal="center", vertical="top")
+            ws[f"A{r}"].font = F(s=10.5, c=_MUTE)
+            ws[f"B{r}"].value = it["desc"]; ws[f"B{r}"].alignment = Alignment(wrap_text=True, vertical="top")
+            ws[f"B{r}"].font = F(s=10.5, c=_INK)
+            # D holds the per-line price: an explicit unit, or an allocated lump (qty 1), or blank (cream).
+            if unit not in (None, ""):
+                dval, q = float(unit), qty
+            elif amt is not None:
+                dval, q = float(amt), 1
+            else:
+                dval, q = None, qty
+            ws[f"C{r}"].value = q; ws[f"C{r}"].alignment = Alignment(horizontal="center", vertical="top")
+            ws[f"C{r}"].font = F(s=10.5, c=_MUTE)
+            if dval is None:
+                fill(ws[f"D{r}"], _ENTER)
+            else:
+                ws[f"D{r}"].value = dval
+            ws[f"D{r}"].number_format = money; ws[f"D{r}"].alignment = Alignment(horizontal="right", vertical="top")
+            ws[f"D{r}"].font = F(s=10.5, c=_INK)
+            ws[f"E{r}"].value = f'=IF(D{r}="","",C{r}*D{r})'; ws[f"E{r}"].number_format = money
+            ws[f"E{r}"].alignment = Alignment(horizontal="right", vertical="top"); ws[f"E{r}"].font = F(s=10.5, c=_INK)
+            ws.row_dimensions[r].height = 15; r += 1
+    item_end = r - 1
 
-    # --- totals (live formulas over the amount column) ---
-    rng = f"D{amt_first}:D{amt_last}" if amt_first else "D1:D1"
-    r += 1
-    ws[f"C{r}"] = "Subtotal"; ws[f"C{r}"].alignment = Rt; ws[f"C{r}"].font = Font(size=10, color=INK)
-    ws[f"D{r}"] = f"=SUM({rng})"; ws[f"D{r}"].number_format = money; ws[f"D{r}"].alignment = Rt
-    sub_row = r
-    if m["agency_fee"]:
-        r += 1
-        ws[f"C{r}"] = "Agency fee (15%)"; ws[f"C{r}"].alignment = Rt; ws[f"C{r}"].font = Font(size=10, color=INK)
-        ws[f"D{r}"] = f"=D{sub_row}*0.15"; ws[f"D{r}"].number_format = money; ws[f"D{r}"].alignment = Rt
-        fee_row = r
-        base = f"(D{sub_row}+D{fee_row})"
-    else:
-        base = f"D{sub_row}"
-    r += 1
-    ws[f"C{r}"] = f"VAT ({int(vat_rate*100)}%)"; ws[f"C{r}"].alignment = Rt; ws[f"C{r}"].font = Font(size=10, color=INK)
-    ws[f"D{r}"] = f"={base}*{vat_rate}"; ws[f"D{r}"].number_format = money; ws[f"D{r}"].alignment = Rt
-    vat_row = r
-    r += 1
-    ws[f"C{r}"] = "Total"; ws[f"C{r}"].alignment = Rt; ws[f"C{r}"].font = Font(bold=True, size=11, color=INK)
-    ws[f"D{r}"] = f"={base}+D{vat_row}"; ws[f"D{r}"].number_format = money; ws[f"D{r}"].alignment = Rt
-    ws[f"D{r}"].font = Font(bold=True, size=11, color=INK)
-    ws[f"C{r}"].border = accent_b; ws[f"D{r}"].border = accent_b
     if m["note"]:
-        r += 1
-        ws.merge_cells(f"A{r}:D{r}")
-        ws[f"A{r}"] = m["note"]; ws[f"A{r}"].font = Font(italic=True, size=8, color=GREY); ws[f"A{r}"].alignment = L
+        ws.merge_cells(span(r)); ws[f"A{r}"].value = m["note"]; ws[f"A{r}"].font = F(s=9.5, i=True, c=_MUTE)
+        ws[f"A{r}"].alignment = Alignment(indent=1); r += 1
 
-    # --- payment + bank band ---
-    r += 2
-    pay_top = r
-    ws[f"A{r}"] = "PAYMENT"; ws[f"A{r}"].font = Font(bold=True, size=8, color=ACCENT)
-    ws[f"C{r}"] = "BANK DETAILS"; ws[f"C{r}"].font = Font(bold=True, size=8, color=ACCENT)
+    # ---- totals ----
+    def total_row(label, formula, big=False):
+        nonlocal r
+        ws.merge_cells(f"A{r}:C{r}")
+        lab = ws[f"A{r}"]; lab.value = label; lab.alignment = Alignment(horizontal="right", indent=1)
+        lab.font = F(f=_DISP if big else _BODYF, s=12 if big else 10.5, b=True, c=_WHT if big else _INK)
+        e = ws[f"E{r}"]; e.value = formula; e.number_format = money
+        e.alignment = Alignment(horizontal="right"); e.font = F(f=_DISP if big else _BODYF, s=12 if big else 10.5,
+                                                                b=True, c=_WHT if big else _INK)
+        if big:
+            for cc in (f"A{r}", f"D{r}", f"E{r}"):
+                fill(ws[cc], _BLACK)
+            ws.row_dimensions[r].height = 24
+        tr = r; r += 1; return tr
+    sub = total_row("Subtotal", f"=SUM(E{item_start}:E{item_end})")
+    base = f"E{sub}"
+    if fee_on:
+        ag = total_row("Agency fee @ 15%", f"=ROUND(E{sub}*0.15,2)"); base = f"E{sub}+E{ag}"
+    vat = total_row(f"VAT @ {int(vat_rate*100)}%", f"=ROUND(({base})*{vat_rate},2)")
+    total_row("TOTAL DUE (AED)", f"=({base})+E{vat}", big=True)
     r += 1
-    ws.merge_cells(f"A{r}:B{r+2}")
-    ws[f"A{r}"] = ("70% down payment to commence; 30% balance before final delivery, on approval.\n"
-                   f"All prices in {cur}, exclusive of {int(vat_rate*100)}% VAT.")
-    ws[f"A{r}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-    ws[f"A{r}"].font = Font(size=9, color=INK)
-    ws.merge_cells(f"C{r}:D{r+2}")
-    ws[f"C{r}"] = data.get("bank_details") or ""
-    ws[f"C{r}"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-    ws[f"C{r}"].font = Font(size=8, color=INK)
-    for rr in range(pay_top, r + 3):
-        ws.row_dimensions[rr].height = 15
-        for cc in "ABCD":
-            ws[f"{cc}{rr}"].fill = fillOf(LIGHT)
-    r += 3
 
-    # --- acceptance ---
-    r += 2
-    ws[f"A{r}"] = "Accepted by (name & signature)"; ws[f"A{r}"].font = Font(size=8, color=GREY)
-    ws[f"C{r}"] = "Date"; ws[f"C{r}"].font = Font(size=8, color=GREY)
-    r += 2
-    ws[f"A{r}"].border = grey_b; ws[f"B{r}"].border = grey_b
-    ws[f"C{r}"].border = grey_b; ws[f"D{r}"].border = grey_b
+    # ---- payment terms + bank ----
+    ws.merge_cells(f"A{r}:B{r}"); ws.merge_cells(f"D{r}:E{r}")
+    for cc, lab in ((f"A{r}", "PAYMENT TERMS"), (f"D{r}", "BANK DETAILS")):
+        ws[cc].value = lab; fill(ws[cc], _TEAL); ws[cc].font = F(s=10, b=True, c=_WHT)
+        ws[cc].alignment = Alignment(indent=1)
+    r += 1
+    pay = ["70% down payment to commence the project.",
+           "30% balance due before final delivery, on approval.",
+           "Two revisions included, within two weeks of delivery.",
+           f"All prices in {cur}, exclusive of {int(vat_rate*100)}% VAT."]
+    bank = hb["bank"]
+    for i in range(max(len(pay), len(bank))):
+        ws.merge_cells(f"A{r}:B{r}"); ws.merge_cells(f"D{r}:E{r}")
+        if i < len(pay):
+            ws[f"A{r}"].value = pay[i]; ws[f"A{r}"].font = F(s=9.5, c=_INK)
+            ws[f"A{r}"].alignment = Alignment(wrap_text=True, indent=1, vertical="center")
+        if i < len(bank):
+            ws[f"D{r}"].value = bank[i]; ws[f"D{r}"].font = F(s=9, b=(i == 0), c=_INK)
+            ws[f"D{r}"].alignment = Alignment(wrap_text=True, indent=1, vertical="center")
+        ws.row_dimensions[r].height = 24 if i == 0 else 14; r += 1
 
-    # --- footer line ---
-    r += 2
-    phone = (data.get("phone") or "").split(";")[0].strip()
-    ws.merge_cells(f"A{r}:D{r}")
-    ws[f"A{r}"] = " · ".join(x for x in [co["name"], phone, data.get("inbox_email") or ""] if x)
-    ws[f"A{r}"].font = Font(size=7, color=GREY)
+    # ---- acceptance ----
+    ws.merge_cells(span(r)); ws[f"A{r}"].value = "ACCEPTANCE"; fill(ws[f"A{r}"], _ALT)
+    ws[f"A{r}"].font = F(s=10, b=True, c=_TEALTX); ws[f"A{r}"].alignment = Alignment(indent=1); r += 1
+    for pair in (("Client name", "Signature"), ("Position", "Date")):
+        ws.merge_cells(f"A{r}:B{r}"); ws.merge_cells(f"D{r}:E{r}")
+        ws[f"A{r}"].value = f"{pair[0]}:  ______________________________"
+        ws[f"D{r}"].value = f"{pair[1]}:  ______________________________"
+        for cc in (f"A{r}", f"D{r}"):
+            ws[cc].font = F(s=10, c=_INK); ws[cc].alignment = Alignment(indent=1)
+        ws.row_dimensions[r].height = 19; r += 1
 
-    # --- sheet 2: terms ---
-    terms = m["terms"]
-    if terms:
-        t2 = wb.create_sheet("Terms & Conditions")
-        t2.sheet_view.showGridLines = False
-        t2.column_dimensions["A"].width = 118
-        tr = 1
-        t2[f"A{tr}"] = "Terms & Conditions"; t2[f"A{tr}"].font = Font(bold=True, size=14, color=INK); tr += 2
-        if terms.get("intro"):
-            t2[f"A{tr}"] = terms["intro"]; t2[f"A{tr}"].font = Font(size=9, color=INK)
-            t2[f"A{tr}"].alignment = Alignment(wrap_text=True, vertical="top"); t2.row_dimensions[tr].height = 30
-            tr += 1
-        for g in terms.get("groups", []):
-            tr += 1
-            t2[f"A{tr}"] = g["heading"]; t2[f"A{tr}"].font = Font(bold=True, size=10, color=ACCENT); tr += 1
-            for ln in g.get("lines", []):
-                t2[f"A{tr}"] = ln; t2[f"A{tr}"].font = Font(size=9, color=INK)
-                t2[f"A{tr}"].alignment = Alignment(wrap_text=True, vertical="top")
-                t2.row_dimensions[tr].height = 26; tr += 1
+    # ---- terms (flow straight on; a hard page break here leaves a half-empty page once deliverables exist) ----
+    r += 1
+    ws.merge_cells(span(r)); ws.row_dimensions[r].height = 26; fill(ws[f"A{r}"], _BLACK)
+    ws[f"A{r}"].value = "TERMS & CONDITIONS"; ws[f"A{r}"].font = F(f=_DISP, s=15, b=True, c=_WHT)
+    ws[f"A{r}"].alignment = Alignment(horizontal="right", vertical="center", indent=1); r += 1
+    ws.merge_cells(span(r)); ws.row_dimensions[r].height = 4; fill(ws[f"A{r}"], _CYAN); r += 2
+
+    def tline(text, size=10, bold=False, italic=False, color=_INK, h=None):
+        nonlocal r
+        ws.merge_cells(span(r)); c = ws[f"A{r}"]; c.value = text
+        c.alignment = Alignment(wrap_text=True, vertical="top", indent=1)
+        c.font = F(s=size, b=bold, i=italic, c=color)
+        ws.row_dimensions[r].height = h or (max(1, -(-len(str(text)) // 120)) * 13 + 4); r += 1
+    tt = m["terms"] or {}
+    if tt.get("intro"):
+        tline(tt["intro"], italic=True, color=_MUTE); r += 1
+    for g in tt.get("groups", []):
+        tline(g["heading"], bold=True, size=11, color=_TEALTX, h=18)
+        for ln in g.get("lines", []):
+            tline(ln)
+        r += 1
+    tline(f"{hb['name']}  ·  {(m['data'].get('inbox_email') or '')}", italic=True, color=_MUTE)
+
+    # ---- logo on the black band ----
+    lg = _logo_on_black((m["data"].get("brand") or {}).get("logo_dark_b64"))
+    if lg:
+        bio, size = lg
+        xi = XLImage(bio)
+        ratio = size[0] / float(size[1] or 1)
+        xi.height = 34; xi.width = 34 * ratio
+        xi.anchor = "A1"
+        ws.add_image(xi)
+
+    from openpyxl.worksheet.properties import PageSetupProperties
+    ws.print_area = f"A1:E{r - 1}"
+    ws.page_setup.orientation = "portrait"
+    ws.page_setup.fitToWidth = 1; ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, f"quotation-{m['company']}-{m['number']}.xlsx")
     wb.save(path)
     return _return(m, path)
+
+
+# ---------------------------------------------------------------------------
+# XLSX -> PDF via headless LibreOffice, so the delivered PDF matches the sheet's
+# house fonts (Poppins/Calibri) and layout exactly (reportlab can't embed those).
+# ---------------------------------------------------------------------------
+
+def xlsx_to_pdf(xlsx_path: str, out_dir: str | None = None) -> str:
+    """Convert a quotation .xlsx to PDF with LibreOffice headless. Returns the .pdf path; raises on failure."""
+    import subprocess
+    import tempfile
+    out_dir = out_dir or os.path.dirname(xlsx_path)
+    profile = tempfile.mkdtemp(prefix="lo_")
+    env = dict(os.environ, HOME=profile)
+    try:
+        subprocess.run(
+            ["soffice", "--headless", "--calc", f"-env:UserInstallation=file://{profile}",
+             "--convert-to", "pdf:calc_pdf_Export", "--outdir", out_dir, xlsx_path],
+            check=True, capture_output=True, timeout=180, env=env)
+    finally:
+        import shutil
+        shutil.rmtree(profile, ignore_errors=True)
+    pdf = os.path.join(out_dir, os.path.splitext(os.path.basename(xlsx_path))[0] + ".pdf")
+    if not os.path.exists(pdf):
+        raise RuntimeError("LibreOffice produced no PDF")
+    return pdf
