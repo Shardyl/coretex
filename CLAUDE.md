@@ -1,0 +1,63 @@
+# Cortex — operator runbook for Claude sessions
+
+Cortex is Rashad's voice-first AI ops platform running all five companies (Tabscanner, Sensa,
+SkyVision, FilmSpoke, Snap Rewards). This repo is the whole system; production runs on the
+Hetzner box `cortex-1`. Read this before touching anything.
+
+## Access (all via the one SSH key `~/.ssh/id_ed25519`)
+
+- **Box:** `ssh cortex` (alias → root@178.156.176.114). Cockpit + API live at https://coretex.uk
+  via a Cloudflare tunnel (no open ports).
+- **Database — the gotcha that keeps biting:** Postgres uses **peer auth** and there is **no
+  `root` role**, so a bare `psql` as root is refused. This is NOT an access problem. Use:
+  `ssh cortex "sudo -u postgres psql -d cortex -P pager=off -c '...'"`.
+  (Alternative: connect as the app with the `DATABASE_URL` from `/etc/cortex/cortex.env`.)
+  Do not "fix" `pg_hba.conf`.
+- **Secrets:** `/etc/cortex/cortex.env`. Never `source` it (values contain spaces) — grep the
+  key you need. Google OAuth client JSONs also in `/etc/cortex/` (must be `chmod 640 root:cortex`).
+
+## Deploy (never scp code; push + pull)
+
+1. Commit + push to `git@github.com:Shardyl/coretex.git` (main).
+2. `ssh cortex "sudo -u cortex git -C /opt/coretex pull --ff-only && sudo systemctl restart cortex-api cortex-engine"`
+   — the pull MUST run as the `cortex` user (deploy key is in `/home/cortex/.ssh/`; a root pull fails).
+3. Verify: `systemctl is-active cortex-api cortex-engine`. Cockpit SW is network-first — a
+   normal reload picks up new web code (bump the sw.js cache version when changing `web/index.html`).
+
+Layout on box: repo at `/opt/coretex`, venv `/opt/coretex/.venv`, WorkingDirectory
+`/opt/coretex/runtime`, package imports as `cortex`. Services: `cortex-api` (uvicorn
+`cortex.api:app` on 127.0.0.1:8787, also serves the cockpit) + `cortex-engine` (`runtime/main.py`,
+60s loop) + `cloudflared`. The engine runs as user `cortex` — files/dirs it writes must be
+cortex-owned (a root-owned `/opt/coretex/reports/` silently killed weekly reports for 7 weeks).
+
+## Before acting on any company task (STANDING RULE)
+
+The **live DB is the source of truth** — never trust cached docs, `catalog.py`, or old counts.
+Before drafting/doing anything for a company: read the relevant skill rows LIVE
+(`skills.rules`/`craft` + `universal_skill_rules`) and the live company profile
+(`company_profiles.data`), report what you found, then act. Drafting/behaviour logic lives in
+skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schema/plumbing only.
+
+## House rules (from Rashad, standing)
+
+- Cortex DRAFTS, Rashad approves — never send/publish without an approval card. Money + outbound
+  are owner-only; blogs never auto regardless of trust.
+- Telegram is a MIRROR, never the flow — its calls are fail-soft (`integrations/telegram.py`);
+  keep it that way.
+- Never delete CRM/contact data on your own initiative; merges carry over every non-empty field.
+- Any Cloudflare WRITE needs Rashad's explicit OK first (read-only fine, but disclose).
+- Batch/recurring LLM jobs default to Haiku (batched + prompt-cached); Sonnet = prose,
+  Opus = ideation. Never silently upgrade a model.
+- No emoji in the cockpit UI — clean monochrome line-icons (Tabler-style) only.
+- Ship a new Talk capability? Add its one-liner to `runtime/cortex/capabilities.py` in the same
+  commit — that manifest is injected into every system prompt.
+- New scheduled work goes on the unified clock (`tasks` recurring templates +
+  `engine.promote_due_tasks`) — `scheduled_tasks` is long dead.
+
+## Wider context
+
+Full history + current state live in the Claude memory files (mirrored on the box at
+`/opt/cortex-knowledge/memory/`, tarred nightly to Google Drive at 03:00 with the DB dump).
+Key ones: `project_cortex*.md` (architecture, cockpit, CRM, roadmap), `reference_machine_restore_2026_08.md`
+(access provenance). Docs in `docs/` (CORTEX-SPEC.md et al.) are the original build spec —
+good for intent, stale for detail; the DB and this file win.
