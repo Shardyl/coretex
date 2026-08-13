@@ -61,3 +61,9 @@ Full history + current state live in the Claude memory files (mirrored on the bo
 Key ones: `project_cortex*.md` (architecture, cockpit, CRM, roadmap), `reference_machine_restore_2026_08.md`
 (access provenance). Docs in `docs/` (CORTEX-SPEC.md et al.) are the original build spec —
 good for intent, stale for detail; the DB and this file win.
+
+## Keep this file honest
+
+If this session changes anything this file describes (access, deploy mechanics, structure,
+standing rules), update this CLAUDE.md in the same commit and push it. This file is the first
+thing every new conversation reads; a stale line here costs a future session real time.
