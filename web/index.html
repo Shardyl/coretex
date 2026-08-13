@@ -601,7 +601,8 @@ const ICON={
   pause:'M9 5v14M15 5v14',
   play:'M7 5l12 7-12 7z',
   up:'M6 15l6-6 6 6',
-  down:'M6 9l6 6 6-6'
+  down:'M6 9l6 6 6-6',
+  download:'M12 4v12M7 11l5 5 5-5M5 20h14'
 };
 function ic(n,s){ s=s||20; return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle"><path d="${ICON[n]||''}"></path></svg>`; }
 function paintIcons(){
@@ -1590,7 +1591,7 @@ function histRow(t){
   const when=t.when?timeTag(t.when):'';
   const kl=t.kind==='email_reply'?'email reply':(t.kind==='report'?'report':(t.kind==='blog'?'blog post':esc(t.kind||'task')));
   const coChip=t.company_name?`<span class="chip cy">${esc(t.company_name)}</span>`:'';
-  const pdf=t.kind==='report'?`<div class="row" style="margin-top:8px"><button class="btn sm go" onclick="event.stopPropagation();openReport(${t.id})">${ic('file',14)} Open PDF</button></div>`:'';
+  const pdf=t.kind==='report'?`<div class="row" style="margin-top:8px"><button class="btn sm go" onclick="event.stopPropagation();openReport(${t.id})">${ic('file',14)} Open PDF</button><button class="btn sm" onclick="event.stopPropagation();downloadReport(${t.id})">${ic('download',14)} Download</button></div>`:'';
   return `<div class="card" onclick="toggleHist(${t.id})" style="cursor:pointer">
     <div class="meta">${coChip}<span class="chip">${kl}</span>${histStatus(t.status)}<span style="margin-left:auto;color:var(--mut)">${esc(when)}</span></div>
     <div class="title" style="font-size:15px">${esc(t.title||('Task #'+t.id))}</div>
@@ -1605,7 +1606,7 @@ function reportCard(t,co){
     <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${ic('trend',13)} report</span></div>
     <div class="title">${esc(r.title||'Report')}</div>
     <div class="body">${esc(t.draft||r.summary||'')}</div>
-    <div class="row" style="margin:4px 0 9px"><button class="btn go" onclick="openReport(${t.id})">${ic('file',16)} Open report (PDF)</button></div>
+    <div class="row" style="margin:4px 0 9px"><button class="btn go" onclick="openReport(${t.id})">${ic('file',16)} Open report (PDF)</button><button class="btn" onclick="downloadReport(${t.id})">${ic('download',16)} Download</button></div>
     <div class="row">
       <button class="btn" onclick="act(${t.id},'approve')">${ic('check',16)} Mark as seen</button>
       <button class="btn bad" onclick="act(${t.id},'skip')">Dismiss</button>
@@ -1690,13 +1691,27 @@ function socialActionCard(t,co){
       <button class="btn bad" onclick="act(${t.id},'skip')">Discard</button>
     </div></div>`;
 }
+async function fetchReportPdf(id){
+  const r=await fetch(API+'/api/report/'+id+'/pdf',{headers:token?{Authorization:'Bearer '+token}:{}});
+  if(!r.ok) throw new Error(r.status);
+  const cd=r.headers.get('content-disposition')||'', m=cd.match(/filename="?([^";]+)/);
+  return {blob:await r.blob(), name:(m&&m[1])||('report-'+id+'.pdf')};
+}
 async function openReport(id){
   try{
     toast('Opening…');
-    const r=await fetch(API+'/api/report/'+id+'/pdf',{headers:token?{Authorization:'Bearer '+token}:{}});
-    if(!r.ok) throw new Error(r.status);
-    const u=URL.createObjectURL(await r.blob()); window.open(u,'_blank'); setTimeout(()=>URL.revokeObjectURL(u),60000);
+    const f=await fetchReportPdf(id);
+    const u=URL.createObjectURL(f.blob); window.open(u,'_blank'); setTimeout(()=>URL.revokeObjectURL(u),600000);
   }catch(e){ toast('Could not open report ('+e.message+')'); }
+}
+async function downloadReport(id){
+  try{
+    toast('Downloading…');
+    const f=await fetchReportPdf(id);
+    const u=URL.createObjectURL(f.blob), a=document.createElement('a');
+    a.href=u; a.download=f.name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(u),60000);
+  }catch(e){ toast('Could not download report ('+e.message+')'); }
 }
 async function openQuotation(id,kind){
   kind=kind||'pdf';
@@ -1707,7 +1722,7 @@ async function openQuotation(id,kind){
     const blob=await r.blob(), u=URL.createObjectURL(blob);
     if(kind==='xlsx'){ const a=document.createElement('a'); a.href=u; a.download='quotation.xlsx'; a.click(); }
     else window.open(u,'_blank');
-    setTimeout(()=>URL.revokeObjectURL(u),60000);
+    setTimeout(()=>URL.revokeObjectURL(u),600000);
   }catch(e){ toast('Could not open quotation ('+e.message+')'); }
 }
 function compName(id){ const c=companies.find(c=>c.id===id); return c?c.name:''; }
