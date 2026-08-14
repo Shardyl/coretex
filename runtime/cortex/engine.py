@@ -1381,10 +1381,16 @@ def qualify_suggest(co: dict, inq: dict) -> dict | None:
         f"is handled:\n{rules}\n\n"
         "Decide whether THIS enquiry is a qualified opportunity. The rules above govern the judgement; the "
         "sender's email domain (corporate vs free/personal) is a supporting signal, not the verdict. "
+        "When you have web search, ALSO research the SENDER as a person (their name + company: LinkedIn, "
+        "company site, public profiles) — their role and where they are based — because replies tailor "
+        "suggested call times to the lead's timezone. Report only what you actually found; empty strings "
+        "otherwise, never a guess. "
         "Return a JSON object: {\"verdict\": \"qualified\" | \"not_qualified\" | \"needs_info\", "
         "\"confidence\": \"low\" | \"medium\" | \"high\", \"reason\": one short sentence under 25 words, "
         "\"bucket\": if the rules define handling buckets, the one this lead falls in: \"self_serve\" | "
         "\"conversation\" | \"strategic\", else \"\", "
+        "\"person\": {\"role\": \"their title/role as found\", \"location\": \"city/region/country they appear "
+        "to be based in\", \"timezone\": \"IANA timezone or UTC offset for that location\"}, "
         "\"ball_in_our_court\": true if their message asks US to do something next (send a proposal, quotation, "
         "pricing, samples or more info) or otherwise puts the next step on us, false if we are waiting on them}.")
     user = (
@@ -1397,8 +1403,8 @@ def qualify_suggest(co: dict, inq: dict) -> dict | None:
         if free:
             out = provider.think_json(system, user, model=model, max_tokens=240,
                                       purpose="qualify", company=co.get("slug"))
-        else:                                          # corporate domain -> let it look the company up
-            out = provider.research_json(system, user, model=model, max_searches=4, max_tokens=600)
+        else:                                          # corporate domain -> let it look the company + person up
+            out = provider.research_json(system, user, model=model, max_searches=4, max_tokens=800)
     except Exception:                                  # noqa: BLE001 -- a failed suggestion must never block intake
         try:
             out = provider.think_json(system, user, model=model, max_tokens=240)
@@ -1411,9 +1417,12 @@ def qualify_suggest(co: dict, inq: dict) -> dict | None:
         v = "needs_info"
     conf = (out.get("confidence") or "medium").strip().lower()
     bucket = (out.get("bucket") or "").strip().lower().replace("-", "_").replace(" ", "_")
+    p = out.get("person") if isinstance(out.get("person"), dict) else {}
+    person = {k: str(p.get(k) or "").strip()[:120] for k in ("role", "location", "timezone")}
     return {"verdict": v, "confidence": conf if conf in ("low", "medium", "high") else "medium",
             "reason": (out.get("reason") or "").strip()[:300],
             "bucket": bucket if bucket in ("self_serve", "conversation", "strategic") else "",
+            "person": person,
             "ball_in_our_court": bool(out.get("ball_in_our_court")),
             "domain": domain, "free_email": free}
 

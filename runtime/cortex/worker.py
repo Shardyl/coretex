@@ -141,6 +141,15 @@ def draft(skill: dict, company: dict, request: dict,
             if sug.get("reason"):
                 q += f" — {sug['reason']}"
             bits.append(q + ". Apply the lead-qualification standing rules for that bucket.")
+        person = sug.get("person") or {}
+        if person.get("location"):
+            loc = f"Research on the sender (public sources, advisory): based in {person['location']}"
+            if person.get("timezone"):
+                loc += f" ({person['timezone']})"
+            if person.get("role"):
+                loc += f", role: {person['role']}"
+            bits.append(loc + ". Apply the standing rules on tailoring suggested call times to the lead's "
+                        "region/timezone.")
         if request.get("strategic"):
             bits.append("This lead is flagged STRATEGIC/enterprise — the owner takes over from here; follow "
                         "the strategic-lead handling in the standing rules.")
