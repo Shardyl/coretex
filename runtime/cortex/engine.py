@@ -191,6 +191,24 @@ def _booking_slots_brief(co: dict | None) -> str:
         return ""
 
 
+def _notify_new_opportunity(co: dict, opp: dict, how: str) -> None:
+    """ONE announcement per new opportunity: an Inbox notification card (+ phone push once a device is
+    registered) and a Telegram mirror line. Fail-soft — announcing must never break the pipeline."""
+    val = (f" — est. {opp.get('currency')} {float(opp['value']):,.0f} (Cortex estimate)"
+           if opp.get("value") else "")
+    try:
+        notifications.notify(f"New opportunity: {opp.get('title')}",
+                             f"{co['name']} — {how}{val}. Account linked; edit the figure or disqualify any time.",
+                             priority="normal", category="lead", company_id=co.get("id"),
+                             target_type="deal", target_id=opp.get("id"))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        tg.send(f"[{co['name']}] New opportunity: {opp.get('title')}{val} ({how}).")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _escalation_brief(inq: dict, co: dict | None, sug: dict | None) -> str:
     """Brief the worker to write an INTERNAL owner briefing for a strategic-bucket lead (`lead_escalation`
     card). Never emailed anywhere — approving only acknowledges the takeover. Plumbing only: the facts are
@@ -1501,10 +1519,7 @@ def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
     try:   # high-confidence qualified -> auto-create the pipeline entry (account + opportunity + estimate);
         opp = crm.auto_opportunity(inq.get("email"), slug, sug, inq)   # never blocks intake, reversible
         if opp:
-            val = (f" — est. {opp.get('currency')} {float(opp['value']):,.0f} (Cortex estimate)"
-                   if opp.get("value") else "")
-            tg.send(f"[{co['name']}] Opportunity auto-created: {opp.get('title')}{val}. "
-                    "Account linked; edit the figure or disqualify any time.")
+            _notify_new_opportunity(co, opp, "auto-qualified from a new enquiry")
     except Exception:  # noqa: BLE001
         pass
     strategic = bool(sug and sug.get("bucket") == "strategic")
@@ -1956,10 +1971,7 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
                 db.setting_set(f"qual:email:{frm}", {**sug, "company_id": co["id"]})
                 opp = crm.auto_opportunity(frm, slug, sug, inq)      # idempotent — skips if a deal is open
                 if opp:
-                    val = (f" — est. {opp.get('currency')} {float(opp['value']):,.0f} (Cortex estimate)"
-                           if opp.get("value") else "")
-                    tg.send(f"[{co['name']}] Opportunity auto-created from the reply thread: "
-                            f"{opp.get('title')}{val}.")
+                    _notify_new_opportunity(co, opp, "auto-qualified from the reply thread")
         except Exception:  # noqa: BLE001
             pass
         db.setting_set(f"lead_fu:{co['id']}:{frm}", None)   # they replied -> stop the silence chase
