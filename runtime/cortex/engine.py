@@ -1419,6 +1419,11 @@ def qualify_suggest(co: dict, inq: dict) -> dict | None:
         "\"conversation\" | \"strategic\", else \"\", "
         "\"person\": {\"role\": \"their title/role as found\", \"location\": \"city/region/country they appear "
         "to be based in\", \"timezone\": \"IANA timezone or UTC offset for that location\"}, "
+        "\"company_name\": the sender company's proper name if identified, else \"\", "
+        "\"est\": {\"amount\": a ROUND estimated total deal value per year, ONLY when you can ground it in "
+        "stated volumes, the rules' pricing, or clearly researched program scale — 0 when you cannot ground "
+        "it (an ungrounded figure is worse than none), \"currency\": ISO code, \"basis\": one short line on "
+        "how it was grounded}, "
         "\"ball_in_our_court\": true if their message asks US to do something next (send a proposal, quotation, "
         "pricing, samples or more info) or otherwise puts the next step on us, false if we are waiting on them}.")
     user = (
@@ -1432,7 +1437,7 @@ def qualify_suggest(co: dict, inq: dict) -> dict | None:
             out = provider.think_json(system, user, model=model, max_tokens=240,
                                       purpose="qualify", company=co.get("slug"))
         else:                                          # corporate domain -> let it look the company + person up
-            out = provider.research_json(system, user, model=model, max_searches=4, max_tokens=800)
+            out = provider.research_json(system, user, model=model, max_searches=4, max_tokens=900)
     except Exception:                                  # noqa: BLE001 -- a failed suggestion must never block intake
         try:
             out = provider.think_json(system, user, model=model, max_tokens=240)
@@ -1447,10 +1452,17 @@ def qualify_suggest(co: dict, inq: dict) -> dict | None:
     bucket = (out.get("bucket") or "").strip().lower().replace("-", "_").replace(" ", "_")
     p = out.get("person") if isinstance(out.get("person"), dict) else {}
     person = {k: str(p.get(k) or "").strip()[:120] for k in ("role", "location", "timezone")}
+    e = out.get("est") if isinstance(out.get("est"), dict) else {}
+    try:
+        est_amount = max(0.0, float(e.get("amount") or 0))
+    except (TypeError, ValueError):
+        est_amount = 0.0
+    est = {"amount": est_amount, "currency": str(e.get("currency") or "USD").strip().upper()[:3],
+           "basis": str(e.get("basis") or "").strip()[:200]}
     return {"verdict": v, "confidence": conf if conf in ("low", "medium", "high") else "medium",
             "reason": (out.get("reason") or "").strip()[:300],
             "bucket": bucket if bucket in ("self_serve", "conversation", "strategic") else "",
-            "person": person,
+            "person": person, "company_name": str(out.get("company_name") or "").strip()[:120], "est": est,
             "ball_in_our_court": bool(out.get("ball_in_our_court")),
             "domain": domain, "free_email": free}
 
@@ -1482,6 +1494,15 @@ def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
             em = (inq.get("email") or "").strip().lower()
             db.setting_set(f"qual:{co['id']}:{em}", sug)
             db.setting_set(f"qual:email:{em}", {**sug, "company_id": co["id"]})
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # high-confidence qualified -> auto-create the pipeline entry (account + opportunity + estimate);
+        opp = crm.auto_opportunity(inq.get("email"), slug, sug, inq)   # never blocks intake, reversible
+        if opp:
+            val = (f" — est. {opp.get('currency')} {float(opp['value']):,.0f} (Cortex estimate)"
+                   if opp.get("value") else "")
+            tg.send(f"[{co['name']}] Opportunity auto-created: {opp.get('title')}{val}. "
+                    "Account linked; edit the figure or disqualify any time.")
     except Exception:  # noqa: BLE001
         pass
     strategic = bool(sug and sug.get("bucket") == "strategic")
@@ -1942,6 +1963,12 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
             if sug:
                 db.setting_set(f"qual:{co['id']}:{frm}", sug)
                 db.setting_set(f"qual:email:{frm}", {**sug, "company_id": co["id"]})
+                opp = crm.auto_opportunity(frm, slug, sug, inq)      # idempotent — skips if a deal is open
+                if opp:
+                    val = (f" — est. {opp.get('currency')} {float(opp['value']):,.0f} (Cortex estimate)"
+                           if opp.get("value") else "")
+                    tg.send(f"[{co['name']}] Opportunity auto-created from the reply thread: "
+                            f"{opp.get('title')}{val}.")
         except Exception:  # noqa: BLE001
             pass
         db.setting_set(f"lead_fu:{co['id']}:{frm}", None)   # they replied -> stop the silence chase

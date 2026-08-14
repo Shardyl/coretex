@@ -882,6 +882,71 @@ def qualify_opportunity(email: str, company_slug: str, title: str | None = None)
     return db.one("select * from crm_projects where id=%s", (d["id"],))
 
 
+def auto_opportunity(email: str, company_slug: str, sug: dict | None, inq: dict | None = None) -> dict | None:
+    """AUTO-qualify a HIGH-confidence qualified intake into the pipeline (all companies): ensure the client
+    ACCOUNT (matched by email domain first so an existing account is never duplicated), link the contact to it,
+    create the Opportunity via qualify_opportunity (cadence/reminder logic unchanged), and stamp Cortex's
+    ESTIMATED value — clearly labelled an estimate, only when the qualification research could ground it
+    (amount 0 = not stamped, never invented). Reversible with disqualify(); the owner edits value/stage any
+    time. Idempotent: skips when the contact already has an open deal for this organisation."""
+    s = sug or {}
+    if not (s.get("verdict") == "qualified" and s.get("confidence") == "high"):
+        return None
+    email = (email or "").strip().lower()
+    c = db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
+    if not c:
+        return None
+    org = _require_business(company_slug)
+    open_deal = db.one(
+        "select id from crm_projects where company=%s and stage not in (%s,'Won') and "
+        "(lower(contact_email)=lower(%s) or contacts @> %s::jsonb) limit 1",
+        (org, LOST_STAGE, email, Json([{"email": email}])))
+    if open_deal:
+        return None
+    domain = email.split("@")[-1] if "@" in email else ""
+    aid = c.get("account_id")
+    if not aid:                     # assign the client company: existing account by domain, else create
+        a = db.one("select id from crm_accounts where lower(domain)=lower(%s)", (domain,)) if domain else None
+        name = (s.get("company_name") or (inq or {}).get("company_name") or "").strip()
+        aid = a["id"] if a else get_or_create_account(name or domain.split(".")[0].title(), domain or None)
+        link_account(aid, email=email)
+    try:
+        p = qualify_opportunity(email, company_slug)
+    except DuplicateDeal:
+        return None
+    if not p:
+        return None
+    est = s.get("est") or {}
+    try:
+        amount = float(est.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0.0
+    if amount > 0:
+        cur = (est.get("currency") or "USD").upper()[:3]
+        basis = (est.get("basis") or "").strip()
+        db.execute(
+            "update crm_projects set value=%s, currency=%s, history = history || %s::jsonb, updated_at=now() "
+            "where id=%s",
+            (amount, cur, Json([{"ts": _now(), "event": "estimate",
+                                 "text": f"Cortex estimated value {cur} {amount:,.0f}"
+                                         + (f" — {basis}" if basis else "")
+                                         + " (estimate, not a quote; edit any time)"}]), p["id"]))
+    if s.get("bucket") == "strategic":  # owner-takeover lead: never auto-chase; personal reminder instead
+        db.execute("update crm_projects set automation='manual', next_followup=null, updated_at=now() "
+                   "where id=%s", (p["id"],))
+        if not s.get("ball_in_our_court"):   # ball-in-our-court already got a 'prepare the proposal' reminder
+            try:
+                from . import reminders, store
+                cid = (store.get_company_by_slug(company_slug) or {}).get("id")
+                reminders.create(f"Strategic lead — handle personally: {p.get('title')}",
+                                 _roll_weekend(datetime.now(timezone.utc) + timedelta(days=1), True),
+                                 company_id=cid, target_type="deal", target_id=p["id"], priority="high")
+            except Exception:  # noqa: BLE001
+                pass
+    log_event(email, "auto_qualified", f"Auto-qualified (high confidence) -> opportunity #{p['id']}: {p.get('title')}")
+    return db.one("select * from crm_projects where id=%s", (p["id"],))
+
+
 def disqualify(email: str) -> dict | None:
     """Mark a lead NOT qualified — no opportunity is created. Reversible (re-qualify any time)."""
     r = set_classification(email, "not_qualified")
