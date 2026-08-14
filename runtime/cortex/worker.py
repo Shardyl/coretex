@@ -150,9 +150,6 @@ def draft(skill: dict, company: dict, request: dict,
                 loc += f", role: {person['role']}"
             bits.append(loc + ". Apply the standing rules on tailoring suggested call times to the lead's "
                         "region/timezone.")
-        if request.get("strategic"):
-            bits.append("This lead is flagged STRATEGIC/enterprise — the owner takes over from here; follow "
-                        "the strategic-lead handling in the standing rules.")
         user.insert(0, " ".join(bits))
     if atts:
         user.append(f"{len(atts)} file(s)/image(s) are attached below — use them as source material for the deliverable.")

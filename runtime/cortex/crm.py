@@ -941,18 +941,6 @@ def auto_opportunity(email: str, company_slug: str, sug: dict | None, inq: dict 
                                  "text": f"Cortex estimated value {cur} {amount:,.0f}"
                                          + (f" — {basis}" if basis else "")
                                          + " (estimate, not a quote; edit any time)"}]), p["id"]))
-    if s.get("bucket") == "strategic":  # owner-takeover lead: never auto-chase; personal reminder instead
-        db.execute("update crm_projects set automation='manual', next_followup=null, updated_at=now() "
-                   "where id=%s", (p["id"],))
-        if not s.get("ball_in_our_court"):   # ball-in-our-court already got a 'prepare the proposal' reminder
-            try:
-                from . import reminders, store
-                cid = (store.get_company_by_slug(company_slug) or {}).get("id")
-                reminders.create(f"Strategic lead — handle personally: {p.get('title')}",
-                                 _roll_weekend(datetime.now(timezone.utc) + timedelta(days=1), True),
-                                 company_id=cid, target_type="deal", target_id=p["id"], priority="high")
-            except Exception:  # noqa: BLE001
-                pass
     log_event(email, "auto_qualified", f"Auto-qualified (high confidence) -> opportunity #{p['id']}: {p.get('title')}")
     return db.one("select * from crm_projects where id=%s", (p["id"],))
 

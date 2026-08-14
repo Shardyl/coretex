@@ -194,7 +194,9 @@ def _booking_slots_brief(co: dict | None) -> str:
 def _escalation_brief(inq: dict, co: dict | None, sug: dict | None) -> str:
     """Brief the worker to write an INTERNAL owner briefing for a strategic-bucket lead (`lead_escalation`
     card). Never emailed anywhere — approving only acknowledges the takeover. Plumbing only: the facts are
-    code-stamped from intake + research; what makes a lead strategic lives in the lead-qualification rules."""
+    code-stamped from intake + research; what makes a lead strategic lives in the lead-qualification rules.
+    DORMANT since 2026-08-14: owner-takeover mode is off (strategic leads get a normal drafted reply, per the
+    trained rule); kept so the mode — and any legacy lead_escalation card — still works if re-enabled."""
     s = sug or {}
     p = s.get("person") or {}
     facts = [f"Lead: {inq.get('name') or '(unknown)'} <{inq.get('email')}>"]
@@ -1506,24 +1508,16 @@ def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
     except Exception:  # noqa: BLE001
         pass
     strategic = bool(sug and sug.get("bucket") == "strategic")
-    if draft:
-        if strategic:   # the lead-qualification rules say: the worker stops, the owner takes over. NO customer
-                        # reply is drafted — an INTERNAL lead_escalation card (never sends) goes to the Inbox.
-            qskill = (store.get_skill_by_key(co["id"], "lead-qualification")
-                      or store.get_skill_by_key(co["id"], "sales-first-response"))
-            if qskill:
-                store.create_task(co["id"], qskill["id"], "lead_escalation",
-                                  {"brief": _escalation_brief(inq, co, sug), "lead": inq,
-                                   "qual_suggest": sug, "strategic": True})
-            tg.send(f"[{co['name']}] STRATEGIC lead flagged: {inq.get('name') or ''} <{inq.get('email')}> — "
-                    f"{(sug or {}).get('reason') or 'enterprise potential'}. No automated reply drafted; "
-                    "briefing card in your Inbox — the lead-qualification rules say this one is yours.")
-        else:                                        # normal lanes -> draft a reply for approval
-            skill = store.get_skill_by_key(co["id"], "sales-first-response")
-            if skill:
-                store.create_task(co["id"], skill["id"], "email_reply",
-                                  {"brief": _email_brief(inq, co), "inquiry": inq, "triage": verdict,
-                                   "qual_suggest": sug})
+    if draft:   # EVERY genuine enquiry gets a drafted reply for approval — strategic leads included (the
+                # trained lead-qualification rule sets the senior register; nothing sends without the owner)
+        skill = store.get_skill_by_key(co["id"], "sales-first-response")
+        if skill:
+            store.create_task(co["id"], skill["id"], "email_reply",
+                              {"brief": _email_brief(inq, co), "inquiry": inq, "triage": verdict,
+                               "qual_suggest": sug})
+        if strategic:   # heads-up so the owner watches this thread personally
+            tg.send(f"[{co['name']}] STRATEGIC lead: {inq.get('name') or ''} <{inq.get('email')}> — "
+                    f"{(sug or {}).get('reason') or 'enterprise potential'}. Reply drafted for your approval.")
     return {"ok": True, "captured": True, "category": verdict.get("category"),
             "qualification": (sug or {}).get("verdict")}
 
@@ -1915,15 +1909,18 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
     co = store.get_company_by_slug(slug)
     if not co:
         return {"reason": "no company"}
-    send_rt = f"gmail_send_refresh_token:{slug}"
+    send_rt, client = f"gmail_send_refresh_token:{slug}", slug
     if not db.setting_get(send_rt):
-        return {"reason": "no sales mailbox token"}
+        if slug == "tabscanner" and db.setting_get("gmail_send_refresh_token"):
+            send_rt, client = "gmail_send_refresh_token", None   # legacy global Tabscanner send mailbox
+        else:
+            return {"reason": "no sales mailbox token"}
     seen = list(db.setting_get(f"sales_replies_seen:{slug}") or [])
     seen_set = set(seen)
     idx = _internal_index()
     own_domain = (INBOXES.get(slug, "") or "").split("@")[-1]
     try:
-        msgs = gmail.list_recent(days=14, limit=30, rt_key=send_rt, company=slug, q="newer_than:14d", skip=seen_set)
+        msgs = gmail.list_recent(days=14, limit=30, rt_key=send_rt, company=client, q="newer_than:14d", skip=seen_set)
     except Exception as e:  # noqa: BLE001
         return {"reason": f"read failed: {e}"}
     skill = store.get_skill_by_key(co["id"], "sales-first-response")
@@ -1948,13 +1945,7 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
         name = nm if re.search(r"[A-Za-z]", nm) else frm.split("@")[0]
         inq = {"name": name, "email": frm, "message": body,
                "subject": subj if subj.lower().startswith("re:") else f"Re: {subj}"}
-        if prior.get("bucket") == "strategic":   # owner-takeover lead: internal briefing card, no drafted reply
-            qskill = store.get_skill_by_key(co["id"], "lead-qualification") or skill
-            if qskill:
-                store.create_task(co["id"], qskill["id"], "lead_escalation",
-                                  {"brief": _escalation_brief(inq, co, prior), "lead": inq,
-                                   "qual_suggest": prior, "strategic": True})
-        elif skill:
+        if skill:
             store.create_task(co["id"], skill["id"], "email_reply",
                               {"brief": _reply_followup_brief(inq, co), "inquiry": inq, "thread_reply": True,
                                "qual_suggest": prior})
@@ -1977,6 +1968,21 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
     if made:
         tg.send(f"[{co['name']}] {made} lead repl{'y' if made == 1 else 'ies'} -> drafted the next message in your Inbox.")
     return {"drafted": made}
+
+
+def poll_all_sales_replies() -> dict:
+    """Read EVERY company's sales/send mailbox for lead replies -> re-qualify + draft the next message.
+    A company without a send-mailbox token is skipped silently (fail-soft), so wiring a new send mailbox
+    auto-joins the loop on the next cycle."""
+    polled = []
+    for slug in INBOXES:
+        try:
+            r = poll_sales_replies(slug)
+            if not (r or {}).get("reason"):
+                polled.append(slug)
+        except Exception as ex:  # noqa: BLE001
+            tg.send(f"(sales reply poll hiccup [{slug}]: {ex})")
+    return {"polled": polled}
 
 
 # ---------- pre-qualification SILENCE chase: don't let a captured lead fade away -----------------------
@@ -2331,7 +2337,7 @@ def run(poll_idle: float = 1.0) -> None:
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(opportunity follow-up hiccup: {e})")
             try:
-                poll_sales_replies("sensa")   # read the sales mailbox for lead replies -> draft the next message
+                poll_all_sales_replies()   # every company's sales mailbox: lead replies -> draft the next message
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(sales reply poll hiccup: {e})")
             try:
