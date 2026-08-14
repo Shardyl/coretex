@@ -71,6 +71,10 @@ APPROVE_ACTION = {
     "newsletter_send": "Approve & send",
     "social_shift": "Approve today's run", "social_relogin": "I've logged back in",
     "social_action": "Approve & run",
+    # lead_escalation: an INTERNAL strategic-lead briefing card — nothing sends anywhere; approving only
+    # acknowledges the owner is taking the lead over. Deliberately NOT in KIND_CLASS (unknown kinds fail safe
+    # to 'outward' = never auto) and not in _APPROVE_PUBLIC (internal ack, no biometric).
+    "lead_escalation": "Acknowledge — I'm taking it over",
 }
 
 
@@ -185,6 +189,30 @@ def _booking_slots_brief(co: dict | None) -> str:
                 "the standing rules.")
     except Exception:  # noqa: BLE001 — availability must never break drafting
         return ""
+
+
+def _escalation_brief(inq: dict, co: dict | None, sug: dict | None) -> str:
+    """Brief the worker to write an INTERNAL owner briefing for a strategic-bucket lead (`lead_escalation`
+    card). Never emailed anywhere — approving only acknowledges the takeover. Plumbing only: the facts are
+    code-stamped from intake + research; what makes a lead strategic lives in the lead-qualification rules."""
+    s = sug or {}
+    p = s.get("person") or {}
+    facts = [f"Lead: {inq.get('name') or '(unknown)'} <{inq.get('email')}>"]
+    if inq.get("company_name"):
+        facts.append(f"Company stated: {inq['company_name']}")
+    if p.get("role"):
+        facts.append(f"Role (researched, public sources): {p['role']}")
+    if p.get("location"):
+        facts.append(f"Based (researched): {p['location']}" + (f" — timezone {p['timezone']}" if p.get("timezone") else ""))
+    if s.get("reason"):
+        facts.append(f"Qualification: {s.get('verdict')} ({s.get('confidence')}) — {s['reason']}")
+    return ("INTERNAL BRIEFING for the owner — NOT an email to the lead; it is never sent externally, and "
+            "approving the card only acknowledges the handover. A STRATEGIC-bucket lead has come in; per the "
+            "lead-qualification standing rules the owner takes this over personally. Write a concise plain-text "
+            "briefing (no markdown, no greeting-to-the-lead, no sign-off): who they are, why this is strategic "
+            "under the rules, the recommended next step, and — if known — their timezone for a call. Use ONLY "
+            "these facts, never invent others:\n" + "\n".join(f"- {x}" for x in facts) +
+            f"\n\nTheir message, verbatim:\n{(inq.get('message') or '').strip()}")
 
 
 def _email_brief(inq: dict, co: dict | None = None) -> str:
@@ -1457,16 +1485,24 @@ def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
     except Exception:  # noqa: BLE001
         pass
     strategic = bool(sug and sug.get("bucket") == "strategic")
-    if draft:                                        # full mode -> also draft a reply for approval
-        skill = store.get_skill_by_key(co["id"], "sales-first-response")
-        if skill:
-            store.create_task(co["id"], skill["id"], "email_reply",
-                              {"brief": _email_brief(inq, co), "inquiry": inq, "triage": verdict,
-                               "qual_suggest": sug, "strategic": strategic})
-        if strategic:                                # the lead-qualification rules say: raise it to the owner NOW
+    if draft:
+        if strategic:   # the lead-qualification rules say: the worker stops, the owner takes over. NO customer
+                        # reply is drafted — an INTERNAL lead_escalation card (never sends) goes to the Inbox.
+            qskill = (store.get_skill_by_key(co["id"], "lead-qualification")
+                      or store.get_skill_by_key(co["id"], "sales-first-response"))
+            if qskill:
+                store.create_task(co["id"], qskill["id"], "lead_escalation",
+                                  {"brief": _escalation_brief(inq, co, sug), "lead": inq,
+                                   "qual_suggest": sug, "strategic": True})
             tg.send(f"[{co['name']}] STRATEGIC lead flagged: {inq.get('name') or ''} <{inq.get('email')}> — "
-                    f"{(sug or {}).get('reason') or 'enterprise potential'}. Reply drafted for approval; "
-                    "the lead-qualification rules recommend you take this one over personally.")
+                    f"{(sug or {}).get('reason') or 'enterprise potential'}. No automated reply drafted; "
+                    "briefing card in your Inbox — the lead-qualification rules say this one is yours.")
+        else:                                        # normal lanes -> draft a reply for approval
+            skill = store.get_skill_by_key(co["id"], "sales-first-response")
+            if skill:
+                store.create_task(co["id"], skill["id"], "email_reply",
+                                  {"brief": _email_brief(inq, co), "inquiry": inq, "triage": verdict,
+                                   "qual_suggest": sug})
     return {"ok": True, "captured": True, "category": verdict.get("category"),
             "qualification": (sug or {}).get("verdict")}
 
@@ -1891,10 +1927,16 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
         name = nm if re.search(r"[A-Za-z]", nm) else frm.split("@")[0]
         inq = {"name": name, "email": frm, "message": body,
                "subject": subj if subj.lower().startswith("re:") else f"Re: {subj}"}
-        if skill:
+        if prior.get("bucket") == "strategic":   # owner-takeover lead: internal briefing card, no drafted reply
+            qskill = store.get_skill_by_key(co["id"], "lead-qualification") or skill
+            if qskill:
+                store.create_task(co["id"], qskill["id"], "lead_escalation",
+                                  {"brief": _escalation_brief(inq, co, prior), "lead": inq,
+                                   "qual_suggest": prior, "strategic": True})
+        elif skill:
             store.create_task(co["id"], skill["id"], "email_reply",
                               {"brief": _reply_followup_brief(inq, co), "inquiry": inq, "thread_reply": True,
-                               "qual_suggest": prior, "strategic": prior.get("bucket") == "strategic"})
+                               "qual_suggest": prior})
         try:                                                         # re-qualify on the new info
             sug = qualify_suggest(co, inq)
             if sug:

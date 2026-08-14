@@ -1279,7 +1279,7 @@ function cadenceText(t){
   return `Weekly · ${DOW[t.weekday||0]} ${pad2(t.hour)}:${pad2(t.minute)}`;
 }
 function whenText(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString([],{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; } }
-function kindLabel(k){ return {blog:'blog post',blog_scheduled:'blog post (queued)',newsletter_idea:'newsletter idea',newsletter_review:'newsletter ready to schedule',newsletter_send:'newsletter due to send',newsletter_scheduled:'newsletter (queued)',email_draft:'email draft',email_reply:'email reply',seo_report:'SEO & Traffic report',report:'report',quotation:'quotation'}[k]||k||'task'; }
+function kindLabel(k){ return {blog:'blog post',blog_scheduled:'blog post (queued)',newsletter_idea:'newsletter idea',newsletter_review:'newsletter ready to schedule',newsletter_send:'newsletter due to send',newsletter_scheduled:'newsletter (queued)',email_draft:'email draft',email_reply:'email reply',seo_report:'SEO & Traffic report',report:'report',quotation:'quotation',lead_escalation:'strategic lead — yours to take'}[k]||k||'task'; }
 let calLinks={};
 function calLinkBtn(t){
   if(!t.link) return '';
@@ -1533,7 +1533,7 @@ function actionCard(t){
     if(t.kind==='social_action') return socialActionCard(t,co);
     const isEmail=t.kind==='email_reply'||t.kind==='email_draft';
     const isOutbound=t.kind==='email_draft';
-    const kindLabel=t.kind==='blog_idea'?'blog idea':t.kind==='blog'?'blog post — review':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to schedule':t.kind==='newsletter_send'?'newsletter due to send':t.kind==='email_draft'?'email draft':(isEmail?'email reply':esc(t.kind||'task'));
+    const kindLabel=t.kind==='blog_idea'?'blog idea':t.kind==='blog'?'blog post — review':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to schedule':t.kind==='newsletter_send'?'newsletter due to send':t.kind==='email_draft'?'email draft':t.kind==='lead_escalation'?'strategic lead — yours to take':(isEmail?'email reply':esc(t.kind||'task'));
     const title=esc(isEmail&&em?((isOutbound?'Email to ':'Reply to ')+(em.inquiry&&em.inquiry.name||em.to||'recipient')):(t.title||(wp&&wp.title)||('Task #'+t.id)));
     const body=esc(plainText(isEmail&&em&&em.preview?em.preview:(t.body||t.draft||'')));
     return `<div class="card" id="t${t.id}">
@@ -1589,7 +1589,7 @@ async function loadHistory(){
 function histStatus(s){ const m={done:['#2ad17e','done'],rejected:['#ff5d6c','skipped'],failed:['#ffb020','failed'],dismissed:['#8597A6','dismissed'],read:['#5B8DEF','seen']}; const x=m[s]||['#8597A6',s]; return `<span class="chip" style="color:${x[0]};border-color:${x[0]}55">${esc(x[1])}</span>`; }
 function histRow(t){
   const when=t.when?timeTag(t.when):'';
-  const kl=t.kind==='email_reply'?'email reply':(t.kind==='report'?'report':(t.kind==='blog'?'blog post':esc(t.kind||'task')));
+  const kl=t.kind==='email_reply'?'email reply':(t.kind==='report'?'report':(t.kind==='blog'?'blog post':(t.kind==='lead_escalation'?'strategic lead — yours to take':esc(t.kind||'task'))));
   const coChip=t.company_name?`<span class="chip cy">${esc(t.company_name)}</span>`:'';
   const pdf=t.kind==='report'?`<div class="row" style="margin-top:8px"><button class="btn sm go" onclick="event.stopPropagation();openReport(${t.id})">${ic('file',14)} Open PDF</button><button class="btn sm" onclick="event.stopPropagation();downloadReport(${t.id})">${ic('download',14)} Download</button></div>`:'';
   return `<div class="card" onclick="toggleHist(${t.id})" style="cursor:pointer">
