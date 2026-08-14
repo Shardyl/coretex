@@ -898,10 +898,25 @@ def auto_opportunity(email: str, company_slug: str, sug: dict | None, inq: dict 
         return None
     org = _require_business(company_slug)
     open_deal = db.one(
-        "select id from crm_projects where company=%s and stage not in (%s,'Won') and "
+        "select id, value from crm_projects where company=%s and stage not in (%s,'Won') and "
         "(lower(contact_email)=lower(%s) or contacts @> %s::jsonb) limit 1",
         (org, LOST_STAGE, email, Json([{"email": email}])))
-    if open_deal:
+    est = s.get("est") or {}
+    try:
+        amount = float(est.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0.0
+    if open_deal:      # no duplicate deal — but a newly GROUNDED estimate backfills a value-less open one
+        if amount > 0 and not open_deal.get("value"):
+            cur = (est.get("currency") or "USD").upper()[:3]
+            basis = (est.get("basis") or "").strip()
+            db.execute(
+                "update crm_projects set value=%s, currency=%s, history = history || %s::jsonb, "
+                "updated_at=now() where id=%s",
+                (amount, cur, Json([{"ts": _now(), "event": "estimate",
+                                     "text": f"Cortex estimated value {cur} {amount:,.0f}"
+                                             + (f" — {basis}" if basis else "")
+                                             + " (estimate, not a quote; edit any time)"}]), open_deal["id"]))
         return None
     domain = email.split("@")[-1] if "@" in email else ""
     aid = c.get("account_id")
@@ -916,11 +931,6 @@ def auto_opportunity(email: str, company_slug: str, sug: dict | None, inq: dict 
         return None
     if not p:
         return None
-    est = s.get("est") or {}
-    try:
-        amount = float(est.get("amount") or 0)
-    except (TypeError, ValueError):
-        amount = 0.0
     if amount > 0:
         cur = (est.get("currency") or "USD").upper()[:3]
         basis = (est.get("basis") or "").strip()
