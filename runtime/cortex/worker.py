@@ -44,12 +44,46 @@ def _model_for(skill: dict) -> str:
 _CC_DIRECTIVE = re.compile(r"\bb?cc\b\s+[\w.+-]+@", re.I)
 
 
-def _rules_block(skill: dict) -> str:
+def _rule_lines(skill: dict) -> list[str]:
+    """The skill's effective rules (universal minus overrides + local), minus CC/BCC sending directives."""
     universal, local = store.effective_rules(skill)  # universal minus this company's overrides, then local
-    rules = [r for r in (list(universal) + list(local)) if not _CC_DIRECTIVE.search(r or "")]
+    return [r for r in (list(universal) + list(local)) if not _CC_DIRECTIVE.search(r or "")]
+
+
+def _rules_block(skill: dict) -> str:
+    rules = _rule_lines(skill)
     if not rules:
         return ""
     return "Standing rules you MUST follow:\n" + "\n".join(f"- {r}" for r in rules)
+
+
+# Related skills whose trained rules must ALSO sit in front of the drafter for certain work — the worker is a
+# dumb waiter: it fetches every relevant shelf, it never cooks. WHICH shelves relate to which task is plumbing
+# (this map); WHAT the rules say lives only in the DB. Keyed by the drafting task's own skill_key.
+_RELATED_SKILLS = {
+    "sales-first-response": ("sales-scheduling", "lead-qualification"),
+}
+
+
+def related_skills(skill: dict, company: dict) -> list[dict]:
+    """The related skills (with their live rules) for this task's skill, resolved from the DB."""
+    out = []
+    for key in _RELATED_SKILLS.get((skill or {}).get("skill_key", ""), ()):
+        s = store.get_skill_by_key(company["id"], key)
+        if s:
+            out.append(s)
+    return out
+
+
+def _related_block(skill: dict, company: dict) -> str:
+    parts = []
+    for s in related_skills(skill, company):
+        rules = _rule_lines(s)
+        if rules:
+            parts.append(f"Standing rules from the related '{s['name']}' skill — follow them whenever this "
+                         "message touches that ground (proposing or arranging a call, judging or handling the "
+                         "lead):\n" + "\n".join(f"- {r}" for r in rules))
+    return "\n\n".join(parts)
 
 
 _EMAIL_BODY_RULE = (
@@ -59,10 +93,10 @@ _EMAIL_BODY_RULE = (
     "'system note', or ANY meta/instruction text whatsoever (e.g. never write 'CC ... add via the sending "
     "system' or 'replace this'). Cc/Bcc and recipients are handled entirely by the sending system and must NEVER "
     "be mentioned in the message.\n"
-    "- NEVER invent or include a booking link, scheduling link, calendar link, any URL, or a PLACEHOLDER for one "
-    "(e.g. 'https://your-meeting-link-here'). If you were not given a real link, do NOT write one, just invite "
-    "them to reply with a few details or to suggest a time that suits them. Never write a 'replace with your "
-    "link' style instruction.\n"
+    "- NEVER invent a booking link, scheduling link, calendar link, any URL, or a PLACEHOLDER for one "
+    "(e.g. 'https://your-meeting-link-here'), and never write a 'replace with your link' style instruction. "
+    "A link that appears in your standing rules or in the task itself is real: use it exactly as written "
+    "when it is relevant.\n"
     "- NO sign-off, NO your name, NO signature or contact details, the signature and logo are attached "
     "automatically, so adding them doubles them up.\n"
     "- Do NOT mention or instruct anyone to add attachments.\n"
@@ -78,6 +112,7 @@ def draft(skill: dict, company: dict, request: dict,
         _company_context(company, author),
         skill.get("craft") or "",
         _rules_block(skill),
+        _related_block(skill, company) if is_email else "",
         _EMAIL_BODY_RULE if is_email else
         "Produce the deliverable only — no preamble, no explanation, no meta-commentary.",
     ]))
@@ -93,6 +128,22 @@ def draft(skill: dict, company: dict, request: dict,
             bits.append(f"Subject: {inq.get('subject')}.")
         bits.append("It is sent BY the owner of the company in the owner's first-person voice. Do NOT address "
                     "it to Rashad and do NOT write it to yourself — Rashad IS the sender.")
+        # Pass the triage/qualification FACTS through to the drafter — how they shape the reply is governed
+        # entirely by the (related) skill rules, never by this code.
+        tri = request.get("triage") or {}
+        if tri.get("category"):
+            bits.append(f"Triage category: {tri['category']}.")
+        sug = request.get("qual_suggest") or {}
+        if sug.get("verdict") or sug.get("bucket"):
+            q = f"Lead-qualification suggestion (advisory; the owner decides): verdict={sug.get('verdict') or 'n/a'}"
+            if sug.get("bucket"):
+                q += f", handling bucket={sug['bucket']}"
+            if sug.get("reason"):
+                q += f" — {sug['reason']}"
+            bits.append(q + ". Apply the lead-qualification standing rules for that bucket.")
+        if request.get("strategic"):
+            bits.append("This lead is flagged STRATEGIC/enterprise — the owner takes over from here; follow "
+                        "the strategic-lead handling in the standing rules.")
         user.insert(0, " ".join(bits))
     if atts:
         user.append(f"{len(atts)} file(s)/image(s) are attached below — use them as source material for the deliverable.")

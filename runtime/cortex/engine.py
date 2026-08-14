@@ -178,11 +178,11 @@ def _booking_slots_brief(co: dict | None) -> str:
         if not slots:
             return ""
         line = bk.get("email_line") or "or let us know what works for you and we'll do our best to meet it."
-        return ("\n\nWHEN you propose a call: offer ONLY these real open times "
-                "(GST), quoting them EXACTLY (never invent, shift or add a time):\n  - " + "\n  - ".join(slots) +
-                f"\nOffer two or three of them naturally (a sentence reads better than a raw list), then add, in "
-                f"your own words: \"{line}\". Do NOT include any booking link, calendar URL or scheduling link of "
-                f"any kind, and do NOT invite them to 'book directly' anywhere; give the times in words only.")
+        return ("\n\nIF you propose a call and mention specific times, these are the ONLY real open slots "
+                "(GST) — quote them EXACTLY, never invent, shift or add a time:\n  - " + "\n  - ".join(slots) +
+                f"\nOffer a couple of them naturally in a sentence, then add, in your own words: \"{line}\". "
+                "Everything else about how scheduling is handled (links, tone, alternatives) is governed by "
+                "the standing rules.")
     except Exception:  # noqa: BLE001 — availability must never break drafting
         return ""
 
@@ -1361,9 +1361,10 @@ _FREE_EMAIL_DOMAINS = {
 
 def qualify_suggest(co: dict, inq: dict) -> dict | None:
     """Run the company's `lead-qualification` skill over ONE genuine enquiry and return a suggested verdict
-    {verdict, confidence, reason}. The sender's DOMAIN is the lead signal: a real corporate domain (especially
-    UAE) with a genuine request can suggest 'qualified' straight away; a free-email / vague one is gauged. For a
-    corporate but unfamiliar domain the model gets live web search so it can judge the company's standing.
+    {verdict, confidence, reason, bucket}. The SKILL RULES govern the judgement (dumb-waiter doctrine); the
+    sender's domain is a supporting signal only. For a corporate but unfamiliar domain the model gets live web
+    search so it can judge the company's standing. `bucket` is the handling bucket the rules assign (self_serve /
+    conversation / strategic, '' if the rules define none) — strategic flags the owner for manual takeover.
     The owner still makes the final call (Qualify / Not qualified). Never raises into the caller."""
     skill = store.get_skill_by_key(co["id"], "lead-qualification")
     if not skill:
@@ -1372,12 +1373,18 @@ def qualify_suggest(co: dict, inq: dict) -> dict | None:
     domain = email.split("@")[-1] if "@" in email else ""
     free = (domain in _FREE_EMAIL_DOMAINS) or not domain
     rules = "\n".join(f"- {r}" for r in (skill.get("rules") or [])) or (skill.get("craft") or "")
+    ctx = co.get("context") or {}
     system = (
-        f"You qualify inbound sales enquiries for {co.get('name')}, a video production company. "
-        f"Apply these qualification rules exactly:\n{rules}\n\n"
-        "Decide whether THIS enquiry is a qualified opportunity, weighing the sender's email domain as the "
-        "primary signal. Return a JSON object: {\"verdict\": \"qualified\" | \"not_qualified\" | \"needs_info\", "
+        f"You qualify inbound sales enquiries for {co.get('name')}."
+        + (f" Products/services: {ctx.get('products')}." if ctx.get("products") else "")
+        + f"\nApply these qualification rules exactly — they define what qualifies and how each kind of lead "
+        f"is handled:\n{rules}\n\n"
+        "Decide whether THIS enquiry is a qualified opportunity. The rules above govern the judgement; the "
+        "sender's email domain (corporate vs free/personal) is a supporting signal, not the verdict. "
+        "Return a JSON object: {\"verdict\": \"qualified\" | \"not_qualified\" | \"needs_info\", "
         "\"confidence\": \"low\" | \"medium\" | \"high\", \"reason\": one short sentence under 25 words, "
+        "\"bucket\": if the rules define handling buckets, the one this lead falls in: \"self_serve\" | "
+        "\"conversation\" | \"strategic\", else \"\", "
         "\"ball_in_our_court\": true if their message asks US to do something next (send a proposal, quotation, "
         "pricing, samples or more info) or otherwise puts the next step on us, false if we are waiting on them}.")
     user = (
@@ -1403,8 +1410,11 @@ def qualify_suggest(co: dict, inq: dict) -> dict | None:
     if v not in ("qualified", "not_qualified", "needs_info"):
         v = "needs_info"
     conf = (out.get("confidence") or "medium").strip().lower()
+    bucket = (out.get("bucket") or "").strip().lower().replace("-", "_").replace(" ", "_")
     return {"verdict": v, "confidence": conf if conf in ("low", "medium", "high") else "medium",
-            "reason": (out.get("reason") or "").strip()[:300], "ball_in_our_court": bool(out.get("ball_in_our_court")),
+            "reason": (out.get("reason") or "").strip()[:300],
+            "bucket": bucket if bucket in ("self_serve", "conversation", "strategic") else "",
+            "ball_in_our_court": bool(out.get("ball_in_our_court")),
             "domain": domain, "free_email": free}
 
 
@@ -1437,11 +1447,17 @@ def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
             db.setting_set(f"qual:email:{em}", {**sug, "company_id": co["id"]})
     except Exception:  # noqa: BLE001
         pass
+    strategic = bool(sug and sug.get("bucket") == "strategic")
     if draft:                                        # full mode -> also draft a reply for approval
         skill = store.get_skill_by_key(co["id"], "sales-first-response")
         if skill:
             store.create_task(co["id"], skill["id"], "email_reply",
-                              {"brief": _email_brief(inq, co), "inquiry": inq, "triage": verdict, "qual_suggest": sug})
+                              {"brief": _email_brief(inq, co), "inquiry": inq, "triage": verdict,
+                               "qual_suggest": sug, "strategic": strategic})
+        if strategic:                                # the lead-qualification rules say: raise it to the owner NOW
+            tg.send(f"[{co['name']}] STRATEGIC lead flagged: {inq.get('name') or ''} <{inq.get('email')}> — "
+                    f"{(sug or {}).get('reason') or 'enterprise potential'}. Reply drafted for approval; "
+                    "the lead-qualification rules recommend you take this one over personally.")
     return {"ok": True, "captured": True, "category": verdict.get("category"),
             "qualification": (sug or {}).get("verdict")}
 
@@ -1868,7 +1884,8 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
                "subject": subj if subj.lower().startswith("re:") else f"Re: {subj}"}
         if skill:
             store.create_task(co["id"], skill["id"], "email_reply",
-                              {"brief": _reply_followup_brief(inq, co), "inquiry": inq, "thread_reply": True})
+                              {"brief": _reply_followup_brief(inq, co), "inquiry": inq, "thread_reply": True,
+                               "qual_suggest": prior, "strategic": prior.get("bucket") == "strategic"})
         try:                                                         # re-qualify on the new info
             sug = qualify_suggest(co, inq)
             if sug:

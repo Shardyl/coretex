@@ -1,19 +1,22 @@
 """The manager — keeper of the standard.
 
-Reviews the worker's draft against the skill's craft, the company's brand, and the FULL rule set
-(universal + this company's local rules — the exact same rules the worker was told to follow), then
-renders a verdict the owner can trust: pass / revise / escalate, with a confidence and a one-line
-reason. 'escalate' or low confidence means it must reach the owner even on an auto lane.
+Reviews the worker's draft against the skill's craft, the FULL company context (voice, audience,
+dos/donts, grounding), and the FULL rule set (universal + local + related skills' rules — the exact
+same rules the worker was told to follow), then renders a verdict the owner can trust: pass / revise /
+escalate, with a confidence and a one-line reason. 'escalate' or low confidence means it must reach
+the owner even on an auto lane.
 """
 from __future__ import annotations
 
-from . import provider, store
+from . import provider, store, worker
 
 
 def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
-    ctx = company.get("context") or {}
-    universal, local = store.effective_rules(skill)   # honour this company's overrides
-    rules = list(universal) + list(local)
+    # The exact rules the worker drafted under: this skill's + its related skills' (CC directives excluded —
+    # they are envelope config the body can never show, so the Manager must not flag their absence).
+    rules = list(worker._rule_lines(skill))
+    for s in worker.related_skills(skill, company):
+        rules += [f"[{s['name']}] {r}" for r in worker._rule_lines(s)]
     brief = request.get("brief") if isinstance(request, dict) else request
     system = (
         "You are the department Manager at Cortex — the keeper of the standard. Review a worker's draft "
@@ -23,7 +26,7 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
         "redo), or 'escalate' (needs the owner's judgement: a rule is ambiguous, the draft makes a risky "
         "or unverifiable claim, or you are simply not confident). State your confidence: high, medium, low.")
     user = (
-        f"Company: {company['name']} (voice: {ctx.get('voice', 'n/a')})\n"
+        worker._company_context(company) + "\n\n"
         f"Task: {brief}\n"
         "Standing rules the draft MUST follow:\n"
         + ("\n".join(f"- {r}" for r in rules) or "- (none set yet)")
