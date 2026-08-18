@@ -456,6 +456,119 @@ def add_inbound_contact(reg: dict, company: str, classification: str, stage: str
     return ("added", email)
 
 
+# ---- Phone-keyed capture (WhatsApp) --------------------------------------------------------------------
+# crm_master is EMAIL-keyed (unique index on lower(email)) and add_inbound_contact refuses an email-less
+# contact. WhatsApp gives a phone number and a push name, never an email — so inbound WhatsApp contacts match
+# and insert on PHONE instead. The table already tolerates this: email is nullable and thousands of rows have
+# none. We do NOT invent placeholder addresses (see feedback_no_llm_invented_facts); the row simply has no
+# email until we learn one.
+
+_PHONE_IDX = r"""
+create index if not exists crm_master_phone9 on crm_master
+  (right(regexp_replace(coalesce(phone,''), '\D', '', 'g'), 9));
+"""
+_phone_idx_done = False
+
+
+def ensure_phone_index() -> None:
+    global _phone_idx_done
+    if _phone_idx_done:
+        return
+    try:
+        with db.connect() as c:
+            c.execute(_PHONE_IDX)
+        _phone_idx_done = True
+    except Exception:  # noqa: BLE001 — matching still works without the index, just slower
+        pass
+
+
+def phone_key(phone: str | None) -> str:
+    """Last 9 digits — the comparable core of a number regardless of how it was written. Handles every format
+    in the imported master sheet ('(845) 863-3689', '055 681 9428', '971 56 2570393', '+447911123456')."""
+    d = re.sub(r"\D", "", phone or "")
+    return d[-9:] if len(d) >= 9 else ""
+
+
+def find_by_phone(phone: str) -> dict | None:
+    """Find the ONE contact this number belongs to, or None. Deliberately refuses to guess.
+
+    An exact full-digit match wins. Otherwise we fall back to the last-9 key (the only way to match the wildly
+    inconsistent formats in the imported master sheet), but ONLY when it identifies exactly one contact.
+    ~1,384 rows share a last-9 key with another row, and sampling shows these are SHARED COMPANY SWITCHBOARDS
+    (nine different people behind one UK office line), not duplicate people. Attaching an inbound message to
+    whichever of them sorted first would file it against the wrong human and corrupt their history, so an
+    ambiguous key returns None and the caller creates a clean contact against the real mobile number."""
+    key = phone_key(phone)
+    if not key:
+        return None
+    ensure_phone_index()
+    digits = re.sub(r"\D", "", phone or "")
+    exact = db.query(
+        "select * from crm_master "
+        r"where regexp_replace(coalesce(phone,''), '\D', '', 'g') = %s order by id limit 2", (digits,))
+    if len(exact) == 1:
+        return exact[0]
+    rows = db.query(
+        "select * from crm_master "
+        r"where right(regexp_replace(coalesce(phone,''), '\D', '', 'g'), 9) = %s "
+        r"  and length(regexp_replace(coalesce(phone,''), '\D', '', 'g')) >= 9 "
+        "order by id limit 2", (key,))
+    return rows[0] if len(rows) == 1 else None
+
+
+def log_event_id(row_id: int, event: str, text: str = "") -> None:
+    """Append one interaction to a contact's history BY ID (log_event matches by email, which an email-less
+    WhatsApp contact does not have)."""
+    db.execute("update crm_master set history = coalesce(history,'[]'::jsonb) || %s::jsonb, updated_at=now() "
+               "where id=%s", (Json([{"ts": _now(), "event": event, "text": text}]), row_id))
+
+
+def match_or_add_by_phone(phone: str, name: str, company: str, source: str = "whatsapp",
+                          summary: str | None = None, classification: str | None = None,
+                          stage: str = "Engaged") -> tuple[str, dict | None]:
+    """Match an inbound WhatsApp contact on phone, else create one. FILL-IF-BLANK ONLY — never overwrites an
+    existing name, note, org or classification (see feedback_never_delete_data_without_checking). Returns
+    (status, row) where status is matched | added | skipped-no-phone."""
+    ensure_schema()
+    p = (phone or "").strip()
+    if not phone_key(p):
+        return ("skipped-no-phone", None)
+    org = _org(company)
+    first, last = _split_name(name) if name else ("", "")
+    note = (summary or "").strip() or None
+    ev_text = f"Inbound WhatsApp to {org}." + (f" {note}" if note else "")
+    existing = find_by_phone(p)
+    if existing:
+        cur = existing.get("organisation") or ""
+        new_org = (cur + ", " + org).strip(", ") if (org and org.lower() not in cur.lower()) else (cur or org)
+        row = db.execute(
+            "update crm_master set organisation=%s, "
+            "first_name=coalesce(nullif(btrim(first_name),''), %s), "
+            "last_name=coalesce(nullif(btrim(last_name),''), %s), "
+            "lead_source=coalesce(nullif(btrim(lead_source),''), %s), "
+            "classification=coalesce(classification, %s), "
+            "note=coalesce(nullif(btrim(note),''), %s), updated_at=now() where id=%s returning *",
+            (new_org, first or None, last or None, source, classification, note, existing["id"]))
+        log_event_id(existing["id"], "inbound_whatsapp", ev_text)
+        return ("matched", row)
+    row = db.execute(
+        "insert into crm_master (organisation, first_name, last_name, phone, lead_source, classification, "
+        "note, newsletter_opt_out, lead_status, stage, history) "
+        "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *",
+        (org, first or None, last or None, p, source, classification, note, True, "New", stage,
+         Json([{"ts": _now(), "event": "inbound_whatsapp", "text": ev_text}])))
+    try:    # same rolling FYI card the email path drops, so a new WhatsApp contact is visible in the Inbox
+        from . import notifications
+        cid_row = db.one("select id from companies where slug=%s", (company,))
+        notifications.notify("New WhatsApp contact captured", f"{name or p} -> {org}",
+                             priority="fyi", category="contact", dedup_key=f"inbound_wa:{org}",
+                             company_id=(cid_row["id"] if cid_row else None),
+                             item={"name": name or p, "phone": p, "cat": classification or "enquiry"})
+    except Exception:  # noqa: BLE001
+        pass
+    return ("added", row)
+
+
 _MIGRATE_DEALS = """
 alter table crm_projects add column if not exists contacts jsonb not null default '[]'::jsonb;
 alter table crm_projects add column if not exists account_id bigint;

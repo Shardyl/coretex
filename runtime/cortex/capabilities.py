@@ -40,6 +40,12 @@ CAPABILITIES: list[tuple[str, str]] = [
     ("Reports",
      "run_report generates a per-company SEO/traffic report into the Inbox now; schedule_report puts it on a "
      "cadence (it then lives on the Calendar)."),
+    ("WhatsApp — inbound, draft-only",
+     "The office-box runner reads WhatsApp Web on the business number and pushes new messages in. Cortex "
+     "captures the contact in the CRM by PHONE (a WhatsApp contact has no email), triages the message "
+     "(enquiry / personal / supplier / spam) and drafts a SHORT, human, texting-style reply into the Inbox. "
+     "Approving a WhatsApp card queues the reply for the runner to send, gated by biometric/PIN like any "
+     "outward message — it can NEVER auto-send. Tone lives in the social-dm-replies skill, not in code."),
     ("System self-knowledge",
      "system_knowledge looks up how Cortex itself works (architecture, approvals, the nightly backup). Use it "
      "before answering 'how does X work / where do I find Y' — never guess about the system."),

@@ -32,10 +32,12 @@ MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
 EMAIL_KINDS = {"email_reply"}              # an inbound-reply, sent via Gmail on approval
 EMAIL_SEND_KINDS = {"email_reply", "email_draft"}    # ALL kinds that actually SEND an email on approval
 EMAIL_RENDER_KINDS = EMAIL_KINDS | {"email_draft"}   # rendered as an email (envelope + logo) in the Inbox
-NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send", "email_reply", "email_draft"}  # outward sends always need the owner
+NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send", "email_reply", "email_draft",
+                    "wa_reply"}  # outward sends always need the owner
 # PUBLIC actions (go OUT to the public) — approving these needs a biometric step-up (see
 # feedback_public_actions_biometric). Internal items use the normal approve. Split by where the action fires:
-_APPROVE_PUBLIC = {"email_reply", "email_draft", "newsletter_idea", "blog", "social_shift", "social_action"}   # the action happens in approve_task
+_APPROVE_PUBLIC = {"email_reply", "email_draft", "newsletter_idea", "blog", "social_shift", "social_action",
+                   "wa_reply"}   # the action happens in approve_task
 _CONFIRM_PUBLIC = {"newsletter_review", "newsletter_send"}        # the action happens in confirm_send_task
 
 # Phase 3.2 — central kind -> security class (the single source of truth for gating; merged spec §3a).
@@ -53,6 +55,7 @@ KIND_CLASS = {
     "newsletter_idea": "outward", "newsletter_review": "outward", "newsletter_send": "outward",
     "social_post": "outward", "dm_reply": "outward", "sms": "outward",
     "social_shift": "outward", "social_relogin": "internal", "social_action": "outward",
+    "wa_reply": "outward",     # an approved WhatsApp reply the runner types back — goes to a real person
     "payment": "money", "invoice_send": "money", "refund": "money",
 }
 
@@ -71,6 +74,7 @@ APPROVE_ACTION = {
     "newsletter_send": "Approve & send",
     "social_shift": "Approve today's run", "social_relogin": "I've logged back in",
     "social_action": "Approve & run",
+    "wa_reply": "Approve & send on WhatsApp",
     # lead_escalation: an INTERNAL strategic-lead briefing card — nothing sends anywhere; approving only
     # acknowledges the owner is taking the lead over. Deliberately NOT in KIND_CLASS (unknown kinds fail safe
     # to 'outward' = never auto) and not in _APPROVE_PUBLIC (internal ack, no biometric).
@@ -789,6 +793,11 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         store.update_task(task["id"], status="queued")
         store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"action": req.get("action")})
         return {"sent_to": f"the runner — {req.get('persona', 'Paul')} will {req.get('action', 'action')} this shortly"}
+    if task["kind"] == "wa_reply":   # approving QUEUES the reply for the runner to type into WhatsApp Web
+        req = task.get("request") or {}
+        store.update_task(task["id"], status="queued")
+        store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"draft": task.get("draft")})
+        return {"sent_to": f"WhatsApp — {req.get('recipient') or req.get('phone') or 'the contact'}"}
     if task["kind"] == "social_relogin":   # acknowledging the re-login clears the logged-out flag so shifts resume
         db.setting_set(f"social_loggedout:{(task.get('request') or {}).get('account', '')}", False)
         store.update_task(task["id"], status="done")

@@ -32,7 +32,8 @@ from pydantic import BaseModel
 
 from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, engine, gmail, knowledge,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
-               skillqa, social, social_config, social_dm, social_warm, store, webauthn_auth, worker)
+               skillqa, social, social_config, social_dm, social_warm, store, webauthn_auth, whatsapp,
+               worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
 
@@ -828,6 +829,55 @@ def social_warm_targets(account: str, n: int = 5, _: None = Depends(_runner_auth
 def social_warm_queue(body: WarmBody, _: None = Depends(_runner_auth)) -> dict:
     """Draft a comment (persona's voice) per target post + create the approval cards (post + comment shown)."""
     return social_warm.queue_warm(body.account, body.items)
+
+
+# ---------- WhatsApp runner (WhatsApp Web on the office box: brain <-> hands) ----------
+# Same contract as the social runner above: the box pushes what it read, pulls what was approved, reports
+# the outcome. Cortex never touches WhatsApp itself, and nothing goes out that Rashad did not approve.
+
+class WaInboxBody(BaseModel):
+    account: str
+    threads: list[dict] = []   # [{phone, name, message, ts, chat_id, from_me}] from the runner's WA reader
+
+
+@app.post("/api/whatsapp/inbox")
+def whatsapp_inbox(body: WaInboxBody, _: None = Depends(_runner_auth)) -> dict:
+    """The runner pushes WhatsApp chats needing a reply; Cortex captures the contact (by phone), drafts a
+    reply in Rashad's voice and lands it in the Inbox. Reads + drafts only, never auto-sends."""
+    return whatsapp.ingest_threads(body.account, body.threads)
+
+
+@app.get("/api/whatsapp/jobs")
+def whatsapp_jobs(account: str, _: None = Depends(_runner_auth)) -> dict:
+    """The runner pulls APPROVED replies to type into WhatsApp Web (wa_reply cards queued by approval)."""
+    rows = db.query("select id, request, draft from tasks where kind='wa_reply' and status='queued' "
+                    "and request->>'account'=%s order by id", (account,))
+    return {"jobs": [{"id": r["id"], "text": r["draft"] or "", **(r["request"] or {})} for r in rows]}
+
+
+@app.post("/api/whatsapp/jobs/{tid}/result")
+def whatsapp_job_result(tid: int, body: JobResult, _: None = Depends(_runner_auth)) -> dict:
+    """The runner reports whether the reply actually went out -> close the card + log it on the contact."""
+    t = store.get_task(tid)
+    if not t or t["kind"] != "wa_reply":
+        raise HTTPException(status_code=404, detail="no such job")
+    store.update_task(tid, status="done" if body.ok else "failed", last_status=body.detail[:300])
+    req = t.get("request") or {}
+    if body.ok and req.get("phone"):
+        try:      # the sent reply belongs on the contact's history, same as an email reply would
+            row = crm.find_by_phone(req["phone"])
+            if row:
+                crm.log_event_id(row["id"], "whatsapp_reply_sent", (t.get("draft") or "")[:500])
+        except Exception:  # noqa: BLE001
+            pass
+    if not body.ok:
+        try:
+            notifications.notify("WhatsApp reply failed to send",
+                                 f"{req.get('recipient') or req.get('phone')}: {body.detail[:200]}",
+                                 category="social", company_id=t["company_id"])
+        except Exception:  # noqa: BLE001
+            pass
+    return {"ok": True}
 
 
 # ---------- notification actions (info cards) ----------
