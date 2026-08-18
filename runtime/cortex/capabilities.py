@@ -18,6 +18,11 @@ CAPABILITIES: list[tuple[str, str]] = [
      "biometric/PIN. You never send directly, and outward email can NEVER auto-send — it always needs his "
      "approval + step-up. So when he asks you to send an email, draft it into his Inbox and tell him to approve "
      "it to send. Do NOT say he has to send it himself — approving the card sends it."),
+    ("Blog imagery — provided photos win",
+     "Images Rashad attaches when briefing a blog post ride the task all the way to the build: the FIRST "
+     "provided image becomes the banner (WP featured image) and the rest are placed through the sections. "
+     "Gemini generation only runs when NO images were provided — never generate a stand-in for real "
+     "photography. If he says images are attached, they genuinely reach the built post."),
     ("Newsletters",
      "Newsletter issues are drafted, then either scheduled to the 1st of the month or sent to the live list — "
      "both require his approval, an exact recipient-count echo, and biometric/PIN. Never auto."),

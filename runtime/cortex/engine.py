@@ -665,6 +665,9 @@ def _run_blog_ideation(task: dict, skill: dict, company: dict) -> None:
         tg.send(f"[{company['name']}] couldn't generate a blog draft — try again or give a brief.")
         return
     total = len(drafts)
+    # owner-provided images ride the request through every rewrite — losing them here cost task #305 its banner
+    keep = ({"attachments": req["attachments"], "attachment_names": req.get("attachment_names") or []}
+            if req.get("attachments") else {})
     for i, c in enumerate(drafts, 1):
         c = blog.add_internal_links(company["id"], c)   # weave contextual internal links into the draft (outbound)
         c = blog.add_service_logos(company["id"], c)    # logos for any external services mentioned + link out
@@ -673,11 +676,12 @@ def _run_blog_ideation(task: dict, skill: dict, company: dict) -> None:
         body = (f"Draft {i} of {total}\n\n{text}") if total > 1 else text
         if i == 1:   # reuse the original request task for the first draft
             store.update_task(task["id"], kind="blog_idea", title=title, draft=body,
-                              request={"brief": req.get("brief", ""), "content": c}, status="awaiting_approval")
+                              request={"brief": req.get("brief", ""), "content": c, **keep},
+                              status="awaiting_approval")
             t = store.get_task(task["id"])
         else:
             t = store.create_task(company["id"], skill["id"], "blog_idea",
-                                  {"brief": req.get("brief", ""), "content": c})
+                                  {"brief": req.get("brief", ""), "content": c, **keep})
             store.update_task(t["id"], title=title, draft=body, status="awaiting_approval")
         _push_approval(t, skill, company)
     tg.send(f"[{company['name']}] {total} blog draft{'s' if total > 1 else ''} ready to read in your Inbox "
@@ -714,7 +718,8 @@ def _build_blog_from_concept(task: dict, skill: dict, company: dict) -> dict:
     _tmpl = str((_brand.get_brand_kit(company["id"]) or {}).get("template") or "")
     rich = _tmpl.startswith("dark") or _tmpl == "light-saas"
     if content:   # the APPROVED text: render it + generate images ONCE — do NOT re-compose (what he read = what ships)
-        art = blog.build_from_content(company["id"], content)
+        art = blog.build_from_content(company["id"], content, attachments=req.get("attachments"),
+                                      attachment_names=req.get("attachment_names"))
         verdict = manager.check(skill, company, f"TITLE: {art['title']}\n\n{art['html']}", {"brief": ""})
     elif rich:    # legacy concept card (no stored content) -> compose from the brief
         art = blog.build(company["id"], req.get("brief", ""))
@@ -1040,9 +1045,12 @@ def apply_correction(task: dict, text: str) -> None:
         c = (task.get("request") or {}).get("content") or {}
         new_c = blog.revise_surgical(company["id"], c, text) if c else blog.compose(company["id"], text)
         new_text = blog.content_text(new_c)
+        _r = task.get("request") or {}
+        _keep = ({"attachments": _r["attachments"], "attachment_names": _r.get("attachment_names") or []}
+                 if _r.get("attachments") else {})
         store.update_task(task["id"], title=(new_c.get("title") or task.get("title")), draft=new_text,
                           status="awaiting_approval",
-                          request={"brief": (task.get("request") or {}).get("brief", ""), "content": new_c},
+                          request={"brief": _r.get("brief", ""), "content": new_c, **_keep},
                           attempts=task["attempts"] + 1)
         store.log_decision(task["id"], skill["id"], "owner", "correct", note=text, snapshot={"old": old, "new": new_text})
         _maybe_propose_rule(task, skill, text, old or "", new_text)

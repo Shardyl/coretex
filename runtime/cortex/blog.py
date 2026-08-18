@@ -374,6 +374,68 @@ def _gen_and_host(slug: str, jobs: list[tuple[str, str, str]], prefix: str = "")
     return urls
 
 
+def _host_attachments(slug: str, atts: list, names: list | None, prefix: str = "") -> list[dict]:
+    """Owner-PROVIDED images (data: URLs carried on the task request) -> hosted R2 urls, order preserved.
+    Returns [{url, alt}]. Non-image attachments are skipped. Provided photography always outranks
+    generation — a real production still must never be replaced by a Gemini lookalike."""
+    import base64 as _b64
+    pre = re.sub(r"[^a-z0-9-]", "", (prefix or "").lower())[:60]
+    hosted: list[dict] = []
+    for i, att in enumerate(atts or []):
+        try:
+            if not isinstance(att, str) or not att.startswith("data:image"):
+                continue
+            head, _, b64 = att.partition(",")
+            data = _optimize_jpeg(_b64.b64decode(b64), max_w=(1600 if not hosted else 1200))
+            if not data:
+                continue
+            name = f"{pre}-provided{i}.jpg" if pre else f"provided{i}.jpg"
+            url = media.put(slug, "blog", name, data, content_type="image/jpeg")
+            raw = ((names or [])[i] if i < len(names or []) else "") or ""
+            alt = re.sub(r"[-_]+", " ", re.sub(r"\.[a-z0-9]+$", "", raw, flags=re.I)).strip()
+            hosted.append({"url": url, "alt": alt})
+        except Exception:  # noqa: BLE001 — one bad attachment must not sink the build
+            continue
+    return hosted
+
+
+def _place_provided(c: dict, hosted: list[dict]) -> dict:
+    """Wire provided images into the post: FIRST image = the banner (WP featured image), the rest spread
+    evenly through the sections as figures. Mutates `c` (figure.use/alt) and returns the imgs dict the
+    renderer expects ({hero, figN: url}). Every provided image gets placed — none silently dropped."""
+    imgs: dict = {}
+    if not hosted:
+        return imgs
+    fi = dict(c.get("featured_image") or c.get("hero") or {})
+    fi["use"] = True
+    fi.pop("image_prompt", None)                      # provided, not generated
+    if not fi.get("alt"):
+        fi["alt"] = hosted[0]["alt"] or (c.get("title") or "")
+    c["featured_image"] = fi
+    imgs["hero"] = hosted[0]["url"]
+    secs = c.get("sections") or []
+    rest = hosted[1:]
+    if rest and secs:
+        used: set[int] = set()
+        for j, h in enumerate(rest):
+            i = min(len(secs) - 1, round((j + 1) * len(secs) / (len(rest) + 1)))
+            while i in used and i + 1 < len(secs):    # walk forward to the next free section
+                i += 1
+            while i in used and i > 0:                # or backwards if we ran off the end
+                i -= 1
+            if i in used:
+                break                                  # more images than sections — nowhere left to put it
+            used.add(i)
+            fig = dict(secs[i].get("figure") or {})
+            fig["use"] = True
+            fig.pop("image_prompt", None)
+            if not fig.get("alt"):
+                fig["alt"] = h["alt"]
+            secs[i]["figure"] = fig
+            imgs[f"fig{i}"] = h["url"]
+    return imgs
+
+
 # ---- render (self-contained dark-cinematic post body; works regardless of the WP theme) ----
 
 def _esc(s) -> str:
@@ -855,14 +917,19 @@ def _keep_reading(company: dict, c: dict, exclude_id=None, n: int = 3) -> list:
     return out
 
 
-def build_from_content(company_id: int, c: dict) -> dict:
-    """Generate + host the imagery, then render the GIVEN content. Returns {title, html, dek, content, images}
-    — content + images are returned so a later REVISION can reuse the same images (no regeneration)."""
+def build_from_content(company_id: int, c: dict, attachments: list | None = None,
+                       attachment_names: list | None = None) -> dict:
+    """Host the imagery, then render the GIVEN content. Returns {title, html, dek, content, images}
+    — content + images are returned so a later REVISION can reuse the same images (no regeneration).
+    If the owner PROVIDED images (task attachments), they are the imagery: first = banner, rest spread
+    through the sections, and nothing is generated. Gemini only runs when no images were provided."""
     company = store.get_company(company_id)
     c = dict(c)
     c["keep_reading"] = _keep_reading(company, c)   # REAL published posts only, never the model's invented links
     post_slug = (c.get("seo") or {}).get("slug") or c.get("title") or ""
-    imgs = _gen_and_host(company.get("slug") or "filmspoke", _image_jobs(c), prefix=post_slug)
+    slug = company.get("slug") or "filmspoke"
+    hosted = _host_attachments(slug, attachments or [], attachment_names, prefix=post_slug)
+    imgs = _place_provided(c, hosted) if hosted else _gen_and_host(slug, _image_jobs(c), prefix=post_slug)
     out = render(company_id, c, imgs)
     out["content"], out["images"] = c, imgs
     return out
