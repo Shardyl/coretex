@@ -534,7 +534,11 @@ def match_or_add_by_phone(phone: str, name: str, company: str, source: str = "wh
     if not phone_key(p):
         return ("skipped-no-phone", None)
     org = _org(company)
-    first, last = _split_name(name) if name else ("", "")
+    # WhatsApp shows an UNSAVED contact's NUMBER where a name would go, so what arrives as `name` is very
+    # often the phone number itself. That must never land in first_name/last_name — a nameless contact is
+    # far better than one called "+971 58". We learn the real name later, from the conversation.
+    clean_name = "" if (not name or phone_key(name)) else name.strip()
+    first, last = _split_name(clean_name) if clean_name else ("", "")
     note = (summary or "").strip() or None
     ev_text = f"Inbound WhatsApp to {org}." + (f" {note}" if note else "")
     existing = find_by_phone(p)
@@ -560,10 +564,10 @@ def match_or_add_by_phone(phone: str, name: str, company: str, source: str = "wh
     try:    # same rolling FYI card the email path drops, so a new WhatsApp contact is visible in the Inbox
         from . import notifications
         cid_row = db.one("select id from companies where slug=%s", (company,))
-        notifications.notify("New WhatsApp contact captured", f"{name or p} -> {org}",
+        notifications.notify("New WhatsApp contact captured", f"{clean_name or p} -> {org}",
                              priority="fyi", category="contact", dedup_key=f"inbound_wa:{org}",
                              company_id=(cid_row["id"] if cid_row else None),
-                             item={"name": name or p, "phone": p, "cat": classification or "enquiry"})
+                             item={"name": clean_name or p, "phone": p, "cat": classification or "enquiry"})
     except Exception:  # noqa: BLE001
         pass
     return ("added", row)
