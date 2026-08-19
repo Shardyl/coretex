@@ -1399,6 +1399,7 @@ function timeTag(ts){ if(!ts) return ''; const d=new Date(ts), diff=(Date.now()-
   if(diff<86400) return Math.floor(diff/3600)+'h ago';
   return d.toLocaleDateString([],{day:'numeric',month:'short'})+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
 async function renderInbox(v){
+  ensurePush();   // once per session: repair a dead push subscription / resurface the banner if the flag lied
   if(inboxView==='history') return renderInboxHistory(v);
   v.innerHTML=`<div class="ibhead"><div class="h" style="margin:0">Needs your yes</div>
     <div style="display:flex;gap:6px;flex:none">
@@ -1482,6 +1483,29 @@ async function addReminder(){
 function updateInboxBadge(n){ const el=document.getElementById('ibBadge'); if(!el) return;
   el.textContent=n>0?n:''; el.style.display=n>0?'inline-flex':'none';
   el.style.animation=n>0?'ibpulse 1.7s ease-in-out infinite':'none'; }
+let _pushChecked=false;
+async function ensurePush(){
+  // Self-heal: the 'cortex_push' flag only proves a PAST subscribe. If the real subscription is gone
+  // (server table rebuilt, endpoint expired 404/410), silently re-subscribe when permission is already
+  // granted, or clear the flag so the Enable-alerts banner comes back. Runs once per app session.
+  if(_pushChecked || demo || !IS_MOBILE) return; _pushChecked=true;
+  if(!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+  try{
+    if(Notification.permission==='granted'){
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if(!sub){
+        const vk = await api('/api/push/vapid');
+        if(!vk || !vk.public_key) return;
+        sub = await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:_b64uToBuf(vk.public_key)});
+      }
+      await api('/api/push/subscribe',{method:'POST',body:JSON.stringify({subscription:sub.toJSON()})});
+      localStorage.setItem('cortex_push','1');
+    } else if(Notification.permission==='default' && localStorage.getItem('cortex_push')==='1'){
+      localStorage.removeItem('cortex_push'); render();   // flag lied — bring the banner back
+    }
+  }catch(e){ /* self-heal is best-effort; the banner path still exists */ }
+}
 async function enablePush(){
   if(demo) return;
   if(!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)){ toast('Push not supported on this device'); return; }
