@@ -46,12 +46,16 @@ def _classify(name: str, phone: str, msg: str, slug: str) -> dict:
             "personal line, so old contacts still message it.",
             f"From: {name or 'unknown'} ({phone})\nTheir message: {msg}\n\n"
             'Return JSON: {"reply": boolean, "category": "enquiry|personal|supplier|spam", '
+            '"name": "their personal name ONLY if they actually state it or sign off with it, '
+            'else empty string - never guess, never use the phone number", '
             '"summary": "one line, who and what", "reason": "short"}',
             model=provider.MODEL_ROUTER, purpose="wa_triage", company=slug)
         return {"reply": bool(out.get("reply")), "category": (out.get("category") or "enquiry"),
+                "name": (out.get("name") or "").strip(),
                 "summary": (out.get("summary") or "").strip(), "reason": (out.get("reason") or "").strip()}
     except Exception:  # noqa: BLE001 — triage must never block an inbound message
-        return {"reply": True, "category": "enquiry", "summary": "", "reason": "triage unavailable -> default reply"}
+        return {"reply": True, "category": "enquiry", "name": "", "summary": "",
+                "reason": "triage unavailable -> default reply"}
 
 
 def _clean_phone(p: str) -> str:
@@ -90,9 +94,12 @@ def ingest_threads(account: str, threads: list[dict]) -> dict:
         # CRM capture happens for every real human (even ones we don't draft for) so the contact is never lost.
         if verdict.get("category") != "spam":
             try:
+                # WhatsApp never gives us a name for an unknown sender - the row title IS the number. The
+                # only honest source is the message itself, when they introduce themselves. Fill-if-blank,
+                # so a later message where they DO say who they are backfills the contact.
                 status, _row = crm.match_or_add_by_phone(
-                    phone, name, slug, source="whatsapp", summary=verdict.get("summary") or msg[:200],
-                    classification=verdict.get("category"))
+                    phone, verdict.get("name") or name, slug, source="whatsapp",
+                    summary=verdict.get("summary") or msg[:200], classification=verdict.get("category"))
                 captured += 1 if status == "added" else 0
             except Exception:  # noqa: BLE001 — a CRM hiccup must not lose the reply
                 pass
@@ -100,6 +107,8 @@ def ingest_threads(account: str, threads: list[dict]) -> dict:
             skipped += 1
             continue
         personal = verdict.get("category") == "personal"
+        # a real name only — never the phone number WhatsApp puts in the chat-list title slot
+        know_name = verdict.get("name") or ("" if _clean_phone(name) else name)
         brief = (
             "Draft a reply to this WhatsApp message. WhatsApp is a PERSONAL, informal channel — write the way "
             "a real person texts: short (1 to 4 sentences), warm, natural, no email formatting, no subject "
@@ -107,13 +116,17 @@ def ingest_threads(account: str, threads: list[dict]) -> dict:
             + ("This is a PERSONAL message from someone who knows Rashad, NOT a business lead — reply as a "
                "friend would, do not pitch, do not sell.\n\n" if personal else
                f"This is a '{verdict.get('category')}' message.\n\n")
-            + f"From: {name or phone}\nTheir message: {msg}")
+            + ("You do NOT know this person's name yet — WhatsApp only gave us their number. If it "
+               "reads naturally, ask who you're speaking with as part of the reply, the way anyone "
+               "would when a message arrives from an unknown number. Do not force it if the message "
+               "doesn't invite it.\n\n" if not know_name else "")
+            + f"From: {know_name or phone}\nTheir message: {msg}")
         try:
             draft = worker.draft(skill, co, {"brief": brief}, author=rt.get("author") or "rashad")
         except Exception:  # noqa: BLE001
             draft = ""
         task = store.create_task(rt["company_id"], skill["id"], "wa_reply", {
-            "brief": brief, "channel": "whatsapp", "account": account, "recipient": name or phone,
+            "brief": brief, "channel": "whatsapp", "account": account, "recipient": know_name or phone,
             "phone": phone, "chat_id": t.get("chat_id") or "", "their_message": msg, "triage": verdict})
         if draft:
             store.update_task(task["id"], draft=draft, status="awaiting_approval")
