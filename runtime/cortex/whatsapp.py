@@ -96,6 +96,18 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
         except Exception:  # noqa: BLE001 — a CRM hiccup must not lose the reply
             pass
     if not verdict.get("reply"):
+        # Traffic on this number is very low (Rashad, 22 Aug 2026), so nothing arrives silently: a message we
+        # decline to answer still raises an FYI card, with the reason, so he can see it was a real decision
+        # and override it. No draft, no approval, nothing armed to send.
+        try:
+            from . import notifications
+            notifications.notify(
+                f"WhatsApp filed, no reply drafted ({verdict.get('category') or 'spam'})",
+                f"{name or phone}: {msg[:180]}" + (f"  [{verdict.get('reason')}]" if verdict.get("reason") else ""),
+                priority="fyi", category="social", company_id=rt["company_id"],
+                item={"name": name or phone, "phone": phone, "cat": verdict.get("category") or "spam"})
+        except Exception:  # noqa: BLE001 — visibility must never block ingest
+            pass
         return "skipped"
     personal = verdict.get("category") == "personal"
     # a real name only — never the phone number WhatsApp puts where a name would go
