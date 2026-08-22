@@ -54,29 +54,42 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
 - New scheduled work goes on the unified clock (`tasks` recurring templates +
   `engine.promote_due_tasks`) — `scheduled_tasks` is long dead.
 
-## WhatsApp (inbound, via the office-box runner)
+## WhatsApp (inbound)
 
-Not the Cloud API. The business number runs on **WhatsApp Web as a linked device** on the runner box, driven
-by Patchright like the LinkedIn runner, because the official Cloud API path needs a WABA + business
-verification + a BSP for Coexistence. Contract mirrors the social runner exactly:
-`POST /api/whatsapp/inbox` (runner pushes chats) -> `GET /api/whatsapp/jobs` (pulls approved replies) ->
-`POST /api/whatsapp/jobs/{tid}/result`. All behind `_runner_auth` (the shared `runner_key` setting).
+**Two transports, one brain.** Both funnel into `whatsapp._process_message`, so triage, CRM capture and
+drafting can never drift apart:
 
-- Ingest/draft lives in `whatsapp.py`, deliberately the same shape as `social_dm.py`. Tone is NOT in code —
-  it comes from the `social-dm-replies` skill craft/rules. Routing (account -> company/skill/author) is the
-  live `wa_routing` setting, so a new number never needs a deploy.
-- Kind is `wa_reply`: outward, never auto, biometric step-up on approve. Approving sets the card `queued`
-  and the RUNNER types it back — Cortex never sends WhatsApp itself.
+- **Cloud API (supported, preferred).** Meta POSTs to `/api/whatsapp/webhook`; approval sends via
+  `whatsapp.send_text`. App "Sensa Productions Messaging" (ID **4445290622399421**) under portfolio
+  **439550807574053**, which is **verified** (SKY VISION AERIAL PHOTOGRAPHY SERVICES, 20 Aug 2026).
+  Env keys in `/etc/cortex/cortex.env`: `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_TOKEN`,
+  `WHATSAPP_PHONE_NUMBER_ID`. Without the last two, `cloud_ready()` is false and approval falls back to
+  queueing for the runner.
+- **Office-box runner (fallback).** WhatsApp Web as a linked device, driven by Patchright, `wa.py` on
+  `pc@100.68.251.25`. Contract mirrors the social runner: `POST /api/whatsapp/inbox` ->
+  `GET /api/whatsapp/jobs` -> `POST /api/whatsapp/jobs/{tid}/result`, behind `_runner_auth`.
+  ⚠️ **Automating WhatsApp Web is against WhatsApp's terms and got a fresh number BANNED within hours on
+  19 Aug 2026** (six session open/close cycles on a number registered that morning). Ban was reversed on
+  appeal. Use the Cloud API.
+
+**The webhook endpoints are PUBLIC** (`GET`/`POST /api/whatsapp/webhook`) — Meta calls them, so they carry no
+operator auth. Security is the verify token on the GET handshake and the app-secret HMAC over the RAW body on
+every POST. Never add `_runner_auth` (it breaks the subscription) and never relax the signature check (it is
+all that stops anyone POSTing fake enquiries into the Inbox). The POST always returns 200 once signed, because
+Meta retries non-200s and disables webhooks that keep failing.
+
+- Tone is NOT in code — it comes from the `social-dm-replies` skill craft/rules. Routing (account -> company/
+  skill/author) is the live `wa_routing` setting, so a new number never needs a deploy.
+- Kind is `wa_reply`: outward, never auto, biometric step-up on approve.
 - **CRM matches on PHONE, not email** (`crm.match_or_add_by_phone`). `crm_master` is email-keyed with a
   unique index on `lower(email)`, and `add_inbound_contact` refuses an email-less contact, so WhatsApp gets
   its own path. It creates genuinely email-less rows; we do NOT invent placeholder addresses.
 - **The gotcha:** matching falls back to the last 9 digits, and ~1,384 existing rows share a last-9 key.
   Those are SHARED COMPANY SWITCHBOARDS (nine people behind one office line), not duplicates. `find_by_phone`
-  therefore refuses an ambiguous key and returns None rather than filing a message against the wrong human.
-  Do not "fix" this by taking the first row.
-- Ban risk is real and accepted: automating WhatsApp Web is against WhatsApp's terms. It runs on a
-  ring-fenced number, never the UAE personal line. INBOUND replies only — outbound marketing blasts on this
-  channel are what get numbers killed, and belong on the official WABA template path instead.
+  refuses an ambiguous key rather than filing a message against the wrong human. Do not "fix" this by taking
+  the first row. Likewise a `name` that parses as a phone number is stored as NO name — WhatsApp puts the
+  number where a name would go, and the real name is learned from the conversation.
+- App must be **published** before Meta delivers production webhooks; unpublished apps get test events only.
 
 ## Wider context
 

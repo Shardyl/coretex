@@ -22,7 +22,7 @@ import time
 
 import httpx
 import websockets
-from fastapi import (Body, Depends, FastAPI, File, Header, HTTPException, Response,
+from fastapi import (Body, Depends, FastAPI, File, Header, HTTPException, Request, Response,
                      UploadFile, WebSocket, WebSocketDisconnect)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
@@ -829,6 +829,44 @@ def social_warm_targets(account: str, n: int = 5, _: None = Depends(_runner_auth
 def social_warm_queue(body: WarmBody, _: None = Depends(_runner_auth)) -> dict:
     """Draft a comment (persona's voice) per target post + create the approval cards (post + comment shown)."""
     return social_warm.queue_warm(body.account, body.items)
+
+
+# ---------- WhatsApp Cloud API webhook (Meta -> Cortex) ----------
+# PUBLIC endpoints: Meta calls these, so they carry NO operator auth. Their security is the verify token on
+# the GET handshake and the app-secret HMAC on every POST. Do not add _runner_auth here — it would break the
+# subscription — and do not relax the signature check, which is the only thing separating a real Meta
+# delivery from anyone on the internet POSTing fake enquiries into Rashad's Inbox.
+
+@app.get("/api/whatsapp/webhook")
+def whatsapp_webhook_verify(request: Request) -> Response:
+    """Meta's subscription handshake: echo hub.challenge back, but only for the right verify token."""
+    q = request.query_params
+    try:
+        challenge = whatsapp.verify_webhook(q.get("hub.mode", ""), q.get("hub.verify_token", ""),
+                                            q.get("hub.challenge", ""))
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="verification failed")
+    return Response(content=challenge, media_type="text/plain")
+
+
+@app.post("/api/whatsapp/webhook")
+async def whatsapp_webhook(request: Request,
+                           x_hub_signature_256: str = Header(default="")) -> dict:
+    """Inbound WhatsApp messages. Verify Meta's signature over the RAW body, then triage/capture/draft.
+
+    Always returns 200 once the signature passes: Meta retries any non-200 and will disable a webhook that
+    keeps failing, so a drafting error must not become a redelivery loop (ingest_cloud dedupes anyway)."""
+    raw = await request.body()
+    if not whatsapp.check_signature(raw, x_hub_signature_256):
+        raise HTTPException(status_code=403, detail="bad signature")
+    try:
+        payload = json.loads(raw.decode("utf-8") or "{}")
+    except ValueError:
+        return {"ok": True, "ignored": "unparseable body"}
+    try:
+        return {"ok": True, **whatsapp.ingest_cloud(payload)}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": True, "error": str(e)[:200]}
 
 
 # ---------- WhatsApp runner (WhatsApp Web on the office box: brain <-> hands) ----------

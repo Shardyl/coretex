@@ -25,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 from psycopg.types.json import Json
 
 from . import (contentqueue, crm, db, gmail, manager, media, newsletter, notifications, profile, provider,
-               quotation, reminders, schedule, seo_report, store, webauthn_auth, worker)
+               quotation, reminders, schedule, seo_report, store, webauthn_auth, whatsapp, worker)
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -798,11 +798,25 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         store.update_task(task["id"], status="queued")
         store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"action": req.get("action")})
         return {"sent_to": f"the runner — {req.get('persona', 'Paul')} will {req.get('action', 'action')} this shortly"}
-    if task["kind"] == "wa_reply":   # approving QUEUES the reply for the runner to type into WhatsApp Web
+    if task["kind"] == "wa_reply":
+        # Cloud API if it is configured (the supported transport, sends immediately), else queue the card for
+        # the office-box runner to type into WhatsApp Web. Either way nothing moves until this approval.
         req = task.get("request") or {}
-        store.update_task(task["id"], status="queued")
+        who = req.get("recipient") or req.get("phone") or "the contact"
+        text = (task.get("draft") or "").strip()
+        if whatsapp.cloud_ready():
+            if not (req.get("phone") and text):
+                return {"ok": False, "error": "no phone or empty draft - nothing sent"}
+            try:
+                whatsapp.send_text(req["phone"], text)
+            except Exception as e:  # noqa: BLE001 - a failed send must NOT read as approved+sent
+                store.update_task(task["id"], last_status=str(e)[:300])
+                return {"ok": False, "error": f"WhatsApp send failed: {str(e)[:200]}"}
+            store.update_task(task["id"], status="done")
+        else:
+            store.update_task(task["id"], status="queued")
         store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"draft": task.get("draft")})
-        return {"sent_to": f"WhatsApp — {req.get('recipient') or req.get('phone') or 'the contact'}"}
+        return {"sent_to": f"WhatsApp — {who}"}
     if task["kind"] == "social_relogin":   # acknowledging the re-login clears the logged-out flag so shifts resume
         db.setting_set(f"social_loggedout:{(task.get('request') or {}).get('account', '')}", False)
         store.update_task(task["id"], status="done")
