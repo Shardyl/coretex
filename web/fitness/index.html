@@ -1025,6 +1025,20 @@ async function syncNow(manual){
   if(!syncToken()){setSyncState('auth');return;}
   _syncing=true;setSyncState('syncing');
   try{
+    // Fresh install (nothing in this origin's storage): the app has just seeded itself from the
+    // history baked into this file, which is older than the box and would resurrect anything
+    // deleted since. So pull first and let the server win; never push seed data over real data.
+    if(!localStorage.getItem(SESS_KEY)){
+      const first=await syncApi('/api/fitness/state');
+      if(first===null){_syncing=false;return;}
+      if(first&&first.counts&&first.counts.liftSessions){
+        applyServerState(first);
+        localStorage.setItem(SYNC_AT_KEY,new Date().toISOString());
+        setSyncState('idle');
+        _syncing=false;
+        return;
+      }
+    }
     const pushed=await syncApi('/api/fitness/state',{method:'POST',body:JSON.stringify(syncDoc())});
     if(pushed===null){_syncing=false;return;}                 // not signed in; state already shown
     rememberSent();
