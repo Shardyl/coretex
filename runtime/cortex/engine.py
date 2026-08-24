@@ -364,6 +364,11 @@ def _inquiry_reference_block(task: dict) -> tuple[str, str]:
     req = task.get("request") or {}
     if req.get("outbound"):                                   # Talk-composed outbound draft, not a reply
         return "", ""
+    if req.get("followup") or req.get("lead_chase") or req.get("thread_reply"):
+        # CONTINUATION of an existing conversation (chase / nudge / reply in-thread): NO reference box —
+        # a thread reply must read like a natural email, and these tasks' inquiry.message is an INTERNAL
+        # system note ("No reply yet...") that must never appear in a customer email. First responses only.
+        return "", ""
     inq = req.get("inquiry") or {}
     msg = (inq.get("message") or inq.get("snippet") or "").strip()
     if not msg:
