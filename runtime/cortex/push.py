@@ -23,12 +23,16 @@ create table if not exists push_subscriptions (
   last_ok timestamptz);
 """
 
+_ALTERS = "alter table push_subscriptions add column if not exists user_id bigint"
+
+
 _PEM_PATH = None
 
 
 def ensure_schema() -> None:
     with db.connect() as c:
         c.execute(_SCHEMA)
+        c.execute(_ALTERS)
 
 
 def _vapid() -> dict:
@@ -40,15 +44,19 @@ def public_key() -> str:
     return _vapid().get("public_key", "")
 
 
-def subscribe(sub: dict) -> dict:
+def subscribe(sub: dict, user_id=None) -> dict:
+    """Register a device. user_id None = the OWNER's device (receives everything); a team user's device
+    receives only notifications for companies inside their scope (resolved at send time, so a scope
+    change applies immediately)."""
     ensure_schema()
     keys = (sub or {}).get("keys") or {}
     ep = (sub or {}).get("endpoint")
     if not ep or not keys.get("p256dh") or not keys.get("auth"):
         return {"ok": False, "error": "bad subscription"}
-    db.execute("insert into push_subscriptions (endpoint, p256dh, auth) values (%s,%s,%s) "
-               "on conflict (endpoint) do update set p256dh=excluded.p256dh, auth=excluded.auth",
-               (ep, keys["p256dh"], keys["auth"]))
+    db.execute("insert into push_subscriptions (endpoint, p256dh, auth, user_id) values (%s,%s,%s,%s) "
+               "on conflict (endpoint) do update set p256dh=excluded.p256dh, auth=excluded.auth, "
+               "user_id=excluded.user_id",
+               (ep, keys["p256dh"], keys["auth"], user_id))
     return {"ok": True}
 
 
@@ -86,6 +94,23 @@ def send_to_devices(notif: dict) -> bool:
     if not pem:
         return False
     subs = db.query("select * from push_subscriptions")
+    if not subs:
+        return False
+    # Scope filter: owner devices (user_id null) get everything; a team device gets a notification only
+    # when it belongs to a company inside that user's scope. No-company (system) pushes are owner-only.
+    slug = None
+    if notif.get("company_id"):
+        co = db.one("select slug from companies where id=%s", (notif["company_id"],))
+        slug = (co or {}).get("slug")
+    scoped = []
+    for s0 in subs:
+        if not s0.get("user_id"):
+            scoped.append(s0)
+            continue
+        u = db.one("select companies from users where id=%s and active", (s0["user_id"],))
+        if u and slug and slug in (u.get("companies") or []):
+            scoped.append(s0)
+    subs = scoped
     if not subs:
         return False
     from pywebpush import WebPushException, webpush

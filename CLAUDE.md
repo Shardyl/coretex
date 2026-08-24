@@ -40,8 +40,10 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
 
 ## House rules (from Rashad, standing)
 
-- Cortex DRAFTS, Rashad approves — never send/publish without an approval card. Money + outbound
-  are owner-only; blogs never auto regardless of trust.
+- Cortex DRAFTS, a human approves — never send/publish without an approval card. Outward approvals:
+  the owner, or a team member with `users.can_approve` using their own PIN at the step-up gate
+  (2026-08-22: Gino + Ayresh for Sensa — Rashad is training them to train the system). MONEY-class
+  kinds always require the owner's own step-up. Blogs never auto regardless of trust.
 - Telegram is a MIRROR, never the flow — its calls are fail-soft (`integrations/telegram.py`);
   keep it that way.
 - Never delete CRM/contact data on your own initiative; merges carry over every non-empty field.

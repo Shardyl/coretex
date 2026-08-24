@@ -101,18 +101,19 @@ def auth_verify(credential: dict) -> dict:
     return {"ok": True, "stepup_token": token}
 
 
-def consume_stepup(token: str | None) -> bool:
-    """A one-time, short-lived proof that a fingerprint OR PIN was just verified. True iff valid (consumes it)."""
+def consume_stepup(token: str | None) -> str | None:
+    """A one-time, short-lived proof that a fingerprint OR PIN was just verified. Returns the SCOPE that
+    passed it ('owner', or 'team' for an authorised team member's own PIN) — None if invalid. Consumes it."""
     s = db.setting_get("webauthn_stepup")
     if not (s and token and s.get("token") == token and s.get("exp", 0) >= int(time.time())):
-        return False
+        return None
     db.setting_set("webauthn_stepup", None)
-    return True
+    return s.get("scope") or "owner"
 
 
-def _issue_stepup() -> str:
+def _issue_stepup(scope: str = "owner") -> str:
     token = secrets.token_urlsafe(24)
-    db.setting_set("webauthn_stepup", {"token": token, "exp": int(time.time()) + _STEPUP_TTL})
+    db.setting_set("webauthn_stepup", {"token": token, "exp": int(time.time()) + _STEPUP_TTL, "scope": scope})
     return token
 
 

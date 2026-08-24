@@ -23,6 +23,10 @@ CAPABILITIES: list[tuple[str, str]] = [
      "provided image becomes the banner (WP featured image) and the rest are placed through the sections. "
      "Gemini generation only runs when NO images were provided — never generate a stand-in for real "
      "photography. If he says images are attached, they genuinely reach the built post."),
+    ("Team approvals",
+     "Authorised team members (users.can_approve — Gino + Ayresh for Sensa) can approve OUTWARD work in "
+     "their company scope with their own PIN at the step-up gate. MONEY-class approvals always require "
+     "Rashad's own fingerprint/PIN. Team logins are company-scoped; push alerts follow the same scope."),
     ("Newsletters",
      "Newsletter issues are drafted, then either scheduled to the 1st of the month or sent to the live list — "
      "both require his approval, an exact recipient-count echo, and biometric/PIN. Never auto."),

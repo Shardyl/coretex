@@ -96,14 +96,19 @@ assert all(kind_class(k) in ("outward", "money") for k in (NEVER_AUTO_KINDS | MO
     "KIND_CLASS drift: a never-auto/money kind is not classed outward/money"
 
 
-def _biometric_gate(is_public: bool, stepup_token: str | None) -> dict | None:
-    """For a PUBLIC approval, require a fresh fingerprint: returns a needs_biometric response if one wasn't
-    provided, else None to proceed (consuming the step-up). No-op until a device is registered, so enabling
-    this can never lock the operator out of existing flows."""
-    if not is_public or not webauthn_auth.stepup_enabled():
+def _biometric_gate(is_public: bool, stepup_token: str | None, money: bool = False) -> dict | None:
+    """For a PUBLIC approval, require a fresh fingerprint/PIN step-up: returns a needs_biometric response if
+    one wasn't provided, else None to proceed (consuming the step-up). Authorised TEAM members pass with
+    their own PIN for outward work; MONEY-class kinds accept the OWNER's step-up only, always. No-op until
+    a device/PIN is registered, so enabling this can never lock the operator out of existing flows."""
+    if not (is_public or money) or not webauthn_auth.stepup_enabled():
         return None
-    if webauthn_auth.consume_stepup(stepup_token):
+    scope = webauthn_auth.consume_stepup(stepup_token)
+    if scope and (scope == "owner" or not money):
         return None
+    if scope and money:
+        return {"ok": False, "needs_biometric": True,
+                "error": "Money approvals are owner-only — this needs Rashad's fingerprint or PIN."}
     return {"ok": False, "needs_biometric": True,
             "error": "This goes out to the public — confirm with your fingerprint or PIN to approve."}
 REPORTS_DIR = "/opt/coretex/reports"       # generated report PDFs (persisted, served to the Inbox)
@@ -1145,7 +1150,8 @@ def approve_task(task_id: int, stepup_token: str | None = None) -> dict:
         if action == "schedule":
             info["date"] = _next_newsletter_slot(company["id"]).strftime("%-d %b %Y")
         return info
-    gate = _biometric_gate(task["kind"] in _APPROVE_PUBLIC, stepup_token)
+    gate = _biometric_gate(task["kind"] in _APPROVE_PUBLIC, stepup_token,
+                           money=(kind_class(task["kind"]) == "money"))
     if gate:
         return gate
     result = _approve(task, skill, company)

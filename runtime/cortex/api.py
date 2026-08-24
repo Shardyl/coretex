@@ -113,6 +113,8 @@ def _ensure_users() -> None:
                "created_at timestamptz default now())")
     db.execute("alter table users add column if not exists must_onboard boolean not null default true")
     db.execute("alter table users add column if not exists pin_hash text")    # the user's OWN quick-unlock PIN
+    db.execute("alter table users add column if not exists can_approve boolean not null default false")
+    # can_approve: this team member's OWN PIN passes the outward step-up gate (money stays owner-only)
 
 
 class Login(BaseModel):
@@ -1019,8 +1021,8 @@ class PushSub(BaseModel):
 
 
 @app.post("/api/push/subscribe")
-def push_subscribe(body: PushSub, _: None = Depends(auth)) -> dict:
-    return push.subscribe(body.subscription)
+def push_subscribe(body: PushSub, u: dict = Depends(current_user)) -> dict:
+    return push.subscribe(body.subscription, user_id=u.get("id"))   # None = the owner's device (sees all)
 
 
 class PushUnsub(BaseModel):
@@ -2515,11 +2517,19 @@ class PinBody(BaseModel):
 
 
 @app.post("/api/stepup/pin/verify")
-def stepup_pin_verify(body: PinBody, _: None = Depends(auth)) -> dict:
-    """Confirm a public approval with the SAME 4-digit cockpit PIN (pin_hash)."""
+def stepup_pin_verify(body: PinBody, u: dict = Depends(current_user)) -> dict:
+    """Confirm a public approval by PIN. The OWNER's cockpit PIN always passes (scope 'owner'). An authorised
+    team member (users.can_approve) passes with THEIR OWN quick-unlock PIN (scope 'team') — enough for
+    outward approvals; money-class approvals still demand the owner scope at the gate."""
+    pin = (body.pin or "").strip()
     h = db.setting_get("pin_hash")
-    if h and hmac.compare_digest(h, _pin_hash((body.pin or "").strip())):
+    if h and hmac.compare_digest(h, _pin_hash(pin)):
         return {"ok": True, "stepup_token": webauthn_auth._issue_stepup()}
+    if u.get("id"):
+        _ensure_users()
+        row = db.one("select pin_hash, can_approve from users where id=%s and active", (u["id"],))
+        if row and row.get("can_approve") and row.get("pin_hash") and                 hmac.compare_digest(row["pin_hash"], _pin_hash(pin)):
+            return {"ok": True, "stepup_token": webauthn_auth._issue_stepup(scope="team")}
     return {"ok": False, "error": "wrong PIN"}
 
 
