@@ -30,7 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Json
 from pydantic import BaseModel
 
-from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, engine, gmail, knowledge,
+from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, engine, fitness, gmail, knowledge,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
                skillqa, social, social_config, social_dm, social_warm, store, webauthn_auth, whatsapp,
                worker)
@@ -3582,6 +3582,54 @@ def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLRes
                     + " You can close this tab.")
     db.setting_set("google_refresh_token" + sfx, rt)
     return page("✓ Cortex is connected to your Google Drive. You can close this tab — backups run nightly.")
+
+
+# ---- fitness (personal training log; the PWA at /fitness syncs here) ----
+# Same-origin as the cockpit, so the app reuses the cockpit token and there is no CORS surface
+# and no API key on the phone. Data lives in the fitness.* schema, apart from the company tables.
+
+
+class FitnessDoc(BaseModel):
+    bodyweight: list[dict] | None = None
+    plans: list[dict] | None = None
+    liftSessions: list[dict] | None = None
+    cardioPresets: list[dict] | None = None
+    cardioSessions: list[dict] | None = None
+    vo2: list[dict] | None = None
+
+
+@app.get("/api/fitness/state")
+def fitness_state(_: None = Depends(auth)) -> dict:
+    return fitness.pull()
+
+
+@app.post("/api/fitness/state")
+def fitness_sync(body: FitnessDoc, _: None = Depends(auth)) -> dict:
+    """Whole-document upsert. Additive: rows the client omits are left alone, never deleted."""
+    return fitness.push(body.model_dump(exclude_none=True), source="app")
+
+
+class Bodyweight(BaseModel):
+    date: str
+    kg: float
+    notes: str | None = None
+
+
+@app.post("/api/fitness/bodyweight")
+def fitness_bodyweight(body: Bodyweight, _: None = Depends(auth)) -> dict:
+    """Log a weight, then re-score every bodyweight lift it now covers.
+
+    Backdating is expected and correct: adding February's weight retro-scores February's pull-ups
+    without touching anything logged since.
+    """
+    res = fitness.push({"bodyweight": [body.model_dump()]}, source="app")
+    res["rescored"] = fitness.rescore_bodyweight_lifts()
+    return res
+
+
+@app.get("/api/fitness/summary")
+def fitness_summary(_: None = Depends(auth)) -> dict:
+    return fitness.summary()
 
 
 # ---- public static assets (e.g. email-signature logos referenced by URL in sent mail) ----

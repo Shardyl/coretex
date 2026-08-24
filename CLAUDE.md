@@ -93,6 +93,34 @@ Meta retries non-200s and disables webhooks that keep failing.
   number where a name would go, and the real name is learned from the conversation.
 - App must be **published** before Meta delivers production webhooks; unpublished apps get test events only.
 
+## Fitness (personal, not a company)
+
+Rashad's training log. Data lives in the **`fitness` schema** (not the company tables) in the same
+`cortex` DB, so it is in the nightly Drive dump like everything else. The PWA is served from the
+box at **coretex.uk/fitness** (`web/fitness/`), same origin as the cockpit, so it reuses the
+`cortex_token` from the cockpit login: no API key on the phone, no CORS. If the pill top-right says
+"Sign in to sync", log into the cockpit in the same browser and reopen.
+
+- Sync is whole-document (`POST/GET /api/fitness/state`): a few hundred rows, one device, so a full
+  push/pull is easier to reason about than field-level merge. Upserts by the client's id, never
+  hard-deletes; local deletions are sent as explicit tombstones. Every push is stored verbatim in
+  `fitness.snapshots` — that is the restore path, do not prune it.
+- localStorage stays the offline cache. The app saves locally FIRST and pushes after, so a gym with
+  no signal works exactly as before.
+- **PR conventions are not decoration, do not "simplify" them:** lifting PR = volume load
+  (total reps x kg); bodyweight lifts resolve against the weight logged for the SESSION DATE, so a
+  weight change never rewrites old records; cardio PR = Pareto frontier of lowest avg HR vs hardest
+  settings, within one preset only. `fitness.py` mirrors the app's maths — change both together.
+- Bodyweight and VO2 tables exist but are deliberately EMPTY: the app was never set up for either
+  and Rashad holds that data elsewhere. Until a bodyweight is logged, no bodyweight lift can be
+  scored (`volume_load` is null by design, not a bug). Parked, to be consolidated later.
+- Migration provenance: seeded 24 Aug 2026 from `fitness_2026-08-24.xlsx` (318 lift sessions,
+  38 cardio sessions, 13 presets, 2 plans). The old app was a Netlify/standalone install whose only
+  copy was phone localStorage.
+- A personal "company" in Cortex is AGREED but NOT BUILT: `companies.kind` would be `personal` with
+  its own smaller skill roster (the uniform-85 roster rule applies within `kind='owned'`), and
+  personal CRM contacts must be suppressed from every campaign audience. Do not build it uninvited.
+
 ## Wider context
 
 Full history + current state live in the Claude memory files (mirrored on the box at

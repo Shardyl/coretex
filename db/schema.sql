@@ -111,3 +111,119 @@ create table if not exists questionnaire_runs (
     updated_at  timestamptz not null default now(),
     unique (company_id, department, tier)
 );
+
+-- ---------------------------------------------------------------------------
+-- Fitness (PERSONAL data, kept in its own schema so it never mixes with the
+-- company tables and is obvious in a dump). Source of truth for the training
+-- PWA, which used to keep everything in phone localStorage with an XLSX export
+-- as the only backup. The app now syncs here.
+--
+-- Two representations on purpose:
+--   * normalised rows below  -> queryable by Cortex (PRs, streaks, reports)
+--   * fitness.snapshots      -> the exact client document of every push, so a
+--                               bad sync can always be rolled back. Never prune
+--                               this without asking; it is the safety net that
+--                               localStorage never had.
+-- Keys are the client's own ids (uid), so a re-push updates rather than
+-- duplicates. Rows are never hard-deleted; the app sets deleted=true.
+-- ---------------------------------------------------------------------------
+create schema if not exists fitness;
+
+-- dated bodyweight log. THE reason bodyweight lifts can be scored: a pull-up
+-- session is resolved against the weight that applied on its own date, so
+-- gaining or losing weight never rewrites old records. Not carried by the XLSX
+-- export, so this table is the only durable home it has ever had.
+create table if not exists fitness.bodyweight (
+    day        date primary key,
+    kg         numeric not null,
+    notes      text,
+    updated_at timestamptz not null default now()
+);
+
+-- lifting plans (the app's "workouts"): ordered exercise list per plan.
+create table if not exists fitness.plans (
+    uid        text primary key,                        -- client id, e.g. wk_default
+    name       text not null,
+    exercises  jsonb not null default '[]'::jsonb,      -- [{id, name, sets, rest, mode?, fields?}]
+    deleted    boolean not null default false,
+    updated_at timestamptz not null default now()
+);
+
+-- one logged lifting session = one exercise on one day.
+create table if not exists fitness.lift_sessions (
+    uid         text primary key,                       -- client id (or exercise|date for migrated rows)
+    exercise    text not null,
+    day         date not null,
+    plan_uid    text,
+    weight      text,                                   -- 'BW' or a kg figure, as entered
+    kg          numeric,                                -- parsed load, null for bodyweight lifts
+    sets        jsonb not null default '[]'::jsonb,     -- reps per set, halves allowed (5.5)
+    total_reps  numeric,
+    best_set    numeric,
+    volume_load numeric,                                -- reps x kg; null until a bodyweight covers the date
+    rest        text,
+    target      text,
+    next_target jsonb,
+    readings    jsonb,                                  -- manual-mode readings (e.g. dynamometer grip)
+    notes       text,
+    deleted     boolean not null default false,
+    updated_at  timestamptz not null default now()
+);
+create index if not exists lift_sessions_day_idx on fitness.lift_sessions (day);
+create index if not exists lift_sessions_ex_idx  on fitness.lift_sessions (exercise, day);
+
+-- cardio presets. A PR is only ever compared within one preset, so this is not
+-- cosmetic grouping: it is what stops a 30-minute session competing with a 67.
+create table if not exists fitness.cardio_presets (
+    uid           text primary key,
+    name          text not null,
+    brand         text,
+    location      text,
+    machine       text,
+    machine_note  text,
+    is_hiit       boolean not null default false,
+    target_duration text,
+    manual_fields jsonb not null default '[]'::jsonb,   -- [{label, type}] — index order matters, extra{} keys to it
+    deleted       boolean not null default false,
+    updated_at    timestamptz not null default now()
+);
+
+create table if not exists fitness.cardio_sessions (
+    uid         text primary key,
+    preset_uid  text,
+    preset_name text,                                   -- denormalised: presets get renamed, history should not shift
+    day         date not null,
+    duration    text,                                   -- as entered ('1:07:36' or '67.5')
+    minutes     numeric,                                -- parsed, for charting
+    avg_hr      numeric,
+    max_hr      numeric,
+    calories    numeric,
+    distance_km numeric,
+    m_per_beat  numeric,                                -- aerobic efficiency: metres per heartbeat
+    extra       jsonb not null default '{}'::jsonb,     -- {"0":"7.5","1":"16"} keyed to preset.manual_fields index
+    next_target jsonb,
+    notes       text,
+    deleted     boolean not null default false,
+    updated_at  timestamptz not null default now()
+);
+create index if not exists cardio_sessions_day_idx on fitness.cardio_sessions (day);
+
+-- lab / test VO2 max results (71.4 in May 2026). Also never carried by the export.
+create table if not exists fitness.vo2 (
+    uid        text primary key,
+    day        date not null,
+    value      numeric not null,
+    method     text,
+    notes      text,
+    deleted    boolean not null default false,
+    updated_at timestamptz not null default now()
+);
+
+-- every client push, verbatim, newest last. Restore path of last resort.
+create table if not exists fitness.snapshots (
+    id         bigserial primary key,
+    source     text not null default 'app',             -- app | import | manual
+    rows       int  not null default 0,
+    doc        jsonb not null,
+    created_at timestamptz not null default now()
+);
