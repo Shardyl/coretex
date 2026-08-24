@@ -1573,6 +1573,7 @@ function actionCard(t){
       ${wp&&wp.preview?`<div class="meta">${ic('file',14)} draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
       ${attachmentStrip(t)}
       <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">${ic('volume',16)} Read aloud</button></div>
+${t.owner_only?`<div class="csub" style="margin-bottom:6px;color:var(--mut)">${ic('lock',12)} Money approval — owner only (Rashad's PIN or fingerprint)</div>`:''}
       <div class="row">
         <button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||'Approve')}</button>
         <button class="btn warn" id="cm${t.id}" onclick="voiceCorrect(${t.id},this)">${ic('mic',16)} Tap to talk</button>
@@ -1683,6 +1684,7 @@ function socialShiftCard(t,co){
     ${conn}
     ${eng}
     ${r.invites_week?`<div class="meta" style="margin-top:11px">${ic('trend',13)} Weekly invite budget: ${esc(String(r.invites_week))}</div>`:''}
+${t.owner_only?`<div class="csub" style="margin-bottom:6px;color:var(--mut)">${ic('lock',12)} Money approval — owner only (Rashad's PIN or fingerprint)</div>`:''}
     <div class="row" style="margin-top:12px">
       <button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||'Approve')}</button>
       <button class="btn bad" onclick="act(${t.id},'skip')">Skip today</button>
