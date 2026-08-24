@@ -943,6 +943,7 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
+const APP_VERSION='8';                         // keep in step with CACHE in sw.js
 const SYNC_TOKEN_KEY='cortex_token';           // written by the cockpit login, same origin
 const SYNC_SENT_KEY='fitness_sync_sent_v1';    // ids last pushed, so local deletes become tombstones
 const SYNC_AT_KEY='fitness_sync_at';
@@ -2747,7 +2748,10 @@ function init(){
 
   // Splash
   setTimeout(()=>document.getElementById('splash').classList.add('gone'),900);
-  if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js')
+  // Cloudflare caches static assets at the edge for 4 hours, so a plain 'sw.js' can keep serving
+  // the previous worker after a deploy. The version query makes each ship a new URL, which the
+  // edge has to fetch. Bump APP_VERSION and CACHE in sw.js together on every ship.
+  if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js?v='+APP_VERSION)
     .then(r=>{_swReg=r;}).catch(e=>{_swErr=String(e&&e.message||e);});
   initInstall();
   initSync();
