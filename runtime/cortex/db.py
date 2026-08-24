@@ -49,6 +49,7 @@ _ALTERS = [
     "alter table tasks add column if not exists last_status   text",
     "alter table tasks add column if not exists enabled       boolean default true",
     "alter table tasks add column if not exists parent_id     bigint references tasks(id)",
+    "alter table fitness.snapshots add column if not exists doc_hash text",
     # grouped FYI notifications accumulate their items (e.g. each captured contact) so the card can expand.
     "alter table notifications add column if not exists items jsonb not null default '[]'::jsonb",
 ]

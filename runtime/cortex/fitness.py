@@ -13,6 +13,8 @@ training data with plain SQL. The maths mirrors the app exactly; keep the two in
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from datetime import date, datetime
 
@@ -263,8 +265,14 @@ def push(doc: dict, source: str = "app") -> dict:
         counts["vo2"] += 1
 
     total = sum(counts.values())
-    db.execute("insert into fitness.snapshots (source, rows, doc) values (%s,%s,%s)",
-               (source, total, Json(doc)))
+    # The app pushes whenever it regains focus, so most pushes are byte-identical to the last one.
+    # Storing those would grow the nightly dump for nothing. Only a document that actually differs
+    # is worth keeping — and every distinct version is still kept, because this is the restore path.
+    digest = hashlib.sha256(json.dumps(doc, sort_keys=True, default=str).encode()).hexdigest()
+    prev = db.one("select doc_hash from fitness.snapshots order by id desc limit 1")
+    if not prev or prev.get("doc_hash") != digest:
+        db.execute("insert into fitness.snapshots (source, rows, doc, doc_hash) values (%s,%s,%s,%s)",
+                   (source, total, Json(doc), digest))
     return {"ok": True, "written": counts, "total": total}
 
 

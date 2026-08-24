@@ -225,5 +225,6 @@ create table if not exists fitness.snapshots (
     source     text not null default 'app',             -- app | import | manual
     rows       int  not null default 0,
     doc        jsonb not null,
+    doc_hash   text,                                    -- skip storing a push identical to the last
     created_at timestamptz not null default now()
 );
