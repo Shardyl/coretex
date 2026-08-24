@@ -56,6 +56,17 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
 - New scheduled work goes on the unified clock (`tasks` recurring templates +
   `engine.promote_due_tasks`) — `scheduled_tasks` is long dead.
 
+## Email intake (full-mailbox triage)
+
+`poll_all_inboxes()` (60s loop) sweeps every CONNECTED inbox in the `inbox_registry` setting — adding a
+mailbox is one OAuth consent + `register_inbox()`, no code. Sensa runs FOUR mailboxes (hello@, gino@,
+rashad@, ayresh@). Each email: `classify_email` (Haiku, sales-triage skill; categories incl. `finance`)
+→ CRM capture → `_draft_direct_reply` for substantive lead/client/finance mail (dup-guarded per sender;
+skips <40-char bodies). The drafted reply carries `from_email` + `mailbox_rt` so the send goes out FROM
+the receiving mailbox with its own token; `deal_id` + project context attach when the sender belongs to
+an active deal (`crm.open_deal_for_email`). Continuations get `thread_reply` (no reference box).
+Own/internal senders are never classified — that guard is what stops the team-CC rule looping.
+
 ## WhatsApp (inbound)
 
 **Two transports, one brain.** Both funnel into `whatsapp._process_message`, so triage, CRM capture and

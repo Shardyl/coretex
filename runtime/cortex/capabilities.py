@@ -23,6 +23,11 @@ CAPABILITIES: list[tuple[str, str]] = [
      "provided image becomes the banner (WP featured image) and the rest are placed through the sections. "
      "Gemini generation only runs when NO images were provided — never generate a stand-in for real "
      "photography. If he says images are attached, they genuinely reach the built post."),
+    ("Full-mailbox triage — Sensa LIVE",
+     "Every email into hello@/gino@/rashad@/ayresh@sensa.digital is classified (incl. 'finance' for "
+     "billing/payment matters) and CRM-captured. Substantive lead/client/finance mail gets a reply DRAFTED "
+     "automatically as an approval card, sent from the mailbox that received it; senders on an active deal "
+     "get project-context replies with the deal on the card. Sensa website enquiries auto-draft too."),
     ("Team approvals",
      "Authorised team members (users.can_approve — Gino + Ayresh for Sensa) can approve OUTWARD work in "
      "their company scope with their own PIN at the step-up gate. MONEY-class approvals always require "

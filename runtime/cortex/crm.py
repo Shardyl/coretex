@@ -212,6 +212,19 @@ def _org(company: str | None) -> str:
     return ORG.get((company or "").lower(), (company or "").title())
 
 
+def open_deal_for_email(email: str, company: str | None) -> dict | None:
+    """The sender's most recent ACTIVE deal for one of our businesses (via their account), so an inbound
+    email can be routed as PROJECT correspondence with the deal on the card. None = no active deal."""
+    if not email:
+        return None
+    c = db.one("select account_id from crm_master where lower(email)=lower(%s)", (email.strip(),))
+    if not (c and c.get("account_id")):
+        return None
+    return db.one("select id, title, stage, company from crm_projects where account_id=%s and company=%s "
+                  "and stage not in ('Lost','Close & review') order by id desc limit 1",
+                  (c["account_id"], _org(company)))
+
+
 class DealNeedsCompany(ValueError):
     """Raised when a deal/opportunity is created without one of YOUR businesses set."""
 

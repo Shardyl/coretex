@@ -503,7 +503,10 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     slug = (company or {}).get("slug")
     send_company = _inbox_client_company(slug) if slug else None
     send_rt_key, from_addr = None, env["from"]
-    if send_company:
+    _mrt = (task.get("request") or {}).get("mailbox_rt")
+    if _mrt and db.setting_get(_mrt):          # reply goes out from the mailbox that received the email
+        send_rt_key = _mrt
+    elif send_company:
         # per-company send ONLY if that brand actually has its own mailbox token; otherwise fall back to the
         # legacy global send mailbox (e.g. Tabscanner has its own OAuth client file but sends via the shared
         # gmail_send_refresh_token / read inbox — never 500 just because the :slug token was never minted).
@@ -1422,9 +1425,9 @@ FORM_INTAKE = {
                     "subject": "Site contact form", "skill": "sales-first-response"},
     "skyvision": {"rt_key": "gmail_refresh_token:skyvision", "client": "skyvision",
                   "subject": "New enquiry from", "skill": "sales-first-response"},
-    # Sensa: the team (Gino) replies to enquiries manually -> capture leads to CRM, but DON'T auto-draft.
+    # Sensa: auto-draft ON (2026-08-22) — the team (Rashad/Gino/Ayresh) approves from the Inbox.
     "sensa": {"rt_key": "gmail_refresh_token:sensa", "client": "sensa",
-              "subject": "New enquiry from", "skill": "sales-first-response", "draft": False},
+              "subject": "New enquiry from", "skill": "sales-first-response", "draft": True},
 }
 
 
@@ -1753,10 +1756,10 @@ def poll_waitlists() -> dict:
 # ---------- inbox classifier (the sales-triage universal skill, on Haiku) ----------
 
 INBOX_CATEGORIES = ["client", "lead", "partner", "support", "freelancer", "vendor", "recruitment",
-                    "marketing", "spam", "personal", "automated"]
+                    "finance", "marketing", "spam", "personal", "automated"]
 # these become CRM contacts. "client" = an existing is_client contact, set deterministically from the CRM
 # (see classify_email) rather than guessed — it overrides the content-based category.
-_INBOX_CRM = {"client", "lead", "partner", "support", "freelancer", "vendor", "recruitment"}
+_INBOX_CRM = {"client", "lead", "partner", "support", "freelancer", "vendor", "recruitment", "finance"}
 # every inbound contact we add is newsletter-eligible (Rashad 2026-06-18: they contacted us, it's a general
 # newsletter, and unsubscribe + complaint->opt-out keep it self-correcting). Own knob in case we re-scope.
 _INBOX_NEWSLETTER = set(_INBOX_CRM)
@@ -1808,7 +1811,8 @@ def classify_email(company: dict, email: dict) -> dict:
         worker._rules_block(skill) if skill else "",
         ("Classify the email into EXACTLY ONE category from: " + ", ".join(INBOX_CATEGORIES) + ". "
          "Guidance: freelancer = a contractor/agency offering THEIR services to us; recruitment = a person "
-         "seeking a JOB with us (a CV, 'are you hiring?', wants to join the team). "
+         "seeking a JOB with us (a CV, 'are you hiring?', wants to join the team); finance = invoices, "
+         "payments, statements, billing or account matters (in either direction). "
          'Return JSON {"category":"<one>","to_crm":boolean,"reason":"<short phrase>",'
          '"summary":"<1-2 sentences for the CRM note: who the sender is and what they want>",'
          '"market":"<a short industry/market label, e.g. video production, e-commerce, real estate, '
@@ -1829,8 +1833,52 @@ def classify_email(company: dict, email: dict) -> dict:
             "summary": (out.get("summary") or "").strip(), "market": (out.get("market") or "").strip()}
 
 
+def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, address: str | None) -> None:
+    """A substantive lead/client/finance email sent DIRECTLY to a monitored mailbox -> draft the reply as an
+    approval card, from the mailbox that received it. Skips thin mail (a signature and nothing else) and
+    senders who already have an open reply card (the sales-replies poller or a previous sweep got there)."""
+    try:
+        sender = (e.get("email") or "").strip()
+        body = (e.get("body") or e.get("snippet") or "").strip()
+        if not sender or len(body) < 40:
+            return
+        dup = db.one("select id from tasks where company_id=%s and kind='email_reply' and "
+                     "status in ('new','drafting','awaiting_approval','awaiting_correction') and "
+                     "lower(request->'inquiry'->>'email')=lower(%s) limit 1", (co["id"], sender))
+        if dup:
+            return
+        deal = crm.open_deal_for_email(sender, co.get("slug"))
+        skill = store.get_skill_by_key(co["id"], "sales-first-response")
+        if not skill:
+            return
+        subj = (e.get("subject") or "").strip()
+        is_thread = subj.lower().startswith(("re:", "fwd:", "fw:"))
+        inq = {"name": e.get("name") or "", "email": sender, "subject": subj or "your email",
+               "message": body[:4000]}
+        what = {"lead": "a direct enquiry", "client": "an email from an existing client",
+                "finance": "a finance/billing email"}.get(cls["category"], "an email")
+        brief = (f"This is {what} sent directly to {address or 'our'} mailbox. Read it and draft our reply "
+                 f"in the company voice, addressing exactly what they said.")
+        if deal:
+            brief += (f" CONTEXT: this sender belongs to the ACTIVE project/deal '{deal['title']}' "
+                      f"(stage: {deal['stage']}). Reply as their project contact, consistent with that work; "
+                      "do not treat them as a new lead.")
+        if cls["category"] == "finance":
+            brief += (" This is a MONEY matter: acknowledge precisely, commit to nothing financial without "
+                      "the owner, and never state amounts that are not in the email itself.")
+        req = {"brief": brief, "inquiry": inq, "from_email": address, "mailbox_rt": rt_key}
+        if is_thread:
+            req["thread_reply"] = True          # continuation: natural reply, no reference box
+        if deal:
+            req["deal_id"] = deal["id"]
+        store.create_task(co["id"], skill["id"], "email_reply", req)
+    except Exception:  # noqa: BLE001 — drafting is best-effort; classification/CRM capture must proceed
+        pass
+
+
 def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_token",
-               days: int = 2, limit: int = 40, commit: bool = True, company: str | None = None) -> dict:
+               days: int = 2, limit: int = 40, commit: bool = True, company: str | None = None,
+               address: str | None = None) -> dict:
     """Read a company's catch-all inbox (non-form mail; form notifications are handled by poll_inquiries),
     classify each email on the sales-triage skill, and route the meaningful ones into the CRM. Deduped per
     mailbox. commit=False is a dry run (classify + report, no CRM writes)."""
@@ -1857,6 +1905,8 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                             "category": "internal", "to_crm": False, "reason": "own/internal address"})
             continue
         cls = classify_email(co, e)
+        if commit and cls["category"] in ("lead", "client", "finance"):
+            _draft_direct_reply(co, e, cls, rt_key=rt_key, address=address)
         if commit:
             if cls["to_crm"] and e.get("email"):
                 stage = "Engaged" if cls["category"] in ("lead", "partner", "support") else "Cold"
@@ -1927,7 +1977,7 @@ def poll_all_inboxes() -> dict:
         if not _inbox_connected(e):
             continue
         try:
-            poll_inbox(e["slug"], e.get("rt_key") or _default_rt_key(e["slug"]))
+            poll_inbox(e["slug"], e.get("rt_key") or _default_rt_key(e["slug"]), address=e.get("address"))
             polled.append(e["slug"])
         except Exception as ex:  # noqa: BLE001
             tg.send(f"(inbox classify hiccup [{e.get('slug')}]: {ex})")
