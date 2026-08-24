@@ -893,7 +893,6 @@ const CARDIO_SESS_KEY='lifts_cardio_v1';
 const CARDIO_EX_KEY='fitness_cardio_exercises_v1';
 const VO2_KEY='lifts_vo2_v1';
 const BW_KEY='fitness_bodyweight_v1';
-const API_KEY_STORE='lifts_api_key';
 
 let liftSessions=[], liftWorkouts=[], cardioSessions=[], cardioExercises=[], vo2Records=[], bodyweightLog=[];
 
@@ -943,7 +942,7 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='8';                         // keep in step with CACHE in sw.js
+const APP_VERSION='9';                         // keep in step with CACHE in sw.js
 const SYNC_TOKEN_KEY='cortex_token';           // written by the cockpit login, same origin
 const SYNC_SENT_KEY='fitness_sync_sent_v1';    // ids last pushed, so local deletes become tombstones
 const SYNC_AT_KEY='fitness_sync_at';
@@ -1809,13 +1808,8 @@ function getCardioExtra(){
 
 // ─── SCREENSHOT AI EXTRACTION ─────────────────────────────────────────────────
 async function extractFromScreenshot(file){
-  const apiKey=localStorage.getItem(API_KEY_STORE)||'';
-  if(!apiKey){
-    const key=prompt('Enter your Anthropic API key to use screenshot scanning:\n(Stored locally on your device only)');
-    if(!key)return;
-    localStorage.setItem(API_KEY_STORE,key.trim());
-  }
-  const storedKey=localStorage.getItem(API_KEY_STORE);
+  // The screenshot goes to Cortex, which calls Claude with the key held on the box. Nothing to
+  // enter on the phone, nothing to leak from localStorage, and the usage shows up in Cortex.
   document.getElementById('uploadZone').style.display='none';
   const scanning=document.getElementById('aiScanning');
   scanning.style.display='block';
@@ -1824,34 +1818,18 @@ async function extractFromScreenshot(file){
   try{
     const base64=await fileToBase64(file);
     const mediaType=file.type||'image/jpeg';
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
+    const res=await fetch('/api/fitness/scan',{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':storedKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({
-        model:'claude-opus-5',max_tokens:500,
-        messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
-          {type:'text',text:`Extract workout data from this Samsung Health screenshot. Return ONLY valid JSON with these fields (use null if not visible):
-{"duration":"MM:SS or HH:MM:SS","avgHR":number,"maxHR":number,"calories":number,"distance":number,"activityType":"Treadmill|Elliptical|Running|Cycling|etc"}
-No other text, just the JSON object.`}
-        ]}]
-      })
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+syncToken()},
+      body:JSON.stringify({image:'data:'+mediaType+';base64,'+base64})
     });
     if(!res.ok){
-      let msg='API error '+res.status;
-      try{const err=await res.json();if(err?.error?.message)msg=err.error.message;}catch(e){}
-      if(res.status===401){
-        localStorage.removeItem(API_KEY_STORE);
-        toast('API key rejected — tap scan again to re-enter it');
-      }else{
-        toast('Scan failed: '+msg.slice(0,90));
-      }
-      console.error('Screenshot scan failed',res.status,msg);
+      if(res.status===401){setSyncState('auth');toast('Sign in to Cortex to scan screenshots');}
+      else toast('Scan failed ('+res.status+') — type the numbers in');
+      console.error('Screenshot scan failed',res.status);
       return;
     }
-    const data=await res.json();
-    const text=data.content?.[0]?.text||'';
-    const json=JSON.parse(text.replace(/```json|```/g,'').trim());
+    const json=await res.json();
     // Populate form
     if(json.duration)document.getElementById('cardioDuration').value=json.duration;
     if(json.avgHR)document.getElementById('cardioAvgHR').value=json.avgHR;

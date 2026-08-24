@@ -301,3 +301,30 @@ def summary() -> dict:
         "unscored_bw_lifts": (db.one("select count(*) as n from fitness.lift_sessions "
                                      "where not deleted and kg is null and total_reps > 0") or {}).get("n", 0),
     }
+
+
+# ---------- screenshot scanning ----------
+
+SCAN_SYSTEM = ("You read fitness machine and health-app screenshots and return the numbers on them. "
+               "Report only what is visibly printed. Never estimate, infer or fill a gap: a field you "
+               "cannot read is null. Getting a session's real numbers wrong is worse than leaving them "
+               "blank for the operator to type.")
+
+SCAN_PROMPT = """Extract the workout data from this screenshot (Samsung Health, a treadmill or a
+cross-trainer console). Return ONLY this JSON, null for anything not clearly visible:
+{"duration":"MM:SS or HH:MM:SS","avgHR":number,"maxHR":number,"calories":number,
+ "distance":number,"activityType":"Treadmill|Elliptical|Running|Cycling|other"}
+distance is in kilometres. Do not convert or round anything else."""
+
+
+def scan_screenshot(data_url: str) -> dict:
+    """Read a workout screenshot into form fields.
+
+    Runs on the box with the Cortex API key, so no key is ever stored on the phone. Haiku: this is
+    mechanical extraction from a clear screen, not reasoning, and it runs every logged session.
+    """
+    from . import provider
+    out = provider.think_json(SCAN_SYSTEM, SCAN_PROMPT, model=provider.MODEL_ROUTER,
+                              max_tokens=400, purpose="fitness_scan", images=[data_url])
+    return {k: out.get(k) for k in ("duration", "avgHR", "maxHR", "calories", "distance",
+                                    "activityType")}

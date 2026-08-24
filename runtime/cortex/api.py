@@ -3627,6 +3627,21 @@ def fitness_bodyweight(body: Bodyweight, _: None = Depends(auth)) -> dict:
     return res
 
 
+class FitnessScan(BaseModel):
+    image: str                                   # data: URL (data:image/jpeg;base64,...)
+
+
+@app.post("/api/fitness/scan")
+def fitness_scan(body: FitnessScan, _: None = Depends(auth)) -> dict:
+    """Read a workout screenshot server-side. The API key stays on the box, never on the phone."""
+    img = body.image or ""
+    if not img.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="expected a data:image/... URL")
+    if len(img) > 8_000_000:                     # ~6 MB of image; a phone screenshot is far smaller
+        raise HTTPException(status_code=413, detail="image too large")
+    return fitness.scan_screenshot(img)
+
+
 @app.get("/api/fitness/summary")
 def fitness_summary(_: None = Depends(auth)) -> dict:
     return fitness.summary()

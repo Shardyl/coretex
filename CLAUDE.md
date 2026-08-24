@@ -114,6 +114,10 @@ box at **coretex.uk/fitness** (`web/fitness/`), same origin as the cockpit, so i
 - Bodyweight and VO2 tables exist but are deliberately EMPTY: the app was never set up for either
   and Rashad holds that data elsewhere. Until a bodyweight is logged, no bodyweight lift can be
   scored (`volume_load` is null by design, not a bug). Parked, to be consolidated later.
+- Screenshot scanning runs on the box (`POST /api/fitness/scan` -> `fitness.scan_screenshot`),
+  Haiku, so the Anthropic key never leaves the server. It was previously called from the phone
+  with a key in localStorage. The prompt forbids estimating: an unreadable field comes back null
+  rather than guessed, because a wrong number in the log is worse than an empty box.
 - Migration provenance: seeded 24 Aug 2026 from `fitness_2026-08-24.xlsx` (318 lift sessions,
   38 cardio sessions, 13 presets, 2 plans). The old app was a Netlify/standalone install whose only
   copy was phone localStorage.

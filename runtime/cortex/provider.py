@@ -302,11 +302,13 @@ def _loads(raw: str) -> dict:
 
 def think_json(system: str, user: str, *, fast: bool = True, model: str | None = None,
                max_tokens: int = 2000, purpose: str = "think_json", company: str | None = None,
-               cache: bool = False) -> dict:
-    """Completion that must return a JSON object → parsed dict. `cache=True` prompt-caches the system."""
+               cache: bool = False, images: list[str] | None = None) -> dict:
+    """Completion that must return a JSON object → parsed dict. `cache=True` prompt-caches the system.
+
+    `images` = data: URLs the model should read (screenshots, PDFs), same contract as think()."""
     sys = system + "\n\nRespond with ONLY a valid JSON object — no prose, no markdown fences."
     return _loads(think(sys, user, fast=fast, model=model, max_tokens=max_tokens,
-                        purpose=purpose, company=company, cache=cache))
+                        purpose=purpose, company=company, cache=cache, images=images))
 
 
 def research_json(system: str, user: str, *, model: str | None = None,
