@@ -367,7 +367,7 @@ async function api(path, opts={}){
   if(demo) throw new Error('demo');
   const r = await fetch(API+path, {...opts, headers:{'Content-Type':'application/json',
     ...(token?{Authorization:'Bearer '+token}:{}), ...(opts.headers||{})}});
-  if(r.status===401){ if(booted) relock(); throw new Error('auth'); }   // only re-lock on in-session expiry, never pre-auth (avoids a reload loop)
+  if(r.status===401){ if(booted) relock(); throw new Error((await r.json().catch(()=>({}))).detail || 'auth'); }   // only re-lock on in-session expiry, never pre-auth (avoids a reload loop); surface the real detail ("wrong email or passcode"), not a bare 'auth'
   if(!r.ok){ throw new Error((await r.json().catch(()=>({}))).detail || r.status); }
   return r.status===204?null:r.json();
 }
