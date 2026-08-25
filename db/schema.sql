@@ -258,6 +258,17 @@ create table if not exists media_assets (
     posted_to          jsonb default '[]',
     source             text default 'youtube-sync',
     classified_at      timestamptz default now(),
+    -- understanding layer (one-time enrichment: audio transcript + 5-frame vision profile)
+    transcript         text,
+    profile            jsonb,                            -- {summary, industry, format, style[], language, has_voiceover, suggested_rating}
+    enriched_at        timestamptz,
+    -- ratings: suggested_rating = AI first pass; rating = the OWNER's subjective score (wins everywhere,
+    -- never overwritten by any AI pass); sort_order = manual drag order within a format group at /media
+    suggested_rating   int,
+    rating             int,
+    rated_by           text,
+    rated_at           timestamptz,
+    sort_order         int,
     created_at         timestamptz default now(),
     updated_at         timestamptz default now()
 );

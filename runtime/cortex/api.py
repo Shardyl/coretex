@@ -3605,6 +3605,75 @@ def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLRes
     return page("✓ Cortex is connected to your Google Drive. You can close this tab — backups run nightly.")
 
 
+# ---- media library (the YouTube catalog review UI at coretex.uk/media) ----
+# Same-origin as the cockpit (reuses cortex_token, no CORS). Read + rate + reorder only:
+# nothing here writes to YouTube. Ratings are the owner's subjective ranking — an AI pass
+# fills suggested_rating, but `rating` is only ever set by a human here and wins everywhere.
+
+
+@app.get("/api/media/library")
+def media_library(company: str = "sensa", _: None = Depends(auth)) -> dict:
+    rows = db.query(
+        """select m.youtube_video_id, m.title, m.client, m.content_type, m.privacy,
+                  m.published_at, m.duration, m.views, m.rating, m.suggested_rating,
+                  m.sort_order, m.portfolio_category, m.profile, m.watch_url,
+                  (m.enriched_at is not null) as enriched
+           from media_assets m join companies c on c.id = m.company_id
+           where c.slug = %s and m.status = 'live'
+           order by coalesce(m.rating, m.suggested_rating, 0) desc,
+                    m.sort_order asc nulls last, m.published_at desc""", (company,))
+    return {"videos": rows}
+
+
+class MediaRate(BaseModel):
+    youtube_video_id: str
+    rating: int | None = None   # 1-5, or null to clear back to the AI suggestion
+
+
+@app.post("/api/media/rate")
+def media_rate(body: MediaRate, user: dict = Depends(current_user)) -> dict:
+    if body.rating is not None and not 1 <= body.rating <= 5:
+        raise HTTPException(status_code=400, detail="rating must be 1-5")
+    db.execute("update media_assets set rating=%s, rated_by=%s, rated_at=now(), updated_at=now() "
+               "where youtube_video_id=%s",
+               (body.rating, user.get("name") or "owner", body.youtube_video_id))
+    return {"ok": True}
+
+
+class MediaOrder(BaseModel):
+    ids: list[str]   # the group's video ids in the operator's chosen order, best first
+
+
+@app.post("/api/media/order")
+def media_order(body: MediaOrder, _: None = Depends(auth)) -> dict:
+    for i, vid in enumerate(body.ids):
+        db.execute("update media_assets set sort_order=%s, updated_at=now() where youtube_video_id=%s",
+                   (i * 10, vid))
+    return {"ok": True, "count": len(body.ids)}
+
+
+class MediaEdit(BaseModel):
+    youtube_video_id: str
+    client: str | None = None
+    content_type: str | None = None
+
+
+@app.post("/api/media/edit")
+def media_edit(body: MediaEdit, _: None = Depends(auth)) -> dict:
+    """Operator corrections to the classification (client name / type). Catalog only."""
+    sets, vals = [], []
+    if body.client is not None:
+        sets.append("client=%s"); vals.append(body.client.strip() or None)
+    if body.content_type is not None:
+        sets.append("content_type=%s"); vals.append(body.content_type)
+    if not sets:
+        return {"ok": False}
+    vals.append(body.youtube_video_id)
+    db.execute(f"update media_assets set {', '.join(sets)}, updated_at=now() where youtube_video_id=%s",
+               tuple(vals))
+    return {"ok": True}
+
+
 # ---- fitness (personal training log; the PWA at /fitness syncs here) ----
 # Same-origin as the cockpit, so the app reuses the cockpit token and there is no CORS surface
 # and no API key on the phone. Data lives in the fitness.* schema, apart from the company tables.
