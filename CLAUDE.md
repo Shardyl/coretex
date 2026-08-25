@@ -61,7 +61,10 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
 - Ship a new Talk capability? Add its one-liner to `runtime/cortex/capabilities.py` in the same
   commit — that manifest is injected into every system prompt.
 - New scheduled work goes on the unified clock (`tasks` recurring templates +
-  `engine.promote_due_tasks`) — `scheduled_tasks` is long dead.
+  `engine.promote_due_tasks`) — `scheduled_tasks` is long dead. Report kinds on the clock:
+  `seo_report` (weekly, per company) + `ppc_report` (daily 08:00 GST, Sensa Google Ads via
+  `cortex/ppc_report.py`, REST creds `/etc/cortex/google-ads.yaml`, card lands on the
+  `ads-google-search` lane).
 
 ## Email intake (full-mailbox triage)
 
