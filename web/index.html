@@ -402,7 +402,6 @@ async function doLogin(){
   const pc = document.getElementById('pc').value.trim();
   const email = (document.getElementById('lemail').value||'').trim();
   const err = document.getElementById('loginerr'); err.textContent='';
-  if(pc==='demo'){ demo=true; enterUnlocked(); return; }
   try{
     const d = await api('/api/login',{method:'POST',body:JSON.stringify(email?{passcode:pc,email}:{passcode:pc})});
     token = d.token; localStorage.setItem('cortex_token',token);
@@ -416,7 +415,7 @@ async function doLogin(){
     let ps=false; try{ const s=await api('/api/lock/status'); ps=!!s.pin_set; }catch(e){}
     pinSet=ps;
     if(ps){ enterUnlocked(); } else { lockMode='set'; pinBuf=''; pinFirst=''; showLock('Set a 4-digit PIN'); }
-  }catch(e){ const m=(e.message||''); err.textContent = m.indexOf('wrong')>=0?(m.charAt(0).toUpperCase()+m.slice(1)):'Could not reach Cortex ('+m+'). Tip: passcode "demo" to explore.'; }
+  }catch(e){ const m=(e.message||''); err.textContent = m.indexOf('wrong')>=0?(m.charAt(0).toUpperCase()+m.slice(1)):'Could not reach Cortex ('+m+').'; }
 }
 function showOnboard(name){
   document.getElementById('login').classList.add('hidden'); document.getElementById('lock').classList.add('hidden');
@@ -518,8 +517,8 @@ async function bioAuth(){
 function lockNow(){ if(token && !demo){ token=''; localStorage.removeItem('cortex_token'); booted=false; pinBuf=''; pinFirst=''; lockMode='login'; showLock('Enter your PIN'); } }
 
 async function boot(){
-  try{ companies = demo?SAMPLE.companies:await api('/api/companies'); }
-  catch(e){ demo=true; document.getElementById('demoBanner').classList.remove('hidden'); companies=SAMPLE.companies; }
+  try{ companies = await api('/api/companies'); }
+  catch(e){ companies=[]; }
   const sel=document.getElementById('coSel'); const single=companies.length===1;
   // a scoped (single-company) user: no "All companies" option — they only ever see their company
   sel.innerHTML=(single?'':'<option value="">All companies</option>')+
@@ -2414,7 +2413,7 @@ function freeStop(){
 
 async function renderAsk(v){
   const co=document.getElementById('coSel').value || (companies[0]&&companies[0].slug)||'';
-  let sk=[]; try{ sk=demo?(SAMPLE.skills[co]||[]):await api(`/api/companies/${co}/skills`); }catch(e){ sk=SAMPLE.skills[co]||[]; }
+  let sk=[]; try{ sk=await api(`/api/companies/${co}/skills`); }catch(e){ sk=[]; }
   v.innerHTML=`<div class="h">Ask Cortex</div>
     <div class="card">
       <label>Organisation</label>
@@ -2451,7 +2450,7 @@ async function submitAsk(){
 async function renderLog(v){
   v.innerHTML='<div class="h">Activity</div><div id="lg" class="empty">Loading…</div>';
   const fco=document.getElementById('coSel').value;
-  let d; try{ d=demo?SAMPLE.decisions:await api('/api/decisions?limit=40'+(fco?'&company='+encodeURIComponent(fco):'')); }catch(e){ d=SAMPLE.decisions; }
+  let d; try{ d=await api('/api/decisions?limit=40'+(fco?'&company='+encodeURIComponent(fco):'')); }catch(e){ d=[]; }
   const verb={publish:'published',approve:'approved',auto:'auto-ran',reject:'skipped',correct:'corrected',rule_confirmed:'added a rule'};
   document.getElementById('lg').outerHTML = d.length? d.map(x=>`
     <div class="logitem"><div class="led ${x.action}"></div><div class="logmain">
@@ -2478,7 +2477,7 @@ async function renderSkills(v){
   }
   const coName=(companies.find(c=>c.slug===co)||{}).name||co; skillsCoName=coName;
   v.innerHTML=`<div class="h">Skills · ${esc(coName)}</div><div id="skilltree" class="empty">Loading…</div>`;
-  try{ skillsData = demo?DEMO_SKILLS:await api(`/api/companies/${co}/skills`); }catch(e){ skillsData=DEMO_SKILLS; }
+  try{ skillsData = await api(`/api/companies/${co}/skills`); }catch(e){ skillsData=[]; }
   paintSkills();
 }
 function paintSkills(){
