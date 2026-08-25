@@ -3622,14 +3622,16 @@ def media_library(company: str = "sensa", _: None = Depends(auth)) -> dict:
            where c.slug = %s and m.status = 'live'
            order by coalesce(m.rating, m.suggested_rating, 0) desc, m.published_at desc""",
         (company,))
-    # flag likely duplicates: same title once lowercased and stripped of spacing/resolution tokens
+    # flag likely duplicates: same title (lowercased, spacing/resolution tokens stripped) AND same
+    # duration — same-titled films with different runtimes are different edits, not duplicates
     import re as _re
-    def _dupkey(t: str) -> str:
-        return _re.sub(r"\s+|1080p|2160p|720p|4k\b|\bhd\b", "", (t or "").lower())
+    def _dupkey(r: dict) -> str:
+        t = _re.sub(r"\s+|1080p|2160p|720p|4k\b|\bhd\b", "", (r["title"] or "").lower())
+        return t + "|" + (r.get("duration") or "")
     from collections import Counter as _Counter
-    keys = _Counter(_dupkey(r["title"]) for r in rows)
+    keys = _Counter(_dupkey(r) for r in rows)
     for r in rows:
-        k = _dupkey(r["title"])
+        k = _dupkey(r)
         r["dup_group"] = k if keys[k] > 1 else None
     return {"videos": rows}
 
