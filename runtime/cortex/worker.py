@@ -76,6 +76,9 @@ _RELATED_SKILLS = {
     # email-handling holds the company's general email voice (for Sensa: distilled from Gino's sent mail),
     # so EVERY inbound-reply draft reads it; sales-followup governs thread continuations (never pressure).
     "sales-first-response": ("email-handling", "sales-scheduling", "lead-qualification", "sales-followup"),
+    # project correspondence (deal in delivery) drafts ON email-handling and also reads the project skills —
+    # corrections/rules about HOW Sensa runs projects accumulate there and reach every project reply.
+    "email-handling": ("sales-scheduling", "prod-revisions", "prod-status-reporting", "prod-pipeline"),
 }
 
 

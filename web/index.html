@@ -818,7 +818,7 @@ async function toggleCompanyDnm(email,slug,on){
     renderContactCompanies(email,st); toast(on?('No marketing — '+slug):('Marketing allowed — '+slug)); }
   catch(e){ toast('Could not update ('+e.message+')'); }
 }
-const PROJ_STAGES=['Opportunity','Quote','Booked','Production','Recurring','Delivered','Final Payment','Close & review','Lost'];
+const PROJ_STAGES=['Opportunity','Quote','Booked','Production','Recurring','Delivered','Final Payment','Close & review','Dormant','Lost'];
 const FORECAST_STAGES=['Opportunity','Quote'];
 const CONTACT_STAGES=['Cold','Contacted','Engaged','Qualified','Not interested','Dormant/dead'];
 function contactStagePicker(c){
@@ -1177,6 +1177,7 @@ async function renderOpps(b,co){
   else if(allco){ const g=byCompany(d.opportunities); Object.keys(g).sort().forEach(cn=>{ const it=g[cn], s=it.reduce((a,o)=>a+(+o.value||0),0);
     h+=`<div class="h">${esc(cn)} · ${it.length}${s?' · '+dmoney(s):''}</div>`+it.map(dealCard).join(''); }); }
   else { h+='<div class="h">In the pipeline</div>'+d.opportunities.map(dealCard).join(''); }
+  if(d.dormant&&d.dormant.length){ h+=`<div class="h" style="color:var(--mut)">Dormant · ${d.dormant.length}</div><div style="opacity:.75">`+d.dormant.map(dealCard).join('')+'</div>'; }
   if(d.lost&&d.lost.length){ h+=`<div class="h" style="color:var(--mut)">Lost · ${d.lost.length}</div><div style="opacity:.55">`+d.lost.map(dealCard).join('')+'</div>'; }
   b.outerHTML='<div id="crmbody">'+h+'</div>';
 }

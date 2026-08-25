@@ -1934,12 +1934,14 @@ def crm_opportunities(company: str | None = None, u: dict = Depends(current_user
         return db.query("select id, company, title, contact_email, value, currency, stage, owner "
                         f"from crm_projects where {' and '.join(base)} order by value desc nulls last, id", tuple(params))
     rows = run(crm.FORECAST_STAGES)
+    dormant = run([crm.DORMANT_STAGE])
     lost = run([crm.LOST_STAGE])
     fparams = [crm.FORECAST_STAGES] + (p if f else [])
     total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects where {' and '.join(base)}", tuple(fparams))
     cur = db.query(f"select coalesce(nullif(currency,''),'AED') c, coalesce(sum(value),0) v from crm_projects "
                    f"where {' and '.join(base)} and value is not null group by c", tuple(fparams))
-    return {"opportunities": rows, "lost": lost, "total_value": float(total["v"] or 0), "count": total["n"],
+    return {"opportunities": rows, "dormant": dormant, "lost": lost, "total_value": float(total["v"] or 0),
+            "count": total["n"],
             "currencies": {r["c"]: float(r["v"] or 0) for r in cur if float(r["v"] or 0) > 0}}
 
 

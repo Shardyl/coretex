@@ -81,6 +81,25 @@ sender belongs to an active deal. Continuations get `thread_reply` (no reference
 land ON the client's existing thread (subject kept verbatim on Re:/Fwd: mail — never "Re: Re:").
 `engine.backfill_missed_client_drafts(slug, days)` is the manual recovery sweep for mail the old gate
 swallowed (ignores the seen-set, dedups on `request.gmail_id`, drafts only — never sends).
+**Project-lane routing (2026-08-25):** client mail on a DELIVERY-stage deal (Booked/Production/Final
+Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` adds the prod-* skills'
+rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
+`sales-first-response`.
+
+## Opportunity follow-up automation (2026-08-25)
+
+Cadence (config: company `followup_cadence` profile override, else `crm.DEFAULT_CADENCE`): 4 chases
+3d apart → 2 fortnightly check-ins → soft revivals at ~3 and ~6 months → stage **Dormant**. NEVER
+auto-Lost (standing rule: nobody who approached us is dumped as dead; Lost = an explicit "no" only).
+Follow-up cards are CONTEXT-AWARE: `_spawn_followup_card` feeds the drafter the deal `note`, open
+reminders on the deal, and the real recent correspondence (`_deal_thread_context`, read from the
+company's send mailbox). Reply handling: an inbound email from a chased contact PAUSES every armed
+cadence on their deals (`crm.pause_followups`); if the email states a timeframe ("give us two weeks"),
+Haiku extracts the phrase, CODE stamps the date, and the cadence re-arms for then — a notification
+card tells the owner what was decided and quotes their words. Our reply sending re-arms a paused
+cadence at the normal gap (`crm.resume_followups`, wired into the send path). Dormant deals stay
+visible on the cockpit Opportunities screen (own section) and their senders are still recognised as
+deal contacts on inbound.
 Own/internal senders are never classified — that guard is what stops the team-CC rule looping.
 The company's general email VOICE lives in its `email-handling` skill rules (Sensa's is distilled from
 Gino's real sent mail, 2026-08-25) — `worker._RELATED_SKILLS` puts it in front of every

@@ -529,6 +529,12 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         crm.log_event(env["to"], "email_sent", f"Email sent: {env['subject']}", company.get("slug"))
     except Exception:  # noqa: BLE001 — CRM history must never block the send
         pass
+    try:   # our reply went out -> a PAUSED auto cadence on this deal re-arms at its normal gap
+        did = (task.get("request") or {}).get("deal_id") or task.get("deal_id")
+        if did:
+            crm.resume_followups(int(did))
+    except Exception:  # noqa: BLE001 — cadence bookkeeping must never block the send
+        pass
     store.update_task(task["id"], status="done")
     store.log_decision(task["id"], skill["id"], actor, "send",
                        snapshot={"to": env["to"], "cc": env["cc"], "bcc": env.get("bcc"),
@@ -1656,8 +1662,9 @@ def run_opportunity_followups() -> dict:
             r = crm.advance_followup(opp["id"])
             if not r:
                 continue
-            if r.get("action") == "lost":
-                tg.send(f"Opportunity '{opp['title']}' marked Lost — follow-up sequence exhausted.")
+            if r.get("action") in ("lost", "dormant"):
+                tg.send(f"Opportunity '{opp['title']}' moved to Dormant — full follow-up sequence (incl. "
+                        "revivals) exhausted. It is never auto-Lost; wake it any time from the deal.")
                 continue
             _spawn_followup_card(opp, r["action"])
             fired.append([opp["id"], r["action"]])
@@ -1666,9 +1673,37 @@ def run_opportunity_followups() -> dict:
     return {"fired": fired}
 
 
+def _deal_thread_context(co: dict, email: str, limit: int = 5) -> str:
+    """The recent REAL correspondence with this contact (newest first, trimmed), read from the company's
+    sales/send mailbox — so a follow-up references what was actually said, never a generic chase. Fail-soft:
+    an unreadable mailbox returns '' and the follow-up still goes out (just less informed)."""
+    try:
+        slug = co.get("slug")
+        rt = None
+        for k in (f"gmail_send_refresh_token:{slug}", f"gmail_refresh_token:{slug}"):
+            if db.setting_get(k):
+                rt = k
+                break
+        if not rt:
+            return ""
+        msgs = gmail.list_recent(days=180, limit=limit, rt_key=rt,
+                                 q=f"(from:{email} OR to:{email}) newer_than:180d",
+                                 company=_inbox_client_company(slug))
+        lines = []
+        for m in msgs:
+            body = re.sub(r"\s+", " ", (m.get("body") or m.get("snippet") or "")).strip()[:900]
+            if body:
+                lines.append(f"[{m.get('date') or ''} | from {m.get('email') or m.get('from') or ''} | "
+                             f"{(m.get('subject') or '')[:80]}]\n{body}")
+        return "\n---\n".join(lines[:limit])
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _spawn_followup_card(opp: dict, action: str) -> None:
     """Create a deal-linked follow-up card. Drafts a chase via the company's first-response skill when there's a
-    contact to chase; otherwise drops a nudge notification on the opportunity. Drafting quality is the skill's job."""
+    contact to chase; otherwise drops a nudge notification on the opportunity. Drafting quality is the skill's
+    job; this code only fetches the shelves — deal notes, live reminders, the real thread — for the drafter."""
     co = store.get_company_by_slug(crm._slug_for_org(opp.get("company")))
     if not co:
         return
@@ -1676,13 +1711,33 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
     primary = next((c for c in contacts if c.get("primary")), contacts[0] if contacts else None)
     email = (primary or {}).get("email") or opp.get("contact_email")
     skill = store.get_skill_by_key(co["id"], "sales-first-response")
-    label = "check-in" if action == "checkin" else "follow-up"
+    label = {"checkin": "check-in", "revive": "revival"}.get(action, "follow-up")
     if email and skill:
+        brief = f"{label.title()} on the opportunity '{opp['title']}'. Goal: get a reply / book a meeting."
+        if action == "revive":
+            brief = (f"Long-gap REVIVAL of the dormant opportunity '{opp['title']}' — months since their last "
+                     "reply. Soft, no-pressure reconnect: we were reviewing our projects and remembered their "
+                     "enquiry; ask if anything is in the pipeline this quarter; offer to pick it back up "
+                     "whenever suits. Reference what THEY originally asked about (see the correspondence "
+                     "below) so it reads personal, never like a mail-merge.")
+        note = (opp.get("note") or "").strip()
+        if note:
+            brief += f"\nNOTES ON THE OPPORTUNITY (from the team — factor them in): {note[:800]}"
+        try:
+            rems = db.query("select title from reminders where target_type='deal' and target_id=%s "
+                            "and status in ('pending','snoozed') order by due_at limit 3", (str(opp["id"]),))
+            if rems:
+                brief += "\nOPEN REMINDERS on this deal: " + "; ".join(r["title"] for r in rems)
+        except Exception:  # noqa: BLE001
+            pass
+        thread = _deal_thread_context(co, email)
+        if thread:
+            brief += ("\nRECENT CORRESPONDENCE with them (newest first — reference it, stay consistent "
+                      "with it, and never repeat a chase they already answered):\n" + thread[:5000])
         inq = {"name": (primary or {}).get("name") or "", "email": email,
-               "message": f"(Automated {label} on the opportunity '{opp['title']}'. No reply yet — chase to move it forward / book a meeting.)"}
+               "message": f"(Automated {label} on the opportunity '{opp['title']}'. No reply yet.)"}
         t = store.create_task(co["id"], skill["id"], "email_reply",
-                              {"brief": f"{label.title()} on '{opp['title']}'. Goal: get a reply / book a meeting.",
-                               "inquiry": inq, "followup": action, "deal_id": opp["id"]})
+                              {"brief": brief, "inquiry": inq, "followup": action, "deal_id": opp["id"]})
         if t:
             db.execute("update tasks set deal_id=%s where id=%s", (opp["id"], t["id"]))
     else:
@@ -1833,6 +1888,50 @@ def classify_email(company: dict, email: dict) -> dict:
             "summary": (out.get("summary") or "").strip(), "market": (out.get("market") or "").strip()}
 
 
+_DELIVERY_STAGES = {"Booked", "Production", "Final Payment", "Recurring"}
+
+
+def _pause_or_reschedule_followups(co: dict, deals: list, sender: str, body: str) -> None:
+    """The contact wrote to us -> every armed auto-chase clock on their deals pauses (the ball is now in
+    OUR court; it re-arms when our reply sends). If their email STATES a timeframe ('give us a couple of
+    weeks', 'ready after Ramadan'), Haiku reads the phrase, CODE stamps the actual date, the clock re-arms
+    for then, and a card tells the owner exactly what was decided and from which words. Fail-soft."""
+    try:
+        armed = [d for d in (deals or []) if d.get("automation") == "auto" and d.get("next_followup")]
+        if not armed:
+            return
+        wait = None
+        try:
+            out = provider.think_json(
+                "An email from a contact we are chasing. Does it STATE when we should next follow up or "
+                "check back (e.g. 'give us two weeks', 'we should be ready next month', 'after the summit "
+                "in October')? Return JSON {\"wait_days\": <integer days from today, conservative>, "
+                "\"quote\": \"<their exact words, under 15 words>\"} — or {\"wait_days\": null} if no "
+                "timeframe is stated. Never guess one that is not in the text.",
+                body[:2000], model=provider.MODEL_ROUTER, purpose="followup-wait", company=co.get("slug"))
+            if isinstance(out, dict) and isinstance(out.get("wait_days"), int) and 0 < out["wait_days"] <= 366:
+                wait = out
+        except Exception:  # noqa: BLE001
+            wait = None
+        for d in armed:
+            crm.pause_followups(d["id"])
+            if wait:
+                when = datetime.now(timezone.utc) + timedelta(days=wait["wait_days"])
+                crm.resume_followups(d["id"], when)
+                notifications.notify(
+                    f"Follow-up on '{d['title']}' rescheduled to {when.strftime('%d %b %Y')} — they said "
+                    f"“{wait.get('quote') or 'a timeframe'}”. Adjust on the deal if that's wrong.",
+                    "Follow-up cadence", category="reminder", company_id=co["id"],
+                    target_type="deal", target_id=str(d["id"]))
+            else:
+                notifications.notify(
+                    f"Auto follow-ups on '{d['title']}' paused — {sender} replied; the cadence re-arms "
+                    "when your reply sends.", "Follow-up cadence", category="reminder",
+                    company_id=co["id"], target_type="deal", target_id=str(d["id"]))
+    except Exception:  # noqa: BLE001 — cadence bookkeeping must never block the reply draft
+        pass
+
+
 def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, address: str | None) -> None:
     """A substantive lead/client/finance email sent DIRECTLY to a monitored mailbox -> draft the reply as an
     approval card, from the mailbox that received it. Skips thin mail (a signature and nothing else). If the
@@ -1848,7 +1947,13 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
                      "lower(request->'inquiry'->>'email')=lower(%s) limit 1", (co["id"], sender))
         deals = crm.active_deals_for_email(sender, co.get("slug"))
         deal = deals[0] if len(deals) == 1 else None   # attach a deal_id only when it is unambiguous
-        skill = store.get_skill_by_key(co["id"], "sales-first-response")
+        _pause_or_reschedule_followups(co, deals, sender, body)
+        # PROJECT correspondence (deal already in delivery) drafts on the company's general email-handling
+        # skill (+ its related project skills' rules), not the sales lane — that is where project-management
+        # behaviour gets trained. Opportunity-stage and no-deal mail stays on sales-first-response.
+        in_delivery = bool(deal and deal.get("stage") in _DELIVERY_STAGES)
+        skill = (store.get_skill_by_key(co["id"], "email-handling") if in_delivery else None) \
+            or store.get_skill_by_key(co["id"], "sales-first-response")
         if not skill:
             return
         subj = (e.get("subject") or "").strip()

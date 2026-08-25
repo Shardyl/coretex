@@ -233,7 +233,8 @@ def active_deals_for_email(email: str, company: str | None) -> list[dict]:
     c = db.one("select account_id from crm_master where lower(email)=lower(%s)", (email.strip(),))
     if not (c and c.get("account_id")):
         return []
-    return db.query("select id, title, stage, company from crm_projects where account_id=%s and company=%s "
+    return db.query("select id, title, stage, company, automation, followup_step, next_followup, note "
+                    "from crm_projects where account_id=%s and company=%s "
                     "and stage not in ('Lost','Close & review') order by id desc",
                     (c["account_id"], _org(company)))
 
@@ -796,7 +797,8 @@ def record_anchor_stats(company_id: int, anchor: str, post: str, engagers: int, 
 FORECAST_STAGES = ["Opportunity", "Quote"]
 WON_STAGES = ["Booked", "Production", "Recurring", "Delivered", "Final Payment", "Close & review"]
 LOST_STAGE = "Lost"                                    # pitched but didn't win — exits both screens
-DEAL_STAGES = FORECAST_STAGES + WON_STAGES + [LOST_STAGE]   # 'Recurring' = ongoing/repeat won work (retainers)
+DORMANT_STAGE = "Dormant"       # sequence exhausted, resting — never dead; revivable any time
+DEAL_STAGES = FORECAST_STAGES + WON_STAGES + [DORMANT_STAGE, LOST_STAGE]   # 'Recurring' = ongoing/repeat won work
 PROJECT_STAGES = DEAL_STAGES   # back-compat alias (any valid deal stage)
 
 # Contact status = the relationship ladder ONLY (deals carry Opportunity/Quote — kept off contacts to avoid
@@ -903,7 +905,10 @@ DEFAULT_CADENCE = {
     "steps": [
         {"after_days": 3, "repeat": 4, "action": "chase"},      # 4 chases, 3 days apart
         {"after_days": 14, "repeat": 2, "action": "checkin"},   # then 2 fortnightly check-ins
-        {"after_days": 14, "repeat": 1, "action": "lost"},      # then mark the opportunity Lost
+        # Nobody who approached us is ever dumped as dead (Rashad, 2026-08-25): after the active
+        # sequence, soft revivals at ~3 and ~6 months, then the opportunity rests as Dormant —
+        # never auto-Lost. Lost is reserved for an explicit "no".
+        {"after_days": 90, "repeat": 2, "action": "revive"},
     ],
 }
 
@@ -972,6 +977,29 @@ def set_opportunity_automation(deal_id: int, mode: str | None) -> dict | None:
     return db.one("select * from crm_projects where id=%s", (deal_id,))
 
 
+def pause_followups(deal_id: int) -> bool:
+    """The contact replied — the ball is in OUR court, so the auto chase clock disarms (automation stays
+    'auto' as the standing intent). resume_followups re-arms it when we answer or a stated wait passes."""
+    r = db.execute("update crm_projects set next_followup=null, updated_at=now() "
+                   "where id=%s and automation='auto' and next_followup is not null returning id", (deal_id,))
+    return bool(r)
+
+
+def resume_followups(deal_id: int, when: datetime | None = None) -> dict | None:
+    """Re-arm a PAUSED auto cadence: at `when` if given (a stated client timeframe, code-stamped by the
+    caller), else at the current step's normal gap from now. No-op unless auto AND currently disarmed."""
+    p = db.one("select * from crm_projects where id=%s", (deal_id,))
+    if not p or p.get("automation") != "auto" or p.get("next_followup"):
+        return None
+    cad = get_cadence(p["company"])
+    when = when or _schedule_point(cad, p.get("followup_step") or 0)
+    if when is None:
+        return None
+    when = _roll_weekend(when, bool(cad.get("skip_weekends")))
+    db.execute("update crm_projects set next_followup=%s, updated_at=now() where id=%s", (when, deal_id))
+    return db.one("select * from crm_projects where id=%s", (deal_id,))
+
+
 def advance_followup(deal_id: int) -> dict | None:
     """Engine calls this when an auto opportunity's next_followup is due: returns the action to fire
     ('chase'/'checkin') and arms the NEXT step, or marks the opportunity Lost when the sequence ends."""
@@ -981,11 +1009,11 @@ def advance_followup(deal_id: int) -> dict | None:
     cad = get_cadence(p["company"])
     pts = cadence_points(cad)
     i = p.get("followup_step") or 0
-    action = pts[i]["action"] if i < len(pts) else "lost"
-    if action == "lost":
-        set_project_stage(deal_id, LOST_STAGE)
+    action = pts[i]["action"] if i < len(pts) else "dormant"
+    if action in ("lost", "dormant"):   # sequence over -> rest as Dormant, never auto-Lost (standing rule)
+        set_project_stage(deal_id, DORMANT_STAGE)
         db.execute("update crm_projects set automation=null, next_followup=null, updated_at=now() where id=%s", (deal_id,))
-        return {"action": "lost", "done": True, "step": i}
+        return {"action": "dormant", "done": True, "step": i}
     nxt = _schedule_point(cad, i + 1)
     db.execute("update crm_projects set followup_step=%s, next_followup=%s, updated_at=now() where id=%s",
                (i + 1, nxt, deal_id))
