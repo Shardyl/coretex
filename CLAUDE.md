@@ -84,8 +84,11 @@ swallowed (ignores the seen-set, dedups on `request.gmail_id`, drafts only — n
 **Inbound attachments (2026-08-25):** images + PDFs on an inbound email reach the drafter — light refs
 (`request.inbound_attachments`) on the card, bytes fetched fresh from Gmail at draft time by
 `engine._request_for_draft` (never stored in the DB, never re-attached to outgoing mail). Caps: 4 files,
-8MB each. Other types (docx/xlsx/zip) are NOT read yet. Attachments on OLDER thread messages are not
-fetched — only the message being replied to.
+8MB each. Office documents — docx/xlsx/xls/pptx/csv/txt — are TEXT-EXTRACTED at draft time by
+`cortex/doctext.py` (pure python: python-docx/openpyxl/xlrd/python-pptx, in requirements) and reach the
+drafter as `request.attachment_texts` blocks; an unreadable file is declared honestly on the card, never
+guessed at. Still unread: zip/rar, legacy .doc, video/audio. Attachments on OLDER thread messages are
+not fetched — only the message being replied to.
 **Project-lane routing (2026-08-25):** client mail on a DELIVERY-stage deal (Booked/Production/Final
 Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` adds the prod-* skills'
 rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
