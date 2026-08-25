@@ -1875,9 +1875,21 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
             req["thread"] = {"id": e["thread_id"], "msg_id": e.get("msg_id") or "",
                              "references": e.get("references") or ""}
         if dup:                                 # supersede the stale open card with their latest email
-            old = ((dup.get("request") or {}).get("inquiry") or {}).get("message") or ""
-            if old.strip() == inq["message"].strip():
+            oldreq = dup.get("request") or {}
+            old = (oldreq.get("inquiry") or {}).get("message") or ""
+            norm = lambda s: re.sub(r"\s+", " ", s or "").strip()[:600]   # noqa: E731
+            if norm(old) == norm(inq["message"]):
                 return                          # same email, another team mailbox's copy — keep the first card
+            _base = lambda s: re.sub(r"^\s*((re|fwd|fw)\s*:\s*)+", "", (s or "").lower()).strip()  # noqa: E731
+            same_conv = _base((oldreq.get("inquiry") or {}).get("subject")) == _base(inq.get("subject"))
+            if same_conv and oldreq.get("mailbox_rt") and oldreq.get("mailbox_rt") != rt_key:
+                # same conversation seen via another team mailbox: the card's sending mailbox is STICKY to
+                # first receipt — threadIds are mailbox-local, so its thread/gmail ids stay from THAT mailbox
+                req["from_email"] = oldreq.get("from_email") or req.get("from_email")
+                req["mailbox_rt"] = oldreq["mailbox_rt"]
+                req["gmail_id"] = oldreq.get("gmail_id") or req.get("gmail_id")
+                if oldreq.get("thread"):
+                    req["thread"] = oldreq["thread"]
             if old and old[:200] not in inq["message"]:
                 req["brief"] += " Their EARLIER message in this thread (already on a card, reply to BOTH): " \
                                 + old[:1500]
