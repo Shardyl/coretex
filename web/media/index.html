@@ -57,6 +57,8 @@ a.tlink{color:inherit;text-decoration:none}
 a.tlink:hover .t{color:var(--accent)}
 .tag{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
 .tag.pf{color:var(--accent);border-color:var(--accent)}
+.tag.dup{color:#E5A54B;border-color:#E5A54B}
+.card.dupmark{border-color:#8a6a33}
 a.watch{color:var(--dim);font-size:11.5px;text-decoration:none;border:1px solid var(--line);
 border-radius:6px;padding:3px 9px}
 a.watch:hover{color:var(--text);border-color:var(--accent)}
@@ -113,7 +115,8 @@ const LABELS = {
   'testimonial':'Testimonials','product-video':'Product videos','recruitment':'Recruitment',
   'documentary':'Documentary','showreel':'Showreels','social-cut':'Social cuts',
   'bts':'Behind the scenes','internal-test':'Tests and drafts','version-variant':'Versions and variants',
-  'client-film':'Client films','unclassified':'Unclassified','untagged':'Untagged'};
+  'client-film':'Client films','unclassified':'Unclassified','untagged':'Untagged',
+  'duplicates':'Duplicates (grouped in pairs, oldest first)'};
 const label = c => LABELS[c] || c.replace(/-/g,' ').replace(/\b\w/g, m=>m.toUpperCase());
 
 const catsOf = v => (v.categories && v.categories.length) ? v.categories : ['untagged'];
@@ -200,6 +203,7 @@ function card(v, groupCat){
       <div class="c">${esc(v.client||'')}${p.industry?' <span style="color:var(--faint)">· '+esc(p.industry)+'</span>':''}</div>
       <div class="d">${(v.published_at||'').slice(0,4)} · ${dur(v.duration)}${v.views?' · '+v.views+' views':''}
         ${v.portfolio_category?' <span class="tag pf">on site</span>':''}
+        ${v.dup_group?' <span class="tag dup">duplicate</span>':''}
         ${v.privacy!=='unlisted'?' <span class="tag">'+v.privacy+'</span>':''}</div>
       ${p.summary?'<div class="sum">'+esc(p.summary)+'</div>':(v.enriched?'':'<div class="sum" style="color:var(--faint)">profile pending</div>')}
       <div class="tags">
@@ -240,11 +244,18 @@ function render(){
   const groups = {};
   for(const v of all){
     if(q && !(v.title+' '+(v.client||'')+' '+((v.profile||{}).industry||'')).toLowerCase().includes(q)) continue;
+    if(activeChip==='__dups'){
+      if(v.dup_group) (groups['duplicates'] = groups['duplicates']||[]).push(v);
+      continue;
+    }
     for(const c of catsOf(v)){
       if(activeChip!=='all' && c!==activeChip) continue;
       (groups[c] = groups[c]||[]).push(v);
     }
   }
+  if(activeChip==='__dups' && groups['duplicates'])
+    groups['duplicates'].sort((a,b)=> a.dup_group<b.dup_group?-1:a.dup_group>b.dup_group?1:
+      (a.published_at<b.published_at?-1:1));
   const order = Object.keys(groups).sort((a,b)=>{
     if(a==='untagged') return 1; if(b==='untagged') return -1;
     return groups[b].length-groups[a].length || a.localeCompare(b); });
@@ -252,7 +263,7 @@ function render(){
   for(const k of order){
     const vs = groups[k];
     const anyManual = vs.some(v=>(v.sort_orders||{})[k]!=null);
-    vs.sort((a,b)=> anyManual
+    if(k!=='duplicates') vs.sort((a,b)=> anyManual
       ? ((a.sort_orders||{})[k]??1e9)-((b.sort_orders||{})[k]??1e9)
       : (b.rating??b.suggested_rating??0)-(a.rating??a.suggested_rating??0) || (b.views??0)-(a.views??0));
     const g = document.createElement('div'); g.className='group';
@@ -287,6 +298,8 @@ function render(){
     c.className='chip'+(activeChip===id?' on':''); c.textContent=lab;
     c.onclick=()=>{activeChip=id; render();}; chips.appendChild(c); };
   mk('all','All '+all.length);
+  const ndup = all.filter(v=>v.dup_group).length;
+  if(ndup) mk('__dups','Duplicates '+ndup);
   for(const k of Object.keys(counts).sort((a,b)=>counts[b]-counts[a]))
     mk(k, label(k)+' '+counts[k]);
 }
