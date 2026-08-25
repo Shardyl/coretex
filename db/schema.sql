@@ -228,3 +228,36 @@ create table if not exists fitness.snapshots (
     doc_hash   text,                                    -- skip storing a push identical to the last
     created_at timestamptz not null default now()
 );
+
+-- media_assets: the media CATALOG from the locked YouTube/media spec — one row per asset,
+-- linking r2_key ↔ youtube_video_id ↔ watch_url, plus the Haiku classification layer
+-- (content_type / client / ai_production / portfolio_category) so Cortex knows what every
+-- video on a company channel IS. Populated by the channel inventory sync (Sensa loaded
+-- 2026-08-25, 322 videos). YouTube owns live state; catalog owns linkage + distribution.
+-- Rows are never deleted by sync — vanished videos get status='removed'.
+create table if not exists media_assets (
+    id                 serial primary key,
+    company_id         int not null references companies(id),
+    r2_key             text,
+    youtube_video_id   text unique,
+    watch_url          text,
+    title              text,
+    description        text,
+    privacy            text,                             -- public | unlisted | private
+    published_at       timestamptz,
+    duration           text,                             -- ISO-8601 (PT2M31S)
+    definition         text,                             -- hd | sd
+    views              int,
+    thumb_url          text,
+    tags               jsonb default '[]',
+    content_type       text,                             -- client-film | showreel | bts | event-coverage | case-study | version-variant | internal-test | brand-content
+    client             text,
+    ai_production      boolean default false,
+    portfolio_category text,                             -- site portfolio slug when the film is on sensa.digital
+    status             text default 'live',              -- live | removed
+    posted_to          jsonb default '[]',
+    source             text default 'youtube-sync',
+    classified_at      timestamptz default now(),
+    created_at         timestamptz default now(),
+    updated_at         timestamptz default now()
+);
