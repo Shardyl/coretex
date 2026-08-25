@@ -136,6 +136,13 @@ def draft(skill: dict, company: dict, request: dict,
     user = [f"Task: {request.get('brief') if isinstance(request, dict) else request}"]
     if is_email:   # tell the worker WHO it's writing to, so it greets the recipient (not Rashad/itself)
         inq = request.get("inquiry") or {}
+        # THEIR EMAIL must always reach the drafter. Some lanes embed it in the brief (_email_brief);
+        # any lane that doesn't gets it appended here — a reply drafted blind is never acceptable
+        # (bit MAH Gold card #328: 'no message content to reply to', Aug 2026).
+        their = (inq.get("message") or inq.get("snippet") or "").strip()
+        if their and their[:200] not in (request.get("brief") or ""):
+            user.append("THEIR EMAIL (this is the message you are replying to — address exactly what it says; "
+                        "quoted earlier messages below it are thread history for context):\n" + their[:6000])
         bits = []
         if inq.get("name") or inq.get("email"):
             bits.append(f"This email is addressed TO {inq.get('name') or inq.get('email')} — greet THEM by "

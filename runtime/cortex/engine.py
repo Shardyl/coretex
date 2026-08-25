@@ -1846,7 +1846,8 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
         dup = db.one("select id, request from tasks where company_id=%s and kind='email_reply' and "
                      "status in ('new','drafting','awaiting_approval','awaiting_correction') and "
                      "lower(request->'inquiry'->>'email')=lower(%s) limit 1", (co["id"], sender))
-        deal = crm.open_deal_for_email(sender, co.get("slug"))
+        deals = crm.active_deals_for_email(sender, co.get("slug"))
+        deal = deals[0] if len(deals) == 1 else None   # attach a deal_id only when it is unambiguous
         skill = store.get_skill_by_key(co["id"], "sales-first-response")
         if not skill:
             return
@@ -1862,6 +1863,11 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
             brief += (f" CONTEXT: this sender belongs to the ACTIVE project/deal '{deal['title']}' "
                       f"(stage: {deal['stage']}). Reply as their project contact, consistent with that work; "
                       "do not treat them as a new lead.")
+        elif len(deals) > 1:
+            names = "; ".join(f"'{d['title']}' (stage: {d['stage']})" for d in deals)
+            brief += (f" CONTEXT: this sender's company has SEVERAL active projects with us: {names}. "
+                      "Read their email to tell which one this thread is about and reply as their project "
+                      "contact for THAT project; do not treat them as a new lead and do not mix projects up.")
         if cls["category"] == "finance":
             brief += (" This is a MONEY matter: acknowledge precisely, commit to nothing financial without "
                       "the owner, and never state amounts that are not in the email itself.")

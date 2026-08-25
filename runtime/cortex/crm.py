@@ -225,6 +225,19 @@ def open_deal_for_email(email: str, company: str | None) -> dict | None:
                   (c["account_id"], _org(company)))
 
 
+def active_deals_for_email(email: str, company: str | None) -> list[dict]:
+    """ALL of the sender's active deals for one of our businesses (newest first). More than one means the
+    thread's project is ambiguous — the caller should present all of them rather than guess."""
+    if not email:
+        return []
+    c = db.one("select account_id from crm_master where lower(email)=lower(%s)", (email.strip(),))
+    if not (c and c.get("account_id")):
+        return []
+    return db.query("select id, title, stage, company from crm_projects where account_id=%s and company=%s "
+                    "and stage not in ('Lost','Close & review') order by id desc",
+                    (c["account_id"], _org(company)))
+
+
 def open_deal_for_domain(email: str, company: str | None) -> dict | None:
     """Fallback when the exact sender isn't in the CRM: an ACTIVE deal whose account has ANY contact on the
     sender's corporate domain — a colleague mailing from the same client company is still project mail.
