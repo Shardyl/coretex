@@ -180,9 +180,10 @@ def draft(skill: dict, company: dict, request: dict,
         user.append("Your manager flagged these to fix:\n- " + "\n- ".join(manager_feedback))
     if correction:
         user.append(f"The owner corrected your previous draft. Apply this and produce a new version:\n{correction}")
-    return provider.think(system, "\n\n".join(user), model=_model_for(skill), think_hard=True,
-                          max_tokens=6000, purpose=f"draft:{skill.get('skill_key', '')}",
-                          company=company.get("slug"), images=atts)
+    out = provider.think(system, "\n\n".join(user), model=_model_for(skill), think_hard=True,
+                         max_tokens=6000, purpose=f"draft:{skill.get('skill_key', '')}",
+                         company=company.get("slug"), images=atts)
+    return _no_dashes(out) if is_email else out   # house rule: no em/en dashes in visible email copy
 
 
 def _no_dashes(s: str) -> str:
