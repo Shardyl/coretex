@@ -131,8 +131,6 @@ def login(body: Login) -> dict:
             return {"token": _make_token(str(u["id"])), "ttl": TOKEN_TTL,
                     "user": {"name": u["name"], "email": u["email"], "role": u["role"],
                              "companies": u["companies"], "must_onboard": bool(u.get("must_onboard"))}}
-        # TEMP DIAGNOSTIC (no secrets: email as typed + lengths only) — remove once the team-login issue is closed
-        print(f"login FAIL email={body.email!r} account_found={bool(u)} pw_len={len((body.passcode or '').strip())}", flush=True)
         raise HTTPException(status_code=401, detail="wrong email or passcode")
     expected = config.get("CORTEX_PASSCODE")              # the owner (Rashad)
     if expected and hmac.compare_digest(body.passcode.strip(), expected.strip()):
@@ -256,8 +254,6 @@ def login_pin(body: PinLogin) -> dict:
     if body.email:                                       # named user -> their own PIN
         u = db.one("select id, name, role, companies, pin_hash, active from users where lower(email)=lower(%s)", (body.email.strip(),))
         if not (u and u.get("active") and u.get("pin_hash") and hmac.compare_digest(u["pin_hash"], _pin_hash(pin))):
-            # TEMP DIAGNOSTIC (no secrets) — remove once the team-login issue is closed
-            print(f"pin FAIL email={body.email!r} account_found={bool(u)} pin_len={len(pin)}", flush=True)
             raise HTTPException(status_code=401, detail="wrong PIN")
         return {"token": _make_token(str(u["id"])), "ttl": TOKEN_TTL,
                 "user": {"name": u["name"], "role": u["role"], "companies": u["companies"]}}

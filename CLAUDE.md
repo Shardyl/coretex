@@ -15,6 +15,13 @@ Hetzner box `cortex-1`. Read this before touching anything.
   Do not "fix" `pg_hba.conf`.
 - **Secrets:** `/etc/cortex/cortex.env`. Never `source` it (values contain spaces) — grep the
   key you need. Google OAuth client JSONs also in `/etc/cortex/` (must be `chmod 640 root:cortex`).
+- **Team login reset (no cockpit UI yet):** passwords/PINs are one-way HMAC hashes (keyed by the
+  `api_secret` setting, `pin:<value>` scheme) — never recoverable, only resettable. On the box as
+  `cortex`, compute the temp hash with the app's scheme and
+  `update users set passcode_hash=<hash>, must_onboard=true, pin_hash=null where email=...` —
+  the user re-onboards and may set the SAME password/PIN. Team members only ever type their PIN
+  day-to-day, so remembered passwords drift (bit Gino 25 Aug 2026). Cockpit demo mode
+  (passcode `demo`, sample data) was removed the same day — no unauthenticated entry.
 
 ## Deploy (never scp code; push + pull)
 
