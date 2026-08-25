@@ -1876,6 +1876,8 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
                              "references": e.get("references") or ""}
         if dup:                                 # supersede the stale open card with their latest email
             old = ((dup.get("request") or {}).get("inquiry") or {}).get("message") or ""
+            if old.strip() == inq["message"].strip():
+                return                          # same email, another team mailbox's copy — keep the first card
             if old and old[:200] not in inq["message"]:
                 req["brief"] += " Their EARLIER message in this thread (already on a card, reply to BOTH): " \
                                 + old[:1500]
