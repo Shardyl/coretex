@@ -25,7 +25,8 @@ from datetime import datetime, timedelta, timezone
 from psycopg.types.json import Json
 
 from . import (contentqueue, crm, db, doctext, gmail, manager, media, newsletter, notifications, profile,
-               provider, quotation, reminders, schedule, seo_report, store, webauthn_auth, whatsapp, worker)
+               ppc_report, provider, quotation, reminders, schedule, seo_report, store, webauthn_auth,
+               whatsapp, worker)
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -48,7 +49,8 @@ _CONFIRM_PUBLIC = {"newsletter_review", "newsletter_send"}        # the action h
 # 3.4/3.5. The assertion below keeps the two in lock-step so they can never silently diverge.
 KIND_CLASS = {
     "content": "internal", "draft": "internal", "research": "internal", "summary": "internal",
-    "report": "internal", "seo_report": "internal", "crm_update": "internal", "internal_note": "internal",
+    "report": "internal", "seo_report": "internal", "ppc_report": "internal", "crm_update": "internal",
+    "internal_note": "internal",
     "quotation": "internal",   # a downloadable quote card; SENDING it to a client is a separate outward step
     "email_reply": "outward", "email_draft": "outward", "email_send": "outward", "blog": "outward",
     "blog_idea": "internal", "blog_scheduled": "outward",
@@ -592,7 +594,7 @@ def _push_approval(task: dict, skill: dict, company: dict) -> None:
 def _run_task(task: dict) -> None:
     skill = store.get_skill(task["skill_id"])
     company = store.get_company(task["company_id"])
-    if task["kind"] == "seo_report":   # a scheduled report instance — generate it, don't worker-draft it
+    if task["kind"] in ("seo_report", "ppc_report"):   # a scheduled report instance — generate it, don't worker-draft it
         store.update_task(task["id"], status="drafting")
         _run_report_task(task)
         return
@@ -2470,6 +2472,32 @@ def deliver_seo_report(company: str, days: int = 28) -> dict:
         (g["company_id"], g["skill_id"], Json(g["request"]), g["summary"]))
 
 
+PPC_SKILL_KEY = "ads-google-search"   # the PPC report lands under the company's Google ads lane
+
+
+def _generate_ppc_report(company: str, days: int = 1) -> dict:
+    """Generate the daily Google Ads PPC report; returns the pieces needed to fill a report card."""
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+    rep = ppc_report.generate(company, days=days, out_dir=REPORTS_DIR)
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise ValueError(f"unknown company {company}")
+    skill = store.get_skill_by_key(co["id"], PPC_SKILL_KEY)
+    req = {"kind": "ppc_report", "company": company, "file": rep["path"],
+           "title": rep["title"], "summary": rep["summary"], "days": days}
+    return {"company_id": co["id"], "skill_id": skill["id"] if skill else None,
+            "request": req, "summary": rep["summary"]}
+
+
+def deliver_ppc_report(company: str = "sensa", days: int = 1) -> dict:
+    """One-off path: generate the PPC report now and drop a downloadable card in the Inbox."""
+    g = _generate_ppc_report(company, days)
+    return db.execute(
+        "insert into tasks (company_id,skill_id,kind,request,draft,status) "
+        "values (%s,%s,'report',%s,%s,'awaiting_approval') returning *",
+        (g["company_id"], g["skill_id"], Json(g["request"]), g["summary"]))
+
+
 QUOTES_DIR = "/opt/coretex/quotations"     # generated quotation PDFs (persisted, served to the Inbox)
 QUOTE_SKILL_KEY = "sales-quotation"        # quotes land under the company's Sales & Inquiries lane
 
@@ -2523,11 +2551,14 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
 
 
 def _run_report_task(task: dict) -> None:
-    """A scheduled report INSTANCE (a 'seo_report' child spawned by the unified clock): generate the report
-    and turn THIS task into the finished report card in place — one row per occurrence (own approval/history)."""
+    """A scheduled report INSTANCE (a 'seo_report'/'ppc_report' child spawned by the unified clock): generate
+    the report and turn THIS task into the finished report card in place — one row per occurrence."""
     req = task.get("request") or {}
     company = req.get("company") or (store.get_company(task["company_id"]) or {}).get("slug")
-    g = _generate_seo_report(company, req.get("days", 28))
+    if task["kind"] == "ppc_report" or req.get("kind") == "ppc_report":
+        g = _generate_ppc_report(company, req.get("days", 1))
+    else:
+        g = _generate_seo_report(company, req.get("days", 28))
     store.update_task(task["id"], kind="report", skill_id=g["skill_id"],
                       request=g["request"], draft=g["summary"], status="awaiting_approval")
 
