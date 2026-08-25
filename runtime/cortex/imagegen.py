@@ -1,11 +1,13 @@
-"""Gemini Imagen hero/figure images for blogs + newsletters. Returns JPEG bytes, or None on any failure —
+"""Gemini hero/figure images for blogs + newsletters. Returns JPEG bytes, or None on any failure —
 images are OPTIONAL (content must read fully with images off), so callers degrade gracefully.
 
-Cost: uses Imagen 4 STANDARD — Rashad values the image QUALITY (composition / prompt-adherence) and images
-are a small slice of spend, so we do NOT drop to Fast. 1K output is ample for web. Every successful image is
-logged to `usage_log` (model, purpose, company, cost_usd) so Gemini spend shows in the Cortex cost chip
-alongside the LLM spend. (Fast = imagen-4.0-fast-generate-001 @ ~$0.02 is the opt-in cheaper tier if ever
-wanted; Ultra @ ~$0.06 the sharper one.)
+Model note (2026-08-25): the Imagen `:predict` models (imagen-4.0-*) were REMOVED from the Generative
+Language API for this key — every call 404'd and heroes silently vanished from issues. Image gen now uses
+the Gemini image models via `:generateContent` (aspect ratio via generationConfig.imageConfig).
+`gemini-3.1-flash-image` is the like-for-like tier: ~$0.04/image, same spend as the Imagen 4 Standard
+Rashad approved (gemini-3-pro-image ~3x the price is the opt-in sharper tier, do not switch silently).
+Every successful image is logged to `usage_log` (model, purpose, company, cost_usd) so Gemini spend
+shows in the Cortex cost chip alongside the LLM spend.
 """
 from __future__ import annotations
 
@@ -16,9 +18,9 @@ import httpx
 
 from . import config
 
-MODEL = "imagen-4.0-generate-001"   # Imagen 4 Standard: the quality Rashad approved (Fast trades quality for cost)
-ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:predict"
-IMAGE_COST_USD = 0.04   # Imagen 4 Standard per-image (Fast ~0.02, Ultra ~0.06)
+MODEL = "gemini-3.1-flash-image"   # same ~$0.04 tier as the retired Imagen 4 Standard (pro-image = opt-in upgrade)
+ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
+IMAGE_COST_USD = 0.04
 
 
 def _log_image(purpose: str, company: str | None) -> None:
@@ -98,11 +100,18 @@ def hero(prompt: str, aspect: str = "16:9", purpose: str = "image", company: str
     prompt = prompt + _company_image_directives(company)   # append company image rules (e.g. realistic receipts)
     try:
         r = httpx.post(ENDPOINT, params={"key": key}, timeout=120, json={
-            "instances": [{"prompt": prompt}],
-            "parameters": {"sampleCount": 1, "aspectRatio": aspect}})
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": aspect}}})
         r.raise_for_status()
-        preds = r.json().get("predictions", [])
-        b64 = preds[0].get("bytesBase64Encoded") if preds else None
+        b64 = None
+        for cand in r.json().get("candidates", []):
+            for part in (cand.get("content") or {}).get("parts", []):
+                inline = part.get("inlineData") or part.get("inline_data")
+                if inline and inline.get("data"):
+                    b64 = inline["data"]
+                    break
+            if b64:
+                break
         if not b64:
             return None
         _log_image(purpose, company)   # only a SUCCESSFUL generation costs money / gets logged
