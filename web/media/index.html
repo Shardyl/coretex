@@ -253,9 +253,12 @@ function render(){
       (groups[c] = groups[c]||[]).push(v);
     }
   }
-  if(activeChip==='__dups' && groups['duplicates'])
-    groups['duplicates'].sort((a,b)=> a.dup_group<b.dup_group?-1:a.dup_group>b.dup_group?1:
-      (a.published_at<b.published_at?-1:1));
+  if(activeChip==='__dups' && groups['duplicates']){
+    const manual = groups['duplicates'].some(v=>(v.sort_orders||{})['duplicates']!=null);
+    groups['duplicates'].sort((a,b)=> manual
+      ? (((a.sort_orders||{})['duplicates'])??1e9)-(((b.sort_orders||{})['duplicates'])??1e9)
+      : (a.dup_group<b.dup_group?-1:a.dup_group>b.dup_group?1:(a.published_at<b.published_at?-1:1)));
+  }
   const order = Object.keys(groups).sort((a,b)=>{
     if(a==='untagged') return 1; if(b==='untagged') return -1;
     return groups[b].length-groups[a].length || a.localeCompare(b); });
