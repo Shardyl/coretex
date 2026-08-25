@@ -2,8 +2,20 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta, timezone
 
 from . import grounding, profile, provider, store
+
+_GST = timezone(timedelta(hours=4))   # Gulf Standard Time (Dubai) — no DST
+
+
+def _now_line() -> str:
+    """Code-stamped current moment in GST. The drafter must anchor every day/date/time it mentions to
+    this — proposing 'Monday or Wednesday' on a Tuesday is exactly the failure this prevents."""
+    now = datetime.now(_GST)
+    return ("Current date and time, code-stamped (GST / Dubai, UTC+4): "
+            + now.strftime("%A %d %B %Y, %I:%M %p")
+            + ". Anchor every day, date and time you mention to this moment — never guess or assume.")
 
 
 def _company_context(company: dict, author: str | None = None) -> str:
@@ -112,6 +124,7 @@ def draft(skill: dict, company: dict, request: dict,
     is_email = isinstance(request, dict) and bool(request.get("outbound") or request.get("inquiry"))
     system = "\n\n".join(filter(None, [
         f"You are Cortex's worker for the '{skill['name']}' skill.",
+        _now_line(),
         _company_context(company, author),
         skill.get("craft") or "",
         _rules_block(skill),

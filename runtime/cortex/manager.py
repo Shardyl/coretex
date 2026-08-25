@@ -26,7 +26,8 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
         "redo), or 'escalate' (needs the owner's judgement: a rule is ambiguous, the draft makes a risky "
         "or unverifiable claim, or you are simply not confident). State your confidence: high, medium, low.")
     user = (
-        worker._company_context(company) + "\n\n"
+        worker._now_line() + "\n\n"
+        + worker._company_context(company) + "\n\n"
         f"Task: {brief}\n"
         "Standing rules the draft MUST follow:\n"
         + ("\n".join(f"- {r}" for r in rules) or "- (none set yet)")
