@@ -219,6 +219,25 @@ def list_inquiries(days: int = 7, limit: int = 50) -> list[dict]:
     return out
 
 
+def _walk_attachments(payload: dict, out: list) -> list:
+    """Collect real file attachments (filename + attachmentId) from a message payload, recursively."""
+    body = payload.get("body") or {}
+    if payload.get("filename") and body.get("attachmentId"):
+        out.append({"filename": payload["filename"], "mime": payload.get("mimeType") or "",
+                    "att_id": body["attachmentId"], "size": int(body.get("size") or 0)})
+    for p in payload.get("parts") or []:
+        _walk_attachments(p, out)
+    return out
+
+
+def get_attachment(gmail_id: str, att_id: str, rt_key: str = "gmail_refresh_token",
+                   company: str | None = None) -> bytes:
+    """Download ONE attachment's bytes from a message in the given mailbox."""
+    tok = _token_for(rt_key, "gmail", company)
+    r = _get(tok, f"messages/{gmail_id}/attachments/{att_id}")
+    return base64.urlsafe_b64decode((r.get("data") or "") + "===")
+
+
 def _parse_generic(msg: dict) -> dict:
     """Light parse of ANY email (sender, subject, body) — for the inbox classifier, no form assumptions."""
     h = {x["name"].lower(): x["value"] for x in msg.get("payload", {}).get("headers", [])}
@@ -231,7 +250,8 @@ def _parse_generic(msg: dict) -> dict:
             "snippet": msg.get("snippet", ""),
             # threading identity: reply with these + threadId so our answer lands ON their thread
             "thread_id": msg.get("threadId", ""), "msg_id": h.get("message-id", ""),
-            "references": h.get("references", "")}
+            "references": h.get("references", ""),
+            "attachments": _walk_attachments(msg.get("payload", {}), [])}
 
 
 def list_recent(days: int = 2, limit: int = 30, rt_key: str = "gmail_refresh_token",

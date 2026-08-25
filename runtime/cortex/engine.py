@@ -613,10 +613,11 @@ def _run_task(task: dict) -> None:
         _run_blog_ideation(task, skill, company)   # NO HTML built/staged yet; the build happens on approval
         return
 
-    draft = worker.draft(skill, company, task["request"])
+    dreq = _request_for_draft(task)   # inbound attachment refs -> data: URLs, drafter's eyes only
+    draft = worker.draft(skill, company, dreq)
     verdict = manager.check(skill, company, draft, task["request"])
     if not verdict["aligned"] and verdict["issues"]:
-        draft = worker.draft(skill, company, task["request"], manager_feedback=verdict["issues"])
+        draft = worker.draft(skill, company, dreq, manager_feedback=verdict["issues"])
         verdict = manager.check(skill, company, draft, task["request"])
 
     task = store.update_task(task["id"], draft=draft, manager=verdict, attempts=task["attempts"] + 1)
@@ -1106,7 +1107,7 @@ def apply_correction(task: dict, text: str) -> None:
         _maybe_propose_rule(task, skill, text, old or "", new or "")   # learn from ideation feedback too
         return
 
-    new = worker.draft(skill, company, task["request"], correction=text)
+    new = worker.draft(skill, company, _request_for_draft(task), correction=text)
     task = store.update_task(task["id"], draft=new, status="awaiting_approval", attempts=task["attempts"] + 1)
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text, snapshot={"old": old, "new": new})
     msg2 = tg.send(_fmt(task, skill, company, None), _approval_buttons(task["id"]))
@@ -1890,6 +1891,46 @@ def classify_email(company: dict, email: dict) -> dict:
 
 _DELIVERY_STAGES = {"Booked", "Production", "Final Payment", "Recurring"}
 
+# inbound attachment types the drafter can actually read (image blocks + PDF document blocks)
+_READABLE_ATT_MIMES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "application/pdf"}
+
+
+def _inbound_att_refs(e: dict, rt_key: str | None, client: str | None) -> list[dict]:
+    """LIGHT references to the readable attachments on an inbound email (no bytes in the DB — they are
+    fetched fresh from Gmail at draft time by _request_for_draft). Caps: 4 files, 8MB each."""
+    refs = []
+    for a in (e.get("attachments") or []):
+        if (a.get("mime") or "").lower() in _READABLE_ATT_MIMES and 0 < int(a.get("size") or 0) <= 8_000_000:
+            refs.append({"gmail_id": e.get("gmail_id"), "att_id": a["att_id"], "mime": a["mime"],
+                         "filename": a.get("filename") or "", "rt_key": rt_key, "client": client})
+        if len(refs) >= 4:
+            break
+    return refs
+
+
+def _request_for_draft(task: dict) -> dict:
+    """The task's request with inbound attachment refs resolved to data: URLs, for the drafter's eyes only.
+    The DB row keeps just the refs; the send path never sees these bytes (so a client's own files can never
+    be attached back onto our reply). A failed fetch drops that file — drafting proceeds regardless."""
+    req = dict(task.get("request") or {})
+    refs = req.get("inbound_attachments") or []
+    if not refs:
+        return req
+    datas = list(req.get("attachments") or [])
+    for r in refs[:4]:
+        try:
+            b = gmail.get_attachment(r["gmail_id"], r["att_id"],
+                                     rt_key=r.get("rt_key") or req.get("mailbox_rt") or "gmail_refresh_token",
+                                     company=r.get("client"))
+            if b and len(b) <= 8_000_000:
+                datas.append(f"data:{r.get('mime') or 'application/octet-stream'};base64,"
+                             + _b64.b64encode(b).decode())
+        except Exception:  # noqa: BLE001
+            continue
+    if datas:
+        req["attachments"] = datas
+    return req
+
 
 def _pause_or_reschedule_followups(co: dict, deals: list, sender: str, body: str) -> None:
     """The contact wrote to us -> every armed auto-chase clock on their deals pauses (the ball is now in
@@ -1978,6 +2019,12 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
                       "the owner, and never state amounts that are not in the email itself.")
         req = {"brief": brief, "inquiry": inq, "from_email": address, "mailbox_rt": rt_key,
                "gmail_id": e.get("gmail_id") or ""}   # source message id -> the backfill sweep dedups on it
+        atts = _inbound_att_refs(e, rt_key, _inbox_client_company(co.get("slug")))
+        if atts:
+            req["inbound_attachments"] = atts
+            req["brief"] += (" Their email includes attachment(s): "
+                             + ", ".join(a["filename"] or a["mime"] for a in atts)
+                             + " — they are provided to you; READ them before drafting and address their content.")
         if is_thread:
             req["thread_reply"] = True          # continuation: natural reply, no reference box
         if deal:
@@ -2249,6 +2296,12 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
             if m.get("thread_id"):
                 fu["thread"] = {"id": m["thread_id"], "msg_id": m.get("msg_id") or "",
                                 "references": m.get("references") or ""}
+            fu_atts = _inbound_att_refs(m, send_rt, client)
+            if fu_atts:
+                fu["inbound_attachments"] = fu_atts
+                fu["brief"] += (" Their reply includes attachment(s): "
+                                + ", ".join(a["filename"] or a["mime"] for a in fu_atts)
+                                + " — they are provided to you; READ them before drafting.")
             store.create_task(co["id"], skill["id"], "email_reply", fu)
         try:                                                         # re-qualify on the new info
             sug = qualify_suggest(co, inq)
