@@ -179,6 +179,9 @@ def draft(skill: dict, company: dict, request: dict,
         user.insert(0, " ".join(bits))
     if atts:
         user.append(f"{len(atts)} file(s)/image(s) are attached below — use them as source material for the deliverable.")
+    for at in (request.get("attachment_texts") or []) if isinstance(request, dict) else []:
+        user.append(f"ATTACHED DOCUMENT '{at.get('filename') or 'document'}' (text extracted from the "
+                    f"client's attachment — read it and address its content):\n{(at.get('text') or '')[:15000]}")
     if manager_feedback:
         user.append("Your manager flagged these to fix:\n- " + "\n- ".join(manager_feedback))
     if correction:

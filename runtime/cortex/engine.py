@@ -24,8 +24,8 @@ from datetime import datetime, timedelta, timezone
 
 from psycopg.types.json import Json
 
-from . import (contentqueue, crm, db, gmail, manager, media, newsletter, notifications, profile, provider,
-               quotation, reminders, schedule, seo_report, store, webauthn_auth, whatsapp, worker)
+from . import (contentqueue, crm, db, doctext, gmail, manager, media, newsletter, notifications, profile,
+               provider, quotation, reminders, schedule, seo_report, store, webauthn_auth, whatsapp, worker)
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -1891,7 +1891,8 @@ def classify_email(company: dict, email: dict) -> dict:
 
 _DELIVERY_STAGES = {"Booked", "Production", "Final Payment", "Recurring"}
 
-# inbound attachment types the drafter can actually read (image blocks + PDF document blocks)
+# attachment types the drafter reads NATIVELY (image blocks + PDF document blocks); office documents
+# (docx/xlsx/xls/pptx/csv/txt) are text-extracted by doctext at draft time instead
 _READABLE_ATT_MIMES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "application/pdf"}
 
 
@@ -1900,9 +1901,11 @@ def _inbound_att_refs(e: dict, rt_key: str | None, client: str | None) -> list[d
     fetched fresh from Gmail at draft time by _request_for_draft). Caps: 4 files, 8MB each."""
     refs = []
     for a in (e.get("attachments") or []):
-        if (a.get("mime") or "").lower() in _READABLE_ATT_MIMES and 0 < int(a.get("size") or 0) <= 8_000_000:
+        mime, fn = (a.get("mime") or "").lower(), a.get("filename") or ""
+        readable = mime in _READABLE_ATT_MIMES or doctext.kind_for(mime, fn)
+        if readable and 0 < int(a.get("size") or 0) <= 8_000_000:
             refs.append({"gmail_id": e.get("gmail_id"), "att_id": a["att_id"], "mime": a["mime"],
-                         "filename": a.get("filename") or "", "rt_key": rt_key, "client": client})
+                         "filename": fn, "rt_key": rt_key, "client": client})
         if len(refs) >= 4:
             break
     return refs
@@ -1917,18 +1920,28 @@ def _request_for_draft(task: dict) -> dict:
     if not refs:
         return req
     datas = list(req.get("attachments") or [])
+    texts = []
     for r in refs[:4]:
         try:
             b = gmail.get_attachment(r["gmail_id"], r["att_id"],
                                      rt_key=r.get("rt_key") or req.get("mailbox_rt") or "gmail_refresh_token",
                                      company=r.get("client"))
-            if b and len(b) <= 8_000_000:
-                datas.append(f"data:{r.get('mime') or 'application/octet-stream'};base64,"
-                             + _b64.b64encode(b).decode())
+            if not b or len(b) > 8_000_000:
+                continue
+            mime, fn = (r.get("mime") or "").lower(), r.get("filename") or ""
+            if mime in _READABLE_ATT_MIMES:      # image/PDF -> the model reads it natively
+                datas.append(f"data:{mime};base64," + _b64.b64encode(b).decode())
+            elif doctext.kind_for(mime, fn):     # office doc -> extracted text block
+                txt = doctext.extract(mime, fn, b)
+                texts.append({"filename": fn or mime,
+                              "text": txt or "(this attachment could not be read — say so rather than guessing "
+                                             "its contents, and ask them to resend as PDF if it matters)"})
         except Exception:  # noqa: BLE001
             continue
     if datas:
         req["attachments"] = datas
+    if texts:
+        req["attachment_texts"] = texts
     return req
 
 
