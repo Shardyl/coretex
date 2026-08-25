@@ -3627,13 +3627,13 @@ def media_library(company: str = "sensa", _: None = Depends(auth)) -> dict:
 
 class MediaRate(BaseModel):
     youtube_video_id: str
-    rating: int | None = None   # 1-5, or null to clear back to the AI suggestion
+    rating: int | None = None   # 1-10, or null to clear back to the AI suggestion
 
 
 @app.post("/api/media/rate")
 def media_rate(body: MediaRate, user: dict = Depends(current_user)) -> dict:
-    if body.rating is not None and not 1 <= body.rating <= 5:
-        raise HTTPException(status_code=400, detail="rating must be 1-5")
+    if body.rating is not None and not 1 <= body.rating <= 10:
+        raise HTTPException(status_code=400, detail="rating must be 1-10")
     db.execute("update media_assets set rating=%s, rated_by=%s, rated_at=now(), updated_at=now() "
                "where youtube_video_id=%s",
                (body.rating, user.get("name") or "owner", body.youtube_video_id))

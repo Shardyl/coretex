@@ -39,10 +39,15 @@ padding:10px;align-items:center;cursor:grab}
 .meta .sum{color:var(--dim);font-size:11.5px;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;
 -webkit-box-orient:vertical;overflow:hidden}
 .side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
-.stars{display:flex;gap:2px}
-.stars svg{width:20px;height:20px;cursor:pointer;stroke:var(--faint);fill:none;stroke-width:1.5}
+.stars{display:flex;gap:1px;align-items:center}
+.stars svg{width:15px;height:15px;cursor:pointer;stroke:var(--faint);fill:none;stroke-width:1.5}
 .stars svg.full{fill:var(--star);stroke:var(--star)}
 .stars.sugg svg.full{fill:none;stroke:var(--accent)}
+.score{font-size:11.5px;color:var(--dim);margin-left:5px;min-width:32px;text-align:right}
+.score b{color:var(--text)}
+.sugg+.score b{color:var(--accent);font-weight:500}
+a.tlink{color:inherit;text-decoration:none}
+a.tlink:hover .t{color:var(--accent)}
 .tag{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
 .tag.pf{color:var(--accent);border-color:var(--accent)}
 a.watch{color:var(--dim);font-size:11.5px;text-decoration:none;border:1px solid var(--line);
@@ -130,9 +135,11 @@ function card(v){
   el.className='card'; el.draggable=true; el.dataset.vid=v.youtube_video_id;
   const p = v.profile||{};
   el.innerHTML = `
-    <img loading="lazy" src="https://i.ytimg.com/vi/${v.youtube_video_id}/mqdefault.jpg" alt="">
+    <a class="tlink" href="${esc(v.watch_url)}" target="_blank" rel="noopener" draggable="false">
+      <img loading="lazy" src="https://i.ytimg.com/vi/${v.youtube_video_id}/mqdefault.jpg" alt="" draggable="false">
+    </a>
     <div class="meta">
-      <div class="t">${esc(v.title)}</div>
+      <a class="tlink" href="${esc(v.watch_url)}" target="_blank" rel="noopener" draggable="false"><div class="t">${esc(v.title)}</div></a>
       <div class="c">${esc(v.client||'')}${p.industry?' <span style="color:var(--faint)">· '+esc(p.industry)+'</span>':''}</div>
       <div class="d">${(v.published_at||'').slice(0,4)} · ${dur(v.duration)}${v.views?' · '+v.views+' views':''}
         ${v.portfolio_category?' <span class="tag pf">on site</span>':''}
@@ -141,7 +148,8 @@ function card(v){
     </div>
     <div class="side">
       <div class="stars ${owner?'':'sugg'}" title="${owner?'Your rating':'AI suggestion — click to set yours'}">
-        ${[1,2,3,4,5].map(i=>star(i<=eff)).join('')}
+        ${[1,2,3,4,5,6,7,8,9,10].map(i=>star(i<=eff)).join('')}
+        <span class="score">${eff?('<b>'+eff+'</b>/10'):''}</span>
       </div>
       <a class="watch" href="${esc(v.watch_url)}" target="_blank" rel="noopener">Watch</a>
     </div>`;
