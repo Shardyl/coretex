@@ -3616,13 +3616,26 @@ def media_library(company: str = "sensa", _: None = Depends(auth)) -> dict:
     rows = db.query(
         """select m.youtube_video_id, m.title, m.client, m.content_type, m.privacy,
                   m.published_at, m.duration, m.views, m.rating, m.suggested_rating,
-                  m.sort_order, m.portfolio_category, m.profile, m.watch_url,
+                  m.categories, m.sort_orders, m.portfolio_category, m.profile, m.watch_url,
                   (m.enriched_at is not null) as enriched
            from media_assets m join companies c on c.id = m.company_id
            where c.slug = %s and m.status = 'live'
-           order by coalesce(m.rating, m.suggested_rating, 0) desc,
-                    m.sort_order asc nulls last, m.published_at desc""", (company,))
+           order by coalesce(m.rating, m.suggested_rating, 0) desc, m.published_at desc""",
+        (company,))
     return {"videos": rows}
+
+
+class MediaTag(BaseModel):
+    youtube_video_id: str
+    categories: list[str]   # the video's FULL category list (tags; a video may be in many)
+
+
+@app.post("/api/media/tag")
+def media_tag(body: MediaTag, _: None = Depends(auth)) -> dict:
+    cats = sorted({c.strip() for c in body.categories if c.strip()})
+    db.execute("update media_assets set categories=%s, updated_at=now() where youtube_video_id=%s",
+               (json.dumps(cats), body.youtube_video_id))
+    return {"ok": True, "categories": cats}
 
 
 class MediaRate(BaseModel):
@@ -3641,14 +3654,16 @@ def media_rate(body: MediaRate, user: dict = Depends(current_user)) -> dict:
 
 
 class MediaOrder(BaseModel):
-    ids: list[str]   # the group's video ids in the operator's chosen order, best first
+    category: str        # order is PER CATEGORY (a video sits in many; each playlist has its own order)
+    ids: list[str]       # that category's video ids in the operator's chosen order, best first
 
 
 @app.post("/api/media/order")
 def media_order(body: MediaOrder, _: None = Depends(auth)) -> dict:
     for i, vid in enumerate(body.ids):
-        db.execute("update media_assets set sort_order=%s, updated_at=now() where youtube_video_id=%s",
-                   (i * 10, vid))
+        db.execute("update media_assets set sort_orders = coalesce(sort_orders,'{}'::jsonb) || "
+                   "jsonb_build_object(%s::text, %s::int), updated_at=now() where youtube_video_id=%s",
+                   (body.category, i * 10, vid))
     return {"ok": True, "count": len(body.ids)}
 
 

@@ -268,7 +268,12 @@ create table if not exists media_assets (
     rating             int,
     rated_by           text,
     rated_at           timestamptz,
-    sort_order         int,
+    sort_order         int,                              -- deprecated: replaced by sort_orders
+    -- multi-category tagging: a film sits in MANY categories (tags); each category becomes an
+    -- unlisted playlist on the future YouTube resync. sort_orders = per-category manual drag
+    -- order at /media ({category: position}) — the playlist's best-to-worst order.
+    categories         jsonb default '[]',
+    sort_orders        jsonb default '{}',
     created_at         timestamptz default now(),
     updated_at         timestamptz default now()
 );

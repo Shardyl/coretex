@@ -30,7 +30,6 @@ padding:14px 0 10px;display:flex;gap:8px;align-items:baseline}
 .card{display:flex;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;
 padding:10px;align-items:center;cursor:grab}
 .card.dragging{opacity:.4}
-.card.over{border-color:var(--accent)}
 .card img{width:128px;height:72px;object-fit:cover;border-radius:6px;background:var(--panel2);flex:none}
 .meta{flex:1;min-width:0}
 .meta .t{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -38,6 +37,14 @@ padding:10px;align-items:center;cursor:grab}
 .meta .d{color:var(--faint);font-size:11.5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .meta .sum{color:var(--dim);font-size:11.5px;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;
 -webkit-box-orient:vertical;overflow:hidden}
+.tags{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;align-items:center}
+.tags .tg{font-size:10.5px;color:var(--dim);border:1px solid var(--line);border-radius:999px;
+padding:2px 8px;display:inline-flex;gap:5px;align-items:center;cursor:default}
+.tags .tg span{cursor:pointer;color:var(--faint);font-size:12px;line-height:1}
+.tags .tg span:hover{color:var(--text)}
+.tags .add{font-size:11px;color:var(--faint);border:1px dashed var(--line);border-radius:999px;
+padding:2px 9px;cursor:pointer}
+.tags .add:hover{color:var(--accent);border-color:var(--accent)}
 .side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
 .stars{display:flex;gap:1px;align-items:center}
 .stars svg{width:15px;height:15px;cursor:pointer;stroke:var(--faint);fill:none;stroke-width:1.5}
@@ -53,6 +60,19 @@ a.tlink:hover .t{color:var(--accent)}
 a.watch{color:var(--dim);font-size:11.5px;text-decoration:none;border:1px solid var(--line);
 border-radius:6px;padding:3px 9px}
 a.watch:hover{color:var(--text);border-color:var(--accent)}
+#tagpop{position:absolute;z-index:40;background:var(--panel2);border:1px solid var(--line);
+border-radius:10px;padding:10px;width:230px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+#tagpop .opt{display:flex;gap:8px;align-items:center;padding:4px 2px;font-size:12.5px;color:var(--dim);
+cursor:pointer;border-radius:5px}
+#tagpop .opt:hover{color:var(--text)}
+#tagpop .opt .bx{width:14px;height:14px;border:1px solid var(--faint);border-radius:3px;flex:none;
+display:flex;align-items:center;justify-content:center}
+#tagpop .opt.on{color:var(--text)}
+#tagpop .opt.on .bx{border-color:var(--accent);background:var(--accent)}
+#tagpop input{width:100%;margin-top:8px;background:var(--panel);border:1px solid var(--line);
+color:var(--text);border-radius:6px;padding:6px 9px;font-size:12.5px;outline:none}
+#tagpop input:focus{border-color:var(--accent)}
+#tagpop .hint{font-size:10.5px;color:var(--faint);margin-top:5px}
 #lock{position:fixed;inset:0;background:var(--bg);z-index:50;display:flex;align-items:center;
 justify-content:center;flex-direction:column;gap:14px}
 #lock input{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;
@@ -61,7 +81,7 @@ padding:10px 14px;font-size:15px;text-align:center;outline:none;width:220px}
 .hidden{display:none !important}
 #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--panel);
 border:1px solid var(--line);border-radius:8px;padding:8px 16px;font-size:12.5px;color:var(--dim);
-opacity:0;transition:opacity .2s;pointer-events:none}
+opacity:0;transition:opacity .2s;pointer-events:none;z-index:60}
 #toast.show{opacity:1}
 @media(max-width:640px){.card img{width:96px;height:54px}.meta .sum{display:none}#search{width:140px}}
 </style>
@@ -87,21 +107,19 @@ const API = '';
 let token = localStorage.getItem('cortex_token') || '';
 let all = [], activeChip = 'all';
 
-const FMT_LABELS = {
+const LABELS = {
   'commercial':'Commercials','corporate-film':'Corporate films','event-aftermovie':'Events',
   'animation':'Animation','stop-motion':'Stop motion','music-video':'Music videos',
   'testimonial':'Testimonials','product-video':'Product videos','recruitment':'Recruitment',
   'documentary':'Documentary','showreel':'Showreels','social-cut':'Social cuts',
   'bts':'Behind the scenes','internal-test':'Tests and drafts','version-variant':'Versions and variants',
-  'pending':'Profile pending'};
+  'client-film':'Client films','unclassified':'Unclassified','untagged':'Untagged'};
+const label = c => LABELS[c] || c.replace(/-/g,' ').replace(/\b\w/g, m=>m.toUpperCase());
 
-function fmtOf(v){
-  if(!v.enriched) return 'pending';
-  if(v.content_type==='bts') return 'bts';
-  if(v.content_type==='internal-test') return 'internal-test';
-  if(v.content_type==='version-variant') return 'version-variant';
-  return (v.profile && v.profile.format) || 'pending';
-}
+const catsOf = v => (v.categories && v.categories.length) ? v.categories : ['untagged'];
+const allCats = () => { const s=new Set(); for(const v of all) for(const c of catsOf(v)) if(c!=='untagged') s.add(c);
+  return [...s].sort(); };
+
 function dur(iso){ if(!iso) return ''; const m=iso.match(/PT(?:(\d+)M)?(?:(\d+)S)?/);
   if(!m) return ''; return (m[1]||'0')+':'+String(m[2]||'0').padStart(2,'0'); }
 
@@ -124,16 +142,55 @@ document.getElementById('pass').addEventListener('keydown', async e=>{
 
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m;
   t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),1500); }
-
+function esc(s){ return String(s??'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function star(filled){ return `<svg viewBox="0 0 24 24" class="${filled?'full':''}">
   <path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4 6.1 20.5l1.2-6.5L2.5 9.4l6.6-.9z"/></svg>`; }
 
-function card(v){
+async function saveTags(v, cats){
+  const d = await api('/api/media/tag',{method:'POST',body:JSON.stringify(
+    {youtube_video_id:v.youtube_video_id, categories:cats})});
+  v.categories = d.categories; render();
+}
+
+let pop = null;
+function closePop(){ if(pop){ pop.remove(); pop=null; } }
+document.addEventListener('click', e=>{ if(pop && !pop.contains(e.target)) closePop(); });
+
+function openTagEditor(v, anchor){
+  closePop();
+  pop = document.createElement('div'); pop.id='tagpop';
+  const cur = new Set(catsOf(v).filter(c=>c!=='untagged'));
+  const opts = allCats();
+  pop.innerHTML = opts.map(c=>`<div class="opt ${cur.has(c)?'on':''}" data-c="${esc(c)}">
+      <div class="bx">${cur.has(c)?'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#0B0F14" stroke-width="4"><path d="M4 13l5 5L20 6"/></svg>':''}</div>${esc(label(c))}</div>`).join('')
+    + `<input placeholder="New category, Enter to add"><div class="hint">A film can sit in many categories; each becomes a playlist on the YouTube resync.</div>`;
+  document.body.appendChild(pop);
+  const r = anchor.getBoundingClientRect();
+  pop.style.left = Math.min(r.left, innerWidth-250) + 'px';
+  pop.style.top = (r.bottom + scrollY + 6) + 'px';
+  pop.querySelectorAll('.opt').forEach(o=>o.addEventListener('click', e=>{
+    e.stopPropagation();
+    const c = o.dataset.c;
+    cur.has(c) ? cur.delete(c) : cur.add(c);
+    saveTags(v, [...cur]); closePop();
+  }));
+  const inp = pop.querySelector('input');
+  inp.addEventListener('keydown', e=>{
+    if(e.key!=='Enter') return;
+    const c = inp.value.trim().toLowerCase().replace(/\s+/g,'-');
+    if(!c) return;
+    cur.add(c); saveTags(v, [...cur]); closePop();
+  });
+  inp.focus();
+}
+
+function card(v, groupCat){
   const eff = v.rating ?? v.suggested_rating ?? 0;
   const owner = v.rating != null;
   const el = document.createElement('div');
   el.className='card'; el.draggable=true; el.dataset.vid=v.youtube_video_id;
   const p = v.profile||{};
+  const tags = catsOf(v).filter(c=>c!=='untagged');
   el.innerHTML = `
     <a class="tlink" href="${esc(v.watch_url)}" target="_blank" rel="noopener" draggable="false">
       <img loading="lazy" src="https://i.ytimg.com/vi/${v.youtube_video_id}/mqdefault.jpg" alt="" draggable="false">
@@ -145,6 +202,10 @@ function card(v){
         ${v.portfolio_category?' <span class="tag pf">on site</span>':''}
         ${v.privacy!=='unlisted'?' <span class="tag">'+v.privacy+'</span>':''}</div>
       ${p.summary?'<div class="sum">'+esc(p.summary)+'</div>':(v.enriched?'':'<div class="sum" style="color:var(--faint)">profile pending</div>')}
+      <div class="tags">
+        ${tags.map(c=>`<span class="tg">${esc(label(c))}<span data-rm="${esc(c)}" title="Remove">×</span></span>`).join('')}
+        <span class="add">+ tag</span>
+      </div>
     </div>
     <div class="side">
       <div class="stars ${owner?'':'sugg'}" title="${owner?'Your rating':'AI suggestion — click to set yours'}">
@@ -156,44 +217,51 @@ function card(v){
   el.querySelectorAll('.stars svg').forEach((s,i)=>{
     s.addEventListener('click', async ev=>{
       ev.stopPropagation();
-      const val = (v.rating===i+1) ? null : i+1;   // click your current rating again to clear it
+      const val = (v.rating===i+1) ? null : i+1;
       await api('/api/media/rate',{method:'POST',body:JSON.stringify(
         {youtube_video_id:v.youtube_video_id, rating:val})});
-      v.rating = val; toast(val?('Rated '+val):'Rating cleared'); render();
+      v.rating = val; toast(val?('Rated '+val+'/10'):'Rating cleared'); render();
     });
   });
-  // drag
+  el.querySelectorAll('[data-rm]').forEach(x=>x.addEventListener('click', e=>{
+    e.stopPropagation();
+    saveTags(v, catsOf(v).filter(c=>c!=='untagged' && c!==x.dataset.rm));
+    toast('Removed from '+label(x.dataset.rm));
+  }));
+  el.querySelector('.add').addEventListener('click', e=>{ e.stopPropagation(); openTagEditor(v, e.target); });
   el.addEventListener('dragstart', ()=>{ el.classList.add('dragging'); });
   el.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); });
   return el;
 }
-function esc(s){ return String(s??'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function render(){
+  closePop();
   const q = document.getElementById('search').value.trim().toLowerCase();
   const groups = {};
   for(const v of all){
-    const f = fmtOf(v);
-    if(activeChip!=='all' && f!==activeChip) continue;
     if(q && !(v.title+' '+(v.client||'')+' '+((v.profile||{}).industry||'')).toLowerCase().includes(q)) continue;
-    (groups[f] = groups[f]||[]).push(v);
+    for(const c of catsOf(v)){
+      if(activeChip!=='all' && c!==activeChip) continue;
+      (groups[c] = groups[c]||[]).push(v);
+    }
   }
-  const order = Object.keys(FMT_LABELS).filter(k=>groups[k]);
-  for(const k of Object.keys(groups)) if(!order.includes(k)) order.push(k);
+  const order = Object.keys(groups).sort((a,b)=>{
+    if(a==='untagged') return 1; if(b==='untagged') return -1;
+    return groups[b].length-groups[a].length || a.localeCompare(b); });
   const root = document.getElementById('groups'); root.innerHTML='';
   for(const k of order){
     const vs = groups[k];
-    const anyManual = vs.some(v=>v.sort_order!=null);
+    const anyManual = vs.some(v=>(v.sort_orders||{})[k]!=null);
     vs.sort((a,b)=> anyManual
-      ? (a.sort_order??1e9)-(b.sort_order??1e9)
+      ? ((a.sort_orders||{})[k]??1e9)-((b.sort_orders||{})[k]??1e9)
       : (b.rating??b.suggested_rating??0)-(a.rating??a.suggested_rating??0) || (b.views??0)-(a.views??0));
     const g = document.createElement('div'); g.className='group';
-    g.innerHTML = `<h2>${FMT_LABELS[k]||k} <span class="n">${vs.length}</span></h2>`;
+    g.innerHTML = `<h2>${esc(label(k))} <span class="n">${vs.length}</span></h2>`;
     const wrap = document.createElement('div'); wrap.className='cards'; wrap.dataset.group=k;
-    for(const v of vs) wrap.appendChild(card(v));
+    for(const v of vs) wrap.appendChild(card(v, k));
     wrap.addEventListener('dragover', e=>{
       e.preventDefault();
-      const dragging = document.querySelector('.card.dragging'); if(!dragging) return;
+      const dragging = wrap.querySelector('.card.dragging'); if(!dragging) return;
       const after = [...wrap.querySelectorAll('.card:not(.dragging)')].find(c=>{
         const r=c.getBoundingClientRect(); return e.clientY < r.top + r.height/2; });
       if(after) wrap.insertBefore(dragging, after); else wrap.appendChild(dragging);
@@ -201,25 +269,26 @@ function render(){
     wrap.addEventListener('drop', async e=>{
       e.preventDefault();
       const ids = [...wrap.querySelectorAll('.card')].map(c=>c.dataset.vid);
-      await api('/api/media/order',{method:'POST',body:JSON.stringify({ids})});
-      ids.forEach((id,i)=>{ const v=all.find(x=>x.youtube_video_id===id); if(v) v.sort_order=i*10; });
-      toast('Order saved');
+      await api('/api/media/order',{method:'POST',body:JSON.stringify({category:k, ids})});
+      ids.forEach((id,i)=>{ const v=all.find(x=>x.youtube_video_id===id);
+        if(v){ v.sort_orders = v.sort_orders||{}; v.sort_orders[k]=i*10; } });
+      toast('Order saved for '+label(k));
     });
     g.appendChild(wrap); root.appendChild(g);
   }
   const rated = all.filter(v=>v.rating!=null).length;
   const enr = all.filter(v=>v.enriched).length;
   document.getElementById('stats').textContent =
-    `${all.length} films · ${enr} profiled · ${rated} rated by you`;
-  // chips
+    `${all.length} films · ${enr} profiled · ${rated} rated`;
   const counts = {};
-  for(const v of all){ const f=fmtOf(v); counts[f]=(counts[f]||0)+1; }
+  for(const v of all) for(const c of catsOf(v)) counts[c]=(counts[c]||0)+1;
   const chips = document.getElementById('chips'); chips.innerHTML='';
-  const mk=(id,label)=>{ const c=document.createElement('div');
-    c.className='chip'+(activeChip===id?' on':''); c.textContent=label;
+  const mk=(id,lab)=>{ const c=document.createElement('div');
+    c.className='chip'+(activeChip===id?' on':''); c.textContent=lab;
     c.onclick=()=>{activeChip=id; render();}; chips.appendChild(c); };
   mk('all','All '+all.length);
-  for(const k of Object.keys(FMT_LABELS)) if(counts[k]) mk(k, (FMT_LABELS[k]||k)+' '+counts[k]);
+  for(const k of Object.keys(counts).sort((a,b)=>counts[b]-counts[a]))
+    mk(k, label(k)+' '+counts[k]);
 }
 
 async function load(){
