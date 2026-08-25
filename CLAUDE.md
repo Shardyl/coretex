@@ -81,6 +81,11 @@ sender belongs to an active deal. Continuations get `thread_reply` (no reference
 land ON the client's existing thread (subject kept verbatim on Re:/Fwd: mail — never "Re: Re:").
 `engine.backfill_missed_client_drafts(slug, days)` is the manual recovery sweep for mail the old gate
 swallowed (ignores the seen-set, dedups on `request.gmail_id`, drafts only — never sends).
+**Inbound attachments (2026-08-25):** images + PDFs on an inbound email reach the drafter — light refs
+(`request.inbound_attachments`) on the card, bytes fetched fresh from Gmail at draft time by
+`engine._request_for_draft` (never stored in the DB, never re-attached to outgoing mail). Caps: 4 files,
+8MB each. Other types (docx/xlsx/zip) are NOT read yet. Attachments on OLDER thread messages are not
+fetched — only the message being replied to.
 **Project-lane routing (2026-08-25):** client mail on a DELIVERY-stage deal (Booked/Production/Final
 Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` adds the prod-* skills'
 rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
