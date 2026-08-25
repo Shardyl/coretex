@@ -9,7 +9,20 @@ reads each target's recent post + text and posts them here.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
+from psycopg.types.json import Json
+
 from . import db, social, social_config, store, worker
+
+# Harvested-buyer pool filters shared by warm + connect targeting: never an anchor (they're the watering
+# hole, not the prospect), never anyone already invited or marked unreachable.
+_POOL_WHERE = (
+    "tags @> '[\"anchor-harvest\"]'::jsonb and linkedin is not null "
+    "and coalesce(stage,'Cold')='Cold' "
+    "and not (tags @> '[\"invited\"]'::jsonb) and not (tags @> '[\"invite-skip\"]'::jsonb) "
+    "and lower(trim(coalesce(first_name,'')||' '||coalesce(last_name,''))) not in "
+    "(select lower(trim(name)) from social_anchors)")
 
 
 def warm_targets(account: str, n: int = 5) -> list[dict]:
@@ -18,8 +31,8 @@ def warm_targets(account: str, n: int = 5) -> list[dict]:
     company_id = cfg.get("company_id", 5)
     done = set(db.setting_get(f"warm_targets_done:{account}") or [])
     rows = db.query(
-        "select first_name, last_name, linkedin from crm_master where tags @> '[\"anchor-harvest\"]'::jsonb "
-        "and linkedin is not null order by tier::int desc nulls last limit 60")
+        f"select first_name, last_name, linkedin from crm_master where {_POOL_WHERE} "
+        "order by tier::int desc nulls last limit 60")
     out = []
     for r in rows:
         url = r["linkedin"]
@@ -29,6 +42,38 @@ def warm_targets(account: str, n: int = 5) -> list[dict]:
         if len(out) >= n:
             break
     return out
+
+
+def connect_targets(account: str, n: int = 10) -> list[dict]:
+    """The next N harvested buyers for this persona to CONNECT with: top fit-score first, Cold only.
+    The same pool warm_targets draws from, so the persona warms and then connects to the same people."""
+    rows = db.query(
+        f"select id, first_name, last_name, job_title, tier, linkedin from crm_master where {_POOL_WHERE} "
+        "order by tier::int desc nulls last limit %s", (n,))
+    return [{"id": r["id"],
+             "name": f"{r['first_name'] or ''} {r['last_name'] or ''}".strip() or "there",
+             "headline": (r["job_title"] or "")[:120], "tier": r["tier"], "linkedin": r["linkedin"]}
+            for r in rows]
+
+
+def record_connect(account: str, linkedin: str, ok: bool, detail: str = "") -> dict:
+    """Record an invite outcome on the harvested contact. Sent -> tag 'invited', stage Cold->Contacted,
+    history event. Failed (Follow-only / pending / already connected) -> tag 'invite-skip' so the target
+    never re-queues; nothing else on the record is touched."""
+    row = db.one("select id, tags, stage from crm_master where lower(linkedin)=lower(%s)", (linkedin,))
+    if not row:
+        return {"ok": False, "detail": "no contact with that linkedin url"}
+    ev = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+          "event": "linkedin_invite_sent" if ok else "linkedin_invite_failed",
+          "account": account, "detail": (detail or "")[:300]}
+    tags = sorted(set(row.get("tags") or []) | {"invited" if ok else "invite-skip"})
+    if ok and (row.get("stage") or "Cold") == "Cold":
+        db.execute("update crm_master set history = history || %s::jsonb, tags=%s::jsonb, stage='Contacted', "
+                   "updated_at=now() where id=%s", (Json([ev]), Json(tags), row["id"]))
+    else:
+        db.execute("update crm_master set history = history || %s::jsonb, tags=%s::jsonb, updated_at=now() "
+                   "where id=%s", (Json([ev]), Json(tags), row["id"]))
+    return {"ok": True, "contact_id": row["id"], "recorded": ev["event"]}
 
 
 def _draft_comment(post_text: str, name: str, company_id: int, person_key: str) -> str:

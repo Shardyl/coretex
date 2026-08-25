@@ -834,6 +834,26 @@ def social_warm_queue(body: WarmBody, _: None = Depends(_runner_auth)) -> dict:
     return social_warm.queue_warm(body.account, body.items)
 
 
+class ConnectResultBody(BaseModel):
+    account: str
+    linkedin: str
+    ok: bool
+    detail: str = ""
+
+
+@app.get("/api/social/connect/targets")
+def social_connect_targets(account: str, n: int = 10, _: None = Depends(_runner_auth)) -> dict:
+    """The next N harvested buyers for this persona to connect with (tier-ranked, Cold, never an anchor,
+    never re-served once invited or skipped)."""
+    return {"targets": social_warm.connect_targets(account, n)}
+
+
+@app.post("/api/social/connect/result")
+def social_connect_result(body: ConnectResultBody, _: None = Depends(_runner_auth)) -> dict:
+    """The runner reports one invite outcome -> recorded on the CRM contact (invited/Contacted or invite-skip)."""
+    return social_warm.record_connect(body.account, body.linkedin, body.ok, body.detail)
+
+
 # ---------- WhatsApp Cloud API webhook (Meta -> Cortex) ----------
 # PUBLIC endpoints: Meta calls these, so they carry NO operator auth. Their security is the verify token on
 # the GET handshake and the app-secret HMAC on every POST. Do not add _runner_auth here — it would break the
