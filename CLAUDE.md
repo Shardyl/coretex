@@ -73,6 +73,11 @@ skips <40-char bodies). The drafted reply carries `from_email` + `mailbox_rt` so
 the receiving mailbox with its own token; `deal_id` + project context attach when the sender belongs to
 an active deal (`crm.open_deal_for_email`). Continuations get `thread_reply` (no reference box).
 Own/internal senders are never classified — that guard is what stops the team-CC rule looping.
+The company's general email VOICE lives in its `email-handling` skill rules (Sensa's is distilled from
+Gino's real sent mail, 2026-08-25) — `worker._RELATED_SKILLS` puts it in front of every
+`sales-first-response` reply draft, and Talk-composed `email_draft` tasks read it as their own skill.
+Lane-specific behaviour stays on the lane skill (first-response structure on `sales-first-response`,
+never-pressure follow-ups on `sales-followup`).
 
 ## WhatsApp (inbound)
 

@@ -61,7 +61,9 @@ def _rules_block(skill: dict) -> str:
 # dumb waiter: it fetches every relevant shelf, it never cooks. WHICH shelves relate to which task is plumbing
 # (this map); WHAT the rules say lives only in the DB. Keyed by the drafting task's own skill_key.
 _RELATED_SKILLS = {
-    "sales-first-response": ("sales-scheduling", "lead-qualification"),
+    # email-handling holds the company's general email voice (for Sensa: distilled from Gino's sent mail),
+    # so EVERY inbound-reply draft reads it; sales-followup governs thread continuations (never pressure).
+    "sales-first-response": ("email-handling", "sales-scheduling", "lead-qualification", "sales-followup"),
 }
 
 
@@ -81,8 +83,9 @@ def _related_block(skill: dict, company: dict) -> str:
         rules = _rule_lines(s)
         if rules:
             parts.append(f"Standing rules from the related '{s['name']}' skill — follow them whenever this "
-                         "message touches that ground (proposing or arranging a call, judging or handling the "
-                         "lead):\n" + "\n".join(f"- {r}" for r in rules))
+                         "message touches that ground (the company's email voice, proposing or arranging a "
+                         "call, judging or handling the lead, following up on an open thread):\n"
+                         + "\n".join(f"- {r}" for r in rules))
     return "\n\n".join(parts)
 
 
