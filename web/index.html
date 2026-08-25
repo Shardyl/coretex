@@ -27,6 +27,7 @@ html[data-theme="light"]{
   --bg:#EEF2F6; --panel:#FFFFFF; --panel2:#F4F8FB; --line:#DCE5EC;
   --bg2:#F4F8FB; --fg:#0C1620; --ln:#DCE5EC;
   --ink:#0C1620; --mut:#5A6B79; --accent:#00C4E0; --accent2:#0098B3; --shadow:0 10px 30px rgba(20,40,60,.12);
+  --good:#0f8a50; --warn:#8a6100; --bad:#c92f3e;
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow-x:hidden;overscroll-behavior:none;width:100%}
@@ -243,7 +244,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .qinc{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mut);margin-bottom:5px}
 .qruletext{font-size:14px;line-height:1.45}
 .qmeta{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
-.qconflict{font-size:12px;color:#ffcf6e;margin-top:8px;line-height:1.4}
+.qconflict{font-size:12px;color:var(--warn);margin-top:8px;line-height:1.4}
 .qover{display:flex;align-items:flex-start;gap:6px;font-size:12px;color:var(--mut);margin-top:6px}
 .skill{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin:0 0 7px 12px;cursor:pointer}
 .sname{font-size:14px;font-weight:500}
@@ -1753,7 +1754,7 @@ async function openQuotation(id,kind){
 function compName(id){ const c=companies.find(c=>c.id===id); return c?c.name:''; }
 
 function envHeader(em){
-  const row=(lbl,val)=> val?`<div style="display:flex;gap:8px;margin:1px 0"><span style="color:#8aa0b4;min-width:46px;flex:none">${lbl}</span><span style="word-break:break-word;color:#e8eef4;font-weight:600">${esc(val)}</span></div>`:'';
+  const row=(lbl,val)=> val?`<div style="display:flex;gap:8px;margin:1px 0"><span style="color:var(--mut);min-width:46px;flex:none">${lbl}</span><span style="word-break:break-word;color:var(--ink);font-weight:600">${esc(val)}</span></div>`:'';
   return `<div style="margin:6px 0 10px;padding:9px 12px;background:var(--bg2,#0e1620);border:1px solid var(--ln,#22303f);border-radius:11px;font-size:13px">
     ${row('From',em.from)}${row('To',em.to)}${row('Cc',em.cc)}${row('Bcc',em.bcc)}${row('Subject',em.subject)}</div>`;
 }
@@ -1770,7 +1771,7 @@ function mgrVerdict(v){
   const sm=esc(v.summary||(v.issues||[]).join('; ')||'');
   if(vv==='pass') return `<div style="color:#6ee7a8;font-size:12.5px;margin:6px 0">${ic('tool',14)} Manager passed${sm?' · '+sm:''}</div>`;
   const lbl=vv==='escalate'?'needs your judgement':'flagged';
-  return `<div style="color:#ffcf6e;font-size:12.5px;margin:6px 0">${ic('alert',14)} Manager ${lbl}${sm?' · '+sm:''}</div>`;
+  return `<div style="color:var(--warn);font-size:12.5px;margin:6px 0">${ic('alert',14)} Manager ${lbl}${sm?' · '+sm:''}</div>`;
 }
 function laneRow(lane){
   if(!lane) return '';
