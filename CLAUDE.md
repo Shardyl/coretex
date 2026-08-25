@@ -104,6 +104,23 @@ Meta retries non-200s and disables webhooks that keep failing.
   number where a name would go, and the real name is learned from the conversation.
 - App must be **published** before Meta delivers production webhooks; unpublished apps get test events only.
 
+## Media library (the YouTube catalog + review UI)
+
+`media_assets` (live DB) is the catalog of every video on a company's YouTube channel — one row
+per asset, per the locked YouTube/media spec. Sensa is loaded (322 videos). Each row carries the
+inventory (id/title/privacy/views), a Haiku classification (content_type/client), and an
+**understanding layer**: full audio transcript (Deepgram) + a 5-frame vision profile
+(summary/industry/format/style/language) so Cortex can match enquiries to sample films without
+watching anything. Enrichment pipeline note: the box's IP is bot-blocked by YouTube, so downloads
+run from Rashad's machine (yt-dlp, residential IP) which ships audio+frames to `/tmp/yt_in/` for
+the box worker — after scp, `chmod -R a+rwX` or the cortex user can't read them.
+
+**coretex.uk/media** (`web/media/`, fitness-style same-origin sub-app) is the review UI: films
+grouped by format, star ratings, drag-to-reorder. `rating` is the OWNER's subjective score — set
+only by a human there, never overwritten by any AI pass (`suggested_rating` is the AI first pass;
+shown hollow until he rates). Endpoints: `GET /api/media/library`, `POST /api/media/rate|order|edit`
+(all behind cockpit auth). Nothing in this stack writes to YouTube.
+
 ## Fitness (personal, not a company)
 
 Rashad's training log. Data lives in the **`fitness` schema** (not the company tables) in the same
