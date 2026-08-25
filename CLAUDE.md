@@ -77,7 +77,10 @@ The company's general email VOICE lives in its `email-handling` skill rules (Sen
 Gino's real sent mail, 2026-08-25) — `worker._RELATED_SKILLS` puts it in front of every
 `sales-first-response` reply draft, and Talk-composed `email_draft` tasks read it as their own skill.
 Lane-specific behaviour stays on the lane skill (first-response structure on `sales-first-response`,
-never-pressure follow-ups on `sales-followup`).
+never-pressure follow-ups on `sales-followup`). Every worker draft and manager check carries
+`worker._now_line()` — the code-stamped current date/time in GST — and the universal
+`sales-scheduling` rule anchors proposed call days to it (no "Monday or Wednesday" on a Tuesday).
+Sensa-wide: no booking/calendar links to clients (email-handling rule); times are proposed in words.
 
 ## WhatsApp (inbound)
 
