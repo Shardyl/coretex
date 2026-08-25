@@ -116,7 +116,7 @@ const LABELS = {
   'documentary':'Documentary','showreel':'Showreels','social-cut':'Social cuts',
   'bts':'Behind the scenes','internal-test':'Tests and drafts','version-variant':'Versions and variants',
   'client-film':'Client films','unclassified':'Unclassified','untagged':'Untagged',
-  'duplicates':'Duplicates (grouped in pairs, oldest first)'};
+  'duplicates':'Duplicates (grouped in pairs, oldest first)','results':'Search results'};
 const label = c => LABELS[c] || c.replace(/-/g,' ').replace(/\b\w/g, m=>m.toUpperCase());
 
 const catsOf = v => (v.categories && v.categories.length) ? v.categories : ['untagged'];
@@ -243,7 +243,15 @@ function render(){
   const q = document.getElementById('search').value.trim().toLowerCase();
   const groups = {};
   for(const v of all){
-    if(q && !(v.title+' '+(v.client||'')+' '+((v.profile||{}).industry||'')).toLowerCase().includes(q)) continue;
+    // search spans title, client, industry, summary, description and tags — and overrides
+    // the active category chip, so a match is never hidden by the current filter
+    if(q){
+      const hay = [v.title, v.client, (v.profile||{}).industry, (v.profile||{}).summary,
+                   v.description, (v.categories||[]).join(' ')].join(' ').toLowerCase();
+      if(!hay.includes(q)) continue;
+      (groups['results'] = groups['results']||[]).push(v);
+      continue;
+    }
     if(activeChip==='__dups'){
       if(v.dup_group) (groups['duplicates'] = groups['duplicates']||[]).push(v);
       continue;
@@ -282,6 +290,7 @@ function render(){
     });
     wrap.addEventListener('drop', async e=>{
       e.preventDefault();
+      if(k==='results') return;   // search results are a view, not an orderable category
       const ids = [...wrap.querySelectorAll('.card')].map(c=>c.dataset.vid);
       await api('/api/media/order',{method:'POST',body:JSON.stringify({category:k, ids})});
       ids.forEach((id,i)=>{ const v=all.find(x=>x.youtube_video_id===id);
