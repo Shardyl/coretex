@@ -311,7 +311,8 @@ def _email_envelope(task: dict, company: dict) -> dict:
     sig_html = (sender_sig.get("signature_html") or data.get("signature_html") or "").strip()
     return {"to": inq.get("email") or "", "to_name": inq.get("name") or "", "from": from_addr,
             "cc": cc or None, "bcc": bcc or None,
-            "subject": subj if outbound else ("Re: " + subj),
+            # never "Re: Re:" — a thread continuation keeps the subject verbatim so Gmail chains it
+            "subject": subj if (outbound or subj.lower().startswith(("re:", "fwd:", "fw:"))) else ("Re: " + subj),
             "name": inq.get("name") or "", "signature": sig_plain, "signature_html": sig_html}
 
 
@@ -518,9 +519,12 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
             from_addr = from_addr or db.setting_get(f"gmail_send_account:{slug}") or db.setting_get(f"gmail_account:{slug}")
         else:
             send_company = None     # no brand token -> legacy global path (_send_token uses gmail_send_refresh_token)
+    th = req.get("thread") or {}               # continue THEIR Gmail thread (threadId + reply headers)
     res = gmail.send_message(env["to"], env["subject"], c["plain"], from_addr=from_addr, cc=env["cc"],
                              html=c["html"], inline_images=c["inline"], bcc=env.get("bcc"),
-                             files=files, file_names=file_names, company=send_company, send_rt_key=send_rt_key)
+                             files=files, file_names=file_names, company=send_company, send_rt_key=send_rt_key,
+                             thread_id=th.get("id") or None, in_reply_to=th.get("msg_id") or None,
+                             references=th.get("references") or None)
     try:
         crm.log_event(env["to"], "email_sent", f"Email sent: {env['subject']}", company.get("slug"))
     except Exception:  # noqa: BLE001 — CRM history must never block the send
@@ -1445,11 +1449,7 @@ def _parse_form_email(e: dict) -> dict:
             "subject": e.get("subject"), "message": (m.group(1).strip() if m else body.strip())}
 
 
-_FREE_EMAIL_DOMAINS = {
-    "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "hotmail.co.uk", "live.com", "live.co.uk",
-    "yahoo.com", "yahoo.co.uk", "icloud.com", "me.com", "mac.com", "aol.com", "proton.me", "protonmail.com",
-    "gmx.com", "mail.com", "yandex.com", "msn.com", "ymail.com", "zoho.com",
-}
+_FREE_EMAIL_DOMAINS = crm.FREE_EMAIL   # single definition (crm.py) — the domain-deal fallback uses it too
 
 
 def qualify_suggest(co: dict, inq: dict) -> dict | None:
@@ -1835,18 +1835,17 @@ def classify_email(company: dict, email: dict) -> dict:
 
 def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, address: str | None) -> None:
     """A substantive lead/client/finance email sent DIRECTLY to a monitored mailbox -> draft the reply as an
-    approval card, from the mailbox that received it. Skips thin mail (a signature and nothing else) and
-    senders who already have an open reply card (the sales-replies poller or a previous sweep got there)."""
+    approval card, from the mailbox that received it. Skips thin mail (a signature and nothing else). If the
+    sender already has an OPEN reply card, the new email SUPERSEDES it: the card is updated with the latest
+    message and redrafted — a fresh mail from them must never be silently swallowed (bit MAH Gold, Aug 2026)."""
     try:
         sender = (e.get("email") or "").strip()
         body = (e.get("body") or e.get("snippet") or "").strip()
         if not sender or len(body) < 40:
             return
-        dup = db.one("select id from tasks where company_id=%s and kind='email_reply' and "
+        dup = db.one("select id, request from tasks where company_id=%s and kind='email_reply' and "
                      "status in ('new','drafting','awaiting_approval','awaiting_correction') and "
                      "lower(request->'inquiry'->>'email')=lower(%s) limit 1", (co["id"], sender))
-        if dup:
-            return
         deal = crm.open_deal_for_email(sender, co.get("slug"))
         skill = store.get_skill_by_key(co["id"], "sales-first-response")
         if not skill:
@@ -1866,11 +1865,22 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
         if cls["category"] == "finance":
             brief += (" This is a MONEY matter: acknowledge precisely, commit to nothing financial without "
                       "the owner, and never state amounts that are not in the email itself.")
-        req = {"brief": brief, "inquiry": inq, "from_email": address, "mailbox_rt": rt_key}
+        req = {"brief": brief, "inquiry": inq, "from_email": address, "mailbox_rt": rt_key,
+               "gmail_id": e.get("gmail_id") or ""}   # source message id -> the backfill sweep dedups on it
         if is_thread:
             req["thread_reply"] = True          # continuation: natural reply, no reference box
         if deal:
             req["deal_id"] = deal["id"]
+        if e.get("thread_id"):                  # reply ON their Gmail thread, not a fresh conversation
+            req["thread"] = {"id": e["thread_id"], "msg_id": e.get("msg_id") or "",
+                             "references": e.get("references") or ""}
+        if dup:                                 # supersede the stale open card with their latest email
+            old = ((dup.get("request") or {}).get("inquiry") or {}).get("message") or ""
+            if old and old[:200] not in inq["message"]:
+                req["brief"] += " Their EARLIER message in this thread (already on a card, reply to BOTH): " \
+                                + old[:1500]
+            store.update_task(dup["id"], status="new", draft=None, request=req)
+            return
         store.create_task(co["id"], skill["id"], "email_reply", req)
     except Exception:  # noqa: BLE001 — drafting is best-effort; classification/CRM capture must proceed
         pass
@@ -1905,6 +1915,17 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                             "category": "internal", "to_crm": False, "reason": "own/internal address"})
             continue
         cls = classify_email(co, e)
+        # DETERMINISTIC client override: a sender on an ACTIVE deal/project is project correspondence,
+        # whatever label the model picked (Haiku filed a MAH Gold project brief as 'support' -> no draft,
+        # Aug 2026). Code decides from the CRM; the model only labels what the CRM doesn't know.
+        if cls["category"] not in ("client", "lead", "finance") and e.get("email"):
+            try:
+                if crm.open_deal_for_email(e["email"], company_slug) or \
+                        crm.open_deal_for_domain(e["email"], company_slug):
+                    cls = {**cls, "category": "client", "to_crm": True,
+                           "reason": "active deal/project in CRM (deterministic override)"}
+            except Exception:  # noqa: BLE001 — a CRM hiccup must never break classification
+                pass
         if commit and cls["category"] in ("lead", "client", "finance"):
             _draft_direct_reply(co, e, cls, rt_key=rt_key, address=address)
         if commit:
@@ -1924,6 +1945,51 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
     if commit:
         db.setting_set(key, list(seen)[-3000:])
     return {"processed": len(results), "added_to_crm": added, "results": results}
+
+
+def backfill_missed_client_drafts(slug: str = "sensa", days: int = 7, limit: int = 60,
+                                  cap: int = 15) -> dict:
+    """One-off RECOVERY sweep for the pre-override gap: re-read a company's registered mailboxes IGNORING
+    the seen-set and draft replies for mail from senders on an ACTIVE deal that never got a card.
+    Drafts approval cards only — never sends, never touches the CRM or the seen-sets. Run manually."""
+    co = store.get_company_by_slug(slug)
+    if not co:
+        return {"reason": "no company"}
+    own_domain = INBOXES.get(slug, "").split("@")[-1].lower()
+    intl = _internal_index()
+    made, skipped = 0, []
+    for entry in inbox_registry():
+        if entry.get("slug") != slug or not _inbox_connected(entry):
+            continue
+        rt = entry.get("rt_key") or _default_rt_key(slug)
+        try:
+            msgs = gmail.list_recent(days=days, limit=limit, rt_key=rt,
+                                     q=f'in:inbox newer_than:{days}d -subject:"New enquiry from"',
+                                     company=_inbox_client_company(slug))
+        except Exception as ex:  # noqa: BLE001 — one dead mailbox must not kill the sweep
+            skipped.append(f"{entry.get('address')}: {ex}")
+            continue
+        for m in reversed(msgs):               # oldest first, so a superseding card ends on the NEWEST mail
+            sender = (m.get("email") or "").strip()
+            gid = m.get("gmail_id") or ""
+            if not sender or _is_internal(sender, own_domain, intl):
+                continue
+            if gid and db.one("select id from tasks where company_id=%s and kind='email_reply' and "
+                              "request->>'gmail_id'=%s limit 1", (co["id"], gid)):
+                continue                       # this exact message already has (or had) a card
+            try:
+                deal = crm.open_deal_for_email(sender, slug) or crm.open_deal_for_domain(sender, slug)
+            except Exception:  # noqa: BLE001
+                deal = None
+            if not deal:
+                continue
+            cls = {"category": "client", "to_crm": False,
+                   "reason": "backfill: active deal/project in CRM"}
+            _draft_direct_reply(co, m, cls, rt_key=rt, address=entry.get("address"))
+            made += 1
+            if made >= cap:
+                return {"drafted": made, "capped": True, "skipped": skipped}
+    return {"drafted": made, "skipped": skipped}
 
 
 # ---------- inbox registry: data-driven, so a NEW address auto-joins the classifier loop ----------
@@ -2053,9 +2119,12 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
         inq = {"name": name, "email": frm, "message": body,
                "subject": subj if subj.lower().startswith("re:") else f"Re: {subj}"}
         if skill:
-            store.create_task(co["id"], skill["id"], "email_reply",
-                              {"brief": _reply_followup_brief(inq, co), "inquiry": inq, "thread_reply": True,
-                               "qual_suggest": prior})
+            fu = {"brief": _reply_followup_brief(inq, co), "inquiry": inq, "thread_reply": True,
+                  "qual_suggest": prior}
+            if m.get("thread_id"):
+                fu["thread"] = {"id": m["thread_id"], "msg_id": m.get("msg_id") or "",
+                                "references": m.get("references") or ""}
+            store.create_task(co["id"], skill["id"], "email_reply", fu)
         try:                                                         # re-qualify on the new info
             sug = qualify_suggest(co, inq)
             if sug:

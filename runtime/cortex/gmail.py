@@ -116,7 +116,9 @@ def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
                  cc: str | None = None, html: str | None = None,
                  inline_images: list | None = None, bcc: str | None = None,
                  files: list | None = None, file_names: list | None = None,
-                 company: str | None = None, send_rt_key: str | None = None) -> dict:
+                 company: str | None = None, send_rt_key: str | None = None,
+                 thread_id: str | None = None, in_reply_to: str | None = None,
+                 references: str | None = None) -> dict:
     """Send an email from the connected sending mailbox (gmail.modify) — it lands in that account's Sent
     folder. If `html` is given, sends a multipart/alternative (plain + html); any `inline_images`
     (list of (cid, filepath)) are embedded so a footer logo renders. `from_addr` is honoured when it
@@ -191,10 +193,17 @@ def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
         msg["Cc"] = cc
     if bcc:
         msg["Bcc"] = bcc
-    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    # thread continuation: RFC-2822 reply headers make every client (incl. Outlook) chain the message;
+    # threadId makes Gmail file it on the same conversation. thread_id only works with a matching subject.
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+        msg["References"] = f"{references} {in_reply_to}".strip() if references else in_reply_to
+    payload = {"raw": base64.urlsafe_b64encode(msg.as_bytes()).decode()}
+    if thread_id:
+        payload["threadId"] = thread_id
     r = httpx.post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
                    headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"},
-                   json={"raw": raw}, timeout=30)
+                   json=payload, timeout=30)
     r.raise_for_status()
     return r.json()
 
@@ -219,7 +228,10 @@ def _parse_generic(msg: dict) -> dict:
     email = (m.group(2).strip() if m else frm).strip().strip("<>")
     return {"gmail_id": msg.get("id"), "subject": h.get("subject", ""), "from": frm, "date": h.get("date", ""),
             "name": name, "email": email, "body": _plain_body(msg.get("payload", {})),
-            "snippet": msg.get("snippet", "")}
+            "snippet": msg.get("snippet", ""),
+            # threading identity: reply with these + threadId so our answer lands ON their thread
+            "thread_id": msg.get("threadId", ""), "msg_id": h.get("message-id", ""),
+            "references": h.get("references", "")}
 
 
 def list_recent(days: int = 2, limit: int = 30, rt_key: str = "gmail_refresh_token",

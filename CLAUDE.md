@@ -68,10 +68,19 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
 `poll_all_inboxes()` (60s loop) sweeps every CONNECTED inbox in the `inbox_registry` setting — adding a
 mailbox is one OAuth consent + `register_inbox()`, no code. Sensa runs FOUR mailboxes (hello@, gino@,
 rashad@, ayresh@). Each email: `classify_email` (Haiku, sales-triage skill; categories incl. `finance`)
-→ CRM capture → `_draft_direct_reply` for substantive lead/client/finance mail (dup-guarded per sender;
-skips <40-char bodies). The drafted reply carries `from_email` + `mailbox_rt` so the send goes out FROM
-the receiving mailbox with its own token; `deal_id` + project context attach when the sender belongs to
-an active deal (`crm.open_deal_for_email`). Continuations get `thread_reply` (no reference box).
+→ CRM capture → `_draft_direct_reply` for substantive lead/client/finance mail (skips <40-char bodies).
+**Deterministic client override (2026-08-25):** a sender on an ACTIVE deal — exact email
+(`crm.open_deal_for_email`) or corporate-domain colleague (`crm.open_deal_for_domain`) — always drafts,
+whatever category Haiku picked (it filed a MAH Gold project brief as `support` and the mail was silently
+swallowed). A new mail from a sender with an OPEN reply card SUPERSEDES that card (request updated,
+redrafted) instead of being dropped. The drafted reply carries `from_email` + `mailbox_rt` so the send
+goes out FROM the receiving mailbox with its own token; `deal_id` + project context attach when the
+sender belongs to an active deal. Continuations get `thread_reply` (no reference box).
+**Thread continuation (2026-08-25):** the poller stashes `request.thread` (Gmail `threadId`,
+`Message-ID`, `References`) and the send passes them through `gmail.send_message`, so approved replies
+land ON the client's existing thread (subject kept verbatim on Re:/Fwd: mail — never "Re: Re:").
+`engine.backfill_missed_client_drafts(slug, days)` is the manual recovery sweep for mail the old gate
+swallowed (ignores the seen-set, dedups on `request.gmail_id`, drafts only — never sends).
 Own/internal senders are never classified — that guard is what stops the team-CC rule looping.
 The company's general email VOICE lives in its `email-handling` skill rules (Sensa's is distilled from
 Gino's real sent mail, 2026-08-25) — `worker._RELATED_SKILLS` puts it in front of every

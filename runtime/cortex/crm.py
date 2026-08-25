@@ -225,6 +225,22 @@ def open_deal_for_email(email: str, company: str | None) -> dict | None:
                   (c["account_id"], _org(company)))
 
 
+def open_deal_for_domain(email: str, company: str | None) -> dict | None:
+    """Fallback when the exact sender isn't in the CRM: an ACTIVE deal whose account has ANY contact on the
+    sender's corporate domain — a colleague mailing from the same client company is still project mail.
+    Free/personal domains never match (a gmail.com sender proves nothing)."""
+    domain = (email or "").strip().lower().split("@")[-1]
+    if not domain or "." not in domain or domain in FREE_EMAIL:
+        return None
+    c = db.one("select account_id from crm_master where account_id is not null and "
+               "lower(email) like %s limit 1", ("%@" + domain,))
+    if not (c and c.get("account_id")):
+        return None
+    return db.one("select id, title, stage, company from crm_projects where account_id=%s and company=%s "
+                  "and stage not in ('Lost','Close & review') order by id desc limit 1",
+                  (c["account_id"], _org(company)))
+
+
 class DealNeedsCompany(ValueError):
     """Raised when a deal/opportunity is created without one of YOUR businesses set."""
 
