@@ -64,6 +64,14 @@ def generate(company: str = "sensa", days: int = 1, out_dir: str = "/tmp") -> di
     acct = ACCOUNTS.get((company or "").lower())
     if not acct:
         raise ValueError(f"no ads account mapped for {company}")
+    # Daily search-term pruning (operator-approved routine 2026-08-26): junk terms become
+    # shared negatives BEFORE the report renders, and the card shows what was pruned + why.
+    prune = {"pruned": [], "kept": []}
+    try:
+        from . import ppc_prune
+        prune = ppc_prune.run(company)
+    except Exception:  # noqa: BLE001 — pruning must never block the report
+        pass
     cid, cur, label = acct["cid"], acct["currency"], acct["label"]
     end = datetime.date.today() - datetime.timedelta(days=1)
     start = end - datetime.timedelta(days=max(days, 1) - 1)
@@ -174,6 +182,9 @@ def generate(company: str = "sensa", days: int = 1, out_dir: str = "/tmp") -> di
                   [52 * mm, 44 * mm, 18 * mm, 26 * mm, 18 * mm])
     story += mini("Where paid visitors landed (GA4, medium=cpc)", ["Landing page", "Sessions"],
                   ga_pages, [130 * mm, 40 * mm])
+    story += mini("Pruned yesterday (auto-added as negatives, veto any of these to restore)",
+                  ["Search term", "Why"],
+                  [[t, r] for t, r in prune.get("pruned", [])], [90 * mm, 80 * mm])
 
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, f"ppc-{company}-{end.isoformat()}.pdf")
@@ -182,7 +193,11 @@ def generate(company: str = "sensa", days: int = 1, out_dir: str = "/tmp") -> di
 
     conv_bits = ", ".join(f"{_dig(r, 'conversionAction.name', '')}: "
                           f"{float(_dig(r, 'metrics.allConversions')):g}" for r in conv) or "no conversions"
+    prune_bit = ""
+    if prune.get("pruned"):
+        prune_bit = " Pruned: " + ", ".join(t for t, _ in prune["pruned"][:6]) + "."
     summary = (f"{label} PPC, {span}: {cur} {_aed(tot_cost)} spent, {tot_clicks:,} clicks, "
-               f"{tot_impr:,} impressions, {tot_conv:g} conversions ({conv_bits}). {status_line}.")
+               f"{tot_impr:,} impressions, {tot_conv:g} conversions ({conv_bits}). "
+               f"{status_line}.{prune_bit}")
     return {"path": out, "title": f"{label} — PPC report ({span})", "summary": summary,
             "company": company, "label": label, "days": days}
