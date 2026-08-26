@@ -100,6 +100,20 @@ Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` ad
 rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
 `sales-first-response`.
 
+## Company document library (2026-08-26)
+
+The OFFICIAL store of each company's standing files (trade licence, VAT certificate, company profile,
+signed forms): bytes at `/opt/cortex-knowledge/documents/<slug>/` (inside the nightly Drive backup),
+registry in `company_documents` (in the nightly DB dump). `runtime/cortex/documents.py`. Upload via the
+Talk paperclip + `save_document`, or the Attach button on any email card (fresh uploads save to the
+library first). `attach_docs` refs on a card resolve to real bytes only at SEND time — attachments never
+bloat task rows, and a client's inbound files can never be re-sent (separate `inbound_attachments` key).
+Talk tools: save_document / list_documents / attach_document; `draft_email` takes `attach_documents`
+by name. Catch-all mailboxes (INBOXES values) can NEVER be the From: `_draft_direct_reply` routes
+catch-all-received replies via the company `reply_from` person, and `_email_envelope` hard-strips any
+catch-all From as a backstop. Universal email-handling rule tells the drafter the library exists and
+never to claim an attachment the tools didn't confirm.
+
 ## Opportunity follow-up automation (2026-08-25)
 
 Cadence (config: company `followup_cadence` profile override, else `crm.DEFAULT_CADENCE`): 4 chases

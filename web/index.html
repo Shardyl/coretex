@@ -1523,7 +1523,10 @@ async function enablePush(){
   }catch(e){ toast('Could not enable push: '+(e.message||'')); }
 }
 function attachmentStrip(t){
-  const n=t.att_count||((t.request&&t.request.attachments)||[]).length; if(!n) return '';
+  const r=t.request||{};
+  const n=(t.att_count!=null)?t.att_count
+    :(((r.attachments)||[]).length+((r.attach_docs)||[]).length+((r.inbound_attachments)||[]).length);
+  if(!n) return '';
   // placeholder; hydrateAttachments() fetches the actual images/filenames on demand and fills this in
   return `<div class="attwrap" id="att${t.id}" data-n="${n}"><div class="meta" style="margin-bottom:7px">${ic('file',14)} ${n} attachment${n>1?'s':''} — loading preview…</div></div>`;
 }
@@ -1533,18 +1536,56 @@ async function hydrateAttachments(){
   document.querySelectorAll('.attwrap[data-n]').forEach(async el=>{
     if(el.dataset.done) return; el.dataset.done='1';
     const id=el.id.slice(3);
-    try{ const r=await api('/api/tasks/'+id+'/attachments'); const a=r.attachments||[];
-      if(!a.length){ el.innerHTML=''; return; }
-      el.innerHTML=`<div class="meta" style="margin-bottom:7px">${ic('file',14)} sent with this draft:</div><div class="attrow">`
+    try{ const r=await api('/api/tasks/'+id+'/attachments'); const a=r.attachments||[], inb=r.inbound||[];
+      if(!a.length&&!inb.length){ el.innerHTML=''; return; }
+      let h='';
+      if(a.length){ h+=`<div class="meta" style="margin-bottom:7px">${ic('file',14)} sends with this email:</div><div class="attrow">`
         + a.map(x=> x.is_image
             ? `<img class="attthumb" src="${x.src}" title="${esc(x.name||'image')} · ${x.size_kb}KB" onclick="enlargeImg(this)">`
-            : `<a class="attfile" href="${x.src}" download="${esc(x.name||('file-'+x.idx))}">${ic('file',15)} <span>${esc(x.name||x.media_type)}</span> <span style="opacity:.55">${x.size_kb}KB</span></a>`
-          ).join('') + `</div>`;
+            : `<a class="attfile" href="${x.src}" ${x.library?'target="_blank"':'download="'+esc(x.name||('file-'+x.idx))+'"'}>${ic('file',15)} <span>${esc(x.name||x.media_type)}</span> <span style="opacity:.55">${x.size_kb}KB</span></a>`
+              + (x.library?`<button class="iconbtn sm" title="Remove from this email" onclick="detachDoc(${id},${x.doc_id})">${ic('x',13)}</button>`:'')
+          ).join('') + `</div>`; }
+      if(inb.length){ h+=`<div class="meta" style="margin:6px 0 0">${ic('inbox',13)} from the client: ${inb.map(x=>esc(x.name)).join(', ')}</div>`; }
+      el.innerHTML=h;
     }catch(e){ el.innerHTML=`<div class="meta">${ic('file',14)} attachment (preview unavailable)</div>`; }
   });
 }
 function enlargeImg(img){ const o=document.createElement('div'); o.className='imgovl'; o.onclick=()=>o.remove();
   o.innerHTML=`<img src="${img.src}">`; document.body.appendChild(o); }
+// ---- card attachments: the company DOCUMENT LIBRARY (official standing files) + one-off uploads ----
+function compSlug(id){ const c=companies.find(c=>c.id===id); return c?c.slug:''; }
+async function openAttachPanel(tid,cid){
+  const p=document.getElementById('ap'+tid); if(!p) return;
+  if(p.style.display!=='none'){ p.style.display='none'; return; }
+  p.style.display='block';
+  p.innerHTML='<div class="meta">Loading the document library…</div>';
+  let docs=[]; try{ const r=await api('/api/documents?company='+encodeURIComponent(compSlug(cid))); docs=r.documents||[]; }catch(e){}
+  p.innerHTML=`<div style="border:1px solid var(--ln);border-radius:11px;padding:10px 12px;margin-bottom:9px">
+    <div class="meta" style="margin-bottom:6px">${ic('file',14)} Attach from the company document library:</div>
+    ${docs.length?docs.map(d=>`<div class="row" style="margin:3px 0"><span style="flex:1;min-width:0;font-size:13px">${esc(d.filename)} <span style="color:var(--mut)">[${esc(d.kind)}]</span></span><button class="btn sm" onclick="attachDoc(${tid},${d.id})">Attach</button></div>`).join(''):'<div class="meta">Library is empty — upload below and it is saved for next time.</div>'}
+    <div class="row" style="margin-top:8px"><button class="btn sm" onclick="pickCardFile(${tid},${cid})">${ic('clip',15)} Upload a new file</button></div></div>`;
+}
+async function attachDoc(tid,docId){
+  try{ await api('/api/tasks/'+tid+'/attach',{method:'POST',body:JSON.stringify({doc_id:docId})});
+    toast('Attached ✓'); render(); }catch(e){ toast('Error: '+e.message); }
+}
+async function detachDoc(tid,docId){
+  try{ await api('/api/tasks/'+tid+'/detach',{method:'POST',body:JSON.stringify({doc_id:docId})});
+    toast('Removed from this email ✓'); render(); }catch(e){ toast('Error: '+e.message); }
+}
+function pickCardFile(tid,cid){
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv';
+  inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(!f) return;
+    if(f.size>15000000){ toast('Too big (max 15MB)'); return; }
+    const kind=(prompt("What IS this document? (trade-licence / vat-certificate / company-profile / signed-form / document)",'document')||'document').trim();
+    const r=new FileReader();
+    r.onload=async()=>{ try{
+        await api('/api/tasks/'+tid+'/attach',{method:'POST',body:JSON.stringify({name:f.name,data:r.result,kind:kind})});
+        toast('Saved to the library + attached ✓'); render();
+      }catch(e){ toast('Error: '+e.message); } };
+    r.readAsDataURL(f); };
+  inp.click();
+}
 // belt-and-suspenders: a card body must NEVER show raw HTML. If anything HTML-ish slips into a text body,
 // strip the tags to readable text (the only place we render real HTML is the email preview box below).
 function plainText(s){ s=String(s||''); return /<\/?[a-z!][^>]*>/i.test(s) ? s.replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/[ \t]+/g,' ').replace(/\n /g,'\n').trim() : s; }
@@ -1573,7 +1614,8 @@ function actionCard(t){
         : (body?`<div class="body"${isEmail?' style="white-space:pre-wrap"':''}>${isEmail?'<div class="meta" style="margin-bottom:5px;white-space:normal">'+ic('file',14)+' '+(isOutbound?'your email draft':'the email that will send')+' (signature included)</div>':''}${body}</div>`:'')}
       ${wp&&wp.preview?`<div class="meta">${ic('file',14)} draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
       ${attachmentStrip(t)}
-      <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">${ic('volume',16)} Read aloud</button></div>
+      <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">${ic('volume',16)} Read aloud</button>${isEmail?`<button class="btn" onclick="openAttachPanel(${t.id},${t.company_id})">${ic('clip',16)} Attach</button>`:''}</div>
+      <div id="ap${t.id}" style="display:none"></div>
 ${t.owner_only?`<div class="csub" style="margin-bottom:6px;color:var(--mut)">${ic('lock',12)} Money approval — owner only (Rashad's PIN or fingerprint)</div>`:''}
       <div class="row">
         <button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||'Approve')}</button>

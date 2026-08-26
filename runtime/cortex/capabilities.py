@@ -45,6 +45,12 @@ CAPABILITIES: list[tuple[str, str]] = [
     ("CRM",
      "crm_lookup finds people/companies (offer close matches, never 'can't find'); crm_pipeline reads the "
      "forecast and won work; create_company / create_contact / create_deal add records."),
+    ("Document library",
+     "The OFFICIAL store of each company's standing files (trade licence, VAT certificate, company profile, "
+     "signed forms) — on the box, in the nightly backup. save_document files what Rashad attaches this turn "
+     "(ask the kind); list_documents answers 'do we have X on file?'; attach_document puts a library file on "
+     "an existing email card; draft_email takes attach_documents by name. NEVER claim a document is attached "
+     "unless the tool confirmed it — if it's not in the library, say so."),
     ("Skills & rules",
      "list_skills to view; add_rule to add a standing rule with scope universal|company (ask the scope); "
      "create_skill (global) and update_craft to change how a job is done."),

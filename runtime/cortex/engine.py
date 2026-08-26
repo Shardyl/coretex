@@ -24,9 +24,9 @@ from datetime import datetime, timedelta, timezone
 
 from psycopg.types.json import Json
 
-from . import (contentqueue, crm, db, doctext, gmail, manager, media, newsletter, notifications, profile,
-               ppc_report, provider, quotation, reminders, schedule, seo_report, store, webauthn_auth,
-               whatsapp, worker)
+from . import (contentqueue, crm, db, doctext, documents, gmail, manager, media, newsletter, notifications,
+               profile, ppc_report, provider, quotation, reminders, schedule, seo_report, store,
+               webauthn_auth, whatsapp, worker)
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -306,6 +306,10 @@ def _email_envelope(task: dict, company: dict) -> dict:
     outbound = bool(req.get("outbound"))   # a Talk-composed email_draft (not a reply) — no "Re:" prefix
     subj = inq.get("subject") or "your enquiry"
     from_addr = (req.get("from_email") or data.get("reply_from") or "").strip() or None
+    if from_addr and from_addr.lower() in {a.lower() for a in INBOXES.values()}:
+        # HARD policy: catch-all addresses never send — fall back to the company's reply_from person
+        from_addr = (data.get("reply_from") or "").strip() or None
+        req = {**req, "mailbox_rt": None}   # and never their mailbox token either
     # per-sender signature: a reply sent FROM a specific person (e.g. gino@sensa.digital) carries THEIR
     # signature (profile.signatures[email]); otherwise the company default.
     sender_sig = (data.get("signatures") or {}).get((from_addr or "").lower()) or {}
@@ -500,8 +504,15 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     env = _email_envelope(task, company)
     c = compose_reply_html(task, company, for_preview=False)
     req = task.get("request") or {}
-    files = req.get("attachments")            # outbound drafts carry real file attachments
-    file_names = req.get("attachment_names")  # ...with their original filenames
+    files = list(req.get("attachments") or [])            # outbound drafts carry real file attachments
+    file_names = list(req.get("attachment_names") or [])  # ...with their original filenames
+    for ref in (req.get("attach_docs") or []):            # library documents referenced by id -> real files
+        doc = documents.get(int(ref.get("id", 0)), company_id=task.get("company_id"))
+        if not doc:
+            raise RuntimeError(f"attached document #{ref.get('id')} not found — remove it from the card")
+        files.append(f"data:{doc['mime']};base64," + _b64.b64encode(documents.read_bytes(doc)).decode())
+        file_names.append(doc["filename"])
+    files, file_names = (files or None), (file_names or None)
     # per-company send: a brand with its own project sends from its OWN mailbox/client (else Tabscanner legacy)
     slug = (company or {}).get("slug")
     send_company = _inbox_client_company(slug) if slug else None
@@ -2069,7 +2080,12 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
         if cls["category"] == "finance":
             brief += (" This is a MONEY matter: acknowledge precisely, commit to nothing financial without "
                       "the owner, and never state amounts that are not in the email itself.")
-        req = {"brief": brief, "inquiry": inq, "from_email": address, "mailbox_rt": rt_key,
+        # The CATCH-ALL mailbox (hello@ etc.) never sends: replies to mail it received route through the
+        # company's send mailbox + reply_from person (their token, their signature). Personal mailboxes
+        # (gino@/rashad@/ayresh@) still reply as themselves.
+        catchall = (address or "").lower() == (INBOXES.get(co.get("slug"), "") or "").lower()
+        req = {"brief": brief, "inquiry": inq,
+               "from_email": None if catchall else address, "mailbox_rt": None if catchall else rt_key,
                "gmail_id": e.get("gmail_id") or ""}   # source message id -> the backfill sweep dedups on it
         atts = _inbound_att_refs(e, rt_key, _inbox_client_company(co.get("slug")))
         if atts:
@@ -2082,7 +2098,9 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
         if deal:
             req["deal_id"] = deal["id"]
         if e.get("thread_id"):                  # reply ON their Gmail thread, not a fresh conversation
-            req["thread"] = {"id": e["thread_id"], "msg_id": e.get("msg_id") or "",
+            # threadIds are mailbox-local: when the reply routes through the send mailbox instead of the
+            # catch-all that received it, thread by the global reply headers only
+            req["thread"] = {"id": "" if catchall else e["thread_id"], "msg_id": e.get("msg_id") or "",
                              "references": e.get("references") or ""}
         if dup:                                 # supersede the stale open card with their latest email
             oldreq = dup.get("request") or {}

@@ -30,7 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Json
 from pydantic import BaseModel
 
-from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, engine, fitness, gmail, knowledge,
+from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, documents, engine, fitness, gmail, knowledge,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
                skillqa, social, social_comments, social_config, social_connect, social_dm, social_warm, store, webauthn_auth, whatsapp,
                worker)
@@ -472,7 +472,7 @@ def _enrich_action_card(t: dict) -> dict:
     # for the send; fetch them on demand). A single phone screenshot can be ~9MB and chokes the connection.
     req = t.get("request") or {}
     atts = req.get("attachments") or []
-    t["att_count"] = len(atts)
+    t["att_count"] = len(atts) + len(req.get("attach_docs") or []) + len(req.get("inbound_attachments") or [])
     if atts:
         t["request"] = {**req, "attachments": []}
     pr = db.setting_get(f"rule:{t['id']}")     # a correction inferred a standing rule, not yet decided -> persist it on the card
@@ -544,7 +544,13 @@ def task_attachments(tid: int, u: dict = Depends(current_user)) -> dict:
         nm = names[i] if i < len(names) and names[i] else None
         out.append({"idx": i, "media_type": media, "is_image": media.startswith("image/"),
                     "size_kb": (len(b64) * 3) // 4 // 1024, "name": nm, "src": u})
-    return {"attachments": out}
+    for r in (req.get("attach_docs") or []):        # library documents that will send with this email
+        out.append({"doc_id": r.get("id"), "media_type": r.get("mime") or "", "is_image": False,
+                    "size_kb": int(r.get("size") or 0) // 1024, "name": r.get("filename"),
+                    "src": f"/api/documents/{r.get('id')}/file", "library": True})
+    inbound = [{"name": r.get("filename") or r.get("mime"), "from_client": True}
+               for r in (req.get("inbound_attachments") or [])]
+    return {"attachments": out, "inbound": inbound}
 
 
 # ---------- social runner (LinkedIn automation: brain <-> office-box hands) ----------
@@ -2509,6 +2515,96 @@ def task_pending_rule(task_id: int, _: None = Depends(auth)) -> dict:
     return engine.pending_rule(task_id)
 
 
+# ---------- company document library (the OFFICIAL store of standing company files) ----------
+
+class DocUpload(BaseModel):
+    company: str
+    name: str
+    data: str            # data: URL
+    kind: str = "document"
+
+
+class TaskAttach(BaseModel):
+    doc_id: int | None = None     # attach an existing library document...
+    name: str | None = None       # ...or upload a new file (saved to the library first, then attached)
+    data: str | None = None
+    kind: str = "document"
+
+
+@app.get("/api/documents")
+def documents_list(company: str, u: dict = Depends(current_user)) -> dict:
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise HTTPException(status_code=404, detail="unknown company")
+    return {"documents": documents.listing(co["id"])}
+
+
+@app.post("/api/documents")
+def documents_upload(body: DocUpload, u: dict = Depends(current_user)) -> dict:
+    co = store.get_company_by_slug(body.company)
+    if not co:
+        raise HTTPException(status_code=404, detail="unknown company")
+    try:
+        d = documents.save_data_url(co["id"], co["slug"], body.name, body.data,
+                                    kind=body.kind, uploaded_by=(u or {}).get("email"))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "document": {k: d[k] for k in ("id", "kind", "filename", "mime", "size")}}
+
+
+@app.get("/api/documents/{doc_id}/file")
+def documents_file(doc_id: int, _: None = Depends(auth)):
+    d = documents.get(doc_id)
+    if not d:
+        raise HTTPException(status_code=404, detail="not found")
+    from fastapi.responses import Response
+    return Response(content=documents.read_bytes(d), media_type=d["mime"],
+                    headers={"Content-Disposition": f'inline; filename="{d["filename"]}"'})
+
+
+@app.post("/api/tasks/{task_id}/attach")
+def task_attach(task_id: int, body: TaskAttach, u: dict = Depends(current_user)) -> dict:
+    """Attach a document to an email card: an existing library doc by id, or a fresh upload (which is
+    saved into the library first so Cortex can find it again). The card's request gains an attach_docs
+    ref; the real bytes join the email at send time."""
+    _guard_task(u, task_id)
+    t = store.get_task(task_id)
+    if not t or t.get("kind") not in ("email_reply", "email_draft"):
+        raise HTTPException(status_code=400, detail="not an email card")
+    co = store.get_company(t["company_id"])
+    if body.doc_id:
+        d = documents.get(body.doc_id, company_id=t["company_id"])
+        if not d:
+            raise HTTPException(status_code=404, detail="document not found for this company")
+    elif body.data and body.name:
+        try:
+            d = documents.save_data_url(t["company_id"], (co or {}).get("slug") or "", body.name, body.data,
+                                        kind=body.kind, uploaded_by=(u or {}).get("email"))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    else:
+        raise HTTPException(status_code=400, detail="pass doc_id, or name + data")
+    req = dict(t.get("request") or {})
+    refs = [r for r in (req.get("attach_docs") or []) if int(r.get("id", 0)) != d["id"]]
+    refs.append({"id": d["id"], "filename": d["filename"], "mime": d["mime"], "size": d["size"]})
+    req["attach_docs"] = refs
+    store.update_task(task_id, request=req)
+    return {"ok": True, "attached": req["attach_docs"]}
+
+
+@app.post("/api/tasks/{task_id}/detach")
+def task_detach(task_id: int, body: TaskAttach, u: dict = Depends(current_user)) -> dict:
+    """Remove one attached library document from an email card (the library copy stays)."""
+    _guard_task(u, task_id)
+    t = store.get_task(task_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="no such task")
+    req = dict(t.get("request") or {})
+    req["attach_docs"] = [r for r in (req.get("attach_docs") or []) if int(r.get("id", 0)) != (body.doc_id or 0)]
+    store.update_task(task_id, request=req)
+    return {"ok": True, "attached": req["attach_docs"]}
+
+
 @app.get("/api/rules/pending")
 def rules_pending(_: None = Depends(auth)) -> dict:
     """EVERY un-decided rule proposal across all companies — the cockpit surfaces these as standalone
@@ -2814,8 +2910,33 @@ SKILL_TOOLS = [
         "to_email": {"type": "string", "description": "recipient's email (resolve via crm_lookup if known)"},
         "subject": {"type": "string"},
         "brief": {"type": "string", "description": "what the email should say"},
-        "from_email": {"type": "string", "description": "optional: from address (defaults to the company's)"}},
+        "from_email": {"type": "string", "description": "optional: from address (defaults to the company's)"},
+        "attach_documents": {"type": "array", "items": {"type": "string"},
+                             "description": "optional: names/kinds of documents from the company document "
+                                            "library to attach (e.g. ['trade licence','VAT certificate']) — "
+                                            "resolve nothing yourself, the library lookup happens server-side"}},
         "required": ["company", "to_name", "subject", "brief"]}},
+    {"name": "save_document",
+     "description": "Save the file(s) Rashad attached to THIS message into the company's OFFICIAL document "
+                    "library (the standing store: trade licence, VAT certificate, company profile, signed forms). "
+                    "Once saved, Cortex can attach them to any outgoing email by name. Ask the kind if unclear.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug"},
+        "kind": {"type": "string", "description": "what this document IS: trade-licence | vat-certificate | "
+                                                  "company-profile | signed-form | document"}},
+        "required": ["company"]}},
+    {"name": "list_documents",
+     "description": "List the company's official document library (standing files Cortex can attach to emails). "
+                    "Use this to answer 'do we have the trade licence on file?'.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug"}}, "required": ["company"]}},
+    {"name": "attach_document",
+     "description": "Attach a document from the company library to an EXISTING pending email card (by task id). "
+                    "The file genuinely sends with that email on approval.",
+     "input_schema": {"type": "object", "properties": {
+        "task_id": {"type": "integer"},
+        "document": {"type": "string", "description": "name or kind to find in the library, e.g. 'trade licence'"}},
+        "required": ["task_id", "document"]}},
     {"name": "correct_task",
      "description": "Give feedback on a pending task's draft; it redrafts and learns the rule.",
      "input_schema": {"type": "object", "properties": {
@@ -3209,10 +3330,68 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         if inp.get("_images"):
             req["attachments"] = inp["_images"]
             req["attachment_names"] = inp.get("_image_names")
+        missing = []
+        if inp.get("attach_documents"):        # library documents requested by name -> resolve server-side
+            refs = []
+            for q in inp["attach_documents"][:6]:
+                hits = documents.find(co["id"], str(q))
+                if hits:
+                    d = hits[0]
+                    refs.append({"id": d["id"], "filename": d["filename"], "mime": d["mime"], "size": d["size"]})
+                else:
+                    missing.append(str(q))
+            if refs:
+                req["attach_docs"] = refs
         t = store.create_task(co["id"], sk["id"], "email_draft", req)
         addr = f" <{to_email}>" if to_email else " (no email resolved)"
+        extra = (f" Attached from the library: {', '.join(r['filename'] for r in req.get('attach_docs', []))}."
+                 if req.get("attach_docs") else "")
+        if missing:
+            extra += (f" NOT in the library (tell Rashad, never pretend to attach): {', '.join(missing)}.")
         return (f"Drafting an email to {to_name or 'the recipient'}{addr} — it's in your Inbox as task "
-                f"#{t['id']} showing the recipient, subject and logo, for your approval.")
+                f"#{t['id']} showing the recipient, subject and logo, for your approval." + extra)
+    if name == "save_document":
+        co2 = store.get_company_by_slug(inp.get("company") or "")
+        if not co2:
+            return "unknown company"
+        files = inp.get("_images") or []
+        names = inp.get("_image_names") or []
+        if not files:
+            return ("No file arrived with this message — ask Rashad to attach the document with the "
+                    "paperclip and say again what it is.")
+        saved = []
+        for i, u in enumerate(files[:6]):
+            try:
+                d = documents.save_data_url(co2["id"], co2["slug"], (names[i] if i < len(names) else "") or "document",
+                                            u, kind=inp.get("kind") or "document", uploaded_by="talk")
+                saved.append(f"{d['filename']} (#{d['id']}, {d['kind']})")
+            except ValueError as e:
+                saved.append(f"FAILED: {e}")
+        return "Saved to the official document library: " + "; ".join(saved)
+    if name == "list_documents":
+        co2 = store.get_company_by_slug(inp.get("company") or "")
+        if not co2:
+            return "unknown company"
+        rows = documents.listing(co2["id"])
+        if not rows:
+            return "The document library is EMPTY for this company — nothing on file yet."
+        return "\n".join(f"#{r['id']} [{r['kind']}] {r['filename']} ({r['size']} bytes, {r['created_at']:%d %b %Y})"
+                         for r in rows)
+    if name == "attach_document":
+        t2 = store.get_task(int(inp.get("task_id") or 0))
+        if not t2 or t2.get("kind") not in ("email_reply", "email_draft"):
+            return "that task isn't a pending email card"
+        hits = documents.find(t2["company_id"], inp.get("document") or "")
+        if not hits:
+            return (f"Nothing in the library matches '{inp.get('document')}'. Tell Rashad it's not on file — "
+                    "he can save it via the paperclip.")
+        d = hits[0]
+        req2 = dict(t2.get("request") or {})
+        refs2 = [r for r in (req2.get("attach_docs") or []) if int(r.get("id", 0)) != d["id"]]
+        refs2.append({"id": d["id"], "filename": d["filename"], "mime": d["mime"], "size": d["size"]})
+        req2["attach_docs"] = refs2
+        store.update_task(t2["id"], request=req2)
+        return f"Attached '{d['filename']}' to card #{t2['id']} — it sends with that email on approval."
     return f"unknown tool {name}"
 
 
@@ -3336,7 +3515,7 @@ def _chat_prepare(body: ChatTurn):
         else:
             chosen = ""
     def _exec(name: str, inp: dict) -> str:   # carry the turn's attachments through when a tool drafts/creates
-        if name in ("create_task", "draft", "draft_email") and body.images:
+        if name in ("create_task", "draft", "draft_email", "save_document") and body.images:
             inp = {**inp, "_images": body.images, "_image_names": body.image_names}
         return _exec_skill_tool(name, inp)
     return msgs, chosen, system, tools, _exec
