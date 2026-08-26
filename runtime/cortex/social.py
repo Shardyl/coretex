@@ -39,10 +39,12 @@ _ACTION_VERB = {
 }
 
 
-def post_action_card(company_id, account, persona, action, target="", content=""):
+def post_action_card(company_id, account, persona, action, target="", content="", person=""):
     """Create a one-off MANUAL-action approval card (post|like|comment|connect|view|dm). The owner approves
-    it (biometric step-up, outward), then the runner picks it up from the job queue and performs it."""
-    req = {"account": account, "persona": persona, "action": action, "target": target, "content": content}
+    it (biometric step-up, outward), then the runner picks it up from the job queue and performs it.
+    `person` = the target's profile URL (for a comment on their post) so warmth can be counted per person."""
+    req = {"account": account, "persona": persona, "action": action, "target": target, "content": content,
+           "person": person}
     t = store.create_task(company_id, _skill_id(company_id), "social_action", req)
     verb = _ACTION_VERB.get(action, action)
     parts = []
