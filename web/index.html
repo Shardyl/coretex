@@ -1559,11 +1559,16 @@ async function openAttachPanel(tid,cid){
   if(p.style.display!=='none'){ p.style.display='none'; return; }
   p.style.display='block';
   p.innerHTML='<div class="meta">Loading the document library…</div>';
-  let docs=[]; try{ const r=await api('/api/documents?company='+encodeURIComponent(compSlug(cid))); docs=r.documents||[]; }catch(e){}
+  let docs=[], have=[];
+  try{ const r=await api('/api/documents?company='+encodeURIComponent(compSlug(cid))); docs=r.documents||[]; }catch(e){}
+  try{ const t=await api('/api/tasks/'+tid+'/attachments'); have=(t.attachments||[]).filter(x=>x.doc_id).map(x=>x.doc_id); }catch(e){}
   p.innerHTML=`<div style="border:1px solid var(--ln);border-radius:11px;padding:10px 12px;margin-bottom:9px">
-    <div class="meta" style="margin-bottom:6px">${ic('file',14)} Attach from the company document library:</div>
-    ${docs.length?docs.map(d=>`<div class="row" style="margin:3px 0"><span style="flex:1;min-width:0;font-size:13px">${esc(d.filename)} <span style="color:var(--mut)">[${esc(d.kind)}]</span></span><button class="btn sm" onclick="attachDoc(${tid},${d.id})">Attach</button></div>`).join(''):'<div class="meta">Library is empty — upload below and it is saved for next time.</div>'}
-    <div class="row" style="margin-top:8px"><button class="btn sm" onclick="pickCardFile(${tid},${cid})">${ic('clip',15)} Upload a new file</button></div></div>`;
+    <div class="row" style="margin-bottom:8px"><button class="btn go sm" onclick="pickCardFile(${tid},${cid})">${ic('clip',15)} Upload a file (Desktop / phone)</button></div>
+    <div class="meta" style="margin-bottom:6px">${ic('file',14)} Or attach from the company document library:</div>
+    ${docs.length?docs.map(d=>have.includes(d.id)
+      ?`<div class="row" style="margin:3px 0;opacity:.6"><span style="flex:1;min-width:0;font-size:13px">${esc(d.filename)}</span><span class="meta">Attached ✓</span></div>`
+      :`<div class="row" style="margin:3px 0"><span style="flex:1;min-width:0;font-size:13px">${esc(d.filename)} <span style="color:var(--mut)">[${esc(d.kind)}]</span></span><button class="btn sm" onclick="attachDoc(${tid},${d.id})">Attach</button></div>`).join('')
+      :'<div class="meta">Library is empty — upload above and it is saved for next time.</div>'}</div>`;
 }
 async function attachDoc(tid,docId){
   try{ await api('/api/tasks/'+tid+'/attach',{method:'POST',body:JSON.stringify({doc_id:docId})});
