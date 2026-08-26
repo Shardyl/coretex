@@ -64,7 +64,10 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
   `engine.promote_due_tasks`) — `scheduled_tasks` is long dead. Report kinds on the clock:
   `seo_report` (weekly, per company) + `ppc_report` (daily 08:00 GST, Sensa Google Ads via
   `cortex/ppc_report.py`, REST creds `/etc/cortex/google-ads.yaml`, card lands on the
-  `ads-google-search` lane).
+  `ads-google-search` lane). The daily report also runs `cortex/ppc_prune.py` first: Haiku
+  classifies yesterday's paid search terms, junk becomes PHRASE negatives in the "Sensa PPC
+  shared negatives" set, and the card lists every prune for operator veto. That shared set
+  attaches to BUYER campaigns only — never attach it to a tool-capture campaign.
 
 ## Email intake (full-mailbox triage)
 
