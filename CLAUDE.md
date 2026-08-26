@@ -181,7 +181,13 @@ Runs on the office boxes (Patchright runners, code scp-synced NOT git-deployed; 
   (no bundled-chromium fallback — it isn't installed), and the poller leaves a "profile busy" job QUEUED
   rather than burning an approved card. Stuck scheduled task → `schtasks /end` then `/run`; stray lock →
   `taskkill /F /IM chrome.exe`. Scheduled (Paul): CortexWarm 09:30, CortexShift 11:00, CortexHarvest 13:00,
-  CortexPoller 10min. Detail + history: memory `project_cortex_social_automation.md`.
+  CortexReplies every 4h from 10:15, CortexPoller 10min. Detail + history: memory `project_cortex_social_automation.md`.
+- **Comment-reply watcher (`social_comments.py` + runner `notify.py`, 2026-08-26):** revisits the posts the
+  persona recently commented on (`pending_reply_checks` = done comment cards, last 12d), reads replies UNDER
+  the persona's own comment that aren't theirs, and `ingest_replies` drafts the persona's response (personable
+  voice, deduped on `reply_seen:<account>`) as a `social_action` action='reply' card. The card carries
+  `parent` (the persona's comment) so `actions.reply` can locate the thread; governed as a comment, paced.
+  A real back-and-forth warms a target far more than one-way comments.
 
 ## Media library (the YouTube catalog + review UI)
 
