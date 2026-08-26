@@ -3990,5 +3990,18 @@ if os.path.isdir(_ASSETS):
 # ---- serve the cockpit (same origin as the API: no CORS, one domain) ----
 # Mounted LAST so the /api/* routes above take precedence; "/" serves web/index.html.
 _WEB = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "web")
+
+
+class _NoEdgeCacheStatics(StaticFiles):
+    """The app shell must never be stale: Cloudflare was edge-caching sw.js/index.html for 4h
+    (cf-cache-status HIT, 2026-08-26), so cockpit deploys lagged. no-store on the shell files keeps
+    CF and browsers fetching fresh; images/icons still cache normally."""
+    async def get_response(self, path, scope):
+        resp = await super().get_response(path, scope)
+        if path in ("index.html", "sw.js", "") or path.endswith((".html", ".js")):
+            resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+
 if os.path.isdir(_WEB):
-    app.mount("/", StaticFiles(directory=_WEB, html=True), name="web")
+    app.mount("/", _NoEdgeCacheStatics(directory=_WEB, html=True), name="web")
