@@ -180,8 +180,15 @@ Runs on the office boxes (Patchright runners, code scp-synced NOT git-deployed; 
   <180-char extracts). One profile = one Chrome at a time: `runner._open` RETRIES the real Chrome channel
   (no bundled-chromium fallback — it isn't installed), and the poller leaves a "profile busy" job QUEUED
   rather than burning an approved card. Stuck scheduled task → `schtasks /end` then `/run`; stray lock →
-  `taskkill /F /IM chrome.exe`. Scheduled (Paul): CortexWarm 09:30, CortexShift 11:00, CortexHarvest 13:00,
-  CortexReplies every 4h from 10:15, CortexPoller 10min. Detail + history: memory `project_cortex_social_automation.md`.
+  `taskkill /F /IM chrome.exe`. Scheduled (Paul): CortexWarm 09:30, CortexShift 11:00, CortexAccepts 12:00,
+  CortexHarvest 13:00, CortexReplies every 4h from 10:15, CortexPoller 10min. Detail + history: memory
+  `project_cortex_social_automation.md`.
+- **Acceptance monitor (`social_connect.py` + runner `accepts.py`, 2026-08-26):** revisits each invited
+  contact (`pending_accept_checks` = tag `invited`, not yet accepted/declined), reads connection degree
+  (1st = accepted), and `ingest_accepts` marks them `accepted` + stage Contacted->Engaged + raises a rolling
+  "new connections" notification and refreshes `connect_report` (invites/accepted/pending/accept-rate card).
+  Detection validated (1st vs 3rd). This is the success-rate loop: invited -> accepted tags on the harvested
+  buyers give the accept rate to analyse.
 - **Comment-reply watcher (`social_comments.py` + runner `notify.py`, 2026-08-26):** revisits the posts the
   persona recently commented on (`pending_reply_checks` = done comment cards, last 12d), reads replies UNDER
   the persona's own comment that aren't theirs, and `ingest_replies` drafts the persona's response (personable
