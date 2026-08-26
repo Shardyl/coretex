@@ -1137,7 +1137,10 @@ def apply_correction(task: dict, text: str) -> None:
         return
 
     new = worker.draft(skill, company, _request_for_draft(task), correction=text)
-    task = store.update_task(task["id"], draft=new, status="awaiting_approval", attempts=task["attempts"] + 1)
+    # corrections bypass the Manager by design (the owner is reviewing personally) — clear any verdict
+    # from the PREVIOUS pass so a stale flag never scares the owner off his own corrected draft
+    task = store.update_task(task["id"], draft=new, status="awaiting_approval", manager=None,
+                             attempts=task["attempts"] + 1)
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text, snapshot={"old": old, "new": new})
     msg2 = tg.send(_fmt(task, skill, company, None), _approval_buttons(task["id"]))
     store.update_task(task["id"], tg_message_id=msg2["message_id"])

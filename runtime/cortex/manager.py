@@ -18,6 +18,24 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
     for s in worker.related_skills(skill, company):
         rules += [f"[{s['name']}] {r}" for r in worker._rule_lines(s)]
     brief = request.get("brief") if isinstance(request, dict) else request
+    # System facts the Manager must judge WITH, not guess about: what is genuinely attached to the card,
+    # that sign-offs/signatures are appended by the send system (never a violation in the body), and any
+    # cc set on the envelope. Without these it flags phantom problems the owner then has to disprove.
+    facts = []
+    if isinstance(request, dict):
+        atts = [r.get("filename") for r in (request.get("attach_docs") or []) if r.get("filename")]
+        atts += [n for n in (request.get("attachment_names") or []) if n]
+        if atts:
+            facts.append("Files GENUINELY ATTACHED to this email (claiming these is correct, not a "
+                         "violation): " + ", ".join(atts))
+        if request.get("cc_extra"):
+            facts.append("Extra cc set on the envelope by the owner: " + ", ".join(request["cc_extra"]))
+    facts.append("The send system STRIPS any closing sign-off from the draft and appends the official "
+                 "closing + signature block itself — a sign-off in the draft body is cosmetic, never a "
+                 "rule violation.")
+    facts.append("Where the Task brief carries the owner's own instructions, content he explicitly "
+                 "asked for is authorised — never flag it as 'without basis'.")
+    facts_block = "SYSTEM FACTS (authoritative — judge with these):\n" + "\n".join(f"- {f}" for f in facts)
     system = (
         "You are the department Manager at Cortex — the keeper of the standard. Review a worker's draft "
         "and decide if it is ready to go out: does it follow EVERY standing rule, match the company's "
@@ -28,7 +46,8 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
     user = (
         worker._now_line() + "\n\n"
         + worker._company_context(company) + "\n\n"
-        f"Task: {brief}\n"
+        f"Task: {brief}\n\n"
+        + facts_block + "\n\n"
         "Standing rules the draft MUST follow:\n"
         + ("\n".join(f"- {r}" for r in rules) or "- (none set yet)")
         + f"\n\nDRAFT:\n{draft}\n\n"
