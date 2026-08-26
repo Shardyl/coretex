@@ -272,6 +272,7 @@ def _parse_generic(msg: dict) -> dict:
             # threading identity: reply with these + threadId so our answer lands ON their thread
             "thread_id": msg.get("threadId", ""), "msg_id": h.get("message-id", ""),
             "references": h.get("references", ""),
+            "to": h.get("to", ""), "cc": h.get("cc", ""),   # recipients decide WHICH company owns the thread
             "attachments": _walk_attachments(msg.get("payload", {}), [])}
 
 

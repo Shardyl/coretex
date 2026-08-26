@@ -2037,6 +2037,21 @@ def classify_email(company: dict, email: dict) -> dict:
 
 _DELIVERY_STAGES = {"Booked", "Production", "Final Payment", "Recurring"}
 
+
+def _belongs_to_other_company(e: dict, slug: str) -> bool:
+    """True when this email is ADDRESSED to another of our companies and not to this one — the team's
+    mailboxes alias across domains (rashad@skyvision.film delivers into the same account as
+    rashad@sensa.digital), so every company's sweep sees every domain's mail. The recipients decide
+    which company owns the conversation; without this, one client reply spawns a card per company
+    (Dawn Christine: 4 duplicate cards across Sensa + SkyVision, 2026-08-26)."""
+    rcpt = f"{e.get('to') or ''} {e.get('cc') or ''}".lower()
+    if not rcpt.strip():
+        return False                       # bcc/undisclosed recipients: can't tell, let it through
+    own = (INBOXES.get(slug, "") or "").split("@")[-1]
+    if own and ("@" + own) in rcpt:
+        return False                       # addressed to us (possibly among others): ours to handle
+    return any(("@" + a.split("@")[-1]) in rcpt for s, a in INBOXES.items() if s != slug)
+
 # attachment types the drafter reads NATIVELY (image blocks + PDF document blocks); office documents
 # (docx/xlsx/xls/pptx/csv/txt) are text-extracted by doctext at draft time instead
 _READABLE_ATT_MIMES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "application/pdf"}
@@ -2274,6 +2289,13 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
             results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
                             "category": "internal", "to_crm": False, "reason": "own/internal address"})
             continue
+        if _belongs_to_other_company(e, company_slug):   # another brand's conversation (aliased mailboxes)
+            if commit:
+                seen.add(gid)
+            results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
+                            "category": "other-company", "to_crm": False,
+                            "reason": "addressed to another of our companies"})
+            continue
         cls = classify_email(co, e)
         # DETERMINISTIC client override: a sender on an ACTIVE deal/project is project correspondence,
         # whatever label the model picked (Haiku filed a MAH Gold project brief as 'support' -> no draft,
@@ -2470,9 +2492,15 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
             continue
         if not subj.lower().startswith("re:"):                       # only a reply to a thread we started
             continue
+        if _belongs_to_other_company(m, slug):                       # aliased mailboxes: not this brand's thread
+            continue
         prior = db.setting_get(f"qual:email:{frm}")                  # ONLY continue threads with leads from OUR
         if not prior or prior.get("company_id") != co["id"]:         # sales funnel (came through enquiry intake) —
             continue                                                 # never cold mail / vendors pitching us
+        if db.one("select id from tasks where company_id=%s and kind='email_reply' and "
+                  "status in ('new','drafting','awaiting_approval','awaiting_correction') and "
+                  "lower(request->'inquiry'->>'email')=lower(%s) limit 1", (co["id"], frm)):
+            continue    # an open reply card for this sender already exists (the inbox sweep got there) — never double up
         c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (frm,))
         nm = ((((c or {}).get("first_name")) or "") + " " + (((c or {}).get("last_name")) or "")).strip()
         name = nm if re.search(r"[A-Za-z]", nm) else frm.split("@")[0]
