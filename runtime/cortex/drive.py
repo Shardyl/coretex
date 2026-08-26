@@ -58,3 +58,30 @@ def download(file_id: str, token: str | None = None) -> bytes:
                   headers={"Authorization": f"Bearer {token}"}, timeout=120)
     r.raise_for_status()
     return r.content
+
+
+def ensure_subfolder(parent_link_or_id: str, name: str, token: str | None = None) -> str:
+    """Id of the named subfolder under parent, creating it if missing (drive.file scope covers creation)."""
+    token = token or access_token()
+    for f in list_folder(parent_link_or_id, token):
+        if f.get("mimeType") == "application/vnd.google-apps.folder" and f.get("name") == name:
+            return f["id"]
+    r = httpx.post(f"{API}/files", params={"supportsAllDrives": "true"},
+                   headers={"Authorization": f"Bearer {token}"},
+                   json={"name": name, "mimeType": "application/vnd.google-apps.folder",
+                         "parents": [folder_id(parent_link_or_id)]}, timeout=30)
+    r.raise_for_status()
+    return r.json()["id"]
+
+
+def upload(parent_id: str, filename: str, mime: str, data: bytes, token: str | None = None) -> str:
+    """Upload one file into a folder; returns the new file id. Multipart, up to ~15MB."""
+    token = token or access_token()
+    meta = json.dumps({"name": filename, "parents": [folder_id(parent_id)]})
+    files = {"metadata": ("metadata", meta, "application/json; charset=UTF-8"),
+             "file": (filename, data, mime or "application/octet-stream")}
+    r = httpx.post("https://www.googleapis.com/upload/drive/v3/files",
+                   params={"uploadType": "multipart", "supportsAllDrives": "true"},
+                   headers={"Authorization": f"Bearer {token}"}, files=files, timeout=180)
+    r.raise_for_status()
+    return r.json()["id"]
