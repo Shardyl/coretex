@@ -179,6 +179,10 @@ def draft(skill: dict, company: dict, request: dict,
         user.insert(0, " ".join(bits))
     if atts:
         user.append(f"{len(atts)} file(s)/image(s) are attached below — use them as source material for the deliverable.")
+    _meet = ((request.get("meeting") or {}).get("meet") or "").strip() if isinstance(request, dict) else ""
+    if _meet:
+        user.append(f"A meeting is CONFIRMED and already booked. Its REAL Google Meet link is {_meet} — "
+                    "include this exact link where natural in the email. NEVER write any other meeting link.")
     for at in (request.get("attachment_texts") or []) if isinstance(request, dict) else []:
         user.append(f"ATTACHED DOCUMENT '{at.get('filename') or 'document'}' (text extracted from the "
                     f"client's attachment — read it and address its content):\n{(at.get('text') or '')[:15000]}")

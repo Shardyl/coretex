@@ -103,3 +103,15 @@ def create_event(company: str, *, calendar_id: str = "primary", start: datetime,
         (e.get("uri") for e in (r.get("conferenceData", {}).get("entryPoints") or [])
          if e.get("entryPointType") == "video"), "")
     return {"id": r.get("id"), "link": r.get("htmlLink"), "meet": meet_link}
+
+
+def add_attendee(company: str, event_id: str, attendee: str, calendar_id: str = "primary") -> dict:
+    """Add the guest to an existing event and let Google send them the invite — the approval-time step
+    after an event was pre-booked (attendee-less) so a draft could carry its real Meet link."""
+    tok = _token(company)
+    body = json.dumps({"attendees": [{"email": attendee}]}).encode()
+    r = json.load(urllib.request.urlopen(urllib.request.Request(
+        f"https://www.googleapis.com/calendar/v3/calendars/{urllib.parse.quote(calendar_id)}/events/"
+        f"{urllib.parse.quote(event_id)}?sendUpdates=all", data=body,
+        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, method="PATCH")))
+    return {"id": r.get("id")}

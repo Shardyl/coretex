@@ -504,23 +504,27 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         return {"blocked": True, "error": "Email sending is PAUSED. Resume it to send this reply."}
     env = _email_envelope(task, company)
     mt = (task.get("request") or {}).get("meeting")
-    if mt and not mt.get("event_id"):   # confirmed slot -> book calendar + Meet BEFORE composing (link in email)
+    if mt and not mt.get("invited"):   # confirmed slot -> event + Meet must exist and the guest must be on it
         from . import calendar as gcal
         _slug = (company or {}).get("slug") or ""
-        cal_co = _slug if db.setting_get(f"calendar_refresh_token:{_slug}") else "sensa"
+        cal_co = mt.get("calendar") or (_slug if db.setting_get(f"calendar_refresh_token:{_slug}") else "sensa")
         try:
-            ev = gcal.create_event(cal_co, start=datetime.fromisoformat(mt["start"]),
-                                   minutes=int(mt.get("minutes") or 30),
-                                   summary=mt.get("summary") or "Call", attendee=env["to"],
-                                   description=f"Booked via Cortex approval (task #{task['id']}).", meet=True)
+            if not mt.get("event_id"):     # pre-booking didn't happen -> book now, guest included
+                ev = gcal.create_event(cal_co, start=datetime.fromisoformat(mt["start"]),
+                                       minutes=int(mt.get("minutes") or 30),
+                                       summary=mt.get("summary") or "Call", attendee=env["to"],
+                                       description=f"Booked via Cortex approval (task #{task['id']}).", meet=True)
+                mt = {**mt, "event_id": ev.get("id"), "meet": ev.get("meet") or ""}
+            else:                          # pre-booked for the draft -> approval adds the guest (Google invites them)
+                gcal.add_attendee(cal_co, mt["event_id"], env["to"])
         except Exception as ex:  # noqa: BLE001 — never send an email promising a meeting we failed to book
             store.update_task(task["id"], status="awaiting_approval")
             return {"blocked": True, "error": f"Couldn't book the calendar/Meet: {ex}. Nothing was sent — approve again to retry."}
-        mt = {**mt, "event_id": ev.get("id"), "meet": ev.get("meet") or "", "calendar": cal_co}
+        mt = {**mt, "calendar": cal_co, "invited": True}
         task = dict(task)
         task["request"] = {**(task.get("request") or {}), "meeting": mt}
-        if ev.get("meet"):
-            task["draft"] = (task.get("draft") or "").rstrip() + f"\n\nGoogle Meet: {ev['meet']}"
+        if mt.get("meet") and mt["meet"] not in (task.get("draft") or ""):
+            task["draft"] = (task.get("draft") or "").rstrip() + f"\n\nGoogle Meet: {mt['meet']}"
         store.update_task(task["id"], request=task["request"], draft=task["draft"])
     c = compose_reply_html(task, company, for_preview=False)
     req = task.get("request") or {}
@@ -1147,6 +1151,7 @@ def apply_correction(task: dict, text: str) -> None:
     if task["kind"] in ("email_reply", "email_draft"):
         task = _apply_envelope_directives(task, text) or task
         task = _apply_attach_directives(task, text) or task
+        task = _prebook_meeting(task) or task   # a stamped meeting -> real Meet link available to the drafter
     if task["kind"] in ("email_reply", "email_draft") and _correction_means_no_reply(text):
         store.update_task(task["id"], status="rejected")
         store.log_decision(task["id"], skill["id"], "owner", "dismiss_no_reply", note=text,
@@ -1266,6 +1271,30 @@ def _apply_attach_directives(task: dict, text: str) -> dict | None:
 
 
 _TIME_HINT = re.compile(r"\b\d{1,2}(:\d{2})?\s*(am|pm)\b|\b\d{1,2}:\d{2}\b", re.I)
+
+
+def _prebook_meeting(task: dict) -> dict | None:
+    """Book the stamped meeting NOW but attendee-less: the event sits on our own calendar with a real
+    Google Meet room, so the draft can carry the genuine link for the owner to see. The client is only
+    added (and invited by Google) when the owner APPROVES — nothing outward happens before that."""
+    try:
+        req = dict(task.get("request") or {})
+        mt = req.get("meeting")
+        if not mt or mt.get("event_id"):
+            return None
+        from . import calendar as gcal
+        co = store.get_company(task["company_id"]) or {}
+        slug = co.get("slug") or ""
+        cal_co = slug if db.setting_get(f"calendar_refresh_token:{slug}") else "sensa"
+        ev = gcal.create_event(cal_co, start=datetime.fromisoformat(mt["start"]),
+                               minutes=int(mt.get("minutes") or 30),
+                               summary=mt.get("summary") or "Call",
+                               description=f"Pre-booked via Cortex (task #{task['id']}); "
+                                           "guest added on the owner's approval.", meet=True)
+        req["meeting"] = {**mt, "event_id": ev.get("id"), "meet": ev.get("meet") or "", "calendar": cal_co}
+        return store.update_task(task["id"], request=req)
+    except Exception:  # noqa: BLE001 — pre-booking is best-effort; the link then arrives at send instead
+        return None
 
 
 def _maybe_extract_meeting(task: dict, draft: str) -> None:
