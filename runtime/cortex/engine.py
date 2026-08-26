@@ -1109,12 +1109,41 @@ def apply_correction(task: dict, text: str) -> None:
         _maybe_propose_rule(task, skill, text, old or "", new or "")   # learn from ideation feedback too
         return
 
+    # "No email needed here" is valid feedback, not a revision request: dismiss the card instead of
+    # stubbornly redrafting (bit card #330 — a tender that answers through the supplier portal), and
+    # still run the rule inference so the owner gets the add-as-rule offer (universal or local).
+    if task["kind"] in ("email_reply", "email_draft") and _correction_means_no_reply(text):
+        store.update_task(task["id"], status="rejected")
+        store.log_decision(task["id"], skill["id"], "owner", "dismiss_no_reply", note=text,
+                           snapshot={"old": old})
+        if task.get("tg_message_id"):
+            tg.edit(task["tg_message_id"], f"✗ Dismissed — no reply needed ('{skill['name']}').")
+        _maybe_propose_rule(task, skill, text, old or "", "(no email sent — the owner said no reply is needed)")
+        return
+
     new = worker.draft(skill, company, _request_for_draft(task), correction=text)
     task = store.update_task(task["id"], draft=new, status="awaiting_approval", attempts=task["attempts"] + 1)
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text, snapshot={"old": old, "new": new})
     msg2 = tg.send(_fmt(task, skill, company, None), _approval_buttons(task["id"]))
     store.update_task(task["id"], tg_message_id=msg2["message_id"])
     _maybe_propose_rule(task, skill, text, old or "", new or "")
+
+
+def _correction_means_no_reply(text: str) -> bool:
+    """Does the owner's feedback mean NO email should be sent at all (vs. change the draft)? Judged by the
+    router model so phrasing stays free ('goes through the supplier portal', 'we don't answer these');
+    on any doubt or model failure it returns False and the normal redraft happens — the safe default."""
+    try:
+        out = provider.think_json(
+            "You read the OWNER'S FEEDBACK on an email draft his assistant prepared. Decide ONE thing: is he "
+            "saying that NO email should be sent at all for this item (the draft should be dismissed — e.g. "
+            "'no reply needed', 'this is handled in the portal', 'we never answer these', 'just ignore it')? "
+            "If he is asking for ANY change, correction or different wording to the email, that is NOT a "
+            'dismissal. Return JSON {"no_reply": true|false}. When unsure: false.',
+            (text or "")[:600], model=provider.MODEL_ROUTER, purpose="correction-intent")
+        return bool(isinstance(out, dict) and out.get("no_reply"))
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _confirm_rule(task: dict, skill: dict, yes: bool, universal: bool = False) -> None:
