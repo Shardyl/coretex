@@ -238,6 +238,20 @@ def get_attachment(gmail_id: str, att_id: str, rt_key: str = "gmail_refresh_toke
     return base64.urlsafe_b64decode((r.get("data") or "") + "===")
 
 
+_HTML_HINT = re.compile(r"<(?:br|p|div|td|tr|a|span|img|html|body|table)\b", re.I)
+
+
+def _html_to_text(s: str) -> str:
+    """Readable text out of an HTML email body (many senders have no text/plain part at all)."""
+    import html as _h
+    s = re.sub(r"(?is)<(script|style|head)\b.*?</\1>", " ", s)
+    s = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</tr>|</li>|</h[1-6]>", "\n", s)
+    s = re.sub(r"(?s)<[^>]+>", " ", s)
+    s = _h.unescape(s)
+    s = re.sub(r"[ \t]+", " ", s)
+    return re.sub(r"\n\s*\n\s*", "\n\n", s).strip()
+
+
 def _parse_generic(msg: dict) -> dict:
     """Light parse of ANY email (sender, subject, body) — for the inbox classifier, no form assumptions."""
     h = {x["name"].lower(): x["value"] for x in msg.get("payload", {}).get("headers", [])}
@@ -245,9 +259,16 @@ def _parse_generic(msg: dict) -> dict:
     m = re.match(r'^\s*"?([^"<]*?)"?\s*<([^>]+)>', frm)
     name = ((m.group(1).strip() if m else "") or (frm.split("@")[0] if "@" in frm else frm)).strip()
     email = (m.group(2).strip() if m else frm).strip().strip("<>")
+    body = _plain_body(msg.get("payload", {}))
+    if _HTML_HINT.search(body or ""):        # HTML-only email -> readable text, never raw markup
+        body = _html_to_text(body)
+    # machine-generated markers: bulk/no-reply mail must never get a drafted reply
+    auto = bool(h.get("list-unsubscribe")
+                or (h.get("precedence", "").lower() in ("bulk", "list", "junk"))
+                or (h.get("auto-submitted", "").lower() not in ("", "no")))
     return {"gmail_id": msg.get("id"), "subject": h.get("subject", ""), "from": frm, "date": h.get("date", ""),
-            "name": name, "email": email, "body": _plain_body(msg.get("payload", {})),
-            "snippet": msg.get("snippet", ""),
+            "name": name, "email": email, "body": body,
+            "snippet": msg.get("snippet", ""), "auto_marker": auto,
             # threading identity: reply with these + threadId so our answer lands ON their thread
             "thread_id": msg.get("threadId", ""), "msg_id": h.get("message-id", ""),
             "references": h.get("references", ""),

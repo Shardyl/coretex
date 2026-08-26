@@ -2002,6 +2002,14 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
                      "status in ('new','drafting','awaiting_approval','awaiting_correction') and "
                      "lower(request->'inquiry'->>'email')=lower(%s) limit 1", (co["id"], sender))
         deals = crm.active_deals_for_email(sender, co.get("slug"))
+        # machine-generated mail (bills, notifications, anything bulk/no-reply) never gets a drafted
+        # reply UNLESS the sender is on an active deal (a real counterpart whose system mailed us).
+        local = sender.split("@")[0].lower()
+        robot = e.get("auto_marker") or re.match(
+            r"^(no[-._]?reply|do[-._]?not[-._]?reply|notifications?|alerts?|mailer|bounce|newsletter|"
+            r"customer[-._]?care|billing|statements?)($|[.+_-])", local)
+        if robot and not deals:
+            return
         deal = deals[0] if len(deals) == 1 else None   # attach a deal_id only when it is unambiguous
         _pause_or_reschedule_followups(co, deals, sender, body)
         # PROJECT correspondence (deal already in delivery) drafts on the company's general email-handling
