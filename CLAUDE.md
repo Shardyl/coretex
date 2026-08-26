@@ -102,9 +102,14 @@ rules), so project-management behaviour is trained there; Opportunity-stage and 
 
 ## Company document library (2026-08-26)
 
-The OFFICIAL store of each company's standing files (trade licence, VAT certificate, company profile,
-signed forms): bytes at `/opt/cortex-knowledge/documents/<slug>/` (inside the nightly Drive backup),
-registry in `company_documents` (in the nightly DB dump). `runtime/cortex/documents.py`. Upload via the
+CANONICAL HOME: the company's Drive `<COMPANY> CORTEX/Documents/` subfolder (same Drive-first doctrine
+as the brand kit — the Drive folder is the controlled source; decided with Rashad 2026-08-26). The box
+copy at `/opt/cortex-knowledge/documents/<slug>/` is the CACHE (instant send-time attach; also in the
+nightly backup) and `company_documents` is the registry (`drive_id` links the canonical file). Saves
+push to Drive first (fail-soft); `documents.sync_drive(company_id)` catches up both directions,
+including files dropped into the Drive folder by hand. `runtime/cortex/documents.py`.
+Storage doctrine overall: Drive CORTEX folders = source of truth for brand assets + official documents;
+R2 (media.coretex.uk) = published/web-served derivatives only; the box = cache/runtime only. Upload via the
 Talk paperclip + `save_document`, or the Attach button on any email card (fresh uploads save to the
 library first). `attach_docs` refs on a card resolve to real bytes only at SEND time — attachments never
 bloat task rows, and a client's inbound files can never be re-sent (separate `inbound_attachments` key).
