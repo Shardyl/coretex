@@ -649,12 +649,13 @@ def social_job_result(tid: int, body: JobResult, _: None = Depends(_runner_auth)
         raise HTTPException(status_code=404, detail="no such job")
     store.update_task(tid, status="done" if body.ok else "failed", last_status=body.detail[:300])
     req = t.get("request") or {}
-    try:
-        notifications.notify(f"{req.get('persona', 'Paul')}: {req.get('action', 'action')} "
-                             + ("done" if body.ok else "failed"),
-                             body.detail[:300], category="social", company_id=t["company_id"])
-    except Exception:  # noqa: BLE001
-        pass
+    # Only notify on FAILURE. Once the owner approves an action, a success is assumed - no "done" popups.
+    if not body.ok:
+        try:
+            notifications.notify(f"{req.get('persona', 'Paul')}: {req.get('action', 'action')} failed",
+                                 body.detail[:300], category="social", company_id=t["company_id"])
+        except Exception:  # noqa: BLE001
+            pass
     return {"ok": True}
 
 
