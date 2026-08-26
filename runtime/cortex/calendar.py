@@ -39,6 +39,17 @@ def _busy(tok: str, calendar_id: str, start: datetime, end: datetime, tz: str) -
     return [(datetime.fromisoformat(b["start"]), datetime.fromisoformat(b["end"])) for b in cal.get("busy", [])]
 
 
+
+
+def _cal_id(company: str, calendar_id: str) -> str:
+    """The company's configured booking calendar (setting calendar_id:<slug>, e.g. Sensa Productions
+    Main Calender) when the caller didn't name one — 'primary' only as the last resort."""
+    if calendar_id and calendar_id != "primary":
+        return calendar_id
+    from . import db
+    return db.setting_get(f"calendar_id:{company}") or "primary"
+
+
 def free_slots(company: str, *, calendar_id: str = "primary", days: int = 21, work_start: int = 10,
                work_end: int = 14, slot_min: int = 30, count: int = 3, buffer_min: int = 180,
                weekdays: tuple = (0, 1, 2, 3), tz: str = "Asia/Dubai",
@@ -48,6 +59,7 @@ def free_slots(company: str, *, calendar_id: str = "primary", days: int = 21, wo
     the Sensa booking rules: 10:00-14:00 GST, Mon-Thu (Fridays + weekend excluded), 3-hour lead time. `prefer`
     rotates the target time per offered slot so they aren't all at the same hour."""
     tzi = ZoneInfo(tz)
+    calendar_id = _cal_id(company, calendar_id)
     tok = _token(company)
     now = datetime.now(tzi)
     start = now + timedelta(minutes=buffer_min)
@@ -85,6 +97,7 @@ def create_event(company: str, *, calendar_id: str = "primary", start: datetime,
     """Create a booking event (read-write). Caller MUST gate this behind Inbox approval — never auto-book.
     meet=True attaches a Google Meet room; the returned dict carries its join link."""
     import uuid
+    calendar_id = _cal_id(company, calendar_id)
     tok = _token(company)
     end = start + timedelta(minutes=minutes)
     ev: dict = {"summary": summary, "description": description,
@@ -108,6 +121,7 @@ def create_event(company: str, *, calendar_id: str = "primary", start: datetime,
 def add_attendee(company: str, event_id: str, attendee: str, calendar_id: str = "primary") -> dict:
     """Add the guest to an existing event and let Google send them the invite — the approval-time step
     after an event was pre-booked (attendee-less) so a draft could carry its real Meet link."""
+    calendar_id = _cal_id(company, calendar_id)
     tok = _token(company)
     body = json.dumps({"attendees": [{"email": attendee}]}).encode()
     r = json.load(urllib.request.urlopen(urllib.request.Request(
