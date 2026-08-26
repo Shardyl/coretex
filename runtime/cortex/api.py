@@ -32,7 +32,7 @@ from pydantic import BaseModel
 
 from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, engine, fitness, gmail, knowledge,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
-               skillqa, social, social_config, social_dm, social_warm, store, webauthn_auth, whatsapp,
+               skillqa, social, social_comments, social_config, social_dm, social_warm, store, webauthn_auth, whatsapp,
                worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
@@ -839,6 +839,23 @@ class ConnectResultBody(BaseModel):
     linkedin: str
     ok: bool
     detail: str = ""
+
+
+class RepliesBody(BaseModel):
+    account: str
+    items: list[dict] = []   # [{post, parent_comment, replies:[{author, profile, text}]}] from notify.py
+
+
+@app.get("/api/social/replies/checks")
+def social_reply_checks(account: str, limit: int = 25, _: None = Depends(_runner_auth)) -> dict:
+    """Posts the persona recently commented on, so the runner can revisit them and read any replies."""
+    return {"checks": social_comments.pending_reply_checks(account, limit)}
+
+
+@app.post("/api/social/replies")
+def social_replies(body: RepliesBody, _: None = Depends(_runner_auth)) -> dict:
+    """Draft the persona's response to each NEW reply under their comments + create the approval cards."""
+    return social_comments.ingest_replies(body.account, body.items)
 
 
 @app.get("/api/social/connect/targets")

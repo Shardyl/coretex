@@ -36,15 +36,17 @@ def post_shift_card(company_id, account, persona, plan, strategy,
 _ACTION_VERB = {
     "post": "publish a post", "like": "like a post", "comment": "comment on a post",
     "connect": "send a connection invite", "view": "view a profile", "dm": "send a message",
+    "reply": "reply to a comment",
 }
 
 
-def post_action_card(company_id, account, persona, action, target="", content="", person=""):
-    """Create a one-off MANUAL-action approval card (post|like|comment|connect|view|dm). The owner approves
-    it (biometric step-up, outward), then the runner picks it up from the job queue and performs it.
-    `person` = the target's profile URL (for a comment on their post) so warmth can be counted per person."""
+def post_action_card(company_id, account, persona, action, target="", content="", person="", parent=""):
+    """Create a one-off MANUAL-action approval card (post|like|comment|connect|view|dm|reply). The owner
+    approves it (biometric step-up, outward), then the runner picks it up from the job queue and performs it.
+    `person` = the target's profile URL (for a comment on their post) so warmth can be counted per person.
+    `parent` = the persona's own comment text (for a reply) so the runner can locate the thread to reply in."""
     req = {"account": account, "persona": persona, "action": action, "target": target, "content": content,
-           "person": person}
+           "person": person, "parent": parent}
     t = store.create_task(company_id, _skill_id(company_id), "social_action", req)
     verb = _ACTION_VERB.get(action, action)
     parts = []
