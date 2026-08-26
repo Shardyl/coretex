@@ -158,6 +158,31 @@ Meta retries non-200s and disables webhooks that keep failing.
   number where a name would go, and the real name is learned from the conversation.
 - App must be **published** before Meta delivers production webhooks; unpublished apps get test events only.
 
+## LinkedIn outreach engine (harvest + warm-ladder + connect)
+
+Runs on the office boxes (Patchright runners, code scp-synced NOT git-deployed; brain in
+`runtime/cortex/social*.py` + `/api/social/*` behind `_runner_auth`). Two accounts in
+`social_accounts`: **rashad** (harvest-only, all write caps 0) + **live** = Paul Anderson
+(FilmSpoke persona, the connector). ~5,900 tier-scored buyers harvested off graded anchors sit in
+`crm_master` (tag `anchor-harvest`, stage Cold).
+- **WARM-LADDER (LOCKED 2026-08-26, rule #3 on FilmSpoke `outreach-linkedin-sequences`):** harvested
+  buyers are mostly 3rd-degree Follow-primary profiles LinkedIn walls to cold no-mutual invites. So
+  per buyer: **(1) follow** (auto, safe) → **(2) ~5 genuinely insightful comments, EACH an approval
+  card** → **(3) only then the silent no-note connect**. `social_warm.connect_targets` ONLY surfaces
+  buyers with ≥4 done comment cards (`WARM_COMMENTS_TO_CONNECT`); cold buyers can't be connected.
+  `queue_warm` makes ≤1 new comment card per person per run, stops at 5. `record_connect` writes the
+  invite outcome to the CRM (sent → `invited`+Contacted; permanent fail/email-wall → `invite-skip`,
+  never re-served). `post_action_card` carries `request.person` so warmth counts per person.
+- **Runner (`C:\Users\Dell\cortex-runner` on Dell@100.72.188.65):** `warm.py` (follow + read ~3 recent
+  posts → comment cards), `run_shift.py` (executes only WARMED-gated connects), `actions.follow/connect`,
+  `poller.py`. **Never rely on LinkedIn CSS classes — they're hashed;** `warm_read.read_post_text` picks
+  the longest prose `[dir=ltr]` block above comments (drops video chrome + pipe-headlines; warm.py drops
+  <180-char extracts). One profile = one Chrome at a time: `runner._open` RETRIES the real Chrome channel
+  (no bundled-chromium fallback — it isn't installed), and the poller leaves a "profile busy" job QUEUED
+  rather than burning an approved card. Stuck scheduled task → `schtasks /end` then `/run`; stray lock →
+  `taskkill /F /IM chrome.exe`. Scheduled (Paul): CortexWarm 09:30, CortexShift 11:00, CortexHarvest 13:00,
+  CortexPoller 10min. Detail + history: memory `project_cortex_social_automation.md`.
+
 ## Media library (the YouTube catalog + review UI)
 
 `media_assets` (live DB) is the catalog of every video on a company's YouTube channel — one row
