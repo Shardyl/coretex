@@ -503,6 +503,25 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         store.update_task(task["id"], status="awaiting_approval")
         return {"blocked": True, "error": "Email sending is PAUSED. Resume it to send this reply."}
     env = _email_envelope(task, company)
+    mt = (task.get("request") or {}).get("meeting")
+    if mt and not mt.get("event_id"):   # confirmed slot -> book calendar + Meet BEFORE composing (link in email)
+        from . import calendar as gcal
+        _slug = (company or {}).get("slug") or ""
+        cal_co = _slug if db.setting_get(f"calendar_refresh_token:{_slug}") else "sensa"
+        try:
+            ev = gcal.create_event(cal_co, start=datetime.fromisoformat(mt["start"]),
+                                   minutes=int(mt.get("minutes") or 30),
+                                   summary=mt.get("summary") or "Call", attendee=env["to"],
+                                   description=f"Booked via Cortex approval (task #{task['id']}).", meet=True)
+        except Exception as ex:  # noqa: BLE001 — never send an email promising a meeting we failed to book
+            store.update_task(task["id"], status="awaiting_approval")
+            return {"blocked": True, "error": f"Couldn't book the calendar/Meet: {ex}. Nothing was sent — approve again to retry."}
+        mt = {**mt, "event_id": ev.get("id"), "meet": ev.get("meet") or "", "calendar": cal_co}
+        task = dict(task)
+        task["request"] = {**(task.get("request") or {}), "meeting": mt}
+        if ev.get("meet"):
+            task["draft"] = (task.get("draft") or "").rstrip() + f"\n\nGoogle Meet: {ev['meet']}"
+        store.update_task(task["id"], request=task["request"], draft=task["draft"])
     c = compose_reply_html(task, company, for_preview=False)
     req = task.get("request") or {}
     files = list(req.get("attachments") or [])            # outbound drafts carry real file attachments
@@ -635,6 +654,7 @@ def _run_task(task: dict) -> None:
         verdict = manager.check(skill, company, draft, task["request"])
 
     task = store.update_task(task["id"], draft=draft, manager=verdict, attempts=task["attempts"] + 1)
+    _maybe_extract_meeting(task, draft)   # a confirmed slot in the draft -> calendar+Meet booked on approval
 
     # Earned autonomy + escalation valve: even on an auto lane, the Manager's verdict must be a clean,
     # confident pass. Anything flagged, escalated, or low-confidence still goes to the owner.
@@ -1141,6 +1161,7 @@ def apply_correction(task: dict, text: str) -> None:
     # from the PREVIOUS pass so a stale flag never scares the owner off his own corrected draft
     task = store.update_task(task["id"], draft=new, status="awaiting_approval", manager=None,
                              attempts=task["attempts"] + 1)
+    _maybe_extract_meeting(task, new)
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text, snapshot={"old": old, "new": new})
     msg2 = tg.send(_fmt(task, skill, company, None), _approval_buttons(task["id"]))
     store.update_task(task["id"], tg_message_id=msg2["message_id"])
@@ -1242,6 +1263,38 @@ def _apply_attach_directives(task: dict, text: str) -> dict | None:
         return store.get_task(task["id"]) if refs else None
     except Exception:  # noqa: BLE001 — best-effort; the redraft still happens
         return None
+
+
+_TIME_HINT = re.compile(r"\b\d{1,2}(:\d{2})?\s*(am|pm)\b|\b\d{1,2}:\d{2}\b", re.I)
+
+
+def _maybe_extract_meeting(task: dict, draft: str) -> None:
+    """When a reply draft CONFIRMS one specific meeting slot with the client, stamp request.meeting so
+    the approval that sends the email ALSO books the calendar event + Google Meet (link appended to the
+    email at send). Haiku only reads what the draft states; code stamps and validates the datetime."""
+    try:
+        req = dict(task.get("request") or {})
+        if task.get("kind") != "email_reply" or req.get("meeting") or not _TIME_HINT.search(draft or ""):
+            return
+        out = provider.think_json(
+            worker._now_line() + " Does this email CONFIRM a specific meeting day and time with the "
+            "recipient (agreed, not merely proposing options)? Return JSON {\"confirmed\": true|false, "
+            "\"start_iso\": \"YYYY-MM-DDTHH:MM\" in Dubai local time for the confirmed slot, "
+            "\"minutes\": 30, \"summary\": \"short meeting title naming the counterpart\"} — "
+            "confirmed:false unless ONE exact slot is clearly agreed in the text.",
+            (draft or "")[:1500], model=provider.MODEL_ROUTER, purpose="meeting-extract",
+            company=(store.get_company(task["company_id"]) or {}).get("slug"))
+        if not (isinstance(out, dict) and out.get("confirmed") and out.get("start_iso")):
+            return
+        s = str(out["start_iso"])
+        dt = datetime.fromisoformat(s if ("+" in s or s.endswith("Z")) else s + "+04:00")
+        if dt < datetime.now(timezone.utc) or dt > datetime.now(timezone.utc) + timedelta(days=180):
+            return                                     # implausible stamp -> no booking, never a wrong one
+        req["meeting"] = {"start": dt.isoformat(), "minutes": int(out.get("minutes") or 30),
+                          "summary": (out.get("summary") or "Intro call")[:80]}
+        store.update_task(task["id"], request=req)
+    except Exception:  # noqa: BLE001 — booking is a bonus; the draft must never fail because of it
+        pass
 
 
 def _correction_means_no_reply(text: str) -> bool:

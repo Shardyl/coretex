@@ -80,16 +80,26 @@ def format_slots(slots: list[datetime]) -> list[str]:
 
 
 def create_event(company: str, *, calendar_id: str = "primary", start: datetime, minutes: int = 30,
-                 summary: str = "Call", attendee: str = "", description: str = "") -> dict:
-    """Create a booking event (read-write). Caller MUST gate this behind Inbox approval — never auto-book."""
+                 summary: str = "Call", attendee: str = "", description: str = "",
+                 meet: bool = False) -> dict:
+    """Create a booking event (read-write). Caller MUST gate this behind Inbox approval — never auto-book.
+    meet=True attaches a Google Meet room; the returned dict carries its join link."""
+    import uuid
     tok = _token(company)
     end = start + timedelta(minutes=minutes)
     ev: dict = {"summary": summary, "description": description,
                 "start": {"dateTime": start.isoformat()}, "end": {"dateTime": end.isoformat()}}
     if attendee:
         ev["attendees"] = [{"email": attendee}]
+    if meet:
+        ev["conferenceData"] = {"createRequest": {
+            "requestId": uuid.uuid4().hex,
+            "conferenceSolutionKey": {"type": "hangoutsMeet"}}}
     r = json.load(urllib.request.urlopen(urllib.request.Request(
         f"https://www.googleapis.com/calendar/v3/calendars/{urllib.parse.quote(calendar_id)}/events"
-        "?sendUpdates=all", data=json.dumps(ev).encode(),
+        "?sendUpdates=all&conferenceDataVersion=1", data=json.dumps(ev).encode(),
         headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, method="POST")))
-    return {"id": r.get("id"), "link": r.get("htmlLink")}
+    meet_link = r.get("hangoutLink") or next(
+        (e.get("uri") for e in (r.get("conferenceData", {}).get("entryPoints") or [])
+         if e.get("entryPointType") == "video"), "")
+    return {"id": r.get("id"), "link": r.get("htmlLink"), "meet": meet_link}
