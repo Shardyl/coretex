@@ -300,6 +300,7 @@ def _email_envelope(task: dict, company: dict) -> dict:
             bcc_list += rb
         except Exception:  # noqa: BLE001
             pass
+    cc_list += [e for e in ((task.get("request") or {}).get("cc_extra") or []) if "@" in e]
     cc = ", ".join(dict.fromkeys(cc_list))     # dedupe, keep order
     bcc = ", ".join(dict.fromkeys(bcc_list))
     req = task.get("request") or {}
@@ -1123,6 +1124,8 @@ def apply_correction(task: dict, text: str) -> None:
     # "No email needed here" is valid feedback, not a revision request: dismiss the card instead of
     # stubbornly redrafting (bit card #330 — a tender that answers through the supplier portal), and
     # still run the rule inference so the owner gets the add-as-rule offer (universal or local).
+    if task["kind"] in ("email_reply", "email_draft"):
+        task = _apply_envelope_directives(task, text) or task
     if task["kind"] in ("email_reply", "email_draft") and _correction_means_no_reply(text):
         store.update_task(task["id"], status="rejected")
         store.log_decision(task["id"], skill["id"], "owner", "dismiss_no_reply", note=text,
@@ -1138,6 +1141,60 @@ def apply_correction(task: dict, text: str) -> None:
     msg2 = tg.send(_fmt(task, skill, company, None), _approval_buttons(task["id"]))
     store.update_task(task["id"], tg_message_id=msg2["message_id"])
     _maybe_propose_rule(task, skill, text, old or "", new or "")
+
+
+def _company_senders(company_id: int) -> dict:
+    """The real people mailboxes this company can send from: {name-or-local: {email, rt_key}}.
+    Built from the per-person gmail_account:<slug>:<who> settings — never a catch-all."""
+    co = store.get_company(company_id) or {}
+    slug = co.get("slug") or ""
+    out = {}
+    for r in db.query("select key, value from settings where key like %s", (f"gmail_account:{slug}:%",)):
+        who = r["key"].split(":")[-1]
+        email = (r["value"] if isinstance(r["value"], str) else str(r["value"])).strip('" ')
+        rt = f"gmail_refresh_token:{slug}:{who}"
+        if email and db.setting_get(rt):
+            out[who.lower()] = {"email": email.lower(), "rt_key": rt}
+    return out
+
+
+def _apply_envelope_directives(task: dict, text: str) -> dict | None:
+    """Owner feedback can also change the ENVELOPE: 'send this from rashad', 'cc gino and ayresh'.
+    Deterministic against the company's real mailboxes — the model only maps words to known people;
+    code applies emails and tokens. Unrecognised names are ignored (never guessed)."""
+    try:
+        senders = _company_senders(task["company_id"])
+        if not senders:
+            return None
+        roster = ", ".join(f"{w} <{v['email']}>" for w, v in senders.items())
+        out = provider.think_json(
+            "Owner feedback on an email draft. Does it EXPLICITLY ask to change WHO the email is sent "
+            f"from, or to ADD people on cc? Known team mailboxes: {roster}. Return JSON "
+            '{"from": "<first name of the new sender, or empty if unchanged>", '
+            '"cc": ["<first names to add on cc>"]} — empty values unless the feedback clearly says so.',
+            (text or "")[:600], model=provider.MODEL_ROUTER, purpose="correction-envelope",
+            company=(store.get_company(task["company_id"]) or {}).get("slug"))
+        if not isinstance(out, dict):
+            return None
+        req = dict(task.get("request") or {})
+        changed = False
+        frm = (out.get("from") or "").strip().lower()
+        if frm and frm in senders:
+            req["from_email"] = senders[frm]["email"]
+            req["mailbox_rt"] = senders[frm]["rt_key"]
+            if req.get("thread"):
+                req["thread"] = {**req["thread"], "id": ""}   # threadIds are mailbox-local; headers still chain
+            changed = True
+        adds = [senders[c.strip().lower()]["email"] for c in (out.get("cc") or [])
+                if isinstance(c, str) and c.strip().lower() in senders]
+        if adds:
+            req["cc_extra"] = sorted(set((req.get("cc_extra") or []) + adds))
+            changed = True
+        if not changed:
+            return None
+        return store.update_task(task["id"], request=req)
+    except Exception:  # noqa: BLE001 — envelope directives are best-effort; the redraft still happens
+        return None
 
 
 def _correction_means_no_reply(text: str) -> bool:
