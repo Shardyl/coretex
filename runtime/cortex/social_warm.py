@@ -110,10 +110,14 @@ def _draft_comment(post_text: str, name: str, company_id: int, person_key: str) 
     co = store.get_company(company_id)
     if not (skill and co):
         return ""
-    brief = ("You are warming up a potential connection by commenting on their LinkedIn post BEFORE sending a "
-             "connection request. Write a SHORT, genuine comment (1 to 2 sentences) that adds a real thought or a "
-             "sharp, friendly take on what they said. Never 'great post', never generic praise, never salesy, "
-             "never mention or pitch your own company. Just be a smart peer worth knowing.\n\n"
+    brief = ("You are leaving a friendly LinkedIn comment on a potential connection's post to WARM THEM UP "
+             "before connecting. Keep it SIMPLE, warm and human: one or two short sentences, the way a real "
+             "person talks. React genuinely to their point and make THE POSTER look good, agree with them, "
+             "appreciate the insight, or build on it in a way that puts them in the spotlight. A light, genuine "
+             "question is welcome. Do NOT try to be clever, witty or profound; no mic-drop lines, no aphorisms, "
+             "no showing off, no 'that's the real takeaway' cleverness. You are an encouraging peer, not the "
+             "smartest person in the comments. Never generic ('great post'), never salesy, never mention your "
+             "own company.\n\n"
              f"{name}'s post:\n{post_text}")
     try:
         return worker.draft(skill, co, {"brief": brief}, author=person_key)   # author -> the persona's voice
