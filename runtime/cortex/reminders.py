@@ -154,7 +154,10 @@ def _spawn_task(r: dict, action: dict) -> int | None:
             return None
         kind = action.get("kind") or "content"
         brief = action.get("brief") or r["title"]
-        t = store.create_task(co["id"], sk["id"], kind, {"brief": brief, "title": r["title"]})
+        # a full request on the action wins (e.g. a scheduled email draft carrying recipient + sender
+        # mailbox); else the plain brief/title task as before
+        req = action.get("request") or {"brief": brief, "title": r["title"]}
+        t = store.create_task(co["id"], sk["id"], kind, req)
         return t["id"] if t else None
     except Exception:  # noqa: BLE001
         return None

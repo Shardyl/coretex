@@ -2206,6 +2206,20 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
             # catch-all that received it, thread by the global reply headers only
             req["thread"] = {"id": "" if catchall else e["thread_id"], "msg_id": e.get("msg_id") or "",
                              "references": e.get("references") or ""}
+        # a NEW lead with no deal: qualify + auto-create the Opportunity, same as the enquiry lane —
+        # "it definitely is an opportunity" should never depend on which door the email came through.
+        if cls["category"] == "lead" and not deals and not dup:
+            try:
+                sug = qualify_suggest(co, inq)
+                if sug and sug.get("verdict") == "qualified":
+                    db.setting_set(f"qual:{co['id']}:{sender.lower()}", sug)
+                    db.setting_set(f"qual:email:{sender.lower()}", {**sug, "company_id": co["id"]})
+                    opp = crm.auto_opportunity(sender, co.get("slug"), sug, inq)
+                    if opp:
+                        req["deal_id"] = opp["id"]
+                        _notify_new_opportunity(co, opp, "auto-qualified from direct email")
+            except Exception:  # noqa: BLE001 — qualification is best-effort; the reply card must exist regardless
+                pass
         if dup:                                 # supersede the stale open card with their latest email
             oldreq = dup.get("request") or {}
             old = (oldreq.get("inquiry") or {}).get("message") or ""
