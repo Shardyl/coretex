@@ -162,6 +162,24 @@ def sync_drive(company_id: int) -> dict:
     return {"pushed": pushed, "pulled": pulled}
 
 
+def sync_all(min_gap_minutes: int = 60) -> dict:
+    """Reconcile EVERY company's library with its Drive Documents folder, at most once per gap.
+    Called from the engine loop, so a file hand-dropped into any CORTEX/Documents folder is in the
+    library within the hour — no command needed."""
+    import time
+    last = db.setting_get("documents_sync_ts") or 0
+    if time.time() - float(last) < min_gap_minutes * 60:
+        return {"skipped": True}
+    db.setting_set("documents_sync_ts", time.time())
+    out = {}
+    for c in db.query("select id, slug from companies order by id"):
+        try:
+            out[c["slug"]] = sync_drive(c["id"])
+        except Exception as e:  # noqa: BLE001 — one company's Drive hiccup never blocks the rest
+            out[c["slug"]] = {"error": str(e)[:80]}
+    return out
+
+
 def find(company_id: int, query: str) -> list[dict]:
     """Loose match on kind/filename ('trade licence' finds kind trade-licence and 'TradeLicense2026.pdf')."""
     ensure_schema()

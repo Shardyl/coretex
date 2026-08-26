@@ -2783,6 +2783,10 @@ def run(poll_idle: float = 1.0) -> None:
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(reminder fire hiccup: {e})")
             try:
+                documents.sync_all()    # hourly: pick up files hand-dropped into any CORTEX/Documents folder
+            except Exception:  # noqa: BLE001 — background sync; never noisy
+                pass
+            try:
                 run_opportunity_followups()   # advance AUTO opportunities' chase cadence -> drafted follow-up cards
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(opportunity follow-up hiccup: {e})")
