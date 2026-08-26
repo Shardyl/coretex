@@ -1126,6 +1126,7 @@ def apply_correction(task: dict, text: str) -> None:
     # still run the rule inference so the owner gets the add-as-rule offer (universal or local).
     if task["kind"] in ("email_reply", "email_draft"):
         task = _apply_envelope_directives(task, text) or task
+        task = _apply_attach_directives(task, text) or task
     if task["kind"] in ("email_reply", "email_draft") and _correction_means_no_reply(text):
         store.update_task(task["id"], status="rejected")
         store.log_decision(task["id"], skill["id"], "owner", "dismiss_no_reply", note=text,
@@ -1155,6 +1156,10 @@ def _company_senders(company_id: int) -> dict:
         rt = f"gmail_refresh_token:{slug}:{who}"
         if email and db.setting_get(rt):
             out[who.lower()] = {"email": email.lower(), "rt_key": rt}
+    # spoken-name aliases (voice-to-text renders Rashad as 'Richard'); config so new quirks are data
+    for alias, real in (db.setting_get("sender_aliases") or {"richard": "rashad"}).items():
+        if real in out and alias not in out:
+            out[alias] = out[real]
     return out
 
 
@@ -1194,6 +1199,45 @@ def _apply_envelope_directives(task: dict, text: str) -> dict | None:
             return None
         return store.update_task(task["id"], request=req)
     except Exception:  # noqa: BLE001 — envelope directives are best-effort; the redraft still happens
+        return None
+
+
+def _apply_attach_directives(task: dict, text: str) -> dict | None:
+    """Owner feedback can ask for library documents on the email ('attach our trade licence and VAT
+    certificate'). The model only names what was asked; documents.find resolves against the REAL
+    library — nothing is ever attached that isn't on file, and misses are surfaced, never faked."""
+    try:
+        out = provider.think_json(
+            "Owner feedback on an email draft. Does it ask to ATTACH any standing company documents "
+            "(trade licence, VAT/tax certificate, company profile, signed forms...)? Return JSON "
+            '{"documents": ["<short name of each requested document>"]} — empty list if none requested.',
+            (text or "")[:800], model=provider.MODEL_ROUTER, purpose="correction-attach",
+            company=(store.get_company(task["company_id"]) or {}).get("slug"))
+        wants = [w for w in (out.get("documents") or []) if isinstance(w, str) and w.strip()] \
+            if isinstance(out, dict) else []
+        if not wants:
+            return None
+        req = dict(task.get("request") or {})
+        refs = {int(r["id"]): r for r in (req.get("attach_docs") or [])}
+        missing = []
+        for w in wants[:6]:
+            hits = documents.find(task["company_id"], w)
+            if hits:
+                d = hits[0]
+                refs[d["id"]] = {"id": d["id"], "filename": d["filename"], "mime": d["mime"], "size": d["size"]}
+            else:
+                missing.append(w)
+        if refs:
+            req["attach_docs"] = list(refs.values())
+            store.update_task(task["id"], request=req)
+        if missing:
+            notifications.notify(
+                f"Card #{task['id']}: not in the document library, NOT attached: {', '.join(missing)}. "
+                "Save them via the paperclip and re-attach.", "Document library",
+                category="reminder", company_id=task["company_id"], target_type="task",
+                target_id=str(task["id"]))
+        return store.get_task(task["id"]) if refs else None
+    except Exception:  # noqa: BLE001 — best-effort; the redraft still happens
         return None
 
 
