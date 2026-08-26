@@ -2038,6 +2038,20 @@ def classify_email(company: dict, email: dict) -> dict:
 _DELIVERY_STAGES = {"Booked", "Production", "Final Payment", "Recurring"}
 
 
+def _rt_for_sender(co: dict, email: str) -> str | None:
+    """The mailbox token that can genuinely send AS this address: a team member's own mailbox, else the
+    company send mailbox when the address is its send-as identity. None = let the send path resolve."""
+    email = (email or "").lower()
+    for v in _company_senders(co["id"]).values():
+        if v["email"] == email:
+            return v["rt_key"]
+    slug = co.get("slug") or ""
+    sa = db.setting_get(f"gmail_send_account:{slug}")
+    if sa and str(sa).strip('" ').lower() == email and db.setting_get(f"gmail_send_refresh_token:{slug}"):
+        return f"gmail_send_refresh_token:{slug}"
+    return None
+
+
 def _belongs_to_other_company(e: dict, slug: str) -> bool:
     """True when this email is ADDRESSED to another of our companies and not to this one — the team's
     mailboxes alias across domains (rashad@skyvision.film delivers into the same account as
@@ -2203,8 +2217,21 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
         # company's send mailbox + reply_from person (their token, their signature). Personal mailboxes
         # (gino@/rashad@/ayresh@) still reply as themselves.
         catchall = (address or "").lower() == (INBOXES.get(co.get("slug"), "") or "").lower()
+        from_email = None if catchall else address
+        mailbox_rt = None if catchall else rt_key
+        # THREAD-STICKY SENDER: a conversation someone on the team is already having stays THEIRS.
+        # Whoever we last sent to this contact AS is who replies — never silently switched to the
+        # company default mid-thread (a Rashad<->client thread must not flip to Gino).
+        if is_thread:
+            last = db.one("select d.snapshot->>'from' f from decisions d join tasks t on t.id=d.task_id "
+                          "where t.company_id=%s and d.action='send' and lower(d.snapshot->>'to')=lower(%s) "
+                          "and d.snapshot->>'from' is not null order by d.id desc limit 1",
+                          (co["id"], sender))
+            lf = ((last or {}).get("f") or "").strip().lower()
+            if lf and lf != (from_email or "").lower():
+                from_email, mailbox_rt = lf, _rt_for_sender(co, lf)
         req = {"brief": brief, "inquiry": inq,
-               "from_email": None if catchall else address, "mailbox_rt": None if catchall else rt_key,
+               "from_email": from_email, "mailbox_rt": mailbox_rt,
                "gmail_id": e.get("gmail_id") or ""}   # source message id -> the backfill sweep dedups on it
         atts = _inbound_att_refs(e, rt_key, _inbox_client_company(co.get("slug")))
         if atts:
