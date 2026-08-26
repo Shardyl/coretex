@@ -32,7 +32,7 @@ from pydantic import BaseModel
 
 from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, engine, fitness, gmail, knowledge,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
-               skillqa, social, social_comments, social_config, social_dm, social_warm, store, webauthn_auth, whatsapp,
+               skillqa, social, social_comments, social_config, social_connect, social_dm, social_warm, store, webauthn_auth, whatsapp,
                worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
@@ -839,6 +839,25 @@ class ConnectResultBody(BaseModel):
     linkedin: str
     ok: bool
     detail: str = ""
+
+
+class AcceptsBody(BaseModel):
+    account: str
+    results: list[dict] = []   # [{linkedin, connected: bool, degree}] from accepts.py
+
+
+@app.get("/api/social/accepts/checks")
+def social_accept_checks(account: str, limit: int = 40, _: None = Depends(_runner_auth)) -> dict:
+    """Invited contacts not yet resolved, for the runner to revisit and check if now connected."""
+    return {"checks": social_connect.pending_accept_checks(account, limit)}
+
+
+@app.post("/api/social/accepts")
+def social_accepts(body: AcceptsBody, _: None = Depends(_runner_auth)) -> dict:
+    """Mark newly-connected invitees accepted (stage->Engaged, notify) and refresh the report."""
+    out = social_connect.ingest_accepts(body.account, body.results)
+    social_connect.connect_report(body.account)
+    return out
 
 
 class RepliesBody(BaseModel):
