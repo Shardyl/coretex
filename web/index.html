@@ -1544,7 +1544,7 @@ async function hydrateAttachments(){
         + a.map(x=> x.is_image
             ? `<img class="attthumb" src="${x.src}" title="${esc(x.name||'image')} · ${x.size_kb}KB" onclick="enlargeImg(this)">`
             : x.library
-              ? `<a class="attfile" href="#" onclick="event.preventDefault();openDoc(${x.doc_id})">${ic('file',15)} <span>${esc(x.name||x.media_type)}</span> <span style="opacity:.55">${x.size_kb}KB</span></a>`
+              ? `<a class="attfile" href="#" onclick="event.preventDefault();openDoc(${x.doc_id},'${esc(x.name||'document')}')">${ic('file',15)} <span>${esc(x.name||x.media_type)}</span> <span style="opacity:.55">${x.size_kb}KB</span></a>`
               : `<a class="attfile" href="${x.src}" download="${esc(x.name||('file-'+x.idx))}">${ic('file',15)} <span>${esc(x.name||x.media_type)}</span> <span style="opacity:.55">${x.size_kb}KB</span></a>`
               + (x.library?`<button class="iconbtn sm" title="Remove from this email" onclick="detachDoc(${id},${x.doc_id})">${ic('x',13)}</button>`:'')
           ).join('') + `</div>`; }
@@ -1569,17 +1569,19 @@ async function openAttachPanel(tid,cid){
     <div class="row" style="margin-bottom:8px"><button class="btn go sm" onclick="pickCardFile(${tid},${cid})">${ic('clip',15)} Upload a file (Desktop / phone)</button></div>
     <div class="meta" style="margin-bottom:6px">${ic('file',14)} Or attach from the company document library:</div>
     ${docs.length?docs.map(d=>have.includes(d.id)
-      ?`<div class="row" style="margin:3px 0;opacity:.6"><span style="flex:1;min-width:0;font-size:13px">${esc(d.filename)}</span><span class="meta">Attached ✓</span></div>`
-      :`<div class="row" style="margin:3px 0"><span style="flex:1;min-width:0;font-size:13px">${esc(d.filename)} <span style="color:var(--mut)">[${esc(d.kind)}]</span></span><button class="btn sm" onclick="attachDoc(${tid},${d.id})">Attach</button></div>`).join('')
+      ?`<div class="row" style="margin:3px 0;opacity:.75"><span style="flex:1;min-width:0;font-size:13px;cursor:pointer;text-decoration:underline" onclick="openDoc(${d.id},'${esc(d.filename)}')">${esc(d.filename)}</span><span class="meta">Attached ✓</span></div>`
+      :`<div class="row" style="margin:3px 0"><span style="flex:1;min-width:0;font-size:13px;cursor:pointer;text-decoration:underline" onclick="openDoc(${d.id},'${esc(d.filename)}')">${esc(d.filename)} <span style="color:var(--mut)">[${esc(d.kind)}]</span></span><button class="btn sm" onclick="attachDoc(${tid},${d.id})">Attach</button></div>`).join('')
       :'<div class="meta">Library is empty — upload above and it is saved for next time.</div>'}</div>`;
 }
-async function openDoc(id){
-  // document downloads need the login token — a plain link 401s, so fetch with auth and open the blob
+async function openDoc(id,name){
+  // document downloads need the login token — a plain link 401s, so fetch with auth and DOWNLOAD the blob
   try{ const r=await fetch(API+'/api/documents/'+id+'/file',{headers:token?{Authorization:'Bearer '+token}:{}});
     if(!r.ok) throw new Error(r.status);
-    const u=URL.createObjectURL(await r.blob()); window.open(u,'_blank');
-    setTimeout(()=>URL.revokeObjectURL(u),600000);
-  }catch(e){ toast('Could not open the document ('+e.message+')'); }
+    const u=URL.createObjectURL(await r.blob());
+    const a=document.createElement('a'); a.href=u; a.download=name||('document-'+id); document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(u),60000);
+    toast('Downloaded ✓');
+  }catch(e){ toast('Could not download the document ('+e.message+')'); }
 }
 async function attachDoc(tid,docId){
   try{ await api('/api/tasks/'+tid+'/attach',{method:'POST',body:JSON.stringify({doc_id:docId})});
