@@ -358,6 +358,7 @@ def _fmt_email(task: dict, skill: dict, company: dict, verdict: dict | None) -> 
 def _clean_email_text(s: str) -> str:
     """Strip markdown so a plain-text email reads neat and professional (no **, #, [](), stray bullets)."""
     s = s or ""
+    s = re.sub(r"^\s*Subject\s*:[^\n]*\n+", "", s, flags=re.I)     # a leaked Subject: header never ships in a body
     s = s.replace("**", "").replace("__", "")                      # bold markers
     s = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", s)                    # markdown headings
     def _link(m):                                                 # [text](url): drop redundant URL text
