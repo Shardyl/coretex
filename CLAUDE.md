@@ -51,6 +51,13 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
   the owner, or a team member with `users.can_approve` using their own PIN at the step-up gate
   (2026-08-22: Gino + Ayresh for Sensa — Rashad is training them to train the system). MONEY-class
   kinds always require the owner's own step-up. Blogs never auto regardless of trust.
+- UNIVERSAL (all-company) rules are OWNER-ONLY (2026-08-27): team members (Gino/Ayresh, scoped to
+  Sensa) can only add/confirm company-scope rules — enforced in the API, Talk's add_rule, and the
+  cockpit UI (scoped users never see the All-companies option).
+- ENVELOPE behaviour (from/cc/bcc) is rule-compiled (2026-08-27): `cortex/envelope.py` distils each
+  skill's effective rules into `skills.envelope` config on every rule change; `_email_envelope` just
+  executes it. Never hardcode cc logic — change the rules and the compiler follows. Safety invariants
+  that stay code: one recipient per send; catch-alls never send.
 - Telegram is a MIRROR, never the flow — its calls are fail-soft (`integrations/telegram.py`);
   keep it that way.
 - Never delete CRM/contact data on your own initiative; merges carry over every non-empty field.
