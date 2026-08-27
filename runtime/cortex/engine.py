@@ -300,10 +300,8 @@ def _email_envelope(task: dict, company: dict) -> dict:
             bcc_list += rb
         except Exception:  # noqa: BLE001
             pass
-    cc_list += [e for e in ((task.get("request") or {}).get("cc_extra") or []) if "@" in e]
-    cc = ", ".join(dict.fromkeys(cc_list))     # dedupe, keep order
-    bcc = ", ".join(dict.fromkeys(bcc_list))
     req = task.get("request") or {}
+    cc_list += [e for e in (req.get("cc_extra") or []) if "@" in e]
     outbound = bool(req.get("outbound"))   # a Talk-composed email_draft (not a reply) — no "Re:" prefix
     subj = inq.get("subject") or "your enquiry"
     from_addr = (req.get("from_email") or data.get("reply_from") or "").strip() or None
@@ -311,6 +309,15 @@ def _email_envelope(task: dict, company: dict) -> dict:
         # HARD policy: catch-all addresses never send — fall back to the company's reply_from person
         from_addr = (data.get("reply_from") or "").strip() or None
         req = {**req, "mailbox_rt": None}   # and never their mailbox token either
+    # cc hygiene, enforced in CODE (the owner's universal rule 'never cc the sender' lives here — the
+    # drafter can't see cc config and prose rules can't reach this layer): drop the sender's own address,
+    # the To recipient, and anything the owner removed by correction (request.cc_remove).
+    drop = {(from_addr or "").lower(), (inq.get("email") or "").lower()} \
+        | {e.lower() for e in (req.get("cc_remove") or [])}
+    cc_list = [e for e in cc_list if e.lower() not in drop]
+    bcc_list = [e for e in bcc_list if e.lower() not in drop]
+    cc = ", ".join(dict.fromkeys(cc_list))     # dedupe, keep order
+    bcc = ", ".join(dict.fromkeys(bcc_list))
     # per-sender signature: a reply sent FROM a specific person (e.g. gino@sensa.digital) carries THEIR
     # signature (profile.signatures[email]); otherwise the company default.
     sender_sig = (data.get("signatures") or {}).get((from_addr or "").lower()) or {}
@@ -1203,9 +1210,11 @@ def _apply_envelope_directives(task: dict, text: str) -> dict | None:
         roster = ", ".join(f"{w} <{v['email']}>" for w, v in senders.items())
         out = provider.think_json(
             "Owner feedback on an email draft. Does it EXPLICITLY ask to change WHO the email is sent "
-            f"from, or to ADD people on cc? Known team mailboxes: {roster}. Return JSON "
-            '{"from": "<first name of the new sender, or empty if unchanged>", '
-            '"cc": ["<first names to add on cc>"]} — empty values unless the feedback clearly says so.',
+            f"from, to ADD people on cc, or to REMOVE someone from cc? Known team mailboxes: {roster}. "
+            'Return JSON {"from": "<first name of the new sender, or empty if unchanged>", '
+            '"cc": ["<first names to add on cc>"], '
+            '"cc_remove": ["<first names or exact email addresses to remove from cc>"]} '
+            "— empty values unless the feedback clearly says so.",
             (text or "")[:600], model=provider.MODEL_ROUTER, purpose="correction-envelope",
             company=(store.get_company(task["company_id"]) or {}).get("slug"))
         if not isinstance(out, dict):
@@ -1223,6 +1232,19 @@ def _apply_envelope_directives(task: dict, text: str) -> dict | None:
                 if isinstance(c, str) and c.strip().lower() in senders]
         if adds:
             req["cc_extra"] = sorted(set((req.get("cc_extra") or []) + adds))
+            changed = True
+        rems = []
+        for c in (out.get("cc_remove") or []):
+            if not isinstance(c, str):
+                continue
+            c = c.strip().lower()
+            if c in senders:
+                rems.append(senders[c]["email"])
+            elif "@" in c:                     # an exact address named in the feedback
+                rems.append(c)
+        if rems:
+            req["cc_remove"] = sorted(set((req.get("cc_remove") or []) + rems))
+            req["cc_extra"] = [e for e in (req.get("cc_extra") or []) if e.lower() not in set(rems)]
             changed = True
         if not changed:
             return None
