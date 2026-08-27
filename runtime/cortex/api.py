@@ -427,6 +427,7 @@ def del_skill_rule(skill_id: int, body: RuleIdx, _: None = Depends(auth)) -> dic
         if 0 <= body.index < len(rules):
             rules.pop(body.index)
         db.execute("update skills set rules=%s::jsonb, updated_at=now() where id=%s", (json.dumps(rules), skill_id))
+    store._recompile_envelope(skill_id=skill_id)
     return _skill_with_rules(skill_id)
 
 

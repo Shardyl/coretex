@@ -24,9 +24,9 @@ from datetime import datetime, timedelta, timezone
 
 from psycopg.types.json import Json
 
-from . import (contentqueue, crm, db, doctext, documents, gmail, manager, media, newsletter, notifications,
-               profile, ppc_report, provider, quotation, reminders, schedule, seo_report, store,
-               webauthn_auth, whatsapp, worker)
+from . import (contentqueue, crm, db, doctext, documents, envelope, gmail, manager, media, newsletter,
+               notifications, profile, ppc_report, provider, quotation, reminders, schedule, seo_report,
+               store, webauthn_auth, whatsapp, worker)
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -295,11 +295,13 @@ def _email_envelope(task: dict, company: dict) -> dict:
             if "@" in v:
                 bcc_list.append(v)
         try:
-            rc, rb = _rule_recipients(store.get_skill(task.get("skill_id")))
-            cc_list += rc
-            bcc_list += rb
+            # COMPILED envelope config — distilled from the skill's rules by envelope.compile_skill()
+            # whenever rules change. Rules are the only source of cc behaviour; this just executes.
+            _ecfg = envelope.get(store.get_skill(task.get("skill_id"))) or {}
+            cc_list += [e for e in _ecfg.get("cc_add", []) if "@" in e]
+            bcc_list += [e for e in _ecfg.get("bcc_add", []) if "@" in e]
         except Exception:  # noqa: BLE001
-            pass
+            _ecfg = {}
     req = task.get("request") or {}
     cc_list += [e for e in (req.get("cc_extra") or []) if "@" in e]
     outbound = bool(req.get("outbound"))   # a Talk-composed email_draft (not a reply) — no "Re:" prefix
@@ -309,11 +311,18 @@ def _email_envelope(task: dict, company: dict) -> dict:
         # HARD policy: catch-all addresses never send — fall back to the company's reply_from person
         from_addr = (data.get("reply_from") or "").strip() or None
         req = {**req, "mailbox_rt": None}   # and never their mailbox token either
-    # cc hygiene, enforced in CODE (the owner's universal rule 'never cc the sender' lives here — the
-    # drafter can't see cc config and prose rules can't reach this layer): drop the sender's own address,
-    # the To recipient, and anything the owner removed by correction (request.cc_remove).
-    drop = {(from_addr or "").lower(), (inq.get("email") or "").lower()} \
-        | {e.lower() for e in (req.get("cc_remove") or [])}
+    # cc exclusions — RULE-driven via the compiled envelope config (never_cc), plus the owner's per-card
+    # removals (request.cc_remove). The only mechanical part is deduping the To recipient out of cc.
+    try:
+        _nc = [str(x).lower() for x in (envelope.get(store.get_skill(task.get("skill_id"))) or {}).get("never_cc", [])]
+    except Exception:  # noqa: BLE001
+        _nc = []
+    drop = {e.lower() for e in (req.get("cc_remove") or [])}
+    drop.add((inq.get("email") or "").lower())            # To-recipient in cc = duplicate mail, always deduped
+    if "sender" in _nc and from_addr:
+        drop.add(from_addr.lower())
+    drop |= {x for x in _nc if "@" in x}
+    drop.discard("")
     cc_list = [e for e in cc_list if e.lower() not in drop]
     bcc_list = [e for e in bcc_list if e.lower() not in drop]
     cc = ", ".join(dict.fromkeys(cc_list))     # dedupe, keep order

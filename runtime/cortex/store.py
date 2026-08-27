@@ -46,10 +46,25 @@ def upsert_skill(company_id, key, name, craft, authority="ask", stakes="low", au
 
 
 def add_rule(skill_id, rule: str) -> dict:
-    return db.execute(
+    r = db.execute(
         "update skills set rules = rules || %s::jsonb, updated_at=now() where id=%s returning *",
         (Json([rule]), skill_id),
     )
+    _recompile_envelope(skill_id=skill_id)
+    return r
+
+
+def _recompile_envelope(skill_id=None, skill_key=None) -> None:
+    """Rules changed -> the compiled envelope config must follow (dumb-waiter doctrine: rules are the
+    only source of envelope behaviour). Fail-soft: a compile hiccup never blocks the rule change."""
+    try:
+        from . import envelope
+        if skill_id is not None:
+            envelope.compile_skill(skill_id)
+        if skill_key:
+            envelope.compile_key(skill_key)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def examples_block(company_id: int, content_type: str, limit: int = 2, cap: int = 3500) -> str:
@@ -80,6 +95,7 @@ def add_universal_rule(skill_key: str, rule: str) -> list:
     db.execute("insert into universal_skill_rules (skill_key, rules) values (%s, %s) "
                "on conflict (skill_key) do update set rules=%s, updated_at=now()",
                (skill_key, Json(rules), Json(rules)))
+    _recompile_envelope(skill_key=skill_key)
     return rules
 
 
@@ -90,6 +106,7 @@ def remove_universal_rule(skill_key: str, index: int) -> list:
     db.execute("insert into universal_skill_rules (skill_key, rules) values (%s, %s) "
                "on conflict (skill_key) do update set rules=%s, updated_at=now()",
                (skill_key, Json(rules), Json(rules)))
+    _recompile_envelope(skill_key=skill_key)
     return rules
 
 
