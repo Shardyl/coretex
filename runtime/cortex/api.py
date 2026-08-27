@@ -2596,6 +2596,7 @@ def task_attach(task_id: int, body: TaskAttach, u: dict = Depends(current_user))
     refs.append({"id": d["id"], "filename": d["filename"], "mime": d["mime"], "size": d["size"]})
     req["attach_docs"] = refs
     store.update_task(task_id, request=req)
+    engine.reconcile_attachments(task_id)   # draft wording follows reality ('attached' vs 'we will send')
     return {"ok": True, "attached": req["attach_docs"]}
 
 
@@ -2609,6 +2610,7 @@ def task_detach(task_id: int, body: TaskAttach, u: dict = Depends(current_user))
     req = dict(t.get("request") or {})
     req["attach_docs"] = [r for r in (req.get("attach_docs") or []) if int(r.get("id", 0)) != (body.doc_id or 0)]
     store.update_task(task_id, request=req)
+    engine.reconcile_attachments(task_id)
     return {"ok": True, "attached": req["attach_docs"]}
 
 
@@ -3402,6 +3404,7 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         refs2.append({"id": d["id"], "filename": d["filename"], "mime": d["mime"], "size": d["size"]})
         req2["attach_docs"] = refs2
         store.update_task(t2["id"], request=req2)
+        engine.reconcile_attachments(t2["id"])
         return f"Attached '{d['filename']}' to card #{t2['id']} — it sends with that email on approval."
     return f"unknown tool {name}"
 

@@ -123,7 +123,7 @@ _EMAIL_BODY_RULE = (
 
 def draft(skill: dict, company: dict, request: dict,
           correction: str | None = None, manager_feedback: list[str] | None = None,
-          author: str | None = None) -> str:
+          author: str | None = None, prev_draft: str | None = None) -> str:
     is_email = isinstance(request, dict) and bool(request.get("outbound") or request.get("inquiry"))
     system = "\n\n".join(filter(None, [
         f"You are Cortex's worker for the '{skill['name']}' skill.",
@@ -179,6 +179,11 @@ def draft(skill: dict, company: dict, request: dict,
         user.insert(0, " ".join(bits))
     if atts:
         user.append(f"{len(atts)} file(s)/image(s) are attached below — use them as source material for the deliverable.")
+    _docs = [r.get("filename") for r in (request.get("attach_docs") or []) if r.get("filename")]         if isinstance(request, dict) else []
+    if _docs:
+        user.append("FILES ATTACHED TO THIS OUTGOING EMAIL (they genuinely send with it): "
+                    + ", ".join(_docs) + " — refer to them as attached NOW ('please find attached'); "
+                    "NEVER promise to send them later.")
     _meet = ((request.get("meeting") or {}).get("meet") or "").strip() if isinstance(request, dict) else ""
     if _meet:
         user.append(f"A meeting is CONFIRMED and already booked. Its REAL Google Meet link is {_meet} — "

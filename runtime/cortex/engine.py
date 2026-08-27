@@ -1187,7 +1187,7 @@ def apply_correction(task: dict, text: str) -> None:
         _maybe_propose_rule(task, skill, text, old or "", "(no email sent — the owner said no reply is needed)")
         return
 
-    new = worker.draft(skill, company, _request_for_draft(task), correction=text)
+    new = worker.draft(skill, company, _request_for_draft(task), correction=text, prev_draft=old)
     # corrections bypass the Manager by design (the owner is reviewing personally) — clear any verdict
     # from the PREVIOUS pass so a stale flag never scares the owner off his own corrected draft
     task = store.update_task(task["id"], draft=new, status="awaiting_approval", manager=None,
@@ -1375,6 +1375,30 @@ def _maybe_extract_meeting(task: dict, draft: str) -> None:
         store.update_task(task["id"], request=req)
     except Exception:  # noqa: BLE001 — booking is a bonus; the draft must never fail because of it
         pass
+
+
+def reconcile_attachments(task_id: int) -> None:
+    """A document was attached to (or removed from) a card that already has a draft: revise the draft
+    OFF-THREAD so the wording matches reality ('please find attached' vs 'we will send'), preserving
+    everything else. System reconcile — no owner decision logged, manager untouched."""
+    def _run():
+        try:
+            t = store.get_task(task_id)
+            if not t or not (t.get("draft") or "").strip() or t.get("status") not in (
+                    "awaiting_approval", "awaiting_correction", "new"):
+                return
+            skill, company = store.get_skill(t["skill_id"]), store.get_company(t["company_id"])
+            names = [r.get("filename") for r in ((t.get("request") or {}).get("attach_docs") or [])]
+            note = ("(system note, not from the owner) The attachments on this email JUST CHANGED. Files now "
+                    "genuinely attached: " + (", ".join(n for n in names if n) or "(none)") + ". Revise ONLY "
+                    "the wording that references sending/attaching documents so it matches — reference "
+                    "attached files as attached, never as coming later; keep every other sentence as it is.")
+            new = worker.draft(skill, company, _request_for_draft(t), correction=note,
+                               prev_draft=t.get("draft"))
+            store.update_task(task_id, draft=new)
+        except Exception:  # noqa: BLE001 — reconcile is a bonus pass; the card stays usable without it
+            pass
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _correction_means_no_reply(text: str) -> bool:
