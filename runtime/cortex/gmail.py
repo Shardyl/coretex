@@ -204,6 +204,14 @@ def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
     r = httpx.post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
                    headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"},
                    json=payload, timeout=30)
+    if r.status_code == 404 and thread_id:
+        # threadIds are mailbox-local: a card rerouted to another sender carries a foreign threadId and
+        # Gmail 404s the send. Drop it and retry — the In-Reply-To/References headers still chain the
+        # reply into the recipient's conversation, which is what actually matters.
+        payload.pop("threadId", None)
+        r = httpx.post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+                       headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"},
+                       json=payload, timeout=30)
     r.raise_for_status()
     return r.json()
 
