@@ -2376,6 +2376,13 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
                         _notify_new_opportunity(co, opp, "auto-qualified from direct email")
             except Exception:  # noqa: BLE001 — qualification is best-effort; the reply card must exist regardless
                 pass
+        # RE-CHECK the open-card state at WRITE time: qualification, attachment refs and the sticky-sender
+        # lookup above can take many seconds, and the same email lands in several team mailboxes — a sibling
+        # copy may have written a card in that gap (bit Sunwoo/ECBD: cards #358+#359, 2026-08-27).
+        dup = db.one("select id, request from tasks where company_id=%s and kind='email_reply' and "
+                     "status in ('new','drafting','awaiting_approval','awaiting_correction') and "
+                     "lower(request->'inquiry'->>'email')=lower(%s) order by id desc limit 1",
+                     (co["id"], sender))
         if dup:                                 # supersede the stale open card with their latest email
             oldreq = dup.get("request") or {}
             old = (oldreq.get("inquiry") or {}).get("message") or ""
