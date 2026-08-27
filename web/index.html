@@ -521,6 +521,7 @@ async function boot(){
   try{ companies = await api('/api/companies'); }
   catch(e){ companies=[]; }
   const sel=document.getElementById('coSel'); const single=companies.length===1;
+  window.isScopedUser=single;   // team member scoped to one company: never offered cross-company powers
   // a scoped (single-company) user: no "All companies" option — they only ever see their company
   sel.innerHTML=(single?'':'<option value="">All companies</option>')+
     companies.map(c=>`<option value="${c.slug}">${c.name}</option>`).join('');
@@ -1437,7 +1438,7 @@ async function renderPendingRules(skipIds){
         <div style="background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:14px;margin-bottom:9px">${esc(p.rule)}</div>
         <div class="row" style="flex-wrap:wrap;gap:7px">
           <button class="btn go sm" onclick="decideRule(${p.task_id},true,'company')">${ic('check',14)} ${esc(p.company||'This company')} only</button>
-          <button class="btn go sm" onclick="decideRule(${p.task_id},true,'universal')">${ic('grid',14)} All companies</button>
+          ${window.isScopedUser?'':`<button class="btn go sm" onclick="decideRule(${p.task_id},true,'universal')">${ic('grid',14)} All companies</button>`}
           <button class="btn sm" onclick="decideRule(${p.task_id},false,'company')">Dismiss</button></div>
       </div>`).join('');
 }
@@ -1946,7 +1947,7 @@ function proposeRule(id, rule, skillName, co){
     <div style="background:var(--bg2,#0e1620);border:1px solid #2563EB66;border-radius:11px;padding:10px 12px;font-size:14px;color:var(--fg,#dfe7ef);margin-bottom:10px">${esc(rule)}</div>
     <div class="row" style="flex-wrap:wrap;gap:7px">
       <button class="btn go" onclick="decideRule(${id},true,'company')">${ic('check',15)} ${esc(co||'This company')} only</button>
-      <button class="btn go" onclick="decideRule(${id},true,'universal')">${ic('grid',15)} All companies (universal)</button>
+      ${window.isScopedUser?'':`<button class="btn go" onclick="decideRule(${id},true,'universal')">${ic('grid',15)} All companies (universal)</button>`}
       <button class="btn" onclick="decideRule(${id},false,'company')">No, just this once</button></div>`;
 }
 async function decideRule(id, add, scope){
@@ -2556,13 +2557,13 @@ function paintSkills(){
         if(so){
           html+=`<div class="sdetail"><div class="craftlabel">Craft <span class="rulehint">the method, universal</span></div><div class="craft">${esc(s.craft||'')}</div>`;
           html+=`<div class="craftlabel">${ic('globe',13)} Universal rules <span class="rulehint">all companies</span></div>`;
-          if(ur.length) ur.forEach((r,i)=>{ html+=`<div class="rule uni"><span>${esc(r)}</span><button class="rx" onclick="event.stopPropagation();delRule(${s.id},${i},'universal')">${ic('x',13)}</button></div>`; });
+          if(ur.length) ur.forEach((r,i)=>{ html+=`<div class="rule uni"><span>${esc(r)}</span>${window.isScopedUser?'':`<button class="rx" onclick="event.stopPropagation();delRule(${s.id},${i},'universal')">${ic('x',13)}</button>`}</div>`; });
           else html+=`<div class="norule">None yet.</div>`;
           html+=`<div class="craftlabel">${ic('building',13)} ${esc(skillsCoName)} only</div>`;
           if(lr.length) lr.forEach((r,i)=>{ html+=`<div class="rule"><span>${esc(r)}</span><button class="rx" onclick="event.stopPropagation();delRule(${s.id},${i},'company')">${ic('x',13)}</button></div>`; });
           else html+=`<div class="norule">None yet.</div>`;
           html+=`<div class="addrule">
-            <select class="rscope" id="rs${s.id}" onclick="event.stopPropagation()"><option value="company">${esc(skillsCoName)} only</option><option value="universal">Universal (all companies)</option></select>
+            <select class="rscope" id="rs${s.id}" onclick="event.stopPropagation()"><option value="company">${esc(skillsCoName)} only</option>${window.isScopedUser?'':'<option value="universal">Universal (all companies)</option>'}</select>
             <input id="nr${s.id}" placeholder="Add a rule…" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.stopPropagation();addRule(${s.id})}">
             <button class="btn go" onclick="event.stopPropagation();addRule(${s.id})">Add</button></div>`;
           html+=qaSection(s)+`</div>`;

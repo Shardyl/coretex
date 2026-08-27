@@ -396,14 +396,17 @@ class RuleBody(BaseModel):
 
 
 @app.post("/api/skills/{skill_id}/rule")
-def add_skill_rule(skill_id: int, body: RuleBody, _: None = Depends(auth)) -> dict:
+def add_skill_rule(skill_id: int, body: RuleBody, u: dict = Depends(current_user)) -> dict:
     sk = store.get_skill(skill_id)
     if not sk:
         raise HTTPException(status_code=404, detail="no such skill")
+    _assert_company_allowed(u, sk["company_id"])
     rule = (body.rule or "").strip()
     if not rule:
         raise HTTPException(status_code=400, detail="empty rule")
     if body.scope == "universal":
+        if (u or {}).get("role") != "owner":   # cross-company rules are the owner's call alone
+            raise HTTPException(status_code=403, detail="Only the owner can set a rule across all companies.")
         store.add_universal_rule(sk["skill_key"], rule)
     else:
         store.add_rule(skill_id, rule)
@@ -416,11 +419,14 @@ class RuleIdx(BaseModel):
 
 
 @app.post("/api/skills/{skill_id}/rule/delete")
-def del_skill_rule(skill_id: int, body: RuleIdx, _: None = Depends(auth)) -> dict:
+def del_skill_rule(skill_id: int, body: RuleIdx, u: dict = Depends(current_user)) -> dict:
     sk = store.get_skill(skill_id)
     if not sk:
         raise HTTPException(status_code=404, detail="no such skill")
+    _assert_company_allowed(u, sk["company_id"])
     if body.scope == "universal":
+        if (u or {}).get("role") != "owner":
+            raise HTTPException(status_code=403, detail="Only the owner can change all-company rules.")
         store.remove_universal_rule(sk["skill_key"], body.index)
     else:
         rules = list(sk.get("rules") or [])
@@ -2621,7 +2627,11 @@ class RuleDecision(BaseModel):
 @app.post("/api/tasks/{task_id}/rule")
 def task_rule(task_id: int, body: RuleDecision, u: dict = Depends(current_user)) -> dict:
     _guard_task(u, task_id)
-    """Confirm/dismiss the rule Cortex inferred from a correction, at the owner's chosen scope (from the cockpit)."""
+    """Confirm/dismiss the rule Cortex inferred from a correction, at the chosen scope. UNIVERSAL scope
+    (every company) is the OWNER'S call alone — team members are scoped to their company."""
+    if body.scope == "universal" and (u or {}).get("role") != "owner":
+        raise HTTPException(status_code=403, detail="Only the owner can set a rule across all companies — "
+                                                    "save it for your company, and Rashad can widen it.")
     return engine.decide_rule(task_id, body.add, body.scope)
 
 
@@ -3493,7 +3503,7 @@ class ChatTurn(BaseModel):
     image_names: list[str] | None = None  # original filenames, parallel to images (for display + send)
 
 
-def _chat_prepare(body: ChatTurn):
+def _chat_prepare(body: ChatTurn, user: dict | None = None):
     """Shared prep for /api/chat and /api/chat/stream: build the working-memory window, route to a persona,
     attach images, resolve (system, tools), and build the tool executor. Returns (msgs, chosen, system, tools, exec)."""
     msgs = [{"role": m.get("role"), "content": m.get("content", "")} for m in body.messages
@@ -3518,13 +3528,16 @@ def _chat_prepare(body: ChatTurn):
     def _exec(name: str, inp: dict) -> str:   # carry the turn's attachments through when a tool drafts/creates
         if name in ("create_task", "draft", "draft_email", "save_document") and body.images:
             inp = {**inp, "_images": body.images, "_image_names": body.image_names}
+        if name == "add_rule" and inp.get("scope") == "universal" and (user or {}).get("role") != "owner":
+            return ("Universal (all-company) rules are the owner's call alone. Save it for this user's own "
+                    "company instead, and tell them Rashad can widen it to all companies.")
         return _exec_skill_tool(name, inp)
     return msgs, chosen, system, tools, _exec
 
 
 @app.post("/api/chat")
-def chat(body: ChatTurn, _: None = Depends(auth)) -> dict:
-    msgs, chosen, system, tools, _exec = _chat_prepare(body)
+def chat(body: ChatTurn, u: dict = Depends(current_user)) -> dict:
+    msgs, chosen, system, tools, _exec = _chat_prepare(body, u)
     reply = provider.chat_tools(system, msgs, tools, _exec,
                                 purpose=f"chat:{chosen}" if chosen else "chat", company=body.company)
     return {"reply": reply, "persona": chosen, "persona_label": personas.label(chosen)}
@@ -3535,11 +3548,11 @@ def _sse(event: str, data: dict) -> str:
 
 
 @app.post("/api/chat/stream")
-def chat_stream(body: ChatTurn, _: None = Depends(auth)) -> StreamingResponse:
+def chat_stream(body: ChatTurn, u: dict = Depends(current_user)) -> StreamingResponse:
     """Streaming chat: the SAME agentic loop as /api/chat, emitted as Server-Sent Events so the reply paints live
     AND the connection never idles past a proxy's ~100s ceiling (the Cloudflare 524 that caused the timeouts).
     Events: meta (persona) -> delta* (text) / tool (name) -> done (full reply) -> [error]."""
-    msgs, chosen, system, tools, _exec = _chat_prepare(body)   # 400s raised here, before streaming starts
+    msgs, chosen, system, tools, _exec = _chat_prepare(body, u)   # 400s raised here, before streaming starts
 
     def gen():
         yield _sse("meta", {"persona": chosen, "persona_label": personas.label(chosen)})
