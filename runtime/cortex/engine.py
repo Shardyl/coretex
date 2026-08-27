@@ -521,23 +521,19 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         return {"blocked": True, "error": "Email sending is PAUSED. Resume it to send this reply."}
     env = _email_envelope(task, company)
     mt = (task.get("request") or {}).get("meeting")
-    if mt and not mt.get("invited"):   # confirmed slot -> event + Meet must exist and the guest must be on it
+    if mt and not mt.get("event_id"):   # confirmed slot -> the event + Meet room must exist (still guest-less)
         from . import calendar as gcal
         _slug = (company or {}).get("slug") or ""
         cal_co = mt.get("calendar") or (_slug if db.setting_get(f"calendar_refresh_token:{_slug}") else "sensa")
         try:
-            if not mt.get("event_id"):     # pre-booking didn't happen -> book now, guest included
-                ev = gcal.create_event(cal_co, start=datetime.fromisoformat(mt["start"]),
-                                       minutes=int(mt.get("minutes") or 30),
-                                       summary=mt.get("summary") or "Call", attendee=env["to"],
-                                       description=f"Booked via Cortex approval (task #{task['id']}).", meet=True)
-                mt = {**mt, "event_id": ev.get("id"), "meet": ev.get("meet") or ""}
-            else:                          # pre-booked for the draft -> approval adds the guest (Google invites them)
-                gcal.add_attendee(cal_co, mt["event_id"], env["to"])
+            ev = gcal.create_event(cal_co, start=datetime.fromisoformat(mt["start"]),
+                                   minutes=int(mt.get("minutes") or 30),
+                                   summary=mt.get("summary") or "Call",
+                                   description=f"Booked via Cortex approval (task #{task['id']}).", meet=True)
         except Exception as ex:  # noqa: BLE001 — never send an email promising a meeting we failed to book
             store.update_task(task["id"], status="awaiting_approval")
             return {"blocked": True, "error": f"Couldn't book the calendar/Meet: {ex}. Nothing was sent — approve again to retry."}
-        mt = {**mt, "calendar": cal_co, "invited": True}
+        mt = {**mt, "event_id": ev.get("id"), "meet": ev.get("meet") or "", "calendar": cal_co}
         task = dict(task)
         task["request"] = {**(task.get("request") or {}), "meeting": mt}
         if mt.get("meet") and mt["meet"] not in (task.get("draft") or ""):
@@ -589,6 +585,19 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
             crm.resume_followups(int(did))
     except Exception:  # noqa: BLE001 — cadence bookkeeping must never block the send
         pass
+    try:   # the guest joins the calendar event only AFTER the email genuinely went — never an invite
+        # for an unsent mail (a blocked approve once invited Sunwoo to a meeting the email never confirmed)
+        mt2 = (task.get("request") or {}).get("meeting")
+        if mt2 and mt2.get("event_id") and not mt2.get("invited"):
+            from . import calendar as gcal
+            gcal.add_attendee(mt2.get("calendar") or (company or {}).get("slug") or "sensa",
+                              mt2["event_id"], env["to"])
+            store.update_task(task["id"], request={**(task.get("request") or {}),
+                                                   "meeting": {**mt2, "invited": True}})
+    except Exception as ex:  # noqa: BLE001 — the email is already sent; surface the invite failure instead
+        notifications.notify(f"Email sent, but adding {env['to']} to the calendar event failed: {ex}. "
+                             "Add them by hand on the calendar.", "Meeting invite", category="reminder",
+                             company_id=task.get("company_id"))
     store.update_task(task["id"], status="done")
     store.log_decision(task["id"], skill["id"], actor, "send",
                        snapshot={"to": env["to"], "cc": env["cc"], "bcc": env.get("bcc"),
@@ -1351,8 +1360,18 @@ def _maybe_extract_meeting(task: dict, draft: str) -> None:
         dt = datetime.fromisoformat(s if ("+" in s or s.endswith("Z")) else s + "+04:00")
         if dt < datetime.now(timezone.utc) or dt > datetime.now(timezone.utc) + timedelta(days=180):
             return                                     # implausible stamp -> no booking, never a wrong one
-        req["meeting"] = {"start": dt.isoformat(), "minutes": int(out.get("minutes") or 30),
-                          "summary": (out.get("summary") or "Intro call")[:80]}
+        # the SAME slot with the SAME contact may already be booked from an earlier card — reuse that
+        # event and its Meet link instead of double-booking (Sunwoo got two invites, 2026-08-27)
+        prior = db.one("select request->'meeting' m from tasks where company_id=%s and "
+                       "lower(request->'inquiry'->>'email')=lower(%s) and "
+                       "request->'meeting'->>'event_id' is not null and request->'meeting'->>'start'=%s "
+                       "order by id desc limit 1",
+                       (task["company_id"], (req.get("inquiry") or {}).get("email") or "", dt.isoformat()))
+        if prior and prior.get("m"):
+            req["meeting"] = prior["m"]
+        else:
+            req["meeting"] = {"start": dt.isoformat(), "minutes": int(out.get("minutes") or 30),
+                              "summary": (out.get("summary") or "Intro call")[:80]}
         store.update_task(task["id"], request=req)
     except Exception:  # noqa: BLE001 — booking is a bonus; the draft must never fail because of it
         pass
