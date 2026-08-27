@@ -2250,7 +2250,7 @@ def _request_for_draft(task: dict) -> dict:
     req = dict(task.get("request") or {})
     refs = req.get("inbound_attachments") or []
     if not refs:
-        return req
+        return _draft_context_for_reply(task, req)
     datas = list(req.get("attachments") or [])
     texts = []
     for r in refs[:4]:
@@ -2274,6 +2274,33 @@ def _request_for_draft(task: dict) -> dict:
         req["attachments"] = datas
     if texts:
         req["attachment_texts"] = texts
+    return _draft_context_for_reply(task, req)
+
+
+def _draft_context_for_reply(task: dict, req: dict) -> dict:
+    """CONVERSATION MEMORY for reply drafting, resolved fresh at draft time: the real recent thread with
+    this contact (including what WE already sent) and any meeting already booked with them — so a draft
+    can never re-introduce, contradict an earlier email, or hand out a second meeting link."""
+    email = ((req.get("inquiry") or {}).get("email") or "").strip()
+    if task.get("kind") != "email_reply" or not email:
+        return req
+    try:
+        co = store.get_company(task.get("company_id")) or {}
+        hist = _deal_thread_context(co, email, limit=4)
+        if hist:
+            req["thread_history"] = hist
+    except Exception:  # noqa: BLE001 — context is best-effort, drafting proceeds regardless
+        pass
+    try:
+        fm = db.one("select request->'meeting' m from tasks where company_id=%s and id<>%s and "
+                    "lower(request->'inquiry'->>'email')=lower(%s) and "
+                    "request->'meeting'->>'event_id' is not null and "
+                    "(request->'meeting'->>'start')::timestamptz > now() order by id desc limit 1",
+                    (task["company_id"], task.get("id"), email))
+        if fm and fm.get("m"):
+            req["existing_meeting"] = fm["m"]
+    except Exception:  # noqa: BLE001
+        pass
     return req
 
 

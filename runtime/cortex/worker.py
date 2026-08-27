@@ -179,6 +179,17 @@ def draft(skill: dict, company: dict, request: dict,
         user.insert(0, " ".join(bits))
     if atts:
         user.append(f"{len(atts)} file(s)/image(s) are attached below — use them as source material for the deliverable.")
+    _hist = (request.get("thread_history") or "").strip() if isinstance(request, dict) else ""
+    if _hist:
+        user.append("CONVERSATION HISTORY with this contact (newest first — includes emails WE already sent). "
+                    "Stay consistent with it: never re-introduce yourself or the company, never repeat or "
+                    "contradict something already sent, and NEVER share a meeting link different from one "
+                    "already sent in this history.\n" + _hist[:5000])
+    _exm = request.get("existing_meeting") if isinstance(request, dict) else None
+    if _exm and _exm.get("meet"):
+        user.append(f"A meeting with this contact is ALREADY BOOKED: '{_exm.get('summary')}' at "
+                    f"{_exm.get('start')}, Google Meet {_exm['meet']}. Do NOT propose, arrange or imply any "
+                    "other meeting; when the draft mentions the call, use THAT exact link and time.")
     _docs = [r.get("filename") for r in (request.get("attach_docs") or []) if r.get("filename")]         if isinstance(request, dict) else []
     if _docs:
         user.append("FILES ATTACHED TO THIS OUTGOING EMAIL (they genuinely send with it): "
