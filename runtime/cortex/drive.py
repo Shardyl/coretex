@@ -85,3 +85,55 @@ def upload(parent_id: str, filename: str, mime: str, data: bytes, token: str | N
                    headers={"Authorization": f"Bearer {token}"}, files=files, timeout=180)
     r.raise_for_status()
     return r.json()["id"]
+
+
+def ensure_client_folder(client_name: str, parent_id: str, token: str | None = None) -> dict:
+    """Find-or-create the client's folder inside the SENSA CLIENTS shared-drive folder, refusing to
+    create near-duplicates: matching is case-insensitive on the trimmed name, and close variants
+    (the name contained in an existing folder or vice versa) are returned as `candidates` instead of
+    silently creating a twin. Returns {id, name, created, candidates}."""
+    tok = token or access_token()
+    H = {"Authorization": f"Bearer {tok}"}
+    q = {"q": f"'{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
+         "includeItemsFromAllDrives": "true", "supportsAllDrives": "true",
+         "pageSize": 200, "fields": "files(id,name)"}
+    r = httpx.get(f"{API}/files", params=q, headers=H, timeout=30)
+    r.raise_for_status()
+    existing = r.json().get("files", [])
+    want = (client_name or "").strip()
+    wl = want.lower()
+    for f in existing:                                   # exact (case-insensitive) match wins
+        if f["name"].strip().lower() == wl:
+            return {"id": f["id"], "name": f["name"], "created": False, "candidates": []}
+    near = [f for f in existing if wl in f["name"].lower() or f["name"].strip().lower() in wl]
+    if near:                                             # near-duplicate: surface, never create a twin
+        return {"id": None, "name": want, "created": False,
+                "candidates": [{"id": f["id"], "name": f["name"]} for f in near]}
+    c = httpx.post(f"{API}/files", params={"supportsAllDrives": "true"}, headers=H,
+                   json={"name": want, "mimeType": "application/vnd.google-apps.folder",
+                         "parents": [parent_id]}, timeout=30)
+    c.raise_for_status()
+    return {"id": c.json()["id"], "name": want, "created": True, "candidates": []}
+
+
+def upload_to_folder(folder_id_: str, filename: str, mime: str, data: bytes, token: str | None = None) -> str:
+    """Upload bytes as a new file into a shared-drive folder; returns the file id."""
+    tok = token or access_token()
+    meta = json.dumps({"name": filename, "parents": [folder_id_]})
+    body = (b"--b
+Content-Type: application/json; charset=UTF-8
+
+" + meta.encode()
+            + b"
+--b
+Content-Type: " + mime.encode() + b"
+
+" + data + b"
+--b--")
+    r = httpx.post("https://www.googleapis.com/upload/drive/v3/files",
+                   params={"uploadType": "multipart", "supportsAllDrives": "true"},
+                   headers={"Authorization": f"Bearer {tok}",
+                            "Content-Type": "multipart/related; boundary=b"},
+                   content=body, timeout=120)
+    r.raise_for_status()
+    return r.json()["id"]

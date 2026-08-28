@@ -2987,8 +2987,9 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
             tg.send(f"Quotation {number} {kind} rendered but R2 upload failed ({e}); the Inbox download works.")
             return None
 
+    drive_note = _push_quote_to_client_drive(co, customer, number, x, pdf_path)
     skill = store.get_skill_by_key(co["id"], QUOTE_SKILL_KEY)
-    req = {"kind": "quotation", "company": company,
+    req = {"kind": "quotation", "company": company, "client_drive": drive_note,
            "file": pdf_path, "r2_url": _r2(pdf_path, "pdf"),
            "xlsx_file": xlsx_path, "xlsx_r2_url": _r2(xlsx_path, "xlsx"),
            "number": number, "title": x["title"], "summary": x["summary"], "customer": customer,
@@ -2997,6 +2998,44 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
         "insert into tasks (company_id,skill_id,kind,request,draft,status,origin,title) "
         "values (%s,%s,'quotation',%s,%s,'awaiting_approval','talk',%s) returning *",
         (co["id"], skill["id"] if skill else None, Json(req), x["summary"], x["title"]))
+
+
+def _push_quote_to_client_drive(co: dict, customer: str, number: str, x: dict, pdf_path: str | None) -> dict:
+    """House filing rule: every quotation version lands in the client's folder under SENSA CLIENTS on the
+    shared drive, named `<number> vN - YYYY-MM-DD`, so the team can review and relabel amendments. The
+    client folder is found-or-created with duplicate protection; a near-duplicate name blocks filing and
+    is reported on the card instead. Fail-soft: a Drive hiccup never loses the quotation card."""
+    from . import drive as _drive
+    try:
+        prof = profile.get(co["id"]) or {}
+        parent = (prof.get("clients_drive_folder") or "").strip()
+        client = (customer or "").split(",")[0].strip()
+        if not parent or not client:
+            return {"filed": False, "reason": "no clients_drive_folder configured" if not parent else "no client name"}
+        tok = _drive.access_token()
+        f = _drive.ensure_client_folder(client, parent, token=tok)
+        if not f.get("id"):
+            return {"filed": False, "reason": "near-duplicate client folders — pick one and file manually",
+                    "candidates": f.get("candidates")}
+        # version = count of existing files for this quote number, + 1
+        import httpx as _hx
+        r = _hx.get(f"{_drive.API}/files", params={
+            "q": f"'{f['id']}' in parents and name contains '{number}' and trashed=false",
+            "includeItemsFromAllDrives": "true", "supportsAllDrives": "true", "fields": "files(id)"},
+            headers={"Authorization": f"Bearer {tok}"}, timeout=30)
+        n = (len(r.json().get("files", [])) // 2) + 1 if r.status_code == 200 else 1
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        uploaded = []
+        for path, mime, ext in ((x.get("path"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"),
+                                (pdf_path, "application/pdf", "pdf")):
+            if path and os.path.exists(path):
+                name = f"{number} v{n} - {stamp}.{ext}"
+                _drive.upload_to_folder(f["id"], name, mime, open(path, "rb").read(), token=tok)
+                uploaded.append(name)
+        return {"filed": True, "folder": f["name"], "folder_id": f["id"],
+                "folder_created": f.get("created"), "version": n, "files": uploaded}
+    except Exception as e:  # noqa: BLE001
+        return {"filed": False, "reason": str(e)[:120]}
 
 
 def _run_report_task(task: dict) -> None:
