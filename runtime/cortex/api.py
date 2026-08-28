@@ -3853,6 +3853,7 @@ def media_library(company: str = "sensa", _: None = Depends(auth)) -> dict:
                   m.published_at, m.duration, m.views, m.rating, m.suggested_rating,
                   m.categories, m.sort_orders, m.portfolio_category, m.profile, m.watch_url,
                   left(coalesce(m.description,''), 600) as description,
+                  m.thumb_url,
                   (m.enriched_at is not null) as enriched
            from media_assets m join companies c on c.id = m.company_id
            where c.slug = %s and m.status = 'live'

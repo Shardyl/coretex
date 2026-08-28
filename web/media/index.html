@@ -225,7 +225,8 @@ function card(v, groupCat){
   const tags = catsOf(v).filter(c=>c!=='untagged');
   el.innerHTML = `
     <a class="tlink" href="${esc(v.watch_url)}" target="_blank" rel="noopener" draggable="false">
-      <img loading="lazy" src="https://i.ytimg.com/vi/${v.youtube_video_id}/mqdefault.jpg" alt="" draggable="false">
+      <img loading="lazy" src="${(v.thumb_url && !v.thumb_url.includes('i.ytimg')) ? esc(v.thumb_url)
+        : 'https://i.ytimg.com/vi/'+v.youtube_video_id+'/mqdefault.jpg'}" alt="" draggable="false">
     </a>
     <div class="meta">
       <a class="tlink" href="${esc(v.watch_url)}" target="_blank" rel="noopener" draggable="false"><div class="t">${esc(v.title)}</div></a>
