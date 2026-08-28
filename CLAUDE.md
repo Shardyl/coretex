@@ -270,6 +270,16 @@ Lead -> opportunity conversion was already automatic on both intake lanes (quali
 with won -> project and Close & review now wired, the lead -> opportunity -> project -> close chain is
 closed end to end.
 
+## Rate card (2026-08-28)
+
+`rate_card:<slug>` setting = the company's per-unit pricing reference (`runtime/cortex/ratecard.py`:
+get/save/set_item/render). `worker.draft` injects `ratecard.render()` into every quotation-adjacent
+draft (sales-quotation, sales-first-response, email-handling). RATES ARE OWNER-APPROVED ONLY: they
+enter the card from quotes Rashad approved or figures he states — a missing/unconfirmed item is
+drafted as OWNER TO CONFIRM, never priced by a model (rule on both companies' sales-quotation).
+When Rashad states a new rate in any session, save it with `ratecard.set_item` so every future
+quote uses it.
+
 ## Media library (the YouTube catalog + review UI)
 
 `media_assets` (live DB) is the catalog of every video on a company's YouTube channel — one row
