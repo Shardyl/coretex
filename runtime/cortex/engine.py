@@ -304,6 +304,8 @@ def _email_envelope(task: dict, company: dict) -> dict:
             _ecfg = {}
     req = task.get("request") or {}
     cc_list += [e for e in (req.get("cc_extra") or []) if "@" in e]
+    if req.get("high_value"):   # Director-handled opportunity: the profile's high-value cc set rides along
+        cc_list += [str(v).strip() for v in (data.get("high_value_cc") or []) if isinstance(v, str) and "@" in v]
     outbound = bool(req.get("outbound"))   # a Talk-composed email_draft (not a reply) — no "Re:" prefix
     subj = inq.get("subject") or "your enquiry"
     from_addr = (req.get("from_email") or data.get("reply_from") or "").strip() or None
@@ -2403,6 +2405,20 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
         catchall = (address or "").lower() == (INBOXES.get(co.get("slug"), "") or "").lower()
         from_email = None if catchall else address
         mailbox_rt = None if catchall else rt_key
+        # HIGH-VALUE ROUTING (config lives in the company profile; the CONDITION is code, because a
+        # threshold check is a must-be-real computation): an opportunity whose deal value meets
+        # data.high_value_threshold drafts FROM data.high_value_from — the Director handles it
+        # personally — with data.high_value_cc copied on the send (applied in _email_envelope).
+        hv = False
+        try:
+            _prof = profile.get(co["id"]) or {}
+            _hvt = float(_prof.get("high_value_threshold") or 0)
+            _hvf = (_prof.get("high_value_from") or "").strip().lower()
+            if _hvt and _hvf and deal and float(deal.get("value") or 0) >= _hvt:
+                hv = True
+                from_email, mailbox_rt = _hvf, _rt_for_sender(co, _hvf)
+        except Exception:  # noqa: BLE001
+            hv = False
         # THREAD-STICKY SENDER: a conversation someone on the team is already having stays THEIRS.
         # Whoever we last sent to this contact AS is who replies — never silently switched to the
         # company default mid-thread (a Rashad<->client thread must not flip to Gino).
@@ -2417,6 +2433,8 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
         req = {"brief": brief, "inquiry": inq,
                "from_email": from_email, "mailbox_rt": mailbox_rt,
                "gmail_id": e.get("gmail_id") or ""}   # source message id -> the backfill sweep dedups on it
+        if hv:
+            req["high_value"] = True
         atts = _inbound_att_refs(e, rt_key, _inbox_client_company(co.get("slug")))
         if atts:
             req["inbound_attachments"] = atts

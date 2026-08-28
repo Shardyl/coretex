@@ -220,7 +220,7 @@ def open_deal_for_email(email: str, company: str | None) -> dict | None:
     c = db.one("select account_id from crm_master where lower(email)=lower(%s)", (email.strip(),))
     if not (c and c.get("account_id")):
         return None
-    return db.one("select id, title, stage, company from crm_projects where account_id=%s and company=%s "
+    return db.one("select id, title, stage, company, value from crm_projects where account_id=%s and company=%s "
                   "and stage not in ('Lost','Close & review') order by id desc limit 1",
                   (c["account_id"], _org(company)))
 
@@ -250,7 +250,7 @@ def open_deal_for_domain(email: str, company: str | None) -> dict | None:
                "lower(email) like %s limit 1", ("%@" + domain,))
     if not (c and c.get("account_id")):
         return None
-    return db.one("select id, title, stage, company from crm_projects where account_id=%s and company=%s "
+    return db.one("select id, title, stage, company, value from crm_projects where account_id=%s and company=%s "
                   "and stage not in ('Lost','Close & review') order by id desc limit 1",
                   (c["account_id"], _org(company)))
 
