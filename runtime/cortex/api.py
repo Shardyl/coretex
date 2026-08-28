@@ -3874,12 +3874,12 @@ def media_library(company: str = "sensa", _: None = Depends(auth)) -> dict:
 
 class MediaTag(BaseModel):
     youtube_video_id: str
-    categories: list[str]   # the video's FULL category list (tags; a video may be in many)
+    categories: list[str | None]   # the video's FULL category list; nulls tolerated + dropped
 
 
 @app.post("/api/media/tag")
 def media_tag(body: MediaTag, _: None = Depends(auth)) -> dict:
-    cats = sorted({c.strip() for c in body.categories if c.strip()})
+    cats = sorted({c.strip() for c in body.categories if c and c.strip()})
     db.execute("update media_assets set categories=%s, updated_at=now() where youtube_video_id=%s",
                (json.dumps(cats), body.youtube_video_id))
     return {"ok": True, "categories": cats}

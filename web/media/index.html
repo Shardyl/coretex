@@ -119,7 +119,10 @@ const LABELS = {
   'duplicates':'Duplicates (grouped in pairs, oldest first)','results':'Search results'};
 const label = c => LABELS[c] || c.replace(/-/g,' ').replace(/\b\w/g, m=>m.toUpperCase());
 
-const catsOf = v => (v.categories && v.categories.length) ? v.categories : ['untagged'];
+const catsOf = v => {
+  const cs = (v.categories || []).filter(c => typeof c === 'string' && c);
+  return cs.length ? cs : ['untagged'];
+};
 const allCats = () => { const s=new Set(); for(const v of all) for(const c of catsOf(v)) if(c!=='untagged') s.add(c);
   return [...s].sort(); };
 
@@ -130,6 +133,7 @@ async function api(path, opts){
   const r = await fetch(API+path, Object.assign({headers:{'Content-Type':'application/json',
     'Authorization':'Bearer '+token}}, opts||{}));
   if(r.status===401){ showLock(); throw new Error('auth'); }
+  if(!r.ok){ toast('Save failed ('+r.status+')'); throw new Error('http '+r.status); }
   return r.json();
 }
 function showLock(){ document.getElementById('lock').classList.remove('hidden');
@@ -150,9 +154,11 @@ function star(filled){ return `<svg viewBox="0 0 24 24" class="${filled?'full':'
   <path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4 6.1 20.5l1.2-6.5L2.5 9.4l6.6-.9z"/></svg>`; }
 
 async function saveTags(v, cats){
+  const clean = cats.filter(c => typeof c === 'string' && c);
   const d = await api('/api/media/tag',{method:'POST',body:JSON.stringify(
-    {youtube_video_id:v.youtube_video_id, categories:cats})});
-  v.categories = d.categories; render();
+    {youtube_video_id:v.youtube_video_id, categories:clean})});
+  if(Array.isArray(d.categories)) v.categories = d.categories;   // never clobber on a bad response
+  render();
 }
 
 let pop = null;
