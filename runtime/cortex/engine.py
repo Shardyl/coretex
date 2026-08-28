@@ -3025,11 +3025,19 @@ def _push_quote_to_client_drive(co: dict, customer: str, number: str, x: dict, p
             headers={"Authorization": f"Bearer {tok}"}, timeout=30)
         n = (len(r.json().get("files", [])) // 2) + 1 if r.status_code == 200 else 1
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        # House naming convention (searchable in Drive): Client - Project - Quotation <number> vN - date
+        project = (x.get("project") or "").strip()
+        if not project:
+            d = db.one("select title from crm_projects p join crm_master m on m.account_id=p.account_id "
+                       "where lower(m.email)=lower(%s) and p.stage not in ('Lost','Close & review') "
+                       "order by p.id desc limit 1", ((x.get("contact_email") or ""),)) if x.get("contact_email") else None
+            project = ((d or {}).get("title") or "").split(" - ")[-1].strip()
+        base = " - ".join(v for v in (client, project, f"Quotation {number}") if v)
         uploaded = []
         for path, mime, ext in ((x.get("path"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"),
                                 (pdf_path, "application/pdf", "pdf")):
             if path and os.path.exists(path):
-                name = f"{number} v{n} - {stamp}.{ext}"
+                name = f"{base} v{n} - {stamp}.{ext}"
                 _drive.upload_to_folder(f["id"], name, mime, open(path, "rb").read(), token=tok)
                 uploaded.append(name)
         return {"filed": True, "folder": f["name"], "folder_id": f["id"],
