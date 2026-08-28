@@ -25,8 +25,8 @@ from datetime import datetime, timedelta, timezone
 from psycopg.types.json import Json
 
 from . import (contentqueue, crm, db, doctext, documents, envelope, gmail, manager, media, meetnotes,
-               newsletter, notifications, profile, ppc_report, provider, quotation, reminders, schedule,
-               seo_report, store, webauthn_auth, whatsapp, worker)
+               newsletter, notifications, pipeline, profile, ppc_report, provider, quotation, reminders,
+               schedule, seo_report, store, webauthn_auth, whatsapp, worker)
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -604,6 +604,10 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     store.log_decision(task["id"], skill["id"], actor, "send",
                        snapshot={"to": env["to"], "cc": env["cc"], "bcc": env.get("bcc"),
                                  "from": env["from"], "subject": env["subject"], "gmail_id": res.get("id")})
+    try:   # pipeline loop: log the send on the deal timeline + track the promises this email makes
+        pipeline.record_send(task, env, company)
+    except Exception:  # noqa: BLE001 — timeline bookkeeping must never block the send
+        pass
     # pre-qualification chase clock: a reply to a FUNNEL LEAD (came via intake, qual:email exists) that is NOT an
     # opportunity chase (no deal_id) -> (re)arm the silence chase, so a lead who then goes quiet gets followed up.
     try:
@@ -2398,6 +2402,20 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
             brief += (f" CONTEXT: this sender belongs to the ACTIVE project/deal '{deal['title']}' "
                       f"(stage: {deal['stage']}). Reply as their project contact, consistent with that work; "
                       "do not treat them as a new lead.")
+            try:   # the deal's timeline rides the brief, so the draft knows the whole flow so far
+                _tl = pipeline.deal_context(deal["id"])
+                if _tl:
+                    brief += "\n\n" + _tl
+            except Exception:  # noqa: BLE001
+                pass
+            try:   # pipeline loop: log the inbound + catch stated client deadlines (once per message)
+                _gid = e.get("gmail_id") or ""
+                if not _gid or not db.one(
+                        "select 1 from tasks where company_id=%s and request->>'gmail_id'=%s limit 1",
+                        (co["id"], _gid)):
+                    pipeline.record_inbound(e, deal, co)
+            except Exception:  # noqa: BLE001
+                pass
         elif len(deals) > 1:
             names = "; ".join(f"'{d['title']}' (stage: {d['stage']})" for d in deals)
             brief += (f" CONTEXT: this sender's company has SEVERAL active projects with us: {names}. "
@@ -3229,6 +3247,10 @@ def run(poll_idle: float = 1.0) -> None:
                 pass
             try:
                 meetnotes.sweep()       # hourly: Gemini meeting notes -> CRM + drafting context
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                pipeline.sweep_sent()   # sent folders: manual sends -> deal timelines, untracked flagged
             except Exception:  # noqa: BLE001
                 pass
             try:

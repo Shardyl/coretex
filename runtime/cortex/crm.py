@@ -213,30 +213,34 @@ def _org(company: str | None) -> str:
 
 
 def open_deal_for_email(email: str, company: str | None) -> dict | None:
-    """The sender's most recent ACTIVE deal for one of our businesses (via their account), so an inbound
-    email can be routed as PROJECT correspondence with the deal on the card. None = no active deal."""
+    """The sender's most recent ACTIVE deal for one of our businesses — via their account, or via the
+    deal's own contact_email (a deal created before its client had an account row still resolves), so an
+    inbound email can be routed as PROJECT correspondence with the deal on the card. None = no active deal."""
     if not email:
         return None
-    c = db.one("select account_id from crm_master where lower(email)=lower(%s)", (email.strip(),))
-    if not (c and c.get("account_id")):
-        return None
-    return db.one("select id, title, stage, company, value from crm_projects where account_id=%s and company=%s "
-                  "and stage not in ('Lost','Close & review') order by id desc limit 1",
-                  (c["account_id"], _org(company)))
+    email = email.strip()
+    c = db.one("select account_id from crm_master where lower(email)=lower(%s)", (email,))
+    acc = (c or {}).get("account_id")
+    return db.one("select id, title, stage, company, value from crm_projects "
+                  "where (lower(contact_email)=lower(%s) or (%s::int is not null and account_id=%s)) "
+                  "and company=%s and stage not in ('Lost','Close & review') order by id desc limit 1",
+                  (email, acc, acc, _org(company)))
 
 
 def active_deals_for_email(email: str, company: str | None) -> list[dict]:
-    """ALL of the sender's active deals for one of our businesses (newest first). More than one means the
-    thread's project is ambiguous — the caller should present all of them rather than guess."""
+    """ALL of the sender's active deals for one of our businesses (newest first), matched via their
+    account or the deal's own contact_email. More than one means the thread's project is ambiguous —
+    the caller should present all of them rather than guess."""
     if not email:
         return []
-    c = db.one("select account_id from crm_master where lower(email)=lower(%s)", (email.strip(),))
-    if not (c and c.get("account_id")):
-        return []
+    email = email.strip()
+    c = db.one("select account_id from crm_master where lower(email)=lower(%s)", (email,))
+    acc = (c or {}).get("account_id")
     return db.query("select id, title, stage, company, automation, followup_step, next_followup, note "
-                    "from crm_projects where account_id=%s and company=%s "
-                    "and stage not in ('Lost','Close & review') order by id desc",
-                    (c["account_id"], _org(company)))
+                    "from crm_projects "
+                    "where (lower(contact_email)=lower(%s) or (%s::int is not null and account_id=%s)) "
+                    "and company=%s and stage not in ('Lost','Close & review') order by id desc",
+                    (email, acc, acc, _org(company)))
 
 
 def open_deal_for_domain(email: str, company: str | None) -> dict | None:
