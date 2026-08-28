@@ -44,6 +44,11 @@ CAPABILITIES: list[tuple[str, str]] = [
      "that needs a deliverable (quote revision, proposal) spawns its prep card alongside the reply. "
      "Meetings on a deal land on its timeline with our action items tracked. When asked 'where is deal "
      "X up to', read its history timeline."),
+    ("Rate card — pricing reference",
+     "Each company has a rate card (setting rate_card:<slug>) of OWNER-APPROVED per-unit prices; it is "
+     "injected into every quotation-adjacent draft. Prices come ONLY from it: an item not on the card is "
+     "named and marked OWNER TO CONFIRM, never priced by a model. When Rashad states a new rate, save it "
+     "to the card (ratecard.set_item) so every future quote uses it."),
     ("Team approvals",
      "Authorised team members (users.can_approve — Gino + Ayresh for Sensa) can approve OUTWARD work in "
      "their company scope with their own PIN at the step-up gate. MONEY-class approvals always require "

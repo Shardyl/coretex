@@ -179,6 +179,14 @@ def draft(skill: dict, company: dict, request: dict,
         user.insert(0, " ".join(bits))
     if atts:
         user.append(f"{len(atts)} file(s)/image(s) are attached below — use them as source material for the deliverable.")
+    if (skill.get("skill_key") or "") in ("sales-quotation", "sales-first-response", "email-handling"):
+        try:   # the rate card rides every quotation-adjacent draft: approved prices only, never invented
+            from . import ratecard
+            _rc = ratecard.render((company or {}).get("slug") or "")
+            if _rc:
+                user.append(_rc)
+        except Exception:  # noqa: BLE001
+            pass
     _hist = (request.get("thread_history") or "").strip() if isinstance(request, dict) else ""
     if _hist:
         user.append("CONVERSATION HISTORY with this contact (newest first — includes emails WE already sent). "

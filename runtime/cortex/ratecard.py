@@ -1,0 +1,63 @@
+"""The company rate card — the single per-unit pricing reference every quotation is built from.
+
+Rates are OWNER-APPROVED numbers only: they enter the card from quotes Rashad has actually approved
+or figures he states, never from a model. Stored as the `rate_card:<slug>` setting (data, editable
+without a deploy). Drafting for quotation-adjacent lanes gets `render()` injected, with the standing
+instruction that a price not on the card is OWNER TO CONFIRM — never invented.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from . import db
+
+
+def _key(slug: str) -> str:
+    return f"rate_card:{(slug or '').strip().lower()}"
+
+
+def get(slug: str) -> dict:
+    return db.setting_get(_key(slug)) or {}
+
+
+def save(slug: str, card: dict) -> dict:
+    card = dict(card or {})
+    card["updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    db.setting_set(_key(slug), card)
+    return card
+
+
+def set_item(slug: str, group: str, desc: str, rate: float | None, unit: str = "each",
+             note: str = "", source: str = "") -> dict:
+    """Add or update one line (matched by description, case-insensitive, within its group).
+    rate=None means the item exists but its price is not yet owner-approved."""
+    card = get(slug) or {"currency": "AED", "groups": []}
+    grp = next((g for g in card.get("groups", []) if g.get("heading", "").lower() == group.lower()), None)
+    if not grp:
+        grp = {"heading": group, "items": []}
+        card.setdefault("groups", []).append(grp)
+    item = {"desc": desc, "unit": unit, "rate": rate, "note": note, "source": source}
+    for i, it in enumerate(grp["items"]):
+        if it.get("desc", "").strip().lower() == desc.strip().lower():
+            grp["items"][i] = item
+            return save(slug, card)
+    grp["items"].append(item)
+    return save(slug, card)
+
+
+def render(slug: str) -> str:
+    """The card as a drafting-context block. Empty string when no card exists."""
+    card = get(slug)
+    if not card or not card.get("groups"):
+        return ""
+    cur = card.get("currency", "AED")
+    lines = [f"COMPANY RATE CARD ({cur}, updated {card.get('updated', '?')}) — quotation pricing comes "
+             "ONLY from these owner-approved rates. An item marked OWNER TO CONFIRM, or any item not on "
+             "this card, is NEVER given an invented price: name it and mark it OWNER TO CONFIRM."]
+    for g in card["groups"]:
+        lines.append(f"{g.get('heading', '')}:")
+        for it in g.get("items", []):
+            rate = f"{cur} {it['rate']:,.0f}" if isinstance(it.get("rate"), (int, float)) else "OWNER TO CONFIRM"
+            note = f" ({it['note']})" if it.get("note") else ""
+            lines.append(f"  - {it.get('desc', '')} — {rate} per {it.get('unit', 'each')}{note}")
+    return "\n".join(lines)
