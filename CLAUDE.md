@@ -247,8 +247,28 @@ Aug 2026). Four mechanisms, all fail-soft, wired into the engine:
   email" notification. Seen-sets in `sent_seen:<rt_key>` settings.
 Deal lookup (`crm.open_deal_for_email` / `active_deals_for_email`) falls back to the deal's own
 `contact_email` when the contact has no account row — account-less opportunities still resolve.
-NOT BUILT YET (next sessions): stage engine (events advance stages), auto lead->opportunity->project
-conversion through delivery/close, meeting-notes action-item ingestion into deal timelines.
+
+Phase 2 (same day): the full flow-of-intelligence. All triggers are deterministic code; models only
+extract/judge, never move stages or invent values:
+- **Stage engine:** a send carrying a Quotation/Proposal (attach_docs filename or subject — a fact,
+  not a guess) advances Opportunity -> Quote (`maybe_advance_on_send`). `crm.set_project_stage` calls
+  `pipeline.on_stage_change`: crossing INTO a won stage logs `project_start` + spawns a kickoff card
+  (action reminder -> Inbox, timeline-grounded, "never invent dates or scope") + notification —
+  won deals convert to tracked projects automatically; `Close & review` surfaces the wrap-up
+  (final files, testimonial, media-library entry).
+- **Commitment settling:** each outbound on a deal first settles open commitment reminders it
+  genuinely fulfils (conservative Haiku judgement -> `mark_done` + `commitment_done` on the
+  timeline), THEN tracks the new promises it makes — a commitment can't be marked done by its own email.
+- **Next-step engine** (`suggest_next_step`, on inbound deal mail): when the client's email requires
+  an internal deliverable beyond a reply (quote revision, proposal, document), a prep card spawns in
+  the Inbox alongside the reply draft — kind `content`, `sales-quotation` lane, timeline-grounded,
+  prices/dates the owner hasn't stated marked OWNER TO CONFIRM. Deduped per message
+  (`nextstep_seen:<deal>`); conservative (most mail spawns nothing).
+- **Meetings feed the loop:** `meetnotes.sweep` -> `pipeline.record_meeting` on deal-matched
+  meetings: summary onto the timeline, OUR action items become commitments with reminders.
+Lead -> opportunity conversion was already automatic on both intake lanes (qualify + auto_opportunity);
+with won -> project and Close & review now wired, the lead -> opportunity -> project -> close chain is
+closed end to end.
 
 ## Media library (the YouTube catalog + review UI)
 
