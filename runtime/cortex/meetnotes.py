@@ -123,8 +123,53 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60) -> dict:
                     crm.log_event(em, "meeting_notes", f"Meeting: {e.get('summary')} — notes captured", None)
                 except Exception:  # noqa: BLE001
                     pass
+            try:                                  # the meeting is the midpoint, not the end: draft the follow-up
+                _spawn_post_meeting_followup(e, ext, company_id, deal_id, summary)
+            except Exception:  # noqa: BLE001
+                pass
             made += 1
     return {"captured": made}
+
+
+def _spawn_post_meeting_followup(event: dict, ext: list, company_id, deal_id, summary: str) -> None:
+    """Notes captured and the client hasn't written since the meeting -> draft the post-meeting follow-up
+    as an approval card: thanks, a short recap of what was agreed, and the committed next step (for a sales
+    meeting usually confirming the proposal/quotation is in preparation with the scope from the notes)."""
+    contact = next((em for em in ext if db.one(
+        "select id from crm_master where lower(email)=lower(%s)", (em,))), None)
+    if not contact:
+        return
+    if company_id is None:                        # no deal matched: the contact's latest card names the company
+        t = db.one("select company_id from tasks where kind='email_reply' and "
+                   "lower(request->'inquiry'->>'email')=lower(%s) order by id desc limit 1", (contact,))
+        company_id = (t or {}).get("company_id")
+    if not company_id:
+        return
+    started = (event.get("start") or {}).get("dateTime")
+    # they already emailed us after the meeting (a reply card exists), or a card is open -> the email flow
+    # has it; a second proactive card would double up
+    if db.one("select id from tasks where company_id=%s and kind='email_reply' and "
+              "lower(request->'inquiry'->>'email')=lower(%s) and "
+              "(status in ('new','drafting','awaiting_approval','awaiting_correction') "
+              " or created_at > %s::timestamptz) limit 1", (company_id, contact, started)):
+        return
+    skill = store.get_skill_by_key(company_id, "sales-first-response")
+    if not skill:
+        return
+    c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (contact,))
+    name = (((c or {}).get("first_name") or "") + " " + ((c or {}).get("last_name") or "")).strip()
+    req = {"brief": (f"POST-MEETING FOLLOW-UP after '{event.get('summary')}'. We just met; they have not "
+                     "emailed since. Draft the follow-up: thank them for the meeting, recap in one or two "
+                     "lines what was agreed (from the notes below), and commit to the agreed next step — "
+                     "when the notes point to a proposal/quotation, confirm it is being prepared with the "
+                     "scope discussed (never invent prices or dates). Warm, brief, no sales pressure.\n"
+                     "MEETING NOTES (distilled):\n" + summary[:3000]),
+           "inquiry": {"name": name or contact.split("@")[0], "email": contact,
+                       "subject": f"Following up: {event.get('summary')}"},
+           "followup": "post-meeting"}
+    if deal_id:
+        req["deal_id"] = deal_id
+    store.create_task(company_id, skill["id"], "email_reply", req)
 
 
 def latest_for_contact(company_id: int, email: str) -> dict | None:
