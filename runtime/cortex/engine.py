@@ -24,9 +24,9 @@ from datetime import datetime, timedelta, timezone
 
 from psycopg.types.json import Json
 
-from . import (contentqueue, crm, db, doctext, documents, envelope, gmail, manager, media, newsletter,
-               notifications, profile, ppc_report, provider, quotation, reminders, schedule, seo_report,
-               store, webauthn_auth, whatsapp, worker)
+from . import (contentqueue, crm, db, doctext, documents, envelope, gmail, manager, media, meetnotes,
+               newsletter, notifications, profile, ppc_report, provider, quotation, reminders, schedule,
+               seo_report, store, webauthn_auth, whatsapp, worker)
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -2294,6 +2294,13 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
     except Exception:  # noqa: BLE001 — context is best-effort, drafting proceeds regardless
         pass
     try:
+        mn = meetnotes.latest_for_contact(task["company_id"], email)
+        if mn and mn.get("summary"):
+            when = mn["starts_at"].strftime("%d %b %Y") if mn.get("starts_at") else ""
+            req["meeting_notes"] = (mn.get("title") or "Meeting") + f" ({when}):\n" + mn["summary"]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
         fm = db.one("select request->'meeting' m from tasks where company_id=%s and id<>%s and "
                     "lower(request->'inquiry'->>'email')=lower(%s) and "
                     "request->'meeting'->>'event_id' is not null and "
@@ -3172,6 +3179,10 @@ def run(poll_idle: float = 1.0) -> None:
             try:
                 documents.sync_all()    # hourly: pick up files hand-dropped into any CORTEX/Documents folder
             except Exception:  # noqa: BLE001 — background sync; never noisy
+                pass
+            try:
+                meetnotes.sweep()       # hourly: Gemini meeting notes -> CRM + drafting context
+            except Exception:  # noqa: BLE001
                 pass
             try:
                 run_opportunity_followups()   # advance AUTO opportunities' chase cadence -> drafted follow-up cards

@@ -185,6 +185,11 @@ def draft(skill: dict, company: dict, request: dict,
                     "Stay consistent with it: never re-introduce yourself or the company, never repeat or "
                     "contradict something already sent, and NEVER share a meeting link different from one "
                     "already sent in this history.\n" + _hist[:5000])
+    _mn = (request.get("meeting_notes") or "").strip() if isinstance(request, dict) else ""
+    if _mn:
+        user.append("NOTES FROM OUR LAST MEETING with this contact (distilled from the real meeting notes — "
+                    "ground your reply in what was actually discussed, decided and committed; never "
+                    "contradict it):\n" + _mn[:3000])
     _exm = request.get("existing_meeting") if isinstance(request, dict) else None
     if _exm and _exm.get("meet"):
         user.append(f"A meeting with this contact is ALREADY BOOKED: '{_exm.get('summary')}' at "
