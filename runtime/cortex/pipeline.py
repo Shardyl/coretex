@@ -171,8 +171,8 @@ def record_inbound(e: dict, deal: dict | None, company: dict) -> None:
 def _own_domains() -> set[str]:
     """Domains of our own mailboxes — mail between them is internal, never deal correspondence."""
     doms = set()
-    for r in db.query("select value from settings where key like 'gmail_account%' "
-                      "or key like 'gmail_send_account%'"):
+    for r in db.query("select value from settings where key like %s or key like %s",
+                      ("gmail_account%", "gmail_send_account%")):
         v = r["value"] if isinstance(r["value"], str) else str(r["value"] or "")
         v = v.strip('" ')
         if "@" in v:
@@ -242,7 +242,7 @@ def sweep_sent(min_gap_minutes: int = 30) -> int:
     db.setting_set("sent_sweep_at", now.isoformat())
     own = _own_domains()
     handled = 0
-    for r in db.query("select key, value from settings where key like 'gmail_account:%'"):
+    for r in db.query("select key, value from settings where key like %s", ("gmail_account:%",)):
         parts = r["key"].split(":")                      # gmail_account:<slug>[:<who>]
         slug = parts[1]
         rt_key = "gmail_refresh_token:" + ":".join(parts[1:])
