@@ -107,7 +107,7 @@ opacity:0;transition:opacity .2s;pointer-events:none;z-index:60}
 <script>
 const API = '';
 let token = localStorage.getItem('cortex_token') || '';
-let all = [], activeChip = 'all';
+let all = [], activeChips = new Set();   // empty = All; multiple = AND filter
 
 const LABELS = {
   'commercial':'Commercials','corporate-film':'Corporate films','event-aftermovie':'Events',
@@ -116,7 +116,7 @@ const LABELS = {
   'documentary':'Documentary','showreel':'Showreels','social-cut':'Social cuts',
   'bts':'Behind the scenes','internal-test':'Tests and drafts','version-variant':'Versions and variants',
   'client-film':'Client films','unclassified':'Unclassified','untagged':'Untagged',
-  'duplicates':'Duplicates (grouped in pairs, oldest first)','results':'Search results'};
+  'duplicates':'Duplicates (grouped in pairs, oldest first)','results':'Results'};
 const label = c => LABELS[c] || c.replace(/-/g,' ').replace(/\b\w/g, m=>m.toUpperCase());
 
 const catsOf = v => {
@@ -268,9 +268,10 @@ function render(){
   closePop();
   const q = document.getElementById('search').value.trim().toLowerCase();
   const groups = {};
+  const multi = activeChips.size > 1 && !activeChips.has('__dups');
   for(const v of all){
     // search spans title, client, industry, summary, description and tags — and overrides
-    // the active category chip, so a match is never hidden by the current filter
+    // the active category chips, so a match is never hidden by the current filter
     if(q){
       const hay = [v.title, v.client, (v.profile||{}).industry, (v.profile||{}).summary,
                    v.description, (v.categories||[]).join(' ')].join(' ').toLowerCase();
@@ -278,16 +279,23 @@ function render(){
       (groups['results'] = groups['results']||[]).push(v);
       continue;
     }
-    if(activeChip==='__dups'){
+    if(activeChips.has('__dups')){
       if(v.dup_group) (groups['duplicates'] = groups['duplicates']||[]).push(v);
       continue;
     }
+    if(multi){
+      // multiple chips = AND filter: only films carrying EVERY selected category
+      const cs = new Set(catsOf(v));
+      if([...activeChips].every(c=>cs.has(c)))
+        (groups['results'] = groups['results']||[]).push(v);
+      continue;
+    }
     for(const c of catsOf(v)){
-      if(activeChip!=='all' && c!==activeChip) continue;
+      if(activeChips.size && !activeChips.has(c)) continue;
       (groups[c] = groups[c]||[]).push(v);
     }
   }
-  if(activeChip==='__dups' && groups['duplicates']){
+  if(activeChips.has('__dups') && groups['duplicates']){
     const manual = groups['duplicates'].some(v=>(v.sort_orders||{})['duplicates']!=null);
     groups['duplicates'].sort((a,b)=> manual
       ? (((a.sort_orders||{})['duplicates'])??1e9)-(((b.sort_orders||{})['duplicates'])??1e9)
@@ -332,14 +340,20 @@ function render(){
   const counts = {};
   for(const v of all) for(const c of catsOf(v)) counts[c]=(counts[c]||0)+1;
   const chips = document.getElementById('chips'); chips.innerHTML='';
-  const mk=(id,lab)=>{ const c=document.createElement('div');
-    c.className='chip'+(activeChip===id?' on':''); c.textContent=lab;
-    c.onclick=()=>{activeChip=id; render();}; chips.appendChild(c); };
-  mk('all','All '+all.length);
+  const mk=(id,lab,on,click)=>{ const c=document.createElement('div');
+    c.className='chip'+(on?' on':''); c.textContent=lab;
+    c.onclick=click; chips.appendChild(c); };
+  mk('all','All '+all.length, activeChips.size===0, ()=>{ activeChips.clear(); render(); });
   const ndup = all.filter(v=>v.dup_group).length;
-  if(ndup) mk('__dups','Duplicates '+ndup);
-  for(const k of Object.keys(counts).sort((a,b)=>counts[b]-counts[a]))
-    mk(k, label(k)+' '+counts[k]);
+  if(ndup) mk('__dups','Duplicates '+ndup, activeChips.has('__dups'),
+    ()=>{ const on=activeChips.has('__dups'); activeChips.clear(); if(!on) activeChips.add('__dups'); render(); });
+  // categories A-Z; click to toggle — several at once = AND filter
+  for(const k of Object.keys(counts).sort((a,b)=>label(a).localeCompare(label(b))))
+    mk(k, label(k)+' '+counts[k], activeChips.has(k), ()=>{
+      activeChips.delete('__dups');
+      activeChips.has(k) ? activeChips.delete(k) : activeChips.add(k);
+      render();
+    });
 }
 
 async function load(){
