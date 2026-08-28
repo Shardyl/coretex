@@ -33,6 +33,13 @@ CAPABILITIES: list[tuple[str, str]] = [
      "real-estate, aerial...) and rated. USE IT whenever an email or proposal should prove competence or "
      "show relevant work: filter on the INTERSECTION of the enquiry's categories, pick highest-rated, share "
      "the watch_url. Never pick videos by ad-hoc YouTube search — the library is canonical."),
+    ("Sales-loop tracking — LIVE",
+     "Every sales email closes the loop: sends and inbound mail log onto the deal's timeline "
+     "(crm_projects.history), promises WE make become tracked commitments with reminders, deadlines the "
+     "CLIENT states become high-priority reminders, and a sent-folder sweep catches emails the team sends "
+     "manually (logged to the deal, or flagged 'Untracked sales email' when no opportunity exists). "
+     "Drafting reads the deal timeline, so replies know the whole flow. When asked 'where is deal X up "
+     "to', read its history timeline."),
     ("Team approvals",
      "Authorised team members (users.can_approve — Gino + Ayresh for Sensa) can approve OUTWARD work in "
      "their company scope with their own PIN at the step-up gate. MONEY-class approvals always require "

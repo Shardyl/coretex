@@ -225,6 +225,31 @@ Runs on the office boxes (Patchright runners, code scp-synced NOT git-deployed; 
   `parent` (the persona's comment) so `actions.reply` can locate the thread; governed as a comment, paced.
   A real back-and-forth warms a target far more than one-way comments.
 
+## Sales-loop integrity (pipeline.py, 2026-08-28)
+
+`runtime/cortex/pipeline.py` closes the loop between communications and the pipeline — built because
+manual sends and un-tracked promises were leaking (Gino's Property Finder reply bypassed everything,
+Aug 2026). Four mechanisms, all fail-soft, wired into the engine:
+- **Deal timelines:** every send (`_send_email_reply` -> `pipeline.record_send`) and every inbound on
+  an active deal (`_draft_direct_reply` -> `pipeline.record_inbound`) appends to
+  `crm_projects.history`. `pipeline.deal_context(deal_id)` renders the timeline into the drafting
+  brief, so drafts know the whole flow (what we promised, what they asked, where the deal stands).
+- **Commitments:** Haiku extracts the promises an outbound email makes ("revised quote coming",
+  "samples to follow") — extraction only, never invention; CODE stamps the check-in date (explicit
+  date used as stated; vague hints map to fixed windows; default 3 days) -> timeline entry + reminder
+  (`created_by='cortex-pipeline'`, target deal).
+- **Client deadlines:** inbound mail is mined for EXPLICITLY stated deadlines ("respond by 1 Sep
+  3pm") -> high-priority reminder a day ahead + timeline entry. Never inferred urgency.
+- **Sent-folder sweep** (`pipeline.sweep_sent`, engine loop, 30-min self-gate): reads every
+  registered mailbox's `in:sent`, skips Cortex's own sends (gmail_id match in `decisions`) and
+  internal mail; a manual send to a deal contact logs `email_out_manual` + commitments and re-arms
+  the follow-up cadence; a manual send to a known lead with NO open deal raises an "Untracked sales
+  email" notification. Seen-sets in `sent_seen:<rt_key>` settings.
+Deal lookup (`crm.open_deal_for_email` / `active_deals_for_email`) falls back to the deal's own
+`contact_email` when the contact has no account row — account-less opportunities still resolve.
+NOT BUILT YET (next sessions): stage engine (events advance stages), auto lead->opportunity->project
+conversion through delivery/close, meeting-notes action-item ingestion into deal timelines.
+
 ## Media library (the YouTube catalog + review UI)
 
 `media_assets` (live DB) is the catalog of every video on a company's YouTube channel — one row
