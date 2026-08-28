@@ -899,6 +899,11 @@ def set_project_stage(project_id: int, stage: str) -> dict | None:
         flag_clients_for_deal(p)        # won = the people/company on it become clients (sticky)
     if p.get("contact_email"):
         log_event(p["contact_email"], "deal_stage", f"{p['title']}: {old} -> {stage}")
+    try:   # pipeline loop: won -> project kickoff card; Close & review -> wrap-up surfaced
+        from . import pipeline
+        pipeline.on_stage_change(p, old, stage)
+    except Exception:  # noqa: BLE001 — stage bookkeeping must never break the stage move
+        pass
     return db.one("select * from crm_projects where id=%s", (project_id,))
 
 

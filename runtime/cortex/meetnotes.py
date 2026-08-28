@@ -123,6 +123,12 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60) -> dict:
                     crm.log_event(em, "meeting_notes", f"Meeting: {e.get('summary')} — notes captured", None)
                 except Exception:  # noqa: BLE001
                     pass
+            if deal_id:                           # pipeline loop: meeting -> deal timeline + our commitments
+                try:
+                    from . import pipeline
+                    pipeline.record_meeting(deal_id, company_id, e.get("summary") or "Meeting", summary)
+                except Exception:  # noqa: BLE001
+                    pass
             try:                                  # the meeting is the midpoint, not the end: draft the follow-up
                 _spawn_post_meeting_followup(e, ext, company_id, deal_id, summary)
             except Exception:  # noqa: BLE001

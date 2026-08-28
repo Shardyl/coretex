@@ -104,6 +104,14 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
     who = "manually sent" if manual else "sent (Cortex-approved)"
     log_deal(did, "email_out_manual" if manual else "email_out",
              f"{who} from {frm or 'company mailbox'} to {to}: {subj or '(no subject)'}")
+    try:   # FIRST settle what this email fulfils, THEN track the new promises it makes
+        settle_commitments(int(did), body, to)
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # a quotation/proposal going out advances Opportunity -> Quote
+        maybe_advance_on_send(int(did), task, env)
+    except Exception:  # noqa: BLE001
+        pass
     for c in extract_commitments(body):
         due = _commitment_due(c.get("due_hint"))
         log_deal(did, "commitment", f"OWED to {to}: {c['text']} (check-in {due.date().isoformat()})")
@@ -164,6 +172,10 @@ def record_inbound(e: dict, deal: dict | None, company: dict) -> None:
                              target_id=did, priority="high", created_by="cortex-pipeline")
         except Exception:  # noqa: BLE001
             pass
+    try:   # does this email need a deliverable PREPARED (quote revision, proposal...), not just a reply?
+        suggest_next_step(e, deal, company)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # ---------- sent-folder sweep (manual sends must not escape the loop) ----------
@@ -257,3 +269,173 @@ def sweep_sent(min_gap_minutes: int = 30) -> int:
         except Exception:  # noqa: BLE001
             continue
     return handled
+
+
+# ---------- stage engine (deterministic transitions; the model never moves a stage) ----------
+
+def maybe_advance_on_send(deal_id: int, task: dict, env: dict) -> None:
+    """A quotation/proposal going out moves a forecast deal Opportunity -> Quote. The trigger is a
+    fact (a Quotation/Proposal document attached to the send, or named in the subject), never a guess."""
+    d = db.one("select stage from crm_projects where id=%s", (int(deal_id),))
+    if not d or d.get("stage") != "Opportunity":
+        return
+    req = (task or {}).get("request") or {}
+    names = " ".join([a.get("filename") or "" for a in req.get("attach_docs") or []]
+                     + list(req.get("attachment_names") or [])
+                     + [(env or {}).get("subject") or ""]).lower()
+    if "quotation" in names or "proposal" in names:
+        try:
+            crm.set_project_stage(int(deal_id), "Quote")   # logs the stage_change on the timeline itself
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def on_stage_change(deal: dict, old: str, new: str) -> None:
+    """Called by crm.set_project_stage AFTER a stage moves. Won = the deal becomes a live project:
+    kickoff lands as a reminder-spawned Inbox card so delivery starts tracked, not ad hoc.
+    Close & review = the wrap-up (final assets, testimonial ask, portfolio entry) is surfaced."""
+    try:
+        did = int(deal.get("id"))
+        co = db.one("select id, slug, name from companies where lower(name)=lower(%s) or lower(slug)=lower(%s)",
+                    (deal.get("company") or "", deal.get("company") or ""))
+        won = set(crm.WON_STAGES)
+        title = deal.get("title") or f"deal {did}"
+        if new in won and old not in won:
+            log_deal(did, "project_start", f"WON at stage {new} - deal is now a live project")
+            due = datetime.now(timezone.utc) + timedelta(hours=2)
+            kickoff_brief = (
+                f"Deal {did} ({title}) was just WON (stage {new}). Draft the project kickoff plan as an "
+                "internal checklist for the owner: what we owe, the dates/milestones from the deal timeline "
+                "below, who does what, and the kickoff message to send the client. Facts from the timeline "
+                "only - never invent dates or scope.\n\n" + deal_context(did))
+            reminders.create(
+                f"Project kickoff: {title} (deal {did})", due,
+                company_id=(co or {}).get("id"), target_type="deal", target_id=did, priority="high",
+                created_by="cortex-pipeline",
+                action={"company": (co or {}).get("slug"), "skill": "email-handling", "kind": "content",
+                        "brief": kickoff_brief})
+            notifications.notify("Deal won - project kickoff queued",
+                                 f"{title} moved to {new}. A kickoff card will land in the Inbox; "
+                                 "delivery correspondence now routes on the project lane.",
+                                 category="crm", company_id=(co or {}).get("id"),
+                                 target_type="deal", target_id=did)
+        if new == "Close & review" and old != "Close & review":
+            log_deal(did, "project_close", "moved to Close & review - wrap-up owed")
+            notifications.notify("Project closing - wrap-up",
+                                 f"{title} is in Close & review: confirm final files delivered + paid, "
+                                 "ask for the testimonial/review, and add the film to the media library.",
+                                 category="crm", company_id=(co or {}).get("id"),
+                                 target_type="deal", target_id=did)
+    except Exception:  # noqa: BLE001 — stage bookkeeping must never break the stage move itself
+        pass
+
+
+# ---------- commitment fulfilment (a send can settle what an earlier send promised) ----------
+
+def settle_commitments(deal_id: int, sent_body: str, to: str) -> None:
+    """When a new email goes out on a deal, check the deal's OPEN commitment reminders: any the model
+    judges genuinely fulfilled by this email is marked done and logged. Judgement is per-commitment
+    and conservative - unclear stays open."""
+    open_rs = db.query("select id, title from reminders where created_by='cortex-pipeline' and "
+                       "status='pending' and target_type='deal' and target_id=%s and "
+                       "(title like %s or title like %s)",
+                       (str(int(deal_id)), "Commitment owed%", "Meeting commitment%"))
+    if not open_rs or not (sent_body or "").strip():
+        return
+    listing = "\n".join(f"[{r['id']}] {r['title']}" for r in open_rs)
+    try:
+        out = provider.think_json(
+            "An email was just sent on a deal. Below are the OPEN commitments previously promised to this "
+            "client. Decide which (if any) THIS email genuinely fulfils - the promised thing is actually "
+            'delivered/attached/answered in it, not merely mentioned. Return {"fulfilled_ids":[<int>...]}. '
+            "Be conservative: when unclear, leave it open (empty list).",
+            f"OPEN COMMITMENTS:\n{listing}\n\nEMAIL JUST SENT (to {to}):\n{(sent_body or '')[:3000]}",
+            model=provider.MODEL_ROUTER, purpose="commitment-settle")
+        ids = {int(i) for i in (out or {}).get("fulfilled_ids", [])}
+    except Exception:  # noqa: BLE001
+        return
+    for r in open_rs:
+        if r["id"] in ids:
+            reminders.mark_done(r["id"])
+            log_deal(deal_id, "commitment_done", r["title"])
+
+
+# ---------- next-step engine (the inbound decides what we should PREPARE, not just what to reply) ----------
+
+def suggest_next_step(e: dict, deal: dict, company: dict) -> None:
+    """An inbound on a deal often needs a deliverable prepared (a revised quotation, a proposal, a
+    document), not only a reply. Detect that and spawn the PREP work as its own Inbox card, so the
+    reply and the thing it promises both exist. Conservative: most mail needs nothing."""
+    gid = (e.get("gmail_id") or "").strip()
+    did = int(deal["id"]) if isinstance(deal, dict) else int(deal)
+    seen_key = f"nextstep_seen:{did}"
+    seen = db.setting_get(seen_key) or []
+    if gid and gid in seen:
+        return
+    try:
+        out = provider.think_json(
+            "You read one inbound client email on an active deal (timeline below). Decide if it requires an "
+            "INTERNAL DELIVERABLE to be prepared beyond a reply - e.g. a revised/new quotation, a proposal, "
+            "a document, a booking. Politeness, questions answerable in prose, or FYI mail need nothing. Return "
+            '{"action":"none|prepare_quotation|prepare_proposal|prepare_document|other","what":"<one line>"}. '
+            "Be conservative - when in doubt, none.",
+            deal_context(did) + "\n\nINBOUND EMAIL from " + (e.get("email") or "") + ":\n"
+            + ((e.get("body") or "")[:2500]),
+            model=provider.MODEL_ROUTER, purpose="next-step")
+    except Exception:  # noqa: BLE001
+        return
+    act = (out or {}).get("action") or "none"
+    what = ((out or {}).get("what") or "").strip()
+    if gid:
+        db.setting_set(seen_key, (seen + [gid])[-50:])
+    if act == "none" or not what:
+        return
+    log_deal(did, "next_step", f"{act}: {what}")
+    sk = store.get_skill_by_key(company["id"], "sales-quotation") \
+        or store.get_skill_by_key(company["id"], "email-handling")
+    if not sk:
+        return
+    title = deal.get("title") or f"deal {did}"
+    brief = (f"NEXT STEP for deal {did} ({title}) - the client latest email requires: {what} ({act}). "
+             "Prepare it as a clear internal work-up the owner can approve and act on: exactly what "
+             "changes/content is needed, based ONLY on the timeline below and the client's words. Any price "
+             "or date the owner has not stated is marked as OWNER TO CONFIRM - never invented.\n\n"
+             + deal_context(did) + "\n\nTHEIR EMAIL:\n" + ((e.get("body") or "")[:2000]))
+    t = store.create_task(company["id"], sk["id"], "content",
+                          {"brief": brief, "deal_id": did, "title": f"Next step: {what[:70]}"})
+    if t:
+        db.execute("update tasks set deal_id=%s where id=%s", (did, t["id"]))
+        notifications.notify("Next step queued", f"{title}: {what}",
+                             category="crm", company_id=company.get("id"),
+                             target_type="deal", target_id=did)
+
+
+# ---------- meetings feed the same loop ----------
+
+def record_meeting(deal_id: int, company_id: int | None, title: str, summary: str) -> None:
+    """A meeting on a deal lands on its timeline, and the things OUR side committed to in it become
+    tracked commitments - the same loop as email, so meetings stop leaking promises."""
+    if not deal_id:
+        return
+    log_deal(deal_id, "meeting", f"{title}: {(summary or '')[:900]}")
+    try:
+        out = provider.think_json(
+            "From this meeting summary, extract only the action items OUR side (the production company) "
+            "committed to - things we now owe the client. Return "
+            '{"commitments":[{"text":"<short>","due_hint":"<ISO date ONLY if stated; else one of: today | '
+            'tomorrow | week | days:N | none>"}]}. Client-side actions and vague intentions are excluded. '
+            "Never invent dates.",
+            (summary or "")[:3000], model=provider.MODEL_ROUTER, purpose="meeting-commitments")
+        cs = [c for c in (out or {}).get("commitments", []) if (c.get("text") or "").strip()][:5]
+    except Exception:  # noqa: BLE001
+        cs = []
+    for c in cs:
+        due = _commitment_due(c.get("due_hint"))
+        log_deal(deal_id, "commitment",
+                 f"OWED (from meeting {title}): {c['text']} (check-in {due.date().isoformat()})")
+        try:
+            reminders.create(f"Meeting commitment: {c['text']} (deal {deal_id})", due,
+                             company_id=company_id, target_type="deal", target_id=deal_id,
+                             created_by="cortex-pipeline")
+        except Exception:  # noqa: BLE001
+            pass
