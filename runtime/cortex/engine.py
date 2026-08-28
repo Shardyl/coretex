@@ -2435,6 +2435,11 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
                "gmail_id": e.get("gmail_id") or ""}   # source message id -> the backfill sweep dedups on it
         if hv:
             req["high_value"] = True
+            _hvd = _prof.get("high_value_attach_doc")   # RFP-class first contact: the company profile rides along
+            if _hvd and not is_thread:
+                _doc = db.one("select id, filename, mime, size from company_documents where id=%s", (int(_hvd),))
+                if _doc:
+                    req["attach_docs"] = [dict(_doc)]
         atts = _inbound_att_refs(e, rt_key, _inbox_client_company(co.get("slug")))
         if atts:
             req["inbound_attachments"] = atts
