@@ -157,32 +157,52 @@ async function saveTags(v, cats){
 
 let pop = null;
 function closePop(){ if(pop){ pop.remove(); pop=null; } }
-document.addEventListener('click', e=>{ if(pop && !pop.contains(e.target)) closePop(); });
+document.addEventListener('click', e=>{
+  if(pop && !pop.contains(e.target)){          // click-away commits any tag changes, then closes
+    const commit = pop._commit; closePop(); if(commit) commit();
+  }
+});
 
 function openTagEditor(v, anchor){
   closePop();
   pop = document.createElement('div'); pop.id='tagpop';
   const cur = new Set(catsOf(v).filter(c=>c!=='untagged'));
-  const opts = allCats();
-  pop.innerHTML = opts.map(c=>`<div class="opt ${cur.has(c)?'on':''}" data-c="${esc(c)}">
-      <div class="bx">${cur.has(c)?'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#0B0F14" stroke-width="4"><path d="M4 13l5 5L20 6"/></svg>':''}</div>${esc(label(c))}</div>`).join('')
-    + `<input placeholder="New category, Enter to add"><div class="hint">A film can sit in many categories; each becomes a playlist on the YouTube resync.</div>`;
+  const orig = JSON.stringify([...cur].sort());
+  const extra = [];                            // categories created in this popover session
+  pop._commit = () => {
+    if(JSON.stringify([...cur].sort()) !== orig) saveTags(v, [...cur]);
+  };
+  const renderOpts = () => {
+    const opts = [...new Set([...allCats(), ...extra])].sort();
+    pop.querySelector('.opts').innerHTML = opts.map(c=>`<div class="opt ${cur.has(c)?'on':''}" data-c="${esc(c)}">
+      <div class="bx">${cur.has(c)?'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#0B0F14" stroke-width="4"><path d="M4 13l5 5L20 6"/></svg>':''}</div>${esc(label(c))}</div>`).join('');
+    pop.querySelectorAll('.opt').forEach(o=>o.addEventListener('click', e=>{
+      e.stopPropagation();
+      const c = o.dataset.c;
+      cur.has(c) ? cur.delete(c) : cur.add(c);
+      renderOpts();                            // stays open: tick as many as needed
+    }));
+  };
+  pop.innerHTML = `<div class="opts" style="max-height:45vh;overflow-y:auto"></div>
+    <input placeholder="New category, Enter to add">
+    <div class="hint">Tick as many as apply, then Done (or click away) to save. Each category becomes a playlist.</div>
+    <div class="opt" style="justify-content:center;border:1px solid var(--line);border-radius:6px;margin-top:8px;color:var(--accent)" id="tagdone">Done</div>`;
   document.body.appendChild(pop);
+  renderOpts();
   const r = anchor.getBoundingClientRect();
   pop.style.left = Math.min(r.left, innerWidth-250) + 'px';
   pop.style.top = (r.bottom + scrollY + 6) + 'px';
-  pop.querySelectorAll('.opt').forEach(o=>o.addEventListener('click', e=>{
+  pop.querySelector('#tagdone').addEventListener('click', e=>{
     e.stopPropagation();
-    const c = o.dataset.c;
-    cur.has(c) ? cur.delete(c) : cur.add(c);
-    saveTags(v, [...cur]); closePop();
-  }));
+    const commit = pop._commit; closePop(); if(commit) commit();
+  });
   const inp = pop.querySelector('input');
   inp.addEventListener('keydown', e=>{
     if(e.key!=='Enter') return;
     const c = inp.value.trim().toLowerCase().replace(/\s+/g,'-');
     if(!c) return;
-    cur.add(c); saveTags(v, [...cur]); closePop();
+    cur.add(c); if(!extra.includes(c)) extra.push(c);
+    inp.value=''; renderOpts();                // added + ticked, popover stays open
   });
   inp.focus();
 }
