@@ -30,6 +30,12 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
                          "violation): " + ", ".join(atts))
         if request.get("cc_extra"):
             facts.append("Extra cc set on the envelope by the owner: " + ", ".join(request["cc_extra"]))
+        if request.get("from_email"):
+            facts.append("The envelope From address is SET BY THE SYSTEM to " + str(request["from_email"]) +
+                         " — the sender is correct by construction, never judge it from the draft.")
+        if request.get("high_value"):
+            facts.append("HIGH-VALUE routing is active: the company's configured high-value cc set is applied "
+                         "to the envelope by the send system — a missing cc in the body is never a violation.")
     facts.append("The send system STRIPS any closing sign-off from the draft and appends the official "
                  "closing + signature block itself — a sign-off in the draft body is cosmetic, never a "
                  "rule violation.")
