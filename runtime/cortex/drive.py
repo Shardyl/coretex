@@ -120,16 +120,10 @@ def upload_to_folder(folder_id_: str, filename: str, mime: str, data: bytes, tok
     """Upload bytes as a new file into a shared-drive folder; returns the file id."""
     tok = token or access_token()
     meta = json.dumps({"name": filename, "parents": [folder_id_]})
-    body = (b"--b
-Content-Type: application/json; charset=UTF-8
-
-" + meta.encode()
-            + b"
---b
-Content-Type: " + mime.encode() + b"
-
-" + data + b"
---b--")
+    crlf = b"\r\n"
+    body = (b"--b" + crlf + b"Content-Type: application/json; charset=UTF-8" + crlf + crlf
+            + meta.encode() + crlf + b"--b" + crlf + b"Content-Type: " + mime.encode() + crlf + crlf
+            + data + crlf + b"--b--")
     r = httpx.post("https://www.googleapis.com/upload/drive/v3/files",
                    params={"uploadType": "multipart", "supportsAllDrives": "true"},
                    headers={"Authorization": f"Bearer {tok}",
