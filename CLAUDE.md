@@ -274,6 +274,14 @@ box at **coretex.uk/fitness** (`web/fitness/`), same origin as the cockpit, so i
   its own smaller skill roster (the uniform-85 roster rule applies within `kind='owned'`), and
   personal CRM contacts must be suppressed from every campaign audience. Do not build it uninvited.
 
+## Media library
+
+`media_assets` = the rated, categorised library of every published film (UI: coretex.uk/media; API
+`/api/media/library`, tag/rate/edit endpoints). Categories are LOWERCASE SLUGS (`interviews`,
+`real-estate`, `aerial`...) — query with slugs, not display names. It is the canonical portfolio
+source: sample links in emails and example films in proposals come from category-intersection
+queries here (highest-rated first, use `watch_url`), never from ad-hoc YouTube scans.
+
 ## Wider context
 
 Full history + current state live in the Claude memory files (mirrored on the box at

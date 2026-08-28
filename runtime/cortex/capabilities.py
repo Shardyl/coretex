@@ -28,6 +28,11 @@ CAPABILITIES: list[tuple[str, str]] = [
      "billing/payment matters) and CRM-captured. Substantive lead/client/finance mail gets a reply DRAFTED "
      "automatically as an approval card, sent from the mailbox that received it; senders on an active deal "
      "get project-context replies with the deal on the card. Sensa website enquiries auto-draft too."),
+    ("Media library — the portfolio source",
+     "coretex.uk/media (media_assets): every film, profiled, categorised (lowercase slugs: interviews, "
+     "real-estate, aerial...) and rated. USE IT whenever an email or proposal should prove competence or "
+     "show relevant work: filter on the INTERSECTION of the enquiry's categories, pick highest-rated, share "
+     "the watch_url. Never pick videos by ad-hoc YouTube search — the library is canonical."),
     ("Team approvals",
      "Authorised team members (users.can_approve — Gino + Ayresh for Sensa) can approve OUTWARD work in "
      "their company scope with their own PIN at the step-up gate. MONEY-class approvals always require "
