@@ -521,6 +521,15 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     if db.setting_get("email_sending_paused"):   # global kill-switch — keep the card, don't send
         store.update_task(task["id"], status="awaiting_approval")
         return {"blocked": True, "error": "Email sending is PAUSED. Resume it to send this reply."}
+    # SAFETY (audit F2): claim the card ATOMICALLY before any side effect. Compare-and-swap means a
+    # double-tap, a second device, or a concurrent supersede can never produce two sends of one card;
+    # a crash mid-send leaves it stuck in 'sending' (alerted, never re-approvable) instead of duplicated.
+    claimed = db.execute("update tasks set status='sending', updated_at=now() where id=%s and "
+                         "status in ('awaiting_approval','awaiting_correction','new') returning id",
+                         (task["id"],))
+    if not claimed:
+        return {"blocked": True, "error": "This card was already handled or just changed — reload it."}
+    task = store.get_task(task["id"]) or task     # re-read: send exactly what the DB holds NOW
     env = _email_envelope(task, company)
     mt = (task.get("request") or {}).get("meeting")
     if mt and not mt.get("event_id"):   # confirmed slot -> the event + Meet room must exist (still guest-less)
@@ -572,11 +581,15 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         else:
             send_company = None     # no brand token -> legacy global path (_send_token uses gmail_send_refresh_token)
     th = req.get("thread") or {}               # continue THEIR Gmail thread (threadId + reply headers)
-    res = gmail.send_message(env["to"], env["subject"], c["plain"], from_addr=from_addr, cc=env["cc"],
-                             html=c["html"], inline_images=c["inline"], bcc=env.get("bcc"),
-                             files=files, file_names=file_names, company=send_company, send_rt_key=send_rt_key,
-                             thread_id=th.get("id") or None, in_reply_to=th.get("msg_id") or None,
-                             references=th.get("references") or None)
+    try:
+        res = gmail.send_message(env["to"], env["subject"], c["plain"], from_addr=from_addr, cc=env["cc"],
+                                 html=c["html"], inline_images=c["inline"], bcc=env.get("bcc"),
+                                 files=files, file_names=file_names, company=send_company, send_rt_key=send_rt_key,
+                                 thread_id=th.get("id") or None, in_reply_to=th.get("msg_id") or None,
+                                 references=th.get("references") or None)
+    except Exception as ex:  # noqa: BLE001 — the send did NOT happen: release the claim so a retry is safe
+        store.update_task(task["id"], status="awaiting_approval")
+        return {"blocked": True, "error": f"Send failed, nothing went out: {ex}"}
     try:
         crm.log_event(env["to"], "email_sent", f"Email sent: {env['subject']}", company.get("slug"))
     except Exception:  # noqa: BLE001 — CRM history must never block the send
@@ -699,6 +712,7 @@ def _run_task(task: dict) -> None:
     auto_ok = (skill["authority"] == "auto" and skill["stakes"] == "low"
                and not skill["paused"] and task["kind"] not in MONEY_KINDS
                and task["kind"] not in NEVER_AUTO_KINDS
+               and kind_class(task["kind"]) == "internal"   # audit F4: outward NEVER auto-runs, full stop
                and verdict.get("aligned") and not verdict.get("escalate"))
     if auto_ok:
         _execute(task, skill, company, actor="cortex", auto=True)
@@ -982,6 +996,19 @@ def _on_callback(cq: dict) -> None:
 
 
 def _approve(task: dict, skill: dict, company: dict) -> dict:
+    # SAFETY (audit F1): the Telegram button must obey the same gates as the cockpit. A stale tap on an
+    # already-handled card must never re-send, and outward/money kinds never bypass the step-up once the
+    # owner has a device registered — Telegram can't do biometrics, so those route to the cockpit.
+    fresh = store.get_task(task["id"])
+    if not fresh or fresh.get("status") not in ("awaiting_approval", "awaiting_correction"):
+        if task.get("tg_message_id"):
+            tg.edit(task["tg_message_id"], "Already handled — nothing sent again.")
+        return {"blocked": True, "error": "already handled"}
+    task = fresh
+    if kind_class(task.get("kind")) in ("outward", "money") and webauthn_auth.is_registered():
+        if task.get("tg_message_id"):
+            tg.edit(task["tg_message_id"], "This one needs your PIN/fingerprint — approve it in the cockpit.")
+        return {"blocked": True, "error": "step-up required — approve in the cockpit"}
     result = _execute(task, skill, company, actor="owner")
     if result and (result.get("blocked") or result.get("needs_confirm")):
         # a guarded newsletter send did NOT go out — don't claim approval, don't bump the streak
@@ -2101,6 +2128,10 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
     contacts = opp.get("contacts") or []
     primary = next((c for c in contacts if c.get("primary")), contacts[0] if contacts else None)
     email = (primary or {}).get("email") or opp.get("contact_email")
+    if email and db.one("select id from tasks where company_id=%s and kind='email_reply' and "
+                        "status in ('new','drafting','awaiting_approval','awaiting_correction','sending') "
+                        "and lower(request->'inquiry'->>'email')=lower(%s) limit 1", (co["id"], email)):
+        return   # an email card for this contact is already in flight — never stack chases (audit F10)
     skill = store.get_skill_by_key(co["id"], "sales-first-response")
     label = {"checkin": "check-in", "revive": "revival"}.get(action, "follow-up")
     if email and skill:
@@ -2604,8 +2635,14 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
             store.update_task(dup["id"], status="new", draft=None, request=req)
             return
         store.create_task(co["id"], skill["id"], "email_reply", req)
-    except Exception:  # noqa: BLE001 — drafting is best-effort; classification/CRM capture must proceed
-        pass
+    except Exception as ex:  # noqa: BLE001 — NEVER silent (audit: a swallowed failure here loses a client
+        # email forever once it is marked seen). Alert + tell the caller NOT to mark it seen, so it retries.
+        try:
+            tg.send(f"(reply-card failed for {e.get('email')}: {str(ex)[:120]} — will retry next sweep)")
+        except Exception:  # noqa: BLE001
+            pass
+        return False
+    return True
 
 
 def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_token",
@@ -2655,8 +2692,9 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                            "reason": "active deal/project in CRM (deterministic override)"}
             except Exception:  # noqa: BLE001 — a CRM hiccup must never break classification
                 pass
+        card_ok = True
         if commit and cls["category"] in ("lead", "client", "finance"):
-            _draft_direct_reply(co, e, cls, rt_key=rt_key, address=address)
+            card_ok = _draft_direct_reply(co, e, cls, rt_key=rt_key, address=address) is not False
         if commit:
             if cls["to_crm"] and e.get("email"):
                 stage = "Engaged" if cls["category"] in ("lead", "partner", "support") else "Cold"
@@ -2669,7 +2707,8 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                         added += 1
                 except Exception:  # noqa: BLE001
                     pass
-            seen.add(gid)
+            if card_ok:      # a failed card leaves the mail unseen -> retried next sweep, never lost
+                seen.add(gid)
         results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60], **cls})
     if commit:
         db.setting_set(key, list(seen)[-3000:])
@@ -3281,6 +3320,16 @@ def _recover_stranded_tasks() -> None:
         store.update_task(r["id"], status="awaiting_approval" if (r.get("draft") or "").strip() else "new")
     if rows:
         tg.send(f"Recovered {len(rows)} task(s) stranded in 'drafting' by a restart.")
+    # a card stuck in 'sending' means a crash happened MID-SEND: the email may or may not have left.
+    # Never auto-retry that (a duplicate to a client is worse than a delay) — surface it for a human check.
+    stuck = db.query("select id from tasks where status='sending'")
+    for r in stuck:
+        notifications.notify(f"Card #{r['id']} was interrupted MID-SEND by a restart. Check the mailbox's "
+                             "Sent folder: if the email went, mark the card done; if not, set it back to "
+                             "awaiting approval. It will NOT retry on its own.", "Interrupted send",
+                             priority="high", category="reminder", target_type="task", target_id=str(r["id"]))
+    if stuck:
+        tg.send(f"⚠️ {len(stuck)} card(s) interrupted mid-send — check the Inbox notification before acting.")
 
 
 def run(poll_idle: float = 1.0) -> None:

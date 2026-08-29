@@ -114,27 +114,33 @@ def due() -> list[dict]:
 
 
 def fire(r: dict) -> dict:
-    """Fire one reminder. Nudge -> a notification (info card). Action -> spawn a task (action card).
-    Then reschedule (recurring) or close (one-off)."""
-    action = r.get("action")
-    note_id, task_id = None, None
-    if action:                                   # ACTION reminder -> spawn a normal task
-        task_id = _spawn_task(r, action)
-    else:                                        # NUDGE -> drop an info card pointing at the target
-        n = notifications.notify(
-            r["title"], "Reminder", priority=r.get("priority") or "normal", category="reminder",
-            company_id=r.get("company_id"), target_type=r.get("target_type"), target_id=r.get("target_id"))
-        note_id = n["id"]
-
+    """Fire one reminder. ORDER MATTERS (audit): the row is advanced/closed FIRST, then the side effect
+    runs — so a failure can never leave a past-due 'pending' row refiring every 60s. If the side effect
+    then fails, we alert once instead of multiplying output."""
     nxt = next_due(r["due_at"], r.get("recurrence") or "none", r.get("custom_days"))
     if nxt is not None:                          # recurring -> queue the next fire
-        db.execute("update reminders set due_at=%s, status='pending', snooze_until=null, "
-                   "last_notification_id=%s, last_task_id=%s where id=%s",
-                   (nxt, note_id, task_id, r["id"]))
+        db.execute("update reminders set due_at=%s, status='pending', snooze_until=null where id=%s",
+                   (nxt, r["id"]))
     else:                                        # one-off -> done
-        db.execute("update reminders set status='fired', snooze_until=null, "
-                   "last_notification_id=%s, last_task_id=%s where id=%s",
-                   (note_id, task_id, r["id"]))
+        db.execute("update reminders set status='fired', snooze_until=null where id=%s", (r["id"],))
+    action = r.get("action")
+    note_id, task_id = None, None
+    try:
+        if action:                               # ACTION reminder -> spawn a normal task
+            task_id = _spawn_task(r, action)
+            if task_id is None and action:       # spawn failed -> the owner must know the work didn't start
+                notifications.notify(f"Reminder \"{r['title']}\" fired but its task could not be created - "
+                                     "set it again or run it by hand.", "Reminder action failed",
+                                     priority="high", category="reminder", company_id=r.get("company_id"))
+        else:                                    # NUDGE -> drop an info card pointing at the target
+            n = notifications.notify(
+                r["title"], "Reminder", priority=r.get("priority") or "normal", category="reminder",
+                company_id=r.get("company_id"), target_type=r.get("target_type"), target_id=r.get("target_id"))
+            note_id = n["id"]
+    except Exception:  # noqa: BLE001 - the row is already advanced; never refires in a loop
+        pass
+    db.execute("update reminders set last_notification_id=%s, last_task_id=%s where id=%s",
+               (note_id, task_id, r["id"]))
     return {"reminder_id": r["id"], "notification_id": note_id, "task_id": task_id}
 
 

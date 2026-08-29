@@ -217,6 +217,9 @@ def draft(skill: dict, company: dict, request: dict,
     for at in (request.get("attachment_texts") or []) if isinstance(request, dict) else []:
         user.append(f"ATTACHED DOCUMENT '{at.get('filename') or 'document'}' (text extracted from the "
                     f"client's attachment — read it and address its content):\n{(at.get('text') or '')[:15000]}")
+    if prev_draft:
+        user.append("YOUR PREVIOUS DRAFT (the one under revision — change ONLY what the correction or "
+                    "feedback requires, keep every other sentence exactly as it is):\n" + prev_draft[:6000])
     if manager_feedback:
         user.append("Your manager flagged these to fix:\n- " + "\n- ".join(manager_feedback))
     if correction:
