@@ -118,12 +118,30 @@ def create_event(company: str, *, calendar_id: str = "primary", start: datetime,
     return {"id": r.get("id"), "link": r.get("htmlLink"), "meet": meet_link}
 
 
-def add_attendee(company: str, event_id: str, attendee: str, calendar_id: str = "primary") -> dict:
-    """Add the guest to an existing event and let Google send them the invite — the approval-time step
-    after an event was pre-booked (attendee-less) so a draft could carry its real Meet link."""
+def delete_event(company: str, event_id: str, calendar_id: str = "primary", notify: bool = False) -> None:
+    """Remove an event (e.g. a pre-booked meeting whose card was skipped) so phantom bookings never
+    accumulate and block availability. notify=True sends guests a cancellation."""
     calendar_id = _cal_id(company, calendar_id)
     tok = _token(company)
-    body = json.dumps({"attendees": [{"email": attendee}]}).encode()
+    urllib.request.urlopen(urllib.request.Request(
+        f"https://www.googleapis.com/calendar/v3/calendars/{urllib.parse.quote(calendar_id)}/events/"
+        f"{urllib.parse.quote(event_id)}?sendUpdates=" + ("all" if notify else "none"),
+        headers={"Authorization": f"Bearer {tok}"}, method="DELETE"))
+
+
+def add_attendee(company: str, event_id: str, attendee: str, calendar_id: str = "primary") -> dict:
+    """Add the guest to an existing event and let Google send them the invite — the approval-time step
+    after an event was pre-booked (attendee-less). MERGES with existing attendees (a PATCH of the
+    attendees array REPLACES it; replacing would cancel-notify anyone already on the event)."""
+    calendar_id = _cal_id(company, calendar_id)
+    tok = _token(company)
+    cur = json.load(urllib.request.urlopen(urllib.request.Request(
+        f"https://www.googleapis.com/calendar/v3/calendars/{urllib.parse.quote(calendar_id)}/events/"
+        f"{urllib.parse.quote(event_id)}", headers={"Authorization": f"Bearer {tok}"})))
+    have = [a for a in (cur.get("attendees") or [])]
+    if not any((a.get("email") or "").lower() == attendee.lower() for a in have):
+        have.append({"email": attendee})
+    body = json.dumps({"attendees": have}).encode()
     r = json.load(urllib.request.urlopen(urllib.request.Request(
         f"https://www.googleapis.com/calendar/v3/calendars/{urllib.parse.quote(calendar_id)}/events/"
         f"{urllib.parse.quote(event_id)}?sendUpdates=all", data=body,

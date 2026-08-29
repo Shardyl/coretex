@@ -835,6 +835,11 @@ def enqueue_send(company_id: int, task_id: int, art: dict, recips: list[dict],
     IDEMPOTENT per task (audit): a retry/crash-rerun for the same card returns the existing job
     instead of mailing the entire list a second time."""
     ensure_jobs_table()   # self-heal: works on any box / fresh DB without a manual migration step
+    if db.setting_get("outbound_paused"):
+        raise RuntimeError("outbound is PAUSED - resume it before queueing a newsletter send")
+    if not live_sends_on():
+        raise RuntimeError("live newsletter sends are OFF (newsletter_live_sends) - the full-list "
+                           "safeguard applies to every enqueue path")
     dup = db.one("select id from newsletter_send_jobs where task_id=%s limit 1", (task_id,))
     if dup:
         return dup["id"]

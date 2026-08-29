@@ -124,7 +124,7 @@ def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
     (list of (cid, filepath)) are embedded so a footer logo renders. `from_addr` is honoured when it
     matches the authenticated account or a verified 'send mail as' identity."""
     # SAFETY (enforced HERE so no path can bypass it): a global kill-switch + recipient sanity check.
-    if db.setting_get("email_sending_paused"):
+    if db.setting_get("email_sending_paused") or db.setting_get("outbound_paused"):
         raise RuntimeError("email sending is PAUSED — resume it to send")
     # This is the ONLY single-email send path in the system (bulk goes through Mailgun). Enforce that the
     # primary recipient is EXACTLY ONE address — a comma-joined `to` (multiple recipients) is refused outright,

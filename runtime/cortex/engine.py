@@ -1048,6 +1048,15 @@ def _skip(task: dict, skill: dict, company: dict) -> None:
         db.execute("delete from tasks where id=%s", (task["id"],))
         return
     store.update_task(task["id"], status="rejected")
+    mt = (task.get("request") or {}).get("meeting") or {}
+    if mt.get("event_id") and not mt.get("invited"):
+        # a pre-booked (guest-less) meeting dies with its card — phantom bookings must never
+        # accumulate and eat availability. No guest was ever invited, so nobody is notified.
+        try:
+            from . import calendar as gcal
+            gcal.delete_event(mt.get("calendar") or (company or {}).get("slug") or "sensa", mt["event_id"])
+        except Exception:  # noqa: BLE001
+            pass
     store.reset_streak(skill["id"])   # a rejection breaks the clean-approval streak
     store.log_decision(task["id"], skill["id"], "owner", "reject", snapshot={"draft": task.get("draft")})
     if task.get("tg_message_id"):
@@ -1768,7 +1777,7 @@ def poll_inquiries_window(days: int = 2) -> dict:
     skill = store.get_skill_by_key(co["id"], "sales-first-response") if co else None
     if not (co and skill):
         return {"made": 0, "filtered": 0, "reason": "tabscanner sales-first-response skill missing"}
-    seen = set(db.setting_get("gmail_processed") or [])
+    seen_list = list(db.setting_get("gmail_processed") or []); seen = set(seen_list)
     filtered_log = db.setting_get("gmail_filtered") or []
     made, filtered = 0, 0
     for inq in inqs:
@@ -1792,7 +1801,7 @@ def poll_inquiries_window(days: int = 2) -> dict:
         made += 1
         if made >= 10:
             break
-    db.setting_set("gmail_processed", list(seen)[-1000:])
+    db.setting_set("gmail_processed", (seen_list + [g for g in seen if g not in set(seen_list)])[-1000:])
     if filtered:
         db.setting_set("gmail_filtered", filtered_log[-200:])
     if made:
@@ -1974,7 +1983,7 @@ def _poll_one_form(slug: str, cfg: dict, days: int = 3) -> dict:
     if not (co and skill):
         return {"reason": "company/skill missing"}
     key = f"form_processed:{slug}"
-    seen = set(db.setting_get(key) or [])
+    seen_list = list(db.setting_get(key) or []); seen = set(seen_list)
     emails = gmail.list_recent(days=days, limit=30, rt_key=cfg["rt_key"], company=cfg.get("client"),
                                q=f'subject:"{cfg["subject"]}"', skip=seen)
     made = filtered = 0
@@ -1995,7 +2004,7 @@ def _poll_one_form(slug: str, cfg: dict, days: int = 3) -> dict:
             filtered += 1
         if made >= 10:
             break
-    db.setting_set(key, list(seen)[-1000:])
+    db.setting_set(key, (seen_list + [g for g in seen if g not in set(seen_list)])[-1000:])
     if made:
         action = "drafting for your approval" if cfg.get("draft", True) else "added to the CRM"
         tg.send(f"{made} genuine {co['name']} contact-form enquir{'ies' if made > 1 else 'y'}"
@@ -2142,7 +2151,7 @@ def _poll_one_waitlist(slug: str, cfg: dict, days: int = 30) -> dict:
     if not co:
         return {"reason": "company missing"}
     key = f"waitlist_processed:{slug}"
-    seen = set(db.setting_get(key) or [])
+    seen_list = list(db.setting_get(key) or []); seen = set(seen_list)
     emails = gmail.list_recent(days=days, limit=30, rt_key=cfg["rt_key"], company=cfg.get("client"),
                                q=f'subject:"{cfg["subject"]}"', skip=seen)
     cid_row = db.one("select id from companies where slug=%s", (slug,))
@@ -2173,7 +2182,7 @@ def _poll_one_waitlist(slug: str, cfg: dict, days: int = 30) -> dict:
                 item={"name": reg.get("name") or reg["email"], "email": reg["email"], "cat": "waitlist"})
         except Exception:  # noqa: BLE001
             pass
-    db.setting_set(key, list(seen)[-1000:])
+    db.setting_set(key, (seen_list + [g for g in seen if g not in set(seen_list)])[-1000:])
     if made:
         tg.send(f"{made} new {co['name']} waitlist signup{'s' if made > 1 else ''} — added to the CRM.")
     return {"made": made}
@@ -2663,7 +2672,7 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
     own_domain = INBOXES.get(company_slug, "").split("@")[-1].lower()
     intl = _internal_index()                       # own/burner domains + internal roster + test group
     key = f"inbox_processed:{company_slug}"
-    seen = set(db.setting_get(key) or [])
+    seen_list = list(db.setting_get(key) or []); seen = set(seen_list)
     emails = gmail.list_recent(days=days, limit=limit, rt_key=rt_key, q=q, skip=seen, company=company)
     results, added = [], 0
     for e in emails:
@@ -2714,7 +2723,7 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                 seen.add(gid)
         results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60], **cls})
     if commit:
-        db.setting_set(key, list(seen)[-3000:])
+        db.setting_set(key, (seen_list + [g for g in seen if g not in set(seen_list)])[-3000:])
     return {"processed": len(results), "added_to_crm": added, "results": results}
 
 

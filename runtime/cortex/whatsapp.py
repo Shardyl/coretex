@@ -209,6 +209,9 @@ def ingest_cloud(payload: dict, account: str = "sensa-uk") -> dict:
 def send_text(phone: str, text: str) -> dict:
     """Send a plain text reply via the Cloud API. Only valid inside the 24h customer service window; outside
     it Meta requires a pre-approved template, which we do not have yet and which is a separate build."""
+    from . import db as _db
+    if _db.setting_get("whatsapp_paused") or _db.setting_get("outbound_paused"):
+        raise RuntimeError("WhatsApp sending is PAUSED - resume it to send")
     token = config.get("WHATSAPP_TOKEN")
     pnid = config.get("WHATSAPP_PHONE_NUMBER_ID")
     if not (token and pnid):
