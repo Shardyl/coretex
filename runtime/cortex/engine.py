@@ -2160,10 +2160,12 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
         if thread:
             brief += ("\nRECENT CORRESPONDENCE with them (newest first — reference it, stay consistent "
                       "with it, and never repeat a chase they already answered):\n" + thread[:5000])
-        inq = {"name": (primary or {}).get("name") or "", "email": email,
-               "message": f"(Automated {label} on the opportunity '{opp['title']}'. No reply yet.)"}
+        inq = {"name": (primary or {}).get("name") or "", "email": email, "message": ""}
+        # the situation is SYSTEM knowledge, never 'their words' (contract: inquiry.message = client only)
         t = store.create_card(co["id"], skill["id"], "email_reply",
-                              {"brief": brief, "inquiry": inq, "followup": action, "deal_id": opp["id"]},
+                              {"brief": brief, "inquiry": inq, "followup": action, "deal_id": opp["id"],
+                               "system_note": f"Automated {label} on the opportunity '{opp['title']}'. "
+                                              "They have not replied to our last message."},
                               contact=email, deal_id=opp["id"])
         if t:
             db.execute("update tasks set deal_id=%s where id=%s", (opp["id"], t["id"]))
@@ -3031,10 +3033,10 @@ def _spawn_lead_chase(co: dict, email: str) -> None:
     c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (email,))
     nm = ((((c or {}).get("first_name")) or "") + " " + (((c or {}).get("last_name")) or "")).strip()
     name = nm if re.search(r"[A-Za-z]", nm) else email.split("@")[0]
-    inq = {"name": name, "email": email, "subject": "Re: your enquiry",
-           "message": "(No reply yet to our last message.)"}
+    inq = {"name": name, "email": email, "subject": "Re: your enquiry", "message": ""}
     store.create_card(co["id"], skill["id"], "email_reply",
-                      {"brief": _lead_chase_brief(inq, co), "inquiry": inq, "lead_chase": True},
+                      {"brief": _lead_chase_brief(inq, co), "inquiry": inq, "lead_chase": True,
+                       "system_note": "Silence chase: this lead has not replied to our last message."},
                       contact=email)
 
 

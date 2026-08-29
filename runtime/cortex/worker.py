@@ -148,6 +148,10 @@ def draft(skill: dict, company: dict, request: dict,
         if their and their[:200] not in (request.get("brief") or ""):
             user.append("THEIR EMAIL (this is the message you are replying to — address exactly what it says; "
                         "quoted earlier messages below it are thread history for context):\n" + their[:6000])
+        _sn = (request.get("system_note") or "").strip()
+        if _sn:
+            user.append("SITUATION (system knowledge, NOT the client's words — never quote or reference "
+                        "this text in the email): " + _sn[:500])
         bits = []
         if inq.get("name") or inq.get("email"):
             bits.append(f"This email is addressed TO {inq.get('name') or inq.get('email')} — greet THEM by "

@@ -198,7 +198,39 @@ def promote_queued(company_id=None, key: str | None = None) -> int:
     return len(rows or [])
 
 
+# ---- the CARD CONTRACT (rebuild Stage 2b) ------------------------------------------------------
+# Known request keys per family. Unknown keys are LOGGED, not rejected (log-only phase) — every future
+# field drift becomes a visible journal line instead of a silent missing behaviour.
+_EMAIL_KEYS = {"brief", "inquiry", "triage", "qual_suggest", "thread", "thread_reply", "meeting",
+               "from_email", "mailbox_rt", "gmail_id", "deal_id", "followup", "lead_chase", "outbound",
+               "attachments", "attachment_names", "attach_docs", "inbound_attachments", "cc_extra",
+               "cc_remove", "system_note", "serialize_key", "context_manifest", "title"}
+
+
+def _validate_card(kind: str, request) -> None:
+    try:
+        if not isinstance(request, dict):
+            return
+        if kind in ("email_reply", "email_draft"):
+            unknown = set(request) - _EMAIL_KEYS
+            if unknown:
+                print(f"[contract] {kind} card carries unknown keys: {sorted(unknown)}", flush=True)
+            if not ((request.get("inquiry") or {}).get("email")):
+                print(f"[contract] {kind} card missing inquiry.email", flush=True)
+        # inbound client files are CONTEXT: their data: URLs must never be persisted as sendable
+        # attachments (a careless save would re-send a client their own files)
+        if request.get("inbound_attachments") and request.get("attachments"):
+            request["attachments"] = [a for a in request["attachments"]
+                                      if not (isinstance(a, str) and a.startswith("data:"))]
+            if not request["attachments"]:
+                request.pop("attachments", None)
+            print("[contract] stripped inbound data-URLs from persistable attachments", flush=True)
+    except Exception:  # noqa: BLE001 — the validator observes, it never blocks
+        pass
+
+
 def create_task(company_id, skill_id, kind, request) -> dict:
+    _validate_card(kind, request)
     return db.execute(
         "insert into tasks (company_id,skill_id,kind,request) values (%s,%s,%s,%s) returning *",
         (company_id, skill_id, kind, Json(request)),
@@ -212,6 +244,9 @@ def get_task(tid: int) -> dict | None:
 def update_task(tid: int, **fields) -> dict | None:
     if not fields:
         return get_task(tid)
+    if isinstance(fields.get("request"), dict):
+        t = db.one("select kind from tasks where id=%s", (tid,))
+        _validate_card((t or {}).get("kind") or "", fields["request"])
     sets, vals = [], []
     for k, v in fields.items():
         sets.append(f"{k}=%s")
