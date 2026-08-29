@@ -2099,11 +2099,9 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
     if email and skill:
         brief = f"{label.title()} on the opportunity '{opp['title']}'. Goal: get a reply / book a meeting."
         if action == "revive":
-            brief = (f"Long-gap REVIVAL of the dormant opportunity '{opp['title']}' — months since their last "
-                     "reply. Soft, no-pressure reconnect: we were reviewing our projects and remembered their "
-                     "enquiry; ask if anything is in the pipeline this quarter; offer to pick it back up "
-                     "whenever suits. Reference what THEY originally asked about (see the correspondence "
-                     "below) so it reads personal, never like a mail-merge.")
+            brief = (f"Long-gap REVIVAL of the dormant opportunity '{opp['title']}' — months since their "
+                     "last reply. The REVIVAL standing rules on the sales-followup skill govern the tone "
+                     "and shape; the correspondence below is what they originally asked about.")
         note = (opp.get("note") or "").strip()
         if note:
             brief += f"\nNOTES ON THE OPPORTUNITY (from the team — factor them in): {note[:800]}"
@@ -2212,8 +2210,7 @@ INBOXES = {"tabscanner": "api@tabscanner.com", "sensa": "hello@sensa.digital",
 
 
 # our own company domains (a sender on any of these is US, never a customer) — kept in sync with the scrape rules
-OWN_COMPANY_DOMAINS = {"sensa.digital", "skyvision.film", "tabscanner.com", "snap-rewards.com",
-                       "filmspoke.ai", "coretex.uk", "sensa.film", "sensafilms.com"}
+from .identity import OWN_COMPANY_DOMAINS   # single definition (identity.py) — meetnotes shares it
 _PLACEHOLDER_RE = re.compile(r"^linked\d+@")
 
 
@@ -2834,14 +2831,9 @@ def _bare_email(s: str) -> str:
 
 def _reply_followup_brief(inq: dict, co: dict | None = None) -> str:
     """Frame a lead's REPLY (ongoing thread) as a 'draft the next message' brief for the worker."""
-    return ("This is a REPLY from a lead in an ONGOING sales conversation (not a new website enquiry). Read their "
-            "message and draft OUR next reply, continuing the thread. Friendly, helpful, in the company voice; "
-            "address exactly what they said; keep gauging scope, timeline and budget; and push for a short call "
-            "(offer the meeting link) UNLESS they have clearly declined one. If they have declined a call and are "
-            "only asking for a quotation or proposal, do NOT write or promise a quote — acknowledge warmly and say "
-            "the team will follow up with it (a human takes the quote over). Plain-text email body ONLY: no "
-            "markdown, no subject, no sign-off/name/signature (appended automatically), never a Cc/Bcc or system "
-            "note.\n\n"
+    return ("This is a REPLY from a lead in an ONGOING sales conversation (not a new website enquiry). Read "
+            "their message and draft OUR next reply, continuing the thread — the THREAD-continuation "
+            "standing rules on the sales-followup skill govern how. Plain-text email body only.\n\n"
             f"Their name: {inq.get('name') or 'there'}\n"
             f"Their email: {inq.get('email') or '(unknown)'}\n"
             f"Their latest message:\n{(inq.get('message') or '').strip()}"
@@ -2974,11 +2966,9 @@ def _arm_lead_followup(cid: int, email: str, step: int | None = None) -> None:
 
 
 def _lead_chase_brief(inq: dict, co: dict | None = None) -> str:
-    return ("This is a FOLLOW-UP to a lead who got in touch and whom we already replied to, but who has NOT "
-            "responded yet. Draft a SHORT, warm, low-pressure nudge: gently check they saw our message, say we'd "
-            "love a quick call to understand their project (offer the meeting link), and invite them to reply with "
-            "any details whenever suits. Never pushy or guilt-trippy; one short paragraph. Plain-text body ONLY: no "
-            "markdown, no subject, no sign-off/name/signature (appended automatically), never a Cc/Bcc or system note.\n\n"
+    return ("This is a SILENCE CHASE: the lead got in touch, we replied, they have not responded yet. Draft "
+            "the nudge — the SILENCE-chase standing rules on the sales-followup skill govern the tone and "
+            "shape. Plain-text body only.\n\n"
             f"Their name: {inq.get('name') or 'there'}\n"
             f"Their email: {inq.get('email')}"
             ) + _booking_slots_brief(co)

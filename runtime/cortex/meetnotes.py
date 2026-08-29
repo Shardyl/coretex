@@ -31,8 +31,7 @@ create table if not exists meeting_notes (
 );
 """
 
-_OWN = ("sensa.digital", "skyvision.film", "tabscanner.com", "snap-rewards.com", "filmspoke.ai",
-        "coretex.uk", "sensa.film", "sensafilms.com", "gmail.com")   # gmail: rashad's personal attends too
+from .identity import NON_CLIENT_DOMAINS as _OWN   # single definition (identity.py)
 
 
 def ensure_schema() -> None:
@@ -165,11 +164,8 @@ def _spawn_post_meeting_followup(event: dict, ext: list, company_id, deal_id, su
     c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (contact,))
     name = (((c or {}).get("first_name") or "") + " " + ((c or {}).get("last_name") or "")).strip()
     req = {"brief": (f"POST-MEETING FOLLOW-UP after '{event.get('summary')}'. We just met; they have not "
-                     "emailed since. Draft the follow-up: thank them for the meeting, recap in one or two "
-                     "lines what was agreed (from the notes below), and commit to the agreed next step — "
-                     "when the notes point to a proposal/quotation, confirm it is being prepared with the "
-                     "scope discussed (never invent prices or dates). Warm, brief, no sales pressure.\n"
-                     "MEETING NOTES (distilled):\n" + summary[:3000]),
+                     "emailed since. The POST-MEETING standing rules on the sales-followup skill govern "
+                     "what this email does.\nMEETING NOTES (distilled):\n" + summary[:3000]),
            "inquiry": {"name": name or contact.split("@")[0], "email": contact,
                        "subject": f"Following up: {event.get('summary')}"},
            "followup": "post-meeting"}

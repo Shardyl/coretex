@@ -72,20 +72,31 @@ def _rules_block(skill: dict) -> str:
 # Related skills whose trained rules must ALSO sit in front of the drafter for certain work — the worker is a
 # dumb waiter: it fetches every relevant shelf, it never cooks. WHICH shelves relate to which task is plumbing
 # (this map); WHAT the rules say lives only in the DB. Keyed by the drafting task's own skill_key.
-_RELATED_SKILLS = {
-    # email-handling holds the company's general email voice (for Sensa: distilled from Gino's sent mail),
-    # so EVERY inbound-reply draft reads it; sales-followup governs thread continuations (never pressure).
+_RELATED_SKILLS_DEFAULT = {
+    # email-handling holds the company's general email voice; sales-followup governs thread continuations.
     "sales-first-response": ("email-handling", "sales-scheduling", "lead-qualification", "sales-followup"),
-    # project correspondence (deal in delivery) drafts ON email-handling and also reads the project skills —
-    # corrections/rules about HOW Sensa runs projects accumulate there and reach every project reply.
+    # project correspondence drafts ON email-handling and also reads the project skills' rules.
     "email-handling": ("sales-scheduling", "prod-revisions", "prod-status-reporting", "prod-pipeline"),
 }
+
+
+def _related_map() -> dict:
+    """The routing table is DATA (setting 'related_skills'), editable without a deploy; the constant
+    above is only the seed/fallback."""
+    try:
+        from . import db
+        m = db.setting_get("related_skills")
+        if isinstance(m, dict) and m:
+            return {k: tuple(v) for k, v in m.items()}
+    except Exception:  # noqa: BLE001
+        pass
+    return _RELATED_SKILLS_DEFAULT
 
 
 def related_skills(skill: dict, company: dict) -> list[dict]:
     """The related skills (with their live rules) for this task's skill, resolved from the DB."""
     out = []
-    for key in _RELATED_SKILLS.get((skill or {}).get("skill_key", ""), ()):
+    for key in _related_map().get((skill or {}).get("skill_key", ""), ()):
         s = store.get_skill_by_key(company["id"], key)
         if s:
             out.append(s)

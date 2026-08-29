@@ -112,17 +112,13 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
     personal = verdict.get("category") == "personal"
     # a real name only — never the phone number WhatsApp puts where a name would go
     know_name = verdict.get("name") or ("" if _clean_phone(name) else name)
+    # channel voice + personal/unknown-number behaviour live in the social-dm-replies skill RULES
+    # (worker.draft serves them) — the brief carries only the FACTS of this message.
     brief = (
-        "Draft a reply to this WhatsApp message. WhatsApp is a PERSONAL, informal channel — write the way "
-        "a real person texts: short (1 to 4 sentences), warm, natural, no email formatting, no subject "
-        "line, no sign-off, no signature, no corporate tone. "
-        + ("This is a PERSONAL message from someone who knows Rashad, NOT a business lead — reply as a "
-           "friend would, do not pitch, do not sell.\n\n" if personal else
-           f"This is a '{verdict.get('category')}' message.\n\n")
-        + ("You do NOT know this person's name yet — WhatsApp only gave us their number. If it "
-           "reads naturally, ask who you're speaking with as part of the reply, the way anyone "
-           "would when a message arrives from an unknown number. Do not force it if the message "
-           "doesn't invite it.\n\n" if not know_name else "")
+        "Draft a reply to this WhatsApp message (the skill's standing rules govern the voice and shape). "
+        + ("FACT: this is a PERSONAL message from someone who knows the owner, not a business lead.\n\n"
+           if personal else f"FACT: triaged as a '{verdict.get('category')}' message.\n\n")
+        + ("FACT: the sender's name is unknown — only their number.\n\n" if not know_name else "")
         + f"From: {know_name or phone}\nTheir message: {msg}")
     try:
         draft = worker.draft(skill, co, {"brief": brief}, author=rt.get("author") or "rashad")
