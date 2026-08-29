@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64 as _b64
 import html as _html
+import json
 import os
 import re
 import secrets
@@ -699,10 +700,10 @@ def _run_task(task: dict) -> None:
     draft = worker.draft(skill, company, dreq)
     if task.get("kind") in ("email_reply", "email_draft"):
         draft = _ensure_clean_email(skill, company, dreq, draft)
-    verdict = manager.check(skill, company, draft, task["request"])
+    verdict = manager.check(skill, company, draft, dreq)   # the Manager judges the SAME evidence the worker saw
     if not verdict["aligned"] and verdict["issues"]:
         draft = worker.draft(skill, company, dreq, manager_feedback=verdict["issues"])
-        verdict = manager.check(skill, company, draft, task["request"])
+        verdict = manager.check(skill, company, draft, dreq)
 
     task = store.update_task(task["id"], draft=draft, manager=verdict, attempts=task["attempts"] + 1)
     _maybe_extract_meeting(task, draft)   # a confirmed slot in the draft -> calendar+Meet booked on approval
@@ -2396,17 +2397,26 @@ def _request_for_draft(task: dict) -> dict:
 
 
 def _draft_context_for_reply(task: dict, req: dict) -> dict:
-    """CONVERSATION MEMORY for reply drafting, resolved fresh at draft time: the real recent thread with
-    this contact (including what WE already sent) and any meeting already booked with them — so a draft
-    can never re-introduce, contradict an earlier email, or hand out a second meeting link."""
+    """THE CONTEXT ASSEMBLER (rebuild Stage 1). Every email the system drafts — inbound replies,
+    Talk-composed outbound, follow-ups, post-meeting, chases, reminder-spawned — passes through here at
+    draft time and receives the full shelf set for its contact: the real thread (incl. our sent mail),
+    Gemini meeting notes, any booked meeting, the deal timeline, and the owner's past corrections on this
+    relationship. A manifest of what was served is stamped on the card, so 'what did the drafter see?'
+    is always answerable. Each shelf is fail-soft: a fetch hiccup skips that shelf, never the draft."""
     email = ((req.get("inquiry") or {}).get("email") or "").strip()
-    if task.get("kind") != "email_reply" or not email:
+    if task.get("kind") not in ("email_reply", "email_draft") or not email:
         return req
+    manifest = []
+    co = store.get_company(task.get("company_id")) or {}
+    if req.get("attachment_texts") or (req.get("inbound_attachments") and req.get("attachments")):
+        manifest.append("inbound_files")
+    if req.get("attach_docs"):
+        manifest.append("outgoing_attachments")
     try:
-        co = store.get_company(task.get("company_id")) or {}
         hist = _deal_thread_context(co, email, limit=4)
         if hist:
             req["thread_history"] = hist
+            manifest.append("thread_history")
     except Exception:  # noqa: BLE001 — context is best-effort, drafting proceeds regardless
         pass
     try:
@@ -2414,6 +2424,7 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
         if mn and mn.get("summary"):
             when = mn["starts_at"].strftime("%d %b %Y") if mn.get("starts_at") else ""
             req["meeting_notes"] = (mn.get("title") or "Meeting") + f" ({when}):\n" + mn["summary"]
+            manifest.append("meeting_notes")
     except Exception:  # noqa: BLE001
         pass
     try:
@@ -2424,6 +2435,37 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
                     (task["company_id"], task.get("id"), email))
         if fm and fm.get("m"):
             req["existing_meeting"] = fm["m"]
+            manifest.append("booked_meeting")
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # the deal's whole timeline — what was promised, asked, and where it stands
+        did = req.get("deal_id") or task.get("deal_id")
+        if not did:
+            ds = crm.active_deals_for_email(email, co.get("slug"))
+            did = ds[0]["id"] if len(ds) == 1 else None
+        if did:
+            from . import pipeline
+            tl = pipeline.deal_context(int(did))
+            if tl:
+                req["deal_timeline"] = tl
+                manifest.append("deal_timeline")
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # the owner's past corrections on THIS relationship — a taught lesson is never re-learned
+        notes = db.query(
+            "select d.note from decisions d join tasks t on t.id=d.task_id where t.company_id=%s and "
+            "d.action='correct' and coalesce(d.note,'')<>'' and "
+            "lower(t.request->'inquiry'->>'email')=lower(%s) and d.task_id<>%s "
+            "order by d.id desc limit 5", (task["company_id"], email, task.get("id") or 0))
+        if notes:
+            req["owner_feedback"] = "\n".join("- " + n["note"][:250] for n in notes)
+            manifest.append("owner_feedback")
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # stamp the manifest on the card (field-level jsonb_set: no read-modify-write clobber)
+        if task.get("id"):
+            db.execute("update tasks set request = jsonb_set(request, '{context_manifest}', %s::jsonb) "
+                       "where id=%s", (json.dumps(manifest), task["id"]))
     except Exception:  # noqa: BLE001
         pass
     return req

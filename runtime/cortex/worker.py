@@ -195,6 +195,14 @@ def draft(skill: dict, company: dict, request: dict,
                     "Stay consistent with it: never re-introduce yourself or the company, never repeat or "
                     "contradict something already sent, and NEVER share a meeting link different from one "
                     "already sent in this history.\n" + _hist[:5000])
+    _tl = (request.get("deal_timeline") or "").strip() if isinstance(request, dict) else ""
+    if _tl:
+        user.append("DEAL STATE (real logged timeline — stay consistent with what was promised and where "
+                    "the deal stands):\n" + _tl[:3000])
+    _of = (request.get("owner_feedback") or "").strip() if isinstance(request, dict) else ""
+    if _of:
+        user.append("THE OWNER'S PAST CORRECTIONS on this relationship (lessons already taught — obey them "
+                    "without being asked again):\n" + _of[:2000])
     _mn = (request.get("meeting_notes") or "").strip() if isinstance(request, dict) else ""
     if _mn:
         user.append("NOTES FROM OUR LAST MEETING with this contact (distilled from the real meeting notes — "
