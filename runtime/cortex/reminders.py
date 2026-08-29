@@ -97,6 +97,17 @@ def create(title: str, due_at: datetime, *, company_id: int | None = None, targe
     ensure_schema()
     recurrence = recurrence if recurrence in RECURRENCES else "none"
     tid = target_id if target_id is None else str(target_id)
+    if tid is not None and recurrence == "none":
+        # ONE reminder per target per day (audit follow-on: deal 103 accumulated SIX overlapping Monday
+        # reminders from four mechanisms). Same target, same day -> the existing reminder absorbs it.
+        ex = db.one("select * from reminders where status in ('pending','snoozed') and target_type=%s "
+                    "and target_id=%s and due_at::date = %s::date limit 1",
+                    (target_type, tid, due_at))
+        if ex:
+            if title and title.lower()[:40] not in (ex.get("title") or "").lower():
+                db.execute("update reminders set title = left(title || ' + ' || %s, 400) where id=%s",
+                           (title, ex["id"]))
+            return ex
     return db.execute(
         "insert into reminders (title, due_at, company_id, target_type, target_id, recurrence, custom_days, "
         "priority, action, created_by) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *",
