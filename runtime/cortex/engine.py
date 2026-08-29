@@ -2421,6 +2421,15 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
                 manifest.append("deal_timeline")
     except Exception:  # noqa: BLE001
         pass
+    try:   # notes the team saved on the CONTACT (deal notes already ride the deal_timeline shelf)
+        c = db.one("select history from crm_master where lower(email)=lower(%s)", (email,))
+        evs = [h for h in ((c or {}).get("history") or []) if h.get("event") == "note"][-5:]
+        if evs:
+            req["contact_notes"] = "\n".join(
+                f"- {h.get('ts', '')[:10]}: {h.get('text', '')[:250]}" for h in evs)
+            manifest.append("contact_notes")
+    except Exception:  # noqa: BLE001
+        pass
     try:   # the owner's past corrections on THIS relationship — a taught lesson is never re-learned
         notes = db.query(
             "select d.note from decisions d join tasks t on t.id=d.task_id where t.company_id=%s and "

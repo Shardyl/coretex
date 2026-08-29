@@ -214,6 +214,10 @@ def draft(skill: dict, company: dict, request: dict,
     if _tl:
         user.append("DEAL STATE (real logged timeline — stay consistent with what was promised and where "
                     "the deal stands):\n" + _tl[:3000])
+    _cn = (request.get("contact_notes") or "").strip() if isinstance(request, dict) else ""
+    if _cn:
+        user.append("NOTES the team saved on this contact (factor them in; never quote them verbatim):\n"
+                    + _cn[:2000])
     _of = (request.get("owner_feedback") or "").strip() if isinstance(request, dict) else ""
     if _of:
         user.append("THE OWNER'S PAST CORRECTIONS on this relationship (lessons already taught — obey them "
