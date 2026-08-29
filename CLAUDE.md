@@ -4,6 +4,16 @@ Cortex is Rashad's voice-first AI ops platform running all five companies (Tabsc
 SkyVision, FilmSpoke, Snap Rewards). This repo is the whole system; production runs on the
 Hetzner box `cortex-1`. Read this before touching anything.
 
+> **6th company, automation OFF (2026-08-29):** `flixtonmanor` (Flixton House Ltd t/a Flixton Manor,
+> a UK care home) was onboarded as a company row with the uniform 85-skill roster, but it is NOT in
+> `inbox_registry`, every skill is authority=ask, and nothing is scheduled — the poller/engine ignore
+> it. It exists so the case tooling (a Grenke leasing dispute) can use Cortex's APIs, not as a live
+> automated company. Its Google project is `flixton-cortex` (a service account + domain-wide delegation
+> gave a one-off all-mailbox read; key held locally, never on the box). The seeder (`onboard.py` via
+> `catalog.py`) is 4 skills behind the live roster — it seeds 81, so the 4 newest
+> (email-handling, lead-qualification, outreach-anchor-engine, roadmap-ideas-parking-lot) were
+> back-filled from the tabscanner baseline. Fix `catalog.CATALOG` before onboarding the next company.
+
 ## Access (all via the one SSH key `~/.ssh/id_ed25519`)
 
 - **Box:** `ssh cortex` (alias → root@178.156.176.114). Cockpit + API live at https://coretex.uk
