@@ -1226,6 +1226,39 @@ def apply_correction(task: dict, text: str) -> None:
     _maybe_propose_rule(task, skill, text, old or "", new or "")
 
 
+def _stamp_when(phrase: str):
+    """CODE resolves the owner's time phrase (rebuild Stage 3: one date-stamper, deterministic first).
+    Weekday names, 'tomorrow', 'today' and explicit dates never touch a model — a weekday always means
+    the NEXT occurrence of that day. Anything else falls back to the shared LLM parser (still validated)."""
+    tz = timezone(timedelta(hours=4))
+    now = datetime.now(tz)
+    ph = (phrase or "").strip().lower()
+    days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    for i, d in enumerate(days):
+        if d in ph:
+            ahead = (i - now.weekday()) % 7 or 7
+            return (now + timedelta(days=ahead)).replace(hour=9, minute=0, second=0, microsecond=0)
+    if "tomorrow" in ph:
+        return (now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+    if "today" in ph:
+        return now.replace(hour=min(now.hour + 2, 20), minute=0, second=0, microsecond=0)
+    m = re.search(r"(\d{1,2})\s*(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|"
+                  r"september|october|november|december)", ph)
+    if m:
+        months = ["january", "february", "march", "april", "may", "june", "july", "august", "september",
+                  "october", "november", "december"]
+        mo = months.index(m.group(2)) + 1
+        yr = now.year + (1 if (mo, int(m.group(1))) < (now.month, now.day) else 0)
+        try:
+            return datetime(yr, mo, int(m.group(1)), 9, 0, tzinfo=tz)
+        except ValueError:
+            return None
+    try:
+        return reminders.parse_when(phrase)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _understand_correction(task: dict, text: str) -> dict:
     """ONE reading of the owner's correction (rebuild Stage 3), replacing four sequential model calls
     that could disagree. The model splits his words into channels; CODE applies every channel
@@ -1242,8 +1275,8 @@ def _understand_correction(task: dict, text: str) -> dict:
             '"cc_add": ["<first names to add on cc>"], '
             '"cc_remove": ["<first names or exact emails to drop from cc>"], '
             '"attach_documents": ["<standing company documents he asks to attach, e.g. trade licence>"], '
-            '"reminders": [{"title": "<self-contained>", "date": "YYYY-MM-DD only if he STATED a day; '
-            'resolve weekday names against the code-stamped now"}], '
+            '"reminders": [{"title": "<self-contained>", "when_phrase": "<his EXACT time words verbatim, '
+            "e.g. 'Monday morning', 'tomorrow', '31 August' - never resolve it yourself\"}], "
             '"prep": [{"title": "<short imperative>", "brief": "<internal work to prepare, incl. stated '
             'deadline>"}]} '
             "- empty/false for anything not asked. Never invent dates or names.",
@@ -1297,9 +1330,8 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
         changed = True
     for r in (u.get("reminders") or [])[:3]:
         try:
-            d = datetime.strptime(str(r.get("date", "")), "%Y-%m-%d").replace(
-                hour=5, minute=0, tzinfo=timezone.utc)
-            if datetime.now(timezone.utc) < d < datetime.now(timezone.utc) + timedelta(days=90):
+            d = _stamp_when(str(r.get("when_phrase") or r.get("date") or ""))
+            if d and datetime.now(timezone.utc) < d < datetime.now(timezone.utc) + timedelta(days=90):
                 reminders.create(str(r.get("title") or "Follow-up")[:150], d, company_id=task["company_id"],
                                  priority="high", target_type="deal" if req.get("deal_id") else None,
                                  target_id=req.get("deal_id"))
