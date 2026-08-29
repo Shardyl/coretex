@@ -831,8 +831,13 @@ def ensure_jobs_table() -> None:
 
 def enqueue_send(company_id: int, task_id: int, art: dict, recips: list[dict],
                  per_hour: int = DEFAULT_PER_HOUR) -> int:
-    """Queue a full-list send to DRIP OUT over time instead of blasting. The engine drains it."""
+    """Queue a full-list send to DRIP OUT over time instead of blasting. The engine drains it.
+    IDEMPOTENT per task (audit): a retry/crash-rerun for the same card returns the existing job
+    instead of mailing the entire list a second time."""
     ensure_jobs_table()   # self-heal: works on any box / fresh DB without a manual migration step
+    dup = db.one("select id from newsletter_send_jobs where task_id=%s limit 1", (task_id,))
+    if dup:
+        return dup["id"]
     domain = send_domain(company_id)
     try:
         b0 = len(mailgun.suppressions(domain, "bounces"))   # baseline, to attribute NEW bounces to this job
