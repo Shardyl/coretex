@@ -136,6 +136,13 @@ def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
         raise ValueError(f"refusing to send: invalid recipient {to!r}")
     if from_addr and primary.lower() == from_addr.split("<")[-1].strip(" <>").lower():
         raise ValueError("refusing to send: recipient equals sender (loop)")
+    # SAFETY INVARIANT: an email containing placeholder text must never reach a client, whoever approved it.
+    ph = (re.search(r"\[[A-Z][A-Z /_-]{2,}\]|\bXXX+\b", body or "")
+          or re.search(r"\[(?:owner to confirm|tbd|amount|price|insert[^\]]*|placeholder[^\]]*)\]",
+                       body or "", re.I))
+    if ph:
+        raise ValueError(f"refusing to send: draft contains placeholder text ({ph.group(0)!r}) - "
+                         "correct the draft with the real content first")
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
     from email.mime.image import MIMEImage
