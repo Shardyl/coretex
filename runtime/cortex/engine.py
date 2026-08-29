@@ -684,6 +684,8 @@ def _run_task(task: dict) -> None:
 
     dreq = _request_for_draft(task)   # inbound attachment refs -> data: URLs, drafter's eyes only
     draft = worker.draft(skill, company, dreq)
+    if task.get("kind") in ("email_reply", "email_draft"):
+        draft = _ensure_clean_email(skill, company, dreq, draft)
     verdict = manager.check(skill, company, draft, task["request"])
     if not verdict["aligned"] and verdict["issues"]:
         draft = worker.draft(skill, company, dreq, manager_feedback=verdict["issues"])
@@ -1184,6 +1186,7 @@ def apply_correction(task: dict, text: str) -> None:
         task = _apply_envelope_directives(task, text) or task
         task = _apply_attach_directives(task, text) or task
         task = _prebook_meeting(task) or task   # a stamped meeting -> real Meet link available to the drafter
+        text = _split_correction_actions(task, text)   # reminders/prep to their rails; drafter gets reply-only
     if task["kind"] in ("email_reply", "email_draft") and _correction_means_no_reply(text):
         store.update_task(task["id"], status="rejected")
         store.log_decision(task["id"], skill["id"], "owner", "dismiss_no_reply", note=text,
@@ -1193,7 +1196,9 @@ def apply_correction(task: dict, text: str) -> None:
         _maybe_propose_rule(task, skill, text, old or "", "(no email sent — the owner said no reply is needed)")
         return
 
-    new = worker.draft(skill, company, _request_for_draft(task), correction=text, prev_draft=old)
+    dreq = _request_for_draft(task)
+    new = worker.draft(skill, company, dreq, correction=text, prev_draft=old)
+    new = _ensure_clean_email(skill, company, dreq, new, prev=old)
     # corrections bypass the Manager by design (the owner is reviewing personally) — clear any verdict
     # from the PREVIOUS pass so a stale flag never scares the owner off his own corrected draft
     task = store.update_task(task["id"], draft=new, status="awaiting_approval", manager=None,
@@ -1405,6 +1410,82 @@ def reconcile_attachments(task_id: int) -> None:
         except Exception:  # noqa: BLE001 — reconcile is a bonus pass; the card stays usable without it
             pass
     threading.Thread(target=_run, daemon=True).start()
+
+
+_META_LEAK = re.compile(r"\bCORTEX\b\s*[,:]|OWNER TO CONFIRM|\bactions? to set\b|\[internal\b", re.I)
+
+
+def _ensure_clean_email(skill: dict, company: dict, dreq: dict, draft: str,
+                        prev: str | None = None) -> str:
+    """HARD output check for email drafts: system/meta text addressed to Cortex or the owner must never
+    appear in a client email. One automatic retry with explicit feedback; the send-layer placeholder
+    guard remains the final backstop."""
+    try:
+        if draft and _META_LEAK.search(draft):
+            draft = worker.draft(skill, company, dreq, prev_draft=prev, manager_feedback=[
+                "Your output contained system/meta text addressed to Cortex or the owner (e.g. 'CORTEX, "
+                "two actions to set', 'OWNER TO CONFIRM'). The email body must contain ONLY the message "
+                "the client reads. Remove every non-client line; reminders and internal work are handled "
+                "by the system, never written into the email."])
+    except Exception:  # noqa: BLE001
+        pass
+    return draft
+
+
+def _split_correction_actions(task: dict, text: str) -> str:
+    """The owner's spoken correction often MIXES channels: reply content + 'set a reminder' + 'prepare
+    the quotation/proposal'. Route each to its own rail — reminders to the clock, prep work to internal
+    cards, and ONLY the reply instruction to the drafter — so system actions can never leak into a
+    client email. Dates are the owner's stated days resolved against the code-stamped now; never invented."""
+    try:
+        co = store.get_company(task["company_id"]) or {}
+        out = provider.think_json(
+            worker._now_line() + " The OWNER'S feedback on an email draft may mix: (a) instructions about "
+            "the REPLY content, (b) reminders to schedule, (c) internal work to PREPARE (quotation, "
+            "proposal, document). Split it faithfully. Return JSON {\"reply_instruction\": \"<only what "
+            "concerns the reply email itself>\", \"reminders\": [{\"title\": \"<what, self-contained>\", "
+            "\"date\": \"YYYY-MM-DD — the day the owner STATED, weekday names resolved against the "
+            "code-stamped current date; omit the reminder if no day was stated\"}], "
+            "\"prep\": [{\"title\": \"<short imperative>\", \"brief\": \"<what to prepare, incl. any "
+            "stated deadline>\"}]} — empty lists when not asked for.",
+            (text or "")[:1200], model=provider.MODEL_ROUTER, purpose="correction-split",
+            company=co.get("slug"))
+        if not isinstance(out, dict):
+            return text
+        created = []
+        deal_id = (task.get("request") or {}).get("deal_id")
+        for r in (out.get("reminders") or [])[:3]:
+            try:
+                d = datetime.strptime(str(r.get("date", "")), "%Y-%m-%d").replace(
+                    hour=5, minute=0, tzinfo=timezone.utc)          # 09:00 GST
+                if datetime.now(timezone.utc) < d < datetime.now(timezone.utc) + timedelta(days=90):
+                    reminders.create(str(r.get("title") or "Follow-up")[:150], d,
+                                     company_id=task["company_id"], priority="high",
+                                     target_type="deal" if deal_id else None, target_id=deal_id)
+                    created.append(f"reminder '{r.get('title')}' on {d:%a %d %b}")
+            except Exception:  # noqa: BLE001
+                continue
+        for p_ in (out.get("prep") or [])[:3]:
+            try:
+                sk = store.get_skill_by_key(task["company_id"], "sales-quotation") \
+                    or store.get_skill_by_key(task["company_id"], "sales-first-response")
+                req = {"brief": (f"INTERNAL PREP (from the owner's instruction on card #{task['id']}): "
+                                 f"{p_.get('brief') or p_.get('title')}"), "title": p_.get("title")}
+                if deal_id:
+                    req["deal_id"] = deal_id
+                store.create_task(task["company_id"], sk["id"], "content", req)
+                created.append(f"prep card '{p_.get('title')}'")
+            except Exception:  # noqa: BLE001
+                continue
+        if created:
+            notifications.notify(f"From your correction on card #{task['id']}, also set: "
+                                 + "; ".join(created) + ".", "Correction actions",
+                                 category="reminder", company_id=task["company_id"],
+                                 target_type="task", target_id=str(task["id"]))
+        reply = (out.get("reply_instruction") or "").strip()
+        return reply if (reply and created) else text   # only narrow the text when actions were really split off
+    except Exception:  # noqa: BLE001 — splitting is best-effort; worst case the old behaviour
+        return text
 
 
 def _correction_means_no_reply(text: str) -> bool:
