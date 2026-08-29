@@ -50,7 +50,7 @@ def _model_for(skill: dict) -> str:
 
 
 # A Cc/Bcc SENDING directive anywhere in a rule, e.g. "...CC ben@x.com and BCC me@y.com". Same shape the
-# envelope reads (engine._rule_recipients). These are actioned by the sending system, NOT instructions for the
+# envelope reads (the compiled skills.envelope config). These are actioned by the sending system, NOT instructions for the
 # writer — hide any rule that sets a recipient from the drafter so the model can never echo it into the email
 # body as a visible "system note".
 _CC_DIRECTIVE = re.compile(r"\bb?cc\b\s+[\w.+-]+@", re.I)

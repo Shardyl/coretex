@@ -265,17 +265,6 @@ def _email_brief(inq: dict, co: dict | None = None) -> str:
 _EMAIL_RE = r"([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})"
 
 
-def _rule_recipients(skill: dict) -> tuple[list, list]:
-    """Honour CC/BCC addresses the owner stated in this skill's standing rules (e.g. 'CC ben@… and BCC me@…')."""
-    if not skill:
-        return [], []
-    uni, loc = store.effective_rules(skill)
-    text = " ".join(list(uni) + list(loc))
-    cc = re.findall(r"\bcc\s+" + _EMAIL_RE, text, re.I)     # \bcc won't match inside 'bcc' (no word boundary)
-    bcc = re.findall(r"\bbcc\s+" + _EMAIL_RE, text, re.I)
-    return cc, bcc
-
-
 def _email_envelope(task: dict, company: dict) -> dict:
     """Who the approved reply goes to / from / cc / bcc — resolved from the inquiry, the company profile,
     AND any CC/BCC the owner set as a standing rule on the skill."""
@@ -1211,19 +1200,18 @@ def apply_correction(task: dict, text: str) -> None:
     # stubbornly redrafting (bit card #330 — a tender that answers through the supplier portal), and
     # still run the rule inference so the owner gets the add-as-rule offer (universal or local).
     if task["kind"] in ("email_reply", "email_draft"):
-        task = _apply_envelope_directives(task, text) or task
-        task = _apply_attach_directives(task, text) or task
+        u = _understand_correction(task, text)                     # ONE reading of the owner's words
+        if u.get("no_reply"):
+            store.update_task(task["id"], status="rejected")
+            store.log_decision(task["id"], skill["id"], "owner", "dismiss_no_reply", note=text,
+                               snapshot={"old": old})
+            if task.get("tg_message_id"):
+                tg.edit(task["tg_message_id"], f"\u2717 Dismissed - no reply needed ('{skill['name']}').")
+            _maybe_propose_rule(task, skill, text, old or "",
+                                "(no email sent - the owner said no reply is needed)")
+            return
+        task, text = _apply_understood(task, u, text)              # every channel applied deterministically
         task = _prebook_meeting(task) or task   # a stamped meeting -> real Meet link available to the drafter
-        text = _split_correction_actions(task, text)   # reminders/prep to their rails; drafter gets reply-only
-    if task["kind"] in ("email_reply", "email_draft") and _correction_means_no_reply(text):
-        store.update_task(task["id"], status="rejected")
-        store.log_decision(task["id"], skill["id"], "owner", "dismiss_no_reply", note=text,
-                           snapshot={"old": old})
-        if task.get("tg_message_id"):
-            tg.edit(task["tg_message_id"], f"✗ Dismissed — no reply needed ('{skill['name']}').")
-        _maybe_propose_rule(task, skill, text, old or "", "(no email sent — the owner said no reply is needed)")
-        return
-
     dreq = _request_for_draft(task)
     new = worker.draft(skill, company, dreq, correction=text, prev_draft=old)
     new = _ensure_clean_email(skill, company, dreq, new, prev=old)
@@ -1236,6 +1224,115 @@ def apply_correction(task: dict, text: str) -> None:
     msg2 = tg.send(_fmt(task, skill, company, None), _approval_buttons(task["id"]))
     store.update_task(task["id"], tg_message_id=msg2["message_id"])
     _maybe_propose_rule(task, skill, text, old or "", new or "")
+
+
+def _understand_correction(task: dict, text: str) -> dict:
+    """ONE reading of the owner's correction (rebuild Stage 3), replacing four sequential model calls
+    that could disagree. The model splits his words into channels; CODE applies every channel
+    deterministically (real mailboxes, real library files, code-stamped dates)."""
+    senders = _company_senders(task["company_id"])
+    roster = ", ".join(f"{w} <{v['email']}>" for w, v in senders.items()) or "(none)"
+    try:
+        out = provider.think_json(
+            worker._now_line() + " You read the OWNER'S spoken feedback on an email draft. It may mix "
+            "several channels. Split it FAITHFULLY into JSON: "
+            '{"no_reply": true only if he says NO email should be sent at all (dismiss it), '
+            '"reply_instruction": "<everything that concerns the email reply content itself>", '
+            f'"from": "<first name of a new sender if he asks to change who it is sent from; known team: {roster}>", '
+            '"cc_add": ["<first names to add on cc>"], '
+            '"cc_remove": ["<first names or exact emails to drop from cc>"], '
+            '"attach_documents": ["<standing company documents he asks to attach, e.g. trade licence>"], '
+            '"reminders": [{"title": "<self-contained>", "date": "YYYY-MM-DD only if he STATED a day; '
+            'resolve weekday names against the code-stamped now"}], '
+            '"prep": [{"title": "<short imperative>", "brief": "<internal work to prepare, incl. stated '
+            'deadline>"}]} '
+            "- empty/false for anything not asked. Never invent dates or names.",
+            (text or "")[:1200], model=provider.MODEL_ROUTER, max_tokens=700,
+            purpose="understand-correction",
+            company=(store.get_company(task["company_id"]) or {}).get("slug"))
+        return out if isinstance(out, dict) else {}
+    except Exception:  # noqa: BLE001 - on failure the whole text goes to the drafter, old behaviour
+        return {}
+
+
+def _apply_understood(task: dict, u: dict, text: str) -> tuple:
+    """Deterministically apply every non-reply channel of an understood correction; returns the (possibly
+    refreshed) task and the text the DRAFTER should receive."""
+    req = dict(task.get("request") or {})
+    changed, created = False, []
+    senders = _company_senders(task["company_id"])
+    frm = (u.get("from") or "").strip().lower()
+    if frm and frm in senders:
+        req["from_email"], req["mailbox_rt"] = senders[frm]["email"], senders[frm]["rt_key"]
+        if req.get("thread"):
+            req["thread"] = {**req["thread"], "id": ""}
+        changed = True
+    adds = [senders[c.strip().lower()]["email"] for c in (u.get("cc_add") or [])
+            if isinstance(c, str) and c.strip().lower() in senders]
+    if adds:
+        req["cc_extra"] = sorted(set((req.get("cc_extra") or []) + adds))
+        changed = True
+    rems = []
+    for c in (u.get("cc_remove") or []):
+        if isinstance(c, str):
+            c = c.strip().lower()
+            rems.append(senders[c]["email"] if c in senders else (c if "@" in c else None))
+    rems = [r for r in rems if r]
+    if rems:
+        req["cc_remove"] = sorted(set((req.get("cc_remove") or []) + rems))
+        req["cc_extra"] = [e for e in (req.get("cc_extra") or []) if e.lower() not in set(rems)]
+        changed = True
+    missing = []
+    refs = {int(r["id"]): r for r in (req.get("attach_docs") or [])}
+    n_refs0 = len(refs)
+    for w in (u.get("attach_documents") or [])[:6]:
+        hits = documents.find(task["company_id"], str(w))
+        if hits:
+            d = hits[0]
+            refs[d["id"]] = {"id": d["id"], "filename": d["filename"], "mime": d["mime"], "size": d["size"]}
+        else:
+            missing.append(str(w))
+    if len(refs) != n_refs0:
+        req["attach_docs"] = list(refs.values())
+        changed = True
+    for r in (u.get("reminders") or [])[:3]:
+        try:
+            d = datetime.strptime(str(r.get("date", "")), "%Y-%m-%d").replace(
+                hour=5, minute=0, tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) < d < datetime.now(timezone.utc) + timedelta(days=90):
+                reminders.create(str(r.get("title") or "Follow-up")[:150], d, company_id=task["company_id"],
+                                 priority="high", target_type="deal" if req.get("deal_id") else None,
+                                 target_id=req.get("deal_id"))
+                created.append(f"reminder '{r.get('title')}' on {d:%a %d %b}")
+        except Exception:  # noqa: BLE001
+            continue
+    for p_ in (u.get("prep") or [])[:3]:
+        try:
+            sk = store.get_skill_by_key(task["company_id"], "sales-quotation") \
+                or store.get_skill_by_key(task["company_id"], "sales-first-response")
+            store.create_card(task["company_id"], sk["id"], "content",
+                              {"brief": "INTERNAL PREP (from the owner's instruction on card "
+                                        f"#{task['id']}): {p_.get('brief') or p_.get('title')}",
+                               "title": p_.get("title"),
+                               **({"deal_id": req["deal_id"]} if req.get("deal_id") else {})},
+                              deal_id=req.get("deal_id"),
+                              contact=None if req.get("deal_id") else (req.get("inquiry") or {}).get("email"))
+            created.append(f"prep card '{p_.get('title')}'")
+        except Exception:  # noqa: BLE001
+            continue
+    notes = []
+    if created:
+        notes.append("set: " + "; ".join(created))
+    if missing:
+        notes.append("NOT in the document library (nothing attached): " + ", ".join(missing))
+    if notes:
+        notifications.notify(f"From your correction on card #{task['id']} - " + ". ".join(notes) + ".",
+                             "Correction actions", category="reminder", company_id=task["company_id"],
+                             target_type="task", target_id=str(task["id"]))
+    if changed:
+        task = store.update_task(task["id"], request=req) or task
+    reply = (u.get("reply_instruction") or "").strip()
+    return task, (reply if (reply and (created or changed)) else text)
 
 
 def _company_senders(company_id: int) -> dict:
@@ -1255,102 +1352,6 @@ def _company_senders(company_id: int) -> dict:
         if real in out and alias not in out:
             out[alias] = out[real]
     return out
-
-
-def _apply_envelope_directives(task: dict, text: str) -> dict | None:
-    """Owner feedback can also change the ENVELOPE: 'send this from rashad', 'cc gino and ayresh'.
-    Deterministic against the company's real mailboxes — the model only maps words to known people;
-    code applies emails and tokens. Unrecognised names are ignored (never guessed)."""
-    try:
-        senders = _company_senders(task["company_id"])
-        if not senders:
-            return None
-        roster = ", ".join(f"{w} <{v['email']}>" for w, v in senders.items())
-        out = provider.think_json(
-            "Owner feedback on an email draft. Does it EXPLICITLY ask to change WHO the email is sent "
-            f"from, to ADD people on cc, or to REMOVE someone from cc? Known team mailboxes: {roster}. "
-            'Return JSON {"from": "<first name of the new sender, or empty if unchanged>", '
-            '"cc": ["<first names to add on cc>"], '
-            '"cc_remove": ["<first names or exact email addresses to remove from cc>"]} '
-            "— empty values unless the feedback clearly says so.",
-            (text or "")[:600], model=provider.MODEL_ROUTER, purpose="correction-envelope",
-            company=(store.get_company(task["company_id"]) or {}).get("slug"))
-        if not isinstance(out, dict):
-            return None
-        req = dict(task.get("request") or {})
-        changed = False
-        frm = (out.get("from") or "").strip().lower()
-        if frm and frm in senders:
-            req["from_email"] = senders[frm]["email"]
-            req["mailbox_rt"] = senders[frm]["rt_key"]
-            if req.get("thread"):
-                req["thread"] = {**req["thread"], "id": ""}   # threadIds are mailbox-local; headers still chain
-            changed = True
-        adds = [senders[c.strip().lower()]["email"] for c in (out.get("cc") or [])
-                if isinstance(c, str) and c.strip().lower() in senders]
-        if adds:
-            req["cc_extra"] = sorted(set((req.get("cc_extra") or []) + adds))
-            changed = True
-        rems = []
-        for c in (out.get("cc_remove") or []):
-            if not isinstance(c, str):
-                continue
-            c = c.strip().lower()
-            if c in senders:
-                rems.append(senders[c]["email"])
-            elif "@" in c:                     # an exact address named in the feedback
-                rems.append(c)
-        if rems:
-            req["cc_remove"] = sorted(set((req.get("cc_remove") or []) + rems))
-            req["cc_extra"] = [e for e in (req.get("cc_extra") or []) if e.lower() not in set(rems)]
-            changed = True
-        if not changed:
-            return None
-        return store.update_task(task["id"], request=req)
-    except Exception:  # noqa: BLE001 — envelope directives are best-effort; the redraft still happens
-        return None
-
-
-def _apply_attach_directives(task: dict, text: str) -> dict | None:
-    """Owner feedback can ask for library documents on the email ('attach our trade licence and VAT
-    certificate'). The model only names what was asked; documents.find resolves against the REAL
-    library — nothing is ever attached that isn't on file, and misses are surfaced, never faked."""
-    try:
-        out = provider.think_json(
-            "Owner feedback on an email draft. Does it ask to ATTACH any standing company documents "
-            "(trade licence, VAT/tax certificate, company profile, signed forms...)? Return JSON "
-            '{"documents": ["<short name of each requested document>"]} — empty list if none requested.',
-            (text or "")[:800], model=provider.MODEL_ROUTER, purpose="correction-attach",
-            company=(store.get_company(task["company_id"]) or {}).get("slug"))
-        wants = [w for w in (out.get("documents") or []) if isinstance(w, str) and w.strip()] \
-            if isinstance(out, dict) else []
-        if not wants:
-            return None
-        req = dict(task.get("request") or {})
-        refs = {int(r["id"]): r for r in (req.get("attach_docs") or [])}
-        missing = []
-        for w in wants[:6]:
-            hits = documents.find(task["company_id"], w)
-            if hits:
-                d = hits[0]
-                refs[d["id"]] = {"id": d["id"], "filename": d["filename"], "mime": d["mime"], "size": d["size"]}
-            else:
-                missing.append(w)
-        if refs:
-            req["attach_docs"] = list(refs.values())
-            store.update_task(task["id"], request=req)
-        if missing:
-            notifications.notify(
-                f"Card #{task['id']}: not in the document library, NOT attached: {', '.join(missing)}. "
-                "Save them via the paperclip and re-attach.", "Document library",
-                category="reminder", company_id=task["company_id"], target_type="task",
-                target_id=str(task["id"]))
-        return store.get_task(task["id"]) if refs else None
-    except Exception:  # noqa: BLE001 — best-effort; the redraft still happens
-        return None
-
-
-_TIME_HINT = re.compile(r"\b\d{1,2}(:\d{2})?\s*(am|pm)\b|\b\d{1,2}:\d{2}\b", re.I)
 
 
 def _prebook_meeting(task: dict) -> dict | None:
@@ -1458,81 +1459,6 @@ def _ensure_clean_email(skill: dict, company: dict, dreq: dict, draft: str,
     except Exception:  # noqa: BLE001
         pass
     return draft
-
-
-def _split_correction_actions(task: dict, text: str) -> str:
-    """The owner's spoken correction often MIXES channels: reply content + 'set a reminder' + 'prepare
-    the quotation/proposal'. Route each to its own rail — reminders to the clock, prep work to internal
-    cards, and ONLY the reply instruction to the drafter — so system actions can never leak into a
-    client email. Dates are the owner's stated days resolved against the code-stamped now; never invented."""
-    try:
-        co = store.get_company(task["company_id"]) or {}
-        out = provider.think_json(
-            worker._now_line() + " The OWNER'S feedback on an email draft may mix: (a) instructions about "
-            "the REPLY content, (b) reminders to schedule, (c) internal work to PREPARE (quotation, "
-            "proposal, document). Split it faithfully. Return JSON {\"reply_instruction\": \"<only what "
-            "concerns the reply email itself>\", \"reminders\": [{\"title\": \"<what, self-contained>\", "
-            "\"date\": \"YYYY-MM-DD — the day the owner STATED, weekday names resolved against the "
-            "code-stamped current date; omit the reminder if no day was stated\"}], "
-            "\"prep\": [{\"title\": \"<short imperative>\", \"brief\": \"<what to prepare, incl. any "
-            "stated deadline>\"}]} — empty lists when not asked for.",
-            (text or "")[:1200], model=provider.MODEL_ROUTER, purpose="correction-split",
-            company=co.get("slug"))
-        if not isinstance(out, dict):
-            return text
-        created = []
-        deal_id = (task.get("request") or {}).get("deal_id")
-        for r in (out.get("reminders") or [])[:3]:
-            try:
-                d = datetime.strptime(str(r.get("date", "")), "%Y-%m-%d").replace(
-                    hour=5, minute=0, tzinfo=timezone.utc)          # 09:00 GST
-                if datetime.now(timezone.utc) < d < datetime.now(timezone.utc) + timedelta(days=90):
-                    reminders.create(str(r.get("title") or "Follow-up")[:150], d,
-                                     company_id=task["company_id"], priority="high",
-                                     target_type="deal" if deal_id else None, target_id=deal_id)
-                    created.append(f"reminder '{r.get('title')}' on {d:%a %d %b}")
-            except Exception:  # noqa: BLE001
-                continue
-        for p_ in (out.get("prep") or [])[:3]:
-            try:
-                sk = store.get_skill_by_key(task["company_id"], "sales-quotation") \
-                    or store.get_skill_by_key(task["company_id"], "sales-first-response")
-                req = {"brief": (f"INTERNAL PREP (from the owner's instruction on card #{task['id']}): "
-                                 f"{p_.get('brief') or p_.get('title')}"), "title": p_.get("title")}
-                if deal_id:
-                    req["deal_id"] = deal_id
-                store.create_card(task["company_id"], sk["id"], "content", req,
-                                  deal_id=deal_id, contact=None if deal_id else
-                                  ((task.get("request") or {}).get("inquiry") or {}).get("email"))
-                created.append(f"prep card '{p_.get('title')}'")
-            except Exception:  # noqa: BLE001
-                continue
-        if created:
-            notifications.notify(f"From your correction on card #{task['id']}, also set: "
-                                 + "; ".join(created) + ".", "Correction actions",
-                                 category="reminder", company_id=task["company_id"],
-                                 target_type="task", target_id=str(task["id"]))
-        reply = (out.get("reply_instruction") or "").strip()
-        return reply if (reply and created) else text   # only narrow the text when actions were really split off
-    except Exception:  # noqa: BLE001 — splitting is best-effort; worst case the old behaviour
-        return text
-
-
-def _correction_means_no_reply(text: str) -> bool:
-    """Does the owner's feedback mean NO email should be sent at all (vs. change the draft)? Judged by the
-    router model so phrasing stays free ('goes through the supplier portal', 'we don't answer these');
-    on any doubt or model failure it returns False and the normal redraft happens — the safe default."""
-    try:
-        out = provider.think_json(
-            "You read the OWNER'S FEEDBACK on an email draft his assistant prepared. Decide ONE thing: is he "
-            "saying that NO email should be sent at all for this item (the draft should be dismissed — e.g. "
-            "'no reply needed', 'this is handled in the portal', 'we never answer these', 'just ignore it')? "
-            "If he is asking for ANY change, correction or different wording to the email, that is NOT a "
-            'dismissal. Return JSON {"no_reply": true|false}. When unsure: false.',
-            (text or "")[:600], model=provider.MODEL_ROUTER, purpose="correction-intent")
-        return bool(isinstance(out, dict) and out.get("no_reply"))
-    except Exception:  # noqa: BLE001
-        return False
 
 
 def _confirm_rule(task: dict, skill: dict, yes: bool, universal: bool = False) -> None:
