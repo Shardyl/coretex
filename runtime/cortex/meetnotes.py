@@ -175,7 +175,7 @@ def _spawn_post_meeting_followup(event: dict, ext: list, company_id, deal_id, su
            "followup": "post-meeting"}
     if deal_id:
         req["deal_id"] = deal_id
-    store.create_task(company_id, skill["id"], "email_reply", req)
+    store.create_card(company_id, skill["id"], "email_reply", req, contact=contact, deal_id=deal_id)
 
 
 def latest_for_contact(company_id: int, email: str) -> dict | None:

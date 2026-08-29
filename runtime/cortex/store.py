@@ -152,6 +152,52 @@ def set_threshold(skill_id, n: int) -> dict:
 
 
 # ---- tasks ----
+OPEN_CARD_STATUSES = ("new", "drafting", "awaiting_approval", "awaiting_correction", "sending")
+
+
+def create_card(company_id, skill_id, kind, request, contact: str | None = None, deal_id=None) -> dict:
+    """ONE CONVEYOR PER RELATIONSHIP (owner principle, 2026-08-29): a contact/deal has at most one open
+    card. If one is open, this card is created status='queued' and promoted to 'new' only when the current
+    step is dealt with (promote_queued in the engine loop). Chronology is preserved: the oldest queued
+    step always goes first. Talk-composed owner cards bypass this via plain create_task."""
+    key = (contact or "").strip().lower() or (f"deal:{deal_id}" if deal_id else None)
+    if not key:
+        return create_task(company_id, skill_id, kind, request)
+    request = {**request, "serialize_key": key}
+    row = db.execute(
+        "insert into tasks (company_id, skill_id, kind, request, status) values (%s,%s,%s,%s,'queued') "
+        "returning *", (company_id, skill_id, kind, Json(request)))
+    promote_queued(company_id, key)
+    return db.one("select * from tasks where id=%s", (row["id"],))
+
+
+def promote_queued(company_id=None, key: str | None = None) -> int:
+    """Promote the OLDEST queued card per relationship whose conveyor is clear — atomic single statement,
+    so two processes can never promote two cards for one key. Called on create and from the engine loop."""
+    where_key = "and request->>'serialize_key' = %s" if key else ""
+    where_co = "and company_id = %s" if company_id is not None else ""
+    params: list = []
+    if company_id is not None:
+        params.append(company_id)
+    if key:
+        params.append(key)
+    sql = f"""
+      update tasks t set status='new', updated_at=now() where t.id in (
+        select distinct on (q.request->>'serialize_key') q.id
+        from tasks q
+        where q.status='queued' {where_co.replace('company_id','q.company_id')} {where_key.replace('request','q.request')}
+          and not exists (
+            select 1 from tasks o
+            where o.company_id = q.company_id and o.id <> q.id
+              and o.status in ('new','drafting','awaiting_approval','awaiting_correction','sending')
+              and (o.request->>'serialize_key' = q.request->>'serialize_key'
+                   or lower(o.request->'inquiry'->>'email') = q.request->>'serialize_key'))
+        order by q.request->>'serialize_key', q.id)
+      returning t.id"""
+    rows = db.query(sql, tuple(params)) if params else db.query(sql)
+    return len(rows or [])
+
+
 def create_task(company_id, skill_id, kind, request) -> dict:
     return db.execute(
         "insert into tasks (company_id,skill_id,kind,request) values (%s,%s,%s,%s) returning *",

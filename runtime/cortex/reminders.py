@@ -163,7 +163,9 @@ def _spawn_task(r: dict, action: dict) -> int | None:
         # a full request on the action wins (e.g. a scheduled email draft carrying recipient + sender
         # mailbox); else the plain brief/title task as before
         req = action.get("request") or {"brief": brief, "title": r["title"]}
-        t = store.create_task(co["id"], sk["id"], kind, req)
+        contact = ((req.get("inquiry") or {}).get("email") if isinstance(req, dict) else None)
+        t = store.create_card(co["id"], sk["id"], kind, req, contact=contact,
+                              deal_id=(req.get("deal_id") if isinstance(req, dict) else None))
         return t["id"] if t else None
     except Exception:  # noqa: BLE001
         return None

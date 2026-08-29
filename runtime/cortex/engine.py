@@ -1501,7 +1501,9 @@ def _split_correction_actions(task: dict, text: str) -> str:
                                  f"{p_.get('brief') or p_.get('title')}"), "title": p_.get("title")}
                 if deal_id:
                     req["deal_id"] = deal_id
-                store.create_task(task["company_id"], sk["id"], "content", req)
+                store.create_card(task["company_id"], sk["id"], "content", req,
+                                  deal_id=deal_id, contact=None if deal_id else
+                                  ((task.get("request") or {}).get("inquiry") or {}).get("email"))
                 created.append(f"prep card '{p_.get('title')}'")
             except Exception:  # noqa: BLE001
                 continue
@@ -1826,8 +1828,9 @@ def poll_inquiries_window(days: int = 2) -> dict:
             crm.add_inquiry(inq, "tabscanner")           # genuine -> verified contact in the CRM
         except Exception:  # noqa: BLE001
             pass
-        store.create_task(co["id"], skill["id"], "email_reply",
-                          {"brief": _email_brief(inq, co), "inquiry": inq, "triage": verdict})
+        store.create_card(co["id"], skill["id"], "email_reply",
+                          {"brief": _email_brief(inq, co), "inquiry": inq, "triage": verdict},
+                          contact=inq.get("email"))
         made += 1
         if made >= 10:
             break
@@ -1997,7 +2000,7 @@ def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
                 # trained lead-qualification rule sets the senior register; nothing sends without the owner)
         skill = store.get_skill_by_key(co["id"], "sales-first-response")
         if skill:
-            store.create_task(co["id"], skill["id"], "email_reply",
+            store.create_card(co["id"], skill["id"], "email_reply",
                               {"brief": _email_brief(inq, co), "inquiry": inq, "triage": verdict,
                                "qual_suggest": sug})
         if strategic:   # heads-up so the owner watches this thread personally
@@ -2159,8 +2162,9 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
                       "with it, and never repeat a chase they already answered):\n" + thread[:5000])
         inq = {"name": (primary or {}).get("name") or "", "email": email,
                "message": f"(Automated {label} on the opportunity '{opp['title']}'. No reply yet.)"}
-        t = store.create_task(co["id"], skill["id"], "email_reply",
-                              {"brief": brief, "inquiry": inq, "followup": action, "deal_id": opp["id"]})
+        t = store.create_card(co["id"], skill["id"], "email_reply",
+                              {"brief": brief, "inquiry": inq, "followup": action, "deal_id": opp["id"]},
+                              contact=email, deal_id=opp["id"])
         if t:
             db.execute("update tasks set deal_id=%s where id=%s", (opp["id"], t["id"]))
     else:
@@ -2676,7 +2680,7 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
                                 + old[:1500]
             store.update_task(dup["id"], status="new", draft=None, request=req)
             return
-        store.create_task(co["id"], skill["id"], "email_reply", req)
+        store.create_card(co["id"], skill["id"], "email_reply", req, contact=sender)
     except Exception as ex:  # noqa: BLE001 — NEVER silent (audit: a swallowed failure here loses a client
         # email forever once it is marked seen). Alert + tell the caller NOT to mark it seen, so it retries.
         try:
@@ -2946,7 +2950,7 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
                 fu["brief"] += (" Their reply includes attachment(s): "
                                 + ", ".join(a["filename"] or a["mime"] for a in fu_atts)
                                 + " — they are provided to you; READ them before drafting.")
-            store.create_task(co["id"], skill["id"], "email_reply", fu)
+            store.create_card(co["id"], skill["id"], "email_reply", fu, contact=frm)
         try:                                                         # re-qualify on the new info
             sug = qualify_suggest(co, inq)
             if sug:
@@ -3029,8 +3033,9 @@ def _spawn_lead_chase(co: dict, email: str) -> None:
     name = nm if re.search(r"[A-Za-z]", nm) else email.split("@")[0]
     inq = {"name": name, "email": email, "subject": "Re: your enquiry",
            "message": "(No reply yet to our last message.)"}
-    store.create_task(co["id"], skill["id"], "email_reply",
-                      {"brief": _lead_chase_brief(inq, co), "inquiry": inq, "lead_chase": True})
+    store.create_card(co["id"], skill["id"], "email_reply",
+                      {"brief": _lead_chase_brief(inq, co), "inquiry": inq, "lead_chase": True},
+                      contact=email)
 
 
 def run_lead_followups() -> dict:
@@ -3419,6 +3424,10 @@ def run(poll_idle: float = 1.0) -> None:
                 pass
             try:
                 meetnotes.sweep()       # hourly: Gemini meeting notes -> CRM + drafting context
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                store.promote_queued()  # conveyor: a dealt-with step releases the next queued card
             except Exception:  # noqa: BLE001
                 pass
             try:

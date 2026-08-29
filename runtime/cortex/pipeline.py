@@ -401,8 +401,9 @@ def suggest_next_step(e: dict, deal: dict, company: dict) -> None:
              "changes/content is needed, based ONLY on the timeline below and the client's words. Any price "
              "or date the owner has not stated is marked as OWNER TO CONFIRM - never invented.\n\n"
              + deal_context(did) + "\n\nTHEIR EMAIL:\n" + ((e.get("body") or "")[:2000]))
-    t = store.create_task(company["id"], sk["id"], "content",
-                          {"brief": brief, "deal_id": did, "title": f"Next step: {what[:70]}"})
+    t = store.create_card(company["id"], sk["id"], "content",
+                          {"brief": brief, "deal_id": did, "title": f"Next step: {what[:70]}"},
+                          deal_id=did)
     if t:
         db.execute("update tasks set deal_id=%s where id=%s", (did, t["id"]))
         notifications.notify("Next step queued", f"{title}: {what}",
