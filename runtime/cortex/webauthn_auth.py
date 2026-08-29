@@ -106,6 +106,10 @@ def consume_stepup(token: str | None) -> str | None:
     passed it ('owner', or 'team' for an authorised team member's own PIN) — None if invalid. Consumes it."""
     s = db.setting_get("webauthn_stepup")
     if not (s and token and s.get("token") == token and s.get("exp", 0) >= int(time.time())):
+        # diagnose silently-failing approvals: WHY was the proof rejected (missing/mismatch/expired)?
+        why = "no token sent" if not token else ("no proof issued" if not s else
+              ("expired" if s.get("exp", 0) < int(time.time()) else "superseded by a newer proof"))
+        print(f"[stepup] rejected: {why}", flush=True)
         return None
     db.setting_set("webauthn_stepup", None)
     return s.get("scope") or "owner"

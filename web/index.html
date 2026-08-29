@@ -1874,8 +1874,10 @@ async function act(id,what){
       r=await api(`/api/tasks/${id}/${what}`,{method:'POST',headers:{'X-Stepup':tok}});
     }
     if(card) card.style.opacity=1;
-    if(r&&r.blocked){ toast('🔒 '+r.error); return; }                         // emergency-paused — nothing sent
+    if(r&&r.needs_biometric){ toast('⚠️ Not sent — the PIN/fingerprint check did not go through. Try approving again.'); render(); return; }
+    if(r&&r.blocked){ toast('🔒 Not sent — '+r.error); return; }               // guarded — nothing went out
     if(r&&r.needs_confirm){ await confirmLiveSend(id, r); return; }            // require explicit count (schedule or send)
+    if(r&&r.ok===false&&r.error){ toast('⚠️ '+r.error); render(); return; }    // e.g. already handled — never claim success
     const building=r&&r.result&&r.result.building, sent=r&&r.result&&r.result.sent_to, err=r&&r.result&&r.result.error;
     toast(err? ('Note: '+err) : building? 'Building the post — it returns to your Inbox for review when ready ✓'
           : sent? ('Sent to '+sent+' ✓') : (what==='approve'?'Approved ✓':'Done ✓')); render(); }
