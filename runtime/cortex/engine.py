@@ -3125,7 +3125,8 @@ QUOTE_SKILL_KEY = "sales-quotation"        # quotes land under the company's Sal
 
 def deliver_quotation(company: str, *, preset: str = "ai-production", customer: str = "",
                       total: float | None = None, total_inclusive: bool = False, sections: list | None = None,
-                      title: str | None = None, note: str | None = None, fmt: str = "both") -> dict:
+                      title: str | None = None, note: str | None = None, fmt: str = "both",
+                      contact_email: str | None = None) -> dict:
     """Render a quotation and drop it in the Inbox as a downloadable card (kind='quotation'). `fmt` = 'both'
     (default: editable .xlsx + ready-to-send .pdf), 'xlsx', or 'pdf'; both share one quote number. Delivery
     copies stored in R2 under <slug>/quotations/draft/. Prices come from the request (a stated total split by
@@ -3135,7 +3136,7 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
     if not co:
         raise ValueError(f"unknown company {company}")
     kw = dict(customer=customer, total=total, total_inclusive=total_inclusive, sections=sections,
-              title=title, note=note, out_dir=QUOTES_DIR)
+              title=title, note=note, contact_email=contact_email, out_dir=QUOTES_DIR)
     want_pdf = fmt in ("both", "pdf")
     want_xlsx = fmt in ("both", "xlsx")
     # The house-format .xlsx is the single source of truth; the PDF is that same sheet converted by

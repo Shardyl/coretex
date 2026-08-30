@@ -468,10 +468,37 @@ def _logo_on_black(b64: str):
         return None
 
 
+def _contact_for(customer: str, contact_email: str | None = None) -> dict:
+    """The quotation's contact person, from the CRM — never invented. An explicit contact_email wins;
+    else the customer's account is matched (name, space/case-insensitive) and used only when it has
+    exactly ONE emailable contact (ambiguity leaves the fields blank for the operator)."""
+    if contact_email:
+        r = db.one("select first_name, last_name, email, phone from crm_master where lower(email)=lower(%s)",
+                   (contact_email.strip(),))
+        if r:
+            return {"name": " ".join(x for x in (r.get("first_name"), r.get("last_name")) if x),
+                    "email": r.get("email") or "", "phone": r.get("phone") or ""}
+        return {"email": contact_email.strip()}
+    if not customer:
+        return {}
+    acc = db.one("select id from crm_accounts where lower(replace(name,' ',''))=lower(replace(%s,' ',''))",
+                 (customer.strip(),))
+    if not acc:
+        return {}
+    rows = db.query("select first_name, last_name, email, phone from crm_master where account_id=%s "
+                    "and coalesce(email,'') <> ''", (acc["id"],))
+    if len(rows) != 1:
+        return {}
+    r = rows[0]
+    return {"name": " ".join(x for x in (r.get("first_name"), r.get("last_name")) if x),
+            "email": r.get("email") or "", "phone": r.get("phone") or ""}
+
+
 def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str = "",
                   sections: list | None = None, total: float | None = None, total_inclusive: bool = False,
                   title: str | None = None, note: str | None = None, agency_fee: bool | None = None,
                   terms: dict | None = None, deliverables: list | None = None, number: str | None = None,
+                  contact: dict | None = None, contact_email: str | None = None,
                   out_dir: str = "/tmp") -> dict:
     """Build the quotation as the Sensa house-format .xlsx (single sheet, brand band, optional Deliverables
     block, line-item table with =IF(D="",...) auto-totals, payment + bank, acceptance, then Terms directly
@@ -536,7 +563,9 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
     r += 1
     today = datetime.date.today()
     valid = (today + datetime.timedelta(days=30)).strftime("%d %b %Y")
-    to_rows = [("Customer", customer or ""), ("Contact person", ""), ("Contact no.", ""), ("Email", "")]
+    ct = contact or _contact_for(customer, contact_email)
+    to_rows = [("Customer", customer or ""), ("Contact person", ct.get("name") or ""),
+               ("Contact no.", ct.get("phone") or ""), ("Email", ct.get("email") or "")]
     det_rows = [("Quotation no.", m["number"]), ("Date", today.strftime("%d %b %Y")),
                 ("Valid until", valid), ("Currency", cur)]
     for i in range(4):
