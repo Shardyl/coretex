@@ -3108,7 +3108,17 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
                             f"where {owhere} order by is_client desc, first_name nulls last limit 12", params)
         awhere = " and ".join(["(coalesce(name,'')||' '||coalesce(domain,'')) ilike %s"] * len(toks))
         accs = db.query(f"select id,name,domain from crm_accounts where {awhere} order by name limit 8", params)
-        return json.dumps({"contacts": cons, "companies": accs}, default=str)
+        # HONEST TRUNCATION (owner rule 2026-08-30): a capped list must say so, with the true total —
+        # a silently cut listing is how a model asserts a false "that contact doesn't exist".
+        n_c = (db.one(f"select count(*) n from crm_master where {where}", params) or {}).get("n", len(cons))
+        n_a = (db.one(f"select count(*) n from crm_accounts where {awhere}", params) or {}).get("n", len(accs))
+        out = {"contacts": cons, "companies": accs,
+               "total_contact_matches": n_c, "total_company_matches": n_a}
+        if n_c > len(cons) or n_a > len(accs):
+            out["truncated"] = (f"showing {len(cons)} of {n_c} contacts / {len(accs)} of {n_a} companies - "
+                                "the list is INCOMPLETE. Refine the query before concluding anything about "
+                                "who exists; NEVER say a person or company is absent from a truncated list.")
+        return json.dumps(out, default=str)
     if name == "crm_pipeline":
         slug = inp.get("company")
         opp, proj = crm_opportunities(slug, _=None), crm_projects(slug, _=None)
@@ -3434,6 +3444,12 @@ def _shared_behaviour() -> str:
         "rashad@tabscanner.com is his Tabscanner business email.",
         "When he names a person or company, crm_lookup them proactively before asking for details (like an "
         "email). If there's no exact match, offer the closest options — never just say you can't find anyone.",
+        "ABSENCE DISCIPLINE (owner rule, absolute): NEVER state that a contact, company, file, film or record "
+        "does not exist unless a search returned ZERO total matches on the broadest sensible query. A result "
+        "marked 'truncated' is incomplete — refine and search again before drawing ANY conclusion. If asked "
+        "about someone by name, search the NAME (and again with spelling variants), not just a company or "
+        "domain. He builds real business decisions on your answers: a slow, verified answer always beats a "
+        "fast guess, and a false 'doesn't exist' is the worst answer you can give.",
         "FILES / ATTACHMENTS WORK: when he attaches an image or PDF, it IS attached to whatever you draft — saved "
         "on the task, used by the worker, and shown on the Inbox approval card. Just attach it and confirm 'your "
         "screenshot is attached to the draft'. NEVER say you can't attach files, that it won't be included, or hedge.",
