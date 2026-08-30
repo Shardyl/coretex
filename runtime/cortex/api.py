@@ -1698,12 +1698,15 @@ def crm_projects(company: str | None = None, u: dict = Depends(current_user)) ->
     rows = db.query(f"select id, company, title, contact_email, value, currency, stage, owner from crm_projects {w} "
                     "order by case stage when 'Booked' then 1 when 'Production' then 2 when 'Recurring' then 3 "
                     "when 'Delivered' then 4 when 'Final Payment' then 5 when 'Close & review' then 6 "
-                    "when 'Nurture' then 7 else 8 end, "
+                    "when 'Nurture' then 7 when 'Completed' then 8 else 9 end, "
                     "value desc nulls last", tuple(params))
     groups = db.query(f"select stage, count(*) n, coalesce(sum(value),0) v from crm_projects {w} group by stage", tuple(params))
     total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects {w}", tuple(params))
+    # pipeline value = OUTSTANDING money only (owner, 30 Aug): once payment is in (Close & review
+    # onward) the amount leaves the headline - nothing there is being chased any more
+    op = tuple([crm.OUTSTANDING_STAGES] + list(params)[1:])
     cur = db.query(f"select coalesce(nullif(currency,''),'AED') c, coalesce(sum(value),0) v from crm_projects {w} "
-                   "and value is not null group by c", tuple(params))
+                   "and value is not null group by c", op)
     return {"projects": rows, "groups": {g["stage"]: {"n": g["n"], "value": float(g["v"] or 0)} for g in groups},
             "total_value": float(total["v"] or 0), "count": total["n"],
             "currencies": {r["c"]: float(r["v"] or 0) for r in cur if float(r["v"] or 0) > 0}}
