@@ -290,6 +290,58 @@ def maybe_advance_on_send(deal_id: int, task: dict, env: dict) -> None:
             pass
 
 
+PLAN_STAGES = ("Booked", "Production", "Recurring", "Delivered", "Final Payment")
+
+
+def plan_request(deal_id: int, title: str, stage: str, why: str) -> dict:
+    """The brief behind a PROJECT PLAN card - the living plan for one project. It is never sent anywhere:
+    it says where the project stands and WHAT HAPPENS NEXT with dates, and confirming it arms those steps.
+    Rebuilt from the deal timeline + notes each time, so a note or a WhatsApp update re-plans it."""
+    d = db.one("select note from crm_projects where id=%s", (int(deal_id),)) or {}
+    rems = db.query("select id, title, to_char(due_at,'DD Mon HH24:MI') w from reminders where "
+                    "target_type='deal' and target_id=%s and status in ('pending','snoozed') order by due_at",
+                    (str(int(deal_id)),))
+    open_steps = "\n".join(f"- [reminder {r['id']}] {r['title']} - due {r['w']}" for r in rems) or "(none)"
+    brief = (
+        f"PROJECT PLAN for '{title}' (deal {deal_id}, stage {stage}) - triggered because {why}. This is an "
+        "INTERNAL plan for Rashad and is never sent to anyone. Write it tight and scannable:\n"
+        "1) WHERE IT STANDS - two or three lines of fact from the record below.\n"
+        "2) WHAT WE OWE - outstanding deliverables/commitments, with dates where the record states them.\n"
+        "3) NEXT STEPS - each a single line naming WHO does it, WHAT it is and WHEN. If we are waiting on "
+        "the client, say what for and when we would chase.\n"
+        "4) RISKS - only real ones visible in the record (missing brief, slipped date, unpaid invoice).\n"
+        "Facts ONLY from the record below: never invent dates, amounts or scope. If something essential is "
+        "missing (no brief, no contact), make saying so the first next step.\n")
+    if d.get("note"):
+        brief += f"\nTEAM NOTES ON THIS PROJECT: {d['note']}\n"
+    brief += f"\nALREADY SCHEDULED on this deal (do not duplicate these):\n{open_steps}\n"
+    brief += "\nDEAL TIMELINE:\n" + deal_context(deal_id, limit=20)
+    return {"brief": brief, "deal_id": int(deal_id), "title": f"Project plan - {title}"}
+
+
+def replan(deal_id: int, why: str = "the plan was updated") -> int | None:
+    """Re-issue the plan for a project: a note added, a WhatsApp/phone update, a stage move, or Talk asking
+    for it. ONE open plan card per deal - an existing open card is refreshed, never stacked."""
+    d = db.one("select id, title, stage, company from crm_projects where id=%s", (int(deal_id),))
+    if not d:
+        return None
+    co = db.one("select id, slug from companies where lower(name)=lower(%s) or lower(slug)=lower(%s)",
+                (d.get("company") or "", d.get("company") or ""))
+    sk = store.get_skill_by_key(co["id"], "email-handling") if co else None
+    if not (co and sk):
+        return None
+    req = plan_request(d["id"], d["title"], d["stage"], why)
+    ex = db.one("select id from tasks where kind='project_plan' and deal_id=%s and status in "
+                "('new','drafting','awaiting_approval','awaiting_correction') order by id desc limit 1",
+                (int(deal_id),))
+    if ex:      # refresh the open plan in place: never two plans for one project
+        db.execute("update tasks set request=%s, status='new', draft=null, manager=null, updated_at=now() "
+                   "where id=%s", (Json(req), ex["id"]))
+        return ex["id"]
+    t = store.create_card(co["id"], sk["id"], "project_plan", req, deal_id=int(deal_id))
+    return (t or {}).get("id")
+
+
 def on_stage_change(deal: dict, old: str, new: str, actor: str = "system") -> None:
     """Called by crm.set_project_stage AFTER a stage moves. Won = the deal becomes a live project:
     kickoff lands as a reminder-spawned Inbox card so delivery starts tracked, not ad hoc.
@@ -306,23 +358,21 @@ def on_stage_change(deal: dict, old: str, new: str, actor: str = "system") -> No
         if new in won and old not in won:
             log_deal(did, "project_start", f"WON at stage {new} - deal is now a live project")
             due = datetime.now(timezone.utc) + timedelta(hours=2)
-            kickoff_brief = (
-                f"Deal {did} ({title}) was just WON (stage {new}). Draft the project kickoff plan as an "
-                "internal checklist for the owner: what we owe, the dates/milestones from the deal timeline "
-                "below, who does what, and the kickoff message to send the client. Facts from the timeline "
-                "only - never invent dates or scope.\n\n" + deal_context(did))
             reminders.create(
-                f"Project kickoff: {title} (deal {did})", due,
+                f"Project plan: {title} (deal {did})", due,
                 company_id=(co or {}).get("id"), target_type="deal", target_id=did, priority="high",
                 created_by="cortex-pipeline",
-                action={"company": (co or {}).get("slug"), "skill": "email-handling", "kind": "content",
-                        "brief": kickoff_brief})
+                action={"company": (co or {}).get("slug"), "skill": "email-handling",
+                        "kind": "project_plan",
+                        "request": plan_request(did, title, new, "the deal was just WON")})
             if actor != "owner":
                 notifications.notify("Deal won - project kickoff queued",
                                      f"{title} moved to {new}. A kickoff card will land in the Inbox; "
                                      "delivery correspondence now routes on the project lane.",
                                      category="crm", company_id=(co or {}).get("id"),
                                      target_type="deal", target_id=did)
+        if new in PLAN_STAGES and old in PLAN_STAGES and new != old:
+            replan(did, f"the project moved from {old} to {new}")
         if new == "Close & review" and old != "Close & review":
             log_deal(did, "project_close", "moved to Close & review - wrap-up owed")
             if actor != "owner":

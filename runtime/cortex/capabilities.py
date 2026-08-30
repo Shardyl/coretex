@@ -44,6 +44,13 @@ CAPABILITIES: list[tuple[str, str]] = [
      "that needs a deliverable (quote revision, proposal) spawns its prep card alongside the reply. "
      "Meetings on a deal land on its timeline with our action items tracked. When asked 'where is deal "
      "X up to', read its history timeline."),
+    ("Project plans — keeping work on track",
+     "Every live project has ONE plan card: where it stands, what we owe, and the NEXT STEPS with dates. "
+     "It is INTERNAL and never sends anything. It appears when a deal is won and when a project changes "
+     "stage, and it re-issues itself whenever new context lands - a note added on the project, or Rashad "
+     "telling you something (use update_project_plan, passing the note). Correcting a plan card is "
+     "actioned, not just reworded: timings he states ('chase in two weeks if we've heard nothing') become "
+     "real dated follow-ups on that deal, visible under the project's reminders."),
     ("Rate card — pricing reference",
      "Each company has a rate card (setting rate_card:<slug>) of OWNER-APPROVED per-unit prices; it is "
      "injected into every quotation-adjacent draft. Prices come ONLY from it: an item not on the card is "

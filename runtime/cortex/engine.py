@@ -54,6 +54,7 @@ KIND_CLASS = {
     "content": "internal", "draft": "internal", "research": "internal", "summary": "internal",
     "report": "internal", "seo_report": "internal", "ppc_report": "internal", "crm_update": "internal",
     "internal_note": "internal",
+    "project_plan": "internal",   # the living plan for a project: never sends, arms the next steps
     "quotation": "internal",   # a downloadable quote card; SENDING it to a client is a separate outward step
     "email_reply": "outward", "email_draft": "outward", "email_send": "outward", "blog": "outward",
     "blog_idea": "internal", "blog_scheduled": "outward",
@@ -75,6 +76,7 @@ def kind_class(kind: str) -> str:
 APPROVE_ACTION = {
     "email_reply": "Approve & send", "email_draft": "Approve & send",
     "blog_idea": "Approve & build", "blog": "Approve & schedule",
+    "project_plan": "Confirm plan",
     "newsletter_idea": "Approve & build", "newsletter_review": "Approve & schedule",
     "newsletter_send": "Approve & send",
     "social_shift": "Approve today's run", "social_relogin": "I've logged back in",
@@ -1247,7 +1249,7 @@ def apply_correction(task: dict, text: str) -> None:
     # "No email needed here" is valid feedback, not a revision request: dismiss the card instead of
     # stubbornly redrafting (bit card #330 — a tender that answers through the supplier portal), and
     # still run the rule inference so the owner gets the add-as-rule offer (universal or local).
-    if task["kind"] in ("email_reply", "email_draft"):
+    if task["kind"] in ("email_reply", "email_draft", "project_plan"):
         u = _understand_correction(task, text)                     # ONE reading of the owner's words
         if u.get("no_reply"):
             store.update_task(task["id"], status="rejected")
@@ -1259,7 +1261,8 @@ def apply_correction(task: dict, text: str) -> None:
                                 "(no email sent - the owner said no reply is needed)")
             return
         task, text = _apply_understood(task, u, text)              # every channel applied deterministically
-        task = _prebook_meeting(task) or task   # a stamped meeting -> real Meet link available to the drafter
+        if task["kind"] != "project_plan":
+            task = _prebook_meeting(task) or task   # a stamped meeting -> real Meet link for the drafter
     dreq = _request_for_draft(task)
     new = worker.draft(skill, company, dreq, correction=text, prev_draft=old)
     new = _ensure_clean_email(skill, company, dreq, new, prev=old)

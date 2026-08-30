@@ -30,7 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Json
 from pydantic import BaseModel
 
-from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, documents, engine, fitness, gmail, knowledge, nurture,
+from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, documents, engine, fitness, gmail, knowledge, nurture, pipeline,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
                skillqa, social, social_comments, social_config, social_connect, social_dm, social_warm, store, webauthn_auth, whatsapp,
                worker)
@@ -2213,6 +2213,15 @@ def crm_project_note(id: int, body: NoteBody, u: dict = Depends(current_user)) -
     r = crm.add_project_note(id, body.note.strip())
     if not r:
         raise HTTPException(status_code=404, detail="deal not found")
+    # a note on a LIVE project is new context (a call, a WhatsApp update): re-plan so the next steps
+    # reflect it. One open plan per deal, so this refreshes rather than stacks (owner, 30 Aug).
+    try:
+        if (r.get("stage") or "") in pipeline.PLAN_STAGES:
+            pid = pipeline.replan(id, "a note was added to the project")
+            if pid:
+                r["replanned_task"] = pid
+    except Exception:  # noqa: BLE001 — never fail the note because re-planning hiccuped
+        pass
     return r
 
 
@@ -3069,6 +3078,16 @@ SKILL_TOOLS = [
                     "due'. Returns three lanes: now_to_deal_with (un-dated open work in the Inbox), recurring "
                     "(jobs on a cadence), and upcoming (dated one-offs). Optional business slug to scope it.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}}},
+    {"name": "update_project_plan",
+     "description": "Re-issue the PROJECT PLAN for a live project so its next steps reflect new context - "
+                    "use when Rashad tells you something that changes a project (a WhatsApp or phone update "
+                    "from the client, a slipped date, a decision). Optionally pass `note` to record what he "
+                    "told you on the deal first; the refreshed plan card lands in his Inbox to confirm. Find "
+                    "the deal id with crm_pipeline/crm_lookup if you don't have it.",
+     "input_schema": {"type": "object", "properties": {
+        "deal_id": {"type": "integer", "description": "the project/deal id"},
+        "note": {"type": "string", "description": "context to record on the project before re-planning"}},
+        "required": ["deal_id"]}},
     {"name": "set_reminder",
      "description": "Set a reminder for Rashad. A NUDGE (no action_*) drops an info card in the Inbox at the "
                     "time, pointing at the target. An ACTION reminder (give action_skill + action_brief) spawns "
@@ -3273,6 +3292,13 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
             "recurring": [f"{r['title']} ({r['cadence']}, next {r['next_run']})" for r in recq],
             "upcoming": [f"{(r['title'] or r['kind'])} ({r['run_at']})" for r in upcq],
         })
+    if name == "update_project_plan":
+        did = int(inp["deal_id"])
+        if (inp.get("note") or "").strip():
+            crm.add_project_note(did, inp["note"].strip())
+        tid = pipeline.replan(did, "Rashad gave new context on the project")
+        return (f"plan card {tid} refreshed for deal {did} - it lands in the Inbox to confirm"
+                if tid else f"could not re-plan deal {did} (unknown deal or company)")
     if name == "set_reminder":
         due = reminders.parse_when(inp.get("when") or "")
         if not due:
