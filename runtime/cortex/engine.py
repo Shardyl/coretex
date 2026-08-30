@@ -295,6 +295,11 @@ def _email_envelope(task: dict, company: dict) -> dict:
         except Exception:  # noqa: BLE001
             _ecfg = {}
     req = task.get("request") or {}
+    # ALWAYS-CC (company profile 'always_cc'): people who ride EVERY email this company sends, replies
+    # and Talk-composed outbound alike - the one cc source that is not reply-only (owner, 30 Aug:
+    # "copy Dalal into everything"). Still subject to never_cc, cc_remove and the To-dedup below.
+    cc_list += [str(v).strip() for v in (data.get("always_cc") or [])
+                if isinstance(v, str) and "@" in v]
     cc_list += [e for e in (req.get("cc_extra") or []) if "@" in e]
     try:   # DEAL LOOP: deal contacts marked cc ride EVERY email on that deal (owner: Alia at MAH Gold
         # responds on the development-department address and must be looped into all communications)
