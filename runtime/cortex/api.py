@@ -2557,9 +2557,11 @@ class Correction(BaseModel):
 
 
 @app.post("/api/tasks/{task_id}/approve")
-def approve(task_id: int, x_stepup: str = Header(default=""), u: dict = Depends(current_user)) -> dict:
+def approve(task_id: int, run_at: str | None = None, x_stepup: str = Header(default=""),
+            u: dict = Depends(current_user)) -> dict:
     _guard_task(u, task_id)
-    return engine.approve_task(task_id, stepup_token=x_stepup or None)
+    # run_at set = APPROVE AND SCHEDULE: authenticated now, sent at that time by the clock
+    return engine.approve_task(task_id, stepup_token=x_stepup or None, run_at=run_at)
 
 
 @app.post("/api/tasks/{task_id}/skip")
@@ -2597,11 +2599,13 @@ class TaskAttach(BaseModel):
 
 
 @app.get("/api/documents")
-def documents_list(company: str, u: dict = Depends(current_user)) -> dict:
+def documents_list(company: str, all: bool = False, u: dict = Depends(current_user)) -> dict:
     co = store.get_company_by_slug(company)
     if not co:
         raise HTTPException(status_code=404, detail="unknown company")
-    return {"documents": documents.listing(co["id"])}
+    # default = the standing company papers only; ?all=true opens the full library
+    return {"documents": documents.listing(co["id"], core_only=not all),
+            "total": len(documents.listing(co["id"])), "core_only": not all}
 
 
 @app.post("/api/documents")

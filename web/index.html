@@ -1616,15 +1616,20 @@ async function openAttachPanel(tid,cid){
   p.style.display='block';
   p.innerHTML='<div class="meta">Loading the document library…</div>';
   let docs=[], have=[];
-  try{ const r=await api('/api/documents?company='+encodeURIComponent(compSlug(cid))); docs=r.documents||[]; }catch(e){}
+  const showAll=(p.dataset.all==='1');
+  let total=0;
+  try{ const r=await api('/api/documents?company='+encodeURIComponent(compSlug(cid))+(showAll?'&all=true':''));
+    docs=r.documents||[]; total=r.total||docs.length; }catch(e){}
   try{ const t=await api('/api/tasks/'+tid+'/attachments'); have=(t.attachments||[]).filter(x=>x.doc_id).map(x=>x.doc_id); }catch(e){}
   p.innerHTML=`<div style="border:1px solid var(--ln);border-radius:11px;padding:10px 12px;margin-bottom:9px">
     <div class="row" style="margin-bottom:8px"><button class="btn go sm" onclick="pickCardFile(${tid},${cid})">${ic('clip',15)} Upload a file (Desktop / phone)</button></div>
-    <div class="meta" style="margin-bottom:6px">${ic('file',14)} Or attach from the company document library:</div>
+    <div class="row" style="margin-bottom:6px;align-items:baseline"><span class="meta">${ic('file',14)} ${showAll?'Full document library':'Standing company papers'}:</span>
+      ${(!showAll&&total>docs.length)?`<span class="meta" style="margin-left:auto;cursor:pointer;text-decoration:underline" onclick="document.getElementById('ap${tid}').dataset.all='1';document.getElementById('ap${tid}').style.display='none';openAttachPanel(${tid},${cid})">Show all ${total}</span>`:''}
+      ${showAll?`<span class="meta" style="margin-left:auto;cursor:pointer;text-decoration:underline" onclick="document.getElementById('ap${tid}').dataset.all='0';document.getElementById('ap${tid}').style.display='none';openAttachPanel(${tid},${cid})">Show core only</span>`:''}</div>
     ${docs.length?docs.map(d=>have.includes(d.id)
       ?`<div class="row" style="margin:3px 0;opacity:.75"><span style="flex:1;min-width:0;font-size:13px;cursor:pointer;text-decoration:underline" onclick="openDoc(${d.id},'${esc(d.filename)}')">${esc(d.filename)}</span><span class="meta">Attached ✓</span></div>`
       :`<div class="row" style="margin:3px 0"><span style="flex:1;min-width:0;font-size:13px;cursor:pointer;text-decoration:underline" onclick="openDoc(${d.id},'${esc(d.filename)}')">${esc(d.filename)} <span style="color:var(--mut)">[${esc(d.kind)}]</span></span><button class="btn sm" onclick="attachDoc(${tid},${d.id})">Attach</button></div>`).join('')
-      :'<div class="meta">Library is empty — upload above and it is saved for next time.</div>'}</div>`;
+      :`<div class="meta">${showAll?'Library is empty — upload above and it is saved for next time.':'No standing papers on file yet (company profile, trade licence, VAT certificate).'}</div>`}</div>`;
 }
 async function openDoc(id,name){
   // document downloads need the login token — a plain link 401s, so fetch with auth and DOWNLOAD the blob
@@ -1690,6 +1695,7 @@ function actionCard(t){
 ${t.owner_only?`<div class="csub" style="margin-bottom:6px;color:var(--mut)">${ic('lock',12)} Money approval — owner only (Rashad's PIN or fingerprint)</div>`:''}
       <div class="row">
         <button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||'Approve')}</button>
+        ${isEmail?`<button class="btn" onclick="openSchedule(${t.id})" title="Approve now, send later">${ic('calendar',16)} Schedule</button>`:''}
         <button class="btn warn" id="cm${t.id}" onclick="voiceCorrect(${t.id},this)">${ic('mic',16)} Tap to talk</button>
         <button class="btn" id="ty${t.id}" onclick="typeCorrect(${t.id})">${ic('edit',16)} Type</button>
         <button class="btn bad" onclick="act(${t.id},'skip')">${t.kind==='blog'?'Discard':'Skip'}</button>
@@ -1915,22 +1921,45 @@ async function setThreshold(ev,id,streak){
   catch(e){ toast('Error: '+e.message); }
 }
 
-async function act(id,what){
+function openSchedule(id){
+  const host=document.getElementById('sch'+id) || (()=>{ const d=document.createElement('div'); d.id='sch'+id;
+    const c=document.getElementById('t'+id); if(c) c.appendChild(d); return d; })();
+  if(host.dataset.open==='1'){ host.dataset.open='0'; host.innerHTML=''; return; }
+  host.dataset.open='1';
+  const now=new Date(), pad=n=>String(n).padStart(2,'0');
+  const d=new Date(now.getTime()+16*3600*1000);        // default: tomorrow-ish morning
+  const def=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T09:00`;
+  host.innerHTML=`<div style="border:1px solid var(--ln);border-radius:11px;padding:10px 12px;margin:8px 0">
+    <div class="meta" style="margin-bottom:7px">Approve now, send automatically at:</div>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <input type="datetime-local" id="schi${id}" value="${def}" style="flex:1;min-width:190px">
+      <button class="btn go sm" onclick="confirmSchedule(${id})">Approve &amp; schedule</button>
+      <button class="btn sm" onclick="openSchedule(${id})">Cancel</button></div>
+    <div class="meta" style="margin-top:6px;opacity:.8">You confirm with your PIN now; it sends at that time. Times are GST.</div></div>`;
+}
+function confirmSchedule(id){
+  const v=(document.getElementById('schi'+id)||{}).value;
+  if(!v){ toast('Pick a date and time'); return; }
+  act(id,'approve',v+':00');
+}
+async function act(id,what,runAt){
   const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;
   if(demo){ toast(what==='approve'?'Approved ✓ (demo)':'Done (demo)'); if(card) card.remove(); return; }
-  try{ if(what==='approve') toast('Working on it…');
-    let r=await api(`/api/tasks/${id}/${what}`,{method:'POST'});
+  const qs = runAt? ('?run_at='+encodeURIComponent(runAt)) : '';
+  try{ if(what==='approve') toast(runAt?'Scheduling…':'Working on it…');
+    let r=await api(`/api/tasks/${id}/${what}${qs}`,{method:'POST'});
     if(r&&r.needs_biometric){                                                  // PUBLIC action — PIN / fingerprint first
       toast('Confirm to approve…');
       const tok=await stepUp();
       if(!tok){ if(card) card.style.opacity=1; toast('Approval needs your PIN or fingerprint'); return; }
-      r=await api(`/api/tasks/${id}/${what}`,{method:'POST',headers:{'X-Stepup':tok}});
+      r=await api(`/api/tasks/${id}/${what}${qs}`,{method:'POST',headers:{'X-Stepup':tok}});
     }
     if(card) card.style.opacity=1;
     if(r&&r.needs_biometric){ toast('⚠️ Not sent — the PIN/fingerprint check did not go through. Try approving again.'); render(); return; }
     if(r&&r.blocked){ toast('🔒 Not sent — '+r.error); return; }               // guarded — nothing went out
     if(r&&r.needs_confirm){ await confirmLiveSend(id, r); return; }            // require explicit count (schedule or send)
     if(r&&r.ok===false&&r.error){ toast('⚠️ '+r.error); render(); return; }    // e.g. already handled — never claim success
+    if(r&&r.scheduled){ toast('Approved — will send '+r.scheduled+' ✓'); render(); return; }
     const building=r&&r.result&&r.result.building, sent=r&&r.result&&r.result.sent_to, err=r&&r.result&&r.result.error;
     toast(err? ('Note: '+err) : building? 'Building the post — it returns to your Inbox for review when ready ✓'
           : sent? ('Sent to '+sent+' ✓') : (what==='approve'?'Approved ✓':'Done ✓')); render(); }

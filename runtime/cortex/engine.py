@@ -23,6 +23,8 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+from .schedule import _GST
+
 from psycopg.types.json import Json
 
 from . import (contentqueue, crm, db, doctext, documents, envelope, gmail, manager, media, meetnotes,
@@ -1598,7 +1600,7 @@ def _load(task_id: int):
     return task, store.get_skill(task["skill_id"]), store.get_company(task["company_id"])
 
 
-def approve_task(task_id: int, stepup_token: str | None = None) -> dict:
+def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | None = None) -> dict:
     task, skill, company = _load(task_id)
     if not task:
         return {"ok": False, "error": "no such task"}
@@ -1624,6 +1626,25 @@ def approve_task(task_id: int, stepup_token: str | None = None) -> dict:
                            money=(kind_class(task["kind"]) == "money"))
     if gate:
         return gate
+    if run_at:
+        # APPROVE AND SCHEDULE (owner, 30 Aug): he authenticates NOW and the send fires later. The card
+        # is parked as a one-off scheduled task carrying an approved-send marker, so the clock EXECUTES
+        # it (never re-drafts). Everything he approved - draft, envelope, attachments - is frozen as is.
+        try:
+            when = datetime.fromisoformat(str(run_at).replace("Z", "+00:00"))
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=_GST)
+        except Exception:  # noqa: BLE001
+            return {"ok": False, "error": "could not read that date/time"}
+        if when <= datetime.now(timezone.utc):
+            return {"ok": False, "error": "that time is in the past"}
+        db.execute("update tasks set status='scheduled', schedule_kind='once', run_at=%s, enabled=true, "
+                   "request = request || '{\"approved_send\": true}'::jsonb, updated_at=now() where id=%s",
+                   (when, task_id))
+        store.log_decision(task_id, skill["id"], "owner", "approved_scheduled",
+                           note=when.astimezone(_GST).strftime("%a %-d %b %H:%M"))
+        return {"ok": True, "scheduled": when.astimezone(_GST).strftime("%a %-d %b, %H:%M"),
+                "task": store.get_task(task_id)}
     result = _approve(task, skill, company)
     return {"ok": True, "task": store.get_task(task_id), "result": result}
 
@@ -3460,8 +3481,22 @@ def promote_due_tasks() -> None:
       one-off   (schedule_kind='once', run_at<=now)  -> flip to 'new' (runs once via process_new_tasks).
       recurring (schedule_kind='recurring', next_run<=now) -> spawn a child 'new' task + bump next_run.
     No-op until the Calendar/Talk (or the 3.4 migration) creates scheduled tasks."""
-    for t in db.query("select id from tasks where schedule_kind='once' and status='scheduled' "
-                      "and coalesce(enabled,true)=true and run_at is not null and run_at <= now()"):
+    for t in db.query("select id, coalesce((request->>'approved_send')::bool, false) ap from tasks "
+                      "where schedule_kind='once' and status='scheduled' and coalesce(enabled,true)=true "
+                      "and run_at is not null and run_at <= now()"):
+        if t["ap"]:      # already owner-approved (approve & schedule): EXECUTE the frozen draft
+            try:
+                task, skill, company = _load(t["id"])
+                db.execute("update tasks set status='awaiting_approval', last_run=now(), updated_at=now() "
+                           "where id=%s", (t["id"],))
+                task = store.get_task(t["id"])
+                res = _approve(task, skill, company)
+                tg.send(f"⏱ Scheduled send fired: {(task.get('title') or 'card')[:60]} — "
+                        f"{(res or {}).get('sent_to') or 'done'}")
+            except Exception as e:  # noqa: BLE001 — never lose the card: park it back for manual approval
+                db.execute("update tasks set status='awaiting_approval', updated_at=now() where id=%s", (t["id"],))
+                tg.send(f"⚠️ Scheduled send FAILED for card {t['id']}: {e}. It is back in the Inbox.")
+            continue
         db.execute("update tasks set status='new', last_run=now(), updated_at=now() where id=%s", (t["id"],))
     for t in db.query("select * from tasks where schedule_kind='recurring' and coalesce(enabled,true)=true "
                       "and next_run is not null and next_run <= now()"):

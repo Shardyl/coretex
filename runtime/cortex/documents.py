@@ -110,8 +110,17 @@ def save_data_url(company_id: int, slug: str, filename: str, data_url: str,
                 base64.b64decode(b64), kind=kind, uploaded_by=uploaded_by)
 
 
-def listing(company_id: int) -> list[dict]:
+# The STANDING company papers - the only documents offered by default when attaching to a card
+# (owner, 30 Aug: everything else is project clutter and Cortex attaches what a draft needs itself).
+CORE_KINDS = ("company-profile", "trade-licence", "vat-certificate")
+
+
+def listing(company_id: int, core_only: bool = False) -> list[dict]:
     ensure_schema()
+    if core_only:
+        return db.query("select id, kind, filename, mime, size, created_at from company_documents "
+                        "where company_id=%s and kind = any(%s) order by kind, created_at desc",
+                        (company_id, list(CORE_KINDS)))
     return db.query("select id, kind, filename, mime, size, created_at from company_documents "
                     "where company_id=%s order by kind, created_at desc", (company_id,))
 
