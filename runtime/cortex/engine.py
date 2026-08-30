@@ -2449,8 +2449,9 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
         return
     from email.utils import parsedate_to_datetime
     co = store.get_company(task.get("company_id")) or {}
-    best, seen_rt = None, set()
-    for s in _company_senders(task["company_id"]).values():
+    senders = _company_senders(task["company_id"])
+    hits, seen_rt = {}, set()            # rt_key -> (dt, sender, newest message in THAT mailbox)
+    for s in senders.values():
         if s["rt_key"] in seen_rt:
             continue                     # alias entries (richard->rashad) point at the same mailbox
         seen_rt.add(s["rt_key"])
@@ -2465,13 +2466,28 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
                 dt = parsedate_to_datetime(m.get("date") or "")
             except Exception:  # noqa: BLE001
                 dt = None
-            if best is None or (dt and (best[0] is None or dt > best[0])):
-                best = (dt, s, m)
+            hits[s["rt_key"]] = (dt, s, m)
         except Exception:  # noqa: BLE001
             continue
-    if not best:
+    if not hits:
         return
+    best = max(hits.values(), key=lambda x: (x[0] is not None, x[0]))
+    # THREAD-STICKY SENDER: a cc'd copy is not ownership (card 388 went out under Gino because his
+    # mailbox held a cc of Rashad's send). The owner is whoever SENT the newest our-side message —
+    # its From if that is one of our senders, else the first of our senders in its To/Cc.
     _, s, m = best
+    ours = {v["email"].lower(): v for v in senders.values()}
+    frm = (m.get("email") or "").lower()
+    if frm in ours:
+        owner = ours[frm]
+    else:
+        owner = next((ours[a.lower()] for a in re.findall(r"[\w.+-]+@[\w.-]+",
+                      (m.get("to") or "") + " " + (m.get("cc") or "")) if a.lower() in ours), s)
+    if owner["rt_key"] != s["rt_key"]:
+        if owner["rt_key"] not in hits:
+            return                       # owner's mailbox has no local copy: no safe threadId to reply with
+        _, s, m = hits[owner["rt_key"]]  # threadIds are mailbox-local: take them from the OWNER's mailbox
+    s = owner
     req["thread"] = {"id": m["thread_id"], "msg_id": m.get("msg_id") or "",
                      "references": m.get("references") or ""}
     req["from_email"], req["mailbox_rt"] = s["email"], s["rt_key"]
