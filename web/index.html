@@ -1214,7 +1214,7 @@ function toggleNurtOnly(){ nurtOnly=!nurtOnly; render(); }
 async function renderClients(b){
   b.outerHTML=`<div id="crmbody">
     <div class="srch">${ic('search',18)}<input id="clq" placeholder="Search organisations…" oninput="searchClients()"><span id="clcount" style="margin-left:auto;font-size:12px;color:var(--mut);white-space:nowrap;padding-left:8px">&nbsp;</span></div>
-    <div class="row" style="margin-bottom:10px;gap:8px"><button class="btn go sm" onclick="openNewCompany()">${ic('plus',15)} New organisation</button><button class="btn sm" onclick="openDupes()">${ic('copy',15)} Merge duplicates</button><span class="fchip${nurtOnly?' on':''}" style="margin-left:auto" onclick="toggleNurtOnly()">Nurtured</span></div>
+    <div class="row" style="margin-bottom:10px;gap:8px"><button class="btn go sm" onclick="openNewCompany()">${ic('plus',15)} New organisation</button><span class="fchip${nurtOnly?' on':''}" style="margin-left:auto" onclick="toggleNurtOnly()">Nurtured</span></div>
     <div id="cllist" class="empty">Loading…</div></div>`;
   await loadNurtMap();
   if(nurtOnly){ renderNurtOnly(); } else { loadClients(); }
