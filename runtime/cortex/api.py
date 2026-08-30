@@ -30,7 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Json
 from pydantic import BaseModel
 
-from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, documents, engine, fitness, gmail, knowledge,
+from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, documents, engine, fitness, gmail, knowledge, nurture,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
                skillqa, social, social_comments, social_config, social_connect, social_dm, social_warm, store, webauthn_auth, whatsapp,
                worker)
@@ -1785,6 +1785,51 @@ def crm_create_deal(body: NewDealBody, _: None = Depends(auth)) -> dict:
         raise HTTPException(status_code=409, detail=str(e))
     except crm.DealNeedsCompany as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class NurtureAddBody(BaseModel):
+    account: str                      # account name (or numeric id as string)
+    company: str                      # business slug
+    contact_email: str | None = None
+    note: str | None = None
+
+
+@app.get("/api/nurture")
+def nurture_listing(company: str | None = None, u: dict = Depends(current_user)) -> dict:
+    slugs = _scoped_companies(u, company)
+    cids = None
+    if slugs:
+        cids = [r["id"] for r in db.query("select id from companies where slug = any(%s)", (slugs,))] or [0]
+    return {"rows": nurture.listing(cids)}
+
+
+@app.post("/api/nurture/add")
+def nurture_add(body: NurtureAddBody, _: None = Depends(auth)) -> dict:
+    co = store.get_company_by_slug(body.company)
+    if not co:
+        raise HTTPException(status_code=404, detail="unknown business")
+    q = body.account.strip()
+    acc = db.one("select id, name from crm_accounts where id::text=%s", (q,)) if q.isdigit() else None
+    if not acc:
+        hits = db.query("select id, name from crm_accounts where name ilike %s order by name limit 5", (f"%{q}%",))
+        if len(hits) != 1:
+            raise HTTPException(status_code=409 if hits else 404,
+                                detail=("ambiguous - matches: " + "; ".join(h["name"] for h in hits)) if hits
+                                else "no client organisation by that name - create it in Organisations first")
+        acc = hits[0]
+    row = nurture.enrol(acc["id"], co["id"], contact_email=(body.contact_email or None),
+                        note=body.note or "", enrolled_from="manual")
+    return {"ok": True, "id": row["id"], "account": acc["name"]}
+
+
+@app.post("/api/nurture/{row_id}/stop")
+def nurture_stop(row_id: int, _: None = Depends(auth)) -> dict:
+    return {"ok": bool(nurture.stop(row_id))}
+
+
+@app.post("/api/nurture/{row_id}/resume")
+def nurture_resume(row_id: int, _: None = Depends(auth)) -> dict:
+    return {"ok": bool(nurture.resume(row_id))}
 
 
 class ContactEditBody(BaseModel):

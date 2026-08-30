@@ -702,8 +702,10 @@ async function renderCRM(v){
     <button class="cseg ${crmView==='opps'?'on':''}" onclick="setCrm('opps')">Opportunities</button>
     <button class="cseg ${crmView==='contacts'?'on':''}" onclick="setCrm('contacts')">Contacts</button>
     <button class="cseg ${crmView==='clients'?'on':''}" onclick="setCrm('clients')">Organisations</button>
+    <button class="cseg ${crmView==='nurture'?'on':''}" onclick="setCrm('nurture')">Nurture</button>
   </div><div id="crmbody" class="empty">Loading…</div>`;
   const b=document.getElementById('crmbody');
+  if(crmView==='nurture') return renderNurture(b);
   if(crmView==='clients') return renderClients(b);
   if(crmView==='projects') return renderProjects(b,co);
   if(crmView==='opps') return renderOpps(b,co);
@@ -1190,6 +1192,46 @@ function accountCard(a){ return `<div class="card crow" style="cursor:pointer" o
     <div style="flex:1;min-width:0"><div class="cname">${esc(a.name)}</div>
       <div class="csub">${a.contacts} contact${a.contacts==1?'':'s'} · ${a.deals} deal${a.deals==1?'':'s'}${a.won_value?' · '+dmoney(a.won_value)+' won':''}</div></div>
     ${ic('chevron',18)}</div>`; }
+async function renderNurture(b){
+  const co=document.getElementById('coSel').value;
+  let d; try{ d=await api('/api/nurture'+(co&&co!=='all'?`?company=${encodeURIComponent(co)}`:'')); }catch(e){ b.innerHTML='<div class="empty">Could not load nurture list</div>'; return; }
+  const rows=d.rows||[];
+  const fmtd=x=>x?new Date(x).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'—';
+  let h=`<div class="h">Relationships kept warm between projects · ${rows.length}</div>
+  <div class="card" style="margin-bottom:10px"><b>Add a client to nurture</b>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <input id="nuAcc" placeholder="Organisation name" style="flex:2;min-width:140px">
+      <input id="nuEmail" placeholder="Preferred contact email (optional)" style="flex:2;min-width:160px">
+      <input id="nuNote" placeholder="Note on the relationship (optional)" style="flex:3;min-width:160px">
+      <button class="btn" onclick="nurtureAdd()">Add</button>
+    </div><div id="nuMsg" class="mut" style="margin-top:6px"></div></div>`;
+  if(!rows.length){ b.innerHTML=h+'<div class="empty">No clients enrolled yet</div>'; return; }
+  h+=rows.map(r=>{
+    const st=r.live_work?`<span class="chip" style="border-color:#FBBF2455;color:#FBBF24">live work · holding</span>`
+      : r.status==='stopped'?`<span class="chip" style="border-color:#8597A655;color:#8597A6">stopped</span>`
+      : `<span class="chip" style="border-color:#4ADE8055;color:#4ADE80">active</span>`;
+    const act=r.status==='stopped'?`<button class="btn sm" onclick="nurtureAct(${r.id},'resume')">Resume</button>`
+      : `<button class="btn sm ghost" onclick="nurtureAct(${r.id},'stop')">Stop</button>`;
+    return `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap">
+      <b>${esc(r.account_name)}</b>${st}</div>
+      <div class="mut">${esc(r.business)} · ${r.won_projects} project${r.won_projects===1?'':'s'} · ${Number(r.won_value||0).toLocaleString()} AED · ${r.contacts} contact${r.contacts===1?'':'s'}</div>
+      <div class="mut">Contact: ${esc(r.contact_email||'best from roster')} · Last touch ${fmtd(r.last_touch)} · Next ${fmtd(r.next_touch)} · every ${r.cadence_days}d</div>
+      ${r.note?`<div class="mut" style="opacity:.8">${esc(r.note)}</div>`:''}
+      <div style="margin-top:6px">${act}</div></div>`;
+  }).join('');
+  b.innerHTML=h;
+}
+async function nurtureAdd(){
+  const co=document.getElementById('coSel').value;
+  const acc=document.getElementById('nuAcc').value.trim(), em=document.getElementById('nuEmail').value.trim(), no=document.getElementById('nuNote').value.trim();
+  const m=document.getElementById('nuMsg');
+  if(!acc){ m.textContent='Organisation name needed'; return; }
+  if(!co||co==='all'){ m.textContent='Pick a business first (top selector)'; return; }
+  try{ const r=await api('/api/nurture/add',{method:'POST',body:JSON.stringify({account:acc,company:co,contact_email:em||null,note:no||null})});
+    m.textContent=`${r.account} enrolled`; render(); }
+  catch(e){ m.textContent=(e&&e.message)||'Could not add'; }
+}
+async function nurtureAct(id,what){ try{ await api(`/api/nurture/${id}/${what}`,{method:'POST'}); }catch(e){} render(); }
 async function renderClients(b){
   b.outerHTML=`<div id="crmbody">
     <div class="srch">${ic('search',18)}<input id="clq" placeholder="Search organisations…" oninput="searchClients()"><span id="clcount" style="margin-left:auto;font-size:12px;color:var(--mut);white-space:nowrap;padding-left:8px">&nbsp;</span></div>

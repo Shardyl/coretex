@@ -1015,45 +1015,22 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
         db.execute("update crm_projects set cadence=%s, followup_step=0, next_followup=%s where id=%s",
                    (Json(RECURRING_CADENCE), _schedule_point(RECURRING_CADENCE, 0), did))
     if new == NURTURE_STAGE:
-        try:   # the keep-warm home for finished, paid, reviewed work: quarterly touches forever
+        try:   # finished, paid, reviewed -> the ACCOUNT joins the relationship layer (nurture section);
+            # the loop is per client organisation, never per deal, so two closed projects = ONE cadence
             db.execute("update reminders set status='cancelled' where target_type='deal' and target_id=%s "
                        "and status in ('pending','snoozed') and title ilike %s", (str(did), "Payment %"))
             email = p.get("contact_email") or next(
                 (c.get("email") for c in (p.get("contacts") or []) if c.get("email")), None)
-            have = db.one("select id from reminders where target_type='deal' and target_id=%s and "
-                          "status in ('pending','snoozed') and title ilike 'Nurture:%%' limit 1", (str(did),))
-            if email and cid and not have:   # Close & review may already have armed the loop — never double it
-                reminders.create(f"Nurture: won client from '{p['title']}'",
-                                 now + timedelta(days=90), company_id=cid, target_type="deal",
-                                 target_id=did, recurrence="custom", custom_days=90, action={
-                                     "company": (db.one("select slug from companies where id=%s", (cid,)) or {}).get("slug"),
-                                     "skill": "sales-followup", "kind": "email_reply", "request": {
-                                         "brief": (f"NURTURE touch: '{p['title']}' client, quarterly reconnect. The "
-                                                   "REPEAT-NURTURE standing rules on the sales-followup skill govern "
-                                                   "this email."),
-                                         "inquiry": {"email": email, "subject": "Anything coming up?"},
-                                         "deal_id": did,
-                                         "system_note": "Nurture-stage quarterly keep-warm touch."}})
+            if p.get("account_id") and cid:
+                from . import nurture
+                nurture.enrol(p["account_id"], cid, contact_email=email, enrolled_from=f"deal:{did}")
         except Exception:  # noqa: BLE001
             pass
     if new == "Close & review":
-        try:   # repeat-business nurture ~6 months after close; AR chase clocks die with the deal
+        try:   # AR chase clocks die with the deal; the relationship itself is handled by the nurture
+            # section when the deal later moves to the Nurture stage (account-level loop, never per-deal)
             db.execute("update reminders set status='cancelled' where target_type='deal' and target_id=%s "
                        "and status in ('pending','snoozed') and title ilike %s", (str(did), "Payment %"))
-            email = p.get("contact_email") or next(
-                (c.get("email") for c in (p.get("contacts") or []) if c.get("email")), None)
-            if email and cid:
-                reminders.create(f"Nurture: won client from '{p['title']}'",
-                                 now + timedelta(days=90), company_id=cid, target_type="deal",
-                                 target_id=did, recurrence="custom", custom_days=90, action={
-                                     "company": (db.one("select slug from companies where id=%s", (cid,)) or {}).get("slug"),
-                                     "skill": "sales-followup", "kind": "email_reply", "request": {
-                                         "brief": (f"NURTURE touch: '{p['title']}' client, quarterly reconnect since the project wrapped "
-                                                   "ago. The REPEAT-NURTURE standing rules on the sales-followup "
-                                                   "skill govern this email."),
-                                         "inquiry": {"email": email, "subject": "Anything coming up?"},
-                                         "deal_id": did,
-                                         "system_note": "Won-client nurture ~6 months after project close."}})
         except Exception:  # noqa: BLE001
             pass
 

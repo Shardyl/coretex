@@ -3552,6 +3552,11 @@ def run(poll_idle: float = 1.0) -> None:
             except Exception:  # noqa: BLE001
                 pass
             try:
+                from . import nurture
+                nurture.sweep()         # account-level keep-warm touches (silent while live work exists)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
                 run_opportunity_followups()   # advance AUTO opportunities' chase cadence -> drafted follow-up cards
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(opportunity follow-up hiccup: {e})")
