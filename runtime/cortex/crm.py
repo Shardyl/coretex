@@ -799,7 +799,8 @@ def record_anchor_stats(company_id: int, anchor: str, post: str, engagers: int, 
 # ---- Deals = the full lifecycle in crm_projects. Forecast stages show on the Opportunities screen;
 #      won/ongoing stages show on the Projects screen. Crossing 'Booked' promotes an opportunity to a project.
 FORECAST_STAGES = ["Opportunity", "Quote"]
-WON_STAGES = ["Booked", "Production", "Recurring", "Delivered", "Final Payment", "Close & review"]
+WON_STAGES = ["Booked", "Production", "Recurring", "Delivered", "Final Payment", "Close & review", "Nurture"]
+NURTURE_STAGE = "Nurture"       # project done, paid and reviewed -> quarterly keep-warm forever (owner, 30 Aug)
 LOST_STAGE = "Lost"                                    # pitched but didn't win — exits both screens
 DORMANT_STAGE = "Dormant"       # sequence exhausted, resting — never dead; revivable any time
 DEAL_STAGES = FORECAST_STAGES + WON_STAGES + [DORMANT_STAGE, LOST_STAGE]   # 'Recurring' = ongoing/repeat won work
@@ -1013,6 +1014,28 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
     if new == "Recurring" and p.get("automation") == "auto":
         db.execute("update crm_projects set cadence=%s, followup_step=0, next_followup=%s where id=%s",
                    (Json(RECURRING_CADENCE), _schedule_point(RECURRING_CADENCE, 0), did))
+    if new == NURTURE_STAGE:
+        try:   # the keep-warm home for finished, paid, reviewed work: quarterly touches forever
+            db.execute("update reminders set status='cancelled' where target_type='deal' and target_id=%s "
+                       "and status in ('pending','snoozed') and title ilike %s", (str(did), "Payment %"))
+            email = p.get("contact_email") or next(
+                (c.get("email") for c in (p.get("contacts") or []) if c.get("email")), None)
+            have = db.one("select id from reminders where target_type='deal' and target_id=%s and "
+                          "status in ('pending','snoozed') and title ilike 'Nurture:%%' limit 1", (str(did),))
+            if email and cid and not have:   # Close & review may already have armed the loop — never double it
+                reminders.create(f"Nurture: won client from '{p['title']}'",
+                                 now + timedelta(days=90), company_id=cid, target_type="deal",
+                                 target_id=did, recurrence="custom", custom_days=90, action={
+                                     "company": (db.one("select slug from companies where id=%s", (cid,)) or {}).get("slug"),
+                                     "skill": "sales-followup", "kind": "email_reply", "request": {
+                                         "brief": (f"NURTURE touch: '{p['title']}' client, quarterly reconnect. The "
+                                                   "REPEAT-NURTURE standing rules on the sales-followup skill govern "
+                                                   "this email."),
+                                         "inquiry": {"email": email, "subject": "Anything coming up?"},
+                                         "deal_id": did,
+                                         "system_note": "Nurture-stage quarterly keep-warm touch."}})
+        except Exception:  # noqa: BLE001
+            pass
     if new == "Close & review":
         try:   # repeat-business nurture ~6 months after close; AR chase clocks die with the deal
             db.execute("update reminders set status='cancelled' where target_type='deal' and target_id=%s "

@@ -1697,7 +1697,8 @@ def crm_projects(company: str | None = None, u: dict = Depends(current_user)) ->
     w = "where " + " and ".join(conds)
     rows = db.query(f"select id, company, title, contact_email, value, currency, stage, owner from crm_projects {w} "
                     "order by case stage when 'Booked' then 1 when 'Production' then 2 when 'Recurring' then 3 "
-                    "when 'Delivered' then 4 when 'Final Payment' then 5 when 'Close & review' then 6 else 7 end, "
+                    "when 'Delivered' then 4 when 'Final Payment' then 5 when 'Close & review' then 6 "
+                    "when 'Nurture' then 7 else 8 end, "
                     "value desc nulls last", tuple(params))
     groups = db.query(f"select stage, count(*) n, coalesce(sum(value),0) v from crm_projects {w} group by stage", tuple(params))
     total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects {w}", tuple(params))
