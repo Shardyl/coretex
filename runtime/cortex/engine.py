@@ -3207,12 +3207,21 @@ def _push_quote_to_client_drive(co: dict, customer: str, number: str, x: dict, p
             project = ((d or {}).get("title") or "").split(" - ")[-1].strip()
         base = " - ".join(v for v in (client, project, f"Quotation {number}") if v)
         uploaded = []
-        for path, mime, ext in ((x.get("path"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"),
+        _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        for path, mime, ext in ((x.get("path"), _XLSX, "xlsx"),
                                 (pdf_path, "application/pdf", "pdf")):
             if path and os.path.exists(path):
                 name = f"{base} v{n} - {stamp}.{ext}"
                 _drive.upload_to_folder(f["id"], name, mime, open(path, "rb").read(), token=tok)
                 uploaded.append(name)
+        try:   # the living ALL VERSIONS workbook: one spreadsheet, a tab per iteration, updated in place
+            vp = quotation.build_versions_workbook(x.get("company") or co.get("slug"), number, QUOTES_DIR)
+            if vp:
+                _drive.upsert_in_folder(f["id"], f"{base} - ALL VERSIONS.xlsx", _XLSX,
+                                        open(vp, "rb").read(), token=tok)
+                uploaded.append("ALL VERSIONS workbook updated")
+        except Exception:  # noqa: BLE001 — the per-version files are already filed
+            pass
         return {"filed": True, "folder": f["name"], "folder_id": f["id"],
                 "folder_created": f.get("created"), "version": n, "files": uploaded}
     except Exception as e:  # noqa: BLE001

@@ -116,6 +116,27 @@ def ensure_client_folder(client_name: str, parent_id: str, token: str | None = N
     return {"id": c.json()["id"], "name": want, "created": True, "candidates": []}
 
 
+def update_file(file_id: str, mime: str, data: bytes, token: str | None = None) -> str:
+    """Replace an existing Drive file's content in place (same id, same name)."""
+    tok = token or access_token()
+    r = httpx.patch(f"https://www.googleapis.com/upload/drive/v3/files/{file_id}",
+                    params={"uploadType": "media", "supportsAllDrives": "true"},
+                    headers={"Authorization": f"Bearer {tok}", "Content-Type": mime},
+                    content=data, timeout=120)
+    r.raise_for_status()
+    return r.json()["id"]
+
+
+def upsert_in_folder(folder_id_: str, filename: str, mime: str, data: bytes, token: str | None = None) -> str:
+    """Update the file of this exact name in the folder if it exists, else create it — for living
+    documents that keep one identity across iterations (e.g. the ALL VERSIONS quote workbook)."""
+    tok = token or access_token()
+    for f in list_folder(folder_id_, tok):
+        if f.get("name") == filename and f.get("mimeType") != "application/vnd.google-apps.folder":
+            return update_file(f["id"], mime, data, token=tok)
+    return upload_to_folder(folder_id_, filename, mime, data, token=tok)
+
+
 def upload_to_folder(folder_id_: str, filename: str, mime: str, data: bytes, token: str | None = None) -> str:
     """Upload bytes as a new file into a shared-drive folder; returns the file id."""
     tok = token or access_token()

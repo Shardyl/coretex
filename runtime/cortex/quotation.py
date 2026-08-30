@@ -499,10 +499,14 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
                   title: str | None = None, note: str | None = None, agency_fee: bool | None = None,
                   terms: dict | None = None, deliverables: list | None = None, number: str | None = None,
                   contact: dict | None = None, contact_email: str | None = None,
-                  out_dir: str = "/tmp") -> dict:
+                  out_dir: str = "/tmp", wb=None, sheet_title: str | None = None) -> dict:
     """Build the quotation as the Sensa house-format .xlsx (single sheet, brand band, optional Deliverables
     block, line-item table with =IF(D="",...) auto-totals, payment + bank, acceptance, then Terms directly
-    underneath). Same model + pricing modes as the PDF (see `_resolve`)."""
+    underneath). Same model + pricing modes as the PDF (see `_resolve`).
+
+    `wb`: render INTO an existing openpyxl Workbook as a new sheet (`sheet_title`) instead of saving a
+    file — used by `build_versions_workbook` to produce one workbook with a tab per iteration. In wb
+    mode nothing is saved and the version registry is not touched (pass `number` explicitly)."""
     from openpyxl import Workbook
     from openpyxl.drawing.image import Image as XLImage
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -521,9 +525,13 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
     def fill(c, argb):
         c.fill = PatternFill("solid", fgColor=argb)
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = (m["preset"][:31] or "Quotation")
+    own_wb = wb is None
+    if own_wb:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = (m["preset"][:31] or "Quotation")
+    else:
+        ws = wb.create_sheet((sheet_title or m["number"] or "Quotation")[:31])
     ws.sheet_view.showGridLines = False
     for i, w in enumerate([4, 56, 6, 14, 15]):
         ws.column_dimensions["ABCDE"[i]].width = w
@@ -748,10 +756,61 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
     ws.page_setup.fitToWidth = 1; ws.page_setup.fitToHeight = 0
     ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 
+    if not own_wb:                     # versions-workbook mode: the caller owns saving
+        return _return(m, "")
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, f"quotation-{m['company']}-{m['number']}.xlsx")
     wb.save(path)
+    _record_version(m, preset, customer, sections, contact_email)
     return _return(m, path)
+
+
+def _record_version(m: dict, preset: str, customer: str, sections: list | None,
+                    contact_email: str | None) -> None:
+    """Version registry (`quote_versions:<number>` setting): every distinct generated iteration of a
+    quote number is recorded with its full spec, so `build_versions_workbook` can rebuild the whole
+    history as one tabbed spreadsheet. Regenerating identical content refreshes the last entry's date
+    instead of adding a duplicate tab."""
+    try:
+        import json as _json
+        key = f"quote_versions:{m['number']}"
+        reg = db.setting_get(key) or []
+        spec = {"company": m["company"], "preset": preset, "customer": customer,
+                "title": m["title"], "note": m["note"], "deliverables": m["deliverables"],
+                "terms": m["terms"], "sections": sections, "contact_email": contact_email}
+        sig = _json.dumps(spec, sort_keys=True, default=str)
+        today = datetime.date.today().isoformat()
+        if reg and reg[-1].get("sig") == sig:
+            reg[-1]["date"] = today
+        else:
+            reg.append({"v": len(reg) + 1, "date": today, "sig": sig, "spec": spec})
+        db.setting_set(key, reg)
+    except Exception:  # noqa: BLE001 — registry bookkeeping must never break a quote
+        pass
+
+
+def build_versions_workbook(company: str, number: str, out_dir: str = "/tmp") -> str | None:
+    """ONE spreadsheet, a tab per iteration (newest first: 'v3 - 2026-08-30', ...), rebuilt from the
+    version registry — the client-folder companion to the per-version PDFs, so the whole quote history
+    is reviewable in a single file."""
+    reg = db.setting_get(f"quote_versions:{number}") or []
+    if not reg:
+        return None
+    from openpyxl import Workbook
+    wb = Workbook()
+    wb.remove(wb.active)
+    for entry in reversed(reg):
+        sp = entry.get("spec") or {}
+        generate_xlsx(sp.get("company") or company, sp.get("preset") or "ai-production",
+                      customer=sp.get("customer") or "", sections=sp.get("sections"),
+                      title=sp.get("title"), note=sp.get("note"), terms=sp.get("terms"),
+                      deliverables=sp.get("deliverables"), number=number,
+                      contact_email=sp.get("contact_email"),
+                      wb=wb, sheet_title=f"v{entry['v']} - {entry['date']}")
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"quotation-{company}-{number}-versions.xlsx")
+    wb.save(path)
+    return path
 
 
 # ---------------------------------------------------------------------------
