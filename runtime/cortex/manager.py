@@ -41,6 +41,9 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
                  "rule violation.")
     facts.append("Where the Task brief carries the owner's own instructions, content he explicitly "
                  "asked for is authorised — never flag it as 'without basis'.")
+    facts.append("Lifecycle and cadence instructions in the Task brief (e.g. 'then the Dormant flow', "
+                 "'ONE email only', follow-up sequencing, reminders) are executed by the PIPELINE, never "
+                 "written into the email — their absence from the draft body is never an issue.")
     # Computed calendar: weekday arithmetic is exactly the kind of fact a model gets wrong (a real
     # manager verdict called Thu 3 Sep a date error). Code stamps the next 4 weeks; the model reads.
     from datetime import datetime, timedelta
@@ -70,10 +73,13 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
         'Return JSON: {"verdict":"pass|revise|escalate","confidence":"high|medium|low",'
         '"summary":"one short line the owner reads","issues":["concrete rule/brand problems, [] if none"],'
         '"rule_refs":["the specific rules that were broken, if any"]}\n'
-        "The summary MUST be a faithful compression of the issues you listed and nothing else: never "
-        "introduce a claim that is not in issues, and never state as an error something your own issues "
-        "verified as correct. If every issue is a style/judgement call rather than a hard rule break, the "
-        "summary must say so plainly (e.g. 'style suggestions only') — never call such a draft unsendable.")
+        "Work in this order: verify facts against SYSTEM FACTS, list issues, THEN write the summary. "
+        "The summary is ONE sentence, max 140 characters, and a faithful compression of the issues you "
+        "listed and nothing else: no reasoning, no re-evaluation, no mention of things that are correct, "
+        "never a claim that is not in issues. If every issue is a style/judgement call rather than a hard "
+        "rule break, verdict is 'pass' and the summary says 'style suggestions only' plus the main one. "
+        "If issues is empty, verdict is 'pass' and the summary is simply what the draft does well, in "
+        "five words or fewer.")
     out = provider.think_json(system, user, max_tokens=1500,
                               purpose=f"manager:{skill.get('skill_key', '')}", company=company.get("slug"))
 
