@@ -884,6 +884,157 @@ def add_project_note(project_id: int, note: str) -> dict | None:
     return db.one("select * from crm_projects where id=%s", (project_id,))
 
 
+# ---------- payment terms + lifecycle patterns (owner playbook, 2026-08-30) ----------
+# Terms are STRUCTURED DATA from the signed approval (e.g. the quotation's 70/30). CODE computes every
+# invoice amount from terms x deal value - a model never produces a payable figure.
+
+def ensure_terms_column() -> None:
+    with db.connect() as c:
+        c.execute("alter table crm_projects add column if not exists payment_terms jsonb")
+
+
+def set_deal_terms(deal_id: int, splits: list) -> dict | None:
+    """splits = [{"pct": 70, "due": "on approval"}, {"pct": 30, "due": "on delivery"}] (pct sums ~100)."""
+    ensure_terms_column()
+    total = sum(float(x.get("pct") or 0) for x in splits)
+    if not 99 <= total <= 101:
+        raise ValueError(f"terms must sum to 100% (got {total})")
+    db.execute("update crm_projects set payment_terms=%s, updated_at=now() where id=%s",
+               (Json({"splits": splits}), deal_id))
+    return db.one("select * from crm_projects where id=%s", (deal_id,))
+
+
+def _invoice_amount(p: dict, pct: float) -> str:
+    """Code-stamped amount line for an invoice prep card; empty when the deal has no value set."""
+    try:
+        v = float(p.get("value") or 0)
+        if v > 0:
+            return f"{p.get('currency') or 'AED'} {round(v * pct / 100):,} ({pct:g}% of {p.get('currency') or 'AED'} {round(v):,} per the signed terms)"
+    except Exception:  # noqa: BLE001
+        pass
+    return f"{pct:g}% per the signed terms (deal value not set - fill the amount from the signed quotation)"
+
+
+DECISION_CADENCE = {   # quote/proposal sent -> awaiting their decision (day 3 / 7 / 14, then normal flow)
+    "skip_weekends": True,
+    "steps": [
+        {"after_days": 3, "repeat": 1, "action": "chase"},
+        {"after_days": 4, "repeat": 1, "action": "chase"},
+        {"after_days": 7, "repeat": 1, "action": "chase"},
+        {"after_days": 14, "repeat": 2, "action": "checkin"},
+        {"after_days": 90, "repeat": 2, "action": "revive"},
+    ],
+}
+
+RECURRING_CADENCE = {  # ongoing/retainer client: quarterly relationship check-in, forever (loops)
+    "skip_weekends": True,
+    "steps": [{"after_days": 90, "repeat": 1, "action": "checkin"}],
+}
+
+
+def _stage_patterns(p: dict, old: str, new: str) -> None:
+    """The lifecycle playbook, fired on stage changes. Every outward step is still a drafted card the
+    owner approves; this only arms the right clocks with code-stamped dates and amounts."""
+    from . import reminders, store
+    ensure_terms_column()
+    did, cid = p["id"], None
+    try:
+        co = db.one("select id from companies where name=%s", (_org(p.get("company")),))
+        cid = (co or {}).get("id")
+    except Exception:  # noqa: BLE001
+        pass
+    terms = ((p.get("payment_terms") or {}).get("splits")) or []
+    now = datetime.now(timezone.utc)
+    if new == "Quote" and p.get("automation") == "auto":
+        # decision-chase rhythm replaces the generic chase while they weigh the quote
+        db.execute("update crm_projects set cadence=%s, followup_step=0, next_followup=%s where id=%s",
+                   (Json(DECISION_CADENCE), _schedule_point(DECISION_CADENCE, 0), did))
+    if new == "Booked":
+        adv = next((x for x in terms if "approval" in (x.get("due") or "").lower()
+                    or "advance" in (x.get("due") or "").lower() or "booking" in (x.get("due") or "").lower()),
+                   terms[0] if terms else None)
+        if adv:
+            try:
+                sk = store.get_skill_by_key(cid, "sales-quotation") if cid else None
+                if sk:
+                    store.create_card(cid, sk["id"], "content", {
+                        "brief": (f"ISSUE THE ADVANCE INVOICE for '{p['title']}' (deal {did}): "
+                                  + _invoice_amount(p, float(adv.get("pct") or 0)) +
+                                  ". Due " + (adv.get("due") or "on approval") + " per the signed terms. "
+                                  "Prepare/issue the invoice; marking this card done arms the payment "
+                                  "follow-up clock."),
+                        "title": f"Advance invoice: {p['title']}", "deal_id": did, "invoice_pct": adv.get("pct"),
+                        "on_done_reminders": [
+                            {"title": f"Payment follow-up (gentle): advance invoice for '{p['title']}'", "days": 8},
+                            {"title": f"Payment follow-up (firmer, attach statement): '{p['title']}'", "days": 15},
+                            {"title": f"Payment ESCALATION - advance invoice '{p['title']}' still unpaid", "days": 22},
+                        ]}, deal_id=did)
+            except Exception:  # noqa: BLE001
+                pass
+    if new in ("Delivered", "Final Payment"):
+        bal = next((x for x in reversed(terms) if "deliver" in (x.get("due") or "").lower()
+                    or "final" in (x.get("due") or "").lower() or "completion" in (x.get("due") or "").lower()),
+                   terms[-1] if terms else None)
+        if bal and old not in ("Delivered", "Final Payment"):
+            try:
+                sk = store.get_skill_by_key(cid, "sales-quotation") if cid else None
+                if sk:
+                    store.create_card(cid, sk["id"], "content", {
+                        "brief": (f"ISSUE THE BALANCE INVOICE for '{p['title']}' (deal {did}): "
+                                  + _invoice_amount(p, float(bal.get("pct") or 0)) +
+                                  ". Due " + (bal.get("due") or "on delivery") + " per the signed terms. "
+                                  "Marking this card done arms the payment follow-up clock."),
+                        "title": f"Balance invoice: {p['title']}", "deal_id": did, "invoice_pct": bal.get("pct"),
+                        "on_done_reminders": [
+                            {"title": f"Payment follow-up (gentle): balance invoice for '{p['title']}'", "days": 8},
+                            {"title": f"Payment follow-up (firmer, attach statement): '{p['title']}'", "days": 15},
+                            {"title": f"Payment ESCALATION - balance invoice '{p['title']}' still unpaid", "days": 22},
+                        ]}, deal_id=did)
+            except Exception:  # noqa: BLE001
+                pass
+        if old not in ("Delivered", "Final Payment"):
+            try:   # feedback ask ~4 days after delivery; testimonial/referral is the trained two-step
+                email = p.get("contact_email") or next(
+                    (c.get("email") for c in (p.get("contacts") or []) if c.get("email")), None)
+                if email and cid:
+                    reminders.create(f"Feedback ask: how did '{p['title']}' land?",
+                                     now + timedelta(days=4), company_id=cid, target_type="deal",
+                                     target_id=did, priority="normal", action={
+                                         "company": (db.one("select slug from companies where id=%s", (cid,)) or {}).get("slug"),
+                                         "skill": "sales-followup", "kind": "email_reply", "request": {
+                                             "brief": (f"POST-DELIVERY FEEDBACK ask for '{p['title']}', delivered a few "
+                                                       "days ago. The DELIVERED-FEEDBACK standing rules on the "
+                                                       "sales-followup skill govern this email."),
+                                             "inquiry": {"email": email, "subject": f"How did {p['title']} land?"},
+                                             "deal_id": did,
+                                             "system_note": "Post-delivery feedback ask, ~4 days after delivery."}})
+            except Exception:  # noqa: BLE001
+                pass
+    if new == "Recurring" and p.get("automation") == "auto":
+        db.execute("update crm_projects set cadence=%s, followup_step=0, next_followup=%s where id=%s",
+                   (Json(RECURRING_CADENCE), _schedule_point(RECURRING_CADENCE, 0), did))
+    if new == "Close & review":
+        try:   # repeat-business nurture ~6 months after close; AR chase clocks die with the deal
+            db.execute("update reminders set status='cancelled' where target_type='deal' and target_id=%s "
+                       "and status in ('pending','snoozed') and title ilike %s", (str(did), "Payment %"))
+            email = p.get("contact_email") or next(
+                (c.get("email") for c in (p.get("contacts") or []) if c.get("email")), None)
+            if email and cid:
+                reminders.create(f"Repeat-business nurture: '{p['title']}' closed ~6 months ago",
+                                 now + timedelta(days=180), company_id=cid, target_type="deal",
+                                 target_id=did, action={
+                                     "company": (db.one("select slug from companies where id=%s", (cid,)) or {}).get("slug"),
+                                     "skill": "sales-followup", "kind": "email_reply", "request": {
+                                         "brief": (f"REPEAT-BUSINESS nurture: '{p['title']}' wrapped about six months "
+                                                   "ago. The REPEAT-NURTURE standing rules on the sales-followup "
+                                                   "skill govern this email."),
+                                         "inquiry": {"email": email, "subject": "Anything coming up?"},
+                                         "deal_id": did,
+                                         "system_note": "Won-client nurture ~6 months after project close."}})
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def set_project_stage(project_id: int, stage: str) -> dict | None:
     """Move a deal to a new stage; logs the change, and (un)marks the linked contact a client across the
     Booked boundary. Moving across 'Booked' shifts it between the Opportunities and Projects screens."""
@@ -903,6 +1054,10 @@ def set_project_stage(project_id: int, stage: str) -> dict | None:
         from . import pipeline
         pipeline.on_stage_change(p, old, stage)
     except Exception:  # noqa: BLE001 — stage bookkeeping must never break the stage move
+        pass
+    try:   # lifecycle playbook: invoices per signed terms, feedback ask, nurture, cadence variants
+        _stage_patterns(p, old, stage)
+    except Exception:  # noqa: BLE001
         pass
     return db.one("select * from crm_projects where id=%s", (project_id,))
 
@@ -1015,15 +1170,20 @@ def advance_followup(deal_id: int) -> dict | None:
     p = db.one("select * from crm_projects where id=%s", (deal_id,))
     if not p or p.get("automation") != "auto":
         return None
-    cad = get_cadence(p["company"])
+    cad = (p.get("cadence") if isinstance(p.get("cadence"), dict) and p["cadence"].get("steps")
+           else get_cadence(p["company"]))   # a per-deal cadence (decision-chase, recurring) wins
     pts = cadence_points(cad)
     i = p.get("followup_step") or 0
+    if i >= len(pts) and p.get("stage") == "Recurring":
+        i = 0                                 # recurring clients loop the check-in forever, never Dormant
     action = pts[i]["action"] if i < len(pts) else "dormant"
     if action in ("lost", "dormant"):   # sequence over -> rest as Dormant, never auto-Lost (standing rule)
         set_project_stage(deal_id, DORMANT_STAGE)
         db.execute("update crm_projects set automation=null, next_followup=null, updated_at=now() where id=%s", (deal_id,))
         return {"action": "dormant", "done": True, "step": i}
     nxt = _schedule_point(cad, i + 1)
+    if nxt is None and p.get("stage") == "Recurring":
+        nxt = _schedule_point(cad, 0)         # wrap the loop
     db.execute("update crm_projects set followup_step=%s, next_followup=%s, updated_at=now() where id=%s",
                (i + 1, nxt, deal_id))
     return {"action": action, "done": False, "step": i}

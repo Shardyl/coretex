@@ -923,6 +923,7 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         return {}
     # Phase 1 string path: 'execute' = mark done + log.
     store.update_task(task["id"], status="done")
+    _arm_on_done_reminders(task)   # e.g. an issued invoice card arms its payment follow-up clock
     store.log_decision(task["id"], skill["id"], actor, "auto" if auto else "approve",
                        snapshot={"draft": task.get("draft")})
     if auto:
@@ -1027,6 +1028,24 @@ def _approve(task: dict, skill: dict, company: dict) -> dict:
                 [[tg.button("Yes, set auto", f"au:{skill['id']}"),
                   tg.button(f"No — raise to {higher}", f"th:{skill['id']}:{higher}")]])
     return result or {}
+
+
+def _arm_on_done_reminders(task: dict) -> None:
+    """A card can carry on_done_reminders: [{title, days}] — armed the moment the owner marks it done
+    (e.g. 'invoice issued' -> the payment follow-up clock starts). Dates are code-computed offsets."""
+    try:
+        specs = (task.get("request") or {}).get("on_done_reminders") or []
+        for r in specs[:5]:
+            d = datetime.now(timezone.utc) + timedelta(days=int(r.get("days") or 7))
+            reminders.create(str(r.get("title") or "Follow-up")[:200], d,
+                             company_id=task.get("company_id"), priority="high",
+                             target_type="deal" if (task.get("request") or {}).get("deal_id") else "task",
+                             target_id=(task.get("request") or {}).get("deal_id") or task["id"])
+        if specs:
+            notifications.notify(f"Card #{task['id']} done — {len(specs)} follow-up clock(s) armed.",
+                                 "Follow-up armed", category="reminder", company_id=task.get("company_id"))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _skip(task: dict, skill: dict, company: dict) -> None:
