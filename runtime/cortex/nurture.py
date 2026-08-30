@@ -1,7 +1,7 @@
 """Nurture — the RELATIONSHIP layer (its own section: not an opportunity, not a project).
 
 One row per (client account × our business): a client we've done good work for, kept warm between
-projects with a quarterly touch. HARD GUARD: any live deal or running project with that client
+projects with a monthly touch (owner: 90 days is too long, 30 is a good hello). HARD GUARD: any live deal or running project with that client
 silences the loop automatically (we never nurture someone we're actively working with or pitching);
 it resumes by itself when the work closes. Touch emails are normal approval cards on the
 sales-followup skill — the repeat-nurture standing rules govern content, this module only keeps
@@ -24,7 +24,7 @@ create table if not exists nurture_accounts (
   account_id bigint not null references crm_accounts(id),
   company_id bigint not null references companies(id),
   status text not null default 'active',        -- active | stopped
-  cadence_days int not null default 90,
+  cadence_days int not null default 30,
   contact_email text,                            -- preferred person; null = best from the account roster
   next_touch timestamptz,
   last_touch timestamptz,
@@ -54,7 +54,7 @@ def has_live_work(account_id: int, company_id: int) -> bool:
 
 
 def enrol(account_id: int, company_id: int, *, contact_email: str | None = None,
-          enrolled_from: str = "manual", cadence_days: int = 90, note: str = "") -> dict:
+          enrolled_from: str = "manual", cadence_days: int = 30, note: str = "") -> dict:
     """Upsert-enrol an account; an existing row keeps its clock (re-enrolling never resets a cadence)."""
     ensure_schema()
     nxt = datetime.now(timezone.utc) + timedelta(days=cadence_days)
