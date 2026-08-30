@@ -444,7 +444,9 @@ def _house_bits(m: dict) -> dict:
              f"Email:  {data.get('inbox_email','')}"]
     if web:
         right.append(f"Web:  {web}")
-    return {"name": co["name"], "addr": addr, "right": right, "bank": bank}
+    # The header shows the LEGAL entity (owner rule 2026-08-28): profile `quote_header_name` wins
+    # (e.g. "Sky Vision Aerial Photography Services T/A Sensa Productions"), else the brand name.
+    return {"name": data.get("quote_header_name") or co["name"], "addr": addr, "right": right, "bank": bank}
 
 
 def _logo_on_black(b64: str):
@@ -687,6 +689,20 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
         xi.height = 34; xi.width = 34 * ratio
         xi.anchor = "A1"
         ws.add_image(xi)
+    # small legal-entity mark, top-right of the band (profile `header_mark_company` names whose brand
+    # logo to show — e.g. Sensa quotes carry the Sky Vision mark, the legal entity behind the brand)
+    mk = (m["data"].get("header_mark_company") or "").strip().lower()
+    if mk:
+        row2 = db.one("select p.data->'brand'->>'logo_dark_b64' as b64 from company_profiles p "
+                      "join companies c on c.id=p.company_id where c.slug=%s", (mk,))
+        lg2 = _logo_on_black((row2 or {}).get("b64"))
+        if lg2:
+            bio2, size2 = lg2
+            xi2 = XLImage(bio2)
+            ratio2 = size2[0] / float(size2[1] or 1)
+            xi2.height = 15; xi2.width = 15 * ratio2
+            xi2.anchor = "E1"
+            ws.add_image(xi2)
 
     from openpyxl.worksheet.properties import PageSetupProperties
     ws.print_area = f"A1:E{r - 1}"
