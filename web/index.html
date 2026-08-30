@@ -558,6 +558,11 @@ function inboxContact(email){ if(!email) return; tab='crm'; crmView='contacts';
   try{ localStorage.setItem('cortex_crm2','contacts'); }catch(e){}
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t==='crm'));
   openContact(email); }
+function histText(t){ t=t||'';
+  if(t.length<=260) return esc(t);
+  const id='h'+Math.random().toString(36).slice(2,9);
+  return `<span id="${id}s">${esc(t.slice(0,260))}… <span style="cursor:pointer;text-decoration:underline" onclick="document.getElementById('${id}s').style.display='none';document.getElementById('${id}f').style.display='inline'">more</span></span><span id="${id}f" style="display:none">${esc(t)}</span>`;
+}
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 // ---- clean outline line-icons (no emoji anywhere) ----
@@ -1112,7 +1117,7 @@ async function openProject(id){
       ${noteBox('p',p.id)}
       <div class="dgrid">${fld('briefcase',p.owner&&('Owner: '+p.owner))}${fld('file',p.quote_ref&&('Quote ref '+p.quote_ref))}</div>
       ${p.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${esc(p.note)}</div></div>`:''}
-      ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
+      ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${histText(h.text)}</div></div></div>`).join('')}</div>`:''}
     </div>`;
 }
 function dealAutomation(p){
@@ -1317,7 +1322,7 @@ async function openAccount(id){
         <div class="row" style="margin-top:8px"><button class="btn go sm" onclick="openNewDeal(${a.id})">${ic('plus',14)} New deal</button></div></div>
       <div class="dsec"><div class="dlbl">Nurture</div>${nurturePanel(a)}</div>
       ${noteBox('a',a.id)}
-      ${(a.history&&a.history.length)?`<div class="dsec"><div class="dlbl">History</div>${a.history.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
+      ${(a.history&&a.history.length)?`<div class="dsec"><div class="dlbl">History</div>${a.history.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${histText(h.text)}</div></div></div>`).join('')}</div>`:''}
     </div>`;
 }
 async function renameAccount(id,cur){
