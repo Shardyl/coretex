@@ -237,7 +237,7 @@ def draft(skill: dict, company: dict, request: dict,
                     "ONLY sample-work links that exist. When sharing samples, pick at most 1-2 whose "
                     "categories genuinely fit this client, and copy each link EXACTLY as written. If "
                     "nothing fits, share none and offer to send samples instead. NEVER write, guess or "
-                    "adapt any other portfolio/library/media URL.\n" + _ml[:2500])
+                    "adapt any other portfolio/library/media URL.\n" + _ml[:4000])
     _mn = (request.get("meeting_notes") or "").strip() if isinstance(request, dict) else ""
     if _mn:
         user.append("NOTES FROM OUR LAST MEETING with this contact (distilled from the real meeting notes — "

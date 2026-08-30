@@ -2556,12 +2556,16 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
         pass
     try:   # the media library — REAL portfolio links, so 'share sample work' can never be invented
         rows = db.query(
-            "select title, watch_url, categories from media_assets where company_id=%s and "
-            "coalesce(watch_url,'')<>'' and status='live' and privacy in ('public','unlisted') "
-            "order by rating desc nulls last, views desc nulls last limit 20", (task["company_id"],))
-        if rows:
+            "select distinct on (cat) cat, title, watch_url, rating from ("
+            "  select title, watch_url, rating, views, jsonb_array_elements_text(categories) cat"
+            "  from media_assets where company_id=%s and coalesce(watch_url,'')<>'' and status='live'"
+            "  and privacy in ('public','unlisted')) x "
+            "where cat not in ('version-variant','internal-test') "
+            "order by cat, rating desc nulls last, views desc nulls last", (task["company_id"],))
+        if rows:   # category-balanced: the BEST film of every genre (a global top-N drowns niche
+            # categories — 118 films tie at 7/10, so fashion/beauty never surfaced for a beauty client)
             req["media_library"] = "\n".join(
-                f"- {r['title']} [{', '.join(r.get('categories') or [])}]: {r['watch_url']}" for r in rows)
+                f"- {r['title']} [{r['cat']}]: {r['watch_url']}" for r in rows)
             manifest.append("media_library")
     except Exception:  # noqa: BLE001
         pass
