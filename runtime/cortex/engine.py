@@ -294,6 +294,16 @@ def _email_envelope(task: dict, company: dict) -> dict:
             _ecfg = {}
     req = task.get("request") or {}
     cc_list += [e for e in (req.get("cc_extra") or []) if "@" in e]
+    try:   # DEAL LOOP: deal contacts marked cc ride EVERY email on that deal (owner: Alia at MAH Gold
+        # responds on the development-department address and must be looped into all communications)
+        did = task.get("deal_id") or req.get("deal_id")
+        if did:
+            drow = db.one("select contacts from crm_projects where id=%s", (int(did),))
+            for c_ in (drow or {}).get("contacts") or []:
+                if isinstance(c_, dict) and c_.get("cc") and "@" in (c_.get("email") or ""):
+                    cc_list.append(c_["email"].strip())
+    except Exception:  # noqa: BLE001
+        pass
     if req.get("high_value"):   # Director-handled opportunity: the profile's high-value cc set rides along
         cc_list += [str(v).strip() for v in (data.get("high_value_cc") or []) if isinstance(v, str) and "@" in v]
     outbound = bool(req.get("outbound"))   # a Talk-composed email_draft (not a reply) — no "Re:" prefix
