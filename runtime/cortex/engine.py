@@ -2180,7 +2180,8 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
                 brief += "\nOPEN REMINDERS on this deal: " + "; ".join(r["title"] for r in rems)
         except Exception:  # noqa: BLE001
             pass
-        thread = _deal_thread_context(co, email)
+        # a revival hinges on WHY the deal faded, which often sits deep in the thread — serve more of it
+        thread = _deal_thread_context(co, email, limit=10 if action == "revive" else 5)
         if thread:
             brief += ("\nRECENT CORRESPONDENCE with them (newest first — reference it, stay consistent "
                       "with it, and never repeat a chase they already answered):\n" + thread[:5000])
