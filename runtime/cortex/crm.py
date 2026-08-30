@@ -1066,7 +1066,7 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
             pass
 
 
-def set_project_stage(project_id: int, stage: str) -> dict | None:
+def set_project_stage(project_id: int, stage: str, actor: str = "system") -> dict | None:
     """Move a deal to a new stage; logs the change, and (un)marks the linked contact a client across the
     Booked boundary. Moving across 'Booked' shifts it between the Opportunities and Projects screens."""
     p = db.one("select * from crm_projects where id=%s", (project_id,))
@@ -1083,7 +1083,7 @@ def set_project_stage(project_id: int, stage: str) -> dict | None:
         log_event(p["contact_email"], "deal_stage", f"{p['title']}: {old} -> {stage}")
     try:   # pipeline loop: won -> project kickoff card; Close & review -> wrap-up surfaced
         from . import pipeline
-        pipeline.on_stage_change(p, old, stage)
+        pipeline.on_stage_change(p, old, stage, actor=actor)
     except Exception:  # noqa: BLE001 — stage bookkeeping must never break the stage move
         pass
     try:   # lifecycle playbook: invoices per signed terms, feedback ask, nurture, cadence variants

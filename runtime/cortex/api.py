@@ -1967,7 +1967,7 @@ def crm_project_stage(id: int, body: ProjectStageBody, u: dict = Depends(current
     _guard_deal(u, id)
     if body.stage not in crm.DEAL_STAGES:
         raise HTTPException(status_code=400, detail=f"stage must be one of {crm.DEAL_STAGES}")
-    r = crm.set_project_stage(id, body.stage)
+    r = crm.set_project_stage(id, body.stage, actor="owner")
     if not r:
         raise HTTPException(status_code=404, detail="deal not found")
     return r

@@ -290,10 +290,13 @@ def maybe_advance_on_send(deal_id: int, task: dict, env: dict) -> None:
             pass
 
 
-def on_stage_change(deal: dict, old: str, new: str) -> None:
+def on_stage_change(deal: dict, old: str, new: str, actor: str = "system") -> None:
     """Called by crm.set_project_stage AFTER a stage moves. Won = the deal becomes a live project:
     kickoff lands as a reminder-spawned Inbox card so delivery starts tracked, not ad hoc.
-    Close & review = the wrap-up (final assets, testimonial ask, portfolio entry) is surfaced."""
+    Close & review = the wrap-up (final assets, testimonial ask, portfolio entry) is surfaced.
+    actor='owner' means Rashad moved the stage himself: the WORK (kickoff card, clocks) still runs,
+    but the narration notification is suppressed - never echo his own click back at him (owner rule
+    30 Aug). Notifications fire only when the SYSTEM moved the stage."""
     try:
         did = int(deal.get("id"))
         co = db.one("select id, slug, name from companies where lower(name)=lower(%s) or lower(slug)=lower(%s)",
@@ -314,18 +317,20 @@ def on_stage_change(deal: dict, old: str, new: str) -> None:
                 created_by="cortex-pipeline",
                 action={"company": (co or {}).get("slug"), "skill": "email-handling", "kind": "content",
                         "brief": kickoff_brief})
-            notifications.notify("Deal won - project kickoff queued",
-                                 f"{title} moved to {new}. A kickoff card will land in the Inbox; "
-                                 "delivery correspondence now routes on the project lane.",
-                                 category="crm", company_id=(co or {}).get("id"),
-                                 target_type="deal", target_id=did)
+            if actor != "owner":
+                notifications.notify("Deal won - project kickoff queued",
+                                     f"{title} moved to {new}. A kickoff card will land in the Inbox; "
+                                     "delivery correspondence now routes on the project lane.",
+                                     category="crm", company_id=(co or {}).get("id"),
+                                     target_type="deal", target_id=did)
         if new == "Close & review" and old != "Close & review":
             log_deal(did, "project_close", "moved to Close & review - wrap-up owed")
-            notifications.notify("Project closing - wrap-up",
-                                 f"{title} is in Close & review: confirm final files delivered + paid, "
-                                 "ask for the testimonial/review, and add the film to the media library.",
-                                 category="crm", company_id=(co or {}).get("id"),
-                                 target_type="deal", target_id=did)
+            if actor != "owner":
+                notifications.notify("Project closing - wrap-up",
+                                     f"{title} is in Close & review: confirm final files delivered + paid, "
+                                     "ask for the testimonial/review, and add the film to the media library.",
+                                     category="crm", company_id=(co or {}).get("id"),
+                                     target_type="deal", target_id=did)
     except Exception:  # noqa: BLE001 — stage bookkeeping must never break the stage move itself
         pass
 
