@@ -2422,6 +2422,59 @@ def _request_for_draft(task: dict) -> dict:
     return _draft_context_for_reply(task, req)
 
 
+def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
+    """THREAD ADOPTION: a follow-up or deal-linked draft to a known contact must continue the REAL Gmail
+    thread from the mailbox that owns it (thread-true reply + thread-sticky sender) — never open a fresh
+    conversation from the default sender. Card 383 would have started a new thread from Gino while the
+    live SFORS thread sat in Rashad's mailbox. Adopted keys are PERSISTED to the task request because the
+    send path reads the stored request, not the draft-time copy. Fail-soft throughout."""
+    email = ((req.get("inquiry") or {}).get("email") or "").strip()
+    if (not email or (req.get("thread") or {}).get("id")
+            or not (req.get("followup") or req.get("deal_id"))
+            or req.get("from_email")):   # an owner-chosen sender also owns the threading choice
+        return
+    from email.utils import parsedate_to_datetime
+    co = store.get_company(task.get("company_id")) or {}
+    best, seen_rt = None, set()
+    for s in _company_senders(task["company_id"]).values():
+        if s["rt_key"] in seen_rt:
+            continue                     # alias entries (richard->rashad) point at the same mailbox
+        seen_rt.add(s["rt_key"])
+        try:
+            msgs = gmail.list_recent(limit=1, rt_key=s["rt_key"],
+                                     q=f"(from:{email} OR to:{email}) newer_than:90d",
+                                     company=_inbox_client_company(co.get("slug") or ""))
+            m = msgs[0] if msgs else None
+            if not m or not m.get("thread_id"):
+                continue
+            try:
+                dt = parsedate_to_datetime(m.get("date") or "")
+            except Exception:  # noqa: BLE001
+                dt = None
+            if best is None or (dt and (best[0] is None or dt > best[0])):
+                best = (dt, s, m)
+        except Exception:  # noqa: BLE001
+            continue
+    if not best:
+        return
+    _, s, m = best
+    req["thread"] = {"id": m["thread_id"], "msg_id": m.get("msg_id") or "",
+                     "references": m.get("references") or ""}
+    req["from_email"], req["mailbox_rt"] = s["email"], s["rt_key"]
+    subj = re.sub(r"^(?:(?:re|fwd?)\s*:\s*)+", "", (m.get("subject") or ""), flags=re.I).strip()
+    if subj:
+        req["inquiry"] = {**(req.get("inquiry") or {}), "subject": subj}
+    manifest.append(f"existing_thread({s['email'].split('@')[0]})")
+    try:
+        if task.get("id"):
+            db.execute(
+                "update tasks set request = request || %s::jsonb where id=%s",
+                (json.dumps({"thread": req["thread"], "from_email": req["from_email"],
+                             "mailbox_rt": req["mailbox_rt"], "inquiry": req["inquiry"]}), task["id"]))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _draft_context_for_reply(task: dict, req: dict) -> dict:
     """THE CONTEXT ASSEMBLER (rebuild Stage 1). Every email the system drafts — inbound replies,
     Talk-composed outbound, follow-ups, post-meeting, chases, reminder-spawned — passes through here at
@@ -2433,6 +2486,7 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
     if task.get("kind") not in ("email_reply", "email_draft") or not email:
         return req
     manifest = []
+    _adopt_existing_thread(task, req, manifest)
     co = store.get_company(task.get("company_id")) or {}
     if req.get("attachment_texts") or (req.get("inbound_attachments") and req.get("attachments")):
         manifest.append("inbound_files")
