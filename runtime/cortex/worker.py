@@ -231,6 +231,13 @@ def draft(skill: dict, company: dict, request: dict,
     if _of:
         user.append("THE OWNER'S PAST CORRECTIONS on this relationship (lessons already taught — obey them "
                     "without being asked again):\n" + _of[:2000])
+    _ml = (request.get("media_library") or "").strip() if isinstance(request, dict) else ""
+    if _ml:
+        user.append("MEDIA LIBRARY — our REAL portfolio films (title [categories]: link). These are the "
+                    "ONLY sample-work links that exist. When sharing samples, pick at most 1-2 whose "
+                    "categories genuinely fit this client, and copy each link EXACTLY as written. If "
+                    "nothing fits, share none and offer to send samples instead. NEVER write, guess or "
+                    "adapt any other portfolio/library/media URL.\n" + _ml[:2500])
     _mn = (request.get("meeting_notes") or "").strip() if isinstance(request, dict) else ""
     if _mn:
         user.append("NOTES FROM OUR LAST MEETING with this contact (distilled from the real meeting notes — "

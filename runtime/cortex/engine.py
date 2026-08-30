@@ -1518,6 +1518,34 @@ def _ensure_clean_email(skill: dict, company: dict, dreq: dict, draft: str,
                 "by the system, never written into the email."])
     except Exception:  # noqa: BLE001
         pass
+    return _ensure_real_links(skill, company, dreq, draft)
+
+
+_URL_RX = re.compile(r"https?://[^\s<>\")\]]+")
+
+
+def _ensure_real_links(skill: dict, company: dict, dreq: dict, draft: str) -> str:
+    """HARD invented-link check: every URL in an email draft must exist somewhere in the request context
+    the drafter was served (media library shelf, thread history, meeting link, brief, notes) or belong to
+    the company's own site. A model must never mint a must-be-real value — card 384 shipped two invented
+    'library' links. One retry naming the offenders; the Manager gets the same allowlist as a backstop."""
+    try:
+        found = _URL_RX.findall(draft or "")
+        if not found:
+            return draft
+        ctx = json.dumps(dreq, default=str)
+        site = ((company.get("data") or {}).get("website") or "") if isinstance(company, dict) else ""
+        bad = [u for u in found
+               if u.rstrip(".,;") not in ctx
+               and not (site and u.startswith(site.rstrip("/")))]
+        if bad:
+            return worker.draft(skill, company, dreq, prev_draft=draft, manager_feedback=[
+                "Your draft contains links that DO NOT EXIST: " + ", ".join(bad[:5]) + ". You may only "
+                "use links given to you in this request (the MEDIA LIBRARY list, the conversation "
+                "history, a booked meeting link). Rewrite using only real links, or share no link at "
+                "all and offer to send samples."])
+    except Exception:  # noqa: BLE001
+        pass
     return draft
 
 
@@ -2458,6 +2486,17 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
         if notes:
             req["owner_feedback"] = "\n".join("- " + n["note"][:250] for n in notes)
             manifest.append("owner_feedback")
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # the media library — REAL portfolio links, so 'share sample work' can never be invented
+        rows = db.query(
+            "select title, watch_url, categories from media_assets where company_id=%s and "
+            "coalesce(watch_url,'')<>'' and status='live' and privacy in ('public','unlisted') "
+            "order by rating desc nulls last, views desc nulls last limit 20", (task["company_id"],))
+        if rows:
+            req["media_library"] = "\n".join(
+                f"- {r['title']} [{', '.join(r.get('categories') or [])}]: {r['watch_url']}" for r in rows)
+            manifest.append("media_library")
     except Exception:  # noqa: BLE001
         pass
     try:   # stamp the manifest on the card (field-level jsonb_set: no read-modify-write clobber)

@@ -41,6 +41,18 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
                  "rule violation.")
     facts.append("Where the Task brief carries the owner's own instructions, content he explicitly "
                  "asked for is authorised — never flag it as 'without basis'.")
+    try:   # the same URL allowlist the invented-link guard uses — the manager verifies, never guesses
+        import json as _json
+        import re as _re
+        _urls = sorted(set(_re.findall(r"https?://[^\s<>\\\"')\]]+", _json.dumps(request, default=str))))
+        if _urls:
+            facts.append("REAL LINKS available to the drafter (any URL in the draft NOT on this list is "
+                         "invented and must be flagged): " + ", ".join(_urls[:25]))
+        else:
+            facts.append("NO links were provided to the drafter — ANY URL in the draft is invented and "
+                         "must be flagged.")
+    except Exception:  # noqa: BLE001
+        pass
     facts.append("Lifecycle and cadence instructions in the Task brief (e.g. 'then the Dormant flow', "
                  "'ONE email only', follow-up sequencing, reminders) are executed by the PIPELINE, never "
                  "written into the email — their absence from the draft body is never an issue.")
