@@ -625,12 +625,15 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
             ws[f"D{r}"].font = F(s=10.5, c=_INK)
             ws[f"E{r}"].value = f'=IF(D{r}="","",C{r}*D{r})'; ws[f"E{r}"].number_format = money
             ws[f"E{r}"].alignment = Alignment(horizontal="right", vertical="top"); ws[f"E{r}"].font = F(s=10.5, c=_INK)
-            ws.row_dimensions[r].height = 15; r += 1
+            # long descriptions wrap — the row grows instead of clipping mid-sentence (~52 chars/line in col B)
+            ws.row_dimensions[r].height = max(15, -(-len(str(it["desc"])) // 52) * 14 + 2); r += 1
     item_end = r - 1
 
     if m["note"]:
         ws.merge_cells(span(r)); ws[f"A{r}"].value = m["note"]; ws[f"A{r}"].font = F(s=9.5, i=True, c=_MUTE)
-        ws[f"A{r}"].alignment = Alignment(indent=1); r += 1
+        ws[f"A{r}"].alignment = Alignment(indent=1, wrap_text=True, vertical="top")
+        ws.row_dimensions[r].height = max(14, -(-len(str(m["note"])) // 105) * 12 + 4)
+        r += 1
 
     # ---- totals ----
     def total_row(label, formula, big=False):
