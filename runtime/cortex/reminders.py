@@ -97,7 +97,9 @@ def create(title: str, due_at: datetime, *, company_id: int | None = None, targe
     ensure_schema()
     recurrence = recurrence if recurrence in RECURRENCES else "none"
     tid = target_id if target_id is None else str(target_id)
-    if tid is not None and recurrence == "none":
+    if tid is not None and recurrence == "none" and created_by != "cortex-pipeline":
+        # pipeline commitment/deadline reminders are a tracked LEDGER (auto-settled by matching title
+        # and creator) - they must never be merged away into a nudge
         # ONE reminder per target per day (audit follow-on: deal 103 accumulated SIX overlapping Monday
         # reminders from four mechanisms). Same target, same day -> the existing reminder absorbs it.
         ex = db.one("select * from reminders where status in ('pending','snoozed') and target_type=%s "
