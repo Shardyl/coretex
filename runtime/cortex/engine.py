@@ -1420,10 +1420,15 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
         notes.append("set: " + "; ".join(created))
     if missing:
         notes.append("NOT in the document library (nothing attached): " + ", ".join(missing))
-    if notes:
-        notifications.notify(f"From your correction on card #{task['id']} - " + ". ".join(notes) + ".",
-                             "Correction actions", category="reminder", company_id=task["company_id"],
-                             target_type="task", target_id=str(task["id"]))
+    if created:   # the receipt belongs ON THE CARD, not in a push notification (owner, 30 Aug: routine
+        # confirmations of his own instructions are noise - the reminders are visible on the deal)
+        req["correction_actions"] = (req.get("correction_actions") or []) + created
+        changed = True
+    if missing:   # this one is NOT routine: he believes a document is attached and it is not
+        notifications.notify(
+            f"Card #{task['id']}: NOT in the document library, so nothing was attached - "
+            + ", ".join(missing) + ".", "Document not found", category="reminder",
+            company_id=task["company_id"], target_type="task", target_id=str(task["id"]))
     if changed:
         task = store.update_task(task["id"], request=req) or task
     reply = (u.get("reply_instruction") or "").strip()

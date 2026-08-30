@@ -1695,6 +1695,7 @@ function actionCard(t){
         : (body?`<div class="body"${isEmail?' style="white-space:pre-wrap"':''}>${isEmail?'<div class="meta" style="margin-bottom:5px;white-space:normal">'+ic('file',14)+' '+(isOutbound?'your email draft':'the email that will send')+' (signature included)</div>':''}${body}</div>`:'')}
       ${wp&&wp.preview?`<div class="meta">${ic('file',14)} draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
       ${attachmentStrip(t)}
+      ${(t.request&&t.request.correction_actions&&t.request.correction_actions.length)?`<div class="meta" style="margin-bottom:8px;opacity:.85">${ic('check',13)} From your corrections: ${esc(t.request.correction_actions.join('; '))}</div>`:''}
       <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">${ic('volume',16)} Read aloud</button>${isEmail?`<button class="btn" onclick="openAttachPanel(${t.id},${t.company_id})">${ic('clip',16)} Attach</button>`:''}</div>
       <div id="ap${t.id}" style="display:none"></div>
 ${t.owner_only?`<div class="csub" style="margin-bottom:6px;color:var(--mut)">${ic('lock',12)} Money approval — owner only (Rashad's PIN or fingerprint)</div>`:''}
