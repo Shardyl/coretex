@@ -204,6 +204,15 @@ def draft(skill: dict, company: dict, request: dict,
                 user.append(_rc)
         except Exception:  # noqa: BLE001
             pass
+    _did = request.get("deal_id") if isinstance(request, dict) else None
+    if _did and "DEAL TIMELINE" not in (request.get("brief") or ""):
+        try:   # every deal-linked draft reads the deal's timeline (research brief, commitments, flow)
+            from . import pipeline as _pl
+            _tl = _pl.deal_context(int(_did))
+            if _tl:
+                user.append(_tl)
+        except Exception:  # noqa: BLE001
+            pass
     _hist = (request.get("thread_history") or "").strip() if isinstance(request, dict) else ""
     if _hist:
         user.append("CONVERSATION HISTORY with this contact (newest first — includes emails WE already sent). "

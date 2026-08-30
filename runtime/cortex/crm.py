@@ -1298,6 +1298,13 @@ def auto_opportunity(email: str, company_slug: str, sug: dict | None, inq: dict 
                                          + (f" — {basis}" if basis else "")
                                          + " (estimate, not a quote; edit any time)"}]), p["id"]))
     log_event(email, "auto_qualified", f"Auto-qualified (high confidence) -> opportunity #{p['id']}: {p.get('title')}")
+    try:   # consultant's first look: one Fable-5 research pass onto the new deal's timeline (fail-soft)
+        from . import pipeline, store as _store
+        _co = _store.get_company_by_slug(company_slug)
+        if _co and inq:
+            pipeline.research_opportunity(p["id"], _co, inq)
+    except Exception:  # noqa: BLE001 — research is a bonus, never a blocker
+        pass
     return db.one("select * from crm_projects where id=%s", (p["id"],))
 
 

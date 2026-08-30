@@ -440,3 +440,40 @@ def record_meeting(deal_id: int, company_id: int | None, title: str, summary: st
                              created_by="cortex-pipeline")
         except Exception:  # noqa: BLE001
             pass
+
+
+# ---------- opportunity research (the consultant's first look, owner-approved Fable 5) ----------
+
+def research_opportunity(deal_id: int, company: dict, inquiry: dict) -> str:
+    """ONE research pass when an opportunity is born: who the sender is, what their project actually
+    touches (locations, logistics, market reality), and 2-3 TRUE insights we can naturally contribute
+    in replies - the consultant posture, grounded. Runs Fable 5 with live web search (owner-approved
+    exception to the Haiku default, 2026-08-30; fires once per deal, guarded). The brief lands on the
+    deal timeline, so every subsequent draft reads it. Returns the brief ('' on any failure)."""
+    try:
+        did = int(deal_id)
+        hist = db.one("select history from crm_projects where id=%s", (did,))
+        if any(h.get("event") == "research" for h in (hist or {}).get("history") or []):
+            return ""
+        out = provider.think_research(
+            "You are the research arm of a Dubai production company's sales desk. Given a new enquiry, "
+            "produce a compact INSIGHT BRIEF (under 170 words, plain text) for the person drafting our "
+            "replies:\n"
+            "1. SENDER: who they are / their company, verified via search (one line; say UNVERIFIED if "
+            "search finds nothing solid).\n"
+            "2. MODE: 'direct' (founder/creator, personal enthusiasm) or 'procurement' (RFP/SOW language, "
+            "numbered asks, deadlines).\n"
+            "3. INSIGHTS: 2-3 concrete, TRUE, useful facts about what their project touches - locations "
+            "and travel realities, permits/permissions, market or industry context, timing realities. "
+            "Things a knowledgeable consultant would mention that the sender did not ask about.\n"
+            "Facts only - verified or common professional knowledge; mark anything uncertain as UNCERTAIN; "
+            "NEVER invent names, numbers or claims. No advice on pricing.",
+            f"Company receiving the enquiry: {company.get('name')}\n"
+            f"Sender: {inquiry.get('name') or ''} <{inquiry.get('email') or ''}>\n"
+            f"Subject: {inquiry.get('subject') or ''}\n\nTheir message:\n{(inquiry.get('message') or '')[:2500]}",
+            purpose="lead-research", company=company.get("slug"))
+        if out:
+            log_deal(did, "research", out[:1200])
+        return out
+    except Exception:  # noqa: BLE001 — research is a bonus, never a blocker
+        return ""

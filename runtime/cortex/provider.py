@@ -104,6 +104,23 @@ def think(system: str, user: str, *, fast: bool = False, model: str | None = Non
     return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
 
 
+def think_research(system: str, user: str, *, model: str = "claude-fable-5", max_tokens: int = 4000,
+                   max_searches: int = 5, purpose: str = "research", company: str | None = None) -> str:
+    """One-shot completion WITH live web search (Anthropic server-side web_search tool — searches run
+    on Anthropic's side, no client tool loop). Default model is Fable 5, an explicit owner-approved
+    exception to the Haiku default (2026-08-30): this runs ONCE per new opportunity, and the insight
+    quality is the point. Returns plain text."""
+    client = _client()
+    kwargs: dict = dict(
+        model=model, max_tokens=max_tokens, system=system,
+        messages=[{"role": "user", "content": user}],
+        tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": max_searches}])
+    with client.with_options(timeout=600.0).messages.stream(**kwargs) as _s:
+        resp = _s.get_final_message()
+    _log_usage(model, getattr(resp, "usage", None), purpose, company)
+    return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+
+
 def _cached_system(system: str) -> list[dict]:
     """Wrap the system prompt as a single ephemeral-cached text block (5-min prompt cache)."""
     return [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
