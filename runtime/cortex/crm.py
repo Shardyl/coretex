@@ -1033,6 +1033,27 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
                        "and status in ('pending','snoozed') and title ilike %s", (str(did), "Payment %"))
         except Exception:  # noqa: BLE001
             pass
+        try:   # stage-skipping must not skip the playbook (deal 33 went Production -> Close & review and
+            # lost its feedback ask): arm it here unless the Delivered/Final Payment step already did
+            if not db.one("select id from reminders where target_type='deal' and target_id=%s and "
+                          "title ilike 'Feedback ask:%%' limit 1", (str(did),)):
+                email = p.get("contact_email") or next(
+                    (c.get("email") for c in (p.get("contacts") or []) if c.get("email")), None)
+                if email and cid:
+                    reminders.create(f"Feedback ask: how did '{p['title']}' land?",
+                                     now + timedelta(days=2), company_id=cid, target_type="deal",
+                                     target_id=did, priority="normal", action={
+                                         "company": (db.one("select slug from companies where id=%s", (cid,)) or {}).get("slug"),
+                                         "skill": "sales-followup", "kind": "email_reply", "request": {
+                                             "brief": (f"POST-DELIVERY FEEDBACK ask for '{p['title']}', just closed "
+                                                       "and fully paid. The DELIVERED-FEEDBACK standing rules on the "
+                                                       "sales-followup skill govern this email (feedback first; the "
+                                                       "review/testimonial two-step follows per the rules)."),
+                                             "inquiry": {"email": email, "subject": f"How did {p['title']} land?"},
+                                             "deal_id": did,
+                                             "system_note": "Feedback ask armed at Close & review (earlier stage skipped)."}})
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def set_project_stage(project_id: int, stage: str) -> dict | None:
