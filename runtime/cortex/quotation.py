@@ -683,11 +683,17 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
     # ---- logo on the black band ----
     lg = _logo_on_black((m["data"].get("brand") or {}).get("logo_dark_b64"))
     if lg:
+        from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
+        from openpyxl.drawing.xdr import XDRPositiveSize2D
+        from openpyxl.utils.units import pixels_to_EMU
         bio, size = lg
         xi = XLImage(bio)
         ratio = size[0] / float(size[1] or 1)
-        xi.height = 34; xi.width = 34 * ratio
-        xi.anchor = "A1"
+        w, h = int(34 * ratio), 34
+        # padded off the band's top-left edge (owner rule 2026-08-28: never flush against the box)
+        xi.anchor = OneCellAnchor(_from=AnchorMarker(col=0, colOff=pixels_to_EMU(12),
+                                                     row=0, rowOff=pixels_to_EMU(10)),
+                                  ext=XDRPositiveSize2D(pixels_to_EMU(w), pixels_to_EMU(h)))
         ws.add_image(xi)
     # small legal-entity mark, top-right of the band (profile `header_mark_company` names whose brand
     # logo to show — e.g. Sensa quotes carry the Sky Vision mark, the legal entity behind the brand)
