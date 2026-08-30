@@ -293,7 +293,7 @@ master `Sensa - Rate Card v1.0.xlsx` lives in Rashad's Drive terms folder
 (`159mEGnuBsWh_GqfPfPTf3q3zaNautfnX`) beside the T&Cs; amendments = new version there + live setting
 updated together. Quotations auto-fill the QUOTATION TO contact (name/email/phone) from the CRM:
 explicit `contact_email` wins, an unambiguous single-contact account fills in, ambiguity stays blank
-(quotation._contact_for; deliver_quotation passes contact_email).
+(quotation._contact_for; deliver_quotation passes contact_email). TERMS MODULES: reusable clause modules live as `terms_module:<name>` settings (human-readable docx beside the T&Cs in the Drive terms folder + library). First module: `multi-version` (v1.0, 2026-08-30) - the approval-gate + enhanced-revision-service + masters-first versions structure for multi-cut/multi-language jobs, born on SEN-2026-0004 (Property Finder); the sales-quotation rule tells the drafter to apply it, gen path: pass a per-quote `terms` dict to generate_xlsx with the module clauses swapped into Revisions & Delivery.
 
 ## Media library (the YouTube catalog + review UI)
 
