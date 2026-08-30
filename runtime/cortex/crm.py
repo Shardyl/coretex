@@ -930,6 +930,17 @@ DECISION_CADENCE = {   # quote/proposal sent -> awaiting their decision (day 3 /
     ],
 }
 
+RESTART_CADENCE = {   # a PARKED/paused project being restarted: patient, never salesy (owner, 30 Aug -
+    # "that's almost like an aggressive sales follow-up, which is wrong"). The client already bought;
+    # we are waiting on their readiness, not chasing a decision.
+    "skip_weekends": True,
+    "steps": [
+        {"after_days": 21, "repeat": 1, "action": "checkin"},   # three weeks after the restart touch
+        {"after_days": 30, "repeat": 1, "action": "checkin"},   # then monthly
+        {"after_days": 60, "repeat": 2, "action": "checkin"},   # then every two months, twice
+    ],
+}
+
 RECURRING_CADENCE = {  # ongoing/retainer client: quarterly relationship check-in, forever (loops)
     "skip_weekends": True,
     "steps": [{"after_days": 90, "repeat": 1, "action": "checkin"}],
@@ -1209,6 +1220,11 @@ def advance_followup(deal_id: int) -> dict | None:
         i = 0                                 # recurring clients loop the check-in forever, never Dormant
     action = pts[i]["action"] if i < len(pts) else "dormant"
     if action in ("lost", "dormant"):   # sequence over -> rest as Dormant, never auto-Lost (standing rule)
+        if p.get("stage") in WON_STAGES:
+            # WON work is not an opportunity: an exhausted cadence just goes quiet. Moving a live/booked
+            # project to Dormant would be nonsense (owner, 30 Aug).
+            db.execute("update crm_projects set next_followup=null, updated_at=now() where id=%s", (deal_id,))
+            return {"action": "quiet", "done": True, "step": i}
         set_project_stage(deal_id, DORMANT_STAGE)
         db.execute("update crm_projects set automation=null, next_followup=null, updated_at=now() where id=%s", (deal_id,))
         return {"action": "dormant", "done": True, "step": i}

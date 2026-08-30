@@ -2152,6 +2152,10 @@ def run_opportunity_followups() -> dict:
             r = crm.advance_followup(opp["id"])
             if not r:
                 continue
+            if r.get("action") == "quiet":     # WON work: sequence done, the project just goes quiet
+                tg.send(f"'{opp['title']}': follow-up sequence finished. The project stays as it is — "
+                        "no more automatic nudges until something changes.")
+                continue
             if r.get("action") in ("lost", "dormant"):
                 tg.send(f"Opportunity '{opp['title']}' moved to Dormant — full follow-up sequence (incl. "
                         "revivals) exhausted. It is never auto-Lost; wake it any time from the deal.")
@@ -2207,7 +2211,12 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
     skill = store.get_skill_by_key(co["id"], "sales-first-response")
     label = {"checkin": "check-in", "revive": "revival"}.get(action, "follow-up")
     if email and skill:
-        brief = f"{label.title()} on the opportunity '{opp['title']}'. Goal: get a reply / book a meeting."
+        won = (opp.get("stage") in crm.WON_STAGES)
+        brief = (f"{label.title()} on the PROJECT '{opp['title']}' — this is WON work, not a pitch. We are "
+                 "waiting on the client's readiness, not chasing a decision: warm, patient, no sales "
+                 "pressure and no re-selling. Goal: find out where they stand and agree the next step."
+                 if won else
+                 f"{label.title()} on the opportunity '{opp['title']}'. Goal: get a reply / book a meeting.")
         if action == "revive":
             brief = (f"Long-gap REVIVAL of the dormant opportunity '{opp['title']}' — months since their "
                      "last reply. The REVIVAL standing rules on the sales-followup skill govern the tone "
