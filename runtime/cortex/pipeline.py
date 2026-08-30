@@ -331,9 +331,10 @@ def replan(deal_id: int, why: str = "the plan was updated") -> int | None:
     if not (co and sk):
         return None
     req = plan_request(d["id"], d["title"], d["stage"], why)
-    ex = db.one("select id from tasks where kind='project_plan' and deal_id=%s and status in "
-                "('new','drafting','awaiting_approval','awaiting_correction') order by id desc limit 1",
-                (int(deal_id),))
+    ex = db.one("select id from tasks where kind='project_plan' and status in "
+                "('new','drafting','awaiting_approval','awaiting_correction') and "
+                "(deal_id=%s or request->>'deal_id'=%s) order by id desc limit 1",
+                (int(deal_id), str(int(deal_id))))
     if ex:      # refresh the open plan in place: never two plans for one project
         db.execute("update tasks set request=%s, status='new', draft=null, manager=null, updated_at=now() "
                    "where id=%s", (Json(req), ex["id"]))

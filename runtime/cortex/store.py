@@ -164,9 +164,14 @@ def create_card(company_id, skill_id, kind, request, contact: str | None = None,
     if not key:
         return create_task(company_id, skill_id, kind, request)
     request = {**request, "serialize_key": key}
+    # the deal and the card's own title belong in their COLUMNS too, not only inside the request: the
+    # cockpit, the deal view and one-open-card-per-deal lookups all read the columns.
     row = db.execute(
-        "insert into tasks (company_id, skill_id, kind, request, status) values (%s,%s,%s,%s,'queued') "
-        "returning *", (company_id, skill_id, kind, Json(request)))
+        "insert into tasks (company_id, skill_id, kind, request, status, deal_id, title) "
+        "values (%s,%s,%s,%s,'queued',%s,%s) returning *",
+        (company_id, skill_id, kind, Json(request),
+         int(deal_id) if deal_id else (int(request["deal_id"]) if str(request.get("deal_id") or "").isdigit() else None),
+         (request.get("title") or None)))
     promote_queued(company_id, key)
     return db.one("select * from tasks where id=%s", (row["id"],))
 
