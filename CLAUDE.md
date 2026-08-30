@@ -76,7 +76,9 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
   Opus = ideation. Never silently upgrade a model. ONE standing exception (owner-approved
   2026-08-30): `provider.think_research` runs claude-fable-5 with live web search for the
   once-per-opportunity research pass (`pipeline.research_opportunity`, hooked into
-  `crm.auto_opportunity`) - low volume, insight quality is the point.
+  `crm.auto_opportunity`) - low volume, insight quality is the point; and FIRST replies on the
+  sales-first-response lane (not thread continuations) draft on Fable 5 in `worker.draft` - the
+  opener + insight set the conversation's direction.
 - No emoji in the cockpit UI — clean monochrome line-icons (Tabler-style) only.
 - Ship a new Talk capability? Add its one-liner to `runtime/cortex/capabilities.py` in the same
   commit — that manifest is injected into every system prompt.

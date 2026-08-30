@@ -263,7 +263,14 @@ def draft(skill: dict, company: dict, request: dict,
                     "to remove something, remove exactly that and nothing around it (removing 'the date' "
                     "takes out the date, not the day of the week); when he asks to change or add something, "
                     "touch only that. Produce the new version:\n" + correction)
-    out = provider.think(system, "\n\n".join(user), model=_model_for(skill), think_hard=True,
+    # FIRST replies on the sales lane draft on Fable 5 (owner-approved exception, 2026-08-30): the
+    # opener + insight set the whole conversation's direction, and the research brief deserves the
+    # model that can use it. Thread continuations fall back to the normal tier.
+    _mdl = _model_for(skill)
+    if (skill.get("skill_key") == "sales-first-response" and isinstance(request, dict)
+            and not request.get("thread_reply")):
+        _mdl = "claude-fable-5"
+    out = provider.think(system, "\n\n".join(user), model=_mdl, think_hard=True,
                          max_tokens=6000, purpose=f"draft:{skill.get('skill_key', '')}",
                          company=company.get("slug"), images=atts)
     return _no_dashes(out) if is_email else out   # house rule: no em/en dashes in visible email copy
