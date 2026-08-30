@@ -164,6 +164,11 @@ never-pressure follow-ups on `sales-followup`). Every worker draft and manager c
 `worker._now_line()` — the code-stamped current date/time in GST — and the universal
 `sales-scheduling` rule anchors proposed call days to it (no "Monday or Wednesday" on a Tuesday).
 Sensa-wide: no booking/calendar links to clients (email-handling rule); times are proposed in words.
+Every email draft is also served a `media_library` shelf (top-rated live `media_assets` with their real
+watch_urls) — sample-work links come ONLY from it; `engine._ensure_real_links` redrafts any email whose
+URLs aren't in the served context, and the manager receives the same computed URL allowlist plus a
+code-computed 28-day calendar (it never does weekday arithmetic) and may only summarise its own listed
+issues (2026-08-30, after invented library links on card 384 and a false date error on 385).
 
 ## WhatsApp (inbound)
 
