@@ -1303,13 +1303,15 @@ def _understand_correction(task: dict, text: str) -> dict:
             '"cc_add": ["<first names to add on cc>"], '
             '"cc_remove": ["<first names or exact emails to drop from cc>"], '
             '"attach_documents": ["<standing company documents he asks to attach, e.g. trade licence>"], '
+            '"detach_documents": ["<attached documents he asks to REMOVE from the email, by name>"], '
             '"reminders": [{"title": "<self-contained>", "when_phrase": "<his EXACT time words verbatim, '
             "e.g. 'Monday morning', 'tomorrow', '31 August' - never resolve it yourself\"}], "
             '"prep": [{"title": "<short imperative>", "brief": "<internal work to prepare, incl. stated '
             'deadline>"}]} '
             "- empty/false for anything not asked. Never invent dates or names.",
-            (text or "")[:1200], model=provider.MODEL_ROUTER, max_tokens=700,
-            purpose="understand-correction",
+            (text or "")[:1200], model=provider.MODEL_FAST, max_tokens=700,
+            purpose="understand-correction",   # Sonnet, owner-approved 2026-08-30: reading his mixed
+            # spoken corrections is interpretation, not plumbing — Haiku repeatedly misread it
             company=(store.get_company(task["company_id"]) or {}).get("slug"))
         return out if isinstance(out, dict) else {}
     except Exception:  # noqa: BLE001 - on failure the whole text goes to the drafter, old behaviour
@@ -1353,7 +1355,14 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
             refs[d["id"]] = {"id": d["id"], "filename": d["filename"], "mime": d["mime"], "size": d["size"]}
         else:
             missing.append(str(w))
-    if len(refs) != n_refs0:
+    for w in (u.get("detach_documents") or [])[:6]:   # remove-attachment verb (card 383: it didn't exist,
+        wl = str(w).lower()                            # so 'remove the hero loop PDF' could never apply)
+        drop = [rid for rid, r in refs.items()
+                if wl in (r.get("filename") or "").lower()
+                or all(tok in (r.get("filename") or "").lower() for tok in wl.split() if len(tok) > 3)]
+        for rid in drop:
+            created.append(f"detached '{refs.pop(rid)['filename']}'")
+    if len(refs) != n_refs0 or any(c.startswith("detached") for c in created):
         req["attach_docs"] = list(refs.values())
         changed = True
     for r in (u.get("reminders") or [])[:3]:
