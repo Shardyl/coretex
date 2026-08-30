@@ -2342,6 +2342,15 @@ def crm_account(id: int, _: None = Depends(auth)) -> dict:
                              "from crm_master where account_id=%s order by first_name nulls last", (id,))
     a["deals"] = db.query("select id, title, company, value, currency, stage from crm_projects "
                           "where account_id=%s order by value desc nulls last, id", (id,))
+    try:
+        nurture.ensure_schema()
+        a["nurture"] = db.query(
+            "select n.*, co.name as business, co.slug from nurture_accounts n join companies co "
+            "on co.id=n.company_id where n.account_id=%s", (id,))
+        for r in a["nurture"]:
+            r["live_work"] = nurture.has_live_work(id, r["company_id"])
+    except Exception:  # noqa: BLE001
+        a["nurture"] = []
     return a
 
 

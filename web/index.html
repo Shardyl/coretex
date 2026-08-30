@@ -702,10 +702,9 @@ async function renderCRM(v){
     <button class="cseg ${crmView==='opps'?'on':''}" onclick="setCrm('opps')">Opportunities</button>
     <button class="cseg ${crmView==='contacts'?'on':''}" onclick="setCrm('contacts')">Contacts</button>
     <button class="cseg ${crmView==='clients'?'on':''}" onclick="setCrm('clients')">Organisations</button>
-    <button class="cseg ${crmView==='nurture'?'on':''}" onclick="setCrm('nurture')">Nurture</button>
   </div><div id="crmbody" class="empty">Loading…</div>`;
   const b=document.getElementById('crmbody');
-  if(crmView==='nurture') return renderNurture(b);
+  if(crmView==='nurture') crmView='clients';
   if(crmView==='clients') return renderClients(b);
   if(crmView==='projects') return renderProjects(b,co);
   if(crmView==='opps') return renderOpps(b,co);
@@ -1189,55 +1188,42 @@ function searchClients(){ clearTimeout(clTimer); clTimer=setTimeout(loadClients,
 function accountsListQuery(off){ const co=document.getElementById('coSel').value||''; return `/api/crm/accounts?company=${encodeURIComponent(co)}&q=${encodeURIComponent(clState.q)}&limit=40&offset=${off}`; }
 function accountCard(a){ return `<div class="card crow" style="cursor:pointer" onclick="openAccount(${a.id})">
     <div class="cav">${esc(initials(a.name))}</div>
-    <div style="flex:1;min-width:0"><div class="cname">${esc(a.name)}</div>
+    <div style="flex:1;min-width:0"><div class="cname">${esc(a.name)} ${nurtChip(NURT[a.id])}</div>
       <div class="csub">${a.contacts} contact${a.contacts==1?'':'s'} · ${a.deals} deal${a.deals==1?'':'s'}${a.won_value?' · '+dmoney(a.won_value)+' won':''}</div></div>
     ${ic('chevron',18)}</div>`; }
-async function renderNurture(b){
-  const co=document.getElementById('coSel').value;
-  let d; try{ d=await api('/api/nurture'+(co&&co!=='all'?`?company=${encodeURIComponent(co)}`:'')); }catch(e){ b.innerHTML='<div class="empty">Could not load nurture list</div>'; return; }
-  const rows=d.rows||[];
+let NURT={}, nurtOnly=false;
+const nurtChip=n=>{ if(!n) return '';
   const fmtd=x=>x?new Date(x).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'—';
-  let h=`<div class="h">Relationships kept warm between projects · ${rows.length}</div>
-  <div class="card" style="margin-bottom:10px"><b>Add a client to nurture</b>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-      <input id="nuAcc" placeholder="Organisation name" style="flex:2;min-width:140px">
-      <input id="nuEmail" placeholder="Preferred contact email (optional)" style="flex:2;min-width:160px">
-      <input id="nuNote" placeholder="Note on the relationship (optional)" style="flex:3;min-width:160px">
-      <button class="btn" onclick="nurtureAdd()">Add</button>
-    </div><div id="nuMsg" class="mut" style="margin-top:6px"></div></div>`;
-  if(!rows.length){ b.innerHTML=h+'<div class="empty">No clients enrolled yet</div>'; return; }
-  h+=rows.map(r=>{
-    const st=r.live_work?`<span class="chip" style="border-color:#FBBF2455;color:#FBBF24">live work · holding</span>`
-      : r.status==='stopped'?`<span class="chip" style="border-color:#8597A655;color:#8597A6">stopped</span>`
-      : `<span class="chip" style="border-color:#4ADE8055;color:#4ADE80">active</span>`;
-    const act=r.status==='stopped'?`<button class="btn sm" onclick="nurtureAct(${r.id},'resume')">Resume</button>`
-      : `<button class="btn sm ghost" onclick="nurtureAct(${r.id},'stop')">Stop</button>`;
-    return `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap">
-      <b>${esc(r.account_name)}</b>${st}</div>
-      <div class="mut">${esc(r.business)} · ${r.won_projects} project${r.won_projects===1?'':'s'} · ${Number(r.won_value||0).toLocaleString()} AED · ${r.contacts} contact${r.contacts===1?'':'s'}</div>
-      <div class="mut">Contact: ${esc(r.contact_email||'best from roster')} · Last touch ${fmtd(r.last_touch)} · Next ${fmtd(r.next_touch)} · every ${r.cadence_days}d</div>
-      ${r.note?`<div class="mut" style="opacity:.8">${esc(r.note)}</div>`:''}
-      <div style="margin-top:6px">${act}</div></div>`;
-  }).join('');
-  b.innerHTML=h;
-}
-async function nurtureAdd(){
+  if(n.live_work) return `<span class="chip" style="font-size:10px;border-color:#FBBF2455;color:#FBBF24">nurture · holding</span>`;
+  if(n.status==='stopped') return `<span class="chip" style="font-size:10px;border-color:#8597A655;color:#8597A6">nurture · stopped</span>`;
+  return `<span class="chip" style="font-size:10px;border-color:#4ADE8055;color:#4ADE80">nurture · ${fmtd(n.next_touch)}</span>`; };
+async function loadNurtMap(){ NURT={};
+  try{ const co=document.getElementById('coSel').value;
+    const d=await api('/api/nurture'+(co&&co!=='all'?`?company=${encodeURIComponent(co)}`:''));
+    (d.rows||[]).forEach(r=>{ NURT[r.account_id]=r; }); }catch(e){} }
+async function nurtureAct(id,what,accId){ try{ await api(`/api/nurture/${id}/${what}`,{method:'POST'}); }catch(e){}
+  if(accId) openAccount(accId); else render(); }
+async function nurtureEnrol(accId){
   const co=document.getElementById('coSel').value;
-  const acc=document.getElementById('nuAcc').value.trim(), em=document.getElementById('nuEmail').value.trim(), no=document.getElementById('nuNote').value.trim();
-  const m=document.getElementById('nuMsg');
-  if(!acc){ m.textContent='Organisation name needed'; return; }
-  if(!co||co==='all'){ m.textContent='Pick a business first (top selector)'; return; }
-  try{ const r=await api('/api/nurture/add',{method:'POST',body:JSON.stringify({account:acc,company:co,contact_email:em||null,note:no||null})});
-    m.textContent=`${r.account} enrolled`; render(); }
-  catch(e){ m.textContent=(e&&e.message)||'Could not add'; }
+  if(!co||co==='all'){ toast('Pick a business first (top selector)'); return; }
+  try{ await api('/api/nurture/add',{method:'POST',body:JSON.stringify({account:String(accId),company:co})});
+    toast('Nurturing started'); }catch(e){ toast((e&&e.message)||'Could not enrol'); }
+  openAccount(accId);
 }
-async function nurtureAct(id,what){ try{ await api(`/api/nurture/${id}/${what}`,{method:'POST'}); }catch(e){} render(); }
+function toggleNurtOnly(){ nurtOnly=!nurtOnly; render(); }
 async function renderClients(b){
   b.outerHTML=`<div id="crmbody">
     <div class="srch">${ic('search',18)}<input id="clq" placeholder="Search organisations…" oninput="searchClients()"><span id="clcount" style="margin-left:auto;font-size:12px;color:var(--mut);white-space:nowrap;padding-left:8px">&nbsp;</span></div>
-    <div class="row" style="margin-bottom:10px;gap:8px"><button class="btn go sm" onclick="openNewCompany()">${ic('plus',15)} New organisation</button><button class="btn sm" onclick="openDupes()">${ic('copy',15)} Merge duplicates</button></div>
+    <div class="row" style="margin-bottom:10px;gap:8px"><button class="btn go sm" onclick="openNewCompany()">${ic('plus',15)} New organisation</button><button class="btn sm" onclick="openDupes()">${ic('copy',15)} Merge duplicates</button><span class="fchip${nurtOnly?' on':''}" style="margin-left:auto" onclick="toggleNurtOnly()">Nurtured</span></div>
     <div id="cllist" class="empty">Loading…</div></div>`;
-  loadClients();
+  await loadNurtMap();
+  if(nurtOnly){ renderNurtOnly(); } else { loadClients(); }
+}
+function renderNurtOnly(){
+  const list=document.getElementById('cllist'); if(!list) return;
+  const rows=Object.values(NURT);
+  document.getElementById('clcount').textContent=rows.length+' nurtured';
+  list.innerHTML = rows.length? rows.map(r=>accountCard({id:r.account_id,name:r.account_name,contacts:r.contacts,deals:r.won_projects,won_value:r.won_value})).join('') : '<div class="empty">No clients being nurtured yet — open an organisation and press Start nurturing</div>';
 }
 async function openDupes(){
   const v=document.getElementById('view'); v.innerHTML='<div class="empty">Finding duplicate organisations…</div>';
@@ -1289,6 +1275,20 @@ function setupClientObserver(){
   clObserver=new IntersectionObserver(es=>{ if(es[0].isIntersecting) loadMoreClients(); }, {rootMargin:'500px'});
   clObserver.observe(s);
 }
+function nurturePanel(a){
+  const fmtd=x=>x?new Date(x).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'—';
+  const rows=a.nurture||[];
+  if(!rows.length) return `<div class="csub">Not enrolled — quarterly keep-warm between projects.</div>
+    <div class="row" style="margin-top:8px"><button class="btn go sm" onclick="nurtureEnrol(${a.id})">${ic('spark',14)} Start nurturing</button></div>`;
+  return rows.map(n=>`<div style="padding:4px 0">
+    <div class="row" style="gap:8px;align-items:baseline;flex-wrap:wrap"><b style="font-size:13px">${esc(n.business)}</b>${nurtChip(n)}</div>
+    <div class="csub">Contact: ${esc(n.contact_email||'best from roster')} · every ${n.cadence_days}d · last ${fmtd(n.last_touch)} · next ${fmtd(n.next_touch)}${n.live_work?' · holding while live work is open':''}</div>
+    ${n.note?`<div class="csub" style="opacity:.85">${esc(n.note)}</div>`:''}
+    <div class="row" style="margin-top:6px">${n.status==='stopped'
+      ?`<button class="btn sm" onclick="nurtureAct(${n.id},'resume',${a.id})">Resume</button>`
+      :`<button class="btn sm ghost" onclick="nurtureAct(${n.id},'stop',${a.id})">Stop</button>`}</div>
+  </div>`).join('');
+}
 async function openAccount(id){
   const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading…</div>';
   let a; try{ a=await api('/api/crm/account?id='+id); }catch(e){ a={}; }
@@ -1305,6 +1305,7 @@ async function openAccount(id){
         <div class="row" style="margin-top:8px"><button class="btn go sm" onclick="addContactToCompany(${a.id})">${ic('plus',14)} Add contact</button></div></div>
       <div class="dsec"><div class="dlbl">Deals (${(a.deals||[]).length})</div>${deals||'<div class="csub">None</div>'}
         <div class="row" style="margin-top:8px"><button class="btn go sm" onclick="openNewDeal(${a.id})">${ic('plus',14)} New deal</button></div></div>
+      <div class="dsec"><div class="dlbl">Nurture</div>${nurturePanel(a)}</div>
       ${noteBox('a',a.id)}
       ${(a.history&&a.history.length)?`<div class="dsec"><div class="dlbl">History</div>${a.history.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${esc((h.text||'').slice(0,140))}</div></div></div>`).join('')}</div>`:''}
     </div>`;
