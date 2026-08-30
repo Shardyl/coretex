@@ -288,7 +288,12 @@ draft (sales-quotation, sales-first-response, email-handling). RATES ARE OWNER-A
 enter the card from quotes Rashad approved or figures he states — a missing/unconfirmed item is
 drafted as OWNER TO CONFIRM, never priced by a model (rule on both companies' sales-quotation).
 When Rashad states a new rate in any session, save it with `ratecard.set_item` so every future
-quote uses it.
+quote uses it. LOCKED v1.0 (2026-08-28, owner-approved, two tiers Budget/Normal): the human-readable
+master `Sensa - Rate Card v1.0.xlsx` lives in Rashad's Drive terms folder
+(`159mEGnuBsWh_GqfPfPTf3q3zaNautfnX`) beside the T&Cs; amendments = new version there + live setting
+updated together. Quotations auto-fill the QUOTATION TO contact (name/email/phone) from the CRM:
+explicit `contact_email` wins, an unambiguous single-contact account fills in, ambiguity stays blank
+(quotation._contact_for; deliver_quotation passes contact_email).
 
 ## Media library (the YouTube catalog + review UI)
 
