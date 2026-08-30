@@ -30,6 +30,7 @@ create table if not exists nurture_accounts (
   last_touch timestamptz,
   enrolled_at timestamptz not null default now(),
   enrolled_from text,                            -- 'deal:<id>' | 'manual'
+  cc_emails jsonb,                               -- people who ride cc on every touch (e.g. internal approver)
   note text,
   unique (account_id, company_id)
 );
@@ -132,6 +133,8 @@ def sweep() -> dict:
                           "OUR HISTORY WITH THEM:\n" + _history_block(n["account_id"], n["company_id"])
                           + (f"\nNOTE ON THE RELATIONSHIP: {n['note']}" if n.get("note") else "")),
                 "inquiry": {"name": name, "email": email, "message": ""},
+                **({"cc_extra": [e for e in (n.get("cc_emails") or []) if "@" in str(e)]}
+                   if n.get("cc_emails") else {}),
                 "followup": "nurture",
                 "system_note": "Quarterly account-level nurture touch (no live work with this client)."},
                 contact=email)
