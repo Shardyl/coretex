@@ -1255,7 +1255,16 @@ async function loadClients(){
   updateOrgCount();
   list.innerHTML='<div class="empty">Loading…</div>';
   let rows; try{ rows=await api(accountsListQuery(0)); }catch(e){ rows=[]; }
-  list.innerHTML = rows.length? rows.map(accountCard).join('')+'<div id="clmore" style="height:1px"></div>' : '<div class="empty">No organisations yet</div>';
+  // nurtured clients pinned first (owner: they are the focus, not the A-Z list); skipped during search
+  let pin='';
+  const nrows=Object.values(NURT);
+  if(!clState.q && nrows.length){
+    pin=`<div class="h" style="margin:2px 0 6px">Nurturing · ${nrows.length}</div>`
+      +nrows.map(r=>accountCard({id:r.account_id,name:r.account_name,contacts:r.contacts,deals:r.won_projects,won_value:r.won_value})).join('')
+      +`<div class="h" style="margin:12px 0 6px;color:var(--mut)">All organisations</div>`;
+    rows=rows.filter(a=>!NURT[a.id]);
+  }
+  list.innerHTML = (pin||rows.length)? pin+rows.filter(a=>clState.q||!NURT[a.id]).map(accountCard).join('')+'<div id="clmore" style="height:1px"></div>' : '<div class="empty">No organisations yet</div>';
   clState.page=1; clState.more = rows.length===40;
   if(clState.more) setupClientObserver();
 }
@@ -1264,6 +1273,7 @@ async function loadMoreClients(){
   const sentinel=document.getElementById('clmore'); if(!sentinel) return;
   clState.loading=true;
   let rows; try{ rows=await api(accountsListQuery(clState.page*40)); }catch(e){ rows=[]; }
+  if(!clState.q) rows=rows.filter(a=>!NURT[a.id]);
   if(rows.length){ sentinel.insertAdjacentHTML('beforebegin', rows.map(accountCard).join('')); clState.page++; }
   clState.more = rows.length===40;
   if(!clState.more){ if(clObserver) clObserver.disconnect(); sentinel.remove(); }
