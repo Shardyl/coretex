@@ -41,6 +41,16 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
                  "rule violation.")
     facts.append("Where the Task brief carries the owner's own instructions, content he explicitly "
                  "asked for is authorised — never flag it as 'without basis'.")
+    # Computed calendar: weekday arithmetic is exactly the kind of fact a model gets wrong (a real
+    # manager verdict called Thu 3 Sep a date error). Code stamps the next 4 weeks; the model reads.
+    from datetime import datetime, timedelta
+    from .schedule import _GST
+    today = datetime.now(_GST)
+    cal = ", ".join((today + timedelta(days=i)).strftime("%a %-d %b") for i in range(28))
+    facts.append(f"CALENDAR (computed, authoritative): today is {today.strftime('%A %-d %B %Y')}. The next "
+                 f"28 days are: {cal}. Judge every date/weekday mention in the draft ONLY against this "
+                 "list — NEVER compute weekdays yourself, and never call a date wrong that this list "
+                 "confirms.")
     facts_block = "SYSTEM FACTS (authoritative — judge with these):\n" + "\n".join(f"- {f}" for f in facts)
     system = (
         "You are the department Manager at Cortex — the keeper of the standard. Review a worker's draft "
@@ -59,7 +69,11 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
         + f"\n\nDRAFT:\n{draft}\n\n"
         'Return JSON: {"verdict":"pass|revise|escalate","confidence":"high|medium|low",'
         '"summary":"one short line the owner reads","issues":["concrete rule/brand problems, [] if none"],'
-        '"rule_refs":["the specific rules that were broken, if any"]}')
+        '"rule_refs":["the specific rules that were broken, if any"]}\n'
+        "The summary MUST be a faithful compression of the issues you listed and nothing else: never "
+        "introduce a claim that is not in issues, and never state as an error something your own issues "
+        "verified as correct. If every issue is a style/judgement call rather than a hard rule break, the "
+        "summary must say so plainly (e.g. 'style suggestions only') — never call such a draft unsendable.")
     out = provider.think_json(system, user, max_tokens=1500,
                               purpose=f"manager:{skill.get('skill_key', '')}", company=company.get("slug"))
 
