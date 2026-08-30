@@ -1308,6 +1308,9 @@ def _understand_correction(task: dict, text: str) -> dict:
             "e.g. 'Monday morning', 'tomorrow', '31 August' - never resolve it yourself\"}], "
             '"prep": [{"title": "<short imperative>", "brief": "<internal work to prepare, incl. stated '
             'deadline>"}]} '
+            "prep is ONLY for work outside this email (build a document, research something). Changes to "
+            "THIS email or card — its attachments, cc, sender, content — always go through their own "
+            "channels above, NEVER into prep. "
             "- empty/false for anything not asked. Never invent dates or names.",
             (text or "")[:1200], model=provider.MODEL_FAST, max_tokens=700,
             purpose="understand-correction",   # Sonnet, owner-approved 2026-08-30: reading his mixed
