@@ -328,6 +328,9 @@ def _email_envelope(task: dict, company: dict) -> dict:
         _nc = []
     drop = {e.lower() for e in (req.get("cc_remove") or [])}
     drop.add((inq.get("email") or "").lower())            # To-recipient in cc = duplicate mail, always deduped
+    if from_addr:
+        drop.add(from_addr.lower())   # the SENDER is never cc'd on their own email (team-copy rule:
+        # "whoever is not sending it copies everybody else in" - owner, 30 Aug)
     if "sender" in _nc and from_addr:
         drop.add(from_addr.lower())
     drop |= {x for x in _nc if "@" in x}
