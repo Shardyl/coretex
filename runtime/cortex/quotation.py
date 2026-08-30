@@ -633,7 +633,7 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
     r += 1
     pay = ["70% down payment to commence the project.",
            "30% balance due before final delivery, on approval.",
-           "Two revisions included, within two weeks of delivery.",
+           "Two consolidated revision rounds per project included, submitted by email.",
            f"All prices in {cur}, exclusive of {int(vat_rate*100)}% VAT."]
     bank = hb["bank"]
     for i in range(max(len(pay), len(bank))):
