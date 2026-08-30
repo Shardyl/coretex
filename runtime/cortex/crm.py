@@ -1020,9 +1020,9 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
             email = p.get("contact_email") or next(
                 (c.get("email") for c in (p.get("contacts") or []) if c.get("email")), None)
             if email and cid:
-                reminders.create(f"Repeat-business nurture: '{p['title']}' closed ~6 months ago",
+                reminders.create(f"Repeat-business nurture: won client from '{p['title']}'",
                                  now + timedelta(days=180), company_id=cid, target_type="deal",
-                                 target_id=did, action={
+                                 target_id=did, recurrence="custom", custom_days=180, action={
                                      "company": (db.one("select slug from companies where id=%s", (cid,)) or {}).get("slug"),
                                      "skill": "sales-followup", "kind": "email_reply", "request": {
                                          "brief": (f"REPEAT-BUSINESS nurture: '{p['title']}' wrapped about six months "
