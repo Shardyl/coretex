@@ -73,7 +73,10 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
 - Never delete CRM/contact data on your own initiative; merges carry over every non-empty field.
 - Any Cloudflare WRITE needs Rashad's explicit OK first (read-only fine, but disclose).
 - Batch/recurring LLM jobs default to Haiku (batched + prompt-cached); Sonnet = prose,
-  Opus = ideation. Never silently upgrade a model.
+  Opus = ideation. Never silently upgrade a model. ONE standing exception (owner-approved
+  2026-08-30): `provider.think_research` runs claude-fable-5 with live web search for the
+  once-per-opportunity research pass (`pipeline.research_opportunity`, hooked into
+  `crm.auto_opportunity`) - low volume, insight quality is the point.
 - No emoji in the cockpit UI — clean monochrome line-icons (Tabler-style) only.
 - Ship a new Talk capability? Add its one-liner to `runtime/cortex/capabilities.py` in the same
   commit — that manifest is injected into every system prompt.

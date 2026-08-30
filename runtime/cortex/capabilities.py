@@ -49,6 +49,11 @@ CAPABILITIES: list[tuple[str, str]] = [
      "injected into every quotation-adjacent draft. Prices come ONLY from it: an item not on the card is "
      "named and marked OWNER TO CONFIRM, never priced by a model. When Rashad states a new rate, save it "
      "to the card (ratecard.set_item) so every future quote uses it."),
+    ("Opportunity research — Fable 5",
+     "Every new opportunity gets ONE research pass (Fable 5 + live web search, owner-approved exception to "
+     "the Haiku default): sender verified, mode classified (direct vs procurement), 2-3 TRUE contributable "
+     "insights onto the deal timeline. Drafts read it; the sales-first-response posture rules govern how "
+     "insight is used (one gift per email for direct clients; document-precision for procurement)."),
     ("Team approvals",
      "Authorised team members (users.can_approve — Gino + Ayresh for Sensa) can approve OUTWARD work in "
      "their company scope with their own PIN at the step-up gate. MONEY-class approvals always require "
