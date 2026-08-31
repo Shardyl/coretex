@@ -365,6 +365,35 @@ updated together. Quotations auto-fill the QUOTATION TO contact (name/email/phon
 explicit `contact_email` wins, an unambiguous single-contact account fills in, ambiguity stays blank
 (quotation._contact_for; deliver_quotation passes contact_email). TERMS MODULES: reusable clause modules live as `terms_module:<name>` settings (human-readable docx beside the T&Cs in the Drive terms folder + library). First module: `multi-version` (v1.0, 2026-08-30) - the approval-gate + enhanced-revision-service + masters-first versions structure for multi-cut/multi-language jobs, born on SEN-2026-0004 (Property Finder); the sales-quotation rule tells the drafter to apply it, gen path: pass a per-quote `terms` dict to generate_xlsx with the module clauses swapped into Revisions & Delivery.
 
+## Pre-meeting briefs (`meetingprep.py`, 2026-08-31)
+
+Any calendar entry with an attendee OUTSIDE our domains gets a one-page research brief 24h before it
+starts. `calendar.upcoming_events()` reads the registry calendars for detail (the personal calendar is
+shared free/busy only, so it returns nothing there and is filtered out as "internal"); `meetingprep
+.sweep()` runs from the engine loop, self-throttled to every 10 minutes, one brief per event ever
+(ledger table `meeting_briefs`, unique on `event_id`).
+
+The card is INSERTED at `awaiting_approval` with the draft already set, never at `new` - a `new` card
+gets worker-drafted and that would throw the research away. Kind `meeting_brief` is registered
+`internal` in KIND_CLASS (an unregistered kind fails safe to `outward` and would demand a biometric
+step-up to read a brief). Approving means "mark as read": nothing ever sends.
+
+MODEL: names `claude-opus-5` OUTRIGHT via `BRIEF_MODEL`, it does NOT use the `opus` tier.
+`/etc/cortex/cortex.env` pins `CORTEX_MODEL`, so a skill marked `opus` resolves to whatever that pin
+says (it said `claude-sonnet-4-6` until 31 Aug 2026, meaning every "opus" skill was really Sonnet).
+Owner-approved exception: ~$0.50 per brief, a handful a week, the insight is the point.
+
+Behaviour lives in the `meeting-prep` skill craft (uniform roster, all six companies, `ensure_skills()`
+is idempotent and never overwrites an edited craft). Sections: THE MEETING / THE COMPANY / WHY WE ARE
+MEETING / WHERE WE STAND / WHAT THEIR ASK LIKELY MEANS / SCOPING QUESTIONS (max 6, de-risking, never
+generic) / WARM OPENERS (4: two personal, two business, said out loud not read) / DO NOT RAISE /
+OUR RELEVANT WORK (dropped entirely when the company has no media library) / SOURCES.
+
+Safety invariants stay in CODE, not the editable skill: `_PERSON_SCOPE` limits people research to
+public professional sources and local colour (never family, health, religion, politics, finances or
+private accounts), every external claim carries a date, and links are either from the served media
+library or a page actually found in search.
+
 ## Media library (the YouTube catalog + review UI)
 
 `media_assets` (live DB) is the catalog of every video on a company's YouTube channel — one row
