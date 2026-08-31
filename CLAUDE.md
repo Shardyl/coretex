@@ -143,6 +143,26 @@ it copied the deal timeline's third-person framing. Everyone also wrote in one s
 To add a person: put `{name, role}` on their signature entry, and a `voice.people.<who>`
 `{emails:[...], profile:"..."}` distilled from their sent mail.
 
+## No-draft gate + skipped opportunities (2026-08-31)
+
+`policy.py` compiles each skill's rules into a NO-DRAFT policy evaluated at TRIAGE, before a card
+exists (`policy.should_skip`). Standing rule added for **broadcast tender/supplier circulars**: a mass
+announcement to a whole supplier register ("Dear Supplier", tender number + closing date, from a
+supplier-relations desk, asking nothing of us) gets no drafted reply - those are bid through the
+issuing portal, not answered by email.
+**The wording of that rule is load-bearing.** A first, looser draft of it ("bulk supplier circulars
+and tender-invitation blasts") made the gate skip the Property Finder RFP as well - a deal-losing
+false positive caught only by testing it against a real enquiry before shipping. The live rule
+therefore carries explicit discriminators AND an explicit carve-out: it NEVER applies to an email that
+asks US for something (RFQ/RFP addressed to us, a scope of work, questions, a named person expecting a
+reply). **Any change to a no-draft rule must be re-tested against a real in-scope enquiry.**
+Skipping used to be silent, so an in-scope tender vanished. `engine._flag_skipped_opportunity` now
+judges every skipped mail against the company's services and raises a "Tender worth a look -
+closes <date>" notification when it is in scope. Notification only; it never drafts.
+Related: `engine._maybe_no_reply` (`_NO_REPLY_RX`) is the LATER net - if a card was created anyway and
+the drafter concludes "RECOMMENDATION: skip", the card is closed and the owner notified rather than
+leaving sendable text on a live email card (card #408).
+
 ## Company document library (2026-08-26)
 
 CANONICAL HOME: the company's Drive `<COMPANY> CORTEX/Documents/` subfolder (same Drive-first doctrine
