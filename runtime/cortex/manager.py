@@ -47,10 +47,20 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
         # the request is JSON-dumped, so every URL is followed by escape sequences; the character
         # class MUST exclude backslash, or allowlist entries carry escape tails and never match the
         # clean URLs in the draft (the Manager then flags REAL library links as invented).
-        _urls = sorted(set(_re.findall(r"https?://[^\s<>\\\"')\]\\]+", _json.dumps(request, default=str))))
+        _rx = _re.compile(r"https?://[^\s<>\\\"')\]\\]+")
+        # ORDER MATTERS: the media-library links are the ones a draft legitimately uses, so they go
+        # FIRST. Sorting alphabetically and truncating cut every youtube.com link off the end while
+        # keeping Teams dial-in URLs, and the Manager then called a real portfolio link invented.
+        _lib = _rx.findall(str(request.get("media_library") or "")) if isinstance(request, dict) else []
+        _rest = _rx.findall(_json.dumps(request, default=str))
+        _seen, _urls = set(), []
+        for _u in _lib + sorted(_rest):
+            if _u not in _seen:
+                _seen.add(_u)
+                _urls.append(_u)
         if _urls:
             facts.append("REAL LINKS available to the drafter (any URL in the draft NOT on this list is "
-                         "invented and must be flagged): " + ", ".join(_urls[:25]))
+                         "invented and must be flagged): " + ", ".join(_urls[:60]))
         else:
             facts.append("NO links were provided to the drafter — ANY URL in the draft is invented and "
                          "must be flagged.")
