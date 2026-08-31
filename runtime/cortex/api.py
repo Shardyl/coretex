@@ -3101,14 +3101,19 @@ SKILL_TOOLS = [
     {"name": "log_conversation",
      "description": "Rashad pastes a conversation that happened OFF EMAIL - a WhatsApp chat, a phone call "
                     "he recounts, a meeting in person - and Cortex files it and MOVES THE CLOCKS. Use "
-                    "whenever he shares chat text or says 'I spoke to X and...'. It identifies the person, "
-                    "logs it on their deal/contact timeline, shifts that deal's automated follow-ups when he "
-                    "states he is away or agrees a later time, and sets reminders for what HE promised. "
+                    "whenever he shares chat text or says 'I spoke to X and...'. TWO STEPS, always: call it "
+                    "FIRST without `confirm` - it returns who it matched, which deal, and exactly what it "
+                    "would do. Show him that and ASK. Only when he confirms, call it again with "
+                    "confirm=true (and deal_id if he picked one). Never pass confirm=true on the first call. "
+                    "It then logs the conversation on the deal, shifts that deal's automated follow-ups when "
+                    "he says he is away or agrees a later time, and sets reminders for what HE promised. "
                     "Dates are computed by code from what was actually said - nothing is invented.",
      "input_schema": {"type": "object", "properties": {
         "text": {"type": "string", "description": "the conversation, pasted as-is"},
         "company": {"type": "string", "description": "business slug (default sensa)"},
-        "contact_hint": {"type": "string", "description": "the person's email/name/company if he says it"}},
+        "contact_hint": {"type": "string", "description": "the person's email/name/company if he says it"},
+        "deal_id": {"type": "integer", "description": "the deal he confirmed it belongs to"},
+        "confirm": {"type": "boolean", "description": "true ONLY after he has confirmed the person and deal"}},
         "required": ["text"]}},
     {"name": "update_project_plan",
      "description": "Re-issue the PROJECT PLAN for a live project so its next steps reflect new context - "
@@ -3326,11 +3331,11 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         })
     if name == "log_conversation":
         r = pipeline.log_conversation(inp.get("text", ""), company_slug=inp.get("company") or "sensa",
-                                      contact_hint=inp.get("contact_hint", ""))
+                                      contact_hint=inp.get("contact_hint", ""),
+                                      deal_id=inp.get("deal_id"), confirm=bool(inp.get("confirm")))
         if not r.get("ok"):
             return r.get("error") or "could not read that conversation"
-        return json.dumps({"counterpart": r.get("counterpart"), "deal": r.get("deal"),
-                           "summary": r.get("summary"), "applied": r.get("applied")}, default=str)
+        return json.dumps({k: v for k, v in r.items() if k != "ok"}, default=str)
     if name == "update_project_plan":
         did = int(inp["deal_id"])
         if (inp.get("note") or "").strip():

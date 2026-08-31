@@ -49,7 +49,8 @@ CAPABILITIES: list[tuple[str, str]] = [
      "deal, shifts that deal's automated follow-ups when he says he is away or agrees a later time, and "
      "sets reminders for what he promised. Use it whenever he shares chat text or says 'I spoke to X'. "
      "Dates are computed by code from his actual words - 'travelling Wednesday for a week' resolves to "
-     "the day he is BACK, not the day he leaves."),
+     "the day he is BACK, not the day he leaves. It ALWAYS proposes first: who it matched, which deal, "
+     "what it would do - you show him and ask, and only apply it once he confirms."),
     ("Project plans — keeping work on track",
      "Every live project has ONE plan card: where it stands, what we owe, and the NEXT STEPS with dates. "
      "It is INTERNAL and never sends anything. It appears when a deal is won and when a project changes "

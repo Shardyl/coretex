@@ -70,13 +70,31 @@ def _commitment_due(hint: str) -> datetime:
     return datetime.now(timezone.utc) + timedelta(days=_DUE_DAYS.get(h, 3))
 
 
-def extract_commitments(draft: str) -> list[dict]:
-    """Promises this email makes to the recipient (things WE now owe). Extraction only — the model
-    quotes the email; it never invents obligations or dates."""
+def extract_commitments(draft: str, stage: str = "") -> list[dict]:
+    """Promises this email makes to the recipient (things WE now owe). Extraction only - the model
+    quotes the email; it never invents obligations or dates.
+
+    STAGE MATTERS (owner, 31 Aug 2026): on an UNCLOSED opportunity, the deliverables described in a
+    quotation or proposal are NOT owed - they are scope we would perform if they buy, and nobody starts
+    them before the deal closes. Tracking '40 images' as a to-do the day after a proposal goes out is
+    noise on exactly the deal that should be quiet. Only PROCESS commitments count until Booked; the
+    scope becomes real work at Booked, where the project plan card owns it."""
     if not (draft or "").strip():
         return []
+    unclosed = (stage or "") in ("Opportunity", "Quote", "")
+    scope_rule = (
+        "This email is on an UNCLOSED opportunity. Deliverables, line items or scope described in an "
+        "attached/quoted proposal or quotation are NOT commitments - they are what we would do IF they "
+        "buy (e.g. 'X images', 'the shoot', 'N videos', 'edit and delivery'). NEVER extract those. "
+        "Extract ONLY what we said we would do NEXT to move the sale along: send a revised quotation, "
+        "call on a stated day, share samples or documents, arrange a meeting. If the email only presents "
+        "a proposal and asks for their decision, return an EMPTY list. "
+    ) if unclosed else (
+        "This deal is WON and in delivery, so production deliverables we commit to ARE real commitments. "
+    )
     try:
         out = provider.think_json(
+            scope_rule +
             "Extract the concrete promises/commitments THIS email makes to its recipient - deliverables or "
             "actions the sender now owes (e.g. 'revised quotation coming', 'will send samples', 'will call "
             "Tuesday'). Politeness ('happy to help', 'any questions, ask') is NOT a commitment. Return "
@@ -112,7 +130,8 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
         maybe_advance_on_send(int(did), task, env)
     except Exception:  # noqa: BLE001
         pass
-    for c in extract_commitments(body):
+    _stage = (db.one("select stage from crm_projects where id=%s", (int(did),)) or {}).get("stage") or ""
+    for c in extract_commitments(body, stage=_stage):
         due = _commitment_due(c.get("due_hint"))
         log_deal(did, "commitment", f"OWED to {to}: {c['text']} (check-in {due.date().isoformat()})")
         try:
@@ -470,7 +489,8 @@ def suggest_next_step(e: dict, deal: dict, company: dict) -> None:
 
 # ---------- conversations that happen OFF-CHANNEL (WhatsApp, phone, in person) ----------
 
-def log_conversation(text: str, company_slug: str = "sensa", contact_hint: str = "") -> dict:
+def log_conversation(text: str, company_slug: str = "sensa", contact_hint: str = "",
+                    deal_id: int | None = None, confirm: bool = False) -> dict:
     """Rashad pastes a WhatsApp/phone conversation; Cortex reads it, files it, and MOVES THE CLOCKS.
 
     Off-channel talk is where the real commitments get made - a coffee promised on WhatsApp, a client
@@ -502,6 +522,10 @@ def log_conversation(text: str, company_slug: str = "sensa", contact_hint: str =
     if not isinstance(out, dict):
         return {"ok": False, "error": "could not read that conversation"}
 
+    # CONFIRM BEFORE ACTIONING (owner, 31 Aug 2026): a pasted chat can only be matched by the names in
+    # it, and WhatsApp exports rarely carry an email. Guessing the person - or picking between two live
+    # deals - and then moving clocks is exactly the kind of silent wrong action he does not want. The
+    # first call always PROPOSES; nothing is written until he confirms.
     hint = (contact_hint or out.get("counterpart_hint") or out.get("counterpart_name") or "").strip()
     person = None
     for q in [h for h in (contact_hint, out.get("counterpart_hint"), out.get("counterpart_name")) if h]:
@@ -511,17 +535,39 @@ def log_conversation(text: str, company_slug: str = "sensa", contact_hint: str =
             "order by updated_at desc nulls last limit 1", (f"%{q}%", f"%{q}%"))
         if person:
             break
-    deal = None
-    if person:
-        deal = db.one("select id, title, stage, automation, next_followup from crm_projects where "
-                      "company=%s and lower(contact_email)=lower(%s) and stage not in "
-                      "('Lost','Completed','Nurture','Close & review') order by id desc limit 1",
-                      (co["name"].split()[0] if co["slug"] == "sensa" else co["name"], person["email"]))
-        if not deal:
-            deal = db.one("select id, title, stage, automation, next_followup from crm_projects where "
-                          "lower(contact_email)=lower(%s) and stage not in "
-                          "('Lost','Completed','Nurture','Close & review') order by id desc limit 1",
-                          (person["email"],))
+    deal, candidates = None, []
+    if deal_id:
+        deal = db.one("select id, title, stage, automation, next_followup from crm_projects where id=%s",
+                      (int(deal_id),))
+    elif person:
+        candidates = db.query(
+            "select id, title, stage, automation, next_followup from crm_projects where "
+            "lower(contact_email)=lower(%s) and stage not in "
+            "('Lost','Completed','Nurture','Close & review') order by id desc limit 5",
+            (person["email"],))
+        if len(candidates) == 1:
+            deal = candidates[0]
+
+    if not confirm:      # PROPOSE ONLY - no writes
+        return {"ok": True, "needs_confirmation": True,
+                "counterpart": out.get("counterpart_name"),
+                "matched_contact": (f"{(person or {}).get('first_name') or ''} "
+                                    f"{(person or {}).get('last_name') or ''}".strip()
+                                    + f" <{(person or {}).get('email')}>") if person else None,
+                "deal": (deal or {}).get("id"),
+                "deal_title": (deal or {}).get("title"),
+                "deal_options": [{"id": c["id"], "title": c["title"], "stage": c["stage"]}
+                                 for c in candidates] if len(candidates) > 1 else [],
+                "summary": out.get("summary"),
+                "would_do": ([f"log it on deal {deal['id']} ({deal['title']})"] if deal else
+                             ["log it on the contact"] if person else
+                             ["NOTHING - I could not match this person in the CRM"])
+                            + ([f"shift that deal's follow-ups to when you are back"]
+                               if deal and (out.get("away_days") or out.get("resume_after_phrase")) else [])
+                            + [f"remind you: {c}" for c in (out.get("our_commitments") or [])[:3]],
+                "ask": ("Which deal is this about?" if len(candidates) > 1 else
+                        "Who is this with? I could not find them in the CRM." if not person else
+                        "Confirm and I will apply it.")}
 
     note = ("OFF-CHANNEL CONVERSATION (" + datetime.now(timezone.utc).strftime("%d %b %Y") + ", pasted by "
             "Rashad): " + (out.get("summary") or "").strip())
