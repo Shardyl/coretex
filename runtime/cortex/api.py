@@ -458,6 +458,8 @@ def _enrich_action_card(t: dict) -> dict:
     if t["kind"] in engine.EMAIL_RENDER_KINDS:  # emails: show the envelope (to/from/subject) + logo HTML
         co = store.get_company(t["company_id"])
         env = engine._email_envelope(t, co)
+        if not (env.get("to") or "").strip():     # visible on the card, not a surprise at approval
+            t["card_problem"] = "No recipient set — this cannot send. Tell Cortex who it goes to."
         inq = (t.get("request") or {}).get("inquiry") or {}
         t["email"] = {**env, "preview": engine.compose_reply_body(t, co),  # plain fallback
                       "html": engine.compose_reply_html(t, co, for_preview=True)["html"],  # rendered, with logo

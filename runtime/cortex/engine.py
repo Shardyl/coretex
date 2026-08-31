@@ -1685,6 +1685,15 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
         if action == "schedule":
             info["date"] = _next_newsletter_slot(company["id"]).strftime("%-d %b %Y")
         return info
+    if task["kind"] in EMAIL_RENDER_KINDS:
+        # A recipient-less email card must never look approvable. Card 398 was composed through the
+        # generic task path (no inquiry block), so it sat in the Inbox with an empty To and the reply
+        # fallback subject 'Re: your enquiry' (31 Aug 2026).
+        _to = ((task.get("request") or {}).get("inquiry") or {}).get("email") or ""
+        if "@" not in _to:
+            return {"ok": False, "blocked": True,
+                    "error": "this card has NO recipient — tell me who it goes to and I'll set it, "
+                             "nothing can send until then"}
     gate = _biometric_gate(task["kind"] in _APPROVE_PUBLIC, stepup_token,
                            money=(kind_class(task["kind"]) == "money"))
     if gate:
