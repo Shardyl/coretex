@@ -1539,6 +1539,12 @@ def _prebook_meeting(task: dict) -> dict | None:
         return None
 
 
+# A draft that states a clock time is the only one worth asking about. (Deleted by mistake in the
+# 29 Aug rebuild while its only use stayed - _maybe_extract_meeting then raised NameError into a bare
+# except, so NO meeting was booked from any card between 29 and 31 Aug 2026.)
+_TIME_HINT = re.compile(r"\d{1,2}(:\d{2})?\s*(am|pm)|\d{1,2}:\d{2}", re.I)
+
+
 def _maybe_extract_meeting(task: dict, draft: str) -> None:
     """When a reply draft CONFIRMS one specific meeting slot with the client, stamp request.meeting so
     the approval that sends the email ALSO books the calendar event + Google Meet (link appended to the
@@ -1549,16 +1555,30 @@ def _maybe_extract_meeting(task: dict, draft: str) -> None:
             return
         out = provider.think_json(
             worker._now_line() + " Does this email CONFIRM a specific meeting day and time with the "
-            "recipient (agreed, not merely proposing options)? Return JSON {\"confirmed\": true|false, "
-            "\"start_iso\": \"YYYY-MM-DDTHH:MM\" in Dubai local time for the confirmed slot, "
+            "recipient (agreed, not merely proposing options)? Report the time EXACTLY AS WRITTEN and "
+            "name its timezone - never convert it yourself. Return JSON {\"confirmed\": true|false, "
+            "\"start_local\": \"YYYY-MM-DDTHH:MM\" as stated in the email, "
+            "\"tz\": \"<IANA zone for the timezone the email states, e.g. Europe/Amsterdam, "
+            "America/New_York, Asia/Dubai; use Asia/Dubai ONLY if no other timezone is stated>\", "
             "\"minutes\": 30, \"summary\": \"short meeting title naming the counterpart\"} — "
             "confirmed:false unless ONE exact slot is clearly agreed in the text.",
             (draft or "")[:1500], model=provider.MODEL_ROUTER, purpose="meeting-extract",
             company=(store.get_company(task["company_id"]) or {}).get("slug"))
-        if not (isinstance(out, dict) and out.get("confirmed") and out.get("start_iso")):
+        if not (isinstance(out, dict) and out.get("confirmed")
+                and (out.get("start_local") or out.get("start_iso"))):
             return
-        s = str(out["start_iso"])
-        dt = datetime.fromisoformat(s if ("+" in s or s.endswith("Z")) else s + "+04:00")
+        s = str(out.get("start_local") or out.get("start_iso"))
+        # CODE converts the timezone (never the model): '11am Amsterdam' is 13:00 in Dubai, and a
+        # two-hour error books the client into the wrong slot.
+        if "+" in s or s.endswith("Z"):
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        else:
+            _tz = str(out.get("tz") or "Asia/Dubai").strip() or "Asia/Dubai"
+            try:
+                from zoneinfo import ZoneInfo
+                dt = datetime.fromisoformat(s).replace(tzinfo=ZoneInfo(_tz))
+            except Exception:  # noqa: BLE001 — unknown zone: fall back to Dubai local
+                dt = datetime.fromisoformat(s + "+04:00")
         if dt < datetime.now(timezone.utc) or dt > datetime.now(timezone.utc) + timedelta(days=180):
             return                                     # implausible stamp -> no booking, never a wrong one
         # the SAME slot with the SAME contact may already be booked from an earlier card — reuse that
