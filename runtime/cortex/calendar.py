@@ -164,6 +164,7 @@ def add_attendee(company: str, event_id: str, attendee: str, calendar_id: str = 
 
 WORK_START, WORK_END = 9, 18          # GST working window used when nothing narrower is asked for
 PREFER_START, PREFER_END = 10, 14     # owner's preferred calling window (GST): 10am-2pm
+CLIENT_START, CLIENT_END = 9, 18      # the slot must also be a sane hour where the CLIENT sits
 SLOT_MINUTES = 30
 
 
@@ -228,6 +229,12 @@ def free_slots(days: int = 10, minutes: int = 30, tz: str = "Asia/Dubai",
                 adjacent = any(abs((e - cur).total_seconds()) <= 300
                                or abs((fin - s).total_seconds()) <= 300
                                for s, e in busy)
+                # CIVILISED FOR THEM TOO: 09:00 Dubai is 07:00 Amsterdam. A slot must sit inside the
+                # working day at BOTH ends, or we propose times no client would take.
+                their = cur.astimezone(zone)
+                if not (CLIENT_START <= their.hour < CLIENT_END):
+                    cur += timedelta(minutes=SLOT_MINUTES)
+                    continue
                 preferred = PREFER_START <= cur.hour < PREFER_END
                 cand.append((0 if adjacent else 1, 0 if preferred else 1, cur))
         cur += timedelta(minutes=SLOT_MINUTES)
