@@ -333,6 +333,10 @@ def _email_envelope(task: dict, company: dict) -> dict:
     except Exception:  # noqa: BLE001
         _nc = []
     drop = {e.lower() for e in (req.get("cc_remove") or [])}
+    # NEVER-COPY (company profile 'never_cc'): addresses the owner has ruled off every email, whatever
+    # the source - team roster, thread participants, or an inherited cc. Sensa: hello@ is the catch-all
+    # for first enquiries only and is never copied (owner, 31 Aug 2026).
+    drop |= {str(v).strip().lower() for v in (data.get("never_cc") or []) if isinstance(v, str)}
     drop.add((inq.get("email") or "").lower())            # To-recipient in cc = duplicate mail, always deduped
     if from_addr:
         drop.add(from_addr.lower())   # the SENDER is never cc'd on their own email (team-copy rule:
