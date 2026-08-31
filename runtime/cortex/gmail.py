@@ -112,6 +112,9 @@ def _parse(msg: dict) -> dict:
             "message": _message_after(body), "snippet": msg.get("snippet", "")}
 
 
+_MAX_TO = 3          # a single send may address a named handful, never a list
+
+
 def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
                  cc: str | None = None, html: str | None = None,
                  inline_images: list | None = None, bcc: str | None = None,
@@ -129,12 +132,19 @@ def send_message(to: str, subject: str, body: str, from_addr: str | None = None,
     # This is the ONLY single-email send path in the system (bulk goes through Mailgun). Enforce that the
     # primary recipient is EXACTLY ONE address — a comma-joined `to` (multiple recipients) is refused outright,
     # so nothing here can ever fan out to more than the one addressee shown in the draft envelope.
-    if "," in (to or ""):
-        raise ValueError(f"refusing to send: single-send accepts one recipient only, got {to!r}")
-    primary = (to or "").strip().strip("<>")
-    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", primary):
-        raise ValueError(f"refusing to send: invalid recipient {to!r}")
-    if from_addr and primary.lower() == from_addr.split("<")[-1].strip(" <>").lower():
+    # A named, VISIBLE handful is allowed (owner, 31 Aug 2026: "address it to Tim and Shehryar") - the
+    # guard exists to stop a draft fanning out to a list, not to stop two people being addressed. Every
+    # address must be a real one shown on the card, and the cap stays hard.
+    recips = [a.strip().strip("<>") for a in (to or "").split(",") if a.strip()]
+    if not recips:
+        raise ValueError(f"refusing to send: no recipient, got {to!r}")
+    if len(recips) > _MAX_TO:
+        raise ValueError(f"refusing to send: at most {_MAX_TO} addressees on a single send, got {to!r}")
+    for _r in recips:
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", _r):
+            raise ValueError(f"refusing to send: invalid recipient {_r!r}")
+    primary = recips[0]
+    if from_addr and any(r.lower() == from_addr.split("<")[-1].strip(" <>").lower() for r in recips):
         raise ValueError("refusing to send: recipient equals sender (loop)")
     # SAFETY INVARIANT: an email containing placeholder text must never reach a client, whoever approved it.
     ph = (re.search(r"\[[A-Z][A-Z /_-]{2,}\]|\bXXX+\b", body or "")

@@ -364,7 +364,15 @@ def _email_envelope(task: dict, company: dict) -> dict:
     sender_sig = (data.get("signatures") or {}).get((from_addr or "").lower()) or {}
     sig_plain = (sender_sig.get("signature") or data.get("signature") or "").strip()
     sig_html = (sender_sig.get("signature_html") or data.get("signature_html") or "").strip()
-    return {"to": inq.get("email") or "", "to_name": inq.get("name") or "", "from": from_addr,
+    # ADDITIONAL ADDRESSEES the owner named ("address it to Tim and Shehryar"): they belong on the To
+    # line, not quietly on cc. Deduped, never the sender, and capped by the send guard.
+    _to = [(inq.get("email") or "").strip()]
+    for _x in (req.get("to_extra") or []):
+        _x = str(_x).strip()
+        if "@" in _x and _x.lower() not in {a.lower() for a in _to} and _x.lower() != (from_addr or "").lower():
+            _to.append(_x)
+    cc_list = [e for e in cc_list if e.lower() not in {a.lower() for a in _to}]
+    return {"to": ", ".join([a for a in _to if a]), "to_name": inq.get("name") or "", "from": from_addr,
             "cc": cc or None, "bcc": bcc or None,
             # never "Re: Re:" — a thread continuation keeps the subject verbatim so Gmail chains it
             "subject": subj if (outbound or subj.lower().startswith(("re:", "fwd:", "fw:"))) else ("Re: " + subj),
@@ -1365,6 +1373,7 @@ def _understand_correction(task: dict, text: str) -> dict:
             '{"no_reply": true only if he says NO email should be sent at all (dismiss it), '
             '"reply_instruction": "<everything that concerns the email reply content itself>", '
             f'"from": "<first name of a new sender if he asks to change who it is sent from; known team: {roster}>", '
+            '"to_add": ["<first names/emails he wants ADDRESSED directly, i.e. on the To line>"], '
             '"cc_add": ["<first names to add on cc>"], '
             '"cc_remove": ["<first names or exact emails to drop from cc>"], '
             '"attach_documents": ["<standing company documents he asks to attach, e.g. trade licence>"], '
@@ -1397,6 +1406,20 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
         req["from_email"], req["mailbox_rt"] = senders[frm]["email"], senders[frm]["rt_key"]
         if req.get("thread"):
             req["thread"] = {**req["thread"], "id": ""}
+        changed = True
+    tos = []
+    for c in (u.get("to_add") or []):
+        c = str(c).strip()
+        if "@" in c:
+            tos.append(c)
+        else:   # a first name: match it against the people already on this email
+            for pool in ((req.get("cc_extra") or []), (req.get("thread_cc") or [])):
+                for a in pool:
+                    if c.lower() and c.lower() in str(a).lower().split("@")[0].replace(".", " "):
+                        tos.append(str(a))
+    if tos:
+        req["to_extra"] = sorted(set((req.get("to_extra") or []) + tos))
+        req["cc_extra"] = [e for e in (req.get("cc_extra") or []) if e not in req["to_extra"]]
         changed = True
     adds = [senders[c.strip().lower()]["email"] for c in (u.get("cc_add") or [])
             if isinstance(c, str) and c.strip().lower() in senders]
@@ -2695,6 +2718,8 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
     # the recipients and the people in copy stay right").
     if not email or (req.get("thread") or {}).get("id"):
         return
+    if req.get("new_thread"):
+        return          # the owner deliberately wants a FRESH conversation, not a continuation
     # A LIVE CONVERSATION is itself the work context: writing to someone we are mid-thread with must
     # continue that thread even when the card carries no deal (card 414 was composed in Talk, so it
     # would have opened a new conversation with a fake 'RE:' subject - owner, 31 Aug 2026). A genuinely
