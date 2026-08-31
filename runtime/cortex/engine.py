@@ -1485,6 +1485,28 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
     return task, (reply if (reply and (created or changed)) else text)
 
 
+_TZ_BY_TLD = {"ae": "Asia/Dubai", "sa": "Asia/Riyadh", "uk": "Europe/London", "nl": "Europe/Amsterdam",
+              "de": "Europe/Berlin", "fr": "Europe/Paris", "es": "Europe/Madrid", "it": "Europe/Rome",
+              "pl": "Europe/Warsaw", "pt": "Europe/Lisbon", "ch": "Europe/Zurich", "se": "Europe/Stockholm",
+              "in": "Asia/Kolkata", "sg": "Asia/Singapore", "au": "Australia/Sydney", "jp": "Asia/Tokyo",
+              "cn": "Asia/Shanghai", "za": "Africa/Johannesburg", "ca": "America/Toronto",
+              "br": "America/Sao_Paulo", "qa": "Asia/Qatar", "kw": "Asia/Kuwait", "bh": "Asia/Bahrain",
+              "om": "Asia/Muscat", "eg": "Africa/Cairo", "tr": "Europe/Istanbul"}
+
+
+def _tz_for_email(email: str) -> str:
+    """A reasonable timezone for a contact from their domain - the country TLD is a decent signal and
+    costs nothing. Defaults to Dubai; a stated timezone in the thread always wins over this."""
+    dom = (email or "").split("@")[-1].lower()
+    tld = dom.rsplit(".", 1)[-1] if "." in dom else ""
+    if tld in _TZ_BY_TLD:
+        return _TZ_BY_TLD[tld]
+    for part in dom.split("."):
+        if part in _TZ_BY_TLD:
+            return _TZ_BY_TLD[part]
+    return "Asia/Dubai"
+
+
 def _thread_participants(msg: dict, to_email: str) -> list:
     """The OTHER people already on this email thread (their side + any third parties), so continuing a
     conversation keeps everyone who was on it. Our own team is excluded here - the company's always_cc
@@ -2822,6 +2844,16 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
         if notes:
             req["owner_feedback"] = "\n".join("- " + n["note"][:250] for n in notes)
             manifest.append("owner_feedback")
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # REAL AVAILABILITY: what we can actually offer, in the recipient's timezone. Code computes
+        # it from the merged calendars; the drafter may only pick from this list (owner, 31 Aug 2026).
+        from . import calendar as _gcal
+        _tz = (req.get("client_tz") or "").strip() or _tz_for_email(email)
+        _av = _gcal.availability_block(tz=_tz)
+        if _av:
+            req["availability"] = _av
+            manifest.append("availability")
     except Exception:  # noqa: BLE001
         pass
     try:   # the media library — REAL portfolio links, so 'share sample work' can never be invented

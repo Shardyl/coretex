@@ -272,6 +272,11 @@ def draft(skill: dict, company: dict, request: dict,
                     "categories genuinely fit this client, and copy each link EXACTLY as written. If "
                     "nothing fits, share none and offer to send samples instead. NEVER write, guess or "
                     "adapt any other portfolio/library/media URL.\n" + _ml[:4000])
+    _av = (request.get("availability") or "").strip() if isinstance(request, dict) else ""
+    if _av:
+        user.append(_av + "\nIf you propose a call, offer times ONLY from that list and state them "
+                    "the recipient's timezone. If none of them suit the conversation, ask them to "
+                    "suggest a time instead - never invent one.")
     _mn = (request.get("meeting_notes") or "").strip() if isinstance(request, dict) else ""
     if _mn:
         user.append("NOTES FROM OUR LAST MEETING with this contact (distilled from the real meeting notes — "
