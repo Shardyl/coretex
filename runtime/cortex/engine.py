@@ -753,6 +753,8 @@ def _run_task(task: dict) -> None:
         verdict = manager.check(skill, company, draft, dreq)
 
     task = store.update_task(task["id"], draft=draft, manager=verdict, attempts=task["attempts"] + 1)
+    if _maybe_no_reply(task, draft, skill):   # the drafter judged that NO reply should go out
+        return
     _maybe_extract_meeting(task, draft)   # a confirmed slot in the draft -> calendar+Meet booked on approval
 
     # Earned autonomy + escalation valve: even on an auto lane, the Manager's verdict must be a clean,
@@ -1561,6 +1563,30 @@ def _prebook_meeting(task: dict) -> dict | None:
 # 29 Aug rebuild while its only use stayed - _maybe_extract_meeting then raised NameError into a bare
 # except, so NO meeting was booked from any card between 29 and 31 Aug 2026.)
 _TIME_HINT = re.compile(r"\b\d{1,2}(:\d{2})?\s*(am|pm)\b|\b\d{1,2}:\d{2}\b", re.I)
+
+
+_NO_REPLY_RX = re.compile(r"^\s*(recommendation\s*:\s*skip|no\s+reply(\s+needed)?\s*:|do\s+not\s+reply\s*:)", re.I)
+
+
+def _maybe_no_reply(task: dict, draft: str, skill: dict) -> bool:
+    """The drafter is allowed to conclude that NO reply should be sent (an out-of-scope tender, a
+    circular, a supplier blast). That conclusion is a DECISION, not an email - leaving it in the draft
+    body left a 'RECOMMENDATION: skip...' text sitting on a sendable card addressed to Dubai Police
+    (card 408, 31 Aug 2026). Close the card and tell the owner why instead."""
+    try:
+        if task.get("kind") not in ("email_reply", "email_draft") or not _NO_REPLY_RX.search(draft or ""):
+            return False
+        reason = re.sub(r"^\s*[^:]{0,40}:\s*", "", (draft or "").strip(), count=1).strip()
+        store.update_task(task["id"], status="rejected", draft=draft)
+        store.log_decision(task["id"], skill["id"], "cortex", "no_reply_recommended", note=reason[:400])
+        to = ((task.get("request") or {}).get("inquiry") or {}).get("email") or "the sender"
+        notifications.notify(
+            f"No reply drafted to {to} - {reason[:300]}", "Nothing to reply to", priority="normal",
+            category="crm", company_id=task.get("company_id"),
+            target_type="task", target_id=str(task["id"]))
+        return True
+    except Exception:  # noqa: BLE001 - never lose the card on a bookkeeping hiccup
+        return False
 
 
 def _maybe_extract_meeting(task: dict, draft: str) -> None:
