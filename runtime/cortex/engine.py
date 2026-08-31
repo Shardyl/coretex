@@ -565,7 +565,14 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     if mt and not mt.get("event_id"):   # confirmed slot -> the event + Meet room must exist (still guest-less)
         from . import calendar as gcal
         _slug = (company or {}).get("slug") or ""
-        cal_co = mt.get("calendar") or (_slug if db.setting_get(f"calendar_refresh_token:{_slug}") else "sensa")
+        cal_co = mt.get("calendar") or _slug
+        if not db.setting_get(f"calendar_refresh_token:{cal_co}"):
+            # same guard at SEND: never book one brand's client onto another brand's calendar
+            store.update_task(task["id"], status="awaiting_approval")
+            return {"blocked": True,
+                    "error": f"{(company or {}).get('name')} has no calendar connected — the email "
+                             "promises a meeting we cannot book. Nothing was sent. Connect a calendar "
+                             "for this company, or tell me which calendar to use."}
         try:
             ev = gcal.create_event(cal_co, start=datetime.fromisoformat(mt["start"]),
                                    minutes=int(mt.get("minutes") or 30),
@@ -1527,7 +1534,18 @@ def _prebook_meeting(task: dict) -> dict | None:
         from . import calendar as gcal
         co = store.get_company(task["company_id"]) or {}
         slug = co.get("slug") or ""
-        cal_co = slug if db.setting_get(f"calendar_refresh_token:{slug}") else "sensa"
+        # CROSS-BRAND GUARD: a company with no calendar of its own must NOT be booked onto another
+        # brand's. A Tabscanner client would have received a Sensa Productions invite from
+        # hello@sensa.digital with a Sensa Meet link (owner caught this on card 407, 31 Aug 2026).
+        if not db.setting_get(f"calendar_refresh_token:{slug}"):
+            notifications.notify(
+                f"{co.get('name')} has no calendar connected, so the meeting on card #{task['id']} was "
+                "NOT booked and the email carries no link. Connect a calendar for this company (or say "
+                "which calendar it should use) and approve again.",
+                "Meeting not booked - no calendar", priority="high", category="reminder",
+                company_id=task["company_id"], target_type="task", target_id=str(task["id"]))
+            return None
+        cal_co = slug
         ev = gcal.create_event(cal_co, start=datetime.fromisoformat(mt["start"]),
                                minutes=int(mt.get("minutes") or 30),
                                summary=mt.get("summary") or "Call",
