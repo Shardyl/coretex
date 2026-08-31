@@ -164,6 +164,13 @@ never-pressure follow-ups on `sales-followup`). Every worker draft and manager c
 `worker._now_line()` — the code-stamped current date/time in GST — and the universal
 `sales-scheduling` rule anchors proposed call days to it (no "Monday or Wednesday" on a Tuesday).
 Sensa-wide: no booking/calendar links to clients (email-handling rule); times are proposed in words.
+DOCUMENTS: Drive is the SOURCE OF TRUTH. The library indexes both `<COMPANY> CORTEX/Documents/` and the
+per-client folders under the profile's `clients_drive_folder` (where the quotation generator files its
+work); the box copy under /opt/cortex-knowledge/documents is a CACHE and an outage fallback. Sends fetch
+the current file from Drive, a deal-linked card may only attach that project's documents
+(`documents.find(..., scope=<deal title>)`), and every attachment carries a Drive checksum PIN: if the
+canonical file changed, moved or was deleted between approval and send, the send STOPS (31 Aug 2026 -
+'attach the accompanying quotation' had matched another client's file).
 Every email draft is also served a `media_library` shelf (top-rated live `media_assets` with their real
 watch_urls) — sample-work links come ONLY from it; `engine._ensure_real_links` redrafts any email whose
 URLs aren't in the served context, and the manager receives the same computed URL allowlist plus a
