@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from . import db
 from .schedule import _GST
 
 _CLIENT = "/etc/cortex/google_oauth_client_{slug}.json"
