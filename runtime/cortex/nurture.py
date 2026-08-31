@@ -80,12 +80,28 @@ def resume(row_id: int) -> dict | None:
                       (row_id,))
 
 
-def _best_contact(account_id: int) -> dict | None:
-    """The account's best current person: most recently updated contact with an email."""
+def _named(email: str) -> dict | None:
+    """The person the owner actually named on the nurture row. Their name must come from THIS record,
+    not from whoever the account touched last - Tatweer's most recent contact is their finance inbox,
+    so a touch meant for Noor was addressed to '.' (31 Aug 2026)."""
+    if not (email or "").strip():
+        return None
+    return db.one("select first_name, last_name, email from crm_master where lower(email)=lower(%s) "
+                  "limit 1", (email.strip(),))
+
+
+def _best_contact(account_id: int, slug: str = "") -> dict | None:
+    """The account's best current person: the most recently updated contact with an email who has NOT
+    opted out of this company's marketing.
+
+    `do_not_market` is a jsonb ARRAY of company slugs, not a boolean - comparing it to false raised
+    every time, and the sweep's catch-all swallowed it, so NO nurture touch could ever fire (found
+    31 Aug 2026, before the first touches were due)."""
     return db.one(
         "select first_name, last_name, email from crm_master where account_id=%s and "
-        "coalesce(email,'')<>'' and coalesce(do_not_market,false) is not true "
-        "order by updated_at desc nulls last limit 1", (account_id,))
+        "coalesce(email,'')<>'' and not coalesce(do_not_market, '[]'::jsonb) @> %s::jsonb "
+        "order by updated_at desc nulls last limit 1",
+        (account_id, f'["{slug}"]' if slug else '["__none__"]'))
 
 
 def _history_block(account_id: int, company_id: int) -> str:
@@ -113,7 +129,9 @@ def sweep() -> dict:
                 held.append(n["id"])
                 continue
             acc = db.one("select name from crm_accounts where id=%s", (n["account_id"],))
-            email = (n.get("contact_email") or "").strip() or ((_best_contact(n["account_id"]) or {}).get("email"))
+            _slug = (store.get_company(n["company_id"]) or {}).get("slug") or ""
+            email = ((n.get("contact_email") or "").strip()
+                     or ((_best_contact(n["account_id"], _slug) or {}).get("email")))
             # advance the clock FIRST (reminder doctrine: a failure must never refire every tick)
             db.execute("update nurture_accounts set next_touch = now() + (cadence_days || ' days')::interval, "
                        "last_touch = now() where id=%s", (n["id"],))
@@ -129,7 +147,7 @@ def sweep() -> dict:
                 # emailed. Cortex does not send WhatsApp - it hands Rashad the nudge and a suggested
                 # opening line, and he sends it himself.
                 from . import notifications, provider
-                _c = _best_contact(n["account_id"]) or {}
+                _c = _named(n.get("contact_email")) or _best_contact(n["account_id"], _slug) or {}
                 _who = " ".join(x for x in (_c.get("first_name"), _c.get("last_name")) if x)                     or (acc or {}).get("name") or "them"
                 line = None
                 try:
@@ -152,7 +170,7 @@ def sweep() -> dict:
                 continue
             sk = store.get_skill_by_key(n["company_id"], "sales-followup") \
                 or store.get_skill_by_key(n["company_id"], "sales-first-response")
-            c = _best_contact(n["account_id"]) or {}
+            c = _named(n.get("contact_email")) or _best_contact(n["account_id"], _slug) or {}
             name = " ".join(x for x in (c.get("first_name"), c.get("last_name")) if x) if c.get("email") == email else ""
             t = store.create_card(n["company_id"], sk["id"], "email_reply", {
                 "brief": (f"NURTURE touch for {(acc or {}).get('name')} - a past client we are keeping warm "
