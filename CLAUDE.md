@@ -205,6 +205,12 @@ never-pressure follow-ups on `sales-followup`). Every worker draft and manager c
 `worker._now_line()` — the code-stamped current date/time in GST — and the universal
 `sales-scheduling` rule anchors proposed call days to it (no "Monday or Wednesday" on a Tuesday).
 Sensa-wide: no booking/calendar links to clients (email-handling rule); times are proposed in words.
+AVAILABILITY is merged, not guessed: setting `availability_calendars` lists every calendar that owns
+Rashad's time (his Tabscanner calendar, his personal WORK calendar shared in as FREE/BUSY ONLY, and the
+Sensa Main Calender), each queried with its own company token. `calendar.free_slots()` turns that into
+real openings - bunched next to existing meetings, preferring 10:00-14:00 GST, inside working hours at
+BOTH ends (09:00 Dubai is 07:00 Amsterdam), weekends and short-notice excluded. The assembler serves it
+as the `availability` shelf and the drafter may ONLY offer times from that list (31 Aug 2026).
 CALENDARS are per company: `calendar_refresh_token:<slug>` + `calendar_id:<slug>` (sensa = the Main
 Calender on hello@; tabscanner = rashad@tabscanner.com's primary, added 31 Aug 2026). A company with
 NO calendar is never booked onto another brand's - the pre-book and the send both stop and say so.
