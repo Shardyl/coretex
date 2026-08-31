@@ -14,11 +14,14 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import html
 import json
 import os
 import re
 import secrets
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 import websockets
@@ -30,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Json
 from pydantic import BaseModel
 
-from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, documents, engine, fitness, gmail, knowledge, nurture, pipeline,
+from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, documents, engine, fitness, gmail, knowledge, meetingprep, nurture, pipeline,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
                skillqa, social, social_comments, social_config, social_connect, social_dm, social_warm, store, webauthn_auth, whatsapp,
                worker)
@@ -4146,6 +4149,71 @@ def fitness_scan(body: FitnessScan, _: None = Depends(auth)) -> dict:
 @app.get("/api/fitness/summary")
 def fitness_summary(_: None = Depends(auth)) -> dict:
     return fitness.summary()
+
+
+# ---- the standalone pre-meeting brief page (coretex.uk/brief/<id>?k=...) ----
+#
+# A brief has to be readable in the ten seconds before a meeting, from a phone, without opening the
+# cockpit. The bearer token lives in a header and a link from a calendar or a notification cannot send
+# one, so the page carries its own unguessable signed key instead. The key is per-brief and derived
+# from the API secret, so it cannot be guessed from the task id and grants nothing else.
+
+@app.get("/brief/{tid}", response_class=HTMLResponse)
+def brief_page(tid: int, k: str = "") -> HTMLResponse:
+    if not hmac.compare_digest(k or "", meetingprep.brief_key(tid)):
+        raise HTTPException(status_code=404, detail="not found")
+    t = db.one("select id, title, request, draft, created_at from tasks where id=%s and "
+               "kind='meeting_brief'", (int(tid),))
+    if not t:
+        raise HTTPException(status_code=404, detail="not found")
+    req = t.get("request") or {}
+    m = req.get("meeting") or {}
+    body = html.escape(req.get("brief") or t.get("draft") or "")
+    heads = ("THE MEETING", "THE COMPANY", "WHY WE ARE MEETING", "WHERE WE STAND",
+             "WHAT THEIR ASK LIKELY MEANS", "SCOPING QUESTIONS", "WARM OPENERS", "DO NOT RAISE",
+             "OUR RELEVANT WORK", "SOURCES")
+    out = []
+    for line in body.split(chr(10)):
+        bare = line.replace("#", "").replace("*", "").strip().rstrip(":").upper()
+        if bare in heads:
+            out.append(f'<h2>{html.escape(bare.title())}</h2>')
+        elif line.strip().startswith("http"):
+            u = line.strip()
+            out.append(f'<p class="src"><a href="{u}" target="_blank" rel="noopener">{u}</a></p>')
+        elif line.strip():
+            out.append(f"<p>{line}</p>")
+    when = ""
+    try:
+        if m.get("start"):
+            when = datetime.fromisoformat(m["start"]).astimezone(
+                ZoneInfo("Asia/Dubai")).strftime("%A %d %B, %H:%M") + " Dubai"
+    except Exception:  # noqa: BLE001
+        pass
+    who = ", ".join(a.get("name") or a.get("email", "") for a in (m.get("attendees") or []))
+    join = (f'<a class="join" href="{html.escape(m["hangout"])}">Join the meeting</a>'
+            if m.get("hangout") else "")
+    return HTMLResponse(f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>{html.escape(m.get('title') or t.get('title') or 'Meeting brief')}</title><style>
+:root{{color-scheme:dark}}
+body{{margin:0;background:#0d1117;color:#e6edf3;font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:22px 18px 60px}}
+main{{max-width:680px;margin:0 auto}}
+h1{{font-size:20px;margin:0 0 4px;letter-spacing:-.01em}}
+.sub{{color:#8b949e;font-size:13px;margin:0 0 18px}}
+h2{{font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:#58a6ff;margin:24px 0 6px;font-weight:650}}
+p{{margin:0 0 7px}}
+.src a{{color:#58a6ff;word-break:break-all;font-size:12.5px}}
+.join{{display:inline-block;margin:6px 0 2px;padding:9px 16px;background:#1f6feb;color:#fff;
+border-radius:8px;text-decoration:none;font-weight:600;font-size:14px}}
+footer{{margin-top:34px;color:#6e7681;font-size:11.5px;border-top:1px solid #21262d;padding-top:12px}}
+</style></head><body><main>
+<h1>{html.escape(m.get('title') or t.get('title') or 'Meeting brief')}</h1>
+<p class="sub">{html.escape(when)}{' &middot; ' + html.escape(who) if who else ''}</p>
+{join}
+{''.join(out)}
+<footer>Cortex pre-meeting brief &middot; card #{t['id']} &middot; private, do not forward</footer>
+</main></body></html>""")
 
 
 # ---- public static assets (e.g. email-signature logos referenced by URL in sent mail) ----

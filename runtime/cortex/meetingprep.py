@@ -22,19 +22,25 @@ skill craft, which Rashad edits.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import re
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from psycopg.types.json import Json
 
 from . import calendar as gcal
-from . import crm, db, notifications, provider
+from . import config, crm, db, notifications, provider
 
 # The brief names its model OUTRIGHT. The 'opus' tier is not trustworthy here: /etc/cortex/cortex.env
 # pins CORTEX_MODEL, so a skill marked 'opus' has silently been resolving to whatever that pin says.
 # Rashad approved Opus 5 for this job specifically (31 Aug 2026), so this job asks for it by name.
 BRIEF_MODEL = "claude-opus-5"
+
+PREP_BLOCK_MINUTES = 15  # the private prep slot dropped in front of the meeting, carrying the link
 
 LEAD_HOURS = 24          # brief lands a day before the meeting, so the research is still fresh
 LOOKAHEAD_HOURS = 30     # how far ahead we read the calendar
@@ -111,6 +117,30 @@ horizontal rules, no prepared-on or confidential line, no bold or markdown decor
 their own line in plain capitals exactly as written above. The cockpit styles them. Under each
 heading, short plain lines. 500 words for the whole brief. If you are running long, cut the
 commentary, never the questions."""
+
+
+# ---- the signed link to the standalone brief page (coretex.uk/brief/<id>?k=...) ----
+#
+# Lives here rather than in api.py so the ENGINE can build a link without importing the web app.
+# Same secret the API session tokens use, so the key is unguessable and grants nothing but this brief.
+PUBLIC_BASE = (config.get("CORTEX_PUBLIC_BASE") or "https://coretex.uk").rstrip("/")
+
+
+def _secret() -> bytes:
+    s = db.setting_get("api_secret")
+    if not s:
+        s = secrets.token_hex(32)
+        db.setting_set("api_secret", s)
+    return s.encode()
+
+
+def brief_key(tid: int) -> str:
+    sig = hmac.new(_secret(), f"brief:{int(tid)}".encode(), hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(sig).decode().rstrip("=")[:32]
+
+
+def brief_url(tid: int) -> str:
+    return f"{PUBLIC_BASE}/brief/{int(tid)}?k={brief_key(tid)}"
 
 
 def ensure_schema() -> None:
@@ -350,11 +380,51 @@ def brief_for(event: dict, *, dry_run: bool = False) -> dict:
                "on conflict (event_id) do update set task_id=excluded.task_id",
                (event.get("event_id"), company["id"], event.get("company"), event.get("title"),
                 event["starts_at"], json.dumps(guests), deal_id, task["id"]))
+    # The brief has to be reachable without opening the cockpit, so it gets its own signed page.
+    link = ""
+    try:
+        link = brief_url(task["id"])
+    except Exception:  # noqa: BLE001 — the card still works without a link
+        pass
+
+    # A PRIVATE PREP BLOCK, never the shared invite. Writing the link into the meeting event itself
+    # would publish our own intelligence to every attendee, the client included: an invite description
+    # is visible to all guests. So the link goes on a 15-minute block that belongs to Rashad alone,
+    # sitting just before the meeting, which also puts the prep time in his day.
+    prep_id = ""
+    if link:
+        try:
+            prep = gcal.create_event(
+                event.get("company") or "sensa",
+                calendar_id=event.get("calendar_id") or "primary",
+                start=event["starts_at"] - timedelta(minutes=PREP_BLOCK_MINUTES),
+                minutes=PREP_BLOCK_MINUTES,
+                summary=f"Prep: {event.get('title') or who}",
+                description="Cortex pre-meeting brief:" + chr(10) + link + chr(10) + chr(10)
+                            + "Private. Do not forward.")
+            prep_id = prep.get("id") or ""
+        except Exception:  # noqa: BLE001
+            pass
+
+    if deal_id and link:
+        try:
+            from . import pipeline
+            pipeline.log_deal(int(deal_id), "brief",
+                              f"Pre-meeting brief written for {when.strftime('%a %d %b %H:%M')}: {link}")
+        except Exception:  # noqa: BLE001
+            pass
+
+    if link or prep_id:
+        db.execute("update tasks set request = request || %s::jsonb where id=%s",
+                   (Json({"brief_url": link, "prep_event_id": prep_id}), task["id"]))
+
     notifications.notify(
-        title, f"{who}, {when.strftime('%A %H:%M')}. Brief ready to read.",
+        title, f"{who}, {when.strftime('%A %H:%M')}. Read it: {link}" if link
+        else f"{who}, {when.strftime('%A %H:%M')}. Brief ready to read.",
         priority="normal", category="brief", company_id=company["id"],
         target_type="task", target_id=task["id"])
-    return {"task_id": task["id"], "company": company.get("slug"), "deal_id": deal_id}
+    return {"task_id": task["id"], "company": company.get("slug"), "deal_id": deal_id,
+            "url": link, "prep_event": prep_id}
 
 
 _last_run = [0.0]
