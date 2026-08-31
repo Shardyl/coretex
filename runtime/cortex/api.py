@@ -2664,7 +2664,7 @@ def task_attach(task_id: int, body: TaskAttach, u: dict = Depends(current_user))
         raise HTTPException(status_code=400, detail="pass doc_id, or name + data")
     req = dict(t.get("request") or {})
     refs = [r for r in (req.get("attach_docs") or []) if int(r.get("id", 0)) != d["id"]]
-    refs.append({"id": d["id"], "filename": d["filename"], "mime": d["mime"], "size": d["size"]})
+    refs.append(documents.card_ref(d))
     req["attach_docs"] = refs
     store.update_task(task_id, request=req)
     engine.reconcile_attachments(task_id)   # draft wording follows reality ('attached' vs 'we will send')
@@ -3448,7 +3448,7 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
                 hits = documents.find(co["id"], str(q))
                 if hits:
                     d = hits[0]
-                    refs.append({"id": d["id"], "filename": d["filename"], "mime": d["mime"], "size": d["size"]})
+                    refs.append(documents.card_ref(d))
                 else:
                     missing.append(str(q))
             if refs:

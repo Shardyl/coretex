@@ -34,6 +34,9 @@ create table if not exists company_documents (
 );
 create index if not exists idx_company_documents_company on company_documents(company_id);
 alter table company_documents add column if not exists drive_id text;   -- canonical Drive file id
+alter table company_documents add column if not exists drive_md5 text;  -- Drive's checksum when cached
+alter table company_documents add column if not exists client text;     -- the client folder it lives in
+alter table company_documents add column if not exists verified_at timestamptz;
 """
 
 
@@ -134,8 +137,57 @@ def get(doc_id: int, company_id: int | None = None) -> dict | None:
 
 
 def read_bytes(doc: dict) -> bytes:
+    """The document's bytes for a send. DRIVE IS THE SOURCE OF TRUTH: when the row has a drive_id we
+    fetch the CURRENT file, so what goes out is what the folder holds now. The box copy is a cache and
+    a fallback for a Drive outage - a send must never fail because Drive blinked (owner, 31 Aug)."""
+    if doc.get("drive_id"):
+        try:
+            from . import drive
+            data = drive.download(doc["drive_id"])
+            try:    # refresh the cache so an outage still has something current to fall back on
+                with open(doc["path"], "wb") as fh:
+                    fh.write(data)
+                db.execute("update company_documents set sha256=%s, size=%s, verified_at=now() "
+                           "where id=%s", (hashlib.sha256(data).hexdigest(), len(data), doc["id"]))
+            except Exception:  # noqa: BLE001
+                pass
+            return data
+        except Exception:  # noqa: BLE001 - fall through to the cached copy
+            pass
     with open(doc["path"], "rb") as f:
         return f.read()
+
+
+def card_ref(doc: dict) -> dict:
+    """The reference put on a card's attach_docs, carrying the Drive checksum PIN so the send can tell
+    whether the canonical file changed after the owner approved it."""
+    st = drive_state(doc) or {}
+    return {"id": doc["id"], "filename": doc["filename"], "mime": doc["mime"], "size": doc["size"],
+            **({"pin_md5": st["md5"]} if st.get("md5") else {})}
+
+
+def drive_state(doc: dict) -> dict | None:
+    """The canonical file's identity right now: {md5, name, modified} - or None if it is gone/unreadable.
+    Used to PIN what the owner approved: if the Drive file changes between approval and send, the card
+    stops instead of quietly sending a different document."""
+    if not doc.get("drive_id"):
+        return None
+    try:
+        import httpx
+        from . import drive
+        r = httpx.get(f"{drive.API}/files/{doc['drive_id']}",
+                      params={"fields": "id,name,md5Checksum,modifiedTime,trashed",
+                              "supportsAllDrives": "true"},
+                      headers={"Authorization": f"Bearer {drive.access_token()}"}, timeout=20)
+        if r.status_code != 200:
+            return None
+        j = r.json()
+        if j.get("trashed"):
+            return None
+        return {"md5": j.get("md5Checksum") or "", "name": j.get("name") or "",
+                "modified": j.get("modifiedTime") or ""}
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def sync_drive(company_id: int) -> dict:

@@ -574,6 +574,17 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         doc = documents.get(int(ref.get("id", 0)), company_id=task.get("company_id"))
         if not doc:
             raise RuntimeError(f"attached document #{ref.get('id')} not found — remove it from the card")
+        # APPROVAL PIN: Drive is the source of truth, so the canonical file can change between the
+        # owner approving and this send. If it did, STOP - he must never send a document he did not
+        # read (owner design, 31 Aug). The pin is taken when the document is put on the card.
+        if ref.get("pin_md5"):
+            st = documents.drive_state(doc)
+            if st is None:
+                raise RuntimeError(f"'{doc['filename']}' is no longer readable in Drive (moved, renamed "
+                                   "or deleted) — nothing was sent. Re-attach the correct file.")
+            if st.get("md5") and st["md5"] != ref["pin_md5"]:
+                raise RuntimeError(f"'{doc['filename']}' has CHANGED in Drive since you approved this "
+                                   "card — nothing was sent. Open it, check it, and re-attach.")
         files.append(f"data:{doc['mime']};base64," + _b64.b64encode(documents.read_bytes(doc)).decode())
         file_names.append(doc["filename"])
     files, file_names = (files or None), (file_names or None)
@@ -1394,7 +1405,7 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
         hits = documents.find(task["company_id"], str(w), scope=_scope)
         if hits:
             d = hits[0]
-            refs[d["id"]] = {"id": d["id"], "filename": d["filename"], "mime": d["mime"], "size": d["size"]}
+            refs[d["id"]] = documents.card_ref(d)
         else:
             missing.append(str(w))
     for w in (u.get("detach_documents") or [])[:6]:   # remove-attachment verb (card 383: it didn't exist,
@@ -3409,9 +3420,16 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
     try:
         if pdf_path:
             with open(pdf_path, "rb") as _fh:
-                documents.save(co["id"], co.get("slug") or company,
-                               os.path.basename(pdf_path), "application/pdf", _fh.read(),
-                               kind="quotation", uploaded_by=f"quotation:{number}", push=False)
+                _doc = documents.save(co["id"], co.get("slug") or company,
+                                      (drive_note or {}).get("file_name") or os.path.basename(pdf_path),
+                                      "application/pdf", _fh.read(),
+                                      kind="quotation", uploaded_by=f"quotation:{number}", push=False)
+            # DRIVE IS THE CANONICAL HOME: point the library row at the file just filed in the client
+            # folder, so the box copy is only a cache of it (owner, 31 Aug) - not a second original.
+            _fid = (drive_note or {}).get("file_id") or (drive_note or {}).get("id")
+            if _doc and _fid:
+                db.execute("update company_documents set drive_id=%s, client=%s, verified_at=now() "
+                           "where id=%s", (_fid, (drive_note or {}).get("client") or customer, _doc["id"]))
     except Exception:  # noqa: BLE001 — the card and the Drive copy still stand
         pass
     skill = store.get_skill_by_key(co["id"], QUOTE_SKILL_KEY)
@@ -3460,13 +3478,16 @@ def _push_quote_to_client_drive(co: dict, customer: str, number: str, x: dict, p
             project = ((d or {}).get("title") or "").split(" - ")[-1].strip()
         base = " - ".join(v for v in (client, project, f"Quotation {number}") if v)
         uploaded = []
+        pdf_id = pdf_name = None
         _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         for path, mime, ext in ((x.get("path"), _XLSX, "xlsx"),
                                 (pdf_path, "application/pdf", "pdf")):
             if path and os.path.exists(path):
                 name = f"{base} v{n} - {stamp}.{ext}"
-                _drive.upload_to_folder(f["id"], name, mime, open(path, "rb").read(), token=tok)
+                _fid = _drive.upload_to_folder(f["id"], name, mime, open(path, "rb").read(), token=tok)
                 uploaded.append(name)
+                if ext == "pdf":     # the library points at THIS file as the canonical original
+                    pdf_id, pdf_name = _fid, name
         try:   # the living ALL VERSIONS workbook: one spreadsheet, a tab per iteration, updated in place
             vp = quotation.build_versions_workbook(x.get("company") or co.get("slug"), number, QUOTES_DIR)
             if vp:
@@ -3475,8 +3496,9 @@ def _push_quote_to_client_drive(co: dict, customer: str, number: str, x: dict, p
                 uploaded.append("ALL VERSIONS workbook updated")
         except Exception:  # noqa: BLE001 — the per-version files are already filed
             pass
-        return {"filed": True, "folder": f["name"], "folder_id": f["id"],
-                "folder_created": f.get("created"), "version": n, "files": uploaded}
+        return {"filed": True, "folder": f["name"], "folder_id": f["id"], "client": f["name"],
+                "folder_created": f.get("created"), "version": n, "files": uploaded,
+                "file_id": pdf_id, "file_name": pdf_name}
     except Exception as e:  # noqa: BLE001
         return {"filed": False, "reason": str(e)[:120]}
 
