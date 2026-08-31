@@ -58,11 +58,14 @@ def _recompile_envelope(skill_id=None, skill_key=None) -> None:
     """Rules changed -> the compiled envelope config must follow (dumb-waiter doctrine: rules are the
     only source of envelope behaviour). Fail-soft: a compile hiccup never blocks the rule change."""
     try:
-        from . import envelope
+        from . import envelope, policy
         if skill_id is not None:
             envelope.compile_skill(skill_id)
+            policy.compile_skill(skill_id)     # rules that say "never draft a reply to X"
         if skill_key:
             envelope.compile_key(skill_key)
+            for _s in db.query("select id from skills where skill_key=%s", (skill_key,)):
+                policy.compile_skill(_s["id"])
     except Exception:  # noqa: BLE001
         pass
 

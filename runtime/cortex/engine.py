@@ -27,7 +27,7 @@ from .schedule import _GST
 
 from psycopg.types.json import Json
 
-from . import (contentqueue, crm, db, doctext, documents, envelope, gmail, manager, media, meetnotes,
+from . import (contentqueue, crm, db, doctext, documents, envelope, gmail, manager, media, meetnotes, policy,
                newsletter, notifications, pipeline, profile, ppc_report, provider, quotation, reminders,
                schedule, seo_report, store, webauthn_auth, whatsapp, worker)
 from .integrations import telegram as tg, wordpress as wp
@@ -2958,6 +2958,16 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                 pass
         card_ok = True
         if commit and cls["category"] in ("lead", "client", "finance"):
+            # NO-DRAFT POLICY: the owner's own rules can say a kind of message never gets a drafted
+            # reply (support handled by Ben, etc.). That decision belongs HERE - a rule on the drafting
+            # skill can never stop a card that already exists, which is why it kept being ignored.
+            _skip = policy.should_skip(co, e)
+            if _skip:
+                results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
+                                "category": cls["category"], "to_crm": cls.get("to_crm"),
+                                "reason": f"no draft - {_skip['reason']}"})
+                seen.add(gid)
+                continue
             card_ok = _draft_direct_reply(co, e, cls, rt_key=rt_key, address=address) is not False
         if commit:
             if cls["to_crm"] and e.get("email"):
