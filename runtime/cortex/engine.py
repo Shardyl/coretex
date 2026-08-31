@@ -2615,8 +2615,11 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
     # the recipients and the people in copy stay right").
     if not email or (req.get("thread") or {}).get("id"):
         return
-    if not (req.get("followup") or req.get("deal_id")):
-        return
+    # A LIVE CONVERSATION is itself the work context: writing to someone we are mid-thread with must
+    # continue that thread even when the card carries no deal (card 414 was composed in Talk, so it
+    # would have opened a new conversation with a fake 'RE:' subject - owner, 31 Aug 2026). A genuinely
+    # cold contact has no recent thread, so nothing changes for them.
+    _recent_days = 45 if (req.get("followup") or req.get("deal_id")) else 21
     from email.utils import parsedate_to_datetime
     co = store.get_company(task.get("company_id")) or {}
     senders = _company_senders(task["company_id"])
@@ -2631,7 +2634,7 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
         seen_rt.add(s["rt_key"])
         try:
             msgs = gmail.list_recent(limit=1, rt_key=s["rt_key"],
-                                     q=f"(from:{email} OR to:{email}) newer_than:90d",
+                                     q=f"(from:{email} OR to:{email}) newer_than:{_recent_days}d",
                                      company=_inbox_client_company(co.get("slug") or ""))
             m = msgs[0] if msgs else None
             if not m or not m.get("thread_id"):
