@@ -3810,7 +3810,18 @@ def run(poll_idle: float = 1.0) -> None:
     except Exception as e:  # noqa: BLE001
         tg.send(f"(startup recovery hiccup: {e})")
     last_poll = 0.0
+    # WATCHDOG: the loop is single-threaded, so ONE hung network call freezes everything - inbox
+    # polling, reminders, sweeps. A calendar urlopen with no timeout stalled it for an hour on
+    # 31 Aug 2026 and nothing said so. A heartbeat lets the API surface a stall instead.
+    def _beat(where: str) -> None:
+        try:
+            db.setting_set("engine_heartbeat", {"at": datetime.now(timezone.utc).isoformat(),
+                                                "where": where})
+        except Exception:  # noqa: BLE001
+            pass
+    _beat("start")
     while True:
+        _beat("tasks")
         try:
             process_new_tasks()
         except Exception as e:  # noqa: BLE001 — a single bad task / model timeout must NEVER kill the engine
@@ -3822,10 +3833,12 @@ def run(poll_idle: float = 1.0) -> None:
         now = time.time()
         if now - last_poll >= 60:        # check Gmail for new enquiries + run any due scheduled tasks
             last_poll = now
+            _beat("poll_inquiries")
             try:
                 poll_inquiries()
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(enquiry poll hiccup: {e})")
+            _beat("poll_all_inboxes")
             try:
                 poll_all_inboxes()  # classify + CRM-route EVERY connected inbox (data-driven registry)
             except Exception as e:  # noqa: BLE001

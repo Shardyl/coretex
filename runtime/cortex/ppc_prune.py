@@ -43,7 +43,7 @@ def _mutate_shared_criteria(cid: str, shared_set: str, terms: list[str]) -> None
                  "developer-token": str(cfg["developer_token"]),
                  "login-customer-id": str(cfg["login_customer_id"]),
                  "Content-Type": "application/json"}, method="POST")
-    urllib.request.urlopen(req)
+    urllib.request.urlopen(req, timeout=30)
 
 
 def run(company: str = "sensa") -> dict:

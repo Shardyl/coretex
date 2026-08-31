@@ -2609,6 +2609,24 @@ class TaskAttach(BaseModel):
     kind: str = "document"
 
 
+@app.get("/api/engine/health")
+def engine_health(_: None = Depends(auth)) -> dict:
+    """Is the engine loop alive? It is single-threaded, so a hung network call stalls everything -
+    this makes that visible instead of silent (31 Aug 2026)."""
+    from datetime import datetime, timezone
+    hb = db.setting_get("engine_heartbeat") or {}
+    age = None
+    try:
+        age = (datetime.now(timezone.utc)
+               - datetime.fromisoformat(hb["at"])).total_seconds()
+    except Exception:  # noqa: BLE001
+        pass
+    return {"heartbeat": hb, "seconds_ago": age,
+            "stalled": bool(age is not None and age > 300),
+            "detail": (f"engine has not moved for {int(age // 60)} min - stuck in '{hb.get('where')}'"
+                       if age and age > 300 else "healthy")}
+
+
 @app.get("/api/documents")
 def documents_list(company: str, all: bool = False, u: dict = Depends(current_user)) -> dict:
     co = store.get_company_by_slug(company)

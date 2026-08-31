@@ -26,7 +26,7 @@ def _token(company: str) -> str:
     data = urllib.parse.urlencode({"client_id": c["client_id"], "client_secret": c["client_secret"],
                                    "refresh_token": rt, "grant_type": "refresh_token"}).encode()
     return json.load(urllib.request.urlopen(urllib.request.Request(
-        "https://oauth2.googleapis.com/token", data=data)))["access_token"]
+        "https://oauth2.googleapis.com/token", data=data), timeout=30))["access_token"]
 
 
 def _busy(tok: str, calendar_id: str, start: datetime, end: datetime, tz: str) -> list[tuple]:
@@ -34,7 +34,7 @@ def _busy(tok: str, calendar_id: str, start: datetime, end: datetime, tz: str) -
                        "timeZone": tz, "items": [{"id": calendar_id}]}).encode()
     r = json.load(urllib.request.urlopen(urllib.request.Request(
         "https://www.googleapis.com/calendar/v3/freeBusy", data=body,
-        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, method="POST")))
+        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, method="POST"), timeout=30))
     cal = (r.get("calendars") or {}).get(calendar_id) or {}
     return [(datetime.fromisoformat(b["start"]), datetime.fromisoformat(b["end"])) for b in cal.get("busy", [])]
 
@@ -111,7 +111,7 @@ def create_event(company: str, *, calendar_id: str = "primary", start: datetime,
     r = json.load(urllib.request.urlopen(urllib.request.Request(
         f"https://www.googleapis.com/calendar/v3/calendars/{urllib.parse.quote(calendar_id)}/events"
         "?sendUpdates=all&conferenceDataVersion=1", data=json.dumps(ev).encode(),
-        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, method="POST")))
+        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, method="POST"), timeout=30))
     meet_link = r.get("hangoutLink") or next(
         (e.get("uri") for e in (r.get("conferenceData", {}).get("entryPoints") or [])
          if e.get("entryPointType") == "video"), "")
@@ -126,7 +126,7 @@ def delete_event(company: str, event_id: str, calendar_id: str = "primary", noti
     urllib.request.urlopen(urllib.request.Request(
         f"https://www.googleapis.com/calendar/v3/calendars/{urllib.parse.quote(calendar_id)}/events/"
         f"{urllib.parse.quote(event_id)}?sendUpdates=" + ("all" if notify else "none"),
-        headers={"Authorization": f"Bearer {tok}"}, method="DELETE"))
+        headers={"Authorization": f"Bearer {tok}"}, method="DELETE"), timeout=30)
 
 
 def add_attendee(company: str, event_id: str, attendee: str, calendar_id: str = "primary") -> dict:
@@ -137,7 +137,7 @@ def add_attendee(company: str, event_id: str, attendee: str, calendar_id: str = 
     tok = _token(company)
     cur = json.load(urllib.request.urlopen(urllib.request.Request(
         f"https://www.googleapis.com/calendar/v3/calendars/{urllib.parse.quote(calendar_id)}/events/"
-        f"{urllib.parse.quote(event_id)}", headers={"Authorization": f"Bearer {tok}"})))
+        f"{urllib.parse.quote(event_id)}", headers={"Authorization": f"Bearer {tok}"}), timeout=30))
     have = [a for a in (cur.get("attendees") or [])]
     if not any((a.get("email") or "").lower() == attendee.lower() for a in have):
         have.append({"email": attendee})
@@ -145,5 +145,5 @@ def add_attendee(company: str, event_id: str, attendee: str, calendar_id: str = 
     r = json.load(urllib.request.urlopen(urllib.request.Request(
         f"https://www.googleapis.com/calendar/v3/calendars/{urllib.parse.quote(calendar_id)}/events/"
         f"{urllib.parse.quote(event_id)}?sendUpdates=all", data=body,
-        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, method="PATCH")))
+        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, method="PATCH"), timeout=30))
     return {"id": r.get("id")}

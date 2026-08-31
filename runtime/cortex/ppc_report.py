@@ -37,7 +37,7 @@ def _ads_search(cid: str, query: str) -> list[dict]:
                  "login-customer-id": str(cfg["login_customer_id"]),
                  "Content-Type": "application/json"}, method="POST")
     try:
-        chunks = json.load(urllib.request.urlopen(req))
+        chunks = json.load(urllib.request.urlopen(req, timeout=30))
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"Ads API {e.code}: {e.read()[:200]}") from e
     rows = []

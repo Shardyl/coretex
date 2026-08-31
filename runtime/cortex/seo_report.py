@@ -41,7 +41,7 @@ def _token(cfg):
     data = urllib.parse.urlencode({"client_id": cfg["client_id"], "client_secret": cfg["client_secret"],
                                    "refresh_token": cfg["refresh_token"], "grant_type": "refresh_token"}).encode()
     return json.load(urllib.request.urlopen(urllib.request.Request(
-        "https://oauth2.googleapis.com/token", data=data)))["access_token"]
+        "https://oauth2.googleapis.com/token", data=data), timeout=30))["access_token"]
 
 
 def _company_token(company: str) -> str:
@@ -63,14 +63,14 @@ def _company_token(company: str) -> str:
 def _post(url, body):
     try:
         return json.load(urllib.request.urlopen(urllib.request.Request(
-            url, data=json.dumps(body).encode(), headers=_H, method="POST")))
+            url, data=json.dumps(body).encode(), headers=_H, method="POST"), timeout=30))
     except urllib.error.HTTPError as e:
         return {"_error": str(e.code)}
 
 
 def _get(url):
     try:
-        return json.load(urllib.request.urlopen(urllib.request.Request(url, headers=_H)))
+        return json.load(urllib.request.urlopen(urllib.request.Request(url, headers=_H), timeout=30))
     except urllib.error.HTTPError as e:
         return {"_error": str(e.code)}
 
