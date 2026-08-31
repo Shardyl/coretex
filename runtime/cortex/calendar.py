@@ -162,6 +162,7 @@ def add_attendee(company: str, event_id: str, attendee: str, calendar_id: str = 
 # (owner, 31 Aug 2026). Proposed times are computed from this; the model never guesses availability.
 
 WORK_START, WORK_END = 9, 18          # GST working window used when nothing narrower is asked for
+PREFER_START, PREFER_END = 10, 14     # owner's preferred calling window (GST): 10am-2pm
 SLOT_MINUTES = 30
 
 
@@ -215,14 +216,31 @@ def free_slots(days: int = 10, minutes: int = 30, tz: str = "Asia/Dubai",
     busy = busy_blocks(start, end)
     lo = WORK_START if earliest_hour is None else earliest_hour
     hi = WORK_END if latest_hour is None else latest_hour
-    slots, cur = [], start.astimezone(_GST).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-    while cur < end and len(slots) < limit:
+    # BUNCHING (owner, 31 Aug 2026): calls should cluster, not scatter a day into fragments. Every free
+    # slot is scored - butting straight onto an existing meeting wins, then the 10am-2pm window, then
+    # the earlier date - and we offer at most two options per day.
+    cand, cur = [], start.astimezone(_GST).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    while cur < end:
         if not (skip_weekends and cur.weekday() >= 5) and lo <= cur.hour < hi:
             fin = cur + timedelta(minutes=minutes)
             if not any(s < fin and cur < e for s, e in busy):
-                slots.append(cur.astimezone(zone))
+                adjacent = any(abs((e - cur).total_seconds()) <= 300
+                               or abs((fin - s).total_seconds()) <= 300
+                               for s, e in busy)
+                preferred = PREFER_START <= cur.hour < PREFER_END
+                cand.append((0 if adjacent else 1, 0 if preferred else 1, cur))
         cur += timedelta(minutes=SLOT_MINUTES)
-    return slots
+    cand.sort(key=lambda x: (x[0], x[1], x[2]))
+    per_day, slots = {}, []
+    for _adj, _pref, dt in cand:
+        d = dt.date()
+        if per_day.get(d, 0) >= 2:
+            continue
+        per_day[d] = per_day.get(d, 0) + 1
+        slots.append(dt.astimezone(zone))
+        if len(slots) >= limit:
+            break
+    return sorted(slots)
 
 
 def availability_block(tz: str = "Asia/Dubai", days: int = 10, minutes: int = 30) -> str:
@@ -237,4 +255,6 @@ def availability_block(tz: str = "Asia/Dubai", days: int = 10, minutes: int = 30
     label = tz.split("/")[-1].replace("_", " ")
     lines = [f"- {d.strftime('%A %-d %B, %H:%M')} ({label})" for d in s]
     return ("GENUINELY FREE TIMES (computed from our real calendars - offer ONLY from this list, in the "
-            f"recipient's timezone; never invent a time):\n" + "\n".join(lines))
+            "recipient's timezone; never invent a time). They are ordered by preference - the first "
+            "ones sit next to an existing meeting or inside the preferred window, so offer the top two "
+            "or three:\n" + "\n".join(lines))
