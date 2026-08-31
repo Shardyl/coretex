@@ -166,6 +166,10 @@ WORK_START, WORK_END = 9, 18          # GST working window used when nothing nar
 PREFER_START, PREFER_END = 10, 14     # owner's preferred calling window (GST): 10am-2pm
 CLIENT_START, CLIENT_END = 9, 18      # the slot must also be a sane hour where the CLIENT sits
 SLOT_MINUTES = 30
+# PREP GAP (owner, 31 Aug 2026): meetings must never butt together. Rashad reads the pre-meeting brief
+# in the minutes before he walks in, so every proposed slot keeps this much clear air on both sides of
+# anything already booked. Bunching still applies - calls cluster, they just stop touching.
+PREP_GAP_MINUTES = 15
 
 
 def _registry() -> list:
@@ -219,15 +223,19 @@ def free_slots(days: int = 10, minutes: int = 30, tz: str = "Asia/Dubai",
     lo = WORK_START if earliest_hour is None else earliest_hour
     hi = WORK_END if latest_hour is None else latest_hour
     # BUNCHING (owner, 31 Aug 2026): calls should cluster, not scatter a day into fragments. Every free
-    # slot is scored - butting straight onto an existing meeting wins, then the 10am-2pm window, then
-    # the earlier date - and we offer at most two options per day.
+    # slot is scored - sitting a short hop after an existing meeting wins (a short hop, NOT touching:
+    # the prep gap is protected), then the 10am-2pm window, then the earlier date - and we offer at
+    # most two options per day.
+    gap = timedelta(minutes=PREP_GAP_MINUTES)
+    near = timedelta(minutes=75)     # "next to" a meeting means a short hop away, not the same hour
     cand, cur = [], start.astimezone(_GST).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
     while cur < end:
         if not (skip_weekends and cur.weekday() >= 5) and lo <= cur.hour < hi:
             fin = cur + timedelta(minutes=minutes)
-            if not any(s < fin and cur < e for s, e in busy):
-                adjacent = any(abs((e - cur).total_seconds()) <= 300
-                               or abs((fin - s).total_seconds()) <= 300
+            # the busy block is treated as PREP_GAP wider at both ends, so a proposed slot can never
+            # start the moment another meeting finishes (or finish the moment the next one starts)
+            if not any(s - gap < fin and cur < e + gap for s, e in busy):
+                adjacent = any(gap <= (cur - e) <= near or gap <= (s - fin) <= near
                                for s, e in busy)
                 # CIVILISED FOR THEM TOO: 09:00 Dubai is 07:00 Amsterdam. A slot must sit inside the
                 # working day at BOTH ends, or we propose times no client would take.
@@ -264,8 +272,8 @@ def availability_block(tz: str = "Asia/Dubai", days: int = 10, minutes: int = 30
     lines = [f"- {d.strftime('%A %-d %B, %H:%M')} ({label})" for d in s]
     return ("GENUINELY FREE TIMES (computed from our real calendars - offer ONLY from this list, in the "
             "recipient's timezone; never invent a time). They are ordered by preference - the first "
-            "ones sit next to an existing meeting or inside the preferred window, so offer the top two "
-            "or three:\n" + "\n".join(lines))
+            "ones sit shortly after an existing meeting or inside the preferred window, so offer the "
+            "top two or three:\n" + "\n".join(lines))
 
 
 # ---------- UPCOMING EVENTS: the detail view, used by the pre-meeting brief ----------
