@@ -10,8 +10,12 @@ from __future__ import annotations
 import json
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+
+import httpx
+
+from .schedule import _GST
 
 _CLIENT = "/etc/cortex/google_oauth_client_{slug}.json"
 
@@ -147,3 +151,90 @@ def add_attendee(company: str, event_id: str, attendee: str, calendar_id: str = 
         f"{urllib.parse.quote(event_id)}?sendUpdates=all", data=body,
         headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, method="PATCH"), timeout=30))
     return {"id": r.get("id")}
+
+
+# ---------- AVAILABILITY: one busy picture across every calendar that owns Rashad's time ----------
+#
+# The registry (setting `availability_calendars`) is a list of {"company": <token slug>, "id": <calendar
+# id>, "label": ...}. Each entry is queried with THAT company's token, so calendars living under
+# different Google accounts merge into one answer. Rashad's personal work calendar is shared into
+# rashad@tabscanner.com as FREE/BUSY ONLY - Cortex sees that he is busy, never what the appointment is
+# (owner, 31 Aug 2026). Proposed times are computed from this; the model never guesses availability.
+
+WORK_START, WORK_END = 9, 18          # GST working window used when nothing narrower is asked for
+SLOT_MINUTES = 30
+
+
+def _registry() -> list:
+    return db.setting_get("availability_calendars") or []
+
+
+def busy_blocks(start: datetime, end: datetime) -> list:
+    """Every busy interval across the registered calendars, merged and sorted. Fail-soft per company:
+    one unreachable account never hides the others (it just contributes nothing)."""
+    import collections
+    by_co = collections.defaultdict(list)
+    for e in _registry():
+        by_co[e.get("company") or "sensa"].append({"id": e["id"]})
+    out = []
+    for co, items in by_co.items():
+        try:
+            r = httpx.post(f"{'https://www.googleapis.com/calendar/v3'}/freeBusy",
+                           json={"timeMin": start.isoformat(), "timeMax": end.isoformat(),
+                                 "timeZone": "Asia/Dubai", "items": items},
+                           headers={"Authorization": f"Bearer {_token(co)}"}, timeout=30)
+            for _cid, val in (r.json().get("calendars") or {}).items():
+                for b in (val.get("busy") or []):
+                    out.append((datetime.fromisoformat(b["start"].replace("Z", "+00:00")),
+                                datetime.fromisoformat(b["end"].replace("Z", "+00:00"))))
+        except Exception:  # noqa: BLE001
+            continue
+    out.sort()
+    merged = []
+    for s, e in out:                       # collapse overlaps so a slot check is one clean pass
+        if merged and s <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+        else:
+            merged.append((s, e))
+    return merged
+
+
+def free_slots(days: int = 10, minutes: int = 30, tz: str = "Asia/Dubai",
+               earliest_hour: int | None = None, latest_hour: int | None = None,
+               skip_weekends: bool = True, min_notice_hours: int = 18, limit: int = 8) -> list:
+    """Real openings, in the CLIENT's timezone. Skips anything busy on any registered calendar, keeps
+    the working window, honours a minimum notice so we never propose 'in an hour', and skips weekends."""
+    from zoneinfo import ZoneInfo
+    try:
+        zone = ZoneInfo(tz)
+    except Exception:  # noqa: BLE001
+        zone = ZoneInfo("Asia/Dubai")
+    now = datetime.now(timezone.utc)
+    start = now + timedelta(hours=min_notice_hours)
+    end = now + timedelta(days=days)
+    busy = busy_blocks(start, end)
+    lo = WORK_START if earliest_hour is None else earliest_hour
+    hi = WORK_END if latest_hour is None else latest_hour
+    slots, cur = [], start.astimezone(_GST).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    while cur < end and len(slots) < limit:
+        if not (skip_weekends and cur.weekday() >= 5) and lo <= cur.hour < hi:
+            fin = cur + timedelta(minutes=minutes)
+            if not any(s < fin and cur < e for s, e in busy):
+                slots.append(cur.astimezone(zone))
+        cur += timedelta(minutes=SLOT_MINUTES)
+    return slots
+
+
+def availability_block(tz: str = "Asia/Dubai", days: int = 10, minutes: int = 30) -> str:
+    """The drafter's view of real availability: a short list of genuinely free times it may offer.
+    Empty string when nothing can be read, so a draft falls back to proposing in words."""
+    try:
+        s = free_slots(days=days, minutes=minutes, tz=tz)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not s:
+        return ""
+    label = tz.split("/")[-1].replace("_", " ")
+    lines = [f"- {d.strftime('%A %-d %B, %H:%M')} ({label})" for d in s]
+    return ("GENUINELY FREE TIMES (computed from our real calendars - offer ONLY from this list, in the "
+            f"recipient's timezone; never invent a time):\n" + "\n".join(lines))
