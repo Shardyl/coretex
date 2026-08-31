@@ -163,6 +163,7 @@ def create_card(company_id, skill_id, kind, request, contact: str | None = None,
     card. If one is open, this card is created status='queued' and promoted to 'new' only when the current
     step is dealt with (promote_queued in the engine loop). Chronology is preserved: the oldest queued
     step always goes first. Talk-composed owner cards bypass this via plain create_task."""
+    kind = _coerce_kind(kind, request)
     key = (contact or "").strip().lower() or (f"deal:{deal_id}" if deal_id else None)
     if not key:
         return create_task(company_id, skill_id, kind, request)
@@ -215,6 +216,21 @@ _EMAIL_KEYS = {"brief", "inquiry", "triage", "qual_suggest", "thread", "thread_r
                "cc_remove", "system_note", "serialize_key", "context_manifest", "title"}
 
 
+def _coerce_kind(kind: str, request) -> str:
+    """An email card with NO RECIPIENT is not an email - it is internal work that was mislabelled, and
+    labelling it email_reply makes it render with a From/Cc/'Re: your enquiry' envelope and be judged as
+    client-facing prose. Card 391 was a call-prep brief for Rashad that said 'internal only, not for
+    sending' inside an email card. Downgrade it to internal content instead (31 Aug 2026)."""
+    try:
+        if kind in ("email_reply", "email_draft") and isinstance(request, dict):
+            if "@" not in ((request.get("inquiry") or {}).get("email") or ""):
+                print(f"[contract] {kind} card has no recipient -> created as internal 'content'", flush=True)
+                return "content"
+    except Exception:  # noqa: BLE001
+        pass
+    return kind
+
+
 def _validate_card(kind: str, request) -> None:
     try:
         if not isinstance(request, dict):
@@ -238,6 +254,7 @@ def _validate_card(kind: str, request) -> None:
 
 
 def create_task(company_id, skill_id, kind, request) -> dict:
+    kind = _coerce_kind(kind, request)
     _validate_card(kind, request)
     return db.execute(
         "insert into tasks (company_id,skill_id,kind,request) values (%s,%s,%s,%s) returning *",
