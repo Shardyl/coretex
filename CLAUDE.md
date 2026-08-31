@@ -394,6 +394,16 @@ public professional sources and local colour (never family, health, religion, po
 private accounts), every external claim carries a date, and links are either from the served media
 library or a page actually found in search.
 
+WHERE THE BRIEF LIVES. Three places, all written at brief time:
+* `coretex.uk/brief/<id>?k=<key>` - standalone phone-first page, `noindex`. The key is
+  `meetingprep.brief_key()`, an HMAC of the task id under the API secret, so it cannot be guessed and
+  grants nothing else. Signing lives in meetingprep, NOT api, so the engine can build a link without
+  importing the web app.
+* A PRIVATE 15-minute `Prep: <meeting>` block immediately before the meeting, description = the link.
+  NEVER the meeting invite itself: an invite description is visible to every guest, so putting the
+  brief link there would hand our own intelligence to the client.
+* The deal timeline (`pipeline.log_deal(..., 'brief', ...)`) and the notification body.
+
 ## Media library (the YouTube catalog + review UI)
 
 `media_assets` (live DB) is the catalog of every video on a company's YouTube channel — one row
