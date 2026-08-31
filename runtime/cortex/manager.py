@@ -44,7 +44,10 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
     try:   # the same URL allowlist the invented-link guard uses — the manager verifies, never guesses
         import json as _json
         import re as _re
-        _urls = sorted(set(_re.findall(r"https?://[^\s<>\\\"')\]]+", _json.dumps(request, default=str))))
+        # the request is JSON-dumped, so every URL is followed by escape sequences; the character
+        # class MUST exclude backslash, or allowlist entries carry escape tails and never match the
+        # clean URLs in the draft (the Manager then flags REAL library links as invented).
+        _urls = sorted(set(_re.findall(r"https?://[^\s<>\\\"')\]\\]+", _json.dumps(request, default=str))))
         if _urls:
             facts.append("REAL LINKS available to the drafter (any URL in the draft NOT on this list is "
                          "invented and must be flagged): " + ", ".join(_urls[:25]))
