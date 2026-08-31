@@ -121,11 +121,12 @@ CORE_KINDS = ("company-profile", "trade-licence", "vat-certificate")
 def listing(company_id: int, core_only: bool = False) -> list[dict]:
     ensure_schema()
     if core_only:
-        return db.query("select id, kind, filename, mime, size, created_at from company_documents "
-                        "where company_id=%s and kind = any(%s) order by kind, created_at desc",
-                        (company_id, list(CORE_KINDS)))
-    return db.query("select id, kind, filename, mime, size, created_at from company_documents "
-                    "where company_id=%s order by kind, created_at desc", (company_id,))
+        return db.query("select id, kind, filename, mime, size, created_at, drive_id, client "
+                        "from company_documents where company_id=%s and kind = any(%s) "
+                        "order by kind, created_at desc", (company_id, list(CORE_KINDS)))
+    return db.query("select id, kind, filename, mime, size, created_at, drive_id, client "
+                    "from company_documents where company_id=%s order by kind, created_at desc",
+                    (company_id,))
 
 
 def get(doc_id: int, company_id: int | None = None) -> dict | None:
@@ -140,6 +141,7 @@ def read_bytes(doc: dict) -> bytes:
     """The document's bytes for a send. DRIVE IS THE SOURCE OF TRUTH: when the row has a drive_id we
     fetch the CURRENT file, so what goes out is what the folder holds now. The box copy is a cache and
     a fallback for a Drive outage - a send must never fail because Drive blinked (owner, 31 Aug)."""
+    doc = _full(doc)
     if doc.get("drive_id"):
         try:
             from . import drive
@@ -158,9 +160,17 @@ def read_bytes(doc: dict) -> bytes:
         return f.read()
 
 
+def _full(doc: dict) -> dict:
+    """Search results are metadata-only; anything touching Drive or bytes needs the whole row."""
+    if doc.get("path") and "drive_id" in doc:
+        return doc
+    return db.one("select * from company_documents where id=%s", (doc.get("id"),)) or doc
+
+
 def card_ref(doc: dict) -> dict:
     """The reference put on a card's attach_docs, carrying the Drive checksum PIN so the send can tell
     whether the canonical file changed after the owner approved it."""
+    doc = _full(doc)
     st = drive_state(doc) or {}
     return {"id": doc["id"], "filename": doc["filename"], "mime": doc["mime"], "size": doc["size"],
             **({"pin_md5": st["md5"]} if st.get("md5") else {})}
@@ -170,6 +180,7 @@ def drive_state(doc: dict) -> dict | None:
     """The canonical file's identity right now: {md5, name, modified} - or None if it is gone/unreadable.
     Used to PIN what the owner approved: if the Drive file changes between approval and send, the card
     stops instead of quietly sending a different document."""
+    doc = _full(doc)
     if not doc.get("drive_id"):
         return None
     try:
