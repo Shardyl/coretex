@@ -3403,6 +3403,17 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
             return None
 
     drive_note = _push_quote_to_client_drive(co, customer, number, x, pdf_path)
+    # ...and straight into the DOCUMENT LIBRARY, so it can be attached to an email card immediately
+    # instead of waiting for the hourly client-folder sync (owner, 31 Aug: "update the quotation to
+    # today's date and share them both").
+    try:
+        if pdf_path:
+            with open(pdf_path, "rb") as _fh:
+                documents.save(co["id"], co.get("slug") or company,
+                               os.path.basename(pdf_path), "application/pdf", _fh.read(),
+                               kind="quotation", uploaded_by=f"quotation:{number}", push=False)
+    except Exception:  # noqa: BLE001 — the card and the Drive copy still stand
+        pass
     skill = store.get_skill_by_key(co["id"], QUOTE_SKILL_KEY)
     req = {"kind": "quotation", "company": company, "client_drive": drive_note,
            "file": pdf_path, "r2_url": _r2(pdf_path, "pdf"),
