@@ -55,17 +55,19 @@ def has_live_work(account_id: int, company_id: int) -> bool:
 
 
 def enrol(account_id: int, company_id: int, *, contact_email: str | None = None,
-          enrolled_from: str = "manual", cadence_days: int = 30, note: str = "") -> dict:
+          enrolled_from: str = "manual", cadence_days: int = 30, note: str = "",
+          channel: str = "email") -> dict:
     """Upsert-enrol an account; an existing row keeps its clock (re-enrolling never resets a cadence)."""
     ensure_schema()
     nxt = datetime.now(timezone.utc) + timedelta(days=cadence_days)
     return db.execute(
         "insert into nurture_accounts (account_id, company_id, contact_email, next_touch, enrolled_from, "
-        "cadence_days, note) values (%s,%s,%s,%s,%s,%s,%s) "
+        "cadence_days, note, channel) values (%s,%s,%s,%s,%s,%s,%s,%s) "
         "on conflict (account_id, company_id) do update set status='active', "
         "contact_email=coalesce(excluded.contact_email, nurture_accounts.contact_email), "
         "note=coalesce(nullif(excluded.note,''), nurture_accounts.note) returning *",
-        (account_id, company_id, contact_email, nxt, enrolled_from, cadence_days, note))
+        (account_id, company_id, contact_email, nxt, enrolled_from, cadence_days, note,
+         channel if channel in ("email", "whatsapp") else "email"))
 
 
 def stop(row_id: int) -> dict | None:
@@ -121,6 +123,32 @@ def sweep() -> dict:
                     f"Nurture touch due for {(acc or {}).get('name')} but no contact has an email - "
                     "add one to the account.", "Nurture needs a contact", priority="normal",
                     category="reminder", company_id=n["company_id"])
+                continue
+            if (n.get("channel") or "email") == "whatsapp":
+                # WHATSAPP RELATIONSHIPS (owner, 31 Aug 2026): some people are only ever messaged, never
+                # emailed. Cortex does not send WhatsApp - it hands Rashad the nudge and a suggested
+                # opening line, and he sends it himself.
+                from . import notifications, provider
+                _c = _best_contact(n["account_id"]) or {}
+                _who = " ".join(x for x in (_c.get("first_name"), _c.get("last_name")) if x)                     or (acc or {}).get("name") or "them"
+                line = None
+                try:
+                    line = provider.think_json(
+                        "Write ONE short, warm WhatsApp opener Rashad can send a past client he has not "
+                        "spoken to in a while. Natural texting tone, no marketing, no pitch, under 30 "
+                        'words. Return {"text": "<the message>"}.',
+                        f"Client: {(acc or {}).get('name')}. Contact: {_who}. "
+                        f"Relationship notes: {n.get('note') or 'past client, work delivered'}",
+                        model=provider.MODEL_FAST, max_tokens=150, purpose="whatsapp-nudge")
+                except Exception:  # noqa: BLE001
+                    line = None
+                msg = ((line or {}).get("text") or "").strip()
+                notifications.notify(
+                    f"WhatsApp {_who} to keep the relationship warm."
+                    + (f' Suggested: "{msg}"' if msg else ""),
+                    f"Message {(acc or {}).get('name')}", priority="normal", category="reminder",
+                    company_id=n["company_id"])
+                spawned.append(f"whatsapp-nudge:{n['id']}")
                 continue
             sk = store.get_skill_by_key(n["company_id"], "sales-followup") \
                 or store.get_skill_by_key(n["company_id"], "sales-first-response")
