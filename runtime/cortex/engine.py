@@ -1012,7 +1012,7 @@ def _on_callback(cq: dict) -> None:
         _confirm_rule(task, skill, yes=(action in ("ry", "ru")), universal=(action == "ru"))
 
 
-def _approve(task: dict, skill: dict, company: dict) -> dict:
+def _approve(task: dict, skill: dict, company: dict, stepped_up: bool = False) -> dict:
     # SAFETY (audit F1): the Telegram button must obey the same gates as the cockpit. A stale tap on an
     # already-handled card must never re-send, and outward/money kinds never bypass the step-up once the
     # owner has a device registered — Telegram can't do biometrics, so those route to the cockpit.
@@ -1022,7 +1022,11 @@ def _approve(task: dict, skill: dict, company: dict) -> dict:
             tg.edit(task["tg_message_id"], "Already handled — nothing sent again.")
         return {"blocked": True, "error": "already handled"}
     task = fresh
-    if kind_class(task.get("kind")) in ("outward", "money") and webauthn_auth.is_registered():
+    # Telegram taps carry no biometrics, so an outward card taps through to the cockpit. The COCKPIT
+    # path has already consumed a fresh step-up at the gate (stepped_up=True) - re-checking here blocked
+    # legitimate approvals outright (cards 383/384 returned OK and sent nothing).
+    if (not stepped_up and kind_class(task.get("kind")) in ("outward", "money")
+            and webauthn_auth.is_registered()):
         if task.get("tg_message_id"):
             tg.edit(task["tg_message_id"], "This one needs your PIN/fingerprint — approve it in the cockpit.")
         return {"blocked": True, "error": "step-up required — approve in the cockpit"}
@@ -1685,7 +1689,7 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
                            note=when.astimezone(_GST).strftime("%a %-d %b %H:%M"))
         return {"ok": True, "scheduled": when.astimezone(_GST).strftime("%a %-d %b, %H:%M"),
                 "task": store.get_task(task_id)}
-    result = _approve(task, skill, company)
+    result = _approve(task, skill, company, stepped_up=True)
     return {"ok": True, "task": store.get_task(task_id), "result": result}
 
 
@@ -3553,7 +3557,7 @@ def promote_due_tasks() -> None:
                 db.execute("update tasks set status='awaiting_approval', last_run=now(), updated_at=now() "
                            "where id=%s", (t["id"],))
                 task = store.get_task(t["id"])
-                res = _approve(task, skill, company)
+                res = _approve(task, skill, company, stepped_up=True)
                 tg.send(f"⏱ Scheduled send fired: {(task.get('title') or 'card')[:60]} — "
                         f"{(res or {}).get('sent_to') or 'done'}")
             except Exception as e:  # noqa: BLE001 — never lose the card: park it back for manual approval
