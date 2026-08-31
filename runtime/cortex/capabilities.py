@@ -61,6 +61,13 @@ CAPABILITIES: list[tuple[str, str]] = [
      "the Haiku default): sender verified, mode classified (direct vs procurement), 2-3 TRUE contributable "
      "insights onto the deal timeline. Drafts read it; the sales-first-response posture rules govern how "
      "insight is used (one gift per email for direct clients; document-precision for procurement)."),
+    ("Sender identity + personal voice",
+     "Every outbound email knows WHO it is written as: the sending mailbox resolves to that person's real "
+     "name and role (profile.resolve_identity, from the signature store) and to their PERSONAL writing "
+     "voice (profile.resolve_voice), distilled from their own sent mail. Gino, Ayresh and Rashad each have "
+     "their own voice for Sensa/SkyVision; the house email voice is the baseline for anyone without one. "
+     "The drafter writes in that person's first person, and the manager flags a draft that names its own "
+     "sender in the third person."),
     ("Team approvals",
      "Authorised team members (users.can_approve — Gino + Ayresh for Sensa) can approve OUTWARD work in "
      "their company scope with their own PIN at the step-up gate. MONEY-class approvals always require "

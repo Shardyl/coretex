@@ -122,6 +122,27 @@ Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` ad
 rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
 `sales-first-response`.
 
+## Sender identity + personal voice (2026-08-31)
+
+Every outbound email carries WHO it is written as, and writes in that person's voice.
+- `profile.resolve_identity(company_id, email)` reads the person's real **name + role** from
+  `data.signatures` (already keyed by email). `worker._identity_block` puts
+  "YOU ARE WRITING AS <name>, <role> at <company>" in front of every email draft, with the
+  first-person instruction, and passes that person as the voice `author`.
+- `profile.resolve_voice` then resolves `data.voice.people.<who>` (matched by key OR email), so the
+  person's own distilled voice reaches their own mail. **Sensa/SkyVision have gino, ayresh and rashad**
+  (distilled from their real sent mail, 2026-08-31, via Fable 5). Catch-alls (hello@) resolve nothing —
+  they never send anyway.
+- The `email-handling` house voice rule is the BASELINE: a personal voice governs greetings, rhythm and
+  phrasing; the baseline governs structure, formatting and what we never do.
+- `manager.check` gets the same identity as a SYSTEM FACT and must flag a draft that names its own
+  sender in the third person.
+WHY: the engine drafted with `author=None` and never surfaced `request.from_email`, so the model wrote
+"the quotation **Gino** sent across this morning" in an email sent AS Gino (card #411, 31 Aug 2026) —
+it copied the deal timeline's third-person framing. Everyone also wrote in one shared voice.
+To add a person: put `{name, role}` on their signature entry, and a `voice.people.<who>`
+`{emails:[...], profile:"..."}` distilled from their sent mail.
+
 ## Company document library (2026-08-26)
 
 CANONICAL HOME: the company's Drive `<COMPANY> CORTEX/Documents/` subfolder (same Drive-first doctrine
