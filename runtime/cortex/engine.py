@@ -2216,12 +2216,24 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
     skill = store.get_skill_by_key(co["id"], "sales-first-response")
     label = {"checkin": "check-in", "revive": "revival"}.get(action, "follow-up")
     if email and skill:
-        won = (opp.get("stage") in crm.WON_STAGES)
-        brief = (f"{label.title()} on the PROJECT '{opp['title']}' — this is WON work, not a pitch. We are "
-                 "waiting on the client's readiness, not chasing a decision: warm, patient, no sales "
-                 "pressure and no re-selling. Goal: find out where they stand and agree the next step."
-                 if won else
-                 f"{label.title()} on the opportunity '{opp['title']}'. Goal: get a reply / book a meeting.")
+        stage = opp.get("stage")
+        if stage == "Final Payment":
+            # MONEY, not readiness: the work is delivered and a balance is outstanding. Patience here
+            # reads as not caring about being paid (card 394 drafted a 'where do things stand' note on a
+            # 60k receivable). Polite and warm, but the ask is unambiguous.
+            brief = (f"PAYMENT FOLLOW-UP on '{opp['title']}' — the work is DELIVERED and the final balance "
+                     "is still outstanding. This is an accounts chase, not a check-in: be warm and "
+                     "professional, but ASK DIRECTLY about the outstanding payment, reference what was "
+                     "last said about it in the correspondence below, and ask for a payment date or the "
+                     "status in their system. Do NOT ask 'where do things stand' vaguely, do not offer a "
+                     "call INSTEAD of asking, and never re-sell or pitch anything.")
+        elif stage in crm.WON_STAGES:
+            brief = (f"{label.title()} on the PROJECT '{opp['title']}' — this is WON work, not a pitch. We "
+                     "are waiting on the client's readiness, not chasing a decision: warm, patient, no "
+                     "sales pressure and no re-selling. Goal: find out where they stand and agree the "
+                     "next step.")
+        else:
+            brief = f"{label.title()} on the opportunity '{opp['title']}'. Goal: get a reply / book a meeting."
         if action == "revive":
             brief = (f"Long-gap REVIVAL of the dormant opportunity '{opp['title']}' — months since their "
                      "last reply. The REVIVAL standing rules on the sales-followup skill govern the tone "
