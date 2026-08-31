@@ -266,3 +266,71 @@ def availability_block(tz: str = "Asia/Dubai", days: int = 10, minutes: int = 30
             "recipient's timezone; never invent a time). They are ordered by preference - the first "
             "ones sit next to an existing meeting or inside the preferred window, so offer the top two "
             "or three:\n" + "\n".join(lines))
+
+
+# ---------- UPCOMING EVENTS: the detail view, used by the pre-meeting brief ----------
+#
+# busy_blocks() answers "is he free?" and deliberately sees nothing else — the personal calendar is
+# shared as FREE/BUSY ONLY. This reads the actual entries (title, attendees, description) from the
+# calendars where we DO have detail access, so a brief can be written before a real meeting. Any
+# calendar that only exposes free/busy simply returns nothing here; that is expected, not an error.
+
+def upcoming_events(hours: int = 30) -> list[dict]:
+    """Every readable event starting in the next `hours`, one flat list across the registry.
+
+    Each row carries the company slug of the calendar it came from, so the brief knows which brand
+    is taking the meeting. Fail-soft per calendar: a 403 on a free/busy-only share is normal."""
+    start = datetime.now(timezone.utc)
+    end = start + timedelta(hours=hours)
+    out: list[dict] = []
+    for entry in _registry():
+        co = entry.get("company") or "sensa"
+        cal_id = entry.get("id") or "primary"
+        try:
+            tok = _token(co)
+            q = urllib.parse.urlencode({
+                "timeMin": start.isoformat(), "timeMax": end.isoformat(),
+                "singleEvents": "true", "orderBy": "startTime", "maxResults": "50"})
+            r = httpx.get(
+                f"https://www.googleapis.com/calendar/v3/calendars/{urllib.parse.quote(cal_id)}/events?{q}",
+                headers={"Authorization": f"Bearer {tok}"}, timeout=30)
+            if r.status_code != 200:
+                continue
+            items = r.json().get("items") or []
+        except Exception:  # noqa: BLE001 — one unreachable calendar never hides the others
+            continue
+        for ev in items:
+            s = (ev.get("start") or {})
+            if s.get("date") and not s.get("dateTime"):
+                continue                      # all-day entries are markers, not meetings
+            if (ev.get("status") or "") == "cancelled":
+                continue
+            try:
+                starts = datetime.fromisoformat(s["dateTime"].replace("Z", "+00:00"))
+            except Exception:  # noqa: BLE001
+                continue
+            # our own RSVP: never brief a meeting the owner has declined
+            declined = any((a.get("self") and a.get("responseStatus") == "declined")
+                           for a in (ev.get("attendees") or []))
+            if declined:
+                continue
+            out.append({
+                "company": co,
+                "calendar_id": cal_id,
+                "event_id": ev.get("id"),
+                "title": (ev.get("summary") or "").strip(),
+                "description": (ev.get("description") or "").strip()[:4000],
+                "location": (ev.get("location") or "").strip(),
+                "hangout": (ev.get("hangoutLink") or "").strip(),
+                "organizer": ((ev.get("organizer") or {}).get("email") or "").lower(),
+                "starts_at": starts,
+                "attendees": [
+                    {"email": (a.get("email") or "").lower(),
+                     "name": (a.get("displayName") or "").strip(),
+                     "self": bool(a.get("self")),
+                     "optional": bool(a.get("optional")),
+                     "response": a.get("responseStatus") or ""}
+                    for a in (ev.get("attendees") or []) if a.get("email")],
+            })
+    out.sort(key=lambda e: e["starts_at"])
+    return out

@@ -12,8 +12,8 @@ import anthropic
 
 from . import config
 
-MODEL = config.get("CORTEX_MODEL", "claude-opus-4-8")          # reasoning / drafting
-MODEL_FAST = config.get("CORTEX_MODEL_FAST", "claude-sonnet-4-6")  # judging / JSON
+MODEL = config.get("CORTEX_MODEL", "claude-opus-5")          # reasoning / drafting
+MODEL_FAST = config.get("CORTEX_MODEL_FAST", "claude-sonnet-5")  # judging / JSON
 MODEL_ROUTER = config.get("CORTEX_MODEL_ROUTER", "claude-haiku-4-5")  # routing / chat naming (cheap+fast)
 
 
@@ -26,7 +26,10 @@ def _client() -> anthropic.Anthropic:
 # ---- cost logging: every model call records exact tokens + $ (input, output, cache) ----
 # $/token (input, output, cache-write, cache-read)
 PRICES = {
+    "claude-fable-5":    (10 / 1e6, 50 / 1e6, 12.5 / 1e6, 1.0 / 1e6),
+    "claude-opus-5":     (5 / 1e6, 25 / 1e6, 6.25 / 1e6, 0.5 / 1e6),
     "claude-opus-4-8":   (5 / 1e6, 25 / 1e6, 6.25 / 1e6, 0.5 / 1e6),
+    "claude-sonnet-5":   (2 / 1e6, 10 / 1e6, 2.5 / 1e6, 0.2 / 1e6),
     "claude-sonnet-4-6": (3 / 1e6, 15 / 1e6, 3.75 / 1e6, 0.3 / 1e6),
     "claude-haiku-4-5":  (1 / 1e6, 5 / 1e6, 1.25 / 1e6, 0.1 / 1e6),
 }

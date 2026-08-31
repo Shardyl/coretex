@@ -55,6 +55,7 @@ KIND_CLASS = {
     "report": "internal", "seo_report": "internal", "ppc_report": "internal", "crm_update": "internal",
     "internal_note": "internal",
     "project_plan": "internal",   # the living plan for a project: never sends, arms the next steps
+    "meeting_brief": "internal",  # pre-meeting research for Rashad's eyes only; nothing ever sends
     "quotation": "internal",   # a downloadable quote card; SENDING it to a client is a separate outward step
     "email_reply": "outward", "email_draft": "outward", "email_send": "outward", "blog": "outward",
     "blog_idea": "internal", "blog_scheduled": "outward",
@@ -86,6 +87,7 @@ APPROVE_ACTION = {
     # acknowledges the owner is taking the lead over. Deliberately NOT in KIND_CLASS (unknown kinds fail safe
     # to 'outward' = never auto) and not in _APPROVE_PUBLIC (internal ack, no biometric).
     "lead_escalation": "Acknowledge — I'm taking it over",
+    "meeting_brief": "Mark as read",
 }
 
 
@@ -3932,6 +3934,11 @@ def run(poll_idle: float = 1.0) -> None:
                 from . import nurture
                 nurture.sweep()         # account-level keep-warm touches (silent while live work exists)
             except Exception:  # noqa: BLE001
+                pass
+            try:
+                from . import meetingprep
+                meetingprep.sweep()     # T-24h: research + write the brief for tomorrow's meetings
+            except Exception:  # noqa: BLE001 — self-throttled; a bad meeting never stops the loop
                 pass
             try:
                 run_opportunity_followups()   # advance AUTO opportunities' chase cadence -> drafted follow-up cards

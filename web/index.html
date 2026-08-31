@@ -1344,7 +1344,7 @@ function cadenceText(t){
   return `Weekly · ${DOW[t.weekday||0]} ${pad2(t.hour)}:${pad2(t.minute)}`;
 }
 function whenText(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString([],{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; } }
-function kindLabel(k){ return {blog:'blog post',blog_scheduled:'blog post (queued)',newsletter_idea:'newsletter idea',newsletter_review:'newsletter ready to schedule',newsletter_send:'newsletter due to send',newsletter_scheduled:'newsletter (queued)',email_draft:'email draft',email_reply:'email reply',seo_report:'SEO & Traffic report',report:'report',quotation:'quotation',lead_escalation:'strategic lead — yours to take'}[k]||k||'task'; }
+function kindLabel(k){ return {blog:'blog post',blog_scheduled:'blog post (queued)',newsletter_idea:'newsletter idea',newsletter_review:'newsletter ready to schedule',newsletter_send:'newsletter due to send',newsletter_scheduled:'newsletter (queued)',email_draft:'email draft',email_reply:'email reply',seo_report:'SEO & Traffic report',report:'report',quotation:'quotation',lead_escalation:'strategic lead — yours to take',meeting_brief:'pre-meeting brief'}[k]||k||'task'; }
 let calLinks={};
 function calLinkBtn(t){
   if(!t.link) return '';
@@ -1681,6 +1681,7 @@ function actionCard(t){
     const wp=t.wp||null, em=t.email||null;
     if(t.kind==='report') return reportCard(t,co);
     if(t.kind==='quotation') return quotationCard(t,co);
+    if(t.kind==='meeting_brief') return meetingBriefCard(t,co);
     if(t.kind==='social_shift') return socialShiftCard(t,co);
     if(t.kind==='social_relogin') return socialReloginCard(t,co);
     if(t.kind==='social_action') return socialActionCard(t,co);
@@ -1767,6 +1768,42 @@ function reportCard(t,co){
     <div class="row" style="margin:4px 0 9px"><button class="btn go" onclick="openReport(${t.id})">${ic('file',16)} Open report (PDF)</button><button class="btn" onclick="downloadReport(${t.id})">${ic('download',16)} Download</button></div>
     <div class="row">
       <button class="btn" onclick="act(${t.id},'approve')">${ic('check',16)} Mark as seen</button>
+      <button class="btn bad" onclick="act(${t.id},'skip')">Dismiss</button>
+    </div></div>`;
+}
+// PRE-MEETING BRIEF — read-only research, lands 24h before a real meeting. Nothing here ever sends;
+// approving just files it. Section headings from the skill's craft are rendered as headings so the
+// page is scannable in the two minutes before he walks in.
+const BRIEF_HEADS=['THE MEETING','THE COMPANY','WHY WE ARE MEETING','WHERE WE STAND','WHAT THEIR ASK LIKELY MEANS','SCOPING QUESTIONS','WARM OPENERS','DO NOT RAISE','OUR RELEVANT WORK','SOURCES'];
+function briefBody(txt){
+  const lines=String(txt||'').split('\n'); let out='';
+  for(const ln of lines){
+    const bare=ln.replace(/^#+\s*/,'').replace(/\*\*/g,'').trim();
+    const head=BRIEF_HEADS.find(h=>bare.toUpperCase()===h||bare.toUpperCase()===h+':');
+    if(head){ out+=`<div style="margin:14px 0 5px;font-weight:650;font-size:12px;letter-spacing:.06em;color:var(--acc)">${esc(head)}</div>`; continue; }
+    if(!ln.trim()){ out+='<div style="height:6px"></div>'; continue; }
+    const url=ln.trim().match(/^https?:\/\/\S+$/);
+    if(url){ out+=`<div style="font-size:12.5px"><a href="${esc(ln.trim())}" target="_blank" rel="noopener" style="color:var(--acc)">${esc(ln.trim())}</a></div>`; continue; }
+    out+=`<div style="font-size:13.5px;line-height:1.55">${esc(ln)}</div>`;
+  }
+  return out;
+}
+function meetingBriefCard(t,co){
+  const r=t.request||{}, m=r.meeting||{};
+  const when=m.start?new Date(m.start):null;
+  const whenTxt=when?when.toLocaleString('en-GB',{weekday:'long',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Dubai'}):'';
+  const who=(m.attendees||[]).map(a=>esc(a.name||a.email)).join(', ');
+  const join=m.hangout?`<a class="btn sm" href="${esc(m.hangout)}" target="_blank" rel="noopener">${ic('link',14)} Join</a>`:'';
+  const served=(r.context_served||[]).length?`<div class="meta" style="margin-top:8px;opacity:.65;font-size:11px">Read before writing: ${esc((r.context_served||[]).join(', '))}</div>`:'';
+  return `<div class="card" id="t${t.id}">
+    <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${ic('spark',13)} pre-meeting brief</span>
+      <span class="chip" style="margin-left:auto;opacity:.6">#${t.id}</span></div>
+    <div class="title">${esc(m.title||r.title||'Meeting brief')}</div>
+    <div class="csub">${esc(whenTxt)}${who?' · '+who:''}${m.location?' · '+esc(m.location):''}</div>
+    <div class="body" style="white-space:normal">${briefBody(r.brief||t.draft||'')}</div>
+    ${served}
+    <div class="row" style="margin-top:10px">${join}
+      <button class="btn" onclick="act(${t.id},'approve')">${ic('check',16)} Mark as read</button>
       <button class="btn bad" onclick="act(${t.id},'skip')">Dismiss</button>
     </div></div>`;
 }
