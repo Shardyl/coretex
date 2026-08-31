@@ -1568,6 +1568,38 @@ _TIME_HINT = re.compile(r"\b\d{1,2}(:\d{2})?\s*(am|pm)\b|\b\d{1,2}:\d{2}\b", re.
 _NO_REPLY_RX = re.compile(r"^\s*(recommendation\s*:\s*skip|no\s+reply(\s+needed)?\s*:|do\s+not\s+reply\s*:)", re.I)
 
 
+def _flag_skipped_opportunity(co: dict, e: dict, reason: str) -> None:
+    """A no-draft rule stopped a reply - correct for broadcasts, but a tender circular can still be
+    work we want. Judge relevance against what the company actually sells and, if it is in scope,
+    surface it to the owner as an opportunity to consider (with its closing date) instead of letting
+    it vanish silently. Never drafts anything; notification only."""
+    try:
+        ctx = (co.get("context") or {}).get("products") or co.get("name") or ""
+        out = provider.think_json(
+            "A company received this email. A standing rule stopped an automatic REPLY (it is a broadcast, "
+            "not correspondence). Decide only whether it still contains an OPPORTUNITY worth the owner's "
+            "eyes: work this company could actually bid for or supply. Company services: " + str(ctx)[:600]
+            + '\nReturn JSON {"relevant": true|false, "what": "<one line: the opportunity>", '
+              '"deadline": "<closing date exactly as written, or empty>"}. Be strict: false unless the '
+              "subject matter is genuinely within those services.",
+            f"From: {e.get('name')} <{e.get('email')}>\nSubject: {e.get('subject')}\n\n"
+            + (e.get("body") or e.get("snippet") or "")[:1500],
+            model=provider.MODEL_ROUTER, max_tokens=200, purpose="skipped-opportunity",
+            company=co.get("slug"))
+        if not (isinstance(out, dict) and out.get("relevant")):
+            return
+        what = (out.get("what") or e.get("subject") or "").strip()
+        due = (out.get("deadline") or "").strip()
+        notifications.notify(
+            "Tender worth a look" + (f" - closes {due}" if due else ""),
+            f"{what}\n\nFrom {e.get('email')}. No reply was drafted ({reason}) - broadcasts are bid "
+            "through the issuing portal, not answered by email.",
+            category="crm", company_id=co.get("id"),
+            dedup_key=f"skipped-opp:{e.get('gmail_id') or e.get('subject')}")
+    except Exception:  # noqa: BLE001 - a relevance hiccup must never disturb the inbox sweep
+        pass
+
+
 def _maybe_no_reply(task: dict, draft: str, skill: dict) -> bool:
     """The drafter is allowed to conclude that NO reply should be sent (an out-of-scope tender, a
     circular, a supplier blast). That conclusion is a DECISION, not an email - leaving it in the draft
@@ -3090,6 +3122,7 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                 results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
                                 "category": cls["category"], "to_crm": cls.get("to_crm"),
                                 "reason": f"no draft - {_skip['reason']}"})
+                _flag_skipped_opportunity(co, e, _skip["reason"])   # in-scope tender -> still surfaced
                 seen.add(gid)
                 continue
             card_ok = _draft_direct_reply(co, e, cls, rt_key=rt_key, address=address) is not False
