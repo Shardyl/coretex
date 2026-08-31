@@ -467,6 +467,123 @@ def suggest_next_step(e: dict, deal: dict, company: dict) -> None:
                              target_type="deal", target_id=did)
 
 
+
+# ---------- conversations that happen OFF-CHANNEL (WhatsApp, phone, in person) ----------
+
+def log_conversation(text: str, company_slug: str = "sensa", contact_hint: str = "") -> dict:
+    """Rashad pastes a WhatsApp/phone conversation; Cortex reads it, files it, and MOVES THE CLOCKS.
+
+    Off-channel talk is where the real commitments get made - a coffee promised on WhatsApp, a client
+    saying 'after the summit', a week of travel - and none of it reaches the mailbox, so automated
+    follow-ups carry on as if nothing was said (owner, 31 Aug 2026). The model only READS: it extracts
+    who, what was agreed, and any timing IN THEIR OWN WORDS. Code resolves the dates, shifts the deal
+    cadence and writes the reminders, so no date is ever invented."""
+    from . import reminders
+    co = db.one("select id, slug, name from companies where slug=%s", (company_slug,))
+    if not co or not (text or "").strip():
+        return {"ok": False, "error": "need a company and the conversation text"}
+    out = provider.think_json(
+        "You are reading a REAL conversation (WhatsApp/phone/in person) that Rashad had with someone "
+        "outside email. Extract ONLY what is actually stated. Return JSON: "
+        '{"counterpart_name": "<the other person>", '
+        '"counterpart_hint": "<any company/email/phone mentioned, else empty>", '
+        '"summary": "<2-3 sentences: what was discussed and where it leaves things>", '
+        '"our_commitments": ["<what WE said we would do>"], '
+        '"their_commitments": ["<what THEY said they would do>"], '
+        '"when_phrases": ["<any timing stated, VERBATIM and in their own words, e.g. travelling '
+        'Wednesday for a week / when I return / after the summit>"], '
+        '"away_start_phrase": "<if Rashad says he is away/travelling, WHEN it starts, his words; else empty>", '
+        '"away_days": <how many days he says he is away, integer, else null>, '
+        '"pause_followups": true|false, '
+        '"resume_after_phrase": "<when automated chasing should resume, in their words, else empty>", '
+        '"warmth": "warm|neutral|cool"}. Never invent a date, a name or a promise.',
+        (text or "")[:6000], model=provider.MODEL_FAST, max_tokens=900,
+        purpose="log-conversation", company=company_slug)
+    if not isinstance(out, dict):
+        return {"ok": False, "error": "could not read that conversation"}
+
+    hint = (contact_hint or out.get("counterpart_hint") or out.get("counterpart_name") or "").strip()
+    person = None
+    for q in [h for h in (contact_hint, out.get("counterpart_hint"), out.get("counterpart_name")) if h]:
+        person = db.one(
+            "select id, email, first_name, last_name from crm_master where coalesce(email,'')<>'' and "
+            "(email ilike %s or (coalesce(first_name,'')||' '||coalesce(last_name,'')) ilike %s) "
+            "order by updated_at desc nulls last limit 1", (f"%{q}%", f"%{q}%"))
+        if person:
+            break
+    deal = None
+    if person:
+        deal = db.one("select id, title, stage, automation, next_followup from crm_projects where "
+                      "company=%s and lower(contact_email)=lower(%s) and stage not in "
+                      "('Lost','Completed','Nurture','Close & review') order by id desc limit 1",
+                      (co["name"].split()[0] if co["slug"] == "sensa" else co["name"], person["email"]))
+        if not deal:
+            deal = db.one("select id, title, stage, automation, next_followup from crm_projects where "
+                          "lower(contact_email)=lower(%s) and stage not in "
+                          "('Lost','Completed','Nurture','Close & review') order by id desc limit 1",
+                          (person["email"],))
+
+    note = ("OFF-CHANNEL CONVERSATION (" + datetime.now(timezone.utc).strftime("%d %b %Y") + ", pasted by "
+            "Rashad): " + (out.get("summary") or "").strip())
+    for label, key in (("WE committed to", "our_commitments"), ("THEY committed to", "their_commitments")):
+        vals = [v for v in (out.get(key) or []) if str(v).strip()]
+        if vals:
+            note += " " + label + ": " + "; ".join(str(v) for v in vals) + "."
+    if out.get("when_phrases"):
+        note += " Timing stated: " + "; ".join(str(w) for w in out["when_phrases"]) + "."
+
+    applied = []
+    if deal:
+        log_deal(deal["id"], "note", note)
+        applied.append(f"logged on deal {deal['id']} ({deal['title']})")
+    elif person:
+        try:
+            crm.log_event_id(person["id"], "note", note)
+            applied.append("logged on the contact")
+        except Exception:  # noqa: BLE001
+            pass
+
+    # SHIFT THE CLOCK: code resolves the phrase, never the model
+    # ABSENCE ARITHMETIC: 'travelling Wednesday for a week' means he is BACK a week on Wednesday, not
+    # busy on Wednesday. The model reports the start phrase and the number of days; CODE adds them up,
+    # so 'when I return' resolves to a real date instead of the departure day (31 Aug 2026).
+    back_on = None
+    try:
+        if out.get("away_start_phrase") and out.get("away_days"):
+            _start = reminders.parse_when(str(out["away_start_phrase"]))
+            if _start:
+                back_on = _start + timedelta(days=int(out["away_days"]) + 1)
+    except Exception:  # noqa: BLE001
+        back_on = None
+
+    resumed = None
+    if deal and (back_on or out.get("resume_after_phrase")):
+        when = back_on or reminders.parse_when(str(out["resume_after_phrase"]))
+        if when and when > datetime.now(timezone.utc):
+            crm.pause_followups(deal["id"])
+            crm.resume_followups(deal["id"], when)
+            resumed = when
+            applied.append(f"follow-ups on deal {deal['id']} moved to {when.strftime('%a %-d %b')}")
+    for c in [str(v) for v in (out.get("our_commitments") or []) if str(v).strip()][:3]:
+        when = back_on          # anything we promised "when I return" lands after he is actually back
+        if not when:
+            for phrase in (out.get("resume_after_phrase"), *(out.get("when_phrases") or [])):
+                if phrase:
+                    when = reminders.parse_when(str(phrase))
+                    if when and when > datetime.now(timezone.utc):
+                        break
+        if not when or when <= datetime.now(timezone.utc):
+            when = datetime.now(timezone.utc) + timedelta(days=7)
+        r = reminders.create(f"{c} ({out.get('counterpart_name') or 'contact'})", when,
+                             company_id=co["id"], priority="normal",
+                             target_type="deal" if deal else None,
+                             target_id=deal["id"] if deal else None)
+        applied.append(f"reminder {r['id']}: {c} on {when.strftime('%a %-d %b')}")
+    return {"ok": True, "counterpart": out.get("counterpart_name"), "deal": (deal or {}).get("id"),
+            "summary": out.get("summary"), "applied": applied,
+            "resumed": resumed.isoformat() if resumed else None}
+
+
 # ---------- meetings feed the same loop ----------
 
 def record_meeting(deal_id: int, company_id: int | None, title: str, summary: str) -> None:

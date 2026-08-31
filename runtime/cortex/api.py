@@ -3098,6 +3098,18 @@ SKILL_TOOLS = [
                     "due'. Returns three lanes: now_to_deal_with (un-dated open work in the Inbox), recurring "
                     "(jobs on a cadence), and upcoming (dated one-offs). Optional business slug to scope it.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}}},
+    {"name": "log_conversation",
+     "description": "Rashad pastes a conversation that happened OFF EMAIL - a WhatsApp chat, a phone call "
+                    "he recounts, a meeting in person - and Cortex files it and MOVES THE CLOCKS. Use "
+                    "whenever he shares chat text or says 'I spoke to X and...'. It identifies the person, "
+                    "logs it on their deal/contact timeline, shifts that deal's automated follow-ups when he "
+                    "states he is away or agrees a later time, and sets reminders for what HE promised. "
+                    "Dates are computed by code from what was actually said - nothing is invented.",
+     "input_schema": {"type": "object", "properties": {
+        "text": {"type": "string", "description": "the conversation, pasted as-is"},
+        "company": {"type": "string", "description": "business slug (default sensa)"},
+        "contact_hint": {"type": "string", "description": "the person's email/name/company if he says it"}},
+        "required": ["text"]}},
     {"name": "update_project_plan",
      "description": "Re-issue the PROJECT PLAN for a live project so its next steps reflect new context - "
                     "use when Rashad tells you something that changes a project (a WhatsApp or phone update "
@@ -3312,6 +3324,13 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
             "recurring": [f"{r['title']} ({r['cadence']}, next {r['next_run']})" for r in recq],
             "upcoming": [f"{(r['title'] or r['kind'])} ({r['run_at']})" for r in upcq],
         })
+    if name == "log_conversation":
+        r = pipeline.log_conversation(inp.get("text", ""), company_slug=inp.get("company") or "sensa",
+                                      contact_hint=inp.get("contact_hint", ""))
+        if not r.get("ok"):
+            return r.get("error") or "could not read that conversation"
+        return json.dumps({"counterpart": r.get("counterpart"), "deal": r.get("deal"),
+                           "summary": r.get("summary"), "applied": r.get("applied")}, default=str)
     if name == "update_project_plan":
         did = int(inp["deal_id"])
         if (inp.get("note") or "").strip():

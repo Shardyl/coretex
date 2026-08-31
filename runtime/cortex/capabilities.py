@@ -44,6 +44,12 @@ CAPABILITIES: list[tuple[str, str]] = [
      "that needs a deliverable (quote revision, proposal) spawns its prep card alongside the reply. "
      "Meetings on a deal land on its timeline with our action items tracked. When asked 'where is deal "
      "X up to', read its history timeline."),
+    ("Off-channel conversations — paste and it moves the clocks",
+     "Rashad can PASTE a WhatsApp chat (or recount a call) and log_conversation files it on the right "
+     "deal, shifts that deal's automated follow-ups when he says he is away or agrees a later time, and "
+     "sets reminders for what he promised. Use it whenever he shares chat text or says 'I spoke to X'. "
+     "Dates are computed by code from his actual words - 'travelling Wednesday for a week' resolves to "
+     "the day he is BACK, not the day he leaves."),
     ("Project plans — keeping work on track",
      "Every live project has ONE plan card: where it stands, what we owe, and the NEXT STEPS with dates. "
      "It is INTERNAL and never sends anything. It appears when a deal is won and when a project changes "
