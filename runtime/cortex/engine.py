@@ -302,6 +302,10 @@ def _email_envelope(task: dict, company: dict) -> dict:
     # "copy Dalal into everything"). Still subject to never_cc, cc_remove and the To-dedup below.
     cc_list += [str(v).strip() for v in (data.get("always_cc") or [])
                 if isinstance(v, str) and "@" in v]
+    # THREAD CONTINUITY: everyone already on this conversation stays on it - replying to a multi-party
+    # thread (client + their consultants + third parties) must never quietly drop half the room.
+    cc_list += [str(v).strip() for v in (req.get("thread_cc") or [])
+                if isinstance(v, str) and "@" in v]
     cc_list += [e for e in (req.get("cc_extra") or []) if "@" in e]
     try:   # DEAL LOOP: deal contacts marked cc ride EVERY email on that deal (owner: Alia at MAH Gold
         # responds on the development-department address and must be looped into all communications)
@@ -1435,6 +1439,26 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
     return task, (reply if (reply and (created or changed)) else text)
 
 
+def _thread_participants(msg: dict, to_email: str) -> list:
+    """The OTHER people already on this email thread (their side + any third parties), so continuing a
+    conversation keeps everyone who was on it. Our own team is excluded here - the company's always_cc
+    puts them on every email anyway. Never includes the To recipient or automated addresses."""
+    from .identity import OWN_COMPANY_DOMAINS
+    out, seen = [], {(to_email or "").lower()}
+    blob = " ".join([str(msg.get("to") or ""), str(msg.get("cc") or ""), str(msg.get("from") or "")])
+    for a in re.findall(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", blob):
+        al = a.lower().strip(".")
+        dom = al.split("@")[-1]
+        if al in seen or dom in OWN_COMPANY_DOMAINS:
+            continue
+        if any(k in al for k in ("noreply", "no-reply", "mailer-daemon", "notifications@", "calendar-",
+                                 "postmaster", "bounce")):
+            continue
+        seen.add(al)
+        out.append(al)
+    return out[:12]
+
+
 def _company_senders(company_id: int) -> dict:
     """The real people mailboxes this company can send from: {name-or-local: {email, rt_key}}.
     Built from the per-person gmail_account:<slug>:<who> settings — never a catch-all."""
@@ -2548,6 +2572,7 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
     s = owner
     req["thread"] = {"id": m["thread_id"], "msg_id": m.get("msg_id") or "",
                      "references": m.get("references") or ""}
+    req["thread_cc"] = _thread_participants(m, email)
     req["from_email"], req["mailbox_rt"] = s["email"], s["rt_key"]
     subj = re.sub(r"^(?:(?:re|fwd?)\s*:\s*)+", "", (m.get("subject") or ""), flags=re.I).strip()
     if subj:
@@ -2824,6 +2849,7 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
         if e.get("thread_id"):                  # reply ON their Gmail thread, not a fresh conversation
             # threadIds are mailbox-local: when the reply routes through the send mailbox instead of the
             # catch-all that received it, thread by the global reply headers only
+            req["thread_cc"] = _thread_participants(e, e.get("email") or "")
             req["thread"] = {"id": "" if catchall else e["thread_id"], "msg_id": e.get("msg_id") or "",
                              "references": e.get("references") or ""}
         # a NEW lead with no deal: qualify + auto-create the Opportunity, same as the enquiry lane —
