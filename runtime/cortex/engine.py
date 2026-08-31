@@ -333,6 +333,16 @@ def _email_envelope(task: dict, company: dict) -> dict:
     except Exception:  # noqa: BLE001
         _nc = []
     drop = {e.lower() for e in (req.get("cc_remove") or [])}
+    # ALWAYS-BCC: the owner's silent copy of everything, from every company. Global setting first (so a
+    # new company is covered the day it is created), then any per-company profile override. BCC because
+    # the recipient must never see it (owner, 31 Aug 2026 - he reads everything in one personal inbox).
+    try:
+        _gb = db.setting_get("always_bcc") or []
+        bcc_list += [str(v).strip() for v in _gb if isinstance(v, str) and "@" in v]
+        bcc_list += [str(v).strip() for v in (data.get("always_bcc") or [])
+                     if isinstance(v, str) and "@" in v]
+    except Exception:  # noqa: BLE001
+        pass
     # NEVER-COPY (company profile 'never_cc'): addresses the owner has ruled off every email, whatever
     # the source - team roster, thread participants, or an inherited cc. Sensa: hello@ is the catch-all
     # for first enquiries only and is never copied (owner, 31 Aug 2026).
