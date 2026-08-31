@@ -79,6 +79,20 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
                  f"28 days are: {cal}. Judge every date/weekday mention in the draft ONLY against this "
                  "list — NEVER compute weekdays yourself, and never call a date wrong that this list "
                  "confirms.")
+    # WHO the email is from: the manager must catch a draft that names its own sender in the third
+    # person ("the quotation Gino sent"), which is what a drafter does when it has the deal timeline
+    # but no identity (card #411, 31 Aug 2026).
+    try:
+        _frm = (request.get("from_email") or "").strip() if isinstance(request, dict) else ""
+        if _frm:
+            _id = worker.profile.resolve_identity(company.get("id"), _frm) or {}
+            _nm = _id.get("name") or _frm
+            facts.append(f"This email is WRITTEN AS and SENT BY {_nm} ({_frm}). The draft must read in that "
+                         "person's first person: their own actions are 'I'/'we'. Their own name used in "
+                         "the third person about their own actions is an ERROR and must be flagged. The "
+                         "signature is appended by the system, so its absence is never an issue.")
+    except Exception:  # noqa: BLE001
+        pass
     facts_block = "SYSTEM FACTS (authoritative — judge with these):\n" + "\n".join(f"- {f}" for f in facts)
     system = (
         "You are the department Manager at Cortex — the keeper of the standard. Review a worker's draft "

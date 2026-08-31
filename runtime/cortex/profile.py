@@ -169,6 +169,22 @@ def get(company_id):
     return (_row(company_id)["data"]) or {}
 
 
+def resolve_identity(company_id, email: str | None) -> dict:
+    """WHO an outbound message is written as: {email, name, role} from the company's signature store
+    (data.signatures is keyed by email and already holds each person's real name and role). Returns
+    {} when the sender is unknown or is a catch-all with no person behind it. This is what lets the
+    drafter write in the first person as that human instead of about them in the third person."""
+    e = (email or "").strip().lower()
+    if not e:
+        return {}
+    sigs = (get(company_id) or {}).get("signatures") or {}
+    for key, val in sigs.items():
+        if str(key).strip().lower() == e and isinstance(val, dict):
+            return {"email": e, "name": (val.get("name") or "").strip(),
+                    "role": (val.get("role") or "").strip()}
+    return {"email": e}
+
+
 def resolve_voice(company_id, author=None):
     """Resolve the WRITING voice for a piece of content.
 

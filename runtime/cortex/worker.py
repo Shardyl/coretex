@@ -134,13 +134,47 @@ _EMAIL_BODY_RULE = (
     "Output is exactly the message the recipient reads, ready to send.")
 
 
+def _identity_block(company: dict, request: dict, author: str | None):
+    """WHO this email is written as. The sending mailbox (request.from_email) is the truth, so the
+    drafter writes in that person's first person instead of describing them in the third person (the
+    deal timeline names people as 'sent from gino@...', and a drafter with no identity copies that
+    framing straight into the email - card #411, 31 Aug 2026). Returns (block, author_key)."""
+    frm = (request.get("from_email") or "").strip() if isinstance(request, dict) else ""
+    who = author or frm
+    if not who:
+        return "", author
+    try:
+        ident = profile.resolve_identity(company.get("id"), frm or who) or {}
+    except Exception:  # noqa: BLE001
+        ident = {}
+    name, role = ident.get("name") or "", ident.get("role") or ""
+    addr = ident.get("email") or frm or ""
+    bits = "YOU ARE WRITING AS: " + (name or addr or "the company")
+    if role:
+        bits += ", " + role
+    if company.get("name"):
+        bits += " at " + company["name"]
+    if addr and name:
+        bits += " (" + addr + ")"
+    return (bits + ". This message goes out from that mailbox, so write in the FIRST PERSON as that "
+            "person: their own past and future actions are 'I' and 'we', NEVER their own name in the "
+            "third person. Colleagues are referred to by first name where it helps the reader. Context "
+            "you are given (deal timelines, logs, notes) describes people in the third person for the "
+            "record: translate anything about YOUR OWN actions into the first person before writing it. "
+            "Do not add a sign-off or signature; that is appended automatically."), who
+
+
 def draft(skill: dict, company: dict, request: dict,
           correction: str | None = None, manager_feedback: list[str] | None = None,
           author: str | None = None, prev_draft: str | None = None) -> str:
     is_email = isinstance(request, dict) and bool(request.get("outbound") or request.get("inquiry"))
+    ident_block = ""
+    if is_email:
+        ident_block, author = _identity_block(company, request, author)
     system = "\n\n".join(filter(None, [
         f"You are Cortex's worker for the '{skill['name']}' skill.",
         _now_line(),
+        ident_block,
         _company_context(company, author),
         skill.get("craft") or "",
         _rules_block(skill),
