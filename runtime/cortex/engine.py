@@ -2557,15 +2557,23 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
     live SFORS thread sat in Rashad's mailbox. Adopted keys are PERSISTED to the task request because the
     send path reads the stored request, not the draft-time copy. Fail-soft throughout."""
     email = ((req.get("inquiry") or {}).get("email") or "").strip()
-    if (not email or (req.get("thread") or {}).get("id")
-            or not (req.get("followup") or req.get("deal_id"))
-            or req.get("from_email")):   # an owner-chosen sender also owns the threading choice
+    # WHEN TO CONTINUE rather than start fresh: whenever there is established work with this person -
+    # a follow-up, a deal-linked card, or an owner-composed email about a deal. A cold new topic with
+    # no work context still opens its own thread (owner, 31 Aug: "continue the last relevant thread so
+    # the recipients and the people in copy stay right").
+    if not email or (req.get("thread") or {}).get("id"):
+        return
+    if not (req.get("followup") or req.get("deal_id")):
         return
     from email.utils import parsedate_to_datetime
     co = store.get_company(task.get("company_id")) or {}
     senders = _company_senders(task["company_id"])
+    # An owner-chosen sender keeps his sender: we then look for the thread in THAT mailbox only,
+    # instead of abandoning continuation altogether (which is what left card 398 with no thread).
+    _chosen = (req.get("from_email") or "").strip().lower()
+    pool = [v for v in senders.values() if not _chosen or v["email"] == _chosen] or list(senders.values())
     hits, seen_rt = {}, set()            # rt_key -> (dt, sender, newest message in THAT mailbox)
-    for s in senders.values():
+    for s in pool:
         if s["rt_key"] in seen_rt:
             continue                     # alias entries (richard->rashad) point at the same mailbox
         seen_rt.add(s["rt_key"])
@@ -2576,6 +2584,11 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
             m = msgs[0] if msgs else None
             if not m or not m.get("thread_id"):
                 continue
+            _subj = (m.get("subject") or "").lower()
+            if (m.get("auto_marker") or any(_subj.startswith(p) for p in (
+                    "invitation:", "accepted:", "declined:", "updated invitation:", "canceled:",
+                    "cancelled:", "notes:", "automatic reply", "out of office", "delivery status"))):
+                continue                 # a calendar/auto thread is not the conversation
             try:
                 dt = parsedate_to_datetime(m.get("date") or "")
             except Exception:  # noqa: BLE001
@@ -2597,6 +2610,8 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
     else:
         owner = next((ours[a.lower()] for a in re.findall(r"[\w.+-]+@[\w.-]+",
                       (m.get("to") or "") + " " + (m.get("cc") or "")) if a.lower() in ours), s)
+    if _chosen and owner["email"] != _chosen:
+        owner = next((v for v in senders.values() if v["email"] == _chosen), owner)
     if owner["rt_key"] != s["rt_key"]:
         if owner["rt_key"] not in hits:
             return                       # owner's mailbox has no local copy: no safe threadId to reply with
