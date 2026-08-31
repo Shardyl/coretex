@@ -1542,7 +1542,7 @@ def _prebook_meeting(task: dict) -> dict | None:
 # A draft that states a clock time is the only one worth asking about. (Deleted by mistake in the
 # 29 Aug rebuild while its only use stayed - _maybe_extract_meeting then raised NameError into a bare
 # except, so NO meeting was booked from any card between 29 and 31 Aug 2026.)
-_TIME_HINT = re.compile(r"\d{1,2}(:\d{2})?\s*(am|pm)|\d{1,2}:\d{2}", re.I)
+_TIME_HINT = re.compile(r"\b\d{1,2}(:\d{2})?\s*(am|pm)\b|\b\d{1,2}:\d{2}\b", re.I)
 
 
 def _maybe_extract_meeting(task: dict, draft: str) -> None:
