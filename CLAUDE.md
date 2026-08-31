@@ -211,6 +211,11 @@ Sensa Main Calender), each queried with its own company token. `calendar.free_sl
 real openings - bunched next to existing meetings, preferring 10:00-14:00 GST, inside working hours at
 BOTH ends (09:00 Dubai is 07:00 Amsterdam), weekends and short-notice excluded. The assembler serves it
 as the `availability` shelf and the drafter may ONLY offer times from that list (31 Aug 2026).
+PREP GAP: every busy block is padded by `calendar.PREP_GAP_MINUTES` (15) at BOTH ends before slots are
+computed, so a proposed meeting can never start the moment another one ends - that gap is when Rashad
+reads the pre-meeting brief. Bunching still holds; "next to a meeting" now means 15 to 75 minutes after
+it, not touching it. Booking duration is unchanged (default 30 min, `mt.minutes` when the drafter
+stamps one).
 CALENDARS are per company: `calendar_refresh_token:<slug>` + `calendar_id:<slug>` (sensa = the Main
 Calender on hello@; tabscanner = rashad@tabscanner.com's primary, added 31 Aug 2026). A company with
 NO calendar is never booked onto another brand's - the pre-book and the send both stop and say so.
