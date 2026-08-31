@@ -1382,8 +1382,16 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
     missing = []
     refs = {int(r["id"]): r for r in (req.get("attach_docs") or [])}
     n_refs0 = len(refs)
+    _scope = ""
+    try:   # a deal-linked card may ONLY attach that project's documents (see documents.find)
+        _did = task.get("deal_id") or req.get("deal_id")
+        if _did:
+            _d = db.one("select title, company from crm_projects where id=%s", (int(_did),))
+            _scope = (_d or {}).get("title") or ""
+    except Exception:  # noqa: BLE001
+        _scope = ""
     for w in (u.get("attach_documents") or [])[:6]:
-        hits = documents.find(task["company_id"], str(w))
+        hits = documents.find(task["company_id"], str(w), scope=_scope)
         if hits:
             d = hits[0]
             refs[d["id"]] = {"id": d["id"], "filename": d["filename"], "mime": d["mime"], "size": d["size"]}

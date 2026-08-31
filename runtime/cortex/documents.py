@@ -189,8 +189,13 @@ def sync_all(min_gap_minutes: int = 60) -> dict:
     return out
 
 
-def find(company_id: int, query: str) -> list[dict]:
-    """Loose match on kind/filename ('trade licence' finds kind trade-licence and 'TradeLicense2026.pdf')."""
+def find(company_id: int, query: str, scope: str = "") -> list[dict]:
+    """Loose match on kind/filename ('trade licence' finds kind trade-licence and 'TradeLicense2026.pdf').
+
+    `scope` is a HARD FILTER, not a hint: when a card belongs to a deal, its client/project words are
+    passed here and a document must carry one of them to qualify. Without it a request for 'the
+    quotation' scored every quotation in the company and returned another client's file - the ChainX
+    card nearly went out with Property Finder's pricing attached (31 Aug 2026)."""
     ensure_schema()
     toks = [t for t in re.split(r"[^a-z0-9]+", (query or "").lower()) if len(t) > 2]
     rows = listing(company_id)
@@ -201,4 +206,14 @@ def find(company_id: int, query: str) -> list[dict]:
         return sum(1 for t in toks if t.replace("license", "licence") in hay)
     scored = [(score(r), r) for r in rows]
     best = [r for s, r in sorted(scored, key=lambda x: -x[0]) if s > 0]
+    stoks = [t for t in re.split(r"[^a-z0-9]+", (scope or "").lower())
+             if len(t) > 2 and t not in _GENERIC]
+    if stoks:
+        best = [r for r in best
+                if any(t in (r["filename"] + " " + r["kind"]).lower() for t in stoks)]
     return best or []
+
+
+# words that identify no project on their own - never enough to match a scoped document
+_GENERIC = {"the", "and", "for", "film", "video", "project", "production", "quotation", "proposal",
+            "sensa", "productions", "ltd", "llc", "company", "with", "from", "abu", "dhabi", "dubai"}
