@@ -168,7 +168,50 @@ def sync_drive(company_id: int) -> dict:
             pulled += 1
         except Exception:  # noqa: BLE001
             pass
+    pulled += _sync_client_folders(company_id, co.get("slug") or "", tok)
     return {"pushed": pushed, "pulled": pulled}
+
+
+def _sync_client_folders(company_id: int, slug: str, tok: str) -> int:
+    """Index the PER-CLIENT folders too (`<clients_drive_folder>/<Client Name>/`) - that is where the
+    quotation/proposal generator files its work, and it is a DIFFERENT store from the flat Documents
+    folder. Until this existed the library could not see a client's own quotation: the ChainX card was
+    asked to attach 'the accompanying quotation', found nothing under ChainX, and matched another
+    client's file instead (31 Aug 2026). Only real deliverables are indexed (pdf/xlsx/docx)."""
+    from . import drive, profile
+    parent = ((profile.get(company_id) or {}).get("clients_drive_folder") or "").strip()
+    if not parent:
+        return 0
+    have = {r["filename"] for r in listing(company_id)}
+    n = 0
+    try:
+        folders = [f for f in drive.list_folder(parent, tok)
+                   if f.get("mimeType") == "application/vnd.google-apps.folder"]
+    except Exception:  # noqa: BLE001
+        return 0
+    for cf in folders[:120]:
+        try:
+            files = drive.list_folder(cf["id"], tok)
+        except Exception:  # noqa: BLE001
+            continue
+        for f in files:
+            name = f.get("name") or ""
+            if (f.get("mimeType") == "application/vnd.google-apps.folder" or name in have
+                    or not name.lower().endswith((".pdf", ".xlsx", ".docx"))):
+                continue
+            try:
+                data = drive.download(f["id"], tok)
+                kind = ("quotation" if "quotation" in name.lower()
+                        else "proposal" if "proposal" in name.lower() else "client-file")
+                d = save(company_id, slug, name, f.get("mimeType") or "application/octet-stream",
+                         data, uploaded_by=f"drive-client:{cf['name']}", kind=kind, push=False)
+                db.execute("update company_documents set drive_id=%s where id=%s and drive_id is null",
+                           (f["id"], d["id"]))
+                have.add(name)
+                n += 1
+            except Exception:  # noqa: BLE001
+                continue
+    return n
 
 
 def sync_all(min_gap_minutes: int = 60) -> dict:
