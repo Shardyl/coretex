@@ -683,7 +683,12 @@ function closeStepup(){ lockMode='login'; pinBuf=''; document.getElementById('lo
 function cancelStepup(){ const r=stepupResolve; stepupResolve=null; closeStepup(); r&&r(null); }
 
 async function render(){
+  // KEEP THE PLACE: re-rendering a tab used to jump to the top, so dismissing one item halfway down
+  // meant scrolling all the way back (owner, 31 Aug). Capture the position and restore it after paint.
+  const _y = window.scrollY || document.documentElement.scrollTop || 0;
+  const _restore = () => requestAnimationFrame(() => window.scrollTo(0, _y));
   const v=document.getElementById('view');
+  if(_y > 0) setTimeout(_restore, 0);
   if(tab==='talk')  return renderChat(v);
   if(tab==='inbox') return renderInbox(v);
   if(tab==='crm')   return renderCRM(v);
@@ -1531,7 +1536,8 @@ function infoCard(t){
 async function notifAct(id,action){
   const el=document.getElementById('n'+id); if(el) el.style.opacity=.4;
   try{ await api(`/api/notifications/${id}/${action}`,{method:'POST',body:action==='snooze'?JSON.stringify({minutes:60}):undefined});
-    if(el) el.remove(); render(); }catch(e){ if(el) el.style.opacity=1; toast('Error'); }
+    if(el) el.remove();          // the row is gone; nothing else on screen changed, so do NOT re-render
+    refreshBadge(); }catch(e){ if(el) el.style.opacity=1; toast('Error'); }
 }
 async function addReminder(){
   const what=(prompt('Remind you to… (what should it say?)')||'').trim(); if(!what) return;
@@ -1962,7 +1968,7 @@ async function act(id,what,runAt){
       r=await api(`/api/tasks/${id}/${what}${qs}`,{method:'POST',headers:{'X-Stepup':tok}});
     }
     if(card) card.style.opacity=1;
-    if(r&&r.needs_biometric){ toast('⚠️ Not sent — the PIN/fingerprint check did not go through. Try approving again.'); render(); return; }
+    if(r&&r.needs_biometric){ toast('⚠️ Not sent — the PIN/fingerprint check did not go through. Try approving again.'); return; }
     if(r&&r.blocked){ toast('🔒 NOT SENT — '+r.error); render(); return; }      // guarded — nothing went out
     if(r&&r.needs_confirm){ await confirmLiveSend(id, r); return; }            // require explicit count (schedule or send)
     if(r&&r.ok===false&&r.error){ toast('⚠️ '+r.error); render(); return; }    // e.g. already handled — never claim success
@@ -1970,7 +1976,9 @@ async function act(id,what,runAt){
     if(r&&r.result&&r.result.blocked){ toast('🔒 NOT SENT — '+(r.result.error||'blocked')); render(); return; }
     const building=r&&r.result&&r.result.building, sent=r&&r.result&&r.result.sent_to, err=r&&r.result&&r.result.error;
     toast(err? ('Note: '+err) : building? 'Building the post — it returns to your Inbox for review when ready ✓'
-          : sent? ('Sent to '+sent+' ✓') : (what==='approve'?'Approved ✓':'Done ✓')); render(); }
+          : sent? ('Sent to '+sent+' ✓') : (what==='approve'?'Approved ✓':'Done ✓'));
+    if(card) card.remove();      // handled: remove it in place, keep the rest of the list where it is
+    refreshBadge(); }
   catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
 }
 // A real-list newsletter action is NEVER a plain approve: the operator must type the exact recipient
