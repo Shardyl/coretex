@@ -31,6 +31,11 @@ from psycopg.types.json import Json
 from . import calendar as gcal
 from . import crm, db, notifications, provider
 
+# The brief names its model OUTRIGHT. The 'opus' tier is not trustworthy here: /etc/cortex/cortex.env
+# pins CORTEX_MODEL, so a skill marked 'opus' has silently been resolving to whatever that pin says.
+# Rashad approved Opus 5 for this job specifically (31 Aug 2026), so this job asks for it by name.
+BRIEF_MODEL = "claude-opus-5"
+
 LEAD_HOURS = 24          # brief lands a day before the meeting, so the research is still fresh
 LOOKAHEAD_HOURS = 30     # how far ahead we read the calendar
 _MIN_GAP_SECONDS = 600   # don't hammer the Calendar API from a 60-second loop
@@ -90,15 +95,22 @@ Anything sensitive: an unpaid invoice, a project that went badly, someone who ha
 stalled the last conversation. One line each. Say "nothing" if there is nothing.
 
 OUR RELEVANT WORK
-Up to three of our films that genuinely fit this client, with their real links from the media library
-served to you. If none fit, say so. Never invent a link.
+Include this section ONLY if a media library was served to you. Then give up to three of our films
+that genuinely fit this client, with their real links exactly as served. Never invent a link. If no
+library was served, leave the section out entirely rather than apologising for its absence.
 
 SOURCES
 The URLs you actually used, one per line.
 
 Rules of the house: no em dashes or en dashes in the body copy, use commas or colons. No emoji.
 British spelling. Plain sentences. If a fact is not in the context you were served and you did not
-find it in a search, leave it out rather than smoothing over the gap."""
+find it in a search, leave it out rather than smoothing over the gap.
+
+FORMAT. Start with the first heading. No preamble, no "here is your brief", no sign-off, no
+horizontal rules, no prepared-on or confidential line, no bold or markdown decoration. Headings on
+their own line in plain capitals exactly as written above. The cockpit styles them. Under each
+heading, short plain lines. 500 words for the whole brief. If you are running long, cut the
+commentary, never the questions."""
 
 
 def ensure_schema() -> None:
@@ -307,7 +319,8 @@ def brief_for(event: dict, *, dry_run: bool = False) -> dict:
         return {"skipped": "unknown company"}
     skill = _skill(company["id"])
     ctx, deal_id = _context(company, event, guests)
-    model = provider.resolve_model(skill.get("model") or "opus")
+    tier = (skill.get("model") or "").strip()
+    model = provider.resolve_model(tier) if tier in ("sonnet", "haiku") else BRIEF_MODEL
     text = provider.think_research(
         _system(company, skill), _user(event, guests, ctx),
         model=model, max_tokens=3000, max_searches=10,
