@@ -431,6 +431,18 @@ WHERE THE BRIEF LIVES. Three places, all written at brief time:
   brief link there would hand our own intelligence to the client.
 * The deal timeline (`pipeline.log_deal(..., 'brief', ...)`) and the notification body.
 
+## Approvals: the step-up must COMPLETE the action (1 Sep 2026)
+
+`POST /api/stepup/pin/verify` takes an optional intent (`task_id`, `action`, `run_at`) and runs
+`engine.approve_task` inside that same request. Do NOT go back to issue-proof-then-let-the-page-retry.
+The old flow was: approve (rejected, no proof) -> PIN verify (proof issued) -> page fires approve
+again. Card 418 lost the third leg because cortex-api restarted in that 2-second window, so a valid
+proof sat unused and the card stayed `awaiting_approval` while the cockpit had moved on. A reload, a
+service-worker update or a backgrounded phone does the same. The fingerprint route carries no intent
+and still fires its own approve; `stepUp()` resolves `{token, done}` for both.
+Related earlier failure, same area, different cause: `_approve(..., stepped_up=True)` - the cockpit
+gate had already consumed the proof, and re-checking it inside `_approve` blocked cards 383/384.
+
 ## Personal company (`personal`, id 29, 2026-08-31)
 
 `companies.kind='personal'` — Rashad's own life, NOT a business. Created on his instruction to run
