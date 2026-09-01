@@ -1803,7 +1803,7 @@ function meetingBriefCard(t,co){
   const when=m.start?new Date(m.start):null;
   const whenTxt=when?when.toLocaleString('en-GB',{weekday:'long',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Dubai'}):'';
   const who=(m.attendees||[]).map(a=>esc(a.name||a.email)).join(', ');
-  const join=m.hangout?`<a class="btn sm" href="${esc(m.hangout)}" target="_blank" rel="noopener">${ic('link',14)} Join</a>`:'';
+  const join=m.hangout?`<a class="btn sm" href="${esc(m.hangout)}" target="_blank" rel="noopener">${ic('link',14)} Join the meeting</a>`:'';
   const served=(r.context_served||[]).length?`<div class="meta" style="margin-top:8px;opacity:.65;font-size:11px">Read before writing: ${esc((r.context_served||[]).join(', '))}</div>`:'';
   return `<div class="card" id="t${t.id}">
     <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${ic('spark',13)} pre-meeting brief</span>
