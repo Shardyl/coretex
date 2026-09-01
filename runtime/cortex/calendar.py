@@ -342,3 +342,23 @@ def upcoming_events(hours: int = 30) -> list[dict]:
             })
     out.sort(key=lambda e: e["starts_at"])
     return out
+
+
+def event_has_guests(company: str, event_id: str, calendar_id: str = "primary") -> bool:
+    """Does this event have anyone invited to it? A guest on an event means deleting it EMAILS them a
+    cancellation, so nothing may delete it silently. Fails CLOSED: if we cannot tell, we say yes, and
+    the caller leaves the event alone (a stale slot costs availability; a wrongly-cancelled client
+    meeting costs the meeting)."""
+    try:
+        calendar_id = _cal_id(company, calendar_id)
+        tok = _token(company)
+        r = httpx.get(
+            f"https://www.googleapis.com/calendar/v3/calendars/{urllib.parse.quote(calendar_id)}"
+            f"/events/{urllib.parse.quote(event_id)}",
+            headers={"Authorization": f"Bearer {tok}"}, timeout=30)
+        if r.status_code != 200:
+            return True
+        ev = r.json()
+        return bool([a for a in (ev.get("attendees") or []) if not a.get("self")])
+    except Exception:  # noqa: BLE001
+        return True

@@ -370,6 +370,9 @@ def brief_for(event: dict, *, dry_run: bool = False) -> dict:
         "values (%s,%s,'meeting_brief',%s,%s,'awaiting_approval',%s,%s) returning *",
         (company["id"], (skill or {}).get("id"), Json({
             "title": title, "brief": text, "meeting": {
+                # read-only: this card DESCRIBES the meeting, it does not own it. `invited` is stamped
+                # so nothing downstream can ever mistake it for a guest-less slot the card pre-booked.
+                "invited": True, "readonly": True,
                 "event_id": event.get("event_id"), "title": event.get("title"),
                 "start": event["starts_at"].isoformat(), "location": event.get("location"),
                 "hangout": event.get("hangout"), "attendees": guests},

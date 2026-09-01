@@ -1156,14 +1156,22 @@ def _skip(task: dict, skill: dict, company: dict) -> None:
         return
     store.update_task(task["id"], status="rejected")
     mt = (task.get("request") or {}).get("meeting") or {}
-    if mt.get("event_id") and not mt.get("invited"):
-        # a pre-booked (guest-less) meeting dies with its card — phantom bookings must never
-        # accumulate and eat availability. No guest was ever invited, so nobody is notified.
+    # A card may only delete an event IT created. Two guards, both learned the hard way on 1 Sep 2026:
+    # dismissing the ECBD pre-meeting BRIEF deleted the real client meeting it was briefing, because the
+    # brief card carries the same `meeting` block and this code only asked "is there an event_id?".
+    #   1. only a card whose own draft pre-booked a guest-less slot owns that event
+    #   2. never delete an event that has GUESTS on it, whatever the card thinks — Google emails them a
+    #      cancellation, and the client is left believing the meeting is off (Sunwoo Yoo was)
+    if mt.get("event_id") and not mt.get("invited") and task.get("kind") in EMAIL_RENDER_KINDS:
         try:
             from . import calendar as gcal
-            gcal.delete_event(mt.get("calendar") or (company or {}).get("slug") or "sensa", mt["event_id"])
-        except Exception:  # noqa: BLE001
-            pass
+            cal_co = mt.get("calendar") or (company or {}).get("slug") or "sensa"
+            if gcal.event_has_guests(cal_co, mt["event_id"]):
+                print(f"[skip] task {task['id']}: event {mt['event_id']} has guests — NOT deleted", flush=True)
+            else:
+                gcal.delete_event(cal_co, mt["event_id"])
+        except Exception as _de:  # noqa: BLE001
+            print(f"[skip] task {task['id']}: event delete skipped: {_de}", flush=True)
     store.reset_streak(skill["id"])   # a rejection breaks the clean-approval streak
     store.log_decision(task["id"], skill["id"], "owner", "reject", snapshot={"draft": task.get("draft")})
     if task.get("tg_message_id"):

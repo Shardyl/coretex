@@ -454,6 +454,19 @@ that list, so a successor can never be invented.
 Still to do: an out-of-office with a return date should shift the follow-up clock instead of firing
 into an empty inbox (`read()` already returns kind='away' for it).
 
+## A card may only delete an event IT created (1 Sep 2026)
+
+`_skip` used to delete any event whose id sat on the card's `request.meeting`, guarded only by
+`not mt.invited`. On 1 Sep 2026 Rashad DISMISSED the ECBD pre-meeting brief (card 419) and that
+deleted the real client meeting it was briefing, 3.5 hours before it started. Sunwoo Yoo was the only
+attendee, so Google emailed her a cancellation and cleared it from her calendar; she did not join, and
+the room had to be re-shared by hand mid-meeting. The brief card carried the same `meeting` block as
+the email cards, without their `invited: true`.
+Three guards now, keep all three: the deleting card must be an EMAIL_RENDER_KIND (only a draft
+pre-books a slot), `calendar.event_has_guests` refuses any event with an attendee and FAILS CLOSED,
+and `meetingprep` stamps `invited/readonly` on the brief's copy of the meeting. A stale slot costs a
+little availability; a wrongly-cancelled client meeting costs the meeting.
+
 ## Approvals: the step-up must COMPLETE the action (1 Sep 2026)
 
 `POST /api/stepup/pin/verify` takes an optional intent (`task_id`, `action`, `run_at`) and runs
