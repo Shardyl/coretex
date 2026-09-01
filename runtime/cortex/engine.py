@@ -3968,7 +3968,14 @@ def run(poll_idle: float = 1.0) -> None:
             except Exception:  # noqa: BLE001 — background sync; never noisy
                 pass
             try:
-                meetnotes.sweep()       # hourly: Gemini meeting notes -> CRM + drafting context
+                # PRIMARY (every 10 min): Gemini emails the notes to every participant, and that mail
+                # cannot be deleted out from under us the way a calendar event can. Costs nothing to run
+                # often - the only paid step is distilling a NEW write-up, once per meeting.
+                meetnotes.sweep_email()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                meetnotes.sweep()       # SECONDARY (hourly): notes attached to the calendar event
             except Exception:  # noqa: BLE001
                 pass
             try:

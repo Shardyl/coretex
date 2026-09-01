@@ -10,6 +10,7 @@ follow-ups reflect what was actually said on the call. Sensa + SkyVision share t
 from __future__ import annotations
 
 import json
+import re
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -187,3 +188,130 @@ def latest_for_contact(company_id: int, email: str) -> dict | None:
     return db.one("select title, starts_at, summary from meeting_notes where attendees ? %s "
                   "and (company_id is null or company_id=%s) order by starts_at desc nulls last limit 1",
                   ((email or "").lower(), company_id))
+
+
+# ---------- THE EMAIL PATH: read the notes where Gemini actually delivers them ----------
+#
+# The calendar was the wrong source. It carries the notes only as an attachment on the event, so the
+# notes die with the event: the ECBD board-meeting call on 1 Sep 2026 ran fine, Gemini wrote it up,
+# and Cortex could never have seen it because the event had been cancelled hours earlier.
+#
+# Gemini also EMAILS the notes to every participant, from gemini-notes@google.com, with the whole
+# write-up in the body. That mail lands in three of our mailboxes and cannot be deleted out from under
+# us, so it is now the primary source. The calendar sweep stays as the secondary.
+
+_NOTES_SENDER = "gemini-notes@google.com"
+_NOTES_SUBJ_TIME = re.compile(
+    r"Notes:\s*(?:Meeting\s+)?(?P<rest>.+?)\s+(?P<mon>[A-Z][a-z]{2})\s+(?P<day>\d{1,2}),\s*(?P<yr>\d{4})"
+    r"\s+at\s+(?P<h>\d{1,2}):(?P<m>\d{2})\s*(?P<ap>AM|PM)", re.I)
+
+
+def _subject_start(subject: str) -> datetime | None:
+    """The meeting's start time, out of Gemini's subject line. Code parses it; nothing guesses a date."""
+    m = _NOTES_SUBJ_TIME.search(subject or "")
+    if not m:
+        return None
+    try:
+        hh = int(m.group("h")) % 12 + (12 if m.group("ap").upper() == "PM" else 0)
+        return datetime.strptime(
+            f"{m.group('day')} {m.group('mon')} {m.group('yr')} {hh:02d}:{m.group('m')}",
+            "%d %b %Y %H:%M").replace(tzinfo=_GST_TZ())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _GST_TZ():
+    from zoneinfo import ZoneInfo
+    return ZoneInfo("Asia/Dubai")
+
+
+def _attendees_at(start: datetime) -> tuple[list[str], str]:
+    """Who was in that meeting, from the calendars — INCLUDING cancelled events, which is the whole
+    point: the event may have been deleted and the meeting still happened. Returns (emails, title)."""
+    from . import calendar as gcal
+    lo, hi = start - timedelta(minutes=45), start + timedelta(minutes=45)
+    for entry in (db.setting_get("availability_calendars") or []):
+        co, cal = entry.get("company") or "sensa", entry.get("id") or "primary"
+        try:
+            tok = gcal._token(co)
+            q = urllib.parse.urlencode({"timeMin": lo.isoformat(), "timeMax": hi.isoformat(),
+                                        "singleEvents": "true", "showDeleted": "true", "maxResults": "25"})
+            items = json.load(urllib.request.urlopen(urllib.request.Request(
+                f"https://www.googleapis.com/calendar/v3/calendars/{urllib.parse.quote(cal)}/events?{q}",
+                headers={"Authorization": f"Bearer {tok}"}), timeout=30)).get("items") or []
+        except Exception:  # noqa: BLE001
+            continue
+        for ev in items:
+            ext = [(a.get("email") or "").lower() for a in (ev.get("attendees") or [])
+                   if a.get("email") and (a["email"].split("@")[-1].lower() not in _OWN)]
+            if ext:
+                return ext, (ev.get("summary") or "")
+    return [], ""
+
+
+def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = False) -> dict:
+    """Gemini's own notes emails -> meeting_notes. Primary path; survives a deleted calendar event."""
+    import time
+    last = db.setting_get("meetnotes_email_ts") or 0
+    if min_gap_minutes and time.time() - float(last) < min_gap_minutes * 60:
+        return {"skipped": True}
+    db.setting_set("meetnotes_email_ts", time.time())
+    ensure_schema()
+    from . import gmail
+    made, seen_keys = [], set()
+    for entry in (db.setting_get("inbox_registry") or []):
+        rt = entry.get("rt_key")
+        if not rt or not db.setting_get(rt):
+            continue
+        try:
+            tok = gmail._token_for(rt, "gmail", entry.get("slug"))
+            res = gmail._get(tok, "messages", {"q": f"newer_than:{days_back}d from:{_NOTES_SENDER}",
+                                               "maxResults": 20})
+        except Exception:  # noqa: BLE001
+            continue
+        for ref in (res.get("messages") or []):
+            try:
+                full = gmail._get(tok, "messages/" + ref["id"], {"format": "full"})
+                hdr = {h["name"]: h["value"] for h in (full.get("payload") or {}).get("headers", [])}
+                subject = hdr.get("Subject", "")
+                body = gmail._plain_body(full.get("payload") or {})
+                if len(body.strip()) < 200:
+                    continue
+                start = _subject_start(subject)
+                # ONE row per meeting, not per mailbox: the same notes email reaches hello@, gino@ and
+                # ayresh@, so the key is the meeting itself (its start time), never the message id.
+                key = "gemini-notes:" + (start.isoformat() if start else ref["id"])
+                if key in seen_keys or db.one("select 1 from meeting_notes where event_id=%s", (key,)):
+                    seen_keys.add(key)
+                    continue
+                emails, ev_title = _attendees_at(start) if start else ([], "")
+                title = ev_title or subject.replace("Notes:", "").strip()
+                summary = _distil(title, body)
+                company_id = deal_id = None
+                for em in emails:
+                    for slug in ("sensa", "skyvision", "tabscanner", "filmspoke", "snaprewards"):
+                        ds = crm.active_deals_for_email(em, slug)
+                        if ds:
+                            co = store.get_company_by_slug(slug)
+                            company_id, deal_id = (co or {}).get("id"), ds[0]["id"]
+                            break
+                    if deal_id:
+                        break
+                db.execute(
+                    "insert into meeting_notes (event_id, file_id, company_id, deal_id, title, starts_at,"
+                    " attendees, summary) values (%s,%s,%s,%s,%s,%s,%s,%s) on conflict (event_id) do nothing",
+                    (key, ref["id"], company_id, deal_id, title, start, json.dumps(emails), summary))
+                for em in emails:
+                    try:
+                        crm.log_event(em, "meeting_notes", f"Meeting: {title} — notes captured", None)
+                    except Exception:  # noqa: BLE001
+                        pass
+                if deal_id:
+                    from . import pipeline
+                    pipeline.record_meeting(deal_id, company_id, title, summary, commitments=not backfill)
+                seen_keys.add(key)
+                made.append({"key": key, "deal": deal_id, "title": title[:60]})
+            except Exception as e:  # noqa: BLE001 — one bad message never stops the rest
+                print(f"[meetnotes-email] {type(e).__name__}: {e}", flush=True)
+                continue
+    return {"captured": made}
