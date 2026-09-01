@@ -632,12 +632,18 @@ def log_conversation(text: str, company_slug: str = "sensa", contact_hint: str =
 
 # ---------- meetings feed the same loop ----------
 
-def record_meeting(deal_id: int, company_id: int | None, title: str, summary: str) -> None:
+def record_meeting(deal_id: int, company_id: int | None, title: str, summary: str,
+                   commitments: bool = True) -> None:
     """A meeting on a deal lands on its timeline, and the things OUR side committed to in it become
-    tracked commitments - the same loop as email, so meetings stop leaking promises."""
+    tracked commitments - the same loop as email, so meetings stop leaking promises.
+
+    commitments=False for a BACKFILL of old meetings: the timeline entry is still true history, but a
+    commitment made in May must not become a live reminder dated from today."""
     if not deal_id:
         return
     log_deal(deal_id, "meeting", f"{title}: {(summary or '')[:900]}")
+    if not commitments:
+        return
     try:
         out = provider.think_json(
             "From this meeting summary, extract only the action items OUR side (the production company) "

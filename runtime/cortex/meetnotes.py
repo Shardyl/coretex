@@ -60,8 +60,13 @@ def _distil(title: str, text: str) -> str:
         f"Meeting: {title}\n\nNOTES:\n{text[:24000]}", fast=True, max_tokens=800, purpose="meetnotes-distil")
 
 
-def sweep(days_back: int = 7, min_gap_minutes: int = 60) -> dict:
-    """Hourly from the engine loop: process finished meetings with Gemini notes, once each."""
+def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False) -> dict:
+    """Hourly from the engine loop: process finished meetings with Gemini notes, once each.
+
+    backfill=True reaches back over OLD meetings to recover the memory only. It still stores the notes
+    and the deal-timeline history, but it never extracts commitments into live reminders and never
+    drafts a post-meeting follow-up: an email thanking someone for a call held in May, or a reminder
+    dated from a promise made four months ago, would be worse than the gap it is filling."""
     import time
     last = db.setting_get("meetnotes_sweep_ts") or 0
     if time.time() - float(last) < min_gap_minutes * 60:
@@ -125,13 +130,15 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60) -> dict:
             if deal_id:                           # pipeline loop: meeting -> deal timeline + our commitments
                 try:
                     from . import pipeline
-                    pipeline.record_meeting(deal_id, company_id, e.get("summary") or "Meeting", summary)
+                    pipeline.record_meeting(deal_id, company_id, e.get("summary") or "Meeting", summary,
+                                            commitments=not backfill)
                 except Exception:  # noqa: BLE001
                     pass
-            try:                                  # the meeting is the midpoint, not the end: draft the follow-up
-                _spawn_post_meeting_followup(e, ext, company_id, deal_id, summary)
-            except Exception:  # noqa: BLE001
-                pass
+            if not backfill:                      # the meeting is the midpoint, not the end: draft the follow-up
+                try:
+                    _spawn_post_meeting_followup(e, ext, company_id, deal_id, summary)
+                except Exception:  # noqa: BLE001
+                    pass
             made += 1
     return {"captured": made}
 
