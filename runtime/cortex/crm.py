@@ -1352,6 +1352,7 @@ def auto_opportunity(email: str, company_slug: str, sug: dict | None, inq: dict 
             pipeline.research_opportunity(p["id"], _co, inq)
     except Exception:  # noqa: BLE001 — research is a bonus, never a blocker
         pass
+    arm_new_deal(p["id"])   # auto is the default: an auto-qualified enquiry starts chasing on its own
     return db.one("select * from crm_projects where id=%s", (p["id"],))
 
 
@@ -1395,6 +1396,7 @@ def create_project(company: str, contact_email: str, title: str, value=None,
             db.execute("update crm_master set is_client=true where lower(email)=lower(%s)", (contact_email,))
         log_event(contact_email, "deal_created", f"{title} ({stage})"
                   + (f" — {value} {currency}" if value else ""), company)
+    arm_new_deal(row["id"])
     return row["id"]
 
 
@@ -1499,7 +1501,40 @@ def create_deal(company: str, title: str, value=None, currency: str = "AED", sta
          Json([{"ts": _now(), "event": "deal_created", "text": f"{title} ({stage})"}])))
     if account_id and stage in WON_STAGES:
         flag_clients_for_deal(db.one("select * from crm_projects where id=%s", (row["id"],)))
+    arm_new_deal(row["id"])
     return db.one("select * from crm_projects where id=%s", (row["id"],))
+
+
+def arm_new_deal(deal_id: int) -> None:
+    """AUTO IS THE DEFAULT (owner, 31 Aug 2026): a new deal starts chasing on the company cadence
+    without anyone remembering to switch it on. That is the whole point of Cortex - before this,
+    4 of Tabscanner's 5 open opportunities were sitting silent because nobody flipped the toggle.
+
+    Never armed for a stage where a chase makes no sense (Lost, Dormant, Nurture - which has its own
+    account-level loop - and Completed, which is silent by design). A deal with no contact anywhere
+    cannot be chased, so it is left off and the owner is told once, rather than nudged every 3 days
+    into a void."""
+    p = db.one("select * from crm_projects where id=%s", (deal_id,))
+    if not p or p.get("automation") or p.get("stage") in (
+            LOST_STAGE, DORMANT_STAGE, NURTURE_STAGE, COMPLETED_STAGE):
+        return
+    has_contact = bool((p.get("contact_email") or "").strip()) or bool(p.get("contacts"))
+    if not has_contact and p.get("account_id"):
+        has_contact = bool(db.one("select 1 from crm_master where account_id=%s and "
+                                  "coalesce(email,'')<>'' limit 1", (p["account_id"],)))
+    if not has_contact:
+        try:
+            from . import notifications, store
+            co = store.get_company_by_slug(_slug_for_org(p.get("company")))
+            notifications.notify(
+                f"No contact on '{p.get('title')}' - follow-ups can't start",
+                "Add a contact to the deal and it will chase automatically.",
+                category="reminder", company_id=(co or {}).get("id"),
+                target_type="deal", target_id=str(deal_id), dedup_key=f"nocontact:{deal_id}")
+        except Exception:  # noqa: BLE001
+            pass
+        return
+    start_opportunity_followups(deal_id)
 
 
 def set_contact_account(email: str, account_id) -> dict | None:

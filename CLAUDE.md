@@ -184,6 +184,18 @@ never to claim an attachment the tools didn't confirm.
 
 ## Opportunity follow-up automation (2026-08-25)
 
+AUTO IS THE DEFAULT (owner, 31 Aug 2026). `crm.arm_new_deal()` runs on every creation path
+(`create_project`, `create_deal`, `auto_opportunity`) and puts the deal straight onto the cadence.
+Before this, automation defaulted to NULL/off and only the cockpit toggle ever armed it: 4 of
+Tabscanner's 5 open opportunities were silently doing nothing. Never armed for Lost/Dormant/Nurture
+(its own account-level loop)/Completed (silent by design). A deal with NO contact anywhere is left
+off and raises ONE deduped "no contact" notification rather than nudging into a void every 3 days.
+Existing pre-31-Aug deals were NOT retro-armed - that would fire a chase blast.
+`_spawn_followup_card` resolves the contact the same way the quotation does: deal contact wins, else
+the ACCOUNT's single emailable contact fills in, ambiguity stays blank (a deal whose contact sat on
+the account but not the deal, Codexa, silently never drafted). The greeting name comes from
+`crm_master` when the deal row has none.
+
 Cadence (config: company `followup_cadence` profile override, else `crm.DEFAULT_CADENCE`): 4 chases
 3d apart → 2 fortnightly check-ins → soft revivals at ~3 and ~6 months → stage **Dormant**. NEVER
 auto-Lost (standing rule: nobody who approached us is dumped as dead; Lost = an explicit "no" only).

@@ -2422,6 +2422,15 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
     contacts = opp.get("contacts") or []
     primary = next((c for c in contacts if c.get("primary")), contacts[0] if contacts else None)
     email = (primary or {}).get("email") or opp.get("contact_email")
+    if not email and opp.get("account_id"):
+        # Same doctrine as the quotation contact (quotation._contact_for): an explicit contact wins,
+        # otherwise the deal's ACCOUNT fills in only when it has exactly ONE emailable contact.
+        # Ambiguity stays blank rather than guessing which colleague to chase. Without this a deal
+        # whose contact sits on the account but not on the deal (Codexa) silently never drafted.
+        rows = db.query("select email from crm_master where account_id=%s and coalesce(email,'')<>''",
+                        (opp["account_id"],))
+        if len(rows) == 1:
+            email = rows[0]["email"]
     if email and db.one("select id from tasks where company_id=%s and kind='email_reply' and "
                         "status in ('new','drafting','awaiting_approval','awaiting_correction','sending') "
                         "and lower(request->'inquiry'->>'email')=lower(%s) limit 1", (co["id"], email)):
@@ -2466,7 +2475,11 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
         if thread:
             brief += ("\nRECENT CORRESPONDENCE with them (newest first — reference it, stay consistent "
                       "with it, and never repeat a chase they already answered):\n" + thread[:5000])
-        inq = {"name": (primary or {}).get("name") or "", "email": email, "message": ""}
+        name = (primary or {}).get("name") or ""
+        if not name:   # the CRM knows who they are even when the deal row doesn't — "Hi Brent", not "Hi there"
+            c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (email,))
+            name = " ".join(x for x in ((c or {}).get("first_name"), (c or {}).get("last_name")) if x).strip()
+        inq = {"name": name, "email": email, "message": ""}
         # the situation is SYSTEM knowledge, never 'their words' (contract: inquiry.message = client only)
         t = store.create_card(co["id"], skill["id"], "email_reply",
                               {"brief": brief, "inquiry": inq, "followup": action, "deal_id": opp["id"],
