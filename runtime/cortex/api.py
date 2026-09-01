@@ -3183,7 +3183,8 @@ SKILL_TOOLS = [
 ]
 
 
-def _exec_skill_tool(name: str, inp: dict) -> str:
+def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
+    u = u if isinstance(u, dict) else {"companies": None}   # default: owner scope (no filter)
     if name == "system_knowledge":
         return knowledge.search(inp.get("query", ""))
     if name == "list_skills":
@@ -3260,7 +3261,7 @@ def _exec_skill_tool(name: str, inp: dict) -> str:
         return json.dumps(out, default=str)
     if name == "crm_pipeline":
         slug = inp.get("company")
-        opp, proj = crm_opportunities(slug, _=None), crm_projects(slug, _=None)
+        opp, proj = crm_opportunities(slug, u=u), crm_projects(slug, u=u)
         return json.dumps({"opportunities_count": opp["count"], "forecast_value": opp["total_value"],
                            "top_opportunities": [{"title": o["title"], "value": o["value"], "company": o["company"]}
                                                  for o in opp["opportunities"][:8]],
@@ -3703,7 +3704,7 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
         if name == "add_rule" and inp.get("scope") == "universal" and (user or {}).get("role") != "owner":
             return ("Universal (all-company) rules are the owner's call alone. Save it for this user's own "
                     "company instead, and tell them Rashad can widen it to all companies.")
-        return _exec_skill_tool(name, inp)
+        return _exec_skill_tool(name, inp, u=user)
     return msgs, chosen, system, tools, _exec
 
 
