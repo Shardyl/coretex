@@ -559,11 +559,21 @@ function inboxContact(email){ if(!email) return; tab='crm'; crmView='contacts';
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t==='crm'));
   openContact(email); }
 function histText(t){ t=t||'';
-  if(t.length<=260) return esc(t);
+  if(t.length<=260) return linky(t);
   const id='h'+Math.random().toString(36).slice(2,9);
-  return `<span id="${id}s">${esc(t.slice(0,260))}… <span style="cursor:pointer;text-decoration:underline" onclick="document.getElementById('${id}s').style.display='none';document.getElementById('${id}f').style.display='inline'">more</span></span><span id="${id}f" style="display:none">${esc(t)}</span>`;
+  // the collapsed preview stays plain: a link cut mid-URL by the 260-char trim would be a broken one
+  return `<span id="${id}s">${esc(t.slice(0,260))}… <span style="cursor:pointer;text-decoration:underline" onclick="document.getElementById('${id}s').style.display='none';document.getElementById('${id}f').style.display='inline'">more</span></span><span id="${id}f" style="display:none">${linky(t)}</span>`;
 }
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// Notes and deal timelines carry REAL links (brief pages, Drive docs, portfolio films). Render them
+// clickable. Escapes FIRST and linkifies the escaped text, so a note can never inject markup.
+function linky(s){
+  return esc(s).replace(/https?:\/\/[^\s<]+/g, m=>{
+    let tail='';
+    while(/[.,;:!?)\]]$/.test(m)){ tail=m.slice(-1)+tail; m=m.slice(0,-1); }
+    return `<a href="${m}" target="_blank" rel="noopener" style="color:var(--acc);word-break:break-all">${m}</a>`+tail;
+  });
+}
 
 // ---- clean outline line-icons (no emoji anywhere) ----
 const ICON={
@@ -796,7 +806,7 @@ async function openContact(email,id){
     <div id="ccCompanies" class="dsec"><div class="dlbl">Companies & test groups</div><div class="csub">Loading…</div></div>
     <div class="dgrid">${fieldRows(c)}</div>
     ${noteBox('c',c.email)}
-    ${c.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${esc(c.note)}</div></div>`:''}
+    ${c.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${linky(c.note)}</div></div>`:''}
     ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>{const lbl=h.event?(h.event||'').replace(/_/g,' '):(h.anchor?'engaged · '+h.anchor:(h.post?'engaged':'note'));const txt=h.text||h.engagement||'';return `<div class="hitem"><span class="hled" style="background:${h.event==='reply_sent'?'#2ad17e':'#00DAFF'}"></span><div><b>${esc(lbl)}</b><div class="csub">${esc(String(txt).slice(0,160))}</div></div></div>`;}).join('')}</div>`:''}
     </div>`;
   loadContactCompanies(email,c.id);
@@ -1121,7 +1131,7 @@ async function openProject(id){
       ${dealAutomation(p)}
       ${noteBox('p',p.id)}
       <div class="dgrid">${fld('briefcase',p.owner&&('Owner: '+p.owner))}${fld('file',p.quote_ref&&('Quote ref '+p.quote_ref))}</div>
-      ${p.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${esc(p.note)}</div></div>`:''}
+      ${p.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${linky(p.note)}</div></div>`:''}
       ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${histText(h.text)}</div></div></div>`).join('')}</div>`:''}
     </div>`;
 }
@@ -1303,7 +1313,7 @@ function nurturePanel(a){
   return rows.map(n=>`<div style="padding:4px 0">
     <div class="row" style="gap:8px;align-items:baseline;flex-wrap:wrap"><b style="font-size:13px">${esc(n.business)}</b>${nurtChip(n)}</div>
     <div class="csub">Contact: ${esc(n.contact_email||'best from roster')} · every ${n.cadence_days}d · last ${fmtd(n.last_touch)} · next ${fmtd(n.next_touch)}${n.live_work?' · holding while live work is open':''}</div>
-    ${n.note?`<div class="csub" style="opacity:.85">${esc(n.note)}</div>`:''}
+    ${n.note?`<div class="csub" style="opacity:.85">${linky(n.note)}</div>`:''}
     <div class="row" style="margin-top:6px">${n.status==='stopped'
       ?`<button class="btn sm" onclick="nurtureAct(${n.id},'resume',${a.id})">Resume</button>`
       :`<button class="btn sm ghost" onclick="nurtureAct(${n.id},'stop',${a.id})">Stop</button>`}</div>
@@ -2654,7 +2664,7 @@ async function renderLog(v){
   document.getElementById('lg').outerHTML = d.length? d.map(x=>`
     <div class="logitem"><div class="led ${x.action}"></div><div class="logmain">
       <b>${x.actor==='cortex'?'Cortex':'You'}</b> ${verb[x.action]||x.action} <b>task #${x.task_id}</b>
-      ${x.note?`<div class="s">“${esc(x.note)}”</div>`:''}</div></div>`).join('')
+      ${x.note?`<div class="s">“${linky(x.note)}”</div>`:''}</div></div>`).join('')
     : '<div class="empty">No activity yet.</div>';
 }
 
