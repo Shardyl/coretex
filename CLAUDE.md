@@ -383,6 +383,27 @@ Lead -> opportunity conversion was already automatic on both intake lanes (quali
 with won -> project and Close & review now wired, the lead -> opportunity -> project -> close chain is
 closed end to end.
 
+## Talk can now do the sales job end to end (2026-09-01)
+
+Built so that asking Cortex produces what Claude would produce (owner rule: deliver THROUGH Cortex,
+build the capability when it is missing).
+- **`create_proposal` / `deck.py`** — the house proposal deck. The model writes the copy under the
+  company's live `sales-quotation` rules; CODE stamps every fact: sample films from `media_assets` by
+  category intersection and rating, original YouTube thumbnails trimmed to true 16:9, a generated cover
+  for the client's world carrying no legible text, and prices read from the named quotation via the
+  `quote_versions:<number>` registry so the deck can never contradict it. `engine.deliver_proposal`
+  files to the document library + the client's Drive folder and raises a review card; it never sends.
+- **`rate_card` / `set_rate`** — read the card (both tiers, and the OWNER TO CONFIRM gaps, which matter
+  as much as the rates); record a rate Rashad STATES. Never invent one.
+- **`media_library` / `rate_film`** — search the canonical portfolio; record his 1-10 rating. An UNRATED
+  film ranks below every rated one, so a new upload is invisible to clients until he rates it (the
+  sports showreel sat unpicked for exactly this reason until rated 8).
+- **`research_client`** — the Fable 5 + web-search brief on demand, not only when an opportunity is
+  auto-created.
+- **`export_templates` / `_export_templates.py`** — re-export presets + rate card to the Drive terms
+  folder. Cortex is the LIVE source, the folder is the human copy; run it after any preset/terms/rate
+  change.
+
 ## Rate card (2026-08-28)
 
 `rate_card:<slug>` setting = the company's per-unit pricing reference (`runtime/cortex/ratecard.py`:

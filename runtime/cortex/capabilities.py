@@ -67,10 +67,25 @@ CAPABILITIES: list[tuple[str, str]] = [
      "Drive folder and the document library; it never contacts the client - to send it, draft an email and "
      "attach the document."),
     ("Rate card — pricing reference",
-     "Each company has a rate card (setting rate_card:<slug>) of OWNER-APPROVED per-unit prices; it is "
-     "injected into every quotation-adjacent draft. Prices come ONLY from it: an item not on the card is "
-     "named and marked OWNER TO CONFIRM, never priced by a model. When Rashad states a new rate, save it "
-     "to the card (ratecard.set_item) so every future quote uses it."),
+     "rate_card reads a company's OWNER-APPROVED per-unit prices, both tiers and every gap still marked "
+     "OWNER TO CONFIRM; it is also injected into every quotation-adjacent draft. Prices come ONLY from it "
+     "and are never invented. When Rashad STATES a rate, record it with set_rate so every future quote "
+     "uses it, then run export_templates so the Drive terms folder matches."),
+    ("Media library — search and rate",
+     "media_library searches the canonical portfolio (category-slug intersection, highest-rated first, with "
+     "watch URLs) - the ONLY source for sample and example films. rate_film records Rashad's own 1-10 "
+     "rating, which is what decides who gets shown: an UNRATED film ranks below every rated one, so a new "
+     "upload stays invisible to clients until he rates it. If nothing matches, say so - never substitute a "
+     "film from anywhere else."),
+    ("Research on demand",
+     "research_client runs live web research on a client or prospect and returns a verified insight brief "
+     "(who they are, market context, 2-3 true contributable facts). Anything unverifiable comes back marked "
+     "UNVERIFIED - trust that and never fill the gap. Pass deal_id to save it to the opportunity."),
+    ("Templates and terms in Drive",
+     "export_templates re-exports every quotation template and the rate card to Rashad's terms folder on "
+     "Drive. Cortex is the LIVE source and that folder is the human copy: after changing a preset, its "
+     "terms or a rate, re-export so they never drift apart. Each contract type (production, retainer, "
+     "assignment) has its OWN terms set and preset, never amendments bolted onto another type."),
     ("Opportunity research — Fable 5",
      "Every new opportunity gets ONE research pass (Fable 5 + live web search, owner-approved exception to "
      "the Haiku default): sender verified, mode classified (direct vs procurement), 2-3 TRUE contributable "
