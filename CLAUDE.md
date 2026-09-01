@@ -431,6 +431,26 @@ WHERE THE BRIEF LIVES. Three places, all written at brief time:
   brief link there would hand our own intelligence to the client.
 * The deal timeline (`pipeline.log_deal(..., 'brief', ...)`) and the notification body.
 
+## Personal company (`personal`, id 29, 2026-08-31)
+
+`companies.kind='personal'` — Rashad's own life, NOT a business. Created on his instruction to run
+automation against his PERSONAL Google account (calendar, Gmail, Drive) rather than a company one.
+
+**`kind` is the fence.** Business-wide loops must filter `where kind='owned'` so a personal company is
+never treated as a brand. Already fenced: `crm.marketing_state` (personal is NEVER a marketing
+audience - standing rule) and `meetingprep.ensure_skills`. Fence any new all-company loop the same
+way, and never add `personal` to `inbox_registry`, a newsletter, a campaign audience, or the
+opportunity pipeline.
+
+**The personal Google account needs an EXTERNAL OAuth client** - `/etc/cortex/google_oauth_client_
+personal.json`, project of its own, redirect `https://coretex.uk/oauth/google/callback`. A consumer
+@gmail.com cannot use an Internal app, and Internal is what every other company uses (which is why
+their tokens never expire). Publishing status MUST be **"In production"**: External + "Testing"
+issues a refresh token that **expires after 7 days**. Unverified production is fine here - it costs
+one "Google hasn't verified this app" click and carries a 100-new-user cap that is irrelevant for one
+user. Gmail scopes are RESTRICTED, so a Google password change revokes that token; Calendar + Drive
+are only "sensitive" and survive it.
+
 ## Media library (the YouTube catalog + review UI)
 
 `media_assets` (live DB) is the catalog of every video on a company's YouTube channel — one row
@@ -476,6 +496,8 @@ box at **coretex.uk/fitness** (`web/fitness/`), same origin as the cockpit, so i
 - Migration provenance: seeded 24 Aug 2026 from `fitness_2026-08-24.xlsx` (318 lift sessions,
   38 cardio sessions, 13 presets, 2 plans). The old app was a Netlify/standalone install whose only
   copy was phone localStorage.
+- BUILT 31 Aug 2026: company id **29, slug `personal`, kind='personal'** (see "Personal company" below).
+  The note below is the original design; the roster question is still open.
 - A personal "company" in Cortex is AGREED but NOT BUILT: `companies.kind` would be `personal` with
   its own smaller skill roster (the uniform-85 roster rule applies within `kind='owned'`), and
   personal CRM contacts must be suppressed from every campaign audience. Do not build it uninvited.

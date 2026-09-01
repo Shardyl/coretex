@@ -162,7 +162,7 @@ def ensure_schema() -> None:
 def ensure_skills() -> None:
     """The uniform-roster rule: the skill exists for EVERY company, seeded with the default craft.
     Idempotent, and it never overwrites craft or rules Rashad has since edited."""
-    for co in db.query("select id from companies order by id"):
+    for co in db.query("select id from companies where kind='owned' order by id"):
         db.execute(
             "insert into skills (company_id, skill_key, name, craft, category, department, manager, "
             "model, authority, stakes) values (%s,'meeting-prep',%s,%s,%s,%s,%s,'opus','ask','low') "

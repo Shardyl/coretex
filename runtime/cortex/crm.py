@@ -328,7 +328,9 @@ def contact_company_state(email: str | None = None, id: int | None = None) -> di
     tg = {row["company_id"] for row in
           db.query("select company_id from newsletter_test_group where active and lower(email)=lower(%s)", (em,))} if em else set()
     comps = []
-    for c in db.query("select id, slug, name from companies order by name"):
+    # kind='owned' only: a PERSONAL company is never a marketing audience (standing rule - personal
+    # contacts must be suppressed from every campaign).
+    for c in db.query("select id, slug, name from companies where kind='owned' order by name"):
         member = _org(c["slug"]).lower() in orgs
         comps.append({"slug": c["slug"], "name": c["name"], "id": c["id"],
                       "member": member, "test_group": c["id"] in tg,
