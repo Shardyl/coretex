@@ -66,3 +66,36 @@ def render(slug: str) -> str:
             note = f" ({it['note']})" if it.get("note") else ""
             lines.append(f"  - {it.get('desc', '')} — {rate} per {it.get('unit', 'each')}{note}")
     return "\n".join(lines)
+
+
+def summary(slug: str) -> str:
+    """The card as a readable list for the Talk assistant, including the Budget tier and every
+    OWNER TO CONFIRM gap — the gaps matter as much as the rates, because they are what stops a
+    quotation being finished."""
+    card = get(slug)
+    if not card or not card.get("groups"):
+        return f"No rate card exists for {slug} yet."
+    cur = card.get("currency", "AED")
+    lines = [f"Rate card for {slug} ({cur}, version {card.get('version', '?')}, "
+             f"updated {card.get('updated', '?')}):"]
+    gaps = []
+    for g in card["groups"]:
+        lines.append(g.get("heading", ""))
+        for it in g.get("items", []):
+            if isinstance(it.get("rate"), (int, float)):
+                bit = f"  - {it.get('desc')}: {cur} {it['rate']:,.0f} per {it.get('unit', 'each')}"
+                if isinstance(it.get("budget"), (int, float)):
+                    bit += f" (Budget tier {cur} {it['budget']:,.0f})"
+            elif isinstance(it.get("budget"), (int, float)):
+                bit = (f"  - {it.get('desc')}: {cur} {it['budget']:,.0f} per "
+                       f"{it.get('unit', 'each')} (Budget tier only)")
+            else:
+                bit = f"  - {it.get('desc')}: OWNER TO CONFIRM per {it.get('unit', 'each')}"
+                gaps.append(str(it.get("desc")))
+            if it.get("note"):
+                bit += f" [{it['note']}]"
+            lines.append(bit)
+    if gaps:
+        lines.append("")
+        lines.append("Still needing a rate from Rashad: " + "; ".join(gaps[:10]))
+    return "\n".join(lines)

@@ -3113,6 +3113,68 @@ SKILL_TOOLS = [
                                                               "quotation exists so prices match exactly"},
         "deal_id": {"type": "integer", "description": "the opportunity this belongs to, if known"}},
       "required": ["company", "customer", "brief"]}},
+    {"name": "rate_card",
+     "description": "Read a company's RATE CARD: the owner-approved per-unit prices every quotation is built "
+                    "from, including the Budget tier and every item still marked OWNER TO CONFIRM. Use it "
+                    "before pricing anything, and when Rashad asks what we charge for something.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"}},
+      "required": ["company"]}},
+    {"name": "set_rate",
+     "description": "Save a rate onto the company's rate card so every future quotation uses it. Use whenever "
+                    "Rashad STATES a price for a unit of work ('a filming day is 15,000', 'make storage 500 a "
+                    "month'). NEVER invent a rate - only record what he actually said. `budget` is the "
+                    "optional deal-closer tier, applied only on his call. Omit `rate` to record an item that "
+                    "still needs a price, which shows as OWNER TO CONFIRM.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string"},
+        "group": {"type": "string", "description": "e.g. Shoot packages, Post-production, Rights & assets"},
+        "item": {"type": "string", "description": "what is being priced"},
+        "unit": {"type": "string", "description": "day, video, project, deliverable, month..."},
+        "rate": {"type": "number", "description": "the Normal-tier price he stated"},
+        "budget": {"type": "number", "description": "the Budget-tier price, if he gave one"},
+        "note": {"type": "string", "description": "any condition he attached"}},
+      "required": ["company", "group", "item", "unit"]}},
+    {"name": "media_library",
+     "description": "Search the MEDIA LIBRARY (coretex.uk/media) for our films - the ONLY source for sample "
+                    "and example work. Filter by lowercase category slugs (interviews, real-estate, aerial, "
+                    "2d-animation, corporate, event-coverage, construction, apps, products...); it returns "
+                    "the intersection first, highest-rated first, with watch URLs. Use it whenever an email "
+                    "or proposal should show relevant work, and never pick films any other way.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string"},
+        "categories": {"type": "array", "items": {"type": "string"}, "description": "lowercase slugs"},
+        "search": {"type": "string", "description": "optional words to match in the title"},
+        "limit": {"type": "integer", "description": "default 5"}},
+      "required": ["company"]}},
+    {"name": "rate_film",
+     "description": "Set Rashad's own 1-10 rating on a film in the media library. The rating is HIS quality "
+                    "judgement and decides which films get shown to clients; an unrated film ranks below "
+                    "every rated one, so a new upload stays invisible until he rates it. Only ever record a "
+                    "rating he actually states.",
+     "input_schema": {"type": "object", "properties": {
+        "video_id": {"type": "string", "description": "the YouTube video id"},
+        "rating": {"type": "integer", "description": "1-10, as Rashad stated it"}},
+      "required": ["video_id", "rating"]}},
+    {"name": "research_client",
+     "description": "Run live web research on a client, prospect or opportunity and return a verified insight "
+                    "brief: who they are, what is happening in their market, and 2-3 true things worth "
+                    "contributing. Use before writing a proposal or a first approach to someone we do not "
+                    "know. Anything search cannot confirm comes back marked UNVERIFIED - trust that, and "
+                    "never fill the gap yourself. Pass deal_id to save it onto the opportunity so later "
+                    "drafts read it.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string"}, "subject": {"type": "string", "description": "the company or person"},
+        "context": {"type": "string", "description": "what they approached us about"},
+        "deal_id": {"type": "integer"}},
+      "required": ["company", "subject"]}},
+    {"name": "export_templates",
+     "description": "Re-export every quotation template and the rate card to Rashad's terms and conditions "
+                    "folder on Google Drive, so the folder matches what Cortex actually uses. Run it after "
+                    "changing a preset, its terms, or a rate - Cortex is the live source and the folder is "
+                    "the human copy, and they must never drift apart.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug; defaults to sensa"}}}},
     {"name": "create_quotation",
      "description": "Produce a branded, house-format QUOTATION (an editable .xlsx spreadsheet plus a ready-to-"
                     "send .pdf by default) and drop it in the Inbox as a downloadable card. Use when Rashad asks "
@@ -3298,6 +3360,59 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                 + (f"Filed to the {r['filed_to']} client folder and the document library. "
                    if r.get("filed_to") else "Filed to the document library. ")
                 + f"It is on card #{r['task_id']} for review; nothing has been sent to the client.")
+    if name == "rate_card":
+        from . import ratecard
+        return ratecard.summary(inp["company"])
+    if name == "set_rate":
+        from . import ratecard
+        ratecard.set_item(inp["company"], inp["group"], inp["item"], inp.get("rate"), inp.get("unit", "each"),
+                          inp.get("note", ""), "stated by Rashad via Talk", budget=inp.get("budget"))
+        r = inp.get("rate")
+        priced = f"AED {r:,.0f} per " + str(inp.get("unit")) if isinstance(r, (int, float)) \
+            else "OWNER TO CONFIRM per " + str(inp.get("unit"))
+        tier = f", Budget tier AED {inp['budget']:,.0f}" if inp.get("budget") else ""
+        return (f"Saved to the {inp['company']} rate card: {inp['item']} = {priced}{tier}. "
+                "Every future quotation will use it.")
+    if name == "media_library":
+        co = store.get_company_by_slug(inp["company"])
+        if not co:
+            return "unknown company " + str(inp["company"])
+        from . import deck as _deck
+        rows = _deck.pick_samples(co["id"], inp.get("categories") or [], int(inp.get("limit") or 5))
+        if not rows and inp.get("search"):
+            rows = db.query("select youtube_video_id, title, rating, duration, categories from media_assets "
+                            "where company_id=%s and status='live' and title ilike %s "
+                            "order by rating desc nulls last limit %s",
+                            (co["id"], "%" + str(inp["search"]) + "%", int(inp.get("limit") or 5)))
+        if not rows:
+            return ("Nothing in the media library matches those categories. Widen them, or tell Rashad the "
+                    "library has no film for this - never substitute a film from anywhere else.")
+        out = []
+        for r in rows:
+            rt = r.get("rating")
+            mark = ("rated " + str(rt)) if rt else "UNRATED, ranks last"
+            cats = ", ".join(r.get("categories") or [])
+            out.append(f"- {r['title']} ({mark}, {r.get('duration') or ''}, {cats}): "
+                       f"https://www.youtube.com/watch?v={r['youtube_video_id']}")
+        return "Media library matches, best first:\n" + "\n".join(out)
+    if name == "rate_film":
+        rt = max(1, min(10, int(inp["rating"])))
+        row = db.execute("update media_assets set rating=%s, rated_by='rashad', rated_at=now() "
+                         "where youtube_video_id=%s returning title", (rt, inp["video_id"]))
+        if not row:
+            return "No film with id " + str(inp["video_id"]) + " in the library."
+        return f"Rated '{row['title']}' {rt}/10 - it will now rank by that in every sample pick."
+    if name == "research_client":
+        co = store.get_company_by_slug(inp.get("company") or "sensa")
+        from . import pipeline as _pl
+        brief = _pl.research_client(co or {}, inp["subject"], inp.get("context", ""), inp.get("deal_id"))
+        return brief or "Research returned nothing usable; treat the subject as UNVERIFIED."
+    if name == "export_templates":
+        import subprocess as _sp
+        r = _sp.run(["/opt/coretex/.venv/bin/python", "-m", "cortex._export_templates",
+                     inp.get("company") or "sensa"], capture_output=True, text=True, timeout=300,
+                    cwd="/opt/coretex/runtime")
+        return ((r.stdout or "") + (r.stderr or "")).strip()[-1200:] or "Export ran but reported nothing."
     if name == "create_company":
         a = crm.create_account(inp["name"], website=inp.get("website"), phone=inp.get("phone"))
         return f"created client company '{a['name']}' (id {a['id']})"
@@ -3665,7 +3780,8 @@ _CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "cr
                 # Chiefs can also DRAFT and look people up — anyone Rashad talks to should be able to act on a
                 # request, not just strategise. (Per-company RULE writes stay Manager-only to avoid scope bleed.)
                 "create_task", "draft_email", "draft", "crm_lookup", "crm_pipeline", "correct_task",
-                "create_proposal",
+                "create_proposal", "rate_card", "set_rate", "media_library", "rate_film",
+                "research_client", "export_templates",
                 "approve_task", "skip_task", "run_report", "schedule_report", "create_quotation",
                 "list_scheduled", "list_calendar",
                 "remember_preference", "forget_preference", "list_preferences"}

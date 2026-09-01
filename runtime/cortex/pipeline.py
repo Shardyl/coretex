@@ -702,3 +702,24 @@ def research_opportunity(deal_id: int, company: dict, inquiry: dict) -> str:
         return out
     except Exception:  # noqa: BLE001 — research is a bonus, never a blocker
         return ""
+
+
+def research_client(company: dict, subject: str, context: str = "", deal_id: int | None = None) -> str:
+    """On-demand research on a client, prospect or opportunity: Fable 5 with live web search, the same
+    contract as the automatic opportunity pass — verified facts only, UNVERIFIED said plainly, nothing
+    invented. Logs to the deal timeline when one is given, so every later draft can read it."""
+    out = provider.think_research(
+        "You are the research arm of a production company's sales desk. Produce a compact INSIGHT BRIEF "
+        "(under 250 words, plain text) for the person handling this relationship:\n"
+        "1. WHO: the company or person, verified via search - what they do, standing, sector, notable "
+        "work or leadership. Say UNVERIFIED plainly for anything search cannot confirm, and flag it when "
+        "the name is ambiguous or collides with other companies.\n"
+        "2. CONTEXT: what is genuinely happening in their market or around this project.\n"
+        "3. INSIGHTS: 2-3 concrete, TRUE things we could usefully contribute or should know.\n"
+        "Facts only; mark anything uncertain as UNCERTAIN; never invent names, numbers, clients or "
+        "claims. If the subject cannot be verified at all, say so clearly - that is a finding, not a "
+        "failure.",
+        f"Subject: {subject}\n\n{context}", purpose="research-on-demand", company=company.get("slug"))
+    if deal_id and out:
+        log_deal(int(deal_id), "research", out[:1200])
+    return out or ""
