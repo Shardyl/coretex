@@ -20,13 +20,13 @@
 :root{
   --bg:#0B0F14; --panel:#11171F; --panel2:#161E28; --line:#1F2A36;
   --bg2:#161E28; --fg:#EAF2F8; --ln:#1F2A36;
-  --ink:#EAF2F8; --mut:#8597A6; --accent:#00DAFF; --accent2:#00C4E0;
+  --ink:#EAF2F8; --mut:#8597A6; --accent:#00DAFF; --accent2:#00C4E0; --link:#5AA3FF;
   --good:#2ad17e; --warn:#ffb020; --bad:#ff5d6c; --shadow:0 10px 30px rgba(0,0,0,.45);
 }
 html[data-theme="light"]{
   --bg:#EEF2F6; --panel:#FFFFFF; --panel2:#F4F8FB; --line:#DCE5EC;
   --bg2:#F4F8FB; --fg:#0C1620; --ln:#DCE5EC;
-  --ink:#0C1620; --mut:#5A6B79; --accent:#00C4E0; --accent2:#0098B3; --shadow:0 10px 30px rgba(20,40,60,.12);
+  --ink:#0C1620; --mut:#5A6B79; --accent:#00C4E0; --accent2:#0098B3; --link:#1560C4; --shadow:0 10px 30px rgba(20,40,60,.12);
   --good:#0f8a50; --warn:#8a6100; --bad:#c92f3e;
 }
 *{box-sizing:border-box}
@@ -571,7 +571,7 @@ function linky(s){
   return esc(s).replace(/https?:\/\/[^\s<]+/g, m=>{
     let tail='';
     while(/[.,;:!?)\]]$/.test(m)){ tail=m.slice(-1)+tail; m=m.slice(0,-1); }
-    return `<a href="${m}" target="_blank" rel="noopener" style="color:var(--acc);word-break:break-all">${m}</a>`+tail;
+    return `<a href="${m}" target="_blank" rel="noopener" style="color:var(--link);text-decoration:underline;word-break:break-all">${m}</a>`+tail;
   });
 }
 
@@ -1790,10 +1790,10 @@ function briefBody(txt){
   for(const ln of lines){
     const bare=ln.replace(/^#+\s*/,'').replace(/\*\*/g,'').trim();
     const head=BRIEF_HEADS.find(h=>bare.toUpperCase()===h||bare.toUpperCase()===h+':');
-    if(head){ out+=`<div style="margin:14px 0 5px;font-weight:650;font-size:12px;letter-spacing:.06em;color:var(--acc)">${esc(head)}</div>`; continue; }
+    if(head){ out+=`<div style="margin:14px 0 5px;font-weight:650;font-size:12px;letter-spacing:.06em;color:var(--accent)">${esc(head)}</div>`; continue; }
     if(!ln.trim()){ out+='<div style="height:6px"></div>'; continue; }
     const url=ln.trim().match(/^https?:\/\/\S+$/);
-    if(url){ out+=`<div style="font-size:12.5px"><a href="${esc(ln.trim())}" target="_blank" rel="noopener" style="color:var(--acc)">${esc(ln.trim())}</a></div>`; continue; }
+    if(url){ out+=`<div style="font-size:12.5px"><a href="${esc(ln.trim())}" target="_blank" rel="noopener" style="color:var(--link);text-decoration:underline">${esc(ln.trim())}</a></div>`; continue; }
     out+=`<div style="font-size:13.5px;line-height:1.55">${esc(ln)}</div>`;
   }
   return out;
