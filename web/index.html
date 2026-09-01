@@ -480,8 +480,8 @@ async function pinSubmit(){
     return;
   }
   if(lockMode==='stepup'){
-    try{ const v=await api('/api/stepup/pin/verify',{method:'POST',body:JSON.stringify({pin})});
-      if(v&&v.ok){ const r=stepupResolve; stepupResolve=null; closeStepup(); r&&r(v.stepup_token); }
+    try{ const v=await api('/api/stepup/pin/verify',{method:'POST',body:JSON.stringify(Object.assign({pin},stepupIntent||{}))});
+      if(v&&v.ok){ const r=stepupResolve; stepupResolve=null; const done=v.completed?v.result:null; stepupIntent=null; closeStepup(); r&&r({token:v.stepup_token,done:done}); }
       else { err.textContent='Wrong PIN'; pinBuf=''; renderDots(); } }
     catch(e){ err.textContent='Error: '+e.message; pinBuf=''; renderDots(); }
     return;
@@ -512,7 +512,9 @@ async function bioAuth(){
     if(login){ const v=await api('/api/login/webauthn/verify',{method:'POST',body:JSON.stringify(out)});
       if(v&&v.token){ token=v.token; localStorage.setItem('cortex_token',token); enterUnlocked(); } }
     else { const v=await api('/api/webauthn/auth/verify',{method:'POST',body:JSON.stringify(out)});
-      if(v&&v.ok){ const rr=stepupResolve; stepupResolve=null; closeStepup(); rr&&rr(v.stepup_token); } }
+      // same {token,done} shape as the PIN path; the fingerprint route carries no intent, so the
+      // caller falls back to firing the approve itself
+      if(v&&v.ok){ const rr=stepupResolve; stepupResolve=null; stepupIntent=null; closeStepup(); rr&&rr({token:v.stepup_token,done:null}); } }
   }catch(e){ /* cancelled / no passkey on this device → stay on the PIN pad */ }
 }
 function lockNow(){ if(token && !demo){ token=''; localStorage.removeItem('cortex_token'); booted=false; pinBuf=''; pinFirst=''; lockMode='login'; showLock('Enter your PIN'); } }
@@ -685,8 +687,14 @@ async function registerDevice(){
 }
 // approval step-up: open the SAME nice keypad in 'stepup' mode (fingerprint auto-fires on mobile).
 // Resolves to a one-time step-up token, or null if cancelled.
-function stepUp(){
+// stepUp(intent) — `intent` ({task_id, action, run_at}) travels WITH the PIN, so the server finishes
+// the approval in that same request. The old flow issued the proof and relied on this page firing a
+// second approve call; an API restart landed in that gap on card 418 and the card silently stayed
+// unapproved. Resolves to {token, done} — `done` is the completed result when the server did it.
+let stepupIntent=null;
+function stepUp(intent){
   if(demo) return Promise.resolve(null);
+  stepupIntent = intent || null;
   return new Promise(resolve=>{ stepupResolve=resolve; lockMode='stepup'; pinBuf=''; pinFirst=''; showLock('Confirm with your PIN'); });
 }
 function closeStepup(){ lockMode='login'; pinBuf=''; document.getElementById('lock').classList.add('hidden'); document.getElementById('lockCancel').classList.add('hidden'); }
@@ -2010,9 +2018,11 @@ async function act(id,what,runAt){
     let r=await api(`/api/tasks/${id}/${what}${qs}`,{method:'POST'});
     if(r&&r.needs_biometric){                                                  // PUBLIC action — PIN / fingerprint first
       toast('Confirm to approve…');
-      const tok=await stepUp();
-      if(!tok){ if(card) card.style.opacity=1; toast('Approval needs your PIN or fingerprint'); return; }
-      r=await api(`/api/tasks/${id}/${what}${qs}`,{method:'POST',headers:{'X-Stepup':tok}});
+      const su=await stepUp({task_id:id, action:what, run_at:runAt||null});
+      if(!su||!su.token){ if(card) card.style.opacity=1; toast('Approval needs your PIN or fingerprint'); return; }
+      // the PIN request already ran it server-side; only fire a second call when it didn't (fingerprint)
+      r = su.done ? su.done
+                  : await api(`/api/tasks/${id}/${what}${qs}`,{method:'POST',headers:{'X-Stepup':su.token}});
     }
     if(card) card.style.opacity=1;
     if(r&&r.needs_biometric){ toast('⚠️ Not sent — the PIN/fingerprint check did not go through. Try approving again.'); return; }
@@ -2046,9 +2056,9 @@ async function confirmLiveSend(id, r){
   try{ let cr=await api(`/api/tasks/${id}/confirm-send`,{method:'POST',body:JSON.stringify({count:Number(c)})});
     if(cr&&cr.needs_biometric){                                               // PUBLIC send — PIN / fingerprint first
       toast('Confirm to send…');
-      const tok=await stepUp();
-      if(!tok){ toast('Send needs your PIN or fingerprint'); return; }
-      cr=await api(`/api/tasks/${id}/confirm-send`,{method:'POST',headers:{'X-Stepup':tok},body:JSON.stringify({count:Number(c)})});
+      const su=await stepUp();   // no intent: a live-list send always re-states its recipient count
+      if(!su||!su.token){ toast('Send needs your PIN or fingerprint'); return; }
+      cr=await api(`/api/tasks/${id}/confirm-send`,{method:'POST',headers:{'X-Stepup':su.token},body:JSON.stringify({count:Number(c)})});
     }
     const res=cr&&cr.result;
     if(cr&&cr.ok&&res&&res.scheduled) toast('Scheduled for '+res.scheduled+' ✓');

@@ -2777,6 +2777,11 @@ def stepup_status(_: None = Depends(auth)) -> dict:
 
 class PinBody(BaseModel):
     pin: str
+    # OPTIONAL INTENT: what this PIN was entered FOR. Carrying it means the approval completes inside
+    # this one request instead of depending on the page surviving long enough to send a second one.
+    task_id: int | None = None
+    action: str | None = None            # 'approve' is the only action that completes here
+    run_at: str | None = None
 
 
 @app.post("/api/stepup/pin/verify")
@@ -2784,15 +2789,28 @@ def stepup_pin_verify(body: PinBody, u: dict = Depends(current_user)) -> dict:
     """Confirm a public approval by PIN. The OWNER's cockpit PIN always passes (scope 'owner'). An authorised
     team member (users.can_approve) passes with THEIR OWN quick-unlock PIN (scope 'team') — enough for
     outward approvals; money-class approvals still demand the owner scope at the gate."""
+    def _done(tok: str) -> dict:
+        """Complete the action the PIN was entered for, in THIS request. The old flow issued the proof
+        and relied on the PAGE to fire a second approve call; anything that interrupted the browser in
+        between (an API restart, a reload, a backgrounded phone) left a valid proof unused and the card
+        sitting unapproved while the operator believed it had sent. Card 418, 1 Sep 2026."""
+        if not (body.task_id and (body.action or "") == "approve"):
+            return {"ok": True, "stepup_token": tok}
+        try:
+            r = engine.approve_task(int(body.task_id), stepup_token=tok, run_at=body.run_at)
+        except Exception as e:  # noqa: BLE001 — never claim success we did not get
+            return {"ok": True, "stepup_token": tok, "completed": False, "error": str(e)[:200]}
+        return {"ok": True, "stepup_token": tok, "completed": True, "result": r}
+
     pin = (body.pin or "").strip()
     h = db.setting_get("pin_hash")
     if h and hmac.compare_digest(h, _pin_hash(pin)):
-        return {"ok": True, "stepup_token": webauthn_auth._issue_stepup()}
+        return _done(webauthn_auth._issue_stepup())
     if u.get("id"):
         _ensure_users()
         row = db.one("select pin_hash, can_approve from users where id=%s and active", (u["id"],))
         if row and row.get("can_approve") and row.get("pin_hash") and                 hmac.compare_digest(row["pin_hash"], _pin_hash(pin)):
-            return {"ok": True, "stepup_token": webauthn_auth._issue_stepup(scope="team")}
+            return _done(webauthn_auth._issue_stepup(scope="team"))
     return {"ok": False, "error": "wrong PIN"}
 
 
