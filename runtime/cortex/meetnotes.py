@@ -204,6 +204,41 @@ _NOTES_SENDER = "gemini-notes@google.com"
 _NOTES_SUBJ_TIME = re.compile(
     r"Notes:\s*(?:Meeting\s+)?(?P<rest>.+?)\s+(?P<mon>[A-Z][a-z]{2})\s+(?P<day>\d{1,2}),\s*(?P<yr>\d{4})"
     r"\s+at\s+(?P<h>\d{1,2}):(?P<m>\d{2})\s*(?P<ap>AM|PM)", re.I)
+# Gemini also sends DATE-ONLY subjects: 'Notes: "Call with Mai" Sep 1, 2026'. Before this was handled the
+# time regex missed, which (a) dropped the dedup key back to the per-mailbox message id, so the same call
+# was stored once per mailbox, and (b) skipped the attendee lookup, so the notes never attached to a deal
+# and drafting could not see them (MAH Gold, 1 Sep 2026).
+_NOTES_SUBJ_DAY = re.compile(
+    r"Notes:\s*(?:Meeting\s+)?(?P<rest>.+?)\s+(?P<mon>[A-Z][a-z]{2})\s+(?P<day>\d{1,2}),\s*(?P<yr>\d{4})",
+    re.I)
+
+
+def _subject_when(subject: str):
+    """(start, has_time). A precise start when the subject carries one; else that DAY at midnight GST with
+    has_time False, so callers can widen the window instead of giving up entirely."""
+    dt = _subject_start(subject)
+    if dt:
+        return dt, True
+    m = _NOTES_SUBJ_DAY.search(subject or "")
+    if not m:
+        return None, False
+    try:
+        return datetime.strptime(f"{m.group('day')} {m.group('mon')} {m.group('yr')}",
+                                 "%d %b %Y").replace(tzinfo=_GST_TZ()), False
+    except Exception:  # noqa: BLE001
+        return None, False
+
+
+def _notes_key(subject: str, start, has_time: bool, fallback: str) -> str:
+    """ONE row per meeting. The same notes email lands in every monitored mailbox, so the key must come
+    from the MEETING, never the message id - keying on the message id is what produced triplicates."""
+    import re as _re
+    slug = _re.sub(r"[^a-z0-9]+", "-", (subject or "").lower()).strip("-")[:60]
+    if start and has_time:
+        return "gemini-notes:" + start.isoformat()
+    if start:
+        return "gemini-notes:" + start.date().isoformat() + ":" + slug
+    return "gemini-notes:subj:" + (slug or fallback)
 
 
 def _subject_start(subject: str) -> datetime | None:
@@ -225,11 +260,16 @@ def _GST_TZ():
     return ZoneInfo("Asia/Dubai")
 
 
-def _attendees_at(start: datetime) -> tuple[list[str], str]:
+def _attendees_at(start: datetime, whole_day: bool = False) -> tuple[list[str], str]:
     """Who was in that meeting, from the calendars — INCLUDING cancelled events, which is the whole
-    point: the event may have been deleted and the meeting still happened. Returns (emails, title)."""
+    point: the event may have been deleted and the meeting still happened. `whole_day` widens the window
+    to that calendar day, for notes whose subject carried a date but no time. Returns (emails, title)."""
     from . import calendar as gcal
-    lo, hi = start - timedelta(minutes=45), start + timedelta(minutes=45)
+    if whole_day:
+        lo = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        hi = lo + timedelta(days=1)
+    else:
+        lo, hi = start - timedelta(minutes=45), start + timedelta(minutes=45)
     for entry in (db.setting_get("availability_calendars") or []):
         co, cal = entry.get("company") or "sensa", entry.get("id") or "primary"
         try:
@@ -277,14 +317,12 @@ def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = 
                 body = gmail._plain_body(full.get("payload") or {})
                 if len(body.strip()) < 200:
                     continue
-                start = _subject_start(subject)
-                # ONE row per meeting, not per mailbox: the same notes email reaches hello@, gino@ and
-                # ayresh@, so the key is the meeting itself (its start time), never the message id.
-                key = "gemini-notes:" + (start.isoformat() if start else ref["id"])
+                start, has_time = _subject_when(subject)
+                key = _notes_key(subject, start, has_time, ref["id"])
                 if key in seen_keys or db.one("select 1 from meeting_notes where event_id=%s", (key,)):
                     seen_keys.add(key)
                     continue
-                emails, ev_title = _attendees_at(start) if start else ([], "")
+                emails, ev_title = _attendees_at(start, whole_day=not has_time) if start else ([], "")
                 title = ev_title or subject.replace("Notes:", "").strip()
                 summary = _distil(title, body)
                 company_id = deal_id = None
