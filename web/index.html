@@ -1544,7 +1544,7 @@ function infoCard(t){
   return `<div class="card" id="n${t.id}" style="border-left:3px solid var(--accent)">
     <div class="meta">${coChip}<span class="chip">${esc(t.category||'update')}</span>${cnt}<span style="margin-left:auto;color:var(--mut)">${timeTag(t.ts)}</span></div>
     <div class="title" style="font-size:15px">${esc(title)}</div>
-    ${(t.body&&!grouped)?`<div class="csub">${esc(t.body)}</div>`:''}
+    ${(t.body&&!grouped)?`<div class="csub">${linky(t.body)}</div>`:''}
     ${details}
     <div class="row" style="margin-top:8px">
       ${(t.target_type==='contact'&&t.target_id&&!grouped)?`<button class="btn sm go" onclick="inboxContact('${esc(t.target_id)}')">${ic('arrow',13)} View contact</button>`:''}

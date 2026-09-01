@@ -10,6 +10,11 @@ Owner-approved model exception (31 Aug 2026): this runs on Opus 5 with server-si
 fires ONCE per meeting, a handful of times a week, and the whole point is that the insight is good.
 At roughly $0.50 a brief the cost is not the constraint.
 
+ONLY FIRST MEETINGS WITH NEW COMPANIES (owner, 1 Sep 2026). A brief is an introduction aid, and before
+a routine call with a client of six months it is noise, which is exactly the noise that made him
+dismiss cards on reflex. `_first_meeting` disqualifies anyone we have already met, or whose
+organisation has ever been a won deal.
+
 The two sections he asked for by name:
   * SCOPING QUESTIONS — the questions that de-risk the project, drawn from THIS enquiry, never
     generic discovery filler. This is the part that earns its keep.
@@ -182,6 +187,38 @@ def _external(attendees: list[dict]) -> list[dict]:
             continue
         out.append(a)
     return out
+
+
+def _first_meeting(guests: list[dict], company: dict) -> tuple[bool, str]:
+    """Is this the FIRST meeting with a company we do not already know?
+
+    A brief is an INTRODUCTION aid (owner, 1 Sep 2026): it earns its keep walking into a room cold, and
+    is pure noise before a routine call with a client we have worked with for months. Two disqualifiers,
+    both meaning "we already know these people": we have met them before, or they are an existing client.
+    Returns (should_brief, why_not)."""
+    emails = [g["email"].lower() for g in guests if g.get("email")]
+    if not emails:
+        return False, "no external guests"
+    # 1. have we already sat down with any of them?
+    try:
+        if db.one("select 1 from meeting_notes where attendees ?| %s limit 1", (emails,)):
+            return False, "we have met them before"
+    except Exception:  # noqa: BLE001
+        pass
+    # 2. is their ORGANISATION already a client? (a won deal at any point, live or finished)
+    try:
+        accts = [r["account_id"] for r in db.query(
+            "select distinct account_id from crm_master where lower(email) = any(%s) "
+            "and account_id is not null", (emails,))]
+        if accts:
+            from .crm import WON_STAGES
+            row = db.one("select id, title, stage from crm_projects where account_id = any(%s) "
+                         "and stage = any(%s) limit 1", (accts, list(WON_STAGES)))
+            if row:
+                return False, f"existing client (deal #{row['id']} at {row['stage']})"
+    except Exception:  # noqa: BLE001
+        pass
+    return True, ""
 
 
 def _company_for(slug: str) -> dict:
@@ -446,10 +483,20 @@ def sweep(force: bool = False) -> dict:
     for ev in gcal.upcoming_events(hours=LOOKAHEAD_HOURS):
         if ev["starts_at"] > cutoff:
             continue                                   # still more than a day out, leave it
-        if not _external(ev.get("attendees") or []):
+        _guests = _external(ev.get("attendees") or [])
+        if not _guests:
             skipped.append((ev.get("title"), "internal"))
             continue
         if db.one("select 1 from meeting_briefs where event_id=%s", (ev.get("event_id"),)):
+            continue
+        _ok, _why = _first_meeting(_guests, _company_for(ev.get("company") or "sensa"))
+        if not _ok:
+            # remember the decision so the throttled sweep does not re-judge it every 10 minutes
+            db.execute("insert into meeting_briefs (event_id, calendar_co, title, starts_at, attendees) "
+                       "values (%s,%s,%s,%s,%s) on conflict (event_id) do nothing",
+                       (ev.get("event_id"), ev.get("company"), ev.get("title"), ev["starts_at"],
+                        json.dumps(_guests)))
+            skipped.append((ev.get("title"), _why))
             continue
         try:
             made.append(brief_for(ev).get("task_id"))

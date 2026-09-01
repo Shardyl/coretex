@@ -400,8 +400,14 @@ explicit `contact_email` wins, an unambiguous single-contact account fills in, a
 
 ## Pre-meeting briefs (`meetingprep.py`, 2026-08-31)
 
-Any calendar entry with an attendee OUTSIDE our domains gets a one-page research brief 24h before it
-starts. `calendar.upcoming_events()` reads the registry calendars for detail (the personal calendar is
+ONLY FIRST MEETINGS WITH NEW COMPANIES (owner, 1 Sep 2026). A brief is an INTRODUCTION aid; before a
+routine call with a client of six months it is noise, and that noise is what made him dismiss cards on
+reflex (which is how the ECBD meeting got cancelled). `_first_meeting` disqualifies a meeting if we
+have already met any attendee (`meeting_notes`) or if their organisation has ever been a won deal. A
+skipped meeting is still WRITTEN to `meeting_briefs` so the 10-minute sweep does not re-judge it.
+
+A qualifying calendar entry with an attendee OUTSIDE our domains gets a one-page research brief 24h
+before it starts. `calendar.upcoming_events()` reads the registry calendars for detail (the personal calendar is
 shared free/busy only, so it returns nothing there and is filtered out as "internal"); `meetingprep
 .sweep()` runs from the engine loop, self-throttled to every 10 minutes, one brief per event ever
 (ledger table `meeting_briefs`, unique on `event_id`).
