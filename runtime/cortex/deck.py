@@ -165,6 +165,13 @@ table.t td.r, table.t th.r { text-align:right; }
 """.replace("ACCENT", accent)
 
 
+def _sentence(text) -> str:
+    """Model captions arrive without terminal punctuation, which ran straight into the 'Click to watch'
+    the template appends. Close the sentence unless it already closes itself."""
+    t = (text or "").strip()
+    return t if (not t or t[-1] in ".!?") else t + "."
+
+
 def _esc(s) -> str:
     return _html.escape(str(s or ""), quote=False)
 
@@ -234,7 +241,7 @@ class _Deck:
                 f'<a href="https://www.youtube.com/watch?v={_esc(f["youtube_video_id"])}" '
                 f'style="text-decoration:none;display:block;width:{w}px">{img}'
                 f'<p class="thumbcap"><b>{_esc(f.get("label") or f.get("title"))}</b> &mdash; '
-                f'{_esc(f.get("caption"))} Click to watch.</p></a>')
+                f'{_esc(_sentence(f.get("caption")))} Click to watch.</p></a>')
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_esc(heading)}</h2>'
