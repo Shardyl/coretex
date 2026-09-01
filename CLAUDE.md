@@ -451,6 +451,13 @@ gate in `_draft_direct_reply`, and `handle()` acts without ever drafting: marks 
 affected deal's `contact_email`, logs `contact_left` on each timeline, and raises a high-priority
 notification. Candidate addresses come from a REGEX over the body and the model may only CHOOSE from
 that list, so a successor can never be invented.
+WHO HAS LEFT IS ENFORCED AT THE ENVELOPE, not just at detection (1 Sep 2026). `lead_status =
+'left-company'` is the flag, and `_email_envelope` drops any such address from cc on EVERY path. That
+guard is the one that matters: thread continuity re-adds everyone on a conversation, so Tim Piper
+would have gone straight back onto the next ITC and Contract Variation replies. A card addressed TO a
+departed contact is BLOCKED at approve with a message naming them, never silently repointed. The
+detector also marks the same person's OTHER addresses (same name, same account): Tim existed twice,
+@parthenon.ey.com and @ae.ey.com, and only the replying address was flagged.
 Still to do: an out-of-office with a return date should shift the follow-up clock instead of firing
 into an empty inbox (`read()` already returns kind='away' for it).
 

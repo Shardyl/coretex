@@ -356,6 +356,18 @@ def _email_envelope(task: dict, company: dict) -> dict:
     if "sender" in _nc and from_addr:
         drop.add(from_addr.lower())
     drop |= {x for x in _nc if "@" in x}
+    # WHO HAS LEFT: a departed contact must never be copied again, whatever put them on the list. Thread
+    # continuity is the danger - reply-all re-adds everyone on the conversation, so Tim Piper would have
+    # gone back onto every ITC and Contract Variation reply the day after he left EY (1 Sep 2026). This
+    # is the guard that covers EVERY path, not just the auto-reply that noticed.
+    try:
+        _cands = [e.lower() for e in cc_list if "@" in e]
+        if _cands:
+            for _g in db.query("select email from crm_master where lower(email) = any(%s) and "
+                               "lower(coalesce(lead_status,'')) = 'left-company'", (_cands,)):
+                drop.add((_g["email"] or "").lower())
+    except Exception:  # noqa: BLE001 — a lookup hiccup must never block an email
+        pass
     drop.discard("")
     cc_list = [e for e in cc_list if e.lower() not in drop]
     bcc_list = [e for e in bcc_list if e.lower() not in drop]
@@ -1876,6 +1888,14 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
             return {"ok": False, "blocked": True,
                     "error": "this card has NO recipient — tell me who it goes to and I'll set it, "
                              "nothing can send until then"}
+        # ADDRESSED TO SOMEONE WHO HAS LEFT: cc is filtered silently, but the To is not a detail to fix
+        # quietly - the email would go nowhere and the chase would look answered. Stop and say so.
+        _gone = db.one("select email from crm_master where lower(email)=lower(%s) and "
+                       "lower(coalesce(lead_status,''))='left-company'", (_to,))
+        if _gone:
+            return {"ok": False, "blocked": True,
+                    "error": f"{_to} has LEFT their company — this would send into a dead mailbox. "
+                             "Tell me who it should go to instead and I'll repoint it."}
     gate = _biometric_gate(task["kind"] in _APPROVE_PUBLIC, stepup_token,
                            money=(kind_class(task["kind"]) == "money"))
     if gate:

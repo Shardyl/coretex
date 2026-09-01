@@ -98,7 +98,19 @@ def handle(msg: dict, company: dict, deals: list[dict] | None = None) -> dict | 
                    "where lower(email)=lower(%s)", (sender,))
     except Exception:  # noqa: BLE001
         pass
-    acct = (db.one("select account_id from crm_master where lower(email)=lower(%s)", (sender,)) or {}).get("account_id")
+    row = db.one("select first_name, last_name, account_id from crm_master where lower(email)=lower(%s)",
+                 (sender,)) or {}
+    acct = row.get("account_id")
+    # THE SAME PERSON ON A SECOND ADDRESS: Tim Piper existed twice, @parthenon.ey.com and @ae.ey.com,
+    # and only the address that replied got flagged - so a lookup landing on the other record still
+    # treated him as current. Same name, same account, same person.
+    also = 0
+    if acct and (row.get("first_name") or row.get("last_name")):
+        also = len(db.query(
+            "update crm_master set lead_status='left-company', updated_at=now() where account_id=%s "
+            "and lower(coalesce(first_name,''))=lower(%s) and lower(coalesce(last_name,''))=lower(%s) "
+            "and lower(email) <> lower(%s) and lower(coalesce(lead_status,'')) <> 'left-company' "
+            "returning email", (acct, row.get("first_name") or "", row.get("last_name") or "", sender)) or [])
 
     # 2. the successor becomes a real contact on the same account (never invented — it was in the text)
     added = False
@@ -141,7 +153,8 @@ def handle(msg: dict, company: dict, deals: list[dict] | None = None) -> dict | 
         + (f", write to {successor} instead" if successor else ", no replacement named"),
         (f"Their auto-reply says: \"{info['quote'][:220]}\"\n"
          + (f"Deal contact repointed on {', '.join('#' + str(t) for t in touched)}. " if touched and successor else "")
-         + ("The new contact was added to the CRM." if added else "")),
+         + ("The new contact was added to the CRM. " if added else "")
+         + (f"Also marked {also} other address(es) for the same person as left." if also else "")),
         priority="high", category="reminder", company_id=cid,
         target_type=("deal" if touched else None), target_id=(str(touched[0]) if touched else None),
         dedup_key=f"left:{sender}")
