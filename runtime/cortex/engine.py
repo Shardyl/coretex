@@ -2995,6 +2995,17 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
         # machine-generated mail (bills, notifications, anything bulk/no-reply) never gets a drafted
         # reply UNLESS the sender is on an active deal (a real counterpart whose system mailed us).
         local = sender.split("@")[0].lower()
+        # AN AUTO-REPLY IS NEVER ANSWERED, BUT IT IS READ. "I no longer work here, write to X" is the
+        # most important thing that can come back off a chase, and discarding the whole class threw it
+        # away (Tim Piper on the ITC payment chase, 1 Sep 2026). Records + repoints, never drafts.
+        try:
+            from . import autoreply
+            if autoreply.is_auto(e):
+                autoreply.handle(e, co, deals)
+                return
+        except Exception as _ae:  # noqa: BLE001 — never let this stop ordinary mail
+            print(f"[autoreply] {type(_ae).__name__}: {_ae}", flush=True)
+            return
         robot = e.get("auto_marker") or re.match(
             r"^(no[-._]?reply|do[-._]?not[-._]?reply|notifications?|alerts?|mailer|bounce|newsletter|"
             r"customer[-._]?care|billing|statements?)($|[.+_-])", local)

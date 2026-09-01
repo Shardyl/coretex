@@ -437,6 +437,23 @@ WHERE THE BRIEF LIVES. Three places, all written at brief time:
   brief link there would hand our own intelligence to the client.
 * The deal timeline (`pipeline.log_deal(..., 'brief', ...)`) and the notification body.
 
+## Auto-replies carry real news (`autoreply.py`, 1 Sep 2026)
+
+An "Automatic reply" is correctly never ANSWERED, and the whole class was therefore discarded - which
+threw away the single most important thing a chase can come back with. On 1 Sep 2026, one minute after
+the ITC payment chase went to Tim Piper, his auto-reply said "I no longer work for EY. Please direct
+your queries to konstantinos.kanellaidis@parthenon.ey.com". Nothing recorded it, and the deal would
+have kept chasing a dead address.
+
+`autoreply.is_auto()` catches it (Auto-Submitted header or an auto-reply subject) BEFORE the robot
+gate in `_draft_direct_reply`, and `handle()` acts without ever drafting: marks the contact
+`lead_status='left-company'`, adds the named successor to the same CRM account, repoints every
+affected deal's `contact_email`, logs `contact_left` on each timeline, and raises a high-priority
+notification. Candidate addresses come from a REGEX over the body and the model may only CHOOSE from
+that list, so a successor can never be invented.
+Still to do: an out-of-office with a return date should shift the follow-up clock instead of firing
+into an empty inbox (`read()` already returns kind='away' for it).
+
 ## Approvals: the step-up must COMPLETE the action (1 Sep 2026)
 
 `POST /api/stepup/pin/verify` takes an optional intent (`task_id`, `action`, `run_at`) and runs
