@@ -766,6 +766,20 @@ def _run_task(task: dict) -> None:
     if _maybe_no_reply(task, draft, skill):   # the drafter judged that NO reply should go out
         return
     _maybe_extract_meeting(task, draft)   # a confirmed slot in the draft -> calendar+Meet booked on approval
+    # BOOK IT NOW, NOT AT SEND. Extraction alone only stamps the slot; booking used to happen at send,
+    # by which point the body was already written and the drafter had no link to offer - so it wrote
+    # "I will send the link separately" and the send tacked a bare Meet URL on the end (card 422,
+    # 1 Sep 2026). Booking here means the drafter is served the REAL link (worker puts it in front of
+    # it) and writes the email around it. Redraft once, and only when the link is genuinely missing.
+    if task.get("kind") in EMAIL_RENDER_KINDS:
+        _booked = _prebook_meeting(store.get_task(task["id"]))
+        _link = (((_booked or {}).get("request") or {}).get("meeting") or {}).get("meet") or ""
+        if _link and _link not in (draft or ""):
+            task = _booked
+            draft = worker.draft(skill, company, _request_for_draft(task))
+            draft = _ensure_clean_email(skill, company, _request_for_draft(task), draft)
+            verdict = manager.check(skill, company, draft, _request_for_draft(task))
+            task = store.update_task(task["id"], draft=draft, manager=verdict)
 
     # Earned autonomy + escalation valve: even on an auto lane, the Manager's verdict must be a clean,
     # confident pass. Anything flagged, escalated, or low-confidence still goes to the owner.
@@ -1602,7 +1616,10 @@ def _prebook_meeting(task: dict) -> dict | None:
                                            "guest added on the owner's approval.", meet=True)
         req["meeting"] = {**mt, "event_id": ev.get("id"), "meet": ev.get("meet") or "", "calendar": cal_co}
         return store.update_task(task["id"], request=req)
-    except Exception:  # noqa: BLE001 — pre-booking is best-effort; the link then arrives at send instead
+    except Exception as _e:  # noqa: BLE001 — best-effort, the send path books as the backstop
+        # NEVER silent: a swallowed booking failure is indistinguishable from "no meeting was agreed",
+        # and the draft then quietly promises a link nobody made.
+        print(f"[prebook] task {task.get('id')}: {type(_e).__name__}: {_e}", flush=True)
         return None
 
 

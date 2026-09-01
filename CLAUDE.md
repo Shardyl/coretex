@@ -232,7 +232,13 @@ CALENDARS are per company: `calendar_refresh_token:<slug>` + `calendar_id:<slug>
 Calender on hello@; tabscanner = rashad@tabscanner.com's primary, added 31 Aug 2026). A company with
 NO calendar is never booked onto another brand's - the pre-book and the send both stop and say so.
 A confirmed slot in a draft is booked attendee-less at correction/draft time so the real Meet link is
-in the email; the guest is invited by Google on approval. `_TIME_HINT` is what triggers that check -
+in the email; the guest is invited by Google on approval. `_prebook_meeting` runs on BOTH the first
+draft and the correction path - it was correction-only until 1 Sep 2026, so a first-pass reply that
+agreed a time had no link to offer and wrote "I will send the link separately", with the send path
+tacking a bare Meet URL onto the end (card 422). Booking before the draft is finished means the
+drafter is served the real link and writes around it; it redraws once, only when the link is missing.
+A failed pre-book now PRINTS its reason - the bare except made a booking failure look identical to
+"no meeting was agreed". `_TIME_HINT` is what triggers that check -
 it was deleted by mistake on 29 Aug and NO meeting booked until 31 Aug, so do not "tidy" it away.
 DOCUMENTS: Drive is the SOURCE OF TRUTH. The library indexes both `<COMPANY> CORTEX/Documents/` and the
 per-client folders under the profile's `clients_drive_folder` (where the quotation generator files its
