@@ -58,6 +58,14 @@ CAPABILITIES: list[tuple[str, str]] = [
      "telling you something (use update_project_plan, passing the note). Correcting a plan card is "
      "actioned, not just reworded: timings he states ('chase in two weeks if we've heard nothing') become "
      "real dated follow-ups on that deal, visible under the project's reminders."),
+    ("Proposal decks — LIVE",
+     "create_proposal builds a branded, house-format PDF proposal deck and lands it in the Inbox: cover with "
+     "a generated hero image for the client's world, the brief as we read it, the approach, sample films "
+     "pulled from the MEDIA LIBRARY by category and rating (never invented, shown as original 16:9 "
+     "thumbnails), a parallel-track timeline, and an investment page priced from the named quotation. Always "
+     "pass quotation_number when a quote exists so the deck cannot contradict it. It files to the client's "
+     "Drive folder and the document library; it never contacts the client - to send it, draft an email and "
+     "attach the document."),
     ("Rate card — pricing reference",
      "Each company has a rate card (setting rate_card:<slug>) of OWNER-APPROVED per-unit prices; it is "
      "injected into every quotation-adjacent draft. Prices come ONLY from it: an item not on the card is "

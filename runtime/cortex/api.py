@@ -3093,6 +3093,26 @@ SKILL_TOOLS = [
     {"name": "run_report",
      "description": "Generate the SEO & traffic report for a business right now; it lands in the Inbox.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}, "required": ["company"]}},
+    {"name": "create_proposal",
+     "description": "Produce a branded, house-format PROPOSAL DECK (a multi-page PDF) and drop it in the Inbox. "
+                    "Use whenever Rashad asks to 'do a proposal', 'put a deck together', or wants a client "
+                    "proposal to accompany a quotation. Give it the CLIENT name and a BRIEF describing what "
+                    "they asked for and the approach; the deck writes itself under the company's skill rules "
+                    "and Cortex stamps the facts: sample films come from the media library by category and "
+                    "rating (never invented), a cover image is generated for the client's world, and prices "
+                    "come from the quotation you name in quotation_number. ALWAYS pass quotation_number when "
+                    "a quote exists, so the deck can never contradict it. It is INTERNAL: it files to the "
+                    "client's Drive folder and the document library and lands as a card for review, it never "
+                    "contacts the client. To send it, draft an email and attach the document.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"},
+        "customer": {"type": "string", "description": "the CLIENT name, as it should read on the deck"},
+        "brief": {"type": "string", "description": "what they asked for, the approach, and anything the deck "
+                                                   "must say. The richer this is, the better the deck."},
+        "quotation_number": {"type": "string", "description": "e.g. SEN-2026-0006 - pass it whenever a "
+                                                              "quotation exists so prices match exactly"},
+        "deal_id": {"type": "integer", "description": "the opportunity this belongs to, if known"}},
+      "required": ["company", "customer", "brief"]}},
     {"name": "create_quotation",
      "description": "Produce a branded, house-format QUOTATION (an editable .xlsx spreadsheet plus a ready-to-"
                     "send .pdf by default) and drop it in the Inbox as a downloadable card. Use when Rashad asks "
@@ -3268,6 +3288,16 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                            "projects_count": proj["count"], "won_value": proj["total_value"],
                            "projects": [{"title": p["title"], "value": p["value"], "stage": p["stage"]}
                                         for p in proj["projects"][:10]]}, default=str)
+    if name == "create_proposal":
+        r = engine.deliver_proposal(inp["company"], customer=inp.get("customer", ""),
+                                    brief=inp.get("brief", ""),
+                                    quotation_number=inp.get("quotation_number"),
+                                    deal_id=inp.get("deal_id"))
+        films = ", ".join(r["films"]) or "none matched in the media library"
+        return (f"Proposal deck built: {r['pages']} pages, '{r['filename']}'. Sample films used: {films}. "
+                + (f"Filed to the {r['filed_to']} client folder and the document library. "
+                   if r.get("filed_to") else "Filed to the document library. ")
+                + f"It is on card #{r['task_id']} for review; nothing has been sent to the client.")
     if name == "create_company":
         a = crm.create_account(inp["name"], website=inp.get("website"), phone=inp.get("phone"))
         return f"created client company '{a['name']}' (id {a['id']})"
@@ -3635,6 +3665,7 @@ _CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "cr
                 # Chiefs can also DRAFT and look people up — anyone Rashad talks to should be able to act on a
                 # request, not just strategise. (Per-company RULE writes stay Manager-only to avoid scope bleed.)
                 "create_task", "draft_email", "draft", "crm_lookup", "crm_pipeline", "correct_task",
+                "create_proposal",
                 "approve_task", "skip_task", "run_report", "schedule_report", "create_quotation",
                 "list_scheduled", "list_calendar",
                 "remember_preference", "forget_preference", "list_preferences"}

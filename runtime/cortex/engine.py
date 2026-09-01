@@ -27,7 +27,7 @@ from .schedule import _GST
 
 from psycopg.types.json import Json
 
-from . import (contentqueue, crm, db, doctext, documents, envelope, gmail, manager, media, meetnotes, policy,
+from . import (contentqueue, crm, db, deck, doctext, documents, envelope, gmail, manager, media, meetnotes, policy,
                newsletter, notifications, pipeline, profile, ppc_report, provider, quotation, reminders,
                schedule, seo_report, store, webauthn_auth, whatsapp, worker)
 from .integrations import telegram as tg, wordpress as wp
@@ -3640,6 +3640,68 @@ def deliver_ppc_report(company: str = "sensa", days: int = 1) -> dict:
 
 QUOTES_DIR = "/opt/coretex/quotations"     # generated quotation PDFs (persisted, served to the Inbox)
 QUOTE_SKILL_KEY = "sales-quotation"        # quotes land under the company's Sales & Inquiries lane
+
+
+def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quotation_number: str | None = None,
+                     deal_id: int | None = None, label: str | None = None) -> dict:
+    """Author + render a house-format PROPOSAL deck, file it to the document library and the client's
+    Drive folder, and drop it in the Inbox as a card. The deck is INTERNAL until an email card sends it:
+    this never contacts the client. Prices, sample films and dates are stamped by code (deck.py)."""
+    os.makedirs(QUOTES_DIR, exist_ok=True)
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise ValueError(f"unknown company {company}")
+    q = None
+    if quotation_number:                       # reuse the real quote so the deck can never contradict it
+        reg = db.setting_get(f"quote_versions:{quotation_number}") or []
+        if reg:
+            spec = (reg[-1].get("spec") or {})
+            net = sum(float(i.get("unit") or 0) * float(i.get("qty") or 1)
+                      for sec in (spec.get("sections") or []) for i in sec.get("items", []))
+            q = {"number": quotation_number, "sections": spec.get("sections"), "net": round(net, 2),
+                 "currency": "AED"}
+    safe = re.sub(r"[^A-Za-z0-9 -]", "", customer or co["name"])[:60].strip() or "Proposal"
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    out = deck.build(company, customer or co["name"], brief, quotation=q, label=label,
+                     out_dir=QUOTES_DIR, filename=f"proposal-{company}-{stamp}.pdf")
+    data = open(out["path"], "rb").read()
+    name = f"{safe} - Proposal{' ' + quotation_number if quotation_number else ''} - {stamp}.pdf"
+    doc = documents.save(co["id"], company, name, "application/pdf", data, uploaded_by="cortex")
+    filed = None
+    try:                                       # same client-folder rule as quotations
+        from . import drive as _drive
+        prof = profile.get(co["id"]) or {}
+        parent = (prof.get("clients_drive_folder") or "").strip()
+        client = (customer or "").split(",")[0].strip()
+        if parent and client:
+            tok = _drive.access_token()
+            f = _drive.ensure_client_folder(client, parent, token=tok)
+            if f.get("id"):
+                _drive.upload_to_folder(f["id"], name, "application/pdf", data, token=tok)
+                filed = f["name"]
+    except Exception:  # noqa: BLE001 — the card must survive a Drive hiccup
+        pass
+    skill = store.get_skill_by_key(co["id"], "sales-quotation")
+    req = {"brief": f"Proposal deck for {customer}: {out['pages']} pages, "
+                    f"{len(out['films'])} sample films from the media library.",
+           "title": name, "file": out["path"], "kind": "proposal",
+           "attach_docs": [{"id": doc["id"], "filename": doc["filename"], "mime": doc["mime"],
+                            "size": doc["size"]}]}
+    if deal_id:
+        req["deal_id"] = int(deal_id)
+    t = store.create_task(co["id"], skill["id"], "content", req)
+    if t and deal_id:
+        db.execute("update tasks set deal_id=%s where id=%s", (int(deal_id), t["id"]))
+        try:
+            from . import pipeline as _pl
+            _pl.log_deal(int(deal_id), "note",
+                         f"Proposal deck built ({out['pages']} pages, films: "
+                         f"{', '.join(out['films']) or 'none'}) and filed"
+                         + (f" to the {filed} client folder" if filed else "") + f". Card {t['id']}.")
+        except Exception:  # noqa: BLE001
+            pass
+    return {"path": out["path"], "pages": out["pages"], "films": out["films"], "doc_id": doc["id"],
+            "filed_to": filed, "task_id": (t or {}).get("id"), "filename": name}
 
 
 def deliver_quotation(company: str, *, preset: str = "ai-production", customer: str = "",
