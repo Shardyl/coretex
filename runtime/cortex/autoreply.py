@@ -102,6 +102,11 @@ def handle(msg: dict, company: dict, deals: list[dict] | None = None) -> dict | 
 
     # 2. the successor becomes a real contact on the same account (never invented — it was in the text)
     added = False
+    if successor and acct:
+        # the successor may already exist as a loose contact (Konstantinos did) - put them on the
+        # same account either way, or the next chase cannot resolve them through it
+        db.execute("update crm_master set account_id=%s, updated_at=now() where lower(email)=lower(%s) "
+                   "and account_id is null", (acct, successor))
     if successor and not db.one("select 1 from crm_master where lower(email)=lower(%s)", (successor,)):
         try:
             from . import crm
