@@ -351,6 +351,16 @@ extract/judge, never move stages or invent values:
   (`nextstep_seen:<deal>`); conservative (most mail spawns nothing).
 - **Meetings feed the loop:** `meetnotes.sweep` -> `pipeline.record_meeting` on deal-matched
   meetings: summary onto the timeline, OUR action items become commitments with reminders.
+  BACKFILL: `sweep(days_back=N, min_gap_minutes=0, backfill=True)` recovers OLD meetings as memory
+  only - notes + timeline history, but NO commitments-into-reminders and NO post-meeting follow-up
+  card. Use it for anything older than the normal 7-day window; a naive backfill dates a four-month-old
+  promise from today and drafts thank-you emails for calls held in the spring. Ran 31 Aug 2026 over
+  150 days: 10 recovered (2 -> 12 notes), 5 matched to deals, tasks and reminders unchanged.
+  GEMINI NOTETAKER IS SENSA ONLY, and that is a DECISION, not a gap: it is licensed on the Sensa
+  Workspace and NOT on rashad@tabscanner.com (evidence 31 Aug 2026: 28 Tabscanner meetings over 120
+  days, zero with any attachment; Sensa 16 meetings, 9 with Gemini docs). Rashad declined the ~$40/mo
+  to add it (31 Aug 2026). Do NOT "fix" this by extending the sweep to Tabscanner: there is nothing
+  there to read. Tabscanner call notes reach Cortex by Rashad pasting or dictating them into Talk.
 Lead -> opportunity conversion was already automatic on both intake lanes (qualify + auto_opportunity);
 with won -> project and Close & review now wired, the lead -> opportunity -> project -> close chain is
 closed end to end.
