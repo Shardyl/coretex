@@ -499,6 +499,7 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
                   title: str | None = None, note: str | None = None, agency_fee: bool | None = None,
                   terms: dict | None = None, deliverables: list | None = None, number: str | None = None,
                   contact: dict | None = None, contact_email: str | None = None,
+                  payment_lines: list | None = None,
                   out_dir: str = "/tmp", wb=None, sheet_title: str | None = None) -> dict:
     """Build the quotation as the Sensa house-format .xlsx (single sheet, brand band, optional Deliverables
     block, line-item table with =IF(D="",...) auto-totals, payment + bank, acceptance, then Terms directly
@@ -671,10 +672,11 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
         ws[cc].value = lab; fill(ws[cc], _TEAL); ws[cc].font = F(s=10, b=True, c=_WHT)
         ws[cc].alignment = Alignment(indent=1)
     r += 1
-    pay = ["70% down payment to commence the project.",
-           "30% balance due before final delivery, on approval.",
-           "Revisions as per the Revisions & Delivery terms on this quotation.",
-           f"All prices in {cur}, exclusive of {int(vat_rate*100)}% VAT."]
+    pay = list(payment_lines) if payment_lines else [
+        "70% down payment to commence the project.",
+        "30% balance due before final delivery, on approval.",
+        "Revisions as per the Revisions & Delivery terms on this quotation."]
+    pay = pay + [f"All prices in {cur}, exclusive of {int(vat_rate*100)}% VAT."]
     bank = hb["bank"]
     for i in range(max(len(pay), len(bank))):
         ws.merge_cells(f"A{r}:B{r}"); ws.merge_cells(f"D{r}:E{r}")
