@@ -1693,7 +1693,12 @@ function pickCardFile(tid,cid){
 }
 // belt-and-suspenders: a card body must NEVER show raw HTML. If anything HTML-ish slips into a text body,
 // strip the tags to readable text (the only place we render real HTML is the email preview box below).
-function plainText(s){ s=String(s||''); return /<\/?[a-z!][^>]*>/i.test(s) ? s.replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/[ \t]+/g,' ').replace(/\n /g,'\n').trim() : s; }
+function plainText(s){ s=String(s||'');
+  if(!/<\/?[a-z!][^>]*>/i.test(s)) return s;
+  // <style> and <script> CONTENTS are not text: stripping tags alone left a card body showing raw CSS
+  // (card 441 rendered 7,000 characters of stylesheet). Drop those blocks whole, then the tags.
+  return s.replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<script[\s\S]*?<\/script>/gi,' ')
+          .replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/[ \t]+/g,' ').replace(/\n /g,'\n').trim(); }
 function actionCard(t){
     const co=t.company||compName(t.company_id), sk=t.skill||'';
     const wp=t.wp||null, em=t.email||null;

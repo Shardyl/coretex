@@ -3798,6 +3798,26 @@ def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quota
     except Exception:  # noqa: BLE001 — the card must survive a Drive hiccup
         pass
     skill = store.get_skill_by_key(co["id"], "sales-quotation")
+    # THE DECK IS ALREADY BUILT, so this card must be inserted READY. Created as 'new' it went to the
+    # worker, which had nothing to write and invented a full HTML document instead - card 441 showed
+    # Rashad 7,000 characters of raw CSS where a summary belonged, and eight earlier ones were
+    # dismissed for the same reason (3 Sep 2026). Same rule as the pre-meeting brief: a card whose
+    # deliverable already exists is never left for the drafter to fill.
+    try:      # real film titles read far better than YouTube ids
+        _titles = [r["title"] for r in db.query(
+            "select title from media_assets where youtube_video_id = any(%s)", (out["films"],))] \
+            if out.get("films") else []
+    except Exception:  # noqa: BLE001
+        _titles = []
+    summary = (f"Proposal deck built for {customer or co['name']}"
+               + (f" against quotation {quotation_number}" if quotation_number else "")
+               + f".\n\n{out['pages']} pages. The PDF is attached to this card"
+               + (f" and filed to the {filed} client folder on Drive" if filed else "")
+               + ".\n\n"
+               + ("Sample films included: " + ", ".join(_titles) + "\n\n" if _titles else
+                  ("Sample films: " + str(len(out.get("films") or [])) + " from the media library.\n\n"
+                   if out.get("films") else "No sample films were included.\n\n"))
+               + "Nothing has been sent. Read the PDF, then ask me to email it when you are happy.")
     req = {"brief": f"Proposal deck for {customer}: {out['pages']} pages, "
                     f"{len(out['films'])} sample films from the media library.",
            "title": name, "file": out["path"], "kind": "proposal",
@@ -3805,7 +3825,9 @@ def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quota
                             "size": doc["size"]}]}
     if deal_id:
         req["deal_id"] = int(deal_id)
-    t = store.create_task(co["id"], skill["id"], "content", req)
+    t = db.execute("insert into tasks (company_id, skill_id, kind, request, draft, status, title) "
+                   "values (%s,%s,'content',%s,%s,'awaiting_approval',%s) returning *",
+                   (co["id"], skill["id"], Json(req), summary, name))
     if t and deal_id:
         db.execute("update tasks set deal_id=%s where id=%s", (int(deal_id), t["id"]))
         try:
