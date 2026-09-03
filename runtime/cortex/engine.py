@@ -1396,6 +1396,40 @@ def apply_correction(task: dict, text: str) -> None:
     _maybe_propose_rule(task, skill, text, old or "", new or "")
 
 
+def _client_contact_named(name: str, deal_id=None, contact_email: str = "") -> str:
+    """The CLIENT-side person the owner just named, resolved to a real address from the CRM.
+
+    Scoped deliberately: the people on THIS deal, then everyone at the same account, then the same
+    email domain as the recipient. Never a global name search - "copy Sarah in" must never reach a
+    Sarah at another client. Returns "" when nothing matches, so the caller can say so."""
+    n = (name or "").strip().lower()
+    if not n:
+        return ""
+    try:
+        if deal_id:      # people already listed on the deal
+            d = db.one("select contacts, account_id from crm_projects where id=%s", (int(deal_id),)) or {}
+            for c in (d.get("contacts") or []):
+                em, nm = (c.get("email") or ""), (c.get("name") or "")
+                if em and (n in nm.lower() or n in em.lower().split("@")[0].replace(".", " ")):
+                    return em
+            if d.get("account_id"):
+                for r in db.query("select first_name, last_name, email from crm_master where "
+                                  "account_id=%s and coalesce(email,'')<>''", (d["account_id"],)):
+                    full = ((r.get("first_name") or "") + " " + (r.get("last_name") or "")).lower()
+                    if n in full or n in (r["email"] or "").lower().split("@")[0].replace(".", " "):
+                        return r["email"]
+        dom = (contact_email or "").split("@")[-1].lower()      # a colleague on the same domain
+        if dom:
+            for r in db.query("select first_name, last_name, email from crm_master where "
+                              "lower(email) like %s", ("%@" + dom,)):
+                full = ((r.get("first_name") or "") + " " + (r.get("last_name") or "")).lower()
+                if n in full or n in (r["email"] or "").lower().split("@")[0].replace(".", " "):
+                    return r["email"]
+    except Exception:  # noqa: BLE001
+        return ""
+    return ""
+
+
 def _stamp_when(phrase: str):
     """CODE resolves the owner's time phrase (rebuild Stage 3: one date-stamper, deterministic first).
     Weekday names, 'tomorrow', 'today' and explicit dates never touch a model — a weekday always means
@@ -1490,10 +1524,30 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
         req["to_extra"] = sorted(set((req.get("to_extra") or []) + tos))
         req["cc_extra"] = [e for e in (req.get("cc_extra") or []) if e not in req["to_extra"]]
         changed = True
-    adds = [senders[c.strip().lower()]["email"] for c in (u.get("cc_add") or [])
-            if isinstance(c, str) and c.strip().lower() in senders]
+    # "Copy Hussein in" used to resolve ONLY against our own team, so naming the CLIENT's colleague
+    # matched nothing and was dropped in silence - the correction reported success and the cc was
+    # unchanged (card 454, 3 Sep 2026). Resolve a bare address, then our team, then the people on THIS
+    # deal and account, and say so out loud when a name cannot be resolved.
+    adds, unresolved = [], []
+    for c in (u.get("cc_add") or []):
+        if not isinstance(c, str) or not c.strip():
+            continue
+        c = c.strip()
+        if "@" in c:
+            adds.append(c)
+            continue
+        if c.lower() in senders:
+            adds.append(senders[c.lower()]["email"])
+            continue
+        hit = _client_contact_named(c, task.get("deal_id") or req.get("deal_id"),
+                                    (req.get("inquiry") or {}).get("email") or "")
+        (adds if hit else unresolved).append(hit or c)
     if adds:
         req["cc_extra"] = sorted(set((req.get("cc_extra") or []) + adds))
+        changed = True
+    if unresolved:
+        req["card_problem"] = ("Could not work out who to copy in: " + ", ".join(unresolved)
+                               + ". Give me the email address and I will add them.")
         changed = True
     rems = []
     for c in (u.get("cc_remove") or []):
