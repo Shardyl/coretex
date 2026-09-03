@@ -2524,7 +2524,10 @@ async function sendChat(text, viaVoice){
     const pk=talkingTo||persona||'';
     if(!talkingTo) routedTo=persona||'';       // remember who the concierge routed to
     routedLabel=plabel;                         // ...and surface it in the header pill
-    chatMsgs[idx]={role:'assistant',content:reply||'(no reply)',who:plabel,pk}; paintChat(); setAutoLbl();
+    // An empty stream is a DROPPED CONNECTION, not silence. "(no reply)" read as though Cortex had
+    // nothing to say, when in fact the answer was lost in transit (3 Sep 2026).
+    if(!reply){ chatMsgs[idx]={role:'assistant',content:'The connection dropped before the reply came back. Nothing was lost on Cortex’s side, send it again.',who:plabel,pk,err:true}; paintChat(); setAutoLbl(); saveConv(); return ''; }
+    chatMsgs[idx]={role:'assistant',content:reply,who:plabel,pk}; paintChat(); setAutoLbl();
     saveConv();
     if(viaVoice && reply) await speakAndWait(reply);
     return reply;

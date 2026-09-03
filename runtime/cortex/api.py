@@ -3875,14 +3875,37 @@ def chat_stream(body: ChatTurn, u: dict = Depends(current_user)) -> StreamingRes
     msgs, chosen, system, tools, _exec = _chat_prepare(body, u)   # 400s raised here, before streaming starts
 
     def gen():
+        # HEARTBEAT. The agentic loop can run a dozen tool calls before it writes a word - a "find this
+        # person in the CRM" turn made ELEVEN crm_lookups first (3 Sep 2026). Nothing crossed the wire in
+        # that time, Cloudflare cut the idle connection at ~100s, the reader saw a clean end-of-stream and
+        # the cockpit wrote "(no reply)" as though Cortex had said nothing. The producer therefore runs on
+        # its own thread and this loop pings every 10s while it thinks, so the connection can never idle.
+        import queue as _q
+        import threading as _th
         yield _sse("meta", {"persona": chosen, "persona_label": personas.label(chosen)})
-        try:
-            for kind, data in provider.chat_tools_stream(
-                    system, msgs, tools, _exec,
-                    purpose=f"chat:{chosen}" if chosen else "chat", company=body.company):
-                yield _sse(kind, data)
-        except Exception as e:  # noqa: BLE001 — surface a clean error event instead of a broken stream
-            yield _sse("error", {"error": str(e)[:200]})
+        out: _q.Queue = _q.Queue()
+
+        def _produce():
+            try:
+                for kind, data in provider.chat_tools_stream(
+                        system, msgs, tools, _exec,
+                        purpose=f"chat:{chosen}" if chosen else "chat", company=body.company):
+                    out.put((kind, data))
+            except Exception as e:  # noqa: BLE001 — surface a clean error event, never a broken stream
+                out.put(("error", {"error": str(e)[:200]}))
+            finally:
+                out.put((None, None))
+
+        _th.Thread(target=_produce, daemon=True).start()
+        while True:
+            try:
+                kind, data = out.get(timeout=10)
+            except _q.Empty:
+                yield ": keepalive\n\n"          # an SSE comment: ignored by the client, seen by the proxy
+                continue
+            if kind is None:
+                break
+            yield _sse(kind, data)
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
