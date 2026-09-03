@@ -105,6 +105,39 @@ assert all(kind_class(k) in ("outward", "money") for k in (NEVER_AUTO_KINDS | MO
     "KIND_CLASS drift: a never-auto/money kind is not classed outward/money"
 
 
+def _identity_mismatch(draft: str, from_addr: str, company: dict) -> str:
+    """Does this email introduce itself as somebody OTHER than the mailbox it sends from?
+
+    The worst class of error this system can make. Card 451 opened "Rashad here, founder of Sensa" on
+    an email whose From was gino@sensa.digital, and would have gone out under Gino's signature. This is
+    deterministic, not a model judgement: the roster is the company's own `signatures`, and only a
+    FIRST-PERSON self-introduction counts, so naming a colleague normally ("Gino sent that over on
+    Monday") is untouched. Returns "" when the draft and the sender agree."""
+    if not draft or not from_addr:
+        return ""
+    try:
+        sigs = (profile.get(company.get("id")) or {}).get("signatures") or {}
+    except Exception:  # noqa: BLE001
+        return ""
+    me = (sigs.get(from_addr.lower()) or {}).get("name") or ""
+    first_me = me.split()[0].lower() if me else ""
+    body = re.sub(r"\s+", " ", draft[:1500])
+    for addr, sig in (sigs or {}).items():
+        nm = ((sig or {}).get("name") or "").strip()
+        if not nm or addr.lower() == from_addr.lower():
+            continue
+        first = nm.split()[0]
+        if first.lower() == first_me:      # two colleagues sharing a first name is not a mismatch
+            continue
+        pat = (r"\b(?:" + re.escape(first) + r"\s+here\b"
+               r"|(?:this is|i am|i'm|my name is)\s+" + re.escape(first) + r"\b)")
+        if re.search(pat, body, re.I):
+            return (f"the draft introduces itself as {nm}, but this email sends from {from_addr}"
+                    + (f" ({me})" if me else "")
+                    + ". Fix the sender or the wording before it goes out.")
+    return ""
+
+
 def _biometric_gate(is_public: bool, stepup_token: str | None, money: bool = False) -> dict | None:
     """For a PUBLIC approval, require a fresh fingerprint/PIN step-up: returns a needs_biometric response if
     one wasn't provided, else None to proceed (consuming the step-up). Authorised TEAM members pass with
@@ -1890,6 +1923,16 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
                              "nothing can send until then"}
         # ADDRESSED TO SOMEONE WHO HAS LEFT: cc is filtered silently, but the To is not a detail to fix
         # quietly - the email would go nowhere and the chase would look answered. Stop and say so.
+        # WRONG PERSON IN THE BODY: never send an email that introduces itself as someone else.
+        try:
+            _cco = store.get_company(task.get("company_id")) or {}
+            _frm = ((task.get("request") or {}).get("from_email") or "").strip() \
+                or ((profile.get(_cco.get("id")) or {}).get("reply_from") or "").strip()
+            _mm = _identity_mismatch(task.get("draft") or "", _frm, _cco)
+            if _mm:
+                return {"ok": False, "blocked": True, "error": _mm}
+        except Exception:  # noqa: BLE001
+            pass
         _gone = db.one("select email from crm_master where lower(email)=lower(%s) and "
                        "lower(coalesce(lead_status,''))='left-company'", (_to,))
         if _gone:
@@ -2868,6 +2911,25 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
     manifest = []
     _adopt_existing_thread(task, req, manifest)
     co = store.get_company(task.get("company_id")) or {}
+    # ONE SENDER, DECIDED ONCE, BEFORE THE DRAFT. The envelope used to fall back to the company's
+    # reply_from at SEND time, long after the drafter had been told nothing about who it was writing
+    # as - so the model picked a person for itself. Card 451 opened "Rashad here, founder of Sensa" on
+    # an email addressed FROM gino@ (1 Sep 2026), and 19 of the last 58 email cards carried no sender
+    # at all. Thread adoption above sets it whenever a real thread exists; this pins the fallback for
+    # everything else and PERSISTS it, so the drafter and the send path read the identical value.
+    if not (req.get("from_email") or "").strip():
+        try:
+            _rf = ((profile.get(co.get("id")) or {}).get("reply_from") or "").strip()
+            if _rf:
+                req["from_email"] = _rf
+                req["mailbox_rt"] = _rt_for_sender(co, _rf)
+                manifest.append("sender_default")
+                if task.get("id"):
+                    db.execute("update tasks set request = request || %s::jsonb where id=%s",
+                               (Json({"from_email": req["from_email"],
+                                      "mailbox_rt": req["mailbox_rt"]}), task["id"]))
+        except Exception:  # noqa: BLE001 — a sender hiccup must never block the draft
+            pass
     if req.get("attachment_texts") or (req.get("inbound_attachments") and req.get("attachments")):
         manifest.append("inbound_files")
     if req.get("attach_docs"):
