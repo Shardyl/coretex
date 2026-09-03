@@ -143,6 +143,19 @@ it copied the deal timeline's third-person framing. Everyone also wrote in one s
 To add a person: put `{name, role}` on their signature entry, and a `voice.people.<who>`
 `{emails:[...], profile:"..."}` distilled from their sent mail.
 
+THE SENDER IS DECIDED ONCE, BEFORE THE DRAFT (1 Sep 2026). It used to be decided TWICE: the drafter
+was briefed at draft time, and `_email_envelope` fell back to the profile's `reply_from` at SEND time.
+With no `from_email` the identity block is empty, so the model chose a person for itself - card 451
+opened "Rashad here, founder of Sensa" on an email addressed FROM gino@, and 19 of the last 58 email
+cards carried no sender at all. `_draft_context_for_reply` now PINS and PERSISTS the fallback sender
+right after thread adoption, so the drafter and the send path read the identical value. Spawned cards
+(`_spawn_followup_card`, post-meeting, nurture) never set one, which is why revivals were the ones
+that broke.
+BACKSTOP: `_identity_mismatch` blocks approval of any draft that introduces itself as another member
+of the team ("<Name> here", "this is <Name>", "I am <Name>"). Deterministic, read off the company's own
+`signatures` roster, first-person self-introductions ONLY - naming a colleague normally is untouched,
+and two colleagues sharing a first name is not a mismatch. Cards 444 and 451 were both caught live.
+
 ## No-draft gate + skipped opportunities (2026-08-31)
 
 `policy.py` compiles each skill's rules into a NO-DRAFT policy evaluated at TRIAGE, before a card
