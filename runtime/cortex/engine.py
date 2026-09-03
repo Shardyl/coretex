@@ -4055,6 +4055,74 @@ def _recover_stranded_tasks() -> None:
         tg.send(f"⚠️ {len(stuck)} card(s) interrupted mid-send — check the Inbox notification before acting.")
 
 
+def sweep_stuck_sends(older_than_minutes: int = 5) -> dict:
+    """A card left in 'sending' is a hole, and it silently blocks every later card for that contact.
+
+    Claiming the card sets 'sending' before any side effect, so a crash or a restart mid-send strands
+    it there. The startup recovery only shouted about it and left the status alone, so card 437 sat in
+    'sending' for two days: it never sent, it never retried, and the conveyor held the next email to
+    that client behind it (3 Sep 2026).
+
+    This RESOLVES the state instead of announcing it, and it does so on evidence: the mailbox's own
+    Sent folder is the only thing that knows whether the email left. Found -> the card is done. Not
+    found -> back to awaiting_approval so the owner can approve it again. It NEVER re-sends by itself;
+    a duplicate to a client is worse than a delay."""
+    from email.utils import parsedate_to_datetime
+    out = {"sent": [], "returned": [], "unknown": []}
+    rows = db.query("select * from tasks where status='sending' and "
+                    "updated_at < now() - (%s || ' minutes')::interval", (str(int(older_than_minutes)),))
+    for t in rows:
+        req = t.get("request") or {}
+        to = ((req.get("inquiry") or {}).get("email") or "").strip()
+        rt = req.get("mailbox_rt") or ""
+        subj = ((req.get("inquiry") or {}).get("subject") or "").strip()
+        went = None
+        if to and rt and db.setting_get(rt):
+            try:    # did it actually leave? search the sending mailbox, since the card was claimed
+                claimed_at = t.get("updated_at")
+                msgs = gmail.list_recent(days=7, limit=10, rt_key=rt,
+                                         q=f"in:sent to:{to} newer_than:7d",
+                                         company=_inbox_client_company(
+                                             (store.get_company(t.get("company_id")) or {}).get("slug") or ""))
+                went = False
+                for m in msgs:
+                    try:
+                        when = parsedate_to_datetime(m.get("date") or "")
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if claimed_at and when and when >= claimed_at - timedelta(minutes=2):
+                        if not subj or subj.lower()[:40] in (m.get("subject") or "").lower():
+                            went = True
+                            break
+            except Exception:  # noqa: BLE001 — an unreadable mailbox means we simply do not know
+                went = None
+        if went is True:
+            store.update_task(t["id"], status="done")
+            out["sent"].append(t["id"])
+            notifications.notify(
+                f"Card #{t['id']} did send after all", f"The email to {to} is in the Sent folder, so the "
+                "card has been closed. It was interrupted before it could record itself.",
+                category="update", company_id=t.get("company_id"),
+                target_type="task", target_id=str(t["id"]), dedup_key=f"stucksend:{t['id']}")
+        elif went is False:
+            store.update_task(t["id"], status="awaiting_approval")
+            out["returned"].append(t["id"])
+            notifications.notify(
+                f"Card #{t['id']} never sent, it is back in your Inbox",
+                f"The send to {to} was interrupted and nothing reached the Sent folder. Nothing was "
+                "re-sent automatically. Approve it again when you are ready.",
+                priority="high", category="approval", company_id=t.get("company_id"),
+                target_type="task", target_id=str(t["id"]), dedup_key=f"stucksend:{t['id']}")
+        else:
+            out["unknown"].append(t["id"])
+            notifications.notify(
+                f"Card #{t['id']} is stuck mid-send and I cannot tell if it went",
+                f"Check the Sent folder for {to or 'the recipient'} yourself. It will NOT retry on its own.",
+                priority="high", category="reminder", company_id=t.get("company_id"),
+                target_type="task", target_id=str(t["id"]), dedup_key=f"stucksend:{t['id']}")
+    return out
+
+
 def run(poll_idle: float = 1.0) -> None:
     tg.send("\U0001F9E0 Cortex engine online.")
     try:
@@ -4120,6 +4188,12 @@ def run(poll_idle: float = 1.0) -> None:
                 pass
             try:
                 meetnotes.sweep()       # SECONDARY (hourly): notes attached to the calendar event
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                # a card stranded in 'sending' blocks every later card for that contact - resolve it
+                # from the Sent folder rather than leaving it there (card 437 sat stuck for two days)
+                sweep_stuck_sends()
             except Exception:  # noqa: BLE001
                 pass
             try:

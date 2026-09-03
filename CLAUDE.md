@@ -514,6 +514,19 @@ pre-books a slot), `calendar.event_has_guests` refuses any event with an attende
 and `meetingprep` stamps `invited/readonly` on the brief's copy of the meeting. A stale slot costs a
 little availability; a wrongly-cancelled client meeting costs the meeting.
 
+## A card stuck in 'sending' is resolved, not announced (3 Sep 2026)
+
+`_send_email_reply` claims the card as `sending` BEFORE any side effect, so a crash or restart mid-send
+strands it there. The startup recovery only raised a notification and left the status alone, and it ran
+at STARTUP only, so card 437 sat in `sending` for two days: it never sent, never retried, and the
+one-open-card-per-contact conveyor held the next email to that client behind it (card 454 was created
+`queued` and would never have drafted).
+`engine.sweep_stuck_sends()` runs from the loop and settles it ON EVIDENCE, the sending mailbox's own
+Sent folder being the only thing that knows: found -> the card is `done`; not found -> back to
+`awaiting_approval` so it is re-approvable; unreadable mailbox -> flagged as genuinely unknown. It
+NEVER re-sends by itself - a duplicate to a client is worse than a delay. Notifications are deduped per
+card (`stucksend:<id>`), so a stuck card cannot become recurring noise.
+
 ## Approvals: the step-up must COMPLETE the action (1 Sep 2026)
 
 `POST /api/stepup/pin/verify` takes an optional intent (`task_id`, `action`, `run_at`) and runs
