@@ -219,7 +219,11 @@ Talk paperclip + `save_document`, or the Attach button on any email card (fresh 
 library first). `attach_docs` refs on a card resolve to real bytes only at SEND time — attachments never
 bloat task rows, and a client's inbound files can never be re-sent (separate `inbound_attachments` key).
 Talk tools: save_document / list_documents / attach_document; `draft_email` takes `attach_documents`
-by name. Catch-all mailboxes (INBOXES values) can NEVER be the From: `_draft_direct_reply` routes
+by name. **`draft_email` OBEYS THE ONE-OPEN-EMAIL-PER-PERSON RULE (4 Sep 2026).** It used to call
+`store.create_task`, which bypasses the conveyor, so Talk built and SENT a second thank-you to Tikkie
+while the first sat awaiting approval (cards 460 and 474). It now finds the open card, quotes its
+opening line back to Rashad, and asks whether to correct that one or send a genuinely separate email;
+only an explicit `separate_email: true` creates a second. Catch-all mailboxes (INBOXES values) can NEVER be the From: `_draft_direct_reply` routes
 catch-all-received replies via the company `reply_from` person, and `_email_envelope` hard-strips any
 catch-all From as a backstop. Universal email-handling rule tells the drafter the library exists and
 never to claim an attachment the tools didn't confirm.
