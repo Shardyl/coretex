@@ -3153,10 +3153,11 @@ def _pause_or_reschedule_followups(co: dict, deals: list, sender: str, body: str
                     "Follow-up cadence", category="reminder", company_id=co["id"],
                     target_type="deal", target_id=str(d["id"]))
             else:
-                notifications.notify(
-                    f"Auto follow-ups on '{d['title']}' paused — {sender} replied; the cadence re-arms "
-                    "when your reply sends.", "Follow-up cadence", category="reminder",
-                    company_id=co["id"], target_type="deal", target_id=str(d["id"]))
+                # SILENT. A client replying and the chase clock stopping is the system working exactly as
+                # designed: nothing is owed, nothing is decided, and the reply draft is already in the
+                # Inbox saying far more than this would (owner, 4 Sep 2026). The RESCHEDULE above still
+                # speaks, because a date moved on THEIR words is a fact he may want to correct.
+                print(f"[cadence] deal {d['id']} paused: {sender} replied", flush=True)
     except Exception:  # noqa: BLE001 — cadence bookkeeping must never block the reply draft
         pass
 

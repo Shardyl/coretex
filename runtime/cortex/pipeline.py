@@ -21,12 +21,22 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def log_deal(deal_id: int, event: str, text: str) -> None:
+def log_deal(deal_id: int, event: str, text: str, ref: str = "") -> None:
     """Append one event to the deal's timeline. The timeline is the deal's memory: drafting,
-    follow-ups and the cockpit all read it."""
+    follow-ups and the cockpit all read it.
+
+    `ref` is the SOURCE identity of the event (a Gmail message id). One email lands in several of our
+    connected mailboxes, and each poll logged it again: ChainX's reply appears THREE times, seconds
+    apart, and the drafter reads that as three messages (4 Sep 2026). A ref that is already on the
+    timeline is not appended twice."""
     if not deal_id:
         return
+    if ref and db.one("select 1 from crm_projects where id=%s and history @> %s::jsonb",
+                      (int(deal_id), Json([{"ref": ref}]))):
+        return
     ev = {"ts": _now_iso(), "event": event, "text": (text or "")[:1200]}
+    if ref:
+        ev["ref"] = ref
     db.execute("update crm_projects set history = history || %s::jsonb, updated_at=now() where id=%s",
                (Json([ev]), int(deal_id)))
 
@@ -172,7 +182,12 @@ def record_inbound(e: dict, deal: dict | None, company: dict) -> None:
     sender = (e.get("email") or "").strip()
     subj = (e.get("subject") or "").strip()
     snippet = re.sub(r"\s+", " ", (e.get("body") or e.get("snippet") or ""))[:220]
-    log_deal(did, "email_in", f"from {sender}: {subj or '(no subject)'} - {snippet}")
+    gid = (e.get("gmail_id") or "").strip()
+    before = db.one("select jsonb_array_length(history) n from crm_projects where id=%s", (did,)) or {}
+    log_deal(did, "email_in", f"from {sender}: {subj or '(no subject)'} - {snippet}", ref=gid)
+    after = db.one("select jsonb_array_length(history) n from crm_projects where id=%s", (did,)) or {}
+    if gid and (after.get("n") == before.get("n")):
+        return          # already logged from another mailbox: its deadlines were captured then too
     for d in extract_deadlines(e.get("body") or ""):
         try:
             when = datetime.fromisoformat(d["when_iso"])
