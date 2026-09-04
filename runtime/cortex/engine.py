@@ -1685,6 +1685,17 @@ def _company_senders(company_id: int) -> dict:
         rt = f"gmail_refresh_token:{slug}:{who}"
         if email and db.setting_get(rt):
             out[who.lower()] = {"email": email.lower(), "rt_key": rt}
+    # THE COMPANY SEND IDENTITY IS A SENDER TOO. Not every company has per-person mailboxes: Tabscanner
+    # has only the catch-all (api@) and one send account (rashad@tabscanner.com), so this returned {} for
+    # it. Everything keyed off "our senders" then did nothing - above all THREAD ADOPTION, which searches
+    # our mailboxes for the live conversation, so EVERY Tabscanner email opened a brand-new thread
+    # (card 464 to Jonathan Bobo, 4 Sep 2026). Still never a catch-all: that is a receiving address.
+    sa = db.setting_get(f"gmail_send_account:{slug}")
+    sa = (sa if isinstance(sa, str) else str(sa or "")).strip('" ').lower()
+    if (sa and "@" in sa and sa != (INBOXES.get(slug) or "").lower()
+            and db.setting_get(f"gmail_send_refresh_token:{slug}")
+            and not any(v["email"] == sa for v in out.values())):
+        out[sa.split("@")[0].lower()] = {"email": sa, "rt_key": f"gmail_send_refresh_token:{slug}"}
     # spoken-name aliases (voice-to-text renders Rashad as 'Richard'); config so new quirks are data
     for alias, real in (db.setting_get("sender_aliases") or {"richard": "rashad"}).items():
         if real in out and alias not in out:
@@ -2881,7 +2892,12 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
     # continue that thread even when the card carries no deal (card 414 was composed in Talk, so it
     # would have opened a new conversation with a fake 'RE:' subject - owner, 31 Aug 2026). A genuinely
     # cold contact has no recent thread, so nothing changes for them.
-    _recent_days = 45 if (req.get("followup") or req.get("deal_id")) else 21
+    # HOW FAR BACK TO LOOK. A chase is BY DEFINITION about an old conversation - the quieter the deal,
+    # the older its thread and the more it matters that we continue it rather than open a fresh one. 45
+    # days was shorter than the 180 the drafter already reads as thread_history, so a card could be
+    # written from a conversation it then refused to continue. Established work now looks back as far as
+    # the drafter reads; a cold contact with no work context still keeps the short window.
+    _recent_days = 180 if (req.get("followup") or req.get("deal_id")) else 21
     from email.utils import parsedate_to_datetime
     co = store.get_company(task.get("company_id")) or {}
     senders = _company_senders(task["company_id"])
