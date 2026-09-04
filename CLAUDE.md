@@ -64,6 +64,17 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
 - UNIVERSAL (all-company) rules are OWNER-ONLY (2026-08-27): team members (Gino/Ayresh, scoped to
   Sensa) can only add/confirm company-scope rules — enforced in the API, Talk's add_rule, and the
   cockpit UI (scoped users never see the All-companies option).
+- A STANDING RECIPIENT LIVES ON THE COMPANY PROFILE, never on one skill (4 Sep 2026). `always_cc` /
+  `never_cc` / `always_bcc` in `company_profiles.data` apply to EVERY email that company sends; a
+  `cc_add` on a skill applies to that lane alone. "Always CC Ben" sat on Tabscanner's
+  sales-first-response and nowhere else, so Ben rode inbound sales replies and was missed by every
+  owner-composed draft, follow-up and project email (card 474). `envelope.audit_company()` reports who
+  is copied on which lanes and who is only half-covered; `check_coverage()` raises a deduped
+  notification naming the missing lanes and runs on EVERY rule change, so partial coverage can never
+  appear silently again. `promote_to_company()` moves a recipient to the profile.
+  CATCH-ALLS ARE NEVER COPIED, only received on: hello@sensa.digital and fly@skyvision.film are in
+  their companies' `never_cc`. Fixing a misfiled rule means editing the RULE TEXT, not just the
+  compiled config - a recompile rebuilds `skills.envelope` from the rules.
 - ENVELOPE behaviour (from/cc/bcc) is rule-compiled (2026-08-27): `cortex/envelope.py` distils each
   skill's effective rules into `skills.envelope` config on every rule change; `_email_envelope` just
   executes it. Never hardcode cc logic — change the rules and the compiler follows. Safety invariants
