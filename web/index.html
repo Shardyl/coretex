@@ -547,8 +547,9 @@ async function refreshBadge(){
     const r=await api('/api/inbox/count'+(fco?'?company='+encodeURIComponent(fco):''));   // tiny — never the heavy inbox
     const n=(r.needs_you||0)+(r.unread||0);
     updateInboxBadge(n);   // pending approvals + unread updates
-    // punchy: if something NEW arrived while you're looking at the Inbox, pull it in straight away
-    if(typeof window._lastInboxN==='number' && n>window._lastInboxN && tab==='inbox') render();
+    // NEVER RE-RENDER UNDER HIM (owner, 4 Sep 2026). A full render throws away whatever is open or
+    // half-typed, and it used to fire the moment the count rose, on tab-return, and on a push. The
+    // badge still moves so he can SEE something arrived; tapping the Inbox tab is the refresh.
     window._lastInboxN=n;
   }catch(e){}
 }
@@ -3113,11 +3114,11 @@ document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden'){ hidAt=Date.now(); return; }
   if(IS_MOBILE && token && pinSet && !demo && hidAt && Date.now()-hidAt>300000){ lockNow(); return; }  // re-lock after 5 min away — MOBILE only
   syncWake();                          // re-acquire screen lock (drops when hidden)
-  if(booted){ refreshBadge(); if(tab==='inbox') render(); }   // punchy: refresh the Inbox the moment you reopen the app
+  if(booted){ refreshBadge(); }   // badge only: coming back to the tab must never rebuild the list
 });
 // instant refresh when a push lands while the app is open/foreground (no need to tap the notification)
 if('serviceWorker' in navigator){ navigator.serviceWorker.addEventListener('message',(e)=>{
-  if(e.data&&e.data.type==='cortex-refresh'&&booted){ refreshBadge(); if(tab==='inbox') render(); } }); }
+  if(e.data&&e.data.type==='cortex-refresh'&&booted){ refreshBadge(); } }); }   // badge only, never a re-render
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{})); }
 </script>
 </body>
