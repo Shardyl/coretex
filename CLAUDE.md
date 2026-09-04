@@ -115,6 +115,24 @@ swallowed). A new mail from a sender with an OPEN reply card SUPERSEDES that car
 redrafted) instead of being dropped. The drafted reply carries `from_email` + `mailbox_rt` so the send
 goes out FROM the receiving mailbox with its own token; `deal_id` + project context attach when the
 sender belongs to an active deal. Continuations get `thread_reply` (no reference box).
+**CONTINUING THE EXISTING THREAD IS THE DEFAULT, for every company (owner, 4 Sep 2026).** A follow-up,
+a chase or any deal-linked draft continues the real Gmail conversation; only a genuinely cold contact
+with no work context opens a new one, and `request.new_thread` is the deliberate override. It is CODE,
+not per-company config, so it applies everywhere by construction. Three separate faults had made it
+fail silently, all fixed 4 Sep 2026 after card 464 opened a fresh thread with Jonathan Bobo:
+  1. `_company_senders` was built ONLY from per-person `gmail_account:<slug>:<who>` settings. Tabscanner
+     has none (just the catch-all api@ and one send account), so it returned `{}` and adoption had no
+     mailbox to search: EVERY Tabscanner email opened a new thread. The company send identity is now a
+     sender in its own right. Never a catch-all - that is a receiving address.
+  2. The look-back for established work was 45 days, SHORTER than the 180 the drafter already reads as
+     `thread_history`, so a card could be written from a conversation it then refused to continue. Now
+     180 for a follow-up or deal-linked card; 21 stays for a cold contact.
+  3. It fetched exactly ONE message per mailbox, so a calendar invite or an out-of-office on top of a
+     live thread made it give up entirely. Jonathan's French auto-reply sat above a four-message
+     thread. It now reads up to eight and takes the newest message that is really the conversation.
+Check it with the `existing_thread(<who>)` entry in `request.context_manifest`; its absence on a
+deal-linked card means adoption found nothing, which is worth investigating rather than assuming.
+
 **Thread continuation (2026-08-25):** the poller stashes `request.thread` (Gmail `threadId`,
 `Message-ID`, `References`) and the send passes them through `gmail.send_message`, so approved replies
 land ON the client's existing thread (subject kept verbatim on Re:/Fwd: mail — never "Re: Re:").
