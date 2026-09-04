@@ -2911,17 +2911,27 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
             continue                     # alias entries (richard->rashad) point at the same mailbox
         seen_rt.add(s["rt_key"])
         try:
-            msgs = gmail.list_recent(limit=1, rt_key=s["rt_key"],
+            # LOOK PAST THE NOISE. This used to fetch exactly ONE message, so when the newest thing in
+            # the mailbox was a calendar invite or an out-of-office, adoption gave up entirely instead
+            # of looking one further back. Jonathan Bobo's French auto-reply sat on top of a live four
+            # message thread, and card 464 opened a fresh conversation (4 Sep 2026).
+            msgs = gmail.list_recent(limit=8, rt_key=s["rt_key"],
                                      q=f"(from:{email} OR to:{email}) newer_than:{_recent_days}d",
                                      company=_inbox_client_company(co.get("slug") or ""))
-            m = msgs[0] if msgs else None
-            if not m or not m.get("thread_id"):
+            m = None
+            for cand in (msgs or []):
+                if not cand.get("thread_id"):
+                    continue
+                _subj = (cand.get("subject") or "").lower()
+                if (cand.get("auto_marker") or any(_subj.startswith(p) for p in (
+                        "invitation:", "accepted:", "declined:", "updated invitation:", "canceled:",
+                        "cancelled:", "notes:", "automatic reply", "auto reply", "out of office",
+                        "réponse automatique", "delivery status"))):
+                    continue             # a calendar/auto thread is not the conversation
+                m = cand
+                break
+            if not m:
                 continue
-            _subj = (m.get("subject") or "").lower()
-            if (m.get("auto_marker") or any(_subj.startswith(p) for p in (
-                    "invitation:", "accepted:", "declined:", "updated invitation:", "canceled:",
-                    "cancelled:", "notes:", "automatic reply", "out of office", "delivery status"))):
-                continue                 # a calendar/auto thread is not the conversation
             try:
                 dt = parsedate_to_datetime(m.get("date") or "")
             except Exception:  # noqa: BLE001
