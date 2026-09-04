@@ -4160,14 +4160,16 @@ def _recover_stranded_tasks() -> None:
         tg.send(f"Recovered {len(rows)} task(s) stranded in 'drafting' by a restart.")
     # a card stuck in 'sending' means a crash happened MID-SEND: the email may or may not have left.
     # Never auto-retry that (a duplicate to a client is worse than a delay) — surface it for a human check.
-    stuck = db.query("select id from tasks where status='sending'")
-    for r in stuck:
-        notifications.notify(f"Card #{r['id']} was interrupted MID-SEND by a restart. Check the mailbox's "
-                             "Sent folder: if the email went, mark the card done; if not, set it back to "
-                             "awaiting approval. It will NOT retry on its own.", "Interrupted send",
-                             priority="high", category="reminder", target_type="task", target_id=str(r["id"]))
-    if stuck:
-        tg.send(f"⚠️ {len(stuck)} card(s) interrupted mid-send — check the Inbox notification before acting.")
+    # A card stranded in 'sending' is RESOLVED from the Sent folder, not announced. This used to raise a
+    # fresh un-deduped notification on EVERY engine restart and never change the status, so one stuck
+    # card (437) produced nine identical "interrupted mid-send" alerts over three days while the card
+    # itself sat untouched (4 Sep 2026). sweep_stuck_sends settles it and dedups per card.
+    try:
+        r = sweep_stuck_sends(older_than_minutes=0)
+        if any(r.values()):
+            tg.send(f"Stranded sends resolved on startup: {r}")
+    except Exception as e:  # noqa: BLE001
+        tg.send(f"(stuck-send recovery hiccup: {e})")
 
 
 def sweep_stuck_sends(older_than_minutes: int = 5) -> dict:
