@@ -2932,6 +2932,19 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
                 break
             if not m:
                 continue
+            # A CONVERSATION WE OPENED MINUTES AGO IS NOT A CONVERSATION. Card 474 sent a thank-you on a
+            # fresh thread; the adoption sweep then pointed card 460, the same thank-you still awaiting
+            # approval, straight at it - approving would have replied to our own email with a near
+            # duplicate (4 Sep 2026). Narrow on purpose: only when they have not written back at all AND
+            # our message is hours old. A chase days after our own last email still continues normally.
+            try:
+                _theirs = any((c.get("email") or "").lower() == email.lower() for c in (msgs or []))
+                _mine_at = parsedate_to_datetime(m.get("date") or "")
+                if (not _theirs and _mine_at
+                        and (datetime.now(timezone.utc) - _mine_at) < timedelta(hours=6)):
+                    continue
+            except Exception:  # noqa: BLE001
+                pass
             try:
                 dt = parsedate_to_datetime(m.get("date") or "")
             except Exception:  # noqa: BLE001

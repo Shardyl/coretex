@@ -3039,7 +3039,10 @@ SKILL_TOOLS = [
         "attach_documents": {"type": "array", "items": {"type": "string"},
                              "description": "optional: names/kinds of documents from the company document "
                                             "library to attach (e.g. ['trade licence','VAT certificate']) — "
-                                            "resolve nothing yourself, the library lookup happens server-side"}},
+                                            "resolve nothing yourself, the library lookup happens server-side"},
+        "separate_email": {"type": "boolean", "description": "only after Rashad has been shown an existing "
+                                                            "open card to this person and has explicitly "
+                                                            "said he wants a SECOND, separate email as well"}},
         "required": ["company", "to_name", "subject", "brief"]}},
     {"name": "save_document",
      "description": "Save the file(s) Rashad attached to THIS message into the company's OFFICIAL document "
@@ -3664,6 +3667,22 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                     missing.append(str(q))
             if refs:
                 req["attach_docs"] = refs
+        # ONE OPEN EMAIL PER PERSON, HERE TOO. draft_email called create_task, which bypasses the
+        # conveyor entirely, so Talk happily built and sent a SECOND thank-you to Tikkie while the first
+        # one sat awaiting approval (cards 460 and 474, 4 Sep 2026). Say so instead of duplicating; the
+        # owner can update the open card or ask again for a separate email.
+        if to_email and not inp.get("separate_email"):
+            _open = db.one("select id, left(coalesce(draft,''), 220) d from tasks where company_id=%s "
+                           "and kind in ('email_reply','email_draft') and status in "
+                           "('new','drafting','awaiting_approval','awaiting_correction','queued') "
+                           "and lower(request->'inquiry'->>'email')=lower(%s) order by id desc limit 1",
+                           (co["id"], to_email))
+            if _open:
+                return (f"There is ALREADY an open email to {to_email} waiting for Rashad: card #"
+                        f"{_open['id']}, which begins: \"{(_open['d'] or '').strip()[:200]}\". Do NOT "
+                        "create a second one. Show him that card, and ask whether to CORRECT it with "
+                        "what he just said (use correct_task) or to send a genuinely separate email as "
+                        "well (call draft_email again with separate_email true).")
         t = store.create_task(co["id"], sk["id"], "email_draft", req)
         addr = f" <{to_email}>" if to_email else " (no email resolved)"
         extra = (f" Attached from the library: {', '.join(r['filename'] for r in req.get('attach_docs', []))}."
