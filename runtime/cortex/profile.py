@@ -147,11 +147,18 @@ def questions():
     return [_q(i) for i in range(len(QUESTIONS))]
 
 
+# Envelope fields are NOT questionnaire answers, but they are profile data and they are what "always
+# copy Ben in" actually means. set_field silently ignored anything outside QUESTIONS, so writing one
+# here looked like it worked and changed nothing (4 Sep 2026).
+ENVELOPE_FIELDS = {"always_cc", "never_cc", "always_bcc", "high_value_cc", "reply_from"}
+
+
 def set_field(company_id, field, value):
     """Set a single profile field directly (used by the review-screen edit)."""
-    valid = {f for _, f, _, _ in QUESTIONS}
+    valid = {f for _, f, _, _ in QUESTIONS} | ENVELOPE_FIELDS
     if field not in valid:
-        return get(company_id)
+        raise ValueError(f"'{field}' is not a profile field — nothing was saved. "
+                         f"Known: {', '.join(sorted(valid))}")
     r = _row(company_id)
     data = dict(r["data"] or {})
     data[field] = value
