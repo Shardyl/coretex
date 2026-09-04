@@ -61,6 +61,13 @@ def compile_skill(skill_id: int) -> dict:
             if isinstance(prev, dict):
                 return prev
     db.execute("update skills set envelope=%s, updated_at=now() where id=%s", (json.dumps(cfg), skill_id))
+    # EVERY rule change re-checks the whole company, so a recipient can never end up covering one lane
+    # and silently missing the rest. Fail-soft: an audit hiccup must never block a rule from saving.
+    try:
+        if skill.get("company_id") and skill.get("skill_key") in EMAIL_LANES:
+            check_coverage(skill["company_id"])
+    except Exception:  # noqa: BLE001
+        pass
     return cfg
 
 
@@ -99,3 +106,80 @@ def compile_all() -> int:
         except Exception:  # noqa: BLE001
             pass
     return n
+
+
+# ---------- COMPANY COVERAGE: a cc rule that only covers SOME lanes is a bug, not a config ----------
+#
+# "Always CC Ben" lived on Tabscanner's sales-first-response skill and nowhere else, so Ben rode inbound
+# sales replies and was missed by every owner-composed draft, follow-up and project email (card 474,
+# 4 Sep 2026). Rashad set the rule, watched it fail, and reasonably concluded it had been ignored.
+#
+# A standing recipient belongs in ONE place: the company profile's always_cc, which the envelope reads
+# for every email that company sends. These functions find the addresses that are only PARTIALLY
+# applied and say so, rather than leaving a rule that works in one lane and silently fails in the rest.
+
+# The lanes that actually send client email; a cc rule on any of them is a claim about our correspondence.
+EMAIL_LANES = ("sales-first-response", "sales-followup", "sales-quotation", "email-handling",
+               "sales-scheduling", "sales-triage", "lead-qualification")
+
+
+def audit_company(company_id: int) -> dict:
+    """Who is cc'd WHERE for this company, and who is only half-covered.
+
+    Returns {profile_cc, by_address: {email: {"on": [lanes], "missing": [lanes]}}, partial: [emails]}.
+    An address already in the profile's always_cc is complete by definition - the profile applies to
+    every send - so it is never reported as partial."""
+    from . import profile
+    prof_cc = {str(e).strip().lower() for e in ((profile.get(company_id) or {}).get("always_cc") or [])
+               if isinstance(e, str) and "@" in e}
+    lanes = {}
+    for r in db.query("select id, skill_key from skills where company_id=%s and skill_key = any(%s)",
+                      (company_id, list(EMAIL_LANES))):
+        cfg = get(store.get_skill(r["id"])) or {}
+        lanes[r["skill_key"]] = {str(e).strip().lower() for e in (cfg.get("cc_add") or [])
+                                 if isinstance(e, str) and "@" in e}
+    by_addr: dict = {}
+    for addr in {a for s in lanes.values() for a in s}:
+        if addr in prof_cc:
+            continue                     # the profile already covers every send
+        on = sorted(k for k, v in lanes.items() if addr in v)
+        missing = sorted(k for k in lanes if addr not in lanes[k])
+        by_addr[addr] = {"on": on, "missing": missing}
+    partial = sorted(a for a, v in by_addr.items() if v["on"] and v["missing"])
+    return {"profile_cc": sorted(prof_cc), "lanes": sorted(lanes), "by_address": by_addr,
+            "partial": partial}
+
+
+def promote_to_company(company_id: int, email: str) -> dict:
+    """Move a standing recipient to the ONE place that covers every send: the company profile."""
+    from psycopg.types.json import Json
+    from . import profile
+    email = (email or "").strip().lower()
+    if "@" not in email:
+        raise ValueError("not an email address")
+    data = dict(profile.get(company_id) or {})
+    cc = [str(e).strip().lower() for e in (data.get("always_cc") or []) if isinstance(e, str)]
+    if email not in cc:
+        cc.append(email)
+    data["always_cc"] = cc
+    db.execute("update company_profiles set data=%s, updated_at=now() where company_id=%s",
+               (Json(data), company_id))
+    return {"always_cc": cc}
+
+
+def check_coverage(company_id: int, notify: bool = True) -> dict:
+    """Run the audit and TELL the owner about a half-applied recipient. Deduped per address, so a
+    known gap is raised once, not on every rule change."""
+    rep = audit_company(company_id)
+    if notify and rep["partial"]:
+        from . import notifications, store as _st
+        co = _st.get_company(company_id) or {}
+        for addr in rep["partial"]:
+            v = rep["by_address"][addr]
+            notifications.notify(
+                f"{addr} is copied on some {co.get('name') or 'company'} emails but not others",
+                f"On: {', '.join(v['on'])}. NOT on: {', '.join(v['missing'])}. If they should be on "
+                "every email, say so and I will move it to the company rule so no lane can miss it.",
+                priority="normal", category="reminder", company_id=company_id,
+                dedup_key=f"cc-partial:{company_id}:{addr}")
+    return rep
