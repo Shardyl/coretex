@@ -4214,13 +4214,12 @@ def sweep_stuck_sends(older_than_minutes: int = 5) -> dict:
             except Exception:  # noqa: BLE001 — an unreadable mailbox means we simply do not know
                 went = None
         if went is True:
+            # SILENT ON PURPOSE. The email went, the card is closed, nothing is owed and no decision is
+            # his to make: telling him would be Cortex narrating its own housekeeping (4 Sep 2026). Only
+            # the two cases that genuinely need a person reach the Inbox.
             store.update_task(t["id"], status="done")
             out["sent"].append(t["id"])
-            notifications.notify(
-                f"Card #{t['id']} did send after all", f"The email to {to} is in the Sent folder, so the "
-                "card has been closed. It was interrupted before it could record itself.",
-                category="update", company_id=t.get("company_id"),
-                target_type="task", target_id=str(t["id"]), dedup_key=f"stucksend:{t['id']}")
+            print(f"[stuck-send] task {t['id']} was already in Sent, closed silently", flush=True)
         elif went is False:
             store.update_task(t["id"], status="awaiting_approval")
             out["returned"].append(t["id"])
