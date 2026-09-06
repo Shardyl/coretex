@@ -260,16 +260,44 @@ def _GST_TZ():
     return ZoneInfo("Asia/Dubai")
 
 
-def _attendees_at(start: datetime, whole_day: bool = False) -> tuple[list[str], str]:
-    """Who was in that meeting, from the calendars — INCLUDING cancelled events, which is the whole
-    point: the event may have been deleted and the meeting still happened. `whole_day` widens the window
-    to that calendar day, for notes whose subject carried a date but no time. Returns (emails, title)."""
+_QUOTES = "\"'“”‘’"
+
+
+def _norm_title(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+
+
+def _subject_title(subject: str) -> str:
+    """The MEETING's own title out of Gemini's subject line:
+    'Notes: "Call with Mai" Sep 1, 2026' -> 'Call with Mai'. This is the only hard link between a
+    notes email and a calendar entry, so it is what attribution is proven against."""
+    for rx in (_NOTES_SUBJ_TIME, _NOTES_SUBJ_DAY):
+        m = rx.search(subject or "")
+        if m:
+            return (m.group("rest") or "").strip().strip(_QUOTES)
+    return (subject or "").replace("Notes:", "").strip().strip(_QUOTES)
+
+
+def _attendees_at(start: datetime, whole_day: bool = False,
+                  want_title: str = "") -> tuple[list[str], str, str]:
+    """Who was in THAT meeting, from the calendars — INCLUDING cancelled events, which is the whole
+    point: the event may have been deleted and the meeting still happened. Returns
+    (emails, event_title, refusal_reason); a non-empty reason means NOT ATTRIBUTED.
+
+    Attribution has to be PROVEN, not assumed. This used to take the first event in the window with
+    an external guest, so Mai's MAH Gold notes (subject carried a date but no time, widening the
+    window to the whole day) were attributed to the ECBD call that ran that morning, and three of
+    her commitments were written onto ECBD's tender deal (1 Sep 2026). The notes title must now
+    match the calendar entry; a bare time window only decides it when exactly one meeting is in it
+    and the clock is precise. Anything ambiguous is refused, because a wrong client is worse than
+    no client."""
     from . import calendar as gcal
     if whole_day:
         lo = start.replace(hour=0, minute=0, second=0, microsecond=0)
         hi = lo + timedelta(days=1)
     else:
         lo, hi = start - timedelta(minutes=45), start + timedelta(minutes=45)
+    cands, seen = [], set()
     for entry in (db.setting_get("availability_calendars") or []):
         co, cal = entry.get("company") or "sensa", entry.get("id") or "primary"
         try:
@@ -282,11 +310,33 @@ def _attendees_at(start: datetime, whole_day: bool = False) -> tuple[list[str], 
         except Exception:  # noqa: BLE001
             continue
         for ev in items:
-            ext = [(a.get("email") or "").lower() for a in (ev.get("attendees") or [])
-                   if a.get("email") and (a["email"].split("@")[-1].lower() not in _OWN)]
-            if ext:
-                return ext, (ev.get("summary") or "")
-    return [], ""
+            ext = sorted({(a.get("email") or "").lower() for a in (ev.get("attendees") or [])
+                          if a.get("email") and (a["email"].split("@")[-1].lower() not in _OWN)})
+            if not ext:
+                continue
+            # the same meeting sits on several of our calendars; count it once
+            k = (ev.get("iCalUID") or ev.get("id")
+                 or _norm_title(ev.get("summary")) + "|" + str((ev.get("start") or {}).get("dateTime")))
+            if k in seen:
+                continue
+            seen.add(k)
+            cands.append({"title": ev.get("summary") or "", "ext": ext})
+    if not cands:
+        return [], "", "no calendar event with an external guest in the window"
+    want = _norm_title(want_title)
+    hits = []
+    for c in cands:
+        got = _norm_title(c["title"])
+        if want and (got == want or (len(want) >= 6 and (want in got or got in want))):
+            hits.append(c)
+    if hits:
+        if len({tuple(c["ext"]) for c in hits}) == 1:
+            return list(hits[0]["ext"]), hits[0]["title"], ""
+        return [], "", f"several meetings titled like '{want_title}' with different guests"
+    if not whole_day and len(cands) == 1:      # precise start, one meeting: the clock is the proof
+        return list(cands[0]["ext"]), cands[0]["title"], ""
+    found = ", ".join(f"'{c['title']}'" for c in cands[:4]) or "nothing"
+    return [], "", f"'{want_title}' matches no meeting in the window (calendar had {found})"
 
 
 def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = False) -> dict:
@@ -322,8 +372,11 @@ def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = 
                 if key in seen_keys or db.one("select 1 from meeting_notes where event_id=%s", (key,)):
                     seen_keys.add(key)
                     continue
-                emails, ev_title = _attendees_at(start, whole_day=not has_time) if start else ([], "")
-                title = ev_title or subject.replace("Notes:", "").strip()
+                want_title = _subject_title(subject)
+                emails, ev_title, unmatched = (
+                    _attendees_at(start, whole_day=not has_time, want_title=want_title)
+                    if start else ([], "", "the subject carries no meeting date"))
+                title = ev_title or want_title or subject.replace("Notes:", "").strip()
                 summary = _distil(title, body)
                 company_id = deal_id = None
                 for em in emails:
@@ -347,6 +400,15 @@ def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = 
                 if deal_id:
                     from . import pipeline
                     pipeline.record_meeting(deal_id, company_id, title, summary, commitments=not backfill)
+                elif unmatched:
+                    # captured, deliberately not filed: say so once, rather than guessing a client
+                    from . import notifications
+                    notifications.notify(
+                        f"Meeting notes not filed: {title[:70]}",
+                        f"Gemini sent notes for this meeting and Cortex could not prove which client "
+                        f"they belong to, so nothing was written to a deal ({unmatched}). "
+                        f"The notes are stored and searchable.",
+                        priority="fyi", category="meeting", dedup_key="meetnotes-unfiled:" + key)
                 seen_keys.add(key)
                 made.append({"key": key, "deal": deal_id, "title": title[:60]})
             except Exception as e:  # noqa: BLE001 — one bad message never stops the rest

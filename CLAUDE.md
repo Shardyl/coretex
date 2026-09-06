@@ -425,6 +425,18 @@ extract/judge, never move stages or invent values:
   days, zero with any attachment; Sensa 16 meetings, 9 with Gemini docs). Rashad declined the ~$40/mo
   to add it (31 Aug 2026). Do NOT "fix" this by extending the sweep to Tabscanner: there is nothing
   there to read. Tabscanner call notes reach Cortex by Rashad pasting or dictating them into Talk.
+  ATTRIBUTION MUST BE PROVEN (6 Sep 2026): the notes-email sweep matches a Gemini notes email to a
+  calendar entry by the MEETING TITLE in the subject (`Notes: "Call with Mai" Sep 1, 2026`), not by
+  time proximity. A bare time window only decides it when the subject carries a precise clock time AND
+  exactly one meeting sits in the +/-45min window; a date-only subject widens to the whole day and is
+  refused unless the title matches. Unattributed notes are still STORED and searchable, get no deal, no
+  commitments and no follow-up card, and raise one FYI notification. Why: Mai Almarri's MAH Gold notes
+  (date-only subject) were attributed to the ECBD tender call that ran the same morning, putting three
+  of her commitments and four timeline entries onto deal 100 as reminders 87/88/89 (cancelled 6 Sep;
+  the deal 100 entries are marked `voided`, not deleted). A wrong client is worse than no client.
+- **Voided timeline entries:** a `voided` key on a `crm_projects.history` event keeps it on the record
+  (cockpit still shows it) but `pipeline.deal_context` no longer reads it back into drafts. That is how
+  a misfiled event is corrected: nothing is ever deleted from a deal.
 Lead -> opportunity conversion was already automatic on both intake lanes (qualify + auto_opportunity);
 with won -> project and Close & review now wired, the lead -> opportunity -> project -> close chain is
 closed end to end.

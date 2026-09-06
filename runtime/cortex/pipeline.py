@@ -48,7 +48,9 @@ def deal_context(deal_id: int, limit: int = 12) -> str:
                (int(deal_id),))
     if not d:
         return ""
-    hist = d.get("history") or []
+    # a VOIDED entry stays on the record (nothing is deleted from a deal) but is never read back into
+    # a draft: it is there because it was filed against the wrong client and corrected.
+    hist = [h for h in (d.get("history") or []) if not h.get("voided")]
     lines = [f"- {h.get('ts', '')[:16]} [{h.get('event', '')}] {h.get('text', '')}" for h in hist[-limit:]]
     out = (f"DEAL TIMELINE for '{d['title']}' (stage {d['stage']}"
            + (f", value {d['currency']} {d['value']}" if d.get("value") else "") + "):\n")
