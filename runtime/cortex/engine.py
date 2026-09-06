@@ -3799,7 +3799,7 @@ QUOTE_SKILL_KEY = "sales-quotation"        # quotes land under the company's Sal
 
 
 def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quotation_number: str | None = None,
-                     deal_id: int | None = None, label: str | None = None) -> dict:
+                     deal_id: int | None = None, label: str | None = None, redo: bool = False) -> dict:
     """Author + render a house-format PROPOSAL deck, file it to the document library and the client's
     Drive folder, and drop it in the Inbox as a card. The deck is INTERNAL until an email card sends it:
     this never contacts the client. Prices, sample films and dates are stamped by code (deck.py)."""
@@ -3807,6 +3807,23 @@ def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quota
     co = store.get_company_by_slug(company)
     if not co:
         raise ValueError(f"unknown company {company}")
+    # A PROPOSAL THAT HAS ALREADY GONE OUT IS THE ONE THAT COUNTS. Building another leaves a second,
+    # unversioned deck sitting in the Inbox next to the one the client actually holds - and it is built
+    # from whatever the library ranks TODAY, so it can be worse: Orion's card 441 was generated two hours
+    # after v5 was sent and led with three rated-7 films instead of the sports showreel Rashad had put
+    # first for a boxing client (4 Sep 2026). Say so instead; `redo=True` is the deliberate override.
+    if deal_id and not redo:
+        sent = db.one(
+            "select e->>'ts' ts, e->>'text' text from crm_projects p, jsonb_array_elements(p.history) e "
+            "where p.id=%s and e->>'event' = 'email_out' and e->>'text' ilike %s "
+            "order by e->>'ts' desc limit 1", (int(deal_id), "%proposal%"))
+        if sent:
+            raise ValueError(
+                f"A proposal has ALREADY been sent on this deal ({(sent['ts'] or '')[:10]}): "
+                f"{(sent['text'] or '')[:160]}. Building another would leave a second deck beside the one "
+                "the client holds, and it is rebuilt from today's film ratings so it may be a weaker "
+                "version. Tell Rashad what went and ask whether he wants a genuine REVISION (say redo)."
+            )
     q = None
     if quotation_number:                       # reuse the real quote so the deck can never contradict it
         reg = db.setting_get(f"quote_versions:{quotation_number}") or []

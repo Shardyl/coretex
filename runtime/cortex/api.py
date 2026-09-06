@@ -3114,7 +3114,10 @@ SKILL_TOOLS = [
                                                    "must say. The richer this is, the better the deck."},
         "quotation_number": {"type": "string", "description": "e.g. SEN-2026-0006 - pass it whenever a "
                                                               "quotation exists so prices match exactly"},
-        "deal_id": {"type": "integer", "description": "the opportunity this belongs to, if known"}},
+        "deal_id": {"type": "integer", "description": "the opportunity this belongs to, if known"},
+        "redo": {"type": "boolean", "description": "only after Rashad has been told a proposal ALREADY went "
+                                                   "out on this deal and has said he wants a revised one "
+                                                   "built anyway"}},
       "required": ["company", "customer", "brief"]}},
     {"name": "rate_card",
      "description": "Read a company's RATE CARD: the owner-approved per-unit prices every quotation is built "
@@ -3354,10 +3357,13 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                            "projects": [{"title": p["title"], "value": p["value"], "stage": p["stage"]}
                                         for p in proj["projects"][:10]]}, default=str)
     if name == "create_proposal":
-        r = engine.deliver_proposal(inp["company"], customer=inp.get("customer", ""),
-                                    brief=inp.get("brief", ""),
-                                    quotation_number=inp.get("quotation_number"),
-                                    deal_id=inp.get("deal_id"))
+        try:
+            r = engine.deliver_proposal(inp["company"], customer=inp.get("customer", ""),
+                                        brief=inp.get("brief", ""),
+                                        quotation_number=inp.get("quotation_number"),
+                                        deal_id=inp.get("deal_id"), redo=bool(inp.get("redo")))
+        except ValueError as _e:
+            return str(_e)
         films = ", ".join(r["films"]) or "none matched in the media library"
         return (f"Proposal deck built: {r['pages']} pages, '{r['filename']}'. Sample films used: {films}. "
                 + (f"Filed to the {r['filed_to']} client folder and the document library. "
