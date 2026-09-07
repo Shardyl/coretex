@@ -2952,6 +2952,21 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
     # instead of abandoning continuation altogether (which is what left card 398 with no thread).
     _chosen = (req.get("from_email") or "").strip().lower()
     pool = [v for v in senders.values() if not _chosen or v["email"] == _chosen] or list(senders.values())
+    # ONE CONTACT, TWO PROJECTS. Shehryar Rahman at EY runs both the Dubai Police road-safety variation
+    # and the ITC invoice. Adoption picked whichever thread was NEWEST, so a chase about the 250k
+    # variation was drafted onto the ITC proforma thread, under the wrong subject and the wrong sender
+    # (card 502, 7 Sep 2026). A deal-linked card prefers a thread THIS deal has already been answered
+    # on: the threads of its own sent cards. Rejected cards do not count, they were never sent.
+    _deal_threads = set()
+    if req.get("deal_id"):
+        try:
+            for r in db.query("select request->'thread'->>'id' t from tasks where deal_id=%s and "
+                              "status='done' and request->'thread'->>'id' is not null "
+                              "order by id desc limit 20", (int(req["deal_id"]),)):
+                if r.get("t"):
+                    _deal_threads.add(r["t"])
+        except Exception:  # noqa: BLE001
+            pass
     hits, seen_rt = {}, set()            # rt_key -> (dt, sender, newest message in THAT mailbox)
     for s in pool:
         if s["rt_key"] in seen_rt:
@@ -2983,7 +2998,8 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
             # 490 was pointed at a one-sided "your enquiry" we had sent a month later (7 Sep 2026).
             _replied = {c["thread_id"] for c in (msgs or [])
                         if c.get("thread_id") and (c.get("email") or "").lower() == email.lower()}
-            m = (next((c for c in (msgs or []) if _usable(c) and c["thread_id"] in _replied), None)
+            m = (next((c for c in (msgs or []) if _usable(c) and c["thread_id"] in _deal_threads), None)
+                 or next((c for c in (msgs or []) if _usable(c) and c["thread_id"] in _replied), None)
                  or next((c for c in (msgs or []) if _usable(c)), None))
             if not m:
                 continue
@@ -3009,7 +3025,10 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
             continue
     if not hits:
         return
-    best = max(hits.values(), key=lambda x: (x[0] is not None, x[0]))
+    # thread ids are mailbox-local, so the deal's own thread may only exist in ONE of our mailboxes and
+    # a newer unrelated thread elsewhere would otherwise win on date. The deal's thread wins outright.
+    _ondeal = [v for v in hits.values() if (v[2] or {}).get("thread_id") in _deal_threads]
+    best = max(_ondeal or list(hits.values()), key=lambda x: (x[0] is not None, x[0]))
     # THREAD-STICKY SENDER: a cc'd copy is not ownership (card 388 went out under Gino because his
     # mailbox held a cc of Rashad's send). The owner is whoever SENT the newest our-side message —
     # its From if that is one of our senders, else the first of our senders in its To/Cc.
