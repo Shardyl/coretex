@@ -451,6 +451,13 @@ build the capability when it is missing).
   for the client's world carrying no legible text, and prices read from the named quotation via the
   `quote_versions:<number>` registry so the deck can never contradict it. `engine.deliver_proposal`
   files to the document library + the client's Drive folder and raises a review card; it never sends.
+- **`create_capabilities_deck`** (2026-09-07) - the CREDENTIALS leave-behind, the other half of
+  `deck.py`. `create_proposal` answers one brief and carries a price; this one says what we can do and
+  proves it with named case studies. Pages: cover, why it matters, the three studio layers, the seven
+  module grid, one page per case study, how we would start. Each case study names its films BY VIDEO
+  ID and `films_by_ids` resolves them from the library, DROPPING any we do not hold rather than
+  substituting. Every statistic, award and project detail must arrive in `facts` - the writer may use
+  nothing else, and the case-study heading never repeats the client name (it prints beside it).
 - **`rate_card` / `set_rate`** — read the card (both tiers, and the OWNER TO CONFIRM gaps, which matter
   as much as the rates); record a rate Rashad STATES. Never invent one.
 - **`media_library` / `rate_film`** — search the canonical portfolio; record his 1-10 rating. An UNRATED
