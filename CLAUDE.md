@@ -151,6 +151,41 @@ Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` ad
 rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
 `sales-first-response`.
 
+## An email's identity is its Message-Id (7 Sep 2026)
+
+`gmail_id` is a **per-mailbox filing number**. One email delivered to hello@, gino@ and ayresh@ carries
+THREE of them, and a resend carries a fourth. Every "have we already handled this?" check keyed on it
+therefore counted one message several times over. Use **`gmail.mail_ref(e)`**: the sender's RFC
+`Message-Id` header, identical in every mailbox it lands in, falling back to the Gmail id only when a
+message genuinely carries none.
+
+**The proof.** Dubai Police sent the same tender circular three times in seven minutes (06:59:16,
+07:02:08, 07:05:54, three distinct Message-Ids, one subject) to three monitored Sensa mailboxes. Eight
+copies arrived. Measured against those eight real messages:
+
+```
+distinct Gmail ids     : 8   <- what the old key produced
+distinct Message-Ids   : 3   <- what the timeline ref now produces
+distinct notification keys : 1
+```
+
+**Where it now applies:**
+- `pipeline.record_inbound` keys the deal timeline on it. Its "already logged from another mailbox"
+  guard could never actually fire before, which is the ChainX triplicate.
+- `pipeline.record_send` takes a `ref` and passes it to `log_deal`, which it never did at all: a sent
+  email that cc's a colleague is met once per mailbox by the sent sweep.
+- the inbound card dedup checks `request.mail_ref`; cards carry BOTH, since attachments still have to
+  be fetched with the mailbox-local `gmail_id`.
+
+**Notifications key on the THING, not the message.** `_flag_skipped_opportunity` keys on the
+opportunity (sender, subject, day). Each copy's description rides as an `item`, so two genuinely
+different tenders under one generic subject expand on the card instead of one hiding the other.
+Note `notify` coalesces only into an UNREAD row: once the owner dismisses a card, the next copy makes
+a fresh one. That is right for FYIs and worth remembering when judging a "duplicate".
+
+**Cockpit:** grouped `items` are not always contacts. Only `contact`/`lead` cards get the "N new
+contacts captured" headline; everything else keeps its own title and body.
+
 ## The dumb waiter, enforced (7 Sep 2026)
 
 **The skills decide, the code fetches.** Card 501 sent from `gino@sensa.digital` and wrote *"Gino has
