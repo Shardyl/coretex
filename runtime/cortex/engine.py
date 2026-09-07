@@ -1799,12 +1799,21 @@ def _flag_skipped_opportunity(co: dict, e: dict, reason: str) -> None:
             return
         what = (out.get("what") or e.get("subject") or "").strip()
         due = (out.get("deadline") or "").strip()
+        # ONE CARD PER CIRCULAR, NOT ONE PER COPY OF IT. This was keyed on the Gmail id, which is unique
+        # per mailbox AND per delivery, so Dubai Police's tender circular - sent three times in seven
+        # minutes to three of our mailboxes - raised eight separate notifications (7 Sep 2026). The key
+        # is now the OPPORTUNITY: who sent it, what it was called, and on what day. Each copy's
+        # description rides along as an ITEM, so two genuinely different tenders under one generic
+        # subject expand on the card instead of one hiding the other.
+        _subj = re.sub(r"[^a-z0-9]+", "-", (e.get("subject") or "").lower()).strip("-")[:60]
+        _day = datetime.now(timezone.utc).date().isoformat()
         notifications.notify(
             "Tender worth a look" + (f" - closes {due}" if due else ""),
             f"{what}\n\nFrom {e.get('email')}. No reply was drafted ({reason}) - broadcasts are bid "
             "through the issuing portal, not answered by email.",
             category="crm", company_id=co.get("id"),
-            dedup_key=f"skipped-opp:{e.get('gmail_id') or e.get('subject')}")
+            dedup_key=f"skipped-opp:{(e.get('email') or '').lower()}:{_subj or _day}:{_day}",
+            item={"cat": due or "tender", "name": what[:160]})
     except Exception:  # noqa: BLE001 - a relevance hiccup must never disturb the inbox sweep
         pass
 
@@ -3270,10 +3279,12 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
             except Exception:  # noqa: BLE001
                 pass
             try:   # pipeline loop: log the inbound + catch stated client deadlines (once per message)
-                _gid = e.get("gmail_id") or ""
+                # keyed on the SENDER's Message-Id, not the per-mailbox Gmail id: the same email in
+                # three of our mailboxes is one message, and used to be counted three times.
+                _gid = gmail.mail_ref(e)
                 if not _gid or not db.one(
-                        "select 1 from tasks where company_id=%s and request->>'gmail_id'=%s limit 1",
-                        (co["id"], _gid)):
+                        "select 1 from tasks where company_id=%s and (request->>'mail_ref'=%s "
+                        "or request->>'gmail_id'=%s) limit 1", (co["id"], _gid, _gid)):
                     pipeline.record_inbound(e, deal, co)
             except Exception:  # noqa: BLE001
                 pass
@@ -3318,7 +3329,8 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
                 from_email, mailbox_rt = lf, _rt_for_sender(co, lf)
         req = {"brief": brief, "inquiry": inq,
                "from_email": from_email, "mailbox_rt": mailbox_rt,
-               "gmail_id": e.get("gmail_id") or ""}   # source message id -> the backfill sweep dedups on it
+               "gmail_id": e.get("gmail_id") or "",   # this mailbox's copy (attachments are fetched by it)
+               "mail_ref": gmail.mail_ref(e)}         # the message itself -> what every dedup keys on
         if hv:
             req["high_value"] = True
             _hvd = _prof.get("high_value_attach_doc")   # RFP-class first contact: the company profile rides along

@@ -109,7 +109,21 @@ def _parse(msg: dict) -> dict:
         name = m.group(1).strip() if m else ""
     return {"gmail_id": msg.get("id"), "subject": subject, "from": h.get("from", ""),
             "date": h.get("date", ""), "name": name, "email": _field(body, "Email"),
+            "msg_id": h.get("message-id", ""),
             "message": _message_after(body), "snippet": msg.get("snippet", "")}
+
+
+def mail_ref(e: dict) -> str:
+    """THE STABLE IDENTITY OF AN EMAIL, for any 'have we already handled this?' check.
+
+    `gmail_id` is a per-mailbox filing number: one email delivered to hello@, gino@ and ayresh@ carries
+    three different ones, and a resend carries a fourth. Every dedup keyed on it therefore counted the
+    same message three times over: ChainX's reply appeared three times on a deal timeline, and Dubai
+    Police's tender circular raised eight notifications (7 Sep 2026). The RFC `Message-Id` header is
+    written by the SENDER and is identical in every mailbox it lands in, so that is the identity.
+    Falls back to the Gmail id only when a message genuinely carries no Message-Id."""
+    mid = str((e or {}).get("msg_id") or "").strip().strip("<>").lower()
+    return mid or str((e or {}).get("gmail_id") or "").strip()
 
 
 _MAX_TO = 3          # a single send may address a named handful, never a list

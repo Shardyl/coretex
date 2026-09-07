@@ -120,7 +120,7 @@ def extract_commitments(draft: str, stage: str = "") -> list[dict]:
 
 
 def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
-                deal_id: int | None = None, draft: str | None = None) -> None:
+                deal_id: int | None = None, draft: str | None = None, ref: str = "") -> None:
     """An outbound sales email went out (Cortex-approved, or detected in a sent folder). Log it on
     the deal timeline and turn its promises into tracked commitments with reminders."""
     req = (task or {}).get("request") or {}
@@ -132,8 +132,10 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
     if not did:
         return
     who = "manually sent" if manual else "sent (Cortex-approved)"
+    # One sent email is visible in every mailbox that was cc'd, so the sent sweep meets it more than
+    # once: the Message-Id makes the timeline entry idempotent (this call passed no ref at all before).
     log_deal(did, "email_out_manual" if manual else "email_out",
-             f"{who} from {frm or 'company mailbox'} to {to}: {subj or '(no subject)'}")
+             f"{who} from {frm or 'company mailbox'} to {to}: {subj or '(no subject)'}", ref=ref)
     try:   # FIRST settle what this email fulfils, THEN track the new promises it makes
         settle_commitments(int(did), body, to)
     except Exception:  # noqa: BLE001
@@ -184,7 +186,7 @@ def record_inbound(e: dict, deal: dict | None, company: dict) -> None:
     sender = (e.get("email") or "").strip()
     subj = (e.get("subject") or "").strip()
     snippet = re.sub(r"\s+", " ", (e.get("body") or e.get("snippet") or ""))[:220]
-    gid = (e.get("gmail_id") or "").strip()
+    gid = gmail.mail_ref(e)          # the sender's Message-Id, identical in every mailbox it reached
     before = db.one("select jsonb_array_length(history) n from crm_projects where id=%s", (did,)) or {}
     log_deal(did, "email_in", f"from {sender}: {subj or '(no subject)'} - {snippet}", ref=gid)
     after = db.one("select jsonb_array_length(history) n from crm_projects where id=%s", (did,)) or {}
@@ -254,7 +256,8 @@ def _sweep_mailbox(co: dict, mailbox: str, rt_key: str, client: str | None, own:
         deal = deals[0] if deals else crm.open_deal_for_domain(to, slug)
         env = {"to": to, "subject": m.get("subject") or "", "from": mailbox}
         if deal:
-            record_send({}, env, co, manual=True, deal_id=deal["id"], draft=m.get("body") or "")
+            record_send({}, env, co, manual=True, deal_id=deal["id"], draft=m.get("body") or "",
+                        ref=gmail.mail_ref(m))
             try:
                 crm.resume_followups(int(deal["id"]))   # a human replied — cadence re-arms at its gap
             except Exception:  # noqa: BLE001
