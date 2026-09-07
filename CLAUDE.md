@@ -234,7 +234,15 @@ outbound drafts had no route to a link. NOTE the sender: an outbound card with n
 back to the company `reply_from` (Sensa = gino@), which is right for the sales inbox and WRONG for a
 conversation Rashad started himself, so pass `from_email` when it is his (card 498). Catch-all mailboxes (INBOXES values) can NEVER be the From: `_draft_direct_reply` routes
 catch-all-received replies via the company `reply_from` person, and `_email_envelope` hard-strips any
-catch-all From as a backstop. Universal email-handling rule tells the drafter the library exists and
+catch-all From as a backstop. **THREAD CHOICE: the conversation THEY answered beats the one WE started (7 Sep 2026).**
+Adoption took the newest non-auto message in the mailbox, so a follow-up Cortex had itself opened on a
+fresh thread became "the thread", and the next chase continued that one-sided thread instead of the
+real exchange (Brent Woodhead: five messages under "New enquiry from Brent Woodhead - tabscanner.com",
+card 490 pointed at a "your enquiry" we sent a month later). `_adopt_existing_thread` now prefers the
+newest usable message whose thread the counterpart has actually replied on, falling back to the newest
+usable message; and a `followup` card reads 15 messages back instead of 8, because on a chase the
+recent history is mostly our own earlier chases.
+Universal email-handling rule tells the drafter the library exists and
 never to claim an attachment the tools didn't confirm.
 
 ## Opportunity follow-up automation (2026-08-25)
