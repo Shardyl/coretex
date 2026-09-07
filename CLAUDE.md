@@ -151,6 +151,63 @@ Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` ad
 rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
 `sales-first-response`.
 
+## The dumb waiter, enforced (7 Sep 2026)
+
+**The skills decide, the code fetches.** Card 501 sent from `gino@sensa.digital` and wrote *"Gino has
+kept me across the project"*, because `worker.py` carried a line from June 2026 saying "It is sent BY
+the owner... Rashad IS the sender". `_identity_block` replaced that on 31 Aug but was inserted ABOVE
+it, so every draft carried both instructions and the hardcoded one won on position. It had been
+corrupting Gino's cards since: 358, 411, 455, 472 (all rejected), 494, 500, 501.
+
+**ORDER IS AUTHORITY.** In `worker.draft` the code-written blocks now come FIRST and the editable
+rules LAST, closed by `_PRECEDENCE`: the company voice and standing rules win over anything else in
+the prompt, except five things they cannot override because they are computed facts or the output
+contract, the sender, the code-stamped date, the real links and files, the ban on invented values,
+and the shape of the output. Add anything new to the prompt ABOVE the rules, never below.
+
+**Nothing in the drafting path names a person.** Who a message is from is `profile.resolve_identity`
+off the company profile. If you ever need to write a name into a prompt string, that is the signal
+you are about to make this mistake again.
+
+**`_identity_mismatch` (engine.py) catches both directions**, deterministically, off the signature
+roster: a draft claiming to BE a colleague ("Rashad here"), and a draft naming its OWN sender in the
+third person ("Gino has kept me across"). It runs at DRAFT time and redraws once, on the first-draft
+path and the correction path, with the approval gate keeping it as a backstop. The Manager also
+carries the check (`manager.py`) but it is a model judgement: it passed 501, so it is a net, never
+the guarantee.
+
+**What moved out of code and onto skills, and where it now lives:**
+
+| Was hardcoded in | Now a rule on |
+|---|---|
+| `_spawn_followup_card` payment chase tone (a 60k receivable) | `sales-followup` PAYMENT FOLLOW-UPS |
+| `_spawn_followup_card` won-work check-in tone | `sales-followup` WON-WORK CHECK-INS |
+| `_spawn_followup_card` opportunity chase goal | `sales-followup` OPPORTUNITY CHASES |
+| `triage_inquiry` what counts as junk | `lead-qualification` JUNK vs GENUINE |
+| worker media shelf: "at most 1-2" samples | `sales-first-response` sharing sample work |
+| worker availability shelf: recipient's timezone | `sales-scheduling` |
+| `draft_article` question-style H2s | `content-blog-posts` |
+
+The revival branch of `_spawn_followup_card` always did this correctly ("the REVIVAL standing rules
+on the sales-followup skill govern"), and is the pattern to copy.
+
+**Model tiers are data.** The Fable 5 first-reply exception is the `first_reply_models` setting
+(`{"sales-first-response": "claude-fable-5"}`), not a model id in code, so a tier is visible and
+editable rather than a silent upgrade nobody can see.
+
+**`triage_inquiry` refuses to guess a company.** It used to fall back to a literal "Tabscanner, a
+receipt-OCR / data-extraction API" whenever the company lookup failed, so another brand's enquiries
+were judged as Tabscanner's. An unresolved company now returns `unclear` and goes to a human.
+
+**Still written in code, deliberately** (plumbing and safety invariants, leave them): the
+code-stamped date, the Manager's computed 28-day calendar, the real-link allowlist, "never invent a
+link, price, date or placeholder", the identity block, hiding cc directives from the drafter,
+correction minimality, and the `related_skills` routing map (already DB-overridable).
+
+**Known and NOT yet moved:** `engine._blog_digest_body` still writes a whole outbound email in
+Python (the blog review digest to the test group). It is internal, to our own test group, so it was
+left; if it ever becomes client-facing it must go through a skill first.
+
 ## Sender identity + personal voice (2026-08-31)
 
 Every outbound email carries WHO it is written as, and writes in that person's voice.
