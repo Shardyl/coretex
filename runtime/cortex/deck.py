@@ -160,6 +160,12 @@ table.t th { font-size:11.5px; color:ACCENT; text-transform:uppercase; letter-sp
 table.t td.r, table.t th.r { text-align:right; }
 .stat { font-family:Poppins,sans-serif; font-size:38px; font-weight:700; color:ACCENT; line-height:1; }
 .big { font-family:Poppins,sans-serif; font-size:38px; font-weight:600; color:#EDEDF2; }
+.grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+.gcell { background:#101114; border:1px solid #1C1D22; border-radius:10px; padding:16px 17px; }
+.gcell b { color:#EDEDF2; font-weight:600; display:block; margin:3px 0 5px; font-size:14px; }
+.gcell p { font-size:12.5px; line-height:1.5; }
+.csclient { font-family:Poppins,sans-serif; font-size:27px; font-weight:700; color:ACCENT;
+            white-space:nowrap; }
 .thumbcap { font-size:12.5px; margin-top:8px; color:#C4C4CC; }
 .thumbcap b { color:#EDEDF2; font-weight:600; }
 """.replace("ACCENT", accent)
@@ -188,7 +194,8 @@ class _Deck:
         return (f'<div class="foot">{lg}<span>{_esc(section)}</span>'
                 f'<span>{_esc(self.label)} &middot; {n:02d}</span></div>')
 
-    def cover(self, title: str, standfirst: str, image: str | None):
+    def cover(self, title: str, standfirst: str, image: str | None,
+              section: str = "Proposal"):
         img = (f'<img style="position:absolute;top:0;left:0;width:1280px;height:720px;object-fit:cover" '
                f'src="{_b64(image)}">'
                '<div style="position:absolute;top:0;left:0;width:1280px;height:720px;background:'
@@ -200,7 +207,7 @@ class _Deck:
             f'<div style="position:absolute;top:0;left:0;width:1280px;height:6px;background:{self.accent}"></div>'
             f'{lg}<div style="position:absolute;bottom:104px;left:72px;right:72px"><div class="rule"></div>'
             f'<h1>{title}</h1><p style="margin-top:16px;max-width:720px">{_esc(standfirst)}</p></div>'
-            f'{self._foot("Proposal")}</div>')
+            f'{self._foot(section)}</div>')
 
     def cards(self, kicker: str, heading: str, cards: list, bullets: list | None = None, section: str = ""):
         c = "".join(f'<div class="card"><b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>'
@@ -226,6 +233,46 @@ class _Deck:
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_esc(heading)}</h2><div class="cols" style="margin-top:4px">{p}</div>{c}</div>'
             f'{self._foot(section or kicker)}</div>')
+
+    def grid(self, kicker: str, heading: str, intro: str, cells: list, section: str = ""):
+        """A four-across grid of up to eight cells - the capability modules. cards() holds only three."""
+        c = "".join(f'<div class="gcell"><div class="num">{_esc(x.get("num"))}</div>'
+                    f'<b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>'
+                    for x in (cells or [])[:8])
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2>{_esc(heading)}</h2>'
+            + (f'<p style="max-width:1060px;margin-bottom:18px">{_esc(intro)}</p>' if intro else "")
+            + f'<div class="grid">{c}</div></div>{self._foot(section or kicker)}</div>')
+
+    def casestudy(self, kicker: str, client: str, heading: str, body: str, bullets: list,
+                  films: list, section: str = ""):
+        """One named client: what we did, and their OWN films from the library underneath at native
+        16:9. The films are supplied by code, so the page can only ever cite work we actually hold."""
+        n = max(1, len(films))
+        w = {1: 470, 2: 470, 3: 352}.get(n, 352)
+        h = int(w * 9 / 16)
+        items = []
+        for f in films:
+            th = f.get("thumb")
+            img = (f'<img src="{_b64(th)}" style="width:{w}px;height:{h}px;display:block;border-radius:8px">'
+                   if th else f'<div style="width:{w}px;height:{h}px;background:#141414;border-radius:8px"></div>')
+            items.append(
+                f'<a href="https://www.youtube.com/watch?v={_esc(f["youtube_video_id"])}" '
+                f'style="text-decoration:none;display:block;width:{w}px">{img}'
+                f'<p class="thumbcap"><b>{_esc(f.get("label") or f.get("title"))}</b> &mdash; '
+                f'{_esc(_sentence(f.get("caption")))} Click to watch.</p></a>')
+        b = ""
+        if bullets:
+            b = ('<ul class="klist" style="margin-top:14px;max-width:1060px">'
+                 + "".join(f"<li>{_esc(x)}</li>" for x in bullets[:3]) + "</ul>")
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<div style="display:flex;align-items:baseline;gap:18px;margin-bottom:10px">'
+            f'<span class="csclient">{_esc(client)}</span><h2 style="margin:0">{_esc(heading)}</h2></div>'
+            f'<p style="max-width:1060px">{_esc(body)}</p>{b}'
+            f'<div style="display:flex;gap:24px;margin-top:20px">{"".join(items)}</div></div>'
+            f'{self._foot(section or "Case study")}</div>')
 
     def samples(self, kicker: str, heading: str, intro: str, films: list, section: str = ""):
         """Films shown at native 16:9, fixed width so the page never overflows."""
@@ -393,3 +440,136 @@ def build(company_slug: str, customer: str, brief: str, *, quotation: dict | Non
     to_pdf(d.html(), path)
     return {"path": path, "pages": len(d.pages), "films": [f["youtube_video_id"] for f in films],
             "spec": spec, "accent": accent}
+
+
+# --------------------------------------------------------------------------- capabilities decks
+
+def films_by_ids(company_id: int, video_ids: list) -> list[dict]:
+    """Named films resolved from the library BY CODE, in the order asked for. A video id the library
+    does not hold is DROPPED, never substituted: a case study cites our own work or it does not run."""
+    ids = [v for v in (video_ids or []) if v]
+    if not ids:
+        return []
+    rows = db.query("select youtube_video_id, title, rating, duration, categories, client "
+                    "from media_assets where company_id=%s and status='live' "
+                    "and youtube_video_id = any(%s)", (company_id, ids))
+    order = {v: i for i, v in enumerate(ids)}
+    return sorted(rows, key=lambda r: order.get(r["youtube_video_id"], 999))
+
+
+_CAPS_SCHEMA = """{
+ "accent": "#RRGGBB, sympathetic to the AUDIENCE's world",
+ "cover": {"title": "<=6 words, may contain <br>", "standfirst": "2-3 sentences",
+           "image_subject": "what the hero photograph shows, concrete and shootable, no text in frame",
+           "image_palette": "the colour treatment"},
+ "opening": {"kicker": "01 - Why this matters", "heading": "one line",
+             "cards": [{"title": "", "body": ""}], "bullets": ["", ""]},
+ "platform": {"kicker": "02 - How it works", "heading": "one line",
+              "phases": [{"when": "LAYER 01", "title": "", "body": ""}],
+              "cards": [{"title": "", "body": ""}]},
+ "modules": {"kicker": "03 - What we control", "heading": "one line", "intro": "1-2 sentences",
+             "cells": [{"num": "01", "title": "", "body": "under 26 words"}]},
+ "case_studies": [{"key": "the KEY you were given, copied exactly", "kicker": "04 - Case study",
+                   "heading": "one line", "body": "2-3 sentences",
+                   "bullets": ["", ""], "captions": ["one short caption per film, in order"]}],
+ "close": {"kicker": "How we would start", "heading": "one line",
+           "phases": [{"when": "STEP 1", "title": "", "body": ""}],
+           "cards": [{"title": "", "body": ""}]}
+}"""
+
+
+def author_capabilities_spec(company: dict, audience: str, focus: str, case_facts: str,
+                             extra_facts: str = "") -> dict:
+    """The model writes the deck's COPY under the company's live skill rules. Every verifiable fact is
+    handed to it; it supplies no film titles, no numbers and no client claims of its own."""
+    skill = store.get_skill_by_key(company["id"], "sales-quotation") or \
+        store.get_skill_by_key(company["id"], "sales-first-response")
+    rules = worker._rules_block(skill) if skill else ""
+    system = "\n\n".join(filter(None, [
+        "You write CAPABILITY DECKS for a production company: a leave-behind that explains what the "
+        "company can do and proves it with its own past work. Return ONLY the JSON spec described "
+        "below - the layout is built by code from it.",
+        worker._now_line(),
+        worker._company_context(company),
+        rules,
+        "HARD RULES: never invent a statistic, an award, a date, a client name or a project detail. Every "
+        "such fact must already appear in the VERIFIED FACTS you are given, and anything not there is "
+        "simply left out. Never name or describe a film: the system supplies the actual films from the "
+        "media library and you write only the captions, in the order the films are listed for that case "
+        "study. Return one case_studies entry per KEY you are given, copying the key exactly. Keep every "
+        "card body under 42 words and every module cell under 26 words. No em dashes, no superlatives, no "
+        "marketing flourish. Write for a senior public-sector audience: plain, specific, unhurried.",
+        "SPEC:\n" + _CAPS_SCHEMA,
+    ]))
+    return provider.think_json(
+        system,
+        f"Audience: {audience}\n\nWhat the deck is for:\n{focus}\n\n"
+        f"VERIFIED FACTS (the only facts you may use):\n{extra_facts}\n\n"
+        f"CASE STUDIES to write, one entry each, keys copied exactly:\n{case_facts}",
+        model="claude-fable-5", max_tokens=6000, purpose="caps-deck-spec", company=company.get("slug"))
+
+
+def build_capabilities(company_slug: str, audience: str, focus: str, *,
+                       case_studies: list | None = None, extra_facts: str = "",
+                       label: str | None = None, out_dir: str = "/tmp",
+                       filename: str = "capabilities.pdf") -> dict:
+    """Author + render a house-format CAPABILITY deck: what we do, how it works, and named case
+    studies proved with our own films. `case_studies` is [{key, client, video_ids, facts}] - the films
+    are resolved from the library by code, so a case study can never cite work we do not have."""
+    co = store.get_company_by_slug(company_slug)
+    if not co:
+        raise ValueError(f"unknown company {company_slug}")
+    cases = []
+    for cs in (case_studies or []):
+        films = films_by_ids(co["id"], cs.get("video_ids") or [])
+        if not films:
+            continue
+        cases.append({**cs, "films": films})
+    case_facts = "\n\n".join(
+        f"KEY {c['key']} - client {c.get('client')}\n  what is true about it: {c.get('facts', '')}\n"
+        "  films the system will show, in this order: "
+        + "; ".join(f["title"] for f in c["films"]) for c in cases) or "(none)"
+
+    spec = author_capabilities_spec(co, audience, focus, case_facts, extra_facts) or {}
+    accent = (spec.get("accent") or _ACCENT_DEFAULT).strip()
+    if not re.match(r"^#[0-9A-Fa-f]{6}$", accent):
+        accent = _ACCENT_DEFAULT
+    import datetime
+    lbl = label or f"Prepared for {audience} · {datetime.date.today():%B %Y}"
+    d = _Deck(co, audience, accent, _logo(co), lbl)
+
+    cv = spec.get("cover") or {}
+    img = cover_image(cv.get("image_subject") or f"the world of {audience}",
+                      cv.get("image_palette") or "deep charcoal with restrained accent light",
+                      company_slug, out_dir)
+    d.cover(cv.get("title") or _esc(co.get("name")), cv.get("standfirst") or "", img, section="Capabilities")
+
+    op = spec.get("opening") or {}
+    if op:
+        d.cards(op.get("kicker", ""), op.get("heading", ""), op.get("cards") or [], op.get("bullets"))
+    pf = spec.get("platform") or {}
+    if pf:
+        d.phases(pf.get("kicker", ""), pf.get("heading", ""), pf.get("phases") or [], pf.get("cards"))
+    md = spec.get("modules") or {}
+    if md:
+        d.grid(md.get("kicker", ""), md.get("heading", ""), md.get("intro", ""), md.get("cells") or [])
+
+    written = {str(c.get("key")): c for c in (spec.get("case_studies") or [])}
+    shown = []
+    for c in cases:
+        w = written.get(str(c["key"])) or {}
+        caps = w.get("captions") or []
+        films = [{**f, "thumb": thumbnail(f["youtube_video_id"], out_dir),
+                  "label": f["title"], "caption": caps[i] if i < len(caps) else ""}
+                 for i, f in enumerate(c["films"])]
+        d.casestudy(w.get("kicker") or "Case study", c.get("client") or "",
+                    w.get("heading") or "", w.get("body") or "", w.get("bullets") or [], films)
+        shown.append({"client": c.get("client"), "films": [f["title"] for f in films]})
+
+    cl = spec.get("close") or {}
+    if cl:
+        d.phases(cl.get("kicker", ""), cl.get("heading", ""), cl.get("phases") or [], cl.get("cards"),
+                 section="Next")
+
+    path = to_pdf(d.html(), os.path.join(out_dir, filename))
+    return {"path": path, "pages": len(d.pages), "cases": shown, "spec": spec}

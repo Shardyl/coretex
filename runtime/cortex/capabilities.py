@@ -66,6 +66,14 @@ CAPABILITIES: list[tuple[str, str]] = [
      "pass quotation_number when a quote exists so the deck cannot contradict it. It files to the client's "
      "Drive folder and the document library; it never contacts the client - to send it, draft an email and "
      "attach the document."),
+    ("Capability decks — LIVE",
+     "create_capabilities_deck builds the CREDENTIALS leave-behind: what we can do, how the studio "
+     "works, and named CASE STUDIES proved with our own films. Use it when he wants a capabilities "
+     "presentation for a client, ministry or department; create_proposal is the other one, answering "
+     "ONE brief and carrying a price. Each case study names the exact films by video id and code "
+     "resolves them from the library, DROPPING any we do not hold rather than substituting. Every "
+     "statistic, award and project detail must be passed in as facts - the writer may use nothing "
+     "else. It lands in the Inbox and contacts nobody."),
     ("Rate card — pricing reference",
      "rate_card reads a company's OWNER-APPROVED per-unit prices, both tiers and every gap still marked "
      "OWNER TO CONFIRM; it is also injected into every quotation-adjacent draft. Prices come ONLY from it "

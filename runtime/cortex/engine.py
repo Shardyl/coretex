@@ -3798,6 +3798,48 @@ QUOTES_DIR = "/opt/coretex/quotations"     # generated quotation PDFs (persisted
 QUOTE_SKILL_KEY = "sales-quotation"        # quotes land under the company's Sales & Inquiries lane
 
 
+def deliver_capabilities(company: str, *, audience: str = "", focus: str = "",
+                         case_studies: list | None = None, facts: str = "",
+                         label: str | None = None) -> dict:
+    """Author + render a house-format CAPABILITY deck (what we do, how it works, named case studies
+    proved with our own films), file it to the document library and drop it in the Inbox as a card.
+    Like a proposal it is INTERNAL: this never contacts anyone. Films are stamped by code from the
+    media library, so a case study can only ever cite work we actually hold."""
+    os.makedirs(QUOTES_DIR, exist_ok=True)
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise ValueError(f"unknown company {company}")
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    out = deck.build_capabilities(company, audience or co["name"], focus,
+                                  case_studies=case_studies or [], extra_facts=facts, label=label,
+                                  out_dir=QUOTES_DIR,
+                                  filename=f"capabilities-{company}-{stamp}.pdf")
+    safe = re.sub(r"[^A-Za-z0-9 -]", "", audience or co["name"])[:60].strip() or "Capabilities"
+    name = f"{safe} - Capabilities deck - {stamp}.pdf"
+    data = open(out["path"], "rb").read()
+    doc = documents.save(co["id"], company, name, "application/pdf", data, uploaded_by="cortex")
+    skill = store.get_skill_by_key(co["id"], "sales-quotation")
+    cases = "\n".join(f"  {c['client']}: " + ", ".join(c["films"]) for c in out.get("cases") or [])
+    kept = [x.get("client") for x in (out.get("cases") or [])]
+    missing = [c.get("client") for c in (case_studies or []) if c.get("client") not in kept]
+    summary = (f"Capabilities deck built for {audience or co['name']}.\n\n"
+               f"{out['pages']} pages. The PDF is attached to this card.\n\n"
+               + (f"Case studies, with the films shown on each:\n{cases}\n\n" if cases else "")
+               + (f"DROPPED, no matching film in the media library: {', '.join(missing)}\n\n"
+                  if missing else "")
+               + "Nothing has been sent. Read the PDF, then ask me to email it when you are happy.")
+    req = {"brief": f"Capabilities deck for {audience}: {out['pages']} pages.",
+           "title": name, "file": out["path"], "kind": "capabilities",
+           "attach_docs": [{"id": doc["id"], "filename": doc["filename"], "mime": doc["mime"],
+                            "size": doc["size"]}]}
+    t = db.execute("insert into tasks (company_id, skill_id, kind, request, draft, status, title) "
+                   "values (%s,%s,'content',%s,%s,'awaiting_approval',%s) returning *",
+                   (co["id"], skill["id"], Json(req), summary, name))
+    return {"path": out["path"], "pages": out["pages"], "cases": out.get("cases") or [],
+            "dropped": missing, "filename": name, "doc_id": doc["id"],
+            "task_id": (t or {}).get("id")}
+
+
 def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quotation_number: str | None = None,
                      deal_id: int | None = None, label: str | None = None, redo: bool = False) -> dict:
     """Author + render a house-format PROPOSAL deck, file it to the document library and the client's

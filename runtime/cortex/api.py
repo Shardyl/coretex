@@ -3124,6 +3124,30 @@ SKILL_TOOLS = [
     {"name": "run_report",
      "description": "Generate the SEO & traffic report for a business right now; it lands in the Inbox.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}, "required": ["company"]}},
+    {"name": "create_capabilities_deck",
+     "description": "Build a house-format CAPABILITY deck: a leave-behind PDF explaining what we can do "
+                    "and proving it with named case studies from our own media library. Use when Rashad "
+                    "wants a capabilities or credentials presentation for a client, a ministry or a "
+                    "department, as opposed to create_proposal which answers ONE specific brief and "
+                    "carries a price. Each case study names a client and the exact films to show by "
+                    "video id: the system resolves them from the library and DROPS any it does not hold, "
+                    "never substituting. Put everything true you want said into `facts` - the writer may "
+                    "use no statistic, award or client detail that is not in there. It lands in the Inbox "
+                    "for review and contacts nobody.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug"},
+        "audience": {"type": "string", "description": "who it is for, e.g. Dubai Municipality"},
+        "focus": {"type": "string", "description": "what the deck is for and what it should land"},
+        "facts": {"type": "string", "description": "the VERIFIED facts the deck may use: capabilities, credentials, numbers. Nothing outside this is allowed."},
+        "case_studies": {"type": "array", "description": "the named case studies, in page order",
+         "items": {"type": "object", "properties": {
+            "key": {"type": "string", "description": "short id, e.g. hbmsu"},
+            "client": {"type": "string"},
+            "video_ids": {"type": "array", "items": {"type": "string"}, "description": "YouTube ids from the media library, in display order"},
+            "facts": {"type": "string", "description": "what is TRUE about this project"}},
+           "required": ["key", "client", "video_ids"]}},
+        "label": {"type": "string", "description": "optional footer label"}},
+      "required": ["company", "audience", "focus"]}},
     {"name": "create_proposal",
      "description": "Produce a branded, house-format PROPOSAL DECK (a multi-page PDF) and drop it in the Inbox. "
                     "Use whenever Rashad asks to 'do a proposal', 'put a deck together', or wants a client "
@@ -3397,6 +3421,20 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                 + (f"Filed to the {r['filed_to']} client folder and the document library. "
                    if r.get("filed_to") else "Filed to the document library. ")
                 + f"It is on card #{r['task_id']} for review; nothing has been sent to the client.")
+    if name == "create_capabilities_deck":
+        try:
+            r = engine.deliver_capabilities(inp["company"], audience=inp.get("audience", ""),
+                                            focus=inp.get("focus", ""), facts=inp.get("facts", ""),
+                                            case_studies=inp.get("case_studies") or [],
+                                            label=inp.get("label"))
+        except ValueError as _e:
+            return str(_e)
+        cases = "; ".join(c["client"] + " (" + ", ".join(c["films"]) + ")" for c in r["cases"]) or "none"
+        dropped = ("DROPPED for having no film in the library: " + ", ".join(r["dropped"]) + ". ") \
+            if r.get("dropped") else ""
+        return (f"Capabilities deck built: {r['pages']} pages, '{r['filename']}'. Case studies: "
+                f"{cases}. {dropped}Filed to the document library and on card #{r['task_id']} for "
+                "review; nothing has been sent.")
     if name == "rate_card":
         from . import ratecard
         return ratecard.summary(inp["company"])
@@ -3833,7 +3871,7 @@ _CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "cr
                 # Chiefs can also DRAFT and look people up — anyone Rashad talks to should be able to act on a
                 # request, not just strategise. (Per-company RULE writes stay Manager-only to avoid scope bleed.)
                 "create_task", "draft_email", "draft", "crm_lookup", "crm_pipeline", "correct_task",
-                "create_proposal", "rate_card", "set_rate", "media_library", "rate_film",
+                "create_proposal", "create_capabilities_deck", "rate_card", "set_rate", "media_library", "rate_film",
                 "research_client", "export_templates",
                 "approve_task", "skip_task", "run_report", "schedule_report", "create_quotation",
                 "list_scheduled", "list_calendar",
