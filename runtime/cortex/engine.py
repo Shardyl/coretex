@@ -122,6 +122,19 @@ def _identity_mismatch(draft: str, from_addr: str, company: dict) -> str:
     me = (sigs.get(from_addr.lower()) or {}).get("name") or ""
     first_me = me.split()[0].lower() if me else ""
     body = re.sub(r"\s+", " ", draft[:1500])
+    # TALKING ABOUT YOURSELF IN THE THIRD PERSON. The check below only caught a draft claiming to BE a
+    # colleague. Card 501 did the mirror of that: sent from gino@, it wrote "Gino has kept me across the
+    # project" - never claiming to be anyone, just quietly writing as somebody else (7 Sep 2026). If the
+    # sender's own first name appears as the SUBJECT of a verb, the draft is not in their voice.
+    if first_me:
+        third = re.search(r"\b" + re.escape(me.split()[0]) + r"\b(?!'s\b)\s+"
+                          r"(?:has|have|had|is|was|will|would|can|could|said|sent|told|mentioned|"
+                          r"shared|passed|kept|handled|been|and I\b)", body, re.I)
+        if third:
+            return (f"the draft talks about {me.split()[0]} in the third person (\"{third.group(0)}...\"), "
+                    f"but this email IS from {from_addr}"
+                    + (f" ({me})" if me else "")
+                    + ". It has been written as somebody else. Redraft it in that person's own voice.")
     for addr, sig in (sigs or {}).items():
         nm = ((sig or {}).get("name") or "").strip()
         if not nm or addr.lower() == from_addr.lower():
@@ -802,6 +815,14 @@ def _run_task(task: dict) -> None:
     draft = worker.draft(skill, company, dreq)
     if task.get("kind") in ("email_reply", "email_draft"):
         draft = _ensure_clean_email(skill, company, dreq, draft)
+        # CAUGHT AT DRAFT TIME, NOT AT APPROVAL. This check is deterministic, so there is no reason for
+        # a draft written as the wrong person to reach the Inbox at all: fix it here, once. The approval
+        # gate keeps the same check as a backstop for anything that slips past.
+        _mm = _identity_mismatch(draft, (dreq.get("from_email") or ""), company)
+        if _mm:
+            print(f"[identity] task {task['id']}: {_mm}", flush=True)
+            draft = _ensure_clean_email(skill, company, dreq,
+                                        worker.draft(skill, company, dreq, manager_feedback=[_mm]))
     verdict = manager.check(skill, company, draft, dreq)   # the Manager judges the SAME evidence the worker saw
     if not verdict["aligned"] and verdict["issues"]:
         draft = worker.draft(skill, company, dreq, manager_feedback=verdict["issues"])
@@ -1385,6 +1406,12 @@ def apply_correction(task: dict, text: str) -> None:
     dreq = _request_for_draft(task)
     new = worker.draft(skill, company, dreq, correction=text, prev_draft=old)
     new = _ensure_clean_email(skill, company, dreq, new, prev=old)
+    _mm = _identity_mismatch(new, (dreq.get("from_email") or ""), company)
+    if _mm:                                   # a correction can reintroduce it: same guard, same place
+        print(f"[identity] task {task['id']} (correction): {_mm}", flush=True)
+        new = _ensure_clean_email(skill, company, dreq,
+                                  worker.draft(skill, company, dreq, correction=text, prev_draft=new,
+                                               manager_feedback=[_mm]), prev=old)
     # corrections bypass the Manager by design (the owner is reviewing personally) — clear any verdict
     # from the PREVIOUS pass so a stale flag never scares the owner off his own corrected draft
     task = store.update_task(task["id"], draft=new, status="awaiting_approval", manager=None,
@@ -2218,13 +2245,23 @@ def triage_inquiry(inq: dict, company_slug: str = "tabscanner") -> dict:
     """Decide if an enquiry is a genuine potential customer/partner worth a reply, or junk (spam, bots,
     gibberish, off-topic, SEO/link-building pitches). Company-aware: each brand triages in its own context."""
     co = store.get_company_by_slug(company_slug)
-    ctx = worker._company_context(co) if co else "Tabscanner, a receipt-OCR / data-extraction API."
+    if not co:
+        # NEVER judge one brand's enquiry under another brand's description. This used to fall back to a
+        # hardcoded "Tabscanner, a receipt-OCR / data-extraction API", so an unresolved company had its
+        # mail triaged as Tabscanner's (7 Sep 2026). No company means no verdict: it goes to a human.
+        return {"genuine": True, "category": "unclear", "reason": f"unknown company '{company_slug}'"}
+    ctx = worker._company_context(co)
+    # WHAT COUNTS AS JUNK is judgement, and it differs per brand: it lives on the lead-qualification
+    # skill, not in this function. The code fetches the shelf; the rules decide.
+    _lq = store.get_skill_by_key(co["id"], "lead-qualification")
+    _rules = worker._rules_block(_lq) if _lq else ""
     try:
         out = provider.think_json(
             "You triage inbound website enquiries for this company.\n" + ctx + "\n\n"
-            "Decide if an enquiry is a GENUINE potential customer, partner, or support contact worth a human "
-            "reply, or JUNK. Be strict: random/gibberish sender addresses, mismatched names, off-topic "
-            "messages, SEO / marketing / link-building / web-design solicitations, and obvious bot spam are JUNK.",
+            + (_rules + "\n\n" if _rules else "")
+            + "Decide if an enquiry is a GENUINE potential customer, partner, or support contact worth a "
+            "human reply, or JUNK. The standing rules above define what junk means for this company; "
+            "where they are silent, judge it against what this company actually does.",
             f"From: {inq.get('name')} <{inq.get('email')}>\nSubject: {inq.get('subject')}\n"
             f"Message:\n{(inq.get('message') or inq.get('snippet') or '').strip()}\n\n"
             'Return JSON: {"genuine": boolean, "category": "lead|partner|support|spam|offtopic|unclear", '
@@ -2592,23 +2629,24 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
     label = {"checkin": "check-in", "revive": "revival"}.get(action, "follow-up")
     if email and skill:
         stage = opp.get("stage")
+        # WHICH situation this is, is plumbing (the deal's stage, read from the CRM). HOW each one is
+        # written is judgement, and judgement lives on the sales-followup skill, exactly as the revival
+        # branch below has always done. The tone of a payment chase and a won-work check-in used to be
+        # written out here in code, where Rashad could not see or edit it (7 Sep 2026).
         if stage == "Final Payment":
             # MONEY, not readiness: the work is delivered and a balance is outstanding. Patience here
             # reads as not caring about being paid (card 394 drafted a 'where do things stand' note on a
-            # 60k receivable). Polite and warm, but the ask is unambiguous.
+            # 60k receivable).
             brief = (f"PAYMENT FOLLOW-UP on '{opp['title']}' — the work is DELIVERED and the final balance "
-                     "is still outstanding. This is an accounts chase, not a check-in: be warm and "
-                     "professional, but ASK DIRECTLY about the outstanding payment, reference what was "
-                     "last said about it in the correspondence below, and ask for a payment date or the "
-                     "status in their system. Do NOT ask 'where do things stand' vaguely, do not offer a "
-                     "call INSTEAD of asking, and never re-sell or pitch anything.")
+                     "is still outstanding. This is an accounts chase, not a check-in. The PAYMENT "
+                     "FOLLOW-UP standing rules on the sales-followup skill govern the tone and the ask.")
         elif stage in crm.WON_STAGES:
-            brief = (f"{label.title()} on the PROJECT '{opp['title']}' — this is WON work, not a pitch. We "
-                     "are waiting on the client's readiness, not chasing a decision: warm, patient, no "
-                     "sales pressure and no re-selling. Goal: find out where they stand and agree the "
-                     "next step.")
+            brief = (f"{label.title()} on the PROJECT '{opp['title']}' — this is WON work, not a pitch: we "
+                     "are waiting on the client's readiness, not chasing a decision. The WON-WORK "
+                     "CHECK-IN standing rules on the sales-followup skill govern the tone and shape.")
         else:
-            brief = f"{label.title()} on the opportunity '{opp['title']}'. Goal: get a reply / book a meeting."
+            brief = (f"{label.title()} on the OPPORTUNITY '{opp['title']}' — not yet won. The OPPORTUNITY "
+                     "CHASE standing rules on the sales-followup skill govern the tone and the goal.")
         if action == "revive":
             brief = (f"Long-gap REVIVAL of the dormant opportunity '{opp['title']}' — months since their "
                      "last reply. The REVIVAL standing rules on the sales-followup skill govern the tone "

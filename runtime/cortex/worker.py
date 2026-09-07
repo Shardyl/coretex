@@ -134,6 +134,16 @@ _EMAIL_BODY_RULE = (
     "Output is exactly the message the recipient reads, ready to send.")
 
 
+_PRECEDENCE = (
+    "PRECEDENCE. The company voice and the standing rules above are the authority on HOW this is written "
+    "and WHAT it says: wherever anything else in these instructions disagrees with them, THEY WIN. They "
+    "do not override five things, because those are facts the system computed or the shape it must "
+    "receive back, not preferences: who this message is from, the code-stamped date and time, the real "
+    "links and files you were handed, the ban on inventing any value you were not given, and the output "
+    "format you were asked to produce. If a rule seems to ask for one of those, follow the rule as far "
+    "as it goes and leave that part out.")
+
+
 def _identity_block(company: dict, request: dict, author: str | None):
     """WHO this email is written as. The sending mailbox (request.from_email) is the truth, so the
     drafter writes in that person's first person instead of describing them in the third person (the
@@ -171,16 +181,20 @@ def draft(skill: dict, company: dict, request: dict,
     ident_block = ""
     if is_email:
         ident_block, author = _identity_block(company, request, author)
+    # ORDER IS AUTHORITY. Everything written in code goes FIRST and the editable rules go LAST, nearest
+    # the task, closed by an explicit precedence statement. The code blocks used to sit AFTER the rules,
+    # so wherever the two disagreed the hardcoded line won on position alone.
     system = "\n\n".join(filter(None, [
         f"You are Cortex's worker for the '{skill['name']}' skill.",
         _now_line(),
         ident_block,
+        _EMAIL_BODY_RULE if is_email else
+        "Produce the deliverable only — no preamble, no explanation, no meta-commentary.",
         _company_context(company, author),
         skill.get("craft") or "",
         _rules_block(skill),
         _related_block(skill, company) if is_email else "",
-        _EMAIL_BODY_RULE if is_email else
-        "Produce the deliverable only — no preamble, no explanation, no meta-commentary.",
+        _PRECEDENCE,
     ]))
     atts = request.get("attachments") if isinstance(request, dict) else None
     user = [f"Task: {request.get('brief') if isinstance(request, dict) else request}"]
@@ -203,8 +217,11 @@ def draft(skill: dict, company: dict, request: dict,
                         "name and write to them in the second person.")
         if inq.get("subject"):
             bits.append(f"Subject: {inq.get('subject')}.")
-        bits.append("It is sent BY the owner of the company in the owner's first-person voice. Do NOT address "
-                    "it to Rashad and do NOT write it to yourself — Rashad IS the sender.")
+        # (An "it is sent BY the owner ... Rashad IS the sender" line lived here from June 2026, when
+        # every Sensa email genuinely was his. `_identity_block` replaced it on 31 Aug but it was never
+        # removed, so every draft carried both instructions, and being nearer the task the hardcoded one
+        # won: card 501 wrote as Rashad out of Gino's mailbox, "Gino has kept me across the project"
+        # (7 Sep 2026). WHO a message is from is resolved from the company profile. Never named in code.)
         # Pass the triage/qualification FACTS through to the drafter — how they shape the reply is governed
         # entirely by the (related) skill rules, never by this code.
         tri = request.get("triage") or {}
@@ -267,16 +284,17 @@ def draft(skill: dict, company: dict, request: dict,
                     "without being asked again):\n" + _of[:2000])
     _ml = (request.get("media_library") or "").strip() if isinstance(request, dict) else ""
     if _ml:
+        # HOW MANY samples to send, and what to do when none fit, is a sales judgement: it lives on the
+        # skill. This block is the shelf plus the invariant that the links are real and exact.
         user.append("MEDIA LIBRARY — our REAL portfolio films (title [categories]: link). These are the "
-                    "ONLY sample-work links that exist. When sharing samples, pick at most 1-2 whose "
-                    "categories genuinely fit this client, and copy each link EXACTLY as written. If "
-                    "nothing fits, share none and offer to send samples instead. NEVER write, guess or "
-                    "adapt any other portfolio/library/media URL.\n" + _ml[:4000])
+                    "ONLY sample-work links that exist. Copy any you use EXACTLY as written, and NEVER "
+                    "write, guess or adapt any other portfolio/library/media URL. Your standing rules "
+                    "govern how many to share and when to share none.\n" + _ml[:4000])
     _av = (request.get("availability") or "").strip() if isinstance(request, dict) else ""
     if _av:
-        user.append(_av + "\nIf you propose a call, offer times ONLY from that list and state them in "
-                    "the recipient's timezone. If none of them suit the conversation, ask them to "
-                    "suggest a time instead - never invent one.")
+        # Which timezone to state them in, and how to word the offer, are scheduling rules on the skill.
+        user.append(_av + "\nIf you propose a call, offer times ONLY from that list: never invent one. "
+                    "If none of them suit the conversation, ask them to suggest a time instead.")
     _mn = (request.get("meeting_notes") or "").strip() if isinstance(request, dict) else ""
     if _mn:
         user.append("NOTES FROM OUR LAST MEETING with this contact (distilled from the real meeting notes — "
@@ -290,8 +308,8 @@ def draft(skill: dict, company: dict, request: dict,
     _docs = [r.get("filename") for r in (request.get("attach_docs") or []) if r.get("filename")]         if isinstance(request, dict) else []
     if _docs:
         user.append("FILES ATTACHED TO THIS OUTGOING EMAIL (they genuinely send with it): "
-                    + ", ".join(_docs) + " — refer to them as attached NOW ('please find attached'); "
-                    "NEVER promise to send them later.")
+                    + ", ".join(_docs) + ". They are on the message already: refer to them as attached "
+                    "now, and NEVER promise to send them later. How you word that is your voice.")
     _meet = ((request.get("meeting") or {}).get("meet") or "").strip() if isinstance(request, dict) else ""
     if _meet:
         user.append(f"A meeting is CONFIRMED and already booked. Its REAL Google Meet link is {_meet} — "
@@ -311,11 +329,18 @@ def draft(skill: dict, company: dict, request: dict,
                     "touch only that. Produce the new version:\n" + correction)
     # FIRST replies on the sales lane draft on Fable 5 (owner-approved exception, 2026-08-30): the
     # opener + insight set the whole conversation's direction, and the research brief deserves the
-    # model that can use it. Thread continuations fall back to the normal tier.
+    # model that can use it. Thread continuations fall back to the skill's own tier. The mapping is
+    # DATA (setting 'first_reply_models'), not a model id in code, so the tier is visible and editable
+    # rather than a silent upgrade nobody can see (7 Sep 2026).
     _mdl = _model_for(skill)
-    if (skill.get("skill_key") == "sales-first-response" and isinstance(request, dict)
-            and not request.get("thread_reply")):
-        _mdl = "claude-fable-5"
+    if isinstance(request, dict) and not request.get("thread_reply"):
+        try:
+            from . import db as _db
+            _fm = (_db.setting_get("first_reply_models") or {}).get(skill.get("skill_key") or "")
+            if _fm:
+                _mdl = provider.resolve_model(_fm) or _fm
+        except Exception:  # noqa: BLE001 — a settings hiccup never blocks a draft
+            pass
     out = provider.think(system, "\n\n".join(user), model=_mdl, think_hard=True,
                          max_tokens=6000, purpose=f"draft:{skill.get('skill_key', '')}",
                          company=company.get("slug"), images=atts)
@@ -339,8 +364,10 @@ def draft_article(skill: dict, company: dict, request: dict,
          '"html" (the article body as clean HTML). Rules for the html: use only <h2>, <h3>, <p>, '
          "<ul>/<li>, <ol>/<li>, <strong>, <em>, <a href>, <blockquote>. Do NOT include an <h1> "
          "(the CMS adds the title from the title field). No markdown, no <html>/<head>/<body>, no "
-         "inline styles. Do NOT use em-dashes or en-dashes anywhere; use commas, colons or periods. "
-         "Lead with the answer, use natural question-style H2 subheadings, keep paragraphs short."),
+         "inline styles. Do NOT use em-dashes or en-dashes anywhere; use commas, colons or periods."),
+        # (Editorial shape — leading with the answer, question-style H2s, paragraph length — was written
+        # here in code. It is editorial judgement, so it lives on the content-blog-posts skill.)
+        _PRECEDENCE,
     ]))
     user = [f"Brief: {request.get('brief') if isinstance(request, dict) else request}"]
     if manager_feedback:
