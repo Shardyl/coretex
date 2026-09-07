@@ -223,7 +223,16 @@ by name. **`draft_email` OBEYS THE ONE-OPEN-EMAIL-PER-PERSON RULE (4 Sep 2026).*
 `store.create_task`, which bypasses the conveyor, so Talk built and SENT a second thank-you to Tikkie
 while the first sat awaiting approval (cards 460 and 474). It now finds the open card, quotes its
 opening line back to Rashad, and asks whether to correct that one or send a genuinely separate email;
-only an explicit `separate_email: true` creates a second. Catch-all mailboxes (INBOXES values) can NEVER be the From: `_draft_direct_reply` routes
+only an explicit `separate_email: true` creates a second. **`draft_email` can also OFFER A BOOKED SLOT
+(7 Sep 2026):** pass `meeting_start` (plus optional `meeting_minutes`) when Rashad names one specific
+day and time. Code parses and range-checks the datetime, stamps `request.meeting`, and the existing
+`_prebook_meeting` books a real attendee-less event with a Google Meet room BEFORE the worker writes,
+so the email carries the genuine link instead of promising one separately. It reuses an event already
+booked for the same person at the same slot rather than creating a second. The guest is added and
+invited only on approval. Needed because `_maybe_extract_meeting` reads `email_reply` cards only, so
+outbound drafts had no route to a link. NOTE the sender: an outbound card with no `from_email` falls
+back to the company `reply_from` (Sensa = gino@), which is right for the sales inbox and WRONG for a
+conversation Rashad started himself, so pass `from_email` when it is his (card 498). Catch-all mailboxes (INBOXES values) can NEVER be the From: `_draft_direct_reply` routes
 catch-all-received replies via the company `reply_from` person, and `_email_envelope` hard-strips any
 catch-all From as a backstop. Universal email-handling rule tells the drafter the library exists and
 never to claim an attachment the tools didn't confirm.
