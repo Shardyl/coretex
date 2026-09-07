@@ -496,7 +496,9 @@ def author_capabilities_spec(company: dict, audience: str, focus: str, case_fact
         "such fact must already appear in the VERIFIED FACTS you are given, and anything not there is "
         "simply left out. Never name or describe a film: the system supplies the actual films from the "
         "media library and you write only the captions, in the order the films are listed for that case "
-        "study. Return one case_studies entry per KEY you are given, copying the key exactly. Keep every "
+        "study. Return one case_studies entry per KEY you are given, copying the key exactly. The "
+        "client name already prints beside each case-study heading, so the HEADING MUST NOT "
+        "CONTAIN IT: write what the work proves, not who it was for. Keep every "
         "card body under 42 words and every module cell under 26 words. No em dashes, no superlatives, no "
         "marketing flourish. Write for a senior public-sector audience: plain, specific, unhurried.",
         "SPEC:\n" + _CAPS_SCHEMA,
