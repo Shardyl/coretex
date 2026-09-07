@@ -151,6 +151,26 @@ Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` ad
 rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
 `sales-first-response`.
 
+## One contact, two projects: the deal picks the thread (7 Sep 2026)
+
+Shehryar Rahman at EY runs BOTH the Dubai Police road-safety variation (deal 73, the 250k) and the ITC
+proforma invoice (deal 58). `_adopt_existing_thread` took whichever thread was newest, so a chase about
+the variation was drafted onto the ITC invoice thread, under that subject, from the colleague who had
+sent it (card 502). Thread choice is now, in order:
+
+1. a thread THIS DEAL has already been answered on: the threads of its own SENT (`status='done'`)
+   cards. Rejected cards never went out, so they do not count.
+2. a thread the counterpart has actually replied on.
+3. the newest usable message.
+
+Thread ids are MAILBOX-LOCAL, so (1) is applied again when choosing between mailboxes, where a newer
+unrelated thread in another mailbox would otherwise win on date.
+
+**The data fault underneath it:** the sent sweep resolves a deal from the RECIPIENT, so Ayresh's ITC
+invoice email to Shehryar was filed on deal 73 (his only deal), subject line ignored. Those three
+entries are voided on 73 and copied to 58, and reminders 93/94 repointed. When one person appears on
+two deals, check where their correspondence actually landed.
+
 ## An email's identity is its Message-Id (7 Sep 2026)
 
 `gmail_id` is a **per-mailbox filing number**. One email delivered to hello@, gino@ and ayresh@ carries
