@@ -3750,6 +3750,15 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                 req["meeting"] = {"start": _dt.isoformat(),
                                   "minutes": int(inp.get("meeting_minutes") or 30),
                                   "summary": f"{co['name']} and {to_name}".strip(" and")}
+                # the same slot with the same person may already be booked from an earlier card:
+                # reuse that event and its Meet room rather than sending a second invite
+                _prior = db.one("select request->'meeting' m from tasks where company_id=%s and "
+                                "lower(request->'inquiry'->>'email')=lower(%s) and "
+                                "request->'meeting'->>'event_id' is not null and "
+                                "request->'meeting'->>'start'=%s order by id desc limit 1",
+                                (co["id"], to_email, req["meeting"]["start"]))
+                if _prior and _prior.get("m"):
+                    req["meeting"] = {**req["meeting"], **_prior["m"]}
             except (ValueError, TypeError) as _e:
                 return (f"Could not read '{inp.get('meeting_start')}' as a date and time ({_e}) — nothing "
                         "was drafted. Ask Rashad for the exact day and time.")
