@@ -2915,21 +2915,29 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
             # the mailbox was a calendar invite or an out-of-office, adoption gave up entirely instead
             # of looking one further back. Jonathan Bobo's French auto-reply sat on top of a live four
             # message thread, and card 464 opened a fresh conversation (4 Sep 2026).
-            msgs = gmail.list_recent(limit=8, rt_key=s["rt_key"],
+            # A chase is written on top of our own earlier chases, so reach further back on one:
+            # eight messages is easily all follow-up and none of the real exchange.
+            msgs = gmail.list_recent(limit=(15 if req.get("followup") else 8), rt_key=s["rt_key"],
                                      q=f"(from:{email} OR to:{email}) newer_than:{_recent_days}d",
                                      company=_inbox_client_company(co.get("slug") or ""))
-            m = None
-            for cand in (msgs or []):
+
+            def _usable(cand) -> bool:
                 if not cand.get("thread_id"):
-                    continue
+                    return False
                 _subj = (cand.get("subject") or "").lower()
-                if (cand.get("auto_marker") or any(_subj.startswith(p) for p in (
-                        "invitation:", "accepted:", "declined:", "updated invitation:", "canceled:",
-                        "cancelled:", "notes:", "automatic reply", "auto reply", "out of office",
-                        "réponse automatique", "delivery status"))):
-                    continue             # a calendar/auto thread is not the conversation
-                m = cand
-                break
+                return not (cand.get("auto_marker") or any(_subj.startswith(p) for p in (
+                    "invitation:", "accepted:", "declined:", "updated invitation:", "canceled:",
+                    "cancelled:", "notes:", "automatic reply", "auto reply", "out of office",
+                    "réponse automatique", "delivery status")))
+            # THE CONVERSATION THEY ANSWERED BEATS THE ONE WE STARTED. Taking the newest message
+            # meant a follow-up we ourselves opened on a fresh thread became "the thread", and the
+            # next chase continued THAT instead of the real exchange: Brent Woodhead's live
+            # conversation ran to five messages under "New enquiry from Brent Woodhead", and card
+            # 490 was pointed at a one-sided "your enquiry" we had sent a month later (7 Sep 2026).
+            _replied = {c["thread_id"] for c in (msgs or [])
+                        if c.get("thread_id") and (c.get("email") or "").lower() == email.lower()}
+            m = (next((c for c in (msgs or []) if _usable(c) and c["thread_id"] in _replied), None)
+                 or next((c for c in (msgs or []) if _usable(c)), None))
             if not m:
                 continue
             # A CONVERSATION WE OPENED MINUTES AGO IS NOT A CONVERSATION. Card 474 sent a thank-you on a
