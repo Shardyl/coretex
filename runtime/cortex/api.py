@@ -496,12 +496,40 @@ def _enrich_action_card(t: dict) -> dict:
     return t
 
 
+def _target_hint(n: dict) -> dict:
+    """What a notification's target ACTUALLY is, in words. A reminder that says "run through card 423"
+    is unreadable a week later: the number means nothing, and the card may already be closed
+    (1 Sep 2026). So the card/deal is resolved here and its label travels with the notification."""
+    tt, tid = n.get("target_type"), str(n.get("target_id") or "")
+    if not tid.isdigit():
+        return {}
+    if tt == "task":
+        t = db.one("select id, kind, status, company_id, request from tasks where id=%s", (int(tid),))
+        if not t:
+            return {"target_label": "this card no longer exists", "target_open": False}
+        req = t.get("request") if isinstance(t.get("request"), dict) else {}
+        inq = req.get("inquiry") if isinstance(req.get("inquiry"), dict) else {}
+        who = inq.get("name") or inq.get("email") or ""
+        what = req.get("title") or inq.get("subject") or req.get("subject") or (req.get("brief") or "")
+        co = (store.get_company(t["company_id"]) or {}).get("name", "") if t.get("company_id") else ""
+        bits = [b for b in (co, (t["kind"] or "").replace("_", " "), who, " ".join(str(what).split())[:80]) if b]
+        return {"target_label": " · ".join(bits)[:200], "target_status": t["status"],
+                "target_open": t["status"] in ("awaiting_approval", "awaiting_correction")}
+    if tt == "deal":
+        d = db.one("select id, title, stage from crm_projects where id=%s", (int(tid),))
+        if d:
+            return {"target_label": f"{d['title']} ({d['stage']})", "target_open": True}
+        return {"target_label": "this deal no longer exists", "target_open": False}
+    return {}
+
+
 def _info_card(n: dict) -> dict:
     """A notification rendered as an Inbox INFO card (swipe-to-dismiss)."""
     return {"card": "info", "id": n["id"], "title": n["title"], "body": n.get("body"),
             "category": n["category"], "priority": n["priority"], "count": n.get("count", 1),
             "items": n.get("items") or [], "company": ((store.get_company(n["company_id"]) or {}).get("name", "") if n.get("company_id") else ""),
             "target_type": n.get("target_type"), "target_id": n.get("target_id"),
+            **_target_hint(n),
             "state": n["state"], "ts": n.get("fired_at")}
 
 

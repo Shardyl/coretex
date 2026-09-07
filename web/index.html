@@ -1529,6 +1529,22 @@ function renderSeg(resp){
   const segs=[['all','All',(resp.needs_you||0)+(resp.updates||0)],['needs','Needs you',resp.needs_you||0],['updates','Updates',resp.updates||0]];
   el.innerHTML=segs.map(s=>`<button class="cseg ${inboxSeg===s[0]?'on':''}" onclick="setSeg('${s[0]}')">${s[1]}${s[2]?' '+s[2]:''}</button>`).join('');
 }
+// A reminder pointed at a card or a deal shows WHAT it is pointed at. "Run through card 423" told
+// Rashad nothing (7 Sep 2026): the number is not a thing he can see.
+function targetLine(t){
+  if(!t.target_label) return '';
+  const pre=t.target_type==='task'?('Card #'+t.target_id+': '):t.target_type==='deal'?('Deal #'+t.target_id+': '):'';
+  const shut=(t.target_status&&!t.target_open)?` — ${esc(String(t.target_status).replace(/_/g,' '))}, nothing to open`:'';
+  return `<div class="csub" style="color:var(--mut);margin-top:4px">${esc(pre)}${esc(t.target_label)}${shut}</div>`;
+}
+function inboxCard(id){
+  go('inbox');
+  setTimeout(()=>{ const el=document.getElementById('t'+id);
+    if(!el){ toast('That card is not in the Inbox any more'); return; }
+    el.scrollIntoView({behavior:'smooth',block:'center'});
+    el.style.transition='box-shadow .25s'; el.style.boxShadow='0 0 0 2px var(--accent)';
+    setTimeout(()=>{ el.style.boxShadow=''; }, 2200); }, 500);
+}
 function infoCard(t){
   const items=t.items||[], grouped=items.length>1;
   const cnt=t.count>1?` <span class="chip">×${t.count}</span>`:'';
@@ -1546,9 +1562,12 @@ function infoCard(t){
     <div class="meta">${coChip}<span class="chip">${esc(t.category||'update')}</span>${cnt}<span style="margin-left:auto;color:var(--mut)">${timeTag(t.ts)}</span></div>
     <div class="title" style="font-size:15px">${esc(title)}</div>
     ${(t.body&&!grouped)?`<div class="csub">${linky(t.body)}</div>`:''}
+    ${targetLine(t)}
     ${details}
     <div class="row" style="margin-top:8px">
       ${(t.target_type==='contact'&&t.target_id&&!grouped)?`<button class="btn sm go" onclick="inboxContact('${esc(t.target_id)}')">${ic('arrow',13)} View contact</button>`:''}
+      ${(t.target_type==='task'&&t.target_id&&t.target_open)?`<button class="btn sm go" onclick="inboxCard(${+t.target_id})">${ic('arrow',13)} Open card</button>`:''}
+      ${(t.target_type==='deal'&&t.target_id&&t.target_open)?`<button class="btn sm go" onclick="openProject(${+t.target_id})">${ic('arrow',13)} View deal</button>`:''}
       <button class="btn sm" onclick="notifAct(${t.id},'dismiss')">Dismiss</button>
       <button class="btn sm" onclick="notifAct(${t.id},'snooze')">Snooze 1h</button></div></div>`;
 }
