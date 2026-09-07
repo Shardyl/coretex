@@ -3068,6 +3068,14 @@ SKILL_TOOLS = [
                              "description": "optional: names/kinds of documents from the company document "
                                             "library to attach (e.g. ['trade licence','VAT certificate']) — "
                                             "resolve nothing yourself, the library lookup happens server-side"},
+        "meeting_start": {"type": "string", "description": "optional: ONLY when Rashad names one specific "
+                                                           "day and time for a call this email offers, e.g. "
+                                                           "'2026-09-08T10:00'. Local Dubai time unless you add "
+                                                           "an offset. Cortex books the calendar slot with a real "
+                                                           "Google Meet room (no guest invited yet) and the draft "
+                                                           "is written around the genuine link. Never invent a "
+                                                           "time and never pass one he only vaguely implied."},
+        "meeting_minutes": {"type": "integer", "description": "optional: length of that meeting, default 30"},
         "separate_email": {"type": "boolean", "description": "only after Rashad has been shown an existing "
                                                             "open card to this person and has explicitly "
                                                             "said he wants a SECOND, separate email as well"}},
@@ -3724,6 +3732,27 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                "inquiry": {"name": to_name, "email": to_email, "subject": inp.get("subject", ""), "message": ""}}
         if inp.get("from_email"):
             req["from_email"] = inp["from_email"]
+        # An outbound email that offers ONE named slot books it the same way a reply does. The reply path
+        # gets there through _maybe_extract_meeting, which only reads email_reply cards, so an outbound
+        # draft had no way to carry a real Meet link and would have promised to "send one separately".
+        # CODE parses and validates the datetime here; the model never stamps it.
+        if inp.get("meeting_start"):
+            try:
+                from datetime import timedelta, timezone
+                from zoneinfo import ZoneInfo
+                _raw = str(inp["meeting_start"]).strip().replace("Z", "+00:00")
+                _dt = datetime.fromisoformat(_raw)
+                if _dt.tzinfo is None:
+                    _dt = _dt.replace(tzinfo=ZoneInfo("Asia/Dubai"))
+                if not (datetime.now(timezone.utc) < _dt < datetime.now(timezone.utc) + timedelta(days=180)):
+                    return (f"That meeting time ({_raw}) is in the past or too far ahead — nothing was "
+                            "drafted. Check the date with Rashad and call draft_email again.")
+                req["meeting"] = {"start": _dt.isoformat(),
+                                  "minutes": int(inp.get("meeting_minutes") or 30),
+                                  "summary": f"{co['name']} and {to_name}".strip(" and")}
+            except (ValueError, TypeError) as _e:
+                return (f"Could not read '{inp.get('meeting_start')}' as a date and time ({_e}) — nothing "
+                        "was drafted. Ask Rashad for the exact day and time.")
         if inp.get("_images"):
             req["attachments"] = inp["_images"]
             req["attachment_names"] = inp.get("_image_names")
