@@ -124,6 +124,11 @@ _SHOOT_TERMS = {
 _SHOOT_PRESET = {
     "title": "PRODUCTION QUOTATION",
     "agency_fee": False,
+    "payment_lines": [
+        "50% on confirmation, which holds the date, the studio and the crew.",
+        "25% on the shoot day.",
+        "25% on delivery of the completed files.",
+    ],
     "note": "Prices are added per the agreed scope; subtotal, VAT and total calculate automatically.",
     "deliverables": [
         "Filmed content per the agreed formats and counts",
@@ -311,6 +316,9 @@ def _resolve(company: str, preset: str, *, customer: str, sections, total, total
     summary = (f"{co['name']} {preset} quotation {number}" + (f" for {customer}" if customer else "")
                + f": {n_items} line items, total {_money(grand, cur)} incl. VAT.{blank_note}")
     return {"company": company, "co": co, "data": data, "preset": preset, "title": title, "note": note,
+            # HOW IT IS PAID IS PART OF THE PRESET, not a constant. 70/30 is the AI schedule; a shoot
+            # commits a studio and a crew to a fixed date and runs 50/25/25 (8 Sep 2026).
+            "payment": list(pset.get("payment_lines") or []),
             "agency_fee": agency_fee, "terms": terms, "deliverables": deliverables, "customer": customer,
             "cur": cur, "vat_rate": vat_rate, "sections": sections, "subtotal": subtotal, "fee": fee,
             "vat": vat, "grand": grand, "number": number, "stated": stated, "blanks": blanks,
@@ -455,9 +463,11 @@ def generate(company: str, preset: str = "ai-production", *, customer: str = "",
 
     # ---- payment + bank band ----
     bank = (data.get("bank_details") or "").replace("\n", "<br/>")
-    pay_left = [Paragraph("PAYMENT", TH),
-                Paragraph("70% down payment to commence; 30% balance before final delivery, on approval.", TD),
-                Paragraph(f"All prices in {cur}, exclusive of {int(vat_rate*100)}% VAT.", SMALL)]
+    _paylines = list(m.get("payment") or []) or [
+        "70% down payment to commence; 30% balance before final delivery, on approval."]
+    pay_left = ([Paragraph("PAYMENT", TH)]
+                + [Paragraph(x, TD) for x in _paylines]
+                + [Paragraph(f"All prices in {cur}, exclusive of {int(vat_rate*100)}% VAT.", SMALL)])
     pay_right = [Paragraph("BANK DETAILS", TH), Paragraph(bank or "&nbsp;", SMALL)]
     pay = Table([[pay_left, pay_right]], colWidths=[100 * mm, 74 * mm],
                 style=TableStyle([("BACKGROUND", (0, 0), (-1, -1), LIGHT), ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -766,7 +776,7 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
         ws[cc].value = lab; fill(ws[cc], _TEAL); ws[cc].font = F(s=10, b=True, c=_WHT)
         ws[cc].alignment = Alignment(indent=1)
     r += 1
-    pay = list(payment_lines) if payment_lines else [
+    pay = list(payment_lines) or list(m.get("payment") or []) or [
         "70% down payment to commence the project.",
         "30% balance due before final delivery, on approval.",
         "Revisions as per the Revisions & Delivery terms on this quotation."]
