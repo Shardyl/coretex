@@ -160,6 +160,50 @@ table.t th { font-size:11.5px; color:ACCENT; text-transform:uppercase; letter-sp
 table.t td.r, table.t th.r { text-align:right; }
 .stat { font-family:Poppins,sans-serif; font-size:38px; font-weight:700; color:ACCENT; line-height:1; }
 .big { font-family:Poppins,sans-serif; font-size:38px; font-weight:600; color:#EDEDF2; }
+table.meta td { font-size:13px; padding:4px 0; color:#C4C4CC; }
+table.meta td.mk { color:ACCENT; font-size:10.5px; letter-spacing:2px; text-transform:uppercase;
+                   padding-right:26px; white-space:nowrap; font-weight:600; }
+.note { font-size:11.5px; color:#7A7A84; line-height:1.5; margin-top:18px; }
+.strip { display:grid; gap:14px; }
+.scol { background:#101114; border:1px solid #1C1D22; border-top:3px solid ACCENT;
+        border-radius:0 0 10px 10px; padding:16px 16px 18px; }
+.scol b { color:#EDEDF2; font-weight:600; display:block; font-size:15px; }
+.scol p { font-size:12px; line-height:1.5; }
+.sstat { color:ACCENT; font-size:11.5px; font-weight:600; margin:4px 0 9px; }
+.sblock { margin-bottom:16px; }
+.sblock b { color:#EDEDF2; font-weight:600; display:block; font-size:15px; margin-bottom:3px; }
+.sblock p { font-size:13.5px; }
+.panel { flex:1; background:#101114; border:1px solid #1C1D22; border-radius:10px; padding:20px; }
+.pgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:11px; }
+.pcell { background:#16171B; border:1px solid #22232A; border-top:2px solid ACCENT; border-radius:0 0 7px 7px;
+         padding:11px 12px; }
+.pcell b { color:#EDEDF2; font-weight:600; font-size:13.5px; display:block; }
+.psub { color:ACCENT; font-size:11.5px; font-weight:600; }
+.pfoot { font-size:10px; color:#7A7A84; margin-top:9px; letter-spacing:.3px; }
+.pwide { background:#16171B; border:1px solid #22232A; border-radius:7px; padding:11px 12px; margin-top:11px; }
+.pwide b { color:ACCENT; font-weight:600; font-size:11.5px; letter-spacing:1.5px; text-transform:uppercase;
+           display:block; margin-bottom:4px; }
+.pwide .psub { color:#C4C4CC; font-weight:300; font-size:12px; }
+.pstat { border-left:2px solid ACCENT; padding-left:12px; margin-bottom:14px; }
+.pk { font-size:10px; color:ACCENT; letter-spacing:2px; text-transform:uppercase; font-weight:600; }
+.pv { font-size:14px; color:#EDEDF2; margin-top:2px; }
+.photocap { position:absolute; bottom:52px; right:22px; background:rgba(10,10,10,.72);
+            border-radius:4px; padding:5px 10px; font-size:10px; color:#9A9AA4; letter-spacing:.5px; }
+.gtitle { color:ACCENT; font-size:11.5px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase;
+          margin:14px 0 4px; }
+table.sched td, table.sched th { padding:5px 10px; font-size:13px; }
+.irow { display:flex; justify-content:space-between; align-items:center; gap:16px;
+        background:#101114; border:1px solid #1C1D22; border-radius:8px; padding:13px 16px; margin-bottom:9px; }
+.irow span { font-size:13.5px; color:#C4C4CC; }
+.irow b { font-family:Poppins,sans-serif; font-size:16px; color:#EDEDF2; white-space:nowrap; }
+.itotal { border-color:ACCENT; background:#0E1416; }
+.itotal span { color:#EDEDF2; font-weight:500; }
+.itotal b { color:ACCENT; font-size:24px; }
+.qgrid { display:grid; grid-template-columns:1fr 1fr; gap:16px 44px; margin-top:6px; }
+.qitem { display:flex; gap:13px; }
+.qn { font-family:Poppins,sans-serif; color:ACCENT; font-size:15px; font-weight:600; line-height:1.3; }
+.qitem b { color:#EDEDF2; font-weight:600; font-size:14.5px; display:block; margin-bottom:2px; }
+.qitem p { font-size:12.5px; line-height:1.5; }
 .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
 .gcell { background:#101114; border:1px solid #1C1D22; border-radius:10px; padding:16px 17px; }
 .gcell b { color:#EDEDF2; font-weight:600; display:block; margin:3px 0 5px; font-size:14px; }
@@ -233,6 +277,151 @@ class _Deck:
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_esc(heading)}</h2><div class="cols" style="margin-top:4px">{p}</div>{c}</div>'
             f'{self._foot(section or kicker)}</div>')
+
+    def covermeta(self, kicker: str, title: str, title2: str, standfirst: str, meta: list,
+                  image: str | None = None, section: str = "Proposal"):
+        """Title cover carrying the deal's hard facts: client, date, venue, document number."""
+        img = (f'<img style="position:absolute;top:0;left:0;width:1280px;height:720px;object-fit:cover" '
+               f'src="{_b64(image)}">'
+               '<div style="position:absolute;top:0;left:0;width:1280px;height:720px;background:'
+               'linear-gradient(to right, rgba(10,10,10,.97) 46%, rgba(10,10,10,.55))"></div>') if image else ""
+        lg = (f'<img class="logobig" style="position:absolute;top:50px;left:72px" src="{self.logo}">'
+              if self.logo else "")
+        m = "".join(f'<tr><td class="mk">{_esc(x.get("k"))}</td><td>{_esc(x.get("v"))}</td></tr>'
+                    for x in (meta or [])[:5])
+        t2 = f'<br><span style="color:{self.accent}">{_esc(title2)}</span>' if title2 else ""
+        self.pages.append(
+            f'<div class="pg">{img}'
+            f'<div style="position:absolute;top:0;left:0;width:1280px;height:6px;background:{self.accent}"></div>'
+            f'{lg}<div style="position:absolute;top:186px;left:72px;right:72px">'
+            f'<h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h1>{_esc(title)}{t2}</h1>'
+            f'<p style="margin-top:18px;max-width:660px">{_esc(standfirst)}</p></div>'
+            f'<table class="meta" style="position:absolute;bottom:78px;left:72px">{m}</table>'
+            f'{self._foot(section)}</div>')
+
+    def strip(self, kicker: str, heading: str, intro: str, cols: list, note: str = "", section: str = ""):
+        """Up to five parallel columns, each with an accent top rule, a headline stat and a body.
+        cards() caps at three, and a five-format programme has to show all five."""
+        cs = (cols or [])[:5]
+        c = "".join('<div class="scol">'
+                    f'<b>{_esc(x.get("title"))}</b>'
+                    f'<div class="sstat">{_esc(x.get("stat"))}</div>'
+                    f'<p>{_esc(x.get("body"))}</p></div>' for x in cs)
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2>{_esc(heading)}</h2>'
+            + (f'<p style="max-width:1060px;margin-bottom:20px">{_esc(intro)}</p>' if intro else "")
+            + f'<div class="strip" style="grid-template-columns:repeat({len(cs) or 1},1fr)">{c}</div>'
+            + (f'<p class="note">{_esc(note)}</p>' if note else "")
+            + f'</div>{self._foot(section or kicker)}</div>')
+
+    def split(self, kicker: str, heading: str, blocks: list, panel: dict, note: str = "",
+              section: str = ""):
+        """The argument on the left, a diagram or facility panel on the right."""
+        b = "".join(f'<div class="sblock"><b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>'
+                    for x in (blocks or [])[:5])
+        p = panel or {}
+        cells = "".join('<div class="pcell">'
+                        f'<b>{_esc(x.get("title"))}</b>'
+                        f'<div class="psub">{_esc(x.get("sub"))}</div>'
+                        f'<div class="pfoot">{_esc(x.get("foot"))}</div></div>'
+                        for x in (p.get("cells") or [])[:6])
+        pf = p.get("foot") or {}
+        foot = (f'<div class="pwide"><b>{_esc(pf.get("title"))}</b>'
+                f'<div class="psub">{_esc(pf.get("body"))}</div></div>') if pf else ""
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2>{_esc(heading)}</h2>'
+            f'<div style="display:flex;gap:40px;margin-top:16px">'
+            f'<div style="width:520px">{b}</div>'
+            f'<div class="panel"><h3 style="margin-bottom:14px">{_esc(p.get("title"))}</h3>'
+            f'<div class="pgrid">{cells}</div>{foot}</div></div>'
+            + (f'<p class="note">{_esc(note)}</p>' if note else "")
+            + f'</div>{self._foot(section or kicker)}</div>')
+
+    def photo(self, kicker: str, heading: str, sub: str, body: str, stats: list,
+              image: str | None, caption: str = "", note: str = "", section: str = ""):
+        """A room, a set or a location: the argument on the left, the photograph bleeding off the right."""
+        st = "".join(f'<div class="pstat"><div class="pk">{_esc(x.get("k"))}</div>'
+                     f'<div class="pv">{_esc(x.get("v"))}</div></div>' for x in (stats or [])[:4])
+        img = (f'<img src="{_b64(image)}" style="position:absolute;top:0;right:0;width:592px;'
+               'height:720px;object-fit:cover">'
+               '<div style="position:absolute;top:0;right:0;width:592px;height:720px;background:'
+               'linear-gradient(to right, rgba(10,10,10,.92), rgba(10,10,10,0) 22%)"></div>'
+               ) if image else ""
+        cap = f'<div class="photocap">{_esc(caption)}</div>' if (image and caption) else ""
+        self.pages.append(
+            f'<div class="pg">{img}{cap}'
+            f'<div style="position:absolute;top:58px;left:72px;width:566px">'
+            f'<h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2 style="margin-bottom:6px">{_esc(heading)}</h2>'
+            + (f'<div class="psub" style="margin-bottom:14px">{_esc(sub)}</div>' if sub else "")
+            + f'<p>{_esc(body)}</p><div style="margin-top:26px">{st}</div></div>'
+            + (f'<div class="note" style="position:absolute;bottom:52px;left:72px;width:560px">'
+               f'{_esc(note)}</div>' if note else "")
+            + f'{self._foot(section or kicker)}</div>')
+
+    def schedule(self, kicker: str, heading: str, groups: list, invest: dict, footnote: str = "",
+                 section: str = ""):
+        """The counted deliverables beside the money. Both are stated, never estimated."""
+        out = []
+        for g in (groups or []):
+            head = "".join(f'<th class="r">{_esc(c)}</th>' for c in (g.get("cols") or []))
+            rows = "".join(
+                f'<tr><td>{_esc(r.get("label"))}</td>'
+                + "".join(f'<td class="r">{_esc(v)}</td>' for v in (r.get("values") or []))
+                + "</tr>" for r in (g.get("rows") or []))
+            out.append(f'<div class="gtitle">{_esc(g.get("title"))}</div>'
+                       + (f'<table class="t sched"><tr><th></th>{head}</tr>{rows}</table>' if rows else "")
+                       + (f'<p class="note" style="margin:6px 0 0">{_esc(g.get("note"))}</p>'
+                          if g.get("note") else ""))
+        iv = invest or {}
+        irows = "".join(f'<div class="irow"><span>{_esc(x.get("item"))}</span>'
+                        f'<b>{_esc(x.get("amount"))}</b></div>' for x in (iv.get("rows") or []))
+        tot = iv.get("total") or {}
+        total = (f'<div class="irow itotal"><span>{_esc(tot.get("item"))}</span>'
+                 f'<b>{_esc(tot.get("amount"))}</b></div>') if tot else ""
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2>{_esc(heading)}</h2>'
+            f'<div style="display:flex;gap:44px;margin-top:14px">'
+            f'<div style="width:640px">{"".join(out)}</div>'
+            f'<div style="width:452px">{irows}{total}'
+            + (f'<p class="note" style="margin-top:14px">{_esc(iv.get("note"))}</p>'
+               if iv.get("note") else "")
+            + '</div></div>'
+            + (f'<p class="note" style="margin-top:16px;max-width:1080px">{_esc(footnote)}</p>'
+               if footnote else "")
+            + f'</div>{self._foot(section or kicker)}</div>')
+
+    def qa(self, kicker: str, heading: str, items: list, note: str = "", section: str = ""):
+        """Their questions, numbered, answered in their order. Nothing they asked is left off the page."""
+        c = "".join(f'<div class="qitem"><div class="qn">{i + 1}</div>'
+                    f'<div><b>{_esc(x.get("q"))}</b><p>{_esc(x.get("a"))}</p></div></div>'
+                    for i, x in enumerate((items or [])[:8]))
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2>{_esc(heading)}</h2><div class="qgrid">{c}</div>'
+            + (f'<p class="note">{_esc(note)}</p>' if note else "")
+            + f'</div>{self._foot(section or kicker)}</div>')
+
+    def closing(self, kicker: str, heading: str, sub: str, cards: list, steps: list,
+                signoff: str = "", section: str = ""):
+        """Why us, then what happens next, then who is signing it."""
+        c = "".join(f'<div class="card"><b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>'
+                    for x in (cards or [])[:3])
+        s = "".join(f'<div class="phase"><div class="num">{i + 1}</div>'
+                    f'<b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>'
+                    for i, x in enumerate((steps or [])[:3]))
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2>{_esc(heading)}</h2>'
+            + (f'<p style="margin-bottom:18px">{_esc(sub)}</p>' if sub else "")
+            + f'<div class="cols">{c}</div>'
+            + (f'<h3 style="margin:30px 0 12px">Next steps</h3><div class="cols">{s}</div>' if s else "")
+            + (f'<p class="note" style="margin-top:26px">{_esc(signoff)}</p>' if signoff else "")
+            + f'</div>{self._foot(section or "Next")}</div>')
 
     def grid(self, kicker: str, heading: str, intro: str, cells: list, section: str = ""):
         """A four-across grid of up to eight cells - the capability modules. cards() holds only three."""
@@ -575,3 +764,168 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
 
     path = to_pdf(d.html(), os.path.join(out_dir, filename))
     return {"path": path, "pages": len(d.pages), "cases": shown, "spec": spec}
+
+
+# --------------------------------------------------------------------------- explicit-spec rendering
+
+def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
+                filename: str = "deck.pdf") -> dict:
+    """Render a deck whose CONTENT IS ALREADY WRITTEN, page by page, into the house format.
+
+    build() and build_capabilities() have a model author the copy. This one has no model in it at
+    all: it takes an explicit page list and lays it out. That is the difference between writing a
+    deck and REBRANDING one - when the words are already agreed, or already sent to a client, a
+    model rewriting them is a defect, not a feature. Every page type is one of the _Deck builders.
+    """
+    co = store.get_company_by_slug(company_slug)
+    if not co:
+        raise ValueError(f"unknown company {company_slug}")
+    accent = str(spec.get("accent") or _ACCENT_DEFAULT).strip()
+    if not re.match(r"^#[0-9A-Fa-f]{6}$", accent):
+        accent = _ACCENT_DEFAULT
+    d = _Deck(co, spec.get("customer") or co["name"], accent, _logo(co), spec.get("label") or "")
+    for pg in (spec.get("pages") or []):
+        t = (pg.get("type") or "").strip().lower()
+        if t == "covermeta":
+            d.covermeta(pg.get("kicker", ""), pg.get("title", ""), pg.get("title2", ""),
+                        pg.get("standfirst", ""), pg.get("meta") or [], pg.get("image"),
+                        pg.get("section", "Proposal"))
+        elif t == "cover":
+            d.cover(pg.get("title", ""), pg.get("standfirst", ""), pg.get("image"),
+                    pg.get("section", "Proposal"))
+        elif t == "strip":
+            d.strip(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""),
+                    pg.get("cols") or [], pg.get("note", ""), pg.get("section", ""))
+        elif t == "split":
+            d.split(pg.get("kicker", ""), pg.get("heading", ""), pg.get("blocks") or [],
+                    pg.get("panel") or {}, pg.get("note", ""), pg.get("section", ""))
+        elif t == "photo":
+            d.photo(pg.get("kicker", ""), pg.get("heading", ""), pg.get("sub", ""),
+                    pg.get("body", ""), pg.get("stats") or [], pg.get("image"),
+                    pg.get("caption", ""), pg.get("note", ""), pg.get("section", ""))
+        elif t == "schedule":
+            d.schedule(pg.get("kicker", ""), pg.get("heading", ""), pg.get("groups") or [],
+                       pg.get("invest") or {}, pg.get("footnote", ""), pg.get("section", ""))
+        elif t == "qa":
+            d.qa(pg.get("kicker", ""), pg.get("heading", ""), pg.get("items") or [],
+                 pg.get("note", ""), pg.get("section", ""))
+        elif t == "closing":
+            d.closing(pg.get("kicker", ""), pg.get("heading", ""), pg.get("sub", ""),
+                      pg.get("cards") or [], pg.get("steps") or [], pg.get("signoff", ""),
+                      pg.get("section", ""))
+        elif t == "cards":
+            d.cards(pg.get("kicker", ""), pg.get("heading", ""), pg.get("cards") or [],
+                    pg.get("bullets"), pg.get("section", ""))
+        elif t == "phases":
+            d.phases(pg.get("kicker", ""), pg.get("heading", ""), pg.get("phases") or [],
+                     pg.get("cards"), pg.get("section", ""))
+        elif t == "grid":
+            d.grid(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""),
+                   pg.get("cells") or [], pg.get("section", ""))
+        elif t == "investment":
+            d.investment(pg.get("kicker", ""), pg.get("headline", ""), pg.get("blurb", ""),
+                         pg.get("rows") or [], pg.get("cards"), pg.get("section", ""))
+        else:
+            raise ValueError(f"unknown page type '{t}'")
+    return {"path": to_pdf(d.html(), os.path.join(out_dir, filename)), "pages": len(d.pages)}
+
+
+# --------------------------------------------------------------------------- rebranding a deck
+
+_REBRAND_SCHEMA = """{
+ "accent": "#RRGGBB - the company's own brand accent unless told otherwise",
+ "customer": "who the deck is for",
+ "label": "the running footer label, e.g. 'Proposal SEN-2026-0011 - November 2026'",
+ "pages": [ one object per page of the source, in the SAME ORDER, each with a "type":
+  {"type":"covermeta","kicker":"","title":"first line","title2":"second line, printed in the accent",
+   "standfirst":"","meta":[{"k":"CLIENT","v":""}],"image":null,"section":"Proposal"},
+  {"type":"strip","kicker":"","heading":"","intro":"","cols":[{"title":"","stat":"","body":""}],
+   "note":"the strapline along the foot of the page","section":""},
+  {"type":"split","kicker":"","heading":"","blocks":[{"title":"","body":""}],
+   "panel":{"title":"","cells":[{"title":"","sub":"","foot":""}],"foot":{"title":"","body":""}},
+   "note":"","section":""},
+  {"type":"photo","kicker":"","heading":"","sub":"","body":"","stats":[{"k":"","v":""}],
+   "image":"IMAGE 3 - the number you were given, or null","caption":"","note":"","section":""},
+  {"type":"phases","kicker":"","heading":"","phases":[{"when":"","title":"","body":""}],
+   "cards":[{"title":"","body":""}],"section":""},
+  {"type":"schedule","kicker":"","heading":"",
+   "groups":[{"title":"","cols":["MASTERS","FILES"],
+              "rows":[{"label":"","values":["",""]}],"note":""}],
+   "invest":{"rows":[{"item":"","amount":""}],"total":{"item":"","amount":""},"note":""},
+   "footnote":"","section":""},
+  {"type":"qa","kicker":"","heading":"","items":[{"q":"","a":""}],"note":"","section":""},
+  {"type":"closing","kicker":"","heading":"","sub":"","cards":[{"title":"","body":""}],
+   "steps":[{"title":"","body":""}],"signoff":"","section":""},
+  {"type":"grid","kicker":"","heading":"","intro":"","cells":[{"num":"","title":"","body":""}]},
+  {"type":"cards","kicker":"","heading":"","cards":[{"title":"","body":""}],"bullets":[""]}
+ ]
+}"""
+
+
+def rebrand_spec(company: dict, source_text: str, images: list, notes: str = "") -> dict:
+    """Map an existing deck onto the house page vocabulary. This is TRANSCRIPTION, not authoring."""
+    imglist = "\n".join(f"IMAGE {i + 1}: a photograph that appeared on source page {p}"
+                        for i, (p, _) in enumerate(images)) or "(the source carries no photographs)"
+    system = "\n\n".join(filter(None, [
+        "You REBRAND an existing deck: the same document, re-laid-out in the house format. Return ONLY "
+        "the JSON spec described below.",
+        worker._now_line(),
+        worker._company_context(company),
+        "THE ONE RULE THAT MATTERS: keep the information EXACTLY the same. Reproduce the source's own "
+        "wording. Do not rewrite it into your own voice, do not improve it, do not shorten it, do not "
+        "add a single fact, and above all do not DROP anything: every heading, every body line, every "
+        "number, every footnote and every strapline in the source must appear somewhere in your spec. "
+        "This deck may already have gone to the client, so a word you change is a discrepancy they can "
+        "see. The only things you may change are punctuation the house style forbids (turn em dashes "
+        "into commas or colons) and layout: which house page type carries which page.",
+        "ONE PAGE IN, ONE PAGE OUT, in the same order. Choose the page type that fits what the source "
+        "page does: a cover with fact rows is covermeta; parallel columns of formats or workstreams is "
+        "strip; an argument beside a diagram is split; a room or location beside its photograph is "
+        "photo; a timeline is phases; counted deliverables beside the money is schedule; numbered "
+        "questions and answers is qa; the closing why-us and next-steps page is closing.",
+        "IMAGES: reference a photograph only by the exact label you are given below, e.g. \"IMAGE 3\". "
+        "Never invent a filename or a path, and never move a photograph to a page it did not come from.",
+        "SPEC:\n" + _REBRAND_SCHEMA,
+    ]))
+    return provider.think_json(
+        system,
+        f"PHOTOGRAPHS AVAILABLE:\n{imglist}\n\n"
+        + (f"INSTRUCTIONS FROM RASHAD:\n{notes}\n\n" if notes else "")
+        + f"THE SOURCE DECK, page by page:\n{source_text}",
+        model="claude-fable-5", max_tokens=16000, purpose="deck-rebrand",
+        company=company.get("slug"))
+
+
+def rebrand(company_slug: str, source_pdf: str, *, notes: str = "", out_dir: str = "/tmp",
+            filename: str = "rebranded.pdf") -> dict:
+    """Re-lay an existing deck PDF into the house format, keeping its content. Photographs are lifted
+    out of the source, so the rebrand carries the same imagery rather than generating new."""
+    co = store.get_company_by_slug(company_slug)
+    if not co:
+        raise ValueError(f"unknown company {company_slug}")
+    text = subprocess.run(["pdftotext", "-layout", source_pdf, "-"],
+                          capture_output=True, text=True, timeout=120).stdout
+    if not (text or "").strip():
+        raise ValueError("that PDF has no extractable text, so it cannot be rebranded without "
+                         "retyping it. Send the content instead.")
+    imgdir = tempfile.mkdtemp(prefix="rebrand-")
+    subprocess.run(["pdfimages", "-j", "-p", source_pdf, os.path.join(imgdir, "img")],
+                   capture_output=True, timeout=180)
+    images = []
+    for fn in sorted(os.listdir(imgdir)):
+        parts = fn.split("-")                       # img-<page>-<n>.<ext>
+        if len(parts) >= 3 and parts[1].isdigit():
+            images.append((int(parts[1]), os.path.join(imgdir, fn)))
+    spec = rebrand_spec(co, text, images, notes) or {}
+    by_label = {f"IMAGE {i + 1}": path for i, (_, path) in enumerate(images)}
+    used = set()
+    for pg in (spec.get("pages") or []):
+        ref = pg.get("image")
+        if isinstance(ref, str) and ref.strip():
+            path = by_label.get(ref.strip().upper())
+            pg["image"] = path                      # an unknown label becomes no image, never a guess
+            if path:
+                used.add(path)
+    out = render_spec(company_slug, spec, out_dir=out_dir, filename=filename)
+    return {**out, "images_found": len(images), "images_placed": len(used),
+            "source_chars": len(text), "spec": spec}

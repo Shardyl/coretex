@@ -3132,6 +3132,25 @@ SKILL_TOOLS = [
     {"name": "run_report",
      "description": "Generate the SEO & traffic report for a business right now; it lands in the Inbox.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}, "required": ["company"]}},
+    {"name": "rebrand_deck",
+     "description": "Take a deck or proposal PDF that already exists in the document library and re-lay "
+                    "it into OUR house format, keeping the content word for word. Use when Rashad says "
+                    "rebrand this, put this in our format, or make this look like ours. It transcribes, "
+                    "it does not rewrite: the same headings, numbers and wording come out, only the "
+                    "layout and branding change, because the client may already hold the original. "
+                    "Photographs are lifted out of the source PDF and carried across, and no new "
+                    "imagery is generated. It lands in the Inbox for review and contacts nobody. To "
+                    "write a NEW proposal use create_proposal instead.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug"},
+        "document": {"type": "string", "description": "the library filename to rebrand"},
+        "document_id": {"type": "integer", "description": "its library id, if you know it"},
+        "customer": {"type": "string", "description": "the client it is for, used to name and file it"},
+        "notes": {"type": "string", "description": "anything Rashad wants changed in the process, "
+                                                   "e.g. a correction to carry in. Leave empty to "
+                                                   "reproduce the source exactly."},
+        "deal_id": {"type": "integer", "description": "the opportunity to attach the card to"}},
+      "required": ["company"]}},
     {"name": "create_capabilities_deck",
      "description": "Build a house-format CAPABILITY deck: a leave-behind PDF explaining what we can do "
                     "and proving it with named case studies from our own media library. Use when Rashad "
@@ -3429,6 +3448,19 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                 + (f"Filed to the {r['filed_to']} client folder and the document library. "
                    if r.get("filed_to") else "Filed to the document library. ")
                 + f"It is on card #{r['task_id']} for review; nothing has been sent to the client.")
+    if name == "rebrand_deck":
+        try:
+            r = engine.deliver_rebrand(inp["company"], document=inp.get("document", ""),
+                                       document_id=inp.get("document_id"),
+                                       customer=inp.get("customer", ""), notes=inp.get("notes", ""),
+                                       deal_id=inp.get("deal_id"))
+        except ValueError as _e:
+            return str(_e)
+        return (f"Rebranded into the house format: {r['pages']} pages, '{r['filename']}'. "
+                f"{r['images_placed']} of {r['images_found']} photographs carried across from the "
+                "source. The content was transcribed, not rewritten, so check it against the original. "
+                + (f"Filed to the {r['filed_to']} client folder and " if r.get("filed_to") else "Filed ")
+                + f"on card #{r['task_id']} for review; nothing has been sent.")
     if name == "create_capabilities_deck":
         try:
             r = engine.deliver_capabilities(inp["company"], audience=inp.get("audience", ""),
@@ -3909,7 +3941,7 @@ _CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "cr
                 # Chiefs can also DRAFT and look people up — anyone Rashad talks to should be able to act on a
                 # request, not just strategise. (Per-company RULE writes stay Manager-only to avoid scope bleed.)
                 "create_task", "draft_email", "draft", "crm_lookup", "crm_pipeline", "correct_task",
-                "create_proposal", "create_capabilities_deck", "rate_card", "set_rate", "media_library", "rate_film",
+                "create_proposal", "create_capabilities_deck", "rebrand_deck", "rate_card", "set_rate", "media_library", "rate_film",
                 "research_client", "export_templates",
                 "approve_task", "skip_task", "run_report", "schedule_report", "create_quotation",
                 "list_scheduled", "list_calendar",

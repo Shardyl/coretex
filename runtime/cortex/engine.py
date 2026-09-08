@@ -18,6 +18,7 @@ import html as _html
 import json
 import os
 import re
+import tempfile
 import secrets
 import threading
 import time
@@ -3918,6 +3919,76 @@ def deliver_ppc_report(company: str = "sensa", days: int = 1) -> dict:
 
 QUOTES_DIR = "/opt/coretex/quotations"     # generated quotation PDFs (persisted, served to the Inbox)
 QUOTE_SKILL_KEY = "sales-quotation"        # quotes land under the company's Sales & Inquiries lane
+
+
+def deliver_rebrand(company: str, *, document: str = "", document_id: int | None = None,
+                    customer: str = "", notes: str = "", deal_id: int | None = None) -> dict:
+    """Re-lay an existing deck from the document library into the house format, keeping its content
+    word for word, file the result and raise a review card. Photographs are lifted from the source,
+    so the rebrand carries the same imagery. Like every deck this is INTERNAL and contacts nobody."""
+    os.makedirs(QUOTES_DIR, exist_ok=True)
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise ValueError(f"unknown company {company}")
+    doc = documents.get(int(document_id), company_id=co["id"]) if document_id else None
+    if not doc and document:
+        hits = documents.find(co["id"], document)
+        if not hits:
+            raise ValueError(f"no document in the library matches '{document}'. Attach the PDF first, "
+                             "or say which library file to rebrand.")
+        doc = hits[0]
+    if not doc:
+        raise ValueError("name the document to rebrand, or give its library id.")
+    if "pdf" not in (doc.get("mime") or "").lower():
+        raise ValueError(f"'{doc['filename']}' is not a PDF, so there is nothing to re-lay.")
+    src = os.path.join(tempfile.mkdtemp(prefix="src-"), "source.pdf")
+    with open(src, "wb") as f:
+        f.write(documents.read_bytes(doc))
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    out = deck.rebrand(company, src, notes=notes, out_dir=QUOTES_DIR,
+                       filename=f"rebrand-{company}-{stamp}.pdf")
+    safe = re.sub(r"[^A-Za-z0-9 -]", "", customer or co["name"])[:60].strip() or "Deck"
+    name = f"{safe} - Proposal rebranded - {stamp}.pdf"
+    data = open(out["path"], "rb").read()
+    saved = documents.save(co["id"], company, name, "application/pdf", data, uploaded_by="cortex")
+    filed = None
+    try:                                  # same client-folder rule as quotations and proposals
+        from . import drive as _drive
+        prof = profile.get(co["id"]) or {}
+        parent = (prof.get("clients_drive_folder") or "").strip()
+        client = (customer or "").split(",")[0].strip()
+        if parent and client:
+            tok = _drive.access_token()
+            fo = _drive.ensure_client_folder(client, parent, token=tok)
+            if fo.get("id"):
+                _drive.upload_to_folder(fo["id"], name, "application/pdf", data, token=tok)
+                filed = fo["name"]
+    except Exception:  # noqa: BLE001 — the card must survive a Drive hiccup
+        pass
+    skill = store.get_skill_by_key(co["id"], "sales-quotation")
+    summary = (f"'{doc['filename']}' re-laid into the house format.\n\n"
+               f"{out['pages']} pages in, {out['pages']} pages out. "
+               f"{out['images_placed']} of {out['images_found']} photographs carried across from the "
+               "source; no new imagery was generated.\n\n"
+               "The content was TRANSCRIBED, not rewritten: check it against the original before it "
+               "goes anywhere, because a rebrand of a deck the client already holds must not read "
+               "differently.\n\n"
+               + (f"Filed to the {filed} client folder on Drive. " if filed else "")
+               + "Nothing has been sent.")
+    req = {"brief": f"Rebranded deck for {customer or co['name']}: {out['pages']} pages.",
+           "title": name, "file": out["path"], "kind": "proposal",
+           "attach_docs": [{"id": saved["id"], "filename": saved["filename"], "mime": saved["mime"],
+                            "size": saved["size"]}]}
+    if deal_id:
+        req["deal_id"] = int(deal_id)
+    t = db.execute("insert into tasks (company_id, skill_id, kind, request, draft, status, title) "
+                   "values (%s,%s,'content',%s,%s,'awaiting_approval',%s) returning *",
+                   (co["id"], skill["id"], Json(req), summary, name))
+    if t and deal_id:
+        db.execute("update tasks set deal_id=%s where id=%s", (int(deal_id), t["id"]))
+    return {"path": out["path"], "pages": out["pages"], "filename": name, "filed_to": filed,
+            "images_found": out["images_found"], "images_placed": out["images_placed"],
+            "doc_id": saved["id"], "task_id": (t or {}).get("id")}
 
 
 def deliver_capabilities(company: str, *, audience: str = "", focus: str = "",

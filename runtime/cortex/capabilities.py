@@ -74,6 +74,12 @@ CAPABILITIES: list[tuple[str, str]] = [
      "resolves them from the library, DROPPING any we do not hold rather than substituting. Every "
      "statistic, award and project detail must be passed in as facts - the writer may use nothing "
      "else. It lands in the Inbox and contacts nobody."),
+    ("Rebranding an existing deck — LIVE",
+     "rebrand_deck takes a deck or proposal PDF already in the document library and re-lays it into the "
+     "house format, keeping the content WORD FOR WORD. It transcribes, it never rewrites: the client "
+     "may already hold the original, so a changed sentence is a discrepancy they can see. Photographs "
+     "are lifted out of the source and carried across; no new imagery is generated. Use it when Rashad "
+     "says rebrand this or put this in our format; create_proposal is for writing a NEW one."),
     ("Rate card — pricing reference",
      "rate_card reads a company's OWNER-APPROVED per-unit prices, both tiers and every gap still marked "
      "OWNER TO CONFIRM; it is also injected into every quotation-adjacent draft. Prices come ONLY from it "
