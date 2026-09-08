@@ -151,6 +151,41 @@ Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` ad
 rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
 `sales-first-response`.
 
+## The relationship decides the sender (8 Sep 2026)
+
+Thread-stickiness answers "who last emailed this CONTACT". That is the wrong question when one person
+works on two deals. Ayresh had emailed Shehryar Rahman about the ITC invoice, so the Dubai Police
+variation chase was drafted as HER, and it read "Rashad is meeting Major Ibrahim at Dubai Police
+headquarters on Thursday" off the deal note and wrote **"I am meeting Major Ibrahim"**.
+
+**`_deal_sender(company_id, deal_id)` runs FIRST**, before anything looks at a mailbox. The deal's
+explicit `crm_projects.owner` wins when it is one of the company's send identities; otherwise it is
+derived deterministically from the deal's own SENT cards, the address that has actually sent on this
+deal most often, most recent breaking a tie. No history means no opinion: it returns "" and the
+thread-sticky and profile fallbacks stay in charge. Pinning the sender here also narrows adoption to
+that person's mailbox, so the thread id comes from the mailbox that will actually send it.
+
+Measured on the live deals: 73 -> rashad, 102 -> rashad, 107 -> gino, 114 -> rashad, 113 and 115 have
+no sent history yet.
+
+**WHO YOU ARE NOT.** `worker._colleagues_named` finds, by string test against the company profile's
+signature roster, which OTHER people are actually named in this task's briefing material (brief,
+system_note, deal_timeline, contact_notes, owner_feedback, meeting_notes) and the identity block names
+them back: these are not you, what the context attributes to them stays theirs. The Manager gets the
+same list as a system fact.
+
+**BE HONEST ABOUT WHICH HALF IS WHICH.** The detection is deterministic and testable. The obedience is
+not. "I am meeting Major Ibrahim" contains no name, so no output check can catch it the way
+`_identity_mismatch` catches "Gino has kept me across" - that one is a string test against the roster
+and either fires or does not. This is odds, and the guarantee remains what it always was: the sender
+is decided once in code and persisted before drafting, and nothing sends without the owner approving.
+
+**A TRAP, learned the hard way:** `_request_for_draft` calls `_draft_context_for_reply`, which re-runs
+adoption and PERSISTS what it picks. Setting `request.thread` or `from_email` by hand and then
+redrafting is silently undone. Pin the SENDER and let adoption choose within that mailbox, then read
+the result back OUT OF THE DATABASE. Printing local variables verifies your intent, not the outcome
+(card 502, twice).
+
 ## One contact, two projects: the deal picks the thread (7 Sep 2026)
 
 Shehryar Rahman at EY runs BOTH the Dubai Police road-safety variation (deal 73, the 250k) and the ITC
