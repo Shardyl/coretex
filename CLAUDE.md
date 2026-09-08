@@ -662,6 +662,24 @@ updated together. Quotations auto-fill the QUOTATION TO contact (name/email/phon
 explicit `contact_email` wins, an unambiguous single-contact account fills in, ambiguity stays blank
 (quotation._contact_for; deliver_quotation passes contact_email). TERMS MODULES: reusable clause modules live as `terms_module:<name>` settings (human-readable docx beside the T&Cs in the Drive terms folder + library). First module: `multi-version` (v1.0, 2026-08-30) - the approval-gate + enhanced-revision-service + masters-first versions structure for multi-cut/multi-language jobs, born on SEN-2026-0004 (Property Finder); the sales-quotation rule tells the drafter to apply it, gen path: pass a per-quote `terms` dict to generate_xlsx with the module clauses swapped into Revisions & Delivery.
 
+## Shoot cancellation: the standard is a FLOOR (8 Sep 2026)
+
+The house standard (Master Terms v1.2 cl.5, Short Form v1.2, `ai-production` cl.19, `sales-quotation`
+rule 6) is **50% inside 72 hours of call time, 100% inside 24**. It was missing from
+`shoot-production` - the one preset that is entirely a shoot - and had already gone out on the
+BioScience quotation.
+
+DO NOT paste it in. That preset carries its own day-based ladder which is STRONGER from 7 days out
+(full studio and crew fee), so adding the 50% step underneath reads as a reduction, and the softer,
+more specific clause is the one a client argues. Clauses 6 and 7 now absorb the 72h and 24h rungs and
+stay continuous: >21 days rescheduled once free; inside 21 days committed third-party costs at cost;
+inside 7 days the full studio and crew fee; inside 72 hours that fee and not carried to the new date;
+inside 24 hours or a no-show, that fee plus post already carried out. Rule 6 says the standard is a
+floor a preset's own ladder can satisfy.
+
+WHEN A PRESET'S TERMS CHANGE: regenerate any un-sent quotation built on it (SEN-2026-0009 was
+superseded by SEN-2026-0010) and run `export_templates` so the Drive terms folder matches.
+
 ## Pre-meeting briefs (`meetingprep.py`, 2026-08-31)
 
 ONLY FIRST MEETINGS WITH NEW COMPANIES (owner, 1 Sep 2026). A brief is an INTRODUCTION aid; before a
