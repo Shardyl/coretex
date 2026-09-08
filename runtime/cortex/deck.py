@@ -391,10 +391,12 @@ class _Deck:
             f'<div style="width:452px">{irows}{total}'
             + (f'<p class="note" style="margin-top:14px">{_esc(iv.get("note"))}</p>'
                if iv.get("note") else "")
-            + '</div></div>'
-            + (f'<p class="note" style="margin-top:16px;max-width:1080px">{_esc(footnote)}</p>'
-               if footnote else "")
-            + f'</div>{self._foot(section or kicker)}</div>')
+            + '</div></div></div>'
+            # ABSOLUTE, not in flow: this page's left column grows with the deliverable count, and a
+            # footnote in flow pushed it past 720px and spilled a BLANK page out of weasyprint.
+            + (f'<p class="note" style="position:absolute;bottom:52px;left:72px;right:72px">'
+               f'{_esc(footnote)}</p>' if footnote else "")
+            + f'{self._foot(section or kicker)}</div>')
 
     def qa(self, kicker: str, heading: str, items: list, note: str = "", section: str = ""):
         """Their questions, numbered, answered in their order. Nothing they asked is left off the page."""
