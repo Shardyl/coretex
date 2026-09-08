@@ -776,7 +776,7 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
         ws[cc].value = lab; fill(ws[cc], _TEAL); ws[cc].font = F(s=10, b=True, c=_WHT)
         ws[cc].alignment = Alignment(indent=1)
     r += 1
-    pay = list(payment_lines) or list(m.get("payment") or []) or [
+    pay = list(payment_lines or []) or list(m.get("payment") or []) or [
         "70% down payment to commence the project.",
         "30% balance due before final delivery, on approval.",
         "Revisions as per the Revisions & Delivery terms on this quotation."]
