@@ -622,6 +622,20 @@ build the capability when it is missing).
   ID and `films_by_ids` resolves them from the library, DROPPING any we do not hold rather than
   substituting. Every statistic, award and project detail must arrive in `facts` - the writer may use
   nothing else, and the case-study heading never repeats the client name (it prints beside it).
+- **`rebrand_deck`** (2026-09-08) - re-lays an existing deck PDF from the document library into the
+  house format, keeping the content WORD FOR WORD. `deck.render_spec()` has NO model in it: it lays out
+  an explicit page list, because when the words are agreed (or already with the client) a model
+  rewriting them is a defect. `deck.rebrand()` extracts the source text and its photographs, runs ONE
+  model pass to map pages onto the house vocabulary under a transcribe-do-not-rewrite rule, and renders.
+  Photographs are referenced by a code-issued "IMAGE n" label and resolved by code, so a page can never
+  cite an image that is not there. Page types added for it: `covermeta` (cover with fact rows), `strip`
+  (up to five parallel columns, since `cards` caps at three), `split` (argument beside a panel), `photo`
+  (room beside its full-bleed photograph), `schedule` (counted deliverables beside the money), `qa`
+  (numbered questions), `closing`. VERIFY A REBRAND BY DIFFING THE TEXT, not by reading it: strip
+  punctuation and undo letter-spacing first, or the h3 kickers show as false losses.
+- **`create_quotation` takes explicit `sections`** (2026-09-08) - a price per line, not only a `total`
+  split by preset weights. A quotation that accompanies a proposal must carry the proposal's own
+  figures; `deliver_quotation` always supported it and only the Talk tool was missing it.
 - **`rate_card` / `set_rate`** — read the card (both tiers, and the OWNER TO CONFIRM gaps, which matter
   as much as the rates); record a rate Rashad STATES. Never invent one.
 - **`media_library` / `rate_film`** — search the canonical portfolio; record his 1-10 rating. An UNRATED
