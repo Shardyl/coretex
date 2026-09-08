@@ -71,7 +71,101 @@ _AI_TERMS = {
     ],
 }
 
+# Live production (a real shoot: crew, studio, talent, post). The AI terms do not fit a shoot day:
+# the money is committed to a studio and a crew on a fixed date, so payment runs 50/25/25 and the
+# date itself has to be governed - holding it, moving it, cancelling it, and who is responsible for
+# the people turning up. Built 8 Sep 2026 for the BioScience KOL day.
+_SHOOT_TERMS = {
+    "intro": "Sensa Productions is the trading brand of Sky Vision Aerial Photography Services, Dubai, UAE. "
+             "These terms apply to the live production services set out in this quotation (the Customer "
+             "being the client named above).",
+    "groups": [
+        {"heading": "Payment", "lines": [
+            "1.  Confirmation: 50% is due on confirmation. The shoot date, studio and crew are held only once it is received.",
+            "2.  Shoot day: 25% is due on the shoot date.",
+            "3.  Delivery: the remaining 25% is due on delivery of the completed files.",
+            "4.  Payments & VAT: All payments are made to Sky Vision Aerial Photography Services at the account on this quotation. Prices are in AED and exclusive of 5% VAT unless stated.",
+        ]},
+        {"heading": "The date: holding it, moving it, cancelling it", "lines": [
+            "5.  Holding the date: crew, studio and equipment are block-booked for the date stated on this quotation. Until the confirmation payment is received the date is not held and may be released to another production.",
+            "6.  Postponement: a date moved with more than 21 days' notice is rescheduled once at no charge, subject to studio and crew availability. Inside 21 days, third-party costs already committed (studio, freelance crew, equipment hire, permits) are charged at cost. Inside 7 days, the full studio and crew fee is due.",
+            "7.  Cancellation: on cancellation the Customer is liable for all costs incurred and committed to that point. The confirmation payment is non-refundable once pre-production has begun.",
+            "8.  Overtime: this quotation covers the run of day stated in the proposal. Time beyond it, at the Customer's request, is charged per crew hour at the published rate card and is subject to studio availability.",
+        ]},
+        {"heading": "The shoot day", "lines": [
+            "9.  Participant attendance: the Customer is responsible for its participants attending at their scheduled times. The day's throughput assumes the agreed manifest and wave schedule; participants who do not attend, or who arrive outside their window, cannot be guaranteed capture and are not re-shot at Sensa's cost.",
+            "10. Manifest & briefs: the participant manifest, question sets and any technique briefs are supplied by the Customer to the pre-production deadline agreed in writing.",
+            "11. Consent: the Customer obtains written consent from every participant for filming, photography and the intended use of the material. Sensa films on the basis that consent is in place.",
+            "12. On-day approvals: where a Customer representative is present to sign off a set, decisions taken on the day are final for that set.",
+            "13. Venue & permissions: commercial filming permissions for the venue stated are arranged by Sensa. Access, parking and building rules are as advised by the venue.",
+        ]},
+        {"heading": "Deliverables, revisions & delivery", "lines": [
+            "14. Scope: the deliverable counts on this quotation are the scope. Additional pieces, formats, languages or versions are quoted separately at the published rate card.",
+            "15. Revisions: two revision rounds per piece are included, requested in writing. Further rounds are quoted separately.",
+            "16. Delivery: to the cadence stated in the proposal. Delivery dates assume the Customer's approvals are returned within the agreed windows.",
+            "17. Final files: on approval Sensa delivers the completed files. Where a balance is outstanding, files are released on receipt of final payment.",
+        ]},
+        {"heading": "Material, ownership & data", "lines": [
+            "18. Ownership: until the balance is paid in full, all deliverables and related rights remain the property of Sensa Productions, which may withhold delivery and recover any outstanding fees. Rights pass to the Customer on full payment.",
+            "19. Usage: the Customer receives the right to use the delivered material for the purposes set out in the brief. Rushes, project and source files are not included and are quoted separately.",
+            "20. Backup & retention: footage is backed up on the shoot day to two independent verified drive sets. Sensa retains project material for three months after final delivery unless a media retainer is agreed.",
+            "21. Data protection: participant details supplied by the Customer are used only to deliver this production and are handled confidentially.",
+        ]},
+        {"heading": "General", "lines": [
+            "22. Insurance: public liability insurance and commercial filming permissions for the stated venue are included in this quotation.",
+            "23. Confidentiality: each party keeps the other's confidential information private.",
+            "24. Liability: Sensa's total liability is limited to the fees paid under this quotation; Sensa is not liable for indirect or consequential loss.",
+            "25. Force majeure: neither party is liable for delay or failure caused by events beyond its reasonable control.",
+            "26. Governing law: these terms are governed by the laws of the Emirate of Dubai and the United Arab Emirates.",
+        ]},
+    ],
+}
+
+_SHOOT_PRESET = {
+    "title": "PRODUCTION QUOTATION",
+    "agency_fee": False,
+    "note": "Prices are added per the agreed scope; subtotal, VAT and total calculate automatically.",
+    "deliverables": [
+        "Filmed content per the agreed formats and counts",
+        "Colour-graded masters, professionally mixed audio",
+        "Aspect versions: 16:9 landscape, 9:16 vertical, 1:1 square",
+        "Two revision rounds per piece",
+        "Delivered as a download link, packaged per format",
+    ],
+    "sections": [
+        {"header": "A ·  STUDIO & FACILITIES", "items": [
+            {"desc": "Studio / location hire for the shoot day", "weight": 3},
+            {"desc": "Set dressing and room preparation", "weight": 1},
+            {"desc": "Commercial filming permissions", "weight": 0.5},
+        ]},
+        {"header": "B ·  CREW & PRODUCTION MANAGEMENT", "items": [
+            {"desc": "Production management and pre-production", "weight": 2},
+            {"desc": "Named production lead, run of day", "weight": 1.5},
+            {"desc": "Camera, lighting and sound crew", "weight": 4},
+            {"desc": "Hair, make-up and talent handling", "weight": 1},
+            {"desc": "DIT, on-set ingest and verified backup", "weight": 1},
+        ]},
+        {"header": "C ·  EQUIPMENT & STAGING", "items": [
+            {"desc": "Cameras, lenses and support", "weight": 2},
+            {"desc": "Lighting and grip", "weight": 1.5},
+            {"desc": "Sound, radio mics and monitoring", "weight": 1},
+            {"desc": "Consumables, transport and logistics", "weight": 0.5},
+        ]},
+        {"header": "D ·  POST-PRODUCTION", "items": [
+            {"desc": "Edit and assembly", "weight": 5},
+            {"desc": "Colour grade and audio mix", "weight": 2},
+            {"desc": "Motion graphics and titles", "weight": 2},
+            {"desc": "Voice over", "weight": 1},
+            {"desc": "Retouching and stills finishing", "weight": 1},
+            {"desc": "Versioning, formats and delivery", "weight": 1},
+        ]},
+    ],
+    "terms": _SHOOT_TERMS,
+}
+
+
 DEFAULT_PRESETS = {
+    "shoot-production": _SHOOT_PRESET,
     "ai-production": {
         "title": "AI VIDEO PRODUCTION QUOTATION",
         "agency_fee": False,
