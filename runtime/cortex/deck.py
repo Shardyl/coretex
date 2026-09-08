@@ -231,11 +231,12 @@ class _Deck:
         self.co, self.customer, self.accent, self.logo = company, customer, accent, logo
         self.label, self.pages = label, []
 
-    def _foot(self, section: str) -> str:
+    def _foot(self, section: str, right: int = 72) -> str:
+        """`right` narrows the footer so a full-bleed photograph cannot swallow the page number."""
         n = len(self.pages) + 1
         lg = f'<img class="logo" src="{self.logo}">' if self.logo else \
              f'<span style="letter-spacing:1.5px">{_esc(self.co.get("name"))}</span>'
-        return (f'<div class="foot">{lg}<span>{_esc(section)}</span>'
+        return (f'<div class="foot" style="right:{right}px">{lg}<span>{_esc(section)}</span>'
                 f'<span>{_esc(self.label)} &middot; {n:02d}</span></div>')
 
     def cover(self, title: str, standfirst: str, image: str | None,
@@ -360,7 +361,7 @@ class _Deck:
             + f'<p>{_esc(body)}</p><div style="margin-top:26px">{st}</div></div>'
             + (f'<div class="note" style="position:absolute;bottom:52px;left:72px;width:560px">'
                f'{_esc(note)}</div>' if note else "")
-            + f'{self._foot(section or kicker)}</div>')
+            + f'{self._foot(section or kicker, right=606)}</div>')
 
     def schedule(self, kicker: str, heading: str, groups: list, invest: dict, footnote: str = "",
                  section: str = ""):
