@@ -74,6 +74,12 @@ CAPABILITIES: list[tuple[str, str]] = [
      "resolves them from the library, DROPPING any we do not hold rather than substituting. Every "
      "statistic, award and project detail must be passed in as facts - the writer may use nothing "
      "else. It lands in the Inbox and contacts nobody."),
+    ("Quotations that match their proposal",
+     "create_quotation takes `sections` with an explicit price per line, not only a `total` to split. "
+     "When a proposal already STATES the figures, quote them exactly that way: a quotation that "
+     "contradicts the deck the client is reading is the failure to avoid. `total` is for when Rashad "
+     "gives one number and Cortex splits it by the preset's weights. Presets carry their own payment "
+     "schedule (AI production 70/30; a shoot commits a studio and crew to a date, so 50/25/25)."),
     ("Rebranding an existing deck — LIVE",
      "rebrand_deck takes a deck or proposal PDF already in the document library and re-lays it into the "
      "house format, keeping the content WORD FOR WORD. It transcribes, it never rewrites: the client "

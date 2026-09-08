@@ -3276,7 +3276,23 @@ SKILL_TOOLS = [
         "customer": {"type": "string", "description": "the client name for the quote"},
         "total": {"type": "number", "description": "the overall figure Rashad states; split into fair line rates. Omit if he gave none."},
         "total_inclusive": {"type": "boolean", "description": "true if `total` already includes VAT"},
-        "fmt": {"type": "string", "enum": ["both", "xlsx", "pdf"], "description": "which files to deliver; default 'both' (spreadsheet + PDF)"}},
+        "fmt": {"type": "string", "enum": ["both", "xlsx", "pdf"], "description": "which files to deliver; default 'both' (spreadsheet + PDF)"},
+        "sections": {"type": "array", "description": "EXPLICIT priced lines, when the figures are already "
+                     "fixed - typically because a proposal states them and the quotation must not "
+                     "contradict it. Each item's `unit` is that line's price (times `qty`); leave `unit` "
+                     "out to print the line with a blank price. Use this instead of `total` whenever "
+                     "Rashad has stated per-section amounts rather than one number.",
+         "items": {"type": "object", "properties": {
+            "header": {"type": "string", "description": "the section heading"},
+            "items": {"type": "array", "items": {"type": "object", "properties": {
+                "desc": {"type": "string"}, "unit": {"type": "number"}, "qty": {"type": "number"}},
+               "required": ["desc"]}}},
+           "required": ["header", "items"]}},
+        "title": {"type": "string", "description": "override the preset's document title"},
+        "note": {"type": "string", "description": "the line printed under the totals"},
+        "contact_email": {"type": "string", "description": "who the quotation is addressed to; "
+                          "otherwise filled from the CRM"},
+        "deal_id": {"type": "integer", "description": "the opportunity this quotation belongs to"}},
         "required": ["company"]}},
     {"name": "list_scheduled",
      "description": "List the scheduled recurring jobs (e.g. SEO reports).",
@@ -3586,7 +3602,11 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         t = engine.deliver_quotation(slug, preset=inp.get("preset") or "ai-production",
                                      customer=inp.get("customer", ""), total=inp.get("total"),
                                      total_inclusive=bool(inp.get("total_inclusive")),
+                                     sections=inp.get("sections"), title=inp.get("title"),
+                                     note=inp.get("note"), contact_email=inp.get("contact_email"),
                                      fmt=inp.get("fmt") or "both")
+        if inp.get("deal_id") and t.get("id"):
+            db.execute("update tasks set deal_id=%s where id=%s", (int(inp["deal_id"]), t["id"]))
         req = t.get("request") or {}
         return (f"created quotation {req.get('number')} — it's in your Inbox now to download (task #{t['id']}). "
                 f"{req.get('summary', '')}")
