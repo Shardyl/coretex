@@ -91,6 +91,17 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
                          "person's first person: their own actions are 'I'/'we'. Their own name used in "
                          "the third person about their own actions is an ERROR and must be flagged. The "
                          "signature is appended by the system, so its absence is never an issue.")
+            # The mirror error, which carries no name and so cannot be caught by any string test: the
+            # draft writing a COLLEAGUE'S action in the first person. Writing as Ayresh, a draft turned
+            # "Rashad is meeting Major Ibrahim at Dubai Police on Thursday" into "I am meeting Major
+            # Ibrahim" (8 Sep 2026). The colleagues actually named in this task's context are listed
+            # here, deterministically, so the judgement has something concrete to check against.
+            _named = worker._colleagues_named(company, request, _frm)
+            if _named:
+                facts.append("These colleagues are named in the briefing material and are NOT the sender: "
+                             + "; ".join(_named) + ". A first-person claim about a meeting, trip, "
+                             "commitment or action that the brief attributes to one of THEM is an ERROR "
+                             "and must be flagged, even though their name does not appear in the sentence.")
     except Exception:  # noqa: BLE001
         pass
     facts_block = "SYSTEM FACTS (authoritative — judge with these):\n" + "\n".join(f"- {f}" for f in facts)

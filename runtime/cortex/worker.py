@@ -166,12 +166,53 @@ def _identity_block(company: dict, request: dict, author: str | None):
         bits += " at " + company["name"]
     if addr and name:
         bits += " (" + addr + ")"
-    return (bits + ". This message goes out from that mailbox, so write in the FIRST PERSON as that "
-            "person: their own past and future actions are 'I' and 'we', NEVER their own name in the "
-            "third person. Colleagues are referred to by first name where it helps the reader. Context "
-            "you are given (deal timelines, logs, notes) describes people in the third person for the "
-            "record: translate anything about YOUR OWN actions into the first person before writing it. "
-            "Do not add a sign-off or signature; that is appended automatically."), who
+    block = (bits + ". This message goes out from that mailbox, so write in the FIRST PERSON as that "
+             "person: their own past and future actions are 'I' and 'we', NEVER their own name in the "
+             "third person. Colleagues are referred to by first name where it helps the reader. Context "
+             "you are given (deal timelines, logs, notes) describes people in the third person for the "
+             "record: translate anything about YOUR OWN actions into the first person before writing it. "
+             "Do not add a sign-off or signature; that is appended automatically.")
+    named = _colleagues_named(company, request, addr)
+    if named:
+        # WHO YOU ARE NOT. The block above told the drafter to turn third-person context into the first
+        # person, and it obeyed too well: writing as Ayresh, it read "Rashad is meeting Major Ibrahim at
+        # Dubai Police headquarters on Thursday" off the deal note and wrote "I am meeting Major Ibrahim"
+        # (8 Sep 2026). No name appears in that sentence, so no output check can catch it. The colleagues
+        # actually present in THIS context are found by name, deterministically, and named back here.
+        block += ("\n\nTHESE PEOPLE ARE NAMED IN YOUR CONTEXT AND THEY ARE NOT YOU: " + "; ".join(named)
+                  + ". Whatever the material below attributes to one of them stays theirs and stays in "
+                  "their name. Never write another person's meeting, travel, commitment, decision or "
+                  "action as your own. Only what YOU did or will do becomes 'I'.")
+    return block, who
+
+
+_CONTEXT_FIELDS = ("brief", "system_note", "deal_timeline", "contact_notes", "owner_feedback",
+                   "meeting_notes")
+
+
+def _colleagues_named(company: dict, request: dict, me: str) -> list:
+    """The company's OTHER people who are actually named in this task's context. Deterministic: the
+    roster is the company profile's signatures, and the test is their first name appearing in the
+    briefing material. Empty when the context names nobody but the sender."""
+    if not isinstance(request, dict):
+        return []
+    hay = " ".join(str(request.get(k) or "") for k in _CONTEXT_FIELDS)
+    if not hay.strip():
+        return []
+    try:
+        sigs = (profile.get(company.get("id")) or {}).get("signatures") or {}
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for addr, sig in (sigs or {}).items():
+        name = ((sig or {}).get("name") or "").strip()
+        if not name or str(addr).strip().lower() == (me or "").strip().lower():
+            continue
+        first = name.split()[0]
+        if re.search(r"\b" + re.escape(first) + r"\b", hay, re.I):
+            role = ((sig or {}).get("role") or "").strip()
+            out.append(f"{name}" + (f", {role}" if role and role.lower() != "none" else ""))
+    return out
 
 
 def draft(skill: dict, company: dict, request: dict,

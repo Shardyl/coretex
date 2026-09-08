@@ -2838,6 +2838,39 @@ def classify_email(company: dict, email: dict) -> dict:
 _DELIVERY_STAGES = {"Booked", "Production", "Final Payment", "Recurring"}
 
 
+def _deal_sender(company_id, deal_id) -> str:
+    """WHO SENDS FOR THIS DEAL: the person who owns the relationship, not whoever last happened to
+    email this contact.
+
+    The deal's explicit `owner` wins when it is one of the company's send identities. Otherwise it is
+    DERIVED, deterministically, from the deal's own SENT cards: the address that has actually sent on
+    this deal most often, with the most recent breaking a tie. Returns "" when the deal has no history
+    to learn from, leaving the existing thread-sticky and profile fallbacks in charge."""
+    if not deal_id or not company_id:
+        return ""
+    try:
+        senders = {v["email"].lower() for v in _company_senders(company_id).values()}
+        if not senders:
+            return ""
+        row = db.one("select owner from crm_projects where id=%s", (int(deal_id),))
+        own = str((row or {}).get("owner") or "").strip().lower()
+        if own in senders:
+            return own
+        counts: dict[str, list] = {}
+        for r in db.query("select request->>'from_email' f from tasks where deal_id=%s and status='done' "
+                          "and coalesce(request->>'from_email','') <> '' order by id desc limit 25",
+                          (int(deal_id),)):
+            e = (r.get("f") or "").strip().lower()
+            if e in senders:
+                counts.setdefault(e, [0, len(counts)])   # index 0 = the most recent sender seen
+                counts[e][0] += 1
+        if not counts:
+            return ""
+        return max(counts.items(), key=lambda kv: (kv[1][0], -kv[1][1]))[0]
+    except Exception:  # noqa: BLE001 — a sender hint must never block a draft
+        return ""
+
+
 def _rt_for_sender(co: dict, email: str) -> str | None:
     """The mailbox token that can genuinely send AS this address: a team member's own mailbox, else the
     company send mailbox when the address is its send-as identity. None = let the send path resolve."""
@@ -3076,8 +3109,20 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
     if task.get("kind") not in ("email_reply", "email_draft") or not email:
         return req
     manifest = []
-    _adopt_existing_thread(task, req, manifest)
     co = store.get_company(task.get("company_id")) or {}
+    # THE RELATIONSHIP DECIDES THE SENDER, BEFORE ANYTHING ELSE LOOKS AT A MAILBOX. Thread-stickiness
+    # picks whoever last emailed this CONTACT, which is the wrong question when one person works on two
+    # deals: Ayresh had emailed Shehryar about the ITC invoice, so the Dubai Police variation chase was
+    # drafted as her, and it wrote Rashad's Thursday meeting at Dubai Police as her own (8 Sep 2026).
+    # Pinning it here also narrows adoption to that person's mailbox, so the thread comes from the
+    # mailbox that will actually send.
+    if not (req.get("from_email") or "").strip():
+        _ds = _deal_sender(task.get("company_id"), req.get("deal_id") or task.get("deal_id"))
+        if _ds:
+            req["from_email"] = _ds
+            req["mailbox_rt"] = _rt_for_sender(co, _ds)
+            manifest.append("deal_owner_sender")
+    _adopt_existing_thread(task, req, manifest)
     # ONE SENDER, DECIDED ONCE, BEFORE THE DRAFT. The envelope used to fall back to the company's
     # reply_from at SEND time, long after the drafter had been told nothing about who it was writing
     # as - so the model picked a person for itself. Card 451 opened "Rashad here, founder of Sensa" on
