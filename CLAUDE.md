@@ -635,6 +635,11 @@ build the capability when it is missing).
   resolved by `film_any` across every company because FilmSpoke's Farmer John led the Sensa deck). The
   four Farmer John channel films were added to `media_assets` under FilmSpoke (company 5, unrated) so
   the tool could resolve them. PDF links: a PDF cannot force a new tab; the viewer decides.
+  Later the same day: `omit` (drop opening/platform/modules/case_studies/close; section numbers are
+  restamped by `_renum` in page order, never trusted from the writer), the grid heading goes big when it
+  opens the deck, and every build saves its spec beside the PDF (`.spec.json`) so `reuse_copy=true`
+  re-lays the SAME words for a layout change instead of rewriting them. Final Sensa deck: cover, Farmer
+  John, What we control, seven module pages, four case studies, close (15 pages, card 560).
 - **`rebrand_deck`** (2026-09-08) - re-lays an existing deck PDF from the document library into the
   house format, keeping the content WORD FOR WORD. `deck.render_spec()` has NO model in it: it lays out
   an explicit page list, because when the words are agreed (or already with the client) a model
