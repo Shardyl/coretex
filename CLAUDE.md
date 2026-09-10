@@ -622,6 +622,12 @@ build the capability when it is missing).
   ID and `films_by_ids` resolves them from the library, DROPPING any we do not hold rather than
   substituting. Every statistic, award and project detail must arrive in `facts` - the writer may use
   nothing else, and the case-study heading never repeats the client name (it prints beside it).
+  **Module pages (2026-09-10):** optional `modules` = [{key, title, image, focus, facts}] adds one
+  full `photo` page per area of capability after the grid, written ONLY from that module's own
+  published text (`facts`, e.g. its page on the company site) beside its own photograph (`image` =
+  URL or path, fetched by code; `focus` left/center/right keeps an off-centre subject in the portrait
+  crop). First use: the Sensa AI capabilities deck, seven modules from sensa.digital/ai-video-production.
+  Owner steer on that deck: talk about what we can DO, not the software or the way we do it.
 - **`rebrand_deck`** (2026-09-08) - re-lays an existing deck PDF from the document library into the
   house format, keeping the content WORD FOR WORD. `deck.render_spec()` has NO model in it: it lays out
   an explicit page list, because when the words are agreed (or already with the client) a model

@@ -717,7 +717,8 @@ def author_capabilities_spec(company: dict, audience: str, focus: str, case_fact
         + (f"MODULES, one module_pages entry each, keys copied exactly:\n{module_facts}\n\n"
            if module_facts else "")
         + f"CASE STUDIES to write, one entry each, keys copied exactly:\n{case_facts}",
-        model="claude-fable-5", max_tokens=6000, purpose="caps-deck-spec", company=company.get("slug"))
+        # 16k: seven module pages plus four case studies ran past 6k and the JSON truncated to {}.
+        model="claude-fable-5", max_tokens=16000, purpose="caps-deck-spec", company=company.get("slug"))
 
 
 def _module_image(ref: str | None, key: str, out_dir: str) -> str | None:
