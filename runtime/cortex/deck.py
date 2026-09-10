@@ -456,7 +456,7 @@ class _Deck:
             items.append(
                 f'<a href="https://www.youtube.com/watch?v={_esc(f["youtube_video_id"])}" '
                 f'style="text-decoration:none;display:block;width:{w}px">{img}'
-                f'<p class="thumbcap"><b>{_esc(f.get("label") or f.get("title"))}</b> &mdash; '
+                f'<p class="thumbcap"><b>{_esc(f.get("label") or f.get("title"))}</b> &middot; '
                 f'{_esc(_sentence(f.get("caption")))} Click to watch.</p></a>')
         b = ""
         if bullets:
@@ -483,7 +483,7 @@ class _Deck:
             items.append(
                 f'<a href="https://www.youtube.com/watch?v={_esc(f["youtube_video_id"])}" '
                 f'style="text-decoration:none;display:block;width:{w}px">{img}'
-                f'<p class="thumbcap"><b>{_esc(f.get("label") or f.get("title"))}</b> &mdash; '
+                f'<p class="thumbcap"><b>{_esc(f.get("label") or f.get("title"))}</b> &middot; '
                 f'{_esc(_sentence(f.get("caption")))} Click to watch.</p></a>')
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
@@ -661,7 +661,7 @@ _CAPS_SCHEMA = """{
  "opening": {"kicker": "01 - Why this matters", "heading": "one line",
              "cards": [{"title": "", "body": ""}], "bullets": ["", ""]},
  "platform": {"kicker": "02 - How it works", "heading": "one line",
-              "phases": [{"when": "LAYER 01", "title": "", "body": ""}],
+              "phases": [{"when": "STEP 01", "title": "", "body": ""}],
               "cards": [{"title": "", "body": ""}]},
  "modules": {"kicker": "03 - What we control", "heading": "one line", "intro": "1-2 sentences",
              "cells": [{"num": "01", "title": "", "body": "under 26 words"}]},
