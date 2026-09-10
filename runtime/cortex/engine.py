@@ -3995,7 +3995,8 @@ def deliver_capabilities(company: str, *, audience: str = "", focus: str = "",
                          case_studies: list | None = None, facts: str = "",
                          modules: list | None = None, page_images: dict | None = None,
                          cover_subject: str = "", cover_palette: str = "",
-                         lead_film: dict | None = None, label: str | None = None) -> dict:
+                         lead_film: dict | None = None, omit: list | None = None,
+                         reuse_copy: bool = False, label: str | None = None) -> dict:
     """Author + render a house-format CAPABILITY deck (what we do, how it works, named case studies
     proved with our own films), file it to the document library and drop it in the Inbox as a card.
     Like a proposal it is INTERNAL: this never contacts anyone. Films are stamped by code from the
@@ -4005,11 +4006,13 @@ def deliver_capabilities(company: str, *, audience: str = "", focus: str = "",
     if not co:
         raise ValueError(f"unknown company {company}")
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    # reuse_copy: lay out the LAST build's words again (a layout change is not a reason to rewrite them)
+    spec_path = os.path.join(QUOTES_DIR, f"capabilities-{company}-{stamp}.spec.json") if reuse_copy else None
     out = deck.build_capabilities(company, audience or co["name"], focus,
                                   case_studies=case_studies or [], extra_facts=facts,
                                   modules=modules or [], page_images=page_images or {},
                                   cover_subject=cover_subject or "", cover_palette=cover_palette or "",
-                                  lead_film=lead_film, label=label,
+                                  lead_film=lead_film, omit=omit or [], spec_path=spec_path, label=label,
                                   out_dir=QUOTES_DIR,
                                   filename=f"capabilities-{company}-{stamp}.pdf")
     safe = re.sub(r"[^A-Za-z0-9 -]", "", audience or co["name"])[:60].strip() or "Capabilities"

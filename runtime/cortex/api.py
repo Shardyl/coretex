@@ -3197,6 +3197,12 @@ SKILL_TOOLS = [
          "properties": {"video_id": {"type": "string"}, "title": {"type": "string", "description": "as it should print"},
                         "kicker": {"type": "string"}, "caption": {"type": "string", "description": "one or two true sentences"}},
          "required": ["video_id"]},
+        "omit": {"type": "array", "items": {"type": "string"},
+                 "description": "optional pages to leave out: opening (why it matters), platform (how it works), "
+                                "modules (the grid), case_studies, close. Section numbers are restamped by code."},
+        "reuse_copy": {"type": "boolean", "description": "true when Rashad is changing LAYOUT of a deck built today "
+                       "(drop a page, swap a picture): the words of the last build are laid out again unchanged "
+                       "instead of being rewritten"},
         "label": {"type": "string", "description": "optional footer label"}},
       "required": ["company", "audience", "focus"]}},
     {"name": "create_proposal",
@@ -3511,6 +3517,8 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                                             cover_subject=inp.get("cover_subject") or "",
                                             cover_palette=inp.get("cover_palette") or "",
                                             lead_film=inp.get("lead_film"),
+                                            omit=inp.get("omit") or [],
+                                            reuse_copy=bool(inp.get("reuse_copy")),
                                             label=inp.get("label"))
         except ValueError as _e:
             return str(_e)

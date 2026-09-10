@@ -486,7 +486,7 @@ class _Deck:
             + f'</div>{self._foot(section or "Next")}</div>')
 
     def grid(self, kicker: str, heading: str, intro: str, cells: list, section: str = "",
-             images: list | None = None):
+             images: list | None = None, big: bool = False):
         """A four-across grid of up to eight cells - the capability modules. cards() holds only three.
         `images` = one {path, href, caption} per cell, by position; with images the intro is dropped,
         because two rows of pictured cells fill the page on their own."""
@@ -498,9 +498,11 @@ class _Deck:
             for i, x in enumerate((cells or [])[:8]))
         if any(ims):
             intro = ""
+        h = (f'<h1 style="font-size:40px;margin-bottom:18px">{_esc(heading)}</h1>' if big
+             else f'<h2>{_esc(heading)}</h2>')
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2>'
+            f'{h}'
             + (f'<p style="max-width:1060px;margin-bottom:18px">{_esc(intro)}</p>' if intro else "")
             + f'<div class="grid">{c}</div></div>{self._foot(section or kicker)}</div>')
 
@@ -716,6 +718,13 @@ def films_by_ids(company_id: int, video_ids: list) -> list[dict]:
     return sorted(rows, key=lambda r: order.get(r["youtube_video_id"], 999))
 
 
+def _renum(kicker: str, n: int) -> str:
+    """Section numbers are stamped by CODE in page order. The writer's '03 - What we control' goes
+    stale the moment a page is omitted, so any leading number is replaced, never trusted."""
+    k = re.sub(r"^\s*\d{1,2}\s*[-.:\u00b7]\s*", "", str(kicker or "")).strip()
+    return f"{n:02d} - {k}" if k else f"{n:02d}"
+
+
 def film_any(video_id: str) -> dict | None:
     """One film resolved from the library across ALL of the owner's companies, for a lead piece that
     belongs to a sister brand (FilmSpoke is a Sensa company). Unknown id = None, never a guess."""
@@ -833,7 +842,8 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
                        case_studies: list | None = None, extra_facts: str = "",
                        modules: list | None = None, page_images: dict | None = None,
                        cover_subject: str = "", cover_palette: str = "",
-                       lead_film: dict | None = None,
+                       lead_film: dict | None = None, omit: list | None = None,
+                       spec_path: str | None = None,
                        label: str | None = None, out_dir: str = "/tmp",
                        filename: str = "capabilities.pdf") -> dict:
     """Author + render a house-format CAPABILITY deck: what we do, how it works, and named case
@@ -863,7 +873,23 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
         "  films the system will show, in this order: "
         + "; ".join(f["title"] for f in c["films"]) for c in cases) or "(none)"
 
-    spec = author_capabilities_spec(co, audience, focus, case_facts, extra_facts, module_facts) or {}
+    import json as _json
+    spec = {}
+    if spec_path and os.path.exists(spec_path):     # the words are agreed: lay them out again, unchanged
+        try:
+            spec = _json.load(open(spec_path, encoding="utf-8")) or {}
+        except Exception:  # noqa: BLE001
+            spec = {}
+    if not spec:
+        spec = author_capabilities_spec(co, audience, focus, case_facts, extra_facts, module_facts) or {}
+    spec_out = os.path.join(out_dir, re.sub(r"\.pdf$", "", filename) + ".spec.json")
+    try:
+        with open(spec_out, "w", encoding="utf-8") as f:
+            _json.dump(spec, f, ensure_ascii=False, indent=1)
+    except Exception:  # noqa: BLE001
+        spec_out = None
+    skip = {str(x).strip().lower() for x in (omit or [])}
+    n = 0
     accent = (spec.get("accent") or _ACCENT_DEFAULT).strip()
     if not re.match(r"^#[0-9A-Fa-f]{6}$", accent):
         accent = _ACCENT_DEFAULT
@@ -889,17 +915,21 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
 
     pimgs = _page_images(page_images, out_dir)
     op = spec.get("opening") or {}
-    if op:
-        d.cards(op.get("kicker", ""), op.get("heading", ""), op.get("cards") or [], op.get("bullets"),
-                images=pimgs.get("opening"))
+    if op and "opening" not in skip:
+        n += 1
+        d.cards(_renum(op.get("kicker", ""), n), op.get("heading", ""), op.get("cards") or [],
+                op.get("bullets"), images=pimgs.get("opening"))
     pf = spec.get("platform") or {}
-    if pf:
-        d.phases(pf.get("kicker", ""), pf.get("heading", ""), pf.get("phases") or [], pf.get("cards"),
-                 images=pimgs.get("platform"))
+    if pf and "platform" not in skip:
+        n += 1
+        d.phases(_renum(pf.get("kicker", ""), n), pf.get("heading", ""), pf.get("phases") or [],
+                 pf.get("cards"), images=pimgs.get("platform"))
     md = spec.get("modules") or {}
-    if md:
-        d.grid(md.get("kicker", ""), md.get("heading", ""), md.get("intro", ""), md.get("cells") or [],
-               images=pimgs.get("grid"))
+    if md and "modules" not in skip:
+        n += 1
+        # With no pages before it, this page opens the deck's argument: the heading goes big.
+        d.grid(_renum(md.get("kicker", ""), n), md.get("heading", ""), md.get("intro", ""),
+               md.get("cells") or [], images=pimgs.get("grid"), big=(n == 1))
 
     mp = {str(x.get("key")): x for x in (spec.get("module_pages") or [])}
     shown_modules = []
@@ -915,24 +945,28 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
 
     written = {str(c.get("key")): c for c in (spec.get("case_studies") or [])}
     shown = []
+    if cases and "case_studies" not in skip:
+        n += 1
     for c in cases:
+        if "case_studies" in skip:
+            break
         w = written.get(str(c["key"])) or {}
         caps = w.get("captions") or []
         films = [{**f, "thumb": thumbnail(f["youtube_video_id"], out_dir),
                   "label": f["title"], "caption": caps[i] if i < len(caps) else ""}
                  for i, f in enumerate(c["films"])]
-        d.casestudy(w.get("kicker") or "Case study", c.get("client") or "",
+        d.casestudy(_renum(w.get("kicker") or "Case study", n), c.get("client") or "",
                     w.get("heading") or "", w.get("body") or "", w.get("bullets") or [], films)
         shown.append({"client": c.get("client"), "films": [f["title"] for f in films]})
 
     cl = spec.get("close") or {}
-    if cl:
+    if cl and "close" not in skip:
         d.phases(cl.get("kicker", ""), cl.get("heading", ""), cl.get("phases") or [], cl.get("cards"),
                  section="Next")
 
     path = to_pdf(d.html(), os.path.join(out_dir, filename))
     return {"path": path, "pages": len(d.pages), "cases": shown, "modules": shown_modules,
-            "lead": lead_shown, "spec": spec}
+            "lead": lead_shown, "spec": spec, "spec_path": spec_out}
 
 
 # --------------------------------------------------------------------------- explicit-spec rendering
