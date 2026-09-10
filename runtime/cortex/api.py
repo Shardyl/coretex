@@ -3183,6 +3183,13 @@ SKILL_TOOLS = [
             "focus": {"type": "string", "description": "left, center or right: where the subject sits in the photograph"},
             "facts": {"type": "string", "description": "the module's published source text, the ONLY material the page may use"}},
            "required": ["key", "title", "facts"]}},
+        "page_images": {"type": "object", "description": "optional pictures for the text pages, so they are not "
+                        "text alone: keys opening (up to 3, one per card), platform (up to 4, one per step), "
+                        "grid (one per module cell, in module order). Each item {image: https URL, href: optional "
+                        "link the picture opens (a film or clip), caption: optional one line}."},
+        "cover_subject": {"type": "string", "description": "optional: what the cover photograph should show, in "
+                          "Rashad's words; overrides the writer's choice"},
+        "cover_palette": {"type": "string", "description": "optional: the cover's colour treatment"},
         "label": {"type": "string", "description": "optional footer label"}},
       "required": ["company", "audience", "focus"]}},
     {"name": "create_proposal",
@@ -3493,6 +3500,9 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                                             focus=inp.get("focus", ""), facts=inp.get("facts", ""),
                                             case_studies=inp.get("case_studies") or [],
                                             modules=inp.get("modules") or [],
+                                            page_images=inp.get("page_images") or {},
+                                            cover_subject=inp.get("cover_subject") or "",
+                                            cover_palette=inp.get("cover_palette") or "",
                                             label=inp.get("label"))
         except ValueError as _e:
             return str(_e)

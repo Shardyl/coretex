@@ -210,6 +210,15 @@ table.sched td, table.sched th { padding:5px 10px; font-size:13px; }
 .gcell p { font-size:12.5px; line-height:1.5; }
 .csclient { font-family:Poppins,sans-serif; font-size:27px; font-weight:700; color:ACCENT;
             white-space:nowrap; }
+.card.hasimg { padding-top:0; overflow:hidden; }
+.card.hasimg .cimg { display:block; width:100%; height:190px; object-fit:cover; margin-bottom:16px; }
+.phase.hasimg { border-top:0; padding-top:0; }
+.phase.hasimg .cimg { display:block; width:100%; height:132px; object-fit:cover; border-radius:8px;
+                      margin-bottom:12px; }
+.gcell.hasimg { padding-top:0; overflow:hidden; }
+.gcell.hasimg .cimg { display:block; width:100%; height:118px; object-fit:cover; margin-bottom:8px; }
+.icap { font-size:10px; color:#7A7A84; letter-spacing:.3px; margin:-8px 0 10px; }
+a.imglink { text-decoration:none; color:inherit; display:block; }
 .thumbcap { font-size:12.5px; margin-top:8px; color:#C4C4CC; }
 .thumbcap b { color:#EDEDF2; font-weight:600; }
 """.replace("ACCENT", accent)
@@ -224,6 +233,18 @@ def _sentence(text) -> str:
 
 def _esc(s) -> str:
     return _html.escape(str(s or ""), quote=False)
+
+
+def _pimg(img: dict | None) -> str:
+    """An image header for a card, phase or grid cell: {path, href, caption}. Resolved by code, so a
+    page can only ever show a file that exists; `href` (a film or clip URL) makes it clickable."""
+    if not img or not img.get("path"):
+        return ""
+    tag = f'<img class="cimg" src="{_b64(img["path"])}">'
+    if img.get("href"):
+        tag = f'<a class="imglink" href="{_esc(img["href"])}">{tag}</a>'
+    cap = f'<div class="icap">{_esc(img["caption"])}</div>' if img.get("caption") else ""
+    return tag + cap
 
 
 class _Deck:
@@ -254,21 +275,33 @@ class _Deck:
             f'<h1>{title}</h1><p style="margin-top:16px;max-width:720px">{_esc(standfirst)}</p></div>'
             f'{self._foot(section)}</div>')
 
-    def cards(self, kicker: str, heading: str, cards: list, bullets: list | None = None, section: str = ""):
-        c = "".join(f'<div class="card"><b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>'
-                    for x in cards[:3])
+    def cards(self, kicker: str, heading: str, cards: list, bullets: list | None = None, section: str = "",
+              images: list | None = None):
+        """`images` = one {path, href, caption} per card, by position; a card with an image gets it as a
+        full-width header, and the bullet list is capped at three so the page cannot overflow."""
+        ims = images or []
+        c = "".join(
+            f'<div class="card{" hasimg" if (i < len(ims) and ims[i]) else ""}">{_pimg(ims[i] if i < len(ims) else None)}'
+            f'<b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>'
+            for i, x in enumerate(cards[:3]))
         b = ""
         if bullets:
-            b = ('<ul class="klist" style="margin-top:26px;max-width:1040px">'
-                 + "".join(f"<li>{_esc(x)}</li>" for x in bullets[:5]) + "</ul>")
+            cap = 3 if any(ims) else 5
+            b = ('<ul class="klist" style="margin-top:22px;max-width:1040px">'
+                 + "".join(f"<li>{_esc(x)}</li>" for x in bullets[:cap]) + "</ul>")
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_esc(heading)}</h2><div class="cols" style="margin-top:4px">{c}</div>{b}</div>'
             f'{self._foot(section or kicker)}</div>')
 
-    def phases(self, kicker: str, heading: str, phases: list, cards: list | None = None, section: str = ""):
-        p = "".join(f'<div class="phase"><div class="num">{_esc(x.get("when"))}</div>'
-                    f'<b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>' for x in phases[:4])
+    def phases(self, kicker: str, heading: str, phases: list, cards: list | None = None, section: str = "",
+               images: list | None = None):
+        """`images` = one {path, href, caption} per phase, by position, shown above the step."""
+        ims = images or []
+        p = "".join(
+            f'<div class="phase{" hasimg" if (i < len(ims) and ims[i]) else ""}">{_pimg(ims[i] if i < len(ims) else None)}'
+            f'<div class="num">{_esc(x.get("when"))}</div>'
+            f'<b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>' for i, x in enumerate(phases[:4]))
         c = ""
         if cards:
             c = ('<div class="cols" style="margin-top:26px">'
@@ -430,11 +463,19 @@ class _Deck:
             + (f'<p class="note" style="margin-top:26px">{_esc(signoff)}</p>' if signoff else "")
             + f'</div>{self._foot(section or "Next")}</div>')
 
-    def grid(self, kicker: str, heading: str, intro: str, cells: list, section: str = ""):
-        """A four-across grid of up to eight cells - the capability modules. cards() holds only three."""
-        c = "".join(f'<div class="gcell"><div class="num">{_esc(x.get("num"))}</div>'
-                    f'<b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>'
-                    for x in (cells or [])[:8])
+    def grid(self, kicker: str, heading: str, intro: str, cells: list, section: str = "",
+             images: list | None = None):
+        """A four-across grid of up to eight cells - the capability modules. cards() holds only three.
+        `images` = one {path, href, caption} per cell, by position; with images the intro is dropped,
+        because two rows of pictured cells fill the page on their own."""
+        ims = images or []
+        c = "".join(
+            f'<div class="gcell{" hasimg" if (i < len(ims) and ims[i]) else ""}">{_pimg(ims[i] if i < len(ims) else None)}'
+            f'<div class="num">{_esc(x.get("num"))}</div>'
+            f'<b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>'
+            for i, x in enumerate((cells or [])[:8]))
+        if any(ims):
+            intro = ""
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_esc(heading)}</h2>'
@@ -743,9 +784,24 @@ def _module_image(ref: str | None, key: str, out_dir: str) -> str | None:
         return None
 
 
+def _page_images(page_images: dict | None, out_dir: str) -> dict:
+    """{opening: [{image, href, caption}], platform: [...], grid: [...]} resolved BY CODE to local
+    files, in position order. An image that does not fetch becomes an empty slot, never a guess."""
+    out = {}
+    for page, items in (page_images or {}).items():
+        lst = []
+        for i, it in enumerate(items or []):
+            it = it or {}
+            path = _module_image(it.get("image"), f"{page}-{i + 1}", out_dir)
+            lst.append({"path": path, "href": it.get("href"), "caption": it.get("caption")} if path else None)
+        out[str(page)] = lst
+    return out
+
+
 def build_capabilities(company_slug: str, audience: str, focus: str, *,
                        case_studies: list | None = None, extra_facts: str = "",
-                       modules: list | None = None,
+                       modules: list | None = None, page_images: dict | None = None,
+                       cover_subject: str = "", cover_palette: str = "",
                        label: str | None = None, out_dir: str = "/tmp",
                        filename: str = "capabilities.pdf") -> dict:
     """Author + render a house-format CAPABILITY deck: what we do, how it works, and named case
@@ -784,20 +840,25 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
     d = _Deck(co, audience, accent, _logo(co), lbl)
 
     cv = spec.get("cover") or {}
-    img = cover_image(cv.get("image_subject") or f"the world of {audience}",
-                      cv.get("image_palette") or "deep charcoal with restrained accent light",
+    # An owner-stated cover subject beats the model's: he knows what the picture should say.
+    img = cover_image(cover_subject or cv.get("image_subject") or f"the world of {audience}",
+                      cover_palette or cv.get("image_palette") or "deep charcoal with restrained accent light",
                       company_slug, out_dir)
     d.cover(cv.get("title") or _esc(co.get("name")), cv.get("standfirst") or "", img, section="Capabilities")
 
+    pimgs = _page_images(page_images, out_dir)
     op = spec.get("opening") or {}
     if op:
-        d.cards(op.get("kicker", ""), op.get("heading", ""), op.get("cards") or [], op.get("bullets"))
+        d.cards(op.get("kicker", ""), op.get("heading", ""), op.get("cards") or [], op.get("bullets"),
+                images=pimgs.get("opening"))
     pf = spec.get("platform") or {}
     if pf:
-        d.phases(pf.get("kicker", ""), pf.get("heading", ""), pf.get("phases") or [], pf.get("cards"))
+        d.phases(pf.get("kicker", ""), pf.get("heading", ""), pf.get("phases") or [], pf.get("cards"),
+                 images=pimgs.get("platform"))
     md = spec.get("modules") or {}
     if md:
-        d.grid(md.get("kicker", ""), md.get("heading", ""), md.get("intro", ""), md.get("cells") or [])
+        d.grid(md.get("kicker", ""), md.get("heading", ""), md.get("intro", ""), md.get("cells") or [],
+               images=pimgs.get("grid"))
 
     mp = {str(x.get("key")): x for x in (spec.get("module_pages") or [])}
     shown_modules = []

@@ -3993,7 +3993,9 @@ def deliver_rebrand(company: str, *, document: str = "", document_id: int | None
 
 def deliver_capabilities(company: str, *, audience: str = "", focus: str = "",
                          case_studies: list | None = None, facts: str = "",
-                         modules: list | None = None, label: str | None = None) -> dict:
+                         modules: list | None = None, page_images: dict | None = None,
+                         cover_subject: str = "", cover_palette: str = "",
+                         label: str | None = None) -> dict:
     """Author + render a house-format CAPABILITY deck (what we do, how it works, named case studies
     proved with our own films), file it to the document library and drop it in the Inbox as a card.
     Like a proposal it is INTERNAL: this never contacts anyone. Films are stamped by code from the
@@ -4005,7 +4007,9 @@ def deliver_capabilities(company: str, *, audience: str = "", focus: str = "",
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     out = deck.build_capabilities(company, audience or co["name"], focus,
                                   case_studies=case_studies or [], extra_facts=facts,
-                                  modules=modules or [], label=label,
+                                  modules=modules or [], page_images=page_images or {},
+                                  cover_subject=cover_subject or "", cover_palette=cover_palette or "",
+                                  label=label,
                                   out_dir=QUOTES_DIR,
                                   filename=f"capabilities-{company}-{stamp}.pdf")
     safe = re.sub(r"[^A-Za-z0-9 -]", "", audience or co["name"])[:60].strip() or "Capabilities"
