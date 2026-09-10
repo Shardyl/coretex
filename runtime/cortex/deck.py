@@ -342,12 +342,16 @@ class _Deck:
             + f'</div>{self._foot(section or kicker)}</div>')
 
     def photo(self, kicker: str, heading: str, sub: str, body: str, stats: list,
-              image: str | None, caption: str = "", note: str = "", section: str = ""):
-        """A room, a set or a location: the argument on the left, the photograph bleeding off the right."""
+              image: str | None, caption: str = "", note: str = "", section: str = "",
+              focus: str = "center"):
+        """A room, a set or a location: the argument on the left, the photograph bleeding off the right.
+        `focus` (left/center/right) is where the subject sits in a landscape source, so the portrait
+        crop keeps it: a director standing at frame left is otherwise cropped out entirely."""
         st = "".join(f'<div class="pstat"><div class="pk">{_esc(x.get("k"))}</div>'
                      f'<div class="pv">{_esc(x.get("v"))}</div></div>' for x in (stats or [])[:4])
+        fx = focus if focus in ("left", "center", "right") else "center"
         img = (f'<img src="{_b64(image)}" style="position:absolute;top:0;right:0;width:592px;'
-               'height:720px;object-fit:cover">'
+               f'height:720px;object-fit:cover;object-position:{fx} center">'
                '<div style="position:absolute;top:0;right:0;width:592px;height:720px;background:'
                'linear-gradient(to right, rgba(10,10,10,.92), rgba(10,10,10,0) 22%)"></div>'
                ) if image else ""
@@ -661,6 +665,10 @@ _CAPS_SCHEMA = """{
               "cards": [{"title": "", "body": ""}]},
  "modules": {"kicker": "03 - What we control", "heading": "one line", "intro": "1-2 sentences",
              "cells": [{"num": "01", "title": "", "body": "under 26 words"}]},
+ "module_pages": [{"key": "the module KEY you were given, copied exactly",
+                   "kicker": "e.g. 'Module 01 - Characters'", "heading": "one line, what we can do",
+                   "sub": "one short strap line", "body": "2-3 sentences, under 75 words, the capability",
+                   "stats": [{"k": "SHORT LABEL", "v": "a fact from that module's source, under 8 words"}]}],
  "case_studies": [{"key": "the KEY you were given, copied exactly", "kicker": "04 - Case study",
                    "heading": "one line", "body": "2-3 sentences",
                    "bullets": ["", ""], "captions": ["one short caption per film, in order"]}],
@@ -671,7 +679,7 @@ _CAPS_SCHEMA = """{
 
 
 def author_capabilities_spec(company: dict, audience: str, focus: str, case_facts: str,
-                             extra_facts: str = "") -> dict:
+                             extra_facts: str = "", module_facts: str = "") -> dict:
     """The model writes the deck's COPY under the company's live skill rules. Every verifiable fact is
     handed to it; it supplies no film titles, no numbers and no client claims of its own."""
     skill = store.get_skill_by_key(company["id"], "sales-quotation") or \
@@ -693,26 +701,68 @@ def author_capabilities_spec(company: dict, audience: str, focus: str, case_fact
         "CONTAIN IT: write what the work proves, not who it was for. Keep every "
         "card body under 42 words and every module cell under 26 words. No em dashes, no superlatives, no "
         "marketing flourish. Write for a senior public-sector audience: plain, specific, unhurried.",
+        ("MODULE PAGES: you are given MODULES, each with a KEY and its own source text. Return one "
+         "module_pages entry per key, copied exactly, in the order given. Each page explains that one "
+         "area of capability using ONLY its source text: what we can deliver for the client, what they "
+         "control and approve. Say what we can do, not how the software does it. Up to four stats per "
+         "page, each a fact lifted from that source, never a number you computed. The page carries the "
+         "module's own photograph, so do not describe an image.")
+        if module_facts else "",
         "SPEC:\n" + _CAPS_SCHEMA,
     ]))
     return provider.think_json(
         system,
         f"Audience: {audience}\n\nWhat the deck is for:\n{focus}\n\n"
         f"VERIFIED FACTS (the only facts you may use):\n{extra_facts}\n\n"
-        f"CASE STUDIES to write, one entry each, keys copied exactly:\n{case_facts}",
+        + (f"MODULES, one module_pages entry each, keys copied exactly:\n{module_facts}\n\n"
+           if module_facts else "")
+        + f"CASE STUDIES to write, one entry each, keys copied exactly:\n{case_facts}",
         model="claude-fable-5", max_tokens=6000, purpose="caps-deck-spec", company=company.get("slug"))
+
+
+def _module_image(ref: str | None, key: str, out_dir: str) -> str | None:
+    """A module's photograph, resolved BY CODE from a local path or an https URL (the company's own
+    site assets). Anything that does not fetch, or is not an image, becomes no image, never a guess."""
+    if not ref:
+        return None
+    if os.path.exists(ref):
+        return ref
+    if not str(ref).startswith("http"):
+        return None
+    import urllib.request
+    path = os.path.join(out_dir, f"deck-mod-{re.sub(r'[^a-z0-9]', '', key.lower())}.jpg")
+    try:
+        req = urllib.request.Request(ref, headers={"User-Agent": "curl/8.5.0"})
+        with urllib.request.urlopen(req, timeout=30) as r, open(path, "wb") as f:
+            f.write(r.read())
+        from PIL import Image
+        Image.open(path).convert("RGB").save(path, quality=90)
+        return path
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def build_capabilities(company_slug: str, audience: str, focus: str, *,
                        case_studies: list | None = None, extra_facts: str = "",
+                       modules: list | None = None,
                        label: str | None = None, out_dir: str = "/tmp",
                        filename: str = "capabilities.pdf") -> dict:
     """Author + render a house-format CAPABILITY deck: what we do, how it works, and named case
     studies proved with our own films. `case_studies` is [{key, client, video_ids, facts}] - the films
-    are resolved from the library by code, so a case study can never cite work we do not have."""
+    are resolved from the library by code, so a case study can never cite work we do not have.
+    `modules` is [{key, title, image, facts, focus}] - one full page per area of capability, its copy
+    written from `facts` (the module's own published text) beside its own photograph (`image` = a
+    path or URL, fetched by code; `focus` = left/center/right, where the subject sits)."""
     co = store.get_company_by_slug(company_slug)
     if not co:
         raise ValueError(f"unknown company {company_slug}")
+    mods = []
+    for m in (modules or []):
+        if not m.get("key") or not m.get("title"):
+            continue
+        mods.append({**m, "image_path": _module_image(m.get("image"), str(m["key"]), out_dir)})
+    module_facts = "\n\n".join(
+        f"KEY {m['key']} - {m['title']}\n  source text: {m.get('facts', '')}" for m in mods)
     cases = []
     for cs in (case_studies or []):
         films = films_by_ids(co["id"], cs.get("video_ids") or [])
@@ -724,7 +774,7 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
         "  films the system will show, in this order: "
         + "; ".join(f["title"] for f in c["films"]) for c in cases) or "(none)"
 
-    spec = author_capabilities_spec(co, audience, focus, case_facts, extra_facts) or {}
+    spec = author_capabilities_spec(co, audience, focus, case_facts, extra_facts, module_facts) or {}
     accent = (spec.get("accent") or _ACCENT_DEFAULT).strip()
     if not re.match(r"^#[0-9A-Fa-f]{6}$", accent):
         accent = _ACCENT_DEFAULT
@@ -748,6 +798,18 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
     if md:
         d.grid(md.get("kicker", ""), md.get("heading", ""), md.get("intro", ""), md.get("cells") or [])
 
+    mp = {str(x.get("key")): x for x in (spec.get("module_pages") or [])}
+    shown_modules = []
+    for m in mods:
+        w = mp.get(str(m["key"])) or {}
+        if not w:
+            continue                             # the writer returned nothing for it: no page, no filler
+        d.photo(w.get("kicker") or m["title"], w.get("heading") or m["title"], w.get("sub") or "",
+                w.get("body") or "", w.get("stats") or [], m.get("image_path"),
+                caption=m.get("caption") or "", section="Capabilities",
+                focus=str(m.get("focus") or "center"))
+        shown_modules.append(m["title"])
+
     written = {str(c.get("key")): c for c in (spec.get("case_studies") or [])}
     shown = []
     for c in cases:
@@ -766,7 +828,7 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
                  section="Next")
 
     path = to_pdf(d.html(), os.path.join(out_dir, filename))
-    return {"path": path, "pages": len(d.pages), "cases": shown, "spec": spec}
+    return {"path": path, "pages": len(d.pages), "cases": shown, "modules": shown_modules, "spec": spec}
 
 
 # --------------------------------------------------------------------------- explicit-spec rendering
@@ -805,7 +867,8 @@ def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
         elif t == "photo":
             d.photo(pg.get("kicker", ""), pg.get("heading", ""), pg.get("sub", ""),
                     pg.get("body", ""), pg.get("stats") or [], pg.get("image"),
-                    pg.get("caption", ""), pg.get("note", ""), pg.get("section", ""))
+                    pg.get("caption", ""), pg.get("note", ""), pg.get("section", ""),
+                    focus=str(pg.get("focus") or "center"))
         elif t == "schedule":
             d.schedule(pg.get("kicker", ""), pg.get("heading", ""), pg.get("groups") or [],
                        pg.get("invest") or {}, pg.get("footnote", ""), pg.get("section", ""))

@@ -3173,6 +3173,16 @@ SKILL_TOOLS = [
             "video_ids": {"type": "array", "items": {"type": "string"}, "description": "YouTube ids from the media library, in display order"},
             "facts": {"type": "string", "description": "what is TRUE about this project"}},
            "required": ["key", "client", "video_ids"]}},
+        "modules": {"type": "array", "description": "optional: one FULL PAGE per area of capability, after the "
+                    "module grid. Give each its own published text as facts (e.g. the module's page on the "
+                    "company website) and its own photograph by URL; the page is written from that text only.",
+         "items": {"type": "object", "properties": {
+            "key": {"type": "string", "description": "short id, e.g. characters"},
+            "title": {"type": "string", "description": "the module name as it should print"},
+            "image": {"type": "string", "description": "https URL of the module's photograph (the site's own asset)"},
+            "focus": {"type": "string", "description": "left, center or right: where the subject sits in the photograph"},
+            "facts": {"type": "string", "description": "the module's published source text, the ONLY material the page may use"}},
+           "required": ["key", "title", "facts"]}},
         "label": {"type": "string", "description": "optional footer label"}},
       "required": ["company", "audience", "focus"]}},
     {"name": "create_proposal",
@@ -3482,13 +3492,15 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             r = engine.deliver_capabilities(inp["company"], audience=inp.get("audience", ""),
                                             focus=inp.get("focus", ""), facts=inp.get("facts", ""),
                                             case_studies=inp.get("case_studies") or [],
+                                            modules=inp.get("modules") or [],
                                             label=inp.get("label"))
         except ValueError as _e:
             return str(_e)
         cases = "; ".join(c["client"] + " (" + ", ".join(c["films"]) + ")" for c in r["cases"]) or "none"
         dropped = ("DROPPED for having no film in the library: " + ", ".join(r["dropped"]) + ". ") \
             if r.get("dropped") else ""
-        return (f"Capabilities deck built: {r['pages']} pages, '{r['filename']}'. Case studies: "
+        mods = ("Module pages: " + ", ".join(r["modules"]) + ". ") if r.get("modules") else ""
+        return (f"Capabilities deck built: {r['pages']} pages, '{r['filename']}'. {mods}Case studies: "
                 f"{cases}. {dropped}Filed to the document library and on card #{r['task_id']} for "
                 "review; nothing has been sent.")
     if name == "rate_card":
