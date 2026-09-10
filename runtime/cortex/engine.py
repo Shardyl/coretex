@@ -3995,7 +3995,7 @@ def deliver_capabilities(company: str, *, audience: str = "", focus: str = "",
                          case_studies: list | None = None, facts: str = "",
                          modules: list | None = None, page_images: dict | None = None,
                          cover_subject: str = "", cover_palette: str = "",
-                         label: str | None = None) -> dict:
+                         lead_film: dict | None = None, label: str | None = None) -> dict:
     """Author + render a house-format CAPABILITY deck (what we do, how it works, named case studies
     proved with our own films), file it to the document library and drop it in the Inbox as a card.
     Like a proposal it is INTERNAL: this never contacts anyone. Films are stamped by code from the
@@ -4009,7 +4009,7 @@ def deliver_capabilities(company: str, *, audience: str = "", focus: str = "",
                                   case_studies=case_studies or [], extra_facts=facts,
                                   modules=modules or [], page_images=page_images or {},
                                   cover_subject=cover_subject or "", cover_palette=cover_palette or "",
-                                  label=label,
+                                  lead_film=lead_film, label=label,
                                   out_dir=QUOTES_DIR,
                                   filename=f"capabilities-{company}-{stamp}.pdf")
     safe = re.sub(r"[^A-Za-z0-9 -]", "", audience or co["name"])[:60].strip() or "Capabilities"
@@ -4022,6 +4022,7 @@ def deliver_capabilities(company: str, *, audience: str = "", focus: str = "",
     missing = [c.get("client") for c in (case_studies or []) if c.get("client") not in kept]
     summary = (f"Capabilities deck built for {audience or co['name']}.\n\n"
                f"{out['pages']} pages. The PDF is attached to this card.\n\n"
+               + (f"Lead film, full frame after the cover: {out['lead']}\n\n" if out.get("lead") else "")
                + (f"Module pages: {', '.join(out.get('modules') or [])}\n\n" if out.get("modules") else "")
                + (f"Case studies, with the films shown on each:\n{cases}\n\n" if cases else "")
                + (f"DROPPED, no matching film in the media library: {', '.join(missing)}\n\n"
@@ -4035,7 +4036,7 @@ def deliver_capabilities(company: str, *, audience: str = "", focus: str = "",
                    "values (%s,%s,'content',%s,%s,'awaiting_approval',%s) returning *",
                    (co["id"], skill["id"], Json(req), summary, name))
     return {"path": out["path"], "pages": out["pages"], "cases": out.get("cases") or [],
-            "modules": out.get("modules") or [], "dropped": missing, "filename": name,
+            "modules": out.get("modules") or [], "lead": out.get("lead"), "dropped": missing, "filename": name,
             "doc_id": doc["id"], "task_id": (t or {}).get("id")}
 
 

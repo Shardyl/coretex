@@ -3190,6 +3190,13 @@ SKILL_TOOLS = [
         "cover_subject": {"type": "string", "description": "optional: what the cover photograph should show, in "
                           "Rashad's words; overrides the writer's choice"},
         "cover_palette": {"type": "string", "description": "optional: the cover's colour treatment"},
+        "lead_film": {"type": "object", "description": "optional: ONE film shown full frame right after the cover, "
+                      "the whole page clickable, before any explanation. Resolved from the media library across "
+                      "all of Rashad's companies (a FilmSpoke film may lead a Sensa deck); an id the library does "
+                      "not hold gets no page.",
+         "properties": {"video_id": {"type": "string"}, "title": {"type": "string", "description": "as it should print"},
+                        "kicker": {"type": "string"}, "caption": {"type": "string", "description": "one or two true sentences"}},
+         "required": ["video_id"]},
         "label": {"type": "string", "description": "optional footer label"}},
       "required": ["company", "audience", "focus"]}},
     {"name": "create_proposal",
@@ -3503,6 +3510,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                                             page_images=inp.get("page_images") or {},
                                             cover_subject=inp.get("cover_subject") or "",
                                             cover_palette=inp.get("cover_palette") or "",
+                                            lead_film=inp.get("lead_film"),
                                             label=inp.get("label"))
         except ValueError as _e:
             return str(_e)
@@ -3510,6 +3518,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         dropped = ("DROPPED for having no film in the library: " + ", ".join(r["dropped"]) + ". ") \
             if r.get("dropped") else ""
         mods = ("Module pages: " + ", ".join(r["modules"]) + ". ") if r.get("modules") else ""
+        mods = (f"Lead film: {r['lead']}. " if r.get("lead") else "") + mods
         return (f"Capabilities deck built: {r['pages']} pages, '{r['filename']}'. {mods}Case studies: "
                 f"{cases}. {dropped}Filed to the document library and on card #{r['task_id']} for "
                 "review; nothing has been sent.")

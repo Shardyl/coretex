@@ -275,6 +275,28 @@ class _Deck:
             f'<h1>{title}</h1><p style="margin-top:16px;max-width:720px">{_esc(standfirst)}</p></div>'
             f'{self._foot(section)}</div>')
 
+    def lead(self, kicker: str, title: str, caption: str, image: str | None, href: str,
+             section: str = "Watch"):
+        """A film shown FULL FRAME before anything is explained: the whole page is the link. For the
+        one piece of work that says more than the deck does."""
+        img = (f'<img style="position:absolute;top:0;left:0;width:1280px;height:720px;object-fit:cover" '
+               f'src="{_b64(image)}">') if image else ""
+        play = ('<div style="position:absolute;top:288px;left:568px;width:144px;height:144px;border-radius:72px;'
+                'background:rgba(10,10,10,.55);border:3px solid rgba(255,255,255,.85)"></div>'
+                '<div style="position:absolute;top:318px;left:626px;width:0;height:0;border-top:42px solid transparent;'
+                'border-bottom:42px solid transparent;border-left:66px solid #FFFFFF"></div>')
+        self.pages.append(
+            f'<div class="pg">{img}'
+            '<div style="position:absolute;top:0;left:0;width:1280px;height:720px;background:'
+            'linear-gradient(to top, rgba(10,10,10,.92) 12%, rgba(10,10,10,.08) 45%, rgba(10,10,10,.35))"></div>'
+            f'{play}'
+            f'<a href="{_esc(href)}" style="position:absolute;top:0;left:0;width:1280px;height:720px;display:block;'
+            'text-decoration:none"></a>'
+            f'<div style="position:absolute;bottom:96px;left:72px;right:72px"><h3>{_esc(kicker)}</h3>'
+            f'<div class="rule"></div><h1 style="font-size:44px">{_esc(title)}</h1>'
+            f'<p style="margin-top:12px;max-width:760px">{_esc(caption)}</p></div>'
+            f'{self._foot(section)}</div>')
+
     def cards(self, kicker: str, heading: str, cards: list, bullets: list | None = None, section: str = "",
               images: list | None = None):
         """`images` = one {path, href, caption} per card, by position; a card with an image gets it as a
@@ -694,6 +716,15 @@ def films_by_ids(company_id: int, video_ids: list) -> list[dict]:
     return sorted(rows, key=lambda r: order.get(r["youtube_video_id"], 999))
 
 
+def film_any(video_id: str) -> dict | None:
+    """One film resolved from the library across ALL of the owner's companies, for a lead piece that
+    belongs to a sister brand (FilmSpoke is a Sensa company). Unknown id = None, never a guess."""
+    if not video_id:
+        return None
+    return db.one("select youtube_video_id, title, rating, duration, categories, client, company_id "
+                  "from media_assets where status='live' and youtube_video_id=%s limit 1", (video_id,))
+
+
 _CAPS_SCHEMA = """{
  "accent": "#RRGGBB, sympathetic to the AUDIENCE's world",
  "cover": {"title": "<=6 words, may contain <br>", "standfirst": "2-3 sentences",
@@ -802,6 +833,7 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
                        case_studies: list | None = None, extra_facts: str = "",
                        modules: list | None = None, page_images: dict | None = None,
                        cover_subject: str = "", cover_palette: str = "",
+                       lead_film: dict | None = None,
                        label: str | None = None, out_dir: str = "/tmp",
                        filename: str = "capabilities.pdf") -> dict:
     """Author + render a house-format CAPABILITY deck: what we do, how it works, and named case
@@ -845,6 +877,15 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
                       cover_palette or cv.get("image_palette") or "deep charcoal with restrained accent light",
                       company_slug, out_dir)
     d.cover(cv.get("title") or _esc(co.get("name")), cv.get("standfirst") or "", img, section="Capabilities")
+
+    lead_shown = None
+    lf = lead_film or {}
+    film = film_any(str(lf.get("video_id") or "")) if lf else None
+    if film:                                     # a film the library does not hold gets no page
+        d.lead(lf.get("kicker") or "Watch first", lf.get("title") or film["title"],
+               lf.get("caption") or "", thumbnail(film["youtube_video_id"], out_dir),
+               f"https://www.youtube.com/watch?v={film['youtube_video_id']}")
+        lead_shown = film["title"]
 
     pimgs = _page_images(page_images, out_dir)
     op = spec.get("opening") or {}
@@ -890,7 +931,8 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
                  section="Next")
 
     path = to_pdf(d.html(), os.path.join(out_dir, filename))
-    return {"path": path, "pages": len(d.pages), "cases": shown, "modules": shown_modules, "spec": spec}
+    return {"path": path, "pages": len(d.pages), "cases": shown, "modules": shown_modules,
+            "lead": lead_shown, "spec": spec}
 
 
 # --------------------------------------------------------------------------- explicit-spec rendering
@@ -920,6 +962,9 @@ def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
         elif t == "cover":
             d.cover(pg.get("title", ""), pg.get("standfirst", ""), pg.get("image"),
                     pg.get("section", "Proposal"))
+        elif t == "lead":
+            d.lead(pg.get("kicker", ""), pg.get("title", ""), pg.get("caption", ""), pg.get("image"),
+                   pg.get("href", ""), pg.get("section", "Watch"))
         elif t == "strip":
             d.strip(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""),
                     pg.get("cols") or [], pg.get("note", ""), pg.get("section", ""))
