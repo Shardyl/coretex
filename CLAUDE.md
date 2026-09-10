@@ -628,6 +628,13 @@ build the capability when it is missing).
   URL or path, fetched by code; `focus` left/center/right keeps an off-centre subject in the portrait
   crop). First use: the Sensa AI capabilities deck, seven modules from sensa.digital/ai-video-production.
   Owner steer on that deck: talk about what we can DO, not the software or the way we do it.
+  Same day, three more owner asks, all built as tool inputs rather than hand edits: `page_images`
+  ({opening/platform/grid: [{image, href, caption}]}, pictures on the text pages, by position, code
+  fetched), `cover_subject`/`cover_palette` (his words beat the writer's cover choice), and `lead_film`
+  ({video_id, title, kicker, caption}: ONE film full frame right after the cover, the whole page a link,
+  resolved by `film_any` across every company because FilmSpoke's Farmer John led the Sensa deck). The
+  four Farmer John channel films were added to `media_assets` under FilmSpoke (company 5, unrated) so
+  the tool could resolve them. PDF links: a PDF cannot force a new tab; the viewer decides.
 - **`rebrand_deck`** (2026-09-08) - re-lays an existing deck PDF from the document library into the
   house format, keeping the content WORD FOR WORD. `deck.render_spec()` has NO model in it: it lays out
   an explicit page list, because when the words are agreed (or already with the client) a model
