@@ -240,7 +240,9 @@ def _pimg(img: dict | None) -> str:
     page can only ever show a file that exists; `href` (a film or clip URL) makes it clickable."""
     if not img or not img.get("path"):
         return ""
-    tag = f'<img class="cimg" src="{_b64(img["path"])}">'
+    fx = str(img.get("focus") or "").strip()      # e.g. "center 20%": where the subject sits in the frame
+    pos = f' style="object-position:{_esc(fx)}"' if fx else ""
+    tag = f'<img class="cimg" src="{_b64(img["path"])}"{pos}>'
     if img.get("href"):
         tag = f'<a class="imglink" href="{_esc(img["href"])}">{tag}</a>'
     cap = f'<div class="icap">{_esc(img["caption"])}</div>' if img.get("caption") else ""
@@ -833,7 +835,8 @@ def _page_images(page_images: dict | None, out_dir: str) -> dict:
         for i, it in enumerate(items or []):
             it = it or {}
             path = _module_image(it.get("image"), f"{page}-{i + 1}", out_dir)
-            lst.append({"path": path, "href": it.get("href"), "caption": it.get("caption")} if path else None)
+            lst.append({"path": path, "href": it.get("href"), "caption": it.get("caption"),
+                        "focus": it.get("focus")} if path else None)
         out[str(page)] = lst
     return out
 
@@ -880,6 +883,7 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
             spec = _json.load(open(spec_path, encoding="utf-8")) or {}
         except Exception:  # noqa: BLE001
             spec = {}
+    reused = bool(spec)
     if not spec:
         spec = author_capabilities_spec(co, audience, focus, case_facts, extra_facts, module_facts) or {}
     spec_out = os.path.join(out_dir, re.sub(r"\.pdf$", "", filename) + ".spec.json")
@@ -898,10 +902,21 @@ def build_capabilities(company_slug: str, audience: str, focus: str, *,
     d = _Deck(co, audience, accent, _logo(co), lbl)
 
     cv = spec.get("cover") or {}
-    # An owner-stated cover subject beats the model's: he knows what the picture should say.
-    img = cover_image(cover_subject or cv.get("image_subject") or f"the world of {audience}",
-                      cover_palette or cv.get("image_palette") or "deep charcoal with restrained accent light",
-                      company_slug, out_dir)
+    # An owner-stated cover subject beats the model's: he knows what the picture should say. When the
+    # words are being reused, the cover he has already seen is reused too, not rolled again.
+    kept_cover = os.path.join(out_dir, re.sub(r"\.pdf$", "", filename) + ".cover.jpg")
+    if reused and os.path.exists(kept_cover):
+        img = kept_cover
+    else:
+        img = cover_image(cover_subject or cv.get("image_subject") or f"the world of {audience}",
+                          cover_palette or cv.get("image_palette") or "deep charcoal with restrained accent light",
+                          company_slug, out_dir)
+        if img:
+            try:
+                import shutil
+                shutil.copyfile(img, kept_cover)
+            except Exception:  # noqa: BLE001
+                pass
     d.cover(cv.get("title") or _esc(co.get("name")), cv.get("standfirst") or "", img, section="Capabilities")
 
     lead_shown = None
