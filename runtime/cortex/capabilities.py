@@ -83,8 +83,9 @@ CAPABILITIES: list[tuple[str, str]] = [
     ("High-value quotations and their Master Terms",
      "At or above the company's high_value_threshold (Sensa: AED 250,000 ex VAT) create_quotation prints "
      "numbers and scope only, with one line incorporating the Master Terms, and issues the CURRENT Master "
-     "Terms (the profile's master_terms_doc) as a separate document stamped 'Issued with Quotation <ref> "
-     "vN for <client>': both filed to the client folder and attached to the card. Below it the preset's "
+     "Terms (the profile's master_terms_doc) as the client's copy: titled Terms and Conditions, headed "
+     "'Quotation <number> - <client>', its signature page filled in. Never call them Master Terms to a "
+     "client. Both filed to the client folder and attached to the card. Below it the preset's "
      "short form terms print on the sheet as before. Pass `number` to issue a new version of an existing "
      "quotation for the same client, so a proposal, its quotation and its terms carry one reference."),
     ("Rebranding an existing deck — LIVE",

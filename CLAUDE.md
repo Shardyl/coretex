@@ -735,7 +735,7 @@ superseded by SEN-2026-0010) and run `export_templates` so the Drive terms folde
 - At or above the profile's `high_value_threshold` (Sensa: AED 250,000 ex VAT) `quotation.master_terms_ref`
   swaps the preset's printed terms for ONE incorporating paragraph: the sheet carries numbers and scope
   only. `engine._issue_master_terms_copy` issues the current Master Terms as their own PDF, built from the
-  .docx beside it, with "Issued with Quotation <ref> vN for <client>, <date>." under the title; filed in
+  .docx beside it, as the client's copy (see THE CLIENT'S COPY below); filed in
   the client folder beside the quote and attached to the card with it. A replayed version keeps the terms
   it was issued with (explicit terms win), so an ALL VERSIONS tab never rewrites history.
 - TWO PROFILE KEYS, TWO JOBS. `master_terms_doc` = the current Master Terms PDF (Sensa: v1.4 since
