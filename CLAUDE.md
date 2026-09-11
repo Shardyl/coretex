@@ -800,6 +800,18 @@ build the capability when it is missing).
   (which stops another client's file going out) also hid our own standing documents, so "attach the AI deck"
   on a deal-linked card came back empty. A rebuild makes a NEW file named from the audience; the standard
   only moves when Rashad says so (rename it, repoint the profile key).
+  **A RENAME HAS TO REACH TALK'S OWN NOTES (11 Sep 2026).** After the rename Talk still called doc 327 by its
+  old name, "Brands agencies and government clients - Capabilities deck - 2026-09-10.pdf": two of its taught
+  notes (setting `chat_self_rules`, injected into every Talk system prompt as "THINGS RASHAD HAS TAUGHT YOU")
+  were saved on 10 Sep with that file name, and the rename touched the library, Drive, the profile, the
+  email-handling rule and the manifest, but not them. Seven earlier builds of the same deck (docs 320-326)
+  also still sat in the library under the old name, so a search offered them beside 327 (card 581 attached
+  one before it was corrected). Fixed: the two notes are one note pointing at `ai_capabilities_deck_doc`
+  (old list kept as `chat_self_rules:backup-2026-09-11`); 320-326 carry `superseded_by = 327`, a column
+  `documents.listing`/`find` now exclude (kept on record, `get()` still resolves them for old cards, and
+  `sync_drive` never re-pulls a retired name). `documents.rename()` and the Talk tool `rename_document` rename
+  the library row, the Drive file and any taught note using the old name in one step, and list back the
+  skill rules that mention it for the owner (never auto-edited). Rename through it, never by hand.
 - **THE DEAL SCOPE MATCHES WHOLE WORDS** (11 Sep 2026). `documents.find(scope=...)` is the hard filter that
   keeps another client's file off a deal-linked card, and it matched FRAGMENTS: measured across all 46 live
   deals it let 56 other-client files through and lost no genuine match by stopping (Sheraa's "ERF" inside
