@@ -967,17 +967,53 @@ the Drive terms folder matches.
   participant data), and 6.3A licenses talent appearance for 12 months, GCC, online, which reads onto a
   client's own participants. Short Form Terms v1.2 still carries the 50% at 72 hours standard.
 
-COMPONENT RATE CARD DRAFT (11 Sep 2026, awaiting the owner's confirmation): `Sensa - Rate Card v1.7 DRAFT -
-components.xlsx` in the terms folder (and on his Desktop). Built BY CODE from 331 quotations he issued by hand
-(the SENSA CLIENTS quotation spreadsheets, final version of each quote number, template tabs and Cortex-issued
-SEN- quotes excluded): 8,228 lines placed into 85 components by keyword rules, suggested normal = 2025-26 median,
-suggested budget = 25th percentile, permits unrounded at cost, kit packages = each quote's gear lines summed per
-day. It is deliberately NOT in the document library and NOT live, so nothing can price from or attach it. On
-confirmation his figures go into `rate_card:sensa` as v1.7 (`ratecard.set_item`), `export_templates` writes Rate
-Card v1.7.xlsx, and v1.6 plus the draft move to OLD. Its Package check tab showed the live packages against their
-parts: full crew day built 50,050 vs 45,000 live, crew of two 20,500 vs 15,000, drone light 15,000 vs 19,700.
-Profile `quote_target_flex_pct` = 20 is the owner's hit-a-number band (components may move up to 20% either way
-to reach a stated total); stored for that build, not yet read by any code.
+RATE CARD v1.7 (11 Sep 2026, LIVE: the owner accepted the component draft as it stood). The draft was built BY
+CODE from 331 quotations he issued by hand (the SENSA CLIENTS quotation spreadsheets, final version of each quote
+number, template tabs and Cortex-issued SEN- quotes excluded): 8,228 lines placed into 85 components by keyword
+rules, normal = 2025-26 median, budget = 25th percentile, permits unrounded at cost, kit packages = each quote's
+gear lines summed per day. 73 components were merged into v1.6 (106 items); where v1.6 already held an
+owner-stated figure (voice over, music, stock, location, travel, actor, additional operator) the owner's figure
+stayed and the component was skipped. Every item now has a stable `key` (shown as [key] in the Talk and drafting
+renders). The Shoot packages and Drone packages groups are `reference_only` (never price a line, and excluded
+from `ratecard.rates()`), because they sat below their own parts (full crew day 45,000 live vs 50,050 built).
+Permits are a group with `at_cost`. v1.6 is kept verbatim as setting `rate_card:sensa:v1.6`; the draft workbook
+and Rate Card v1.6.xlsx are in the terms folder's OLD, `Sensa - Rate Card v1.7.xlsx` at the top.
+
+## Quotations: blocks by default, every line priced by code (11 Sep 2026)
+
+The owner wants quotes laid out like Honor SEN-2026-0012: blocks (pre-production, production per day, talent,
+locations, post, then voice over / music / versioning as their own lines), each line ONE amount whose
+description names what it includes, a full line-item breakdown only when he asks. The layout is RULES on Sensa's
+`sales-quotation` skill ("QUOTATION SHAPE"; "SPEC IT, DO NOT INTERVIEW": build from the opportunity, list the
+assumptions in the reply, never ask first). Talk reads those rules because the `rate_card` tool now returns the
+live sales-quotation rules under the card.
+
+PRICING IS CODE, `ratecard.price_lines(slug, sections, allowed=, target=, flex_pct=)`:
+- a line carries `components` ([{item: <rate-card key or description>, qty}]); code prices it as sum(rate x qty).
+  One component keeps its own qty and rate on the line (6 x stock clip); several make one block amount. A
+  missing, reference-only or unpriced component blanks the whole line and names it. `priced_from` is stored on
+  the line in the version registry, so every figure is traceable to the card.
+- a typed `unit` survives only if it is in `allowed`: the owner's own words plus `ratecard.rates()`.
+- `target` (his number, ex VAT): the component lines move pro rata to reach it, only inside profile
+  `quote_target_flex_pct` (Sensa 20); typed and at-cost lines never move; outside the band, or with any line
+  blank, nothing moves and the quote is NOT built, the reply says by how much.
+- Talk: `create_quotation` runs it before `deliver_quotation`. The owner's words come from `_TURN_SAID`, a
+  context variable set by the chat executor from the user turns, never a tool input, so the model cannot supply
+  "what he said". A `total` he did not write is dropped. Before this, Talk passed its own figures straight
+  through (the prep-card guard only ever ran on prep cards).
+- Prep cards: `_prep_quote_spec` asks for components too and runs the same function.
+
+TALK FIXES FOUND BY THE FIRST RUN (Sheraa ERF, card 578):
+- Talk had no tool to OPEN a deal. Asked for "opportunity 118" it searched contacts for "118" and asked the owner
+  for scope the timeline already held. `deal_timeline` (deal_id or title words) returns the deal, its contacts,
+  its quotations and `pipeline.deal_context(limit=40)`; it is in `_CHIEF_TOOLS`.
+- `provider.chat_tools` / `chat_tools_stream` run at max_tokens 1,500. A whole quotation as one tool call was
+  cut at exactly 1,500 and the owner got an EMPTY reply. A round stopped by `max_tokens` is now re-run once at
+  `_ROOMY` (16,000; a ceiling costs nothing unless used). And a turn that runs out of rounds mid-task makes one
+  last call with `tool_choice: none` to say what was done and what is left, never "".
+Result: SEN-2026-0013 v2, 12 block lines all priced from the card, 40,850 net (v1 was one 45,000 package line,
+card 577, closed as superseded). Assumptions it listed: one shoot day, crew of four, travel to Sharjah, English
+VO (Arabic offered in the note), six stock clips.
 
 RATE CARD v1.6 (11 Sep 2026, owner-stated while pricing Honor SEN-2026-0012): voiceover for a CAMPAIGN (one
 hero film and its cut-downs, every version in that language) is AED 3,000 English (British) and AED 5,000

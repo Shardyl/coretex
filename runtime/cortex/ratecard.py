@@ -99,8 +99,9 @@ def price_lines(slug: str, sections: list, *, allowed: set | None = None, target
                     blanked.append(label)
                     continue
                 if len(comps) == 1:
-                    it["qty"] = float(comps[0].get("qty") or 1)
-                    it["unit"] = round(amt / it["qty"], 2)
+                    q1 = float(comps[0].get("qty") or 1)
+                    it["qty"] = int(q1) if q1.is_integer() else q1      # prints "6", not "6.0"
+                    it["unit"] = round(amt / q1, 2)
                 else:
                     it["qty"], it["unit"] = 1, round(amt, 2)
                 it["priced_from"] = "; ".join(basis)
