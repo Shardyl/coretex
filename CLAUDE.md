@@ -151,6 +151,33 @@ Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` ad
 rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
 `sales-first-response`.
 
+## An empty draft is a failure, and the To line owns the reply (11 Sep 2026)
+
+Card 545 (Antoni Entertainment) reached the Inbox with an EMPTY body and the wrong sender. Approving
+would have sent "Best regards" and a signature, from Rashad, in reply to an email addressed to Gino.
+
+**Out of room is not an answer.** Both draft attempts used exactly 6,000 of 6,000 output tokens (see
+`usage_log`): Sonnet 5's adaptive thinking spent the whole `max_tokens` reasoning and wrote nothing.
+`budget_tokens` is REJECTED on Sonnet 5 / Opus 5 / Fable 5, so thinking cannot be capped directly; the
+levers are `max_tokens` headroom and `output_config.effort`. `provider.think` used to join the text
+blocks and return "" without looking at `stop_reason`. Now, on a `think_hard` call: empty text with
+`stop_reason == "max_tokens"` retries once with `max_tokens = max(4x, 24000)` (streamed) and
+`output_config={"effort": "medium"}`; still empty raises `provider.EmptyCompletion`. Only `think_hard`
+calls raise (`worker.draft`, `newsletter.generate_idea` - the latter runs at 1,200 tokens and is the
+likeliest to hit it). Drafts now run at `max_tokens=16000`, a ceiling the model cannot see that costs
+nothing unless used. **5 empty-draft cards in the 60 days before this.**
+
+**An empty body never sends.** The approval gate refuses a whitespace-only draft, and
+`_send_email_reply` re-checks the row it just claimed and releases it to `awaiting_correction` rather
+than sending. `EmptyCompletion` in `process_new_tasks` leaves a visible, unsendable card with the reason
+and a notification - never a silent `failed` row, which the Inbox does not show.
+
+**The To line owns the reply.** Everyone is on `always_cc`, so a client writing TO Gino lands in
+Rashad's mailbox too, and "personal mailboxes reply as themselves" made the reply Rashad's.
+`_addressed_person(co, e, mailbox)`: when the swept mailbox is NOT on the To line and exactly one of our
+people IS, the reply is theirs, from their own mailbox (so adoption finds the thread there too). None
+when the mailbox is on the To line, or when none or several of ours are. High-value routing outranks it.
+
 ## Intake: seen is not the same as handled (11 Sep 2026)
 
 Gino forwarded three enquiries that "never came through Cortex". All three HAD been seen by
