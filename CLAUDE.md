@@ -151,6 +151,38 @@ Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` ad
 rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
 `sales-first-response`.
 
+## Intake: seen is not the same as handled (11 Sep 2026)
+
+Gino forwarded three enquiries that "never came through Cortex". All three HAD been seen by
+`poll_inbox` (their ids were in `inbox_processed:sensa`); each was filtered on purpose by a different
+gate. When something "never arrived", check the seen set before assuming the sweep missed it.
+
+1. **A rule's own exception is a fact, so code checks it.** Sheraa's urgent ERF film RFP went DIRECTLY
+   to hello@sensa.digital, closing next day. The no-draft check matched it to "broadcast tender/supplier
+   circulars ... (not addressed to us specifically)" by reading the body. `policy.should_skip(...,
+   own_domain=)` now removes any situation whose own words limit it to mail NOT addressed to us
+   (`_ONLY_WHEN_NOT_ADDRESSED`) whenever our domain is on the To/Cc (`_addressed_to_us`), before the
+   model sees the list. Edit the rule's wording and the behaviour follows.
+2. **Skipping the reply never skips the person.** The skip branch used to `continue` before the CRM
+   step, so Massar's RFP (a real BCC blast, rightly not replied to) erased the prospect too.
+   `_record_contact()` now runs on both paths.
+3. **Which categories get a card is data:** `policy.card_categories(co)`, setting
+   `card_categories:<slug>`, default `("lead","client","finance")`. Antoni Entertainment (a `partner`)
+   stayed on the default by the owner's call; adding `partner` is now a setting, not a deploy.
+4. **Relevant blasts are picked up, not just announced.** `_track_tender` makes an in-scope supplier
+   circular an opportunity (title `Tender: <subject> (<domain>)`, one per circular, repeats land on its
+   timeline) created on **MANUAL**, because `create_deal` arms the auto cadence and a portal tender must
+   never be chased by email. `closing_reminder` takes the date the extractor reads, validates it in
+   code, and treats a DATE-ONLY deadline as END of that day: as midnight, a tender closing today counted
+   as already closed.
+
+Proven on the real emails: Sheraa -> addressed to us, broadcast rule removed, `should_skip` None (would
+now draft). Massar -> not addressed, still skipped. Backfilled as deals 117 (Massar) and 118 (Sheraa).
+
+**Known and not fixed:** the no-draft check gave Massar's skip reason as "sales emails", a rule meant
+for vendors pitching TO us. Right outcome, wrong reason, and it means a DIRECT RFP could still be
+skipped under "sales emails" on the model's reading. Fix 1 only protects against the broadcast rule.
+
 ## The relationship decides the sender (8 Sep 2026)
 
 Thread-stickiness answers "who last emailed this CONTACT". That is the wrong question when one person
