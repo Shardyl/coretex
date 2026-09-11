@@ -1038,6 +1038,24 @@ def _build_blog_from_concept(task: dict, skill: dict, company: dict) -> dict:
 
 
 def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = False) -> dict:
+    # APPROVING A QUOTATION PREP CARD BUILDS THE QUOTATION (owner, 11 Sep 2026). A prep card is kind
+    # 'content', which used to fall through to "mark done": the approve button silently threw the prep
+    # away. Approved WITHOUT answers, it now builds from the card's own defaults, as the quotation skill's
+    # standing rules define them; ANSWERED, the correction path builds it from his words. Either way the
+    # result is a quotation card for him to review: nothing is sent.
+    if _is_quotation_prep(task):
+        text = ("APPROVED AS-IS: the owner approved this prep card without answering its questions. Build the "
+                "quotation from the card's own defaults, exactly as the quotation skill's standing rules "
+                "define them.\n\nTHE PREP CARD HE APPROVED:\n" + (task.get("draft") or ""))
+        try:
+            if _prep_build_quotation(task, skill, company, text):
+                return {"built_quotation": True}
+            err = "the card has nothing to build a quotation from yet"
+        except Exception as _pe:  # noqa: BLE001
+            err = f"{type(_pe).__name__}: {_pe}"
+        store.update_task(task["id"], status="awaiting_approval")   # never silently closed
+        return {"blocked": True, "error": f"Couldn't build the quotation ({err}). The card is still open: "
+                                          "answer its questions on the card and it builds from those."}
     if task["kind"] in ("newsletter_idea", "newsletter_review", "newsletter_send"):
         # EVERY outward newsletter send (the test send to reviewers, the schedule, the live send) routes
         # through the cockpit confirm — it shows exactly who it reaches + takes the PIN/fingerprint. A plain
@@ -1382,6 +1400,12 @@ def _prep_quote_spec(task: dict, company: dict, text: str) -> dict:
         timeline = ""
     slug = company.get("slug") or ""
     presets = sorted((_q.presets() or {}).keys())
+    # The quotation skill's own rules ride along (dumb waiter): what an approval-without-answers means,
+    # file naming, payment chasing - all editable there, none of it written here.
+    try:
+        _rules = worker._rules_block(store.get_skill(task["skill_id"]) or {}) if task.get("skill_id") else ""
+    except Exception:  # noqa: BLE001
+        _rules = ""
     spec = provider.think_json(
         worker._now_line() + " You turn the OWNER'S instructions into the arguments for a quotation. JSON: "
         '{"preset": "<one of ' + ", ".join(presets) + '>", "customer": "<client company name>", '
@@ -1389,12 +1413,15 @@ def _prep_quote_spec(task: dict, company: dict, text: str) -> dict:
         '[{"desc": "<what is delivered>", "unit": <price per unit as a number ONLY if he stated it or a rate '
         'card line he named gives it, else null>, "qty": <number he stated, else 1>}]}], '
         '"deliverables": ["<short bullet>"], "note": "<one line for under the totals, or empty>", '
-        '"total": <one overall figure ONLY if he gave a total instead of line prices, else null>}. '
+        '"total": <one overall figure ONLY if he gave a total instead of line prices, else null>, '
+        '"assumptions": ["<each default you chose that he did not state himself: for the OWNER only, it is '
+        'never printed on the client document>"]}. '
         "RULES: prices come ONLY from his words or the rate card; never estimate, a line he gave no price for "
         "has unit null. Preset: shoot-production for any live filmed shoot, ai-production for AI video. "
         "Describe the scope plainly from his words and the deal timeline; never invent counts, dates or "
         "deliverables. Headers in the house style 'A ·  STUDIO & FACILITIES'. No em dashes.",
-        f"OWNER'S INSTRUCTIONS (oldest first):\n{words}\n\nOPPORTUNITY: "
+        (f"QUOTATION SKILL {_rules}\n\n" if _rules else "")
+        + f"OWNER'S INSTRUCTIONS (oldest first):\n{words}\n\nOPPORTUNITY: "
         + (f"#{deal['id']} {deal['title']} (client account: {acct or 'unknown'})" if deal else "none linked")
         + f"\n\nDEAL TIMELINE:\n{timeline or '(none)'}\n\nRATE CARD:\n{_rc.render(slug) or '(none)'}",
         model=provider.MODEL_FAST, max_tokens=2500, purpose="prep-quotation", company=slug) or {}
@@ -1451,6 +1478,8 @@ def _prep_build_quotation(task: dict, skill: dict, company: dict, text: str) -> 
     if spec.get("blanked"):
         msg += (" Left BLANK because no price was stated for: " + "; ".join(spec["blanked"])
                 + ". Fill them on the quotation or tell me the figures.")
+    if spec.get("assumptions"):   # what was assumed goes to HIM on the closed prep card, never on the document
+        msg += " Defaults assumed: " + "; ".join(str(a) for a in spec["assumptions"][:12]) + "."
     store.update_task(task["id"], status="done", draft=msg)
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text,
                        snapshot={"built_quotation": rq.get("number"), "card": (t or {}).get("id")})
