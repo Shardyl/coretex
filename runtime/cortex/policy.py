@@ -11,6 +11,8 @@ executes them.
 """
 from __future__ import annotations
 
+import re
+
 from . import db, provider, store
 
 
@@ -52,7 +54,36 @@ def get(skill_id: int) -> dict:
     return db.setting_get(_key(skill_id)) or {"situations": [], "addresses": []}
 
 
-def should_skip(company: dict, email: dict, skill_key: str = "sales-first-response") -> dict | None:
+# A no-draft situation that only applies to mail NOT addressed to us. Read from the rule's OWN words
+# ("... sent generically to a supplier register (not addressed to us specifically)"), so editing the
+# rule changes the behaviour. Nothing about tenders or suppliers is decided here.
+_ONLY_WHEN_NOT_ADDRESSED = re.compile(
+    r"not\s+(?:addressed|sent|written)\s+(?:to|for)\s+us|sent\s+generically|undisclosed\s+recipients", re.I)
+
+
+def _addressed_to_us(email: dict, own_domain: str) -> bool:
+    """Is one of OUR addresses on the To or Cc line? A fact from the headers, never a judgement."""
+    rcpt = f"{email.get('to') or ''} {email.get('cc') or ''}".lower()
+    d = (own_domain or "").strip().lower().lstrip("@")
+    return bool(d) and ("@" + d) in rcpt
+
+
+DEFAULT_CARD_CATEGORIES = ("lead", "client", "finance")
+
+
+def card_categories(company: dict) -> tuple:
+    """Which inbox categories get a drafted reply card. DATA per company (setting
+    'card_categories:<slug>'), editable without a deploy; the tuple above is only the default. It was a
+    literal inside poll_inbox, so no wording of a partner enquiry could ever produce a card (Antoni
+    Entertainment, 9 Sep 2026 - left on the default by the owner's call, but now his to change)."""
+    v = db.setting_get(f"card_categories:{(company or {}).get('slug') or ''}")
+    if isinstance(v, list) and v:
+        return tuple(str(x).strip().lower() for x in v if str(x).strip())
+    return DEFAULT_CARD_CATEGORIES
+
+
+def should_skip(company: dict, email: dict, skill_key: str = "sales-first-response",
+                own_domain: str = "") -> dict | None:
     """Does this inbound email fall into a NO-DRAFT situation for this company? Returns {reason} to skip,
     or None to proceed. Cheap: no model call at all unless the company actually has such a rule."""
     try:
@@ -60,7 +91,15 @@ def should_skip(company: dict, email: dict, skill_key: str = "sales-first-respon
         if not sk:
             return None
         cfg = get(sk["id"])
-        sits, addrs = cfg.get("situations") or [], cfg.get("addresses") or []
+        sits, addrs = list(cfg.get("situations") or []), cfg.get("addresses") or []
+        # A RULE'S OWN EXCEPTION IS A FACT, SO CODE CHECKS IT. Sheraa's urgent ERF film RFP was sent
+        # DIRECTLY to hello@sensa.digital with a deadline the next day; a model reading the body saw
+        # "procurement" and matched it to "broadcast circulars ... (not addressed to us specifically)",
+        # and it was skipped (10 Sep 2026). Whether we are on the To/Cc is not a judgement. When we are,
+        # any situation that only applies to mail NOT addressed to us leaves the list before the model
+        # ever sees it.
+        if own_domain and _addressed_to_us(email, own_domain):
+            sits = [s for s in sits if not _ONLY_WHEN_NOT_ADDRESSED.search(s)]
         if not sits and not addrs:
             return None
         # deterministic first: the rule named the mailbox that handles these

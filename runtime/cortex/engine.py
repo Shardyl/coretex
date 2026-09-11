@@ -1815,8 +1815,84 @@ def _flag_skipped_opportunity(co: dict, e: dict, reason: str) -> None:
             category="crm", company_id=co.get("id"),
             dedup_key=f"skipped-opp:{(e.get('email') or '').lower()}:{_subj or _day}:{_day}",
             item={"cat": due or "tender", "name": what[:160]})
+        try:
+            _track_tender(co, e, what)
+        except Exception as _te:  # noqa: BLE001 - tracking must never lose the notification above
+            print(f"[tender] {type(_te).__name__}: {_te}", flush=True)
     except Exception:  # noqa: BLE001 - a relevance hiccup must never disturb the inbox sweep
         pass
+
+
+def _track_tender(co: dict, e: dict, what: str) -> dict | None:
+    """A relevant supplier blast is PICKED UP, not merely announced: it becomes a tracked opportunity,
+    with its closing date as a reminder. Owner, 10 Sep 2026: "we do get those supplier blasts from time
+    to time, so definitely they should be picked up". Massar's RFP arrived by BCC, was rightly not
+    replied to by email, and then existed nowhere but an FYI card.
+
+    NEVER chased by email: a broadcast is bid through the issuer's own process, so the deal is created
+    on MANUAL, not the auto cadence every new deal otherwise gets. One deal per circular (sender domain +
+    subject); a repeat of the same circular lands on that deal's timeline instead of opening another.
+    The closing date is read by the deadline extractor and VALIDATED by code; free text is never trusted
+    as a date."""
+    from datetime import timedelta as _td
+    from . import pipeline as _pl
+    email = (e.get("email") or "").strip().lower()
+    subj = (e.get("subject") or "").strip()
+    if not email or "@" not in email or not subj:
+        return None
+    slug = co.get("slug") or ""
+    title = f"Tender: {subj} ({email.split('@')[-1]})"[:160]
+    org = crm._org(slug)
+    d = db.one("select * from crm_projects where company=%s and lower(title)=lower(%s) limit 1", (org, title))
+    fresh = False
+    if not d:
+        try:
+            d = crm.create_deal(slug, title, stage="Opportunity")
+            fresh = True
+        except crm.DuplicateDeal:
+            d = db.one("select * from crm_projects where company=%s and lower(title)=lower(%s) limit 1",
+                       (org, title))
+    if not d:
+        return None
+    if fresh:
+        crm.set_opportunity_automation(d["id"], "manual")   # a portal tender is never chased by email
+        try:
+            crm.add_deal_contact(d["id"], email, role="issuer", primary=True)
+        except Exception:  # noqa: BLE001
+            pass
+    _pl.log_deal(d["id"], "tender", f"Supplier circular from {email}: {what}", ref=gmail.mail_ref(e))
+    closing_reminder(co, d["id"], e, what)
+    return d
+
+
+def closing_reminder(co: dict, deal_id: int, e: dict, what: str, label: str = "Tender closes") -> dict | None:
+    """ONE reminder for the closing date the email itself states. The extractor reads it; code validates
+    it and decides the time. A date with no clock time means the END of that day: read as midnight, a
+    tender closing today would count as already closed and get no reminder at all. Fires a day ahead, or
+    within the hour when the deadline is nearer than that."""
+    from datetime import timedelta as _td
+    from . import pipeline as _pl
+    now = datetime.now(timezone.utc)
+    gst = timezone(_td(hours=4))
+    for dl in _pl.extract_deadlines(e.get("body") or e.get("snippet") or ""):
+        iso = str(dl.get("when_iso") or "")
+        try:
+            when = datetime.fromisoformat(iso)
+        except (TypeError, ValueError):
+            continue                                   # not a real date: no reminder, never a guessed one
+        if "T" not in iso:
+            when = when.replace(hour=23, minute=59)
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=gst)
+        if when <= now or when > now + _td(days=365):
+            continue
+        remind = when - _td(days=1)
+        if remind <= now:
+            remind = now + _td(hours=1)
+        return reminders.create(f"{label} {when.astimezone(gst):%a %d %b %Y}: {what[:140]} (deal {deal_id})",
+                                remind, company_id=co.get("id"), target_type="deal", target_id=deal_id,
+                                created_by="cortex-pipeline")
+    return None
 
 
 def _maybe_no_reply(task: dict, draft: str, skill: dict) -> bool:
@@ -3519,32 +3595,42 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                            "reason": "active deal/project in CRM (deterministic override)"}
             except Exception:  # noqa: BLE001 — a CRM hiccup must never break classification
                 pass
+        def _record_contact() -> None:
+            nonlocal added
+            if not (cls["to_crm"] and e.get("email")):
+                return
+            stage = "Engaged" if cls["category"] in ("lead", "partner", "support") else "Cold"
+            try:
+                st, _ = crm.add_inbound_contact({"email": e["email"], "name": e["name"]},
+                                                company_slug, cls["category"], stage=stage,
+                                                newsletter=cls["category"] in _INBOX_NEWSLETTER,
+                                                summary=cls.get("summary"), market=cls.get("market"))
+                if st == "added":
+                    added += 1
+            except Exception:  # noqa: BLE001
+                pass
+
         card_ok = True
-        if commit and cls["category"] in ("lead", "client", "finance"):
+        if commit and cls["category"] in policy.card_categories(co):
             # NO-DRAFT POLICY: the owner's own rules can say a kind of message never gets a drafted
             # reply (support handled by Ben, etc.). That decision belongs HERE - a rule on the drafting
             # skill can never stop a card that already exists, which is why it kept being ignored.
-            _skip = policy.should_skip(co, e)
+            _skip = policy.should_skip(co, e, own_domain=own_domain)
             if _skip:
+                # SKIPPING THE REPLY NEVER SKIPS THE PERSON. This branch used to mark the mail seen and
+                # move on BEFORE the CRM step below, so a correctly-skipped supplier blast also erased
+                # the sender: Massar's RFP arrived by BCC, was rightly not replied to, and the prospect
+                # never reached the CRM (9 Sep 2026).
+                _record_contact()
                 results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
                                 "category": cls["category"], "to_crm": cls.get("to_crm"),
                                 "reason": f"no draft - {_skip['reason']}"})
-                _flag_skipped_opportunity(co, e, _skip["reason"])   # in-scope tender -> still surfaced
+                _flag_skipped_opportunity(co, e, _skip["reason"])   # in-scope tender -> tracked
                 seen.add(gid)
                 continue
             card_ok = _draft_direct_reply(co, e, cls, rt_key=rt_key, address=address) is not False
         if commit:
-            if cls["to_crm"] and e.get("email"):
-                stage = "Engaged" if cls["category"] in ("lead", "partner", "support") else "Cold"
-                try:
-                    st, _ = crm.add_inbound_contact({"email": e["email"], "name": e["name"]},
-                                                    company_slug, cls["category"], stage=stage,
-                                                    newsletter=cls["category"] in _INBOX_NEWSLETTER,
-                                                    summary=cls.get("summary"), market=cls.get("market"))
-                    if st == "added":
-                        added += 1
-                except Exception:  # noqa: BLE001
-                    pass
+            _record_contact()
             if card_ok:      # a failed card leaves the mail unseen -> retried next sweep, never lost
                 seen.add(gid)
         results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60], **cls})
