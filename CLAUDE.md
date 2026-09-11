@@ -739,6 +739,15 @@ updated together. Quotations auto-fill the QUOTATION TO contact (name/email/phon
 explicit `contact_email` wins, an unambiguous single-contact account fills in, ambiguity stays blank
 (quotation._contact_for; deliver_quotation passes contact_email). TERMS MODULES: reusable clause modules live as `terms_module:<name>` settings (human-readable docx beside the T&Cs in the Drive terms folder + library). First module: `multi-version` (v1.0, 2026-08-30) - the approval-gate + enhanced-revision-service + masters-first versions structure for multi-cut/multi-language jobs, born on SEN-2026-0004 (Property Finder); the sales-quotation rule tells the drafter to apply it, gen path: pass a per-quote `terms` dict to generate_xlsx with the module clauses swapped into Revisions & Delivery.
 
+## KNOWN GAP: secondary contacts do not match a deal (11 Sep 2026, left open by the owner)
+
+`crm.active_deals_for_email` / `open_deal_for_email` link an inbound email to an opportunity only by the
+deal's MAIN `contact_email` or by the sender's CRM account (`account_id`). They never read the deal's own
+`contacts` list. So a colleague listed there as a secondary contact, on a deal with no account, gets a card
+with no deal: Muhanad Aouameh's reply on Sheraa deal 118 (card 568), because the back-filled deal had no
+account. Fixed BY HAND that once (account 1007 attached, card linked, thread logged). Anything that creates
+a deal by hand must set `account_id`; the code fix is to also match `contacts @> [{"email": ...}]`.
+
 ## Where Cortex is told how terms travel (11 Sep 2026)
 
 WHERE CORTEX IS TOLD HOW TERMS TRAVEL - keep these four in step with each other and with the code:
