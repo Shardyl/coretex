@@ -4315,10 +4315,20 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
                                "size": d["size"]} for d in _att]
     _draft = x["summary"] + (f" The Terms and Conditions issued with it: {terms_doc['filename']}."
                              if terms_doc else "")
-    return db.execute(
+    t = db.execute(
         "insert into tasks (company_id,skill_id,kind,request,draft,status,origin,title) "
         "values (%s,%s,'quotation',%s,%s,'awaiting_approval','talk',%s) returning *",
         (co["id"], skill["id"] if skill else None, Json(req), _draft, x["title"]))
+    # ONE OPEN CARD PER QUOTATION NUMBER. A new version closes the older open cards for the same number
+    # as 'cancelled', never 'rejected': nobody rejected them, and a rejection reads as a judgement on
+    # the skill. They stay on record, pointing at the card that replaced them (11 Sep 2026: SEN-2026-0011
+    # left three open cards for one quotation in a single morning).
+    if t and number:
+        db.execute("update tasks set status='cancelled', updated_at=now(), "
+                   "request = request || jsonb_build_object('superseded_by', %s::bigint) "
+                   "where kind='quotation' and company_id=%s and status='awaiting_approval' "
+                   "and id <> %s and request->>'number' = %s", (t["id"], co["id"], t["id"], number))
+    return t
 
 
 def _issue_master_terms_copy(co: dict, customer: str, number: str, mt: dict,
@@ -4450,6 +4460,8 @@ def _issue_master_terms_copy(co: dict, customer: str, number: str, mt: dict,
             for f in fields:
                 key = f.lower()
                 stamp = key == "company stamp"
+                if stamp:       # air first, or the box's top edge sits on the Date line and reads as it
+                    add_row(Cm(0.6))
                 c = add_row(Cm(3.4) if stamp else Cm(1.6) if key == "signature" else Cm(1.0))
                 if stamp:
                     for cc in c:
