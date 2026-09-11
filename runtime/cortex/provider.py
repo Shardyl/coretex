@@ -97,14 +97,43 @@ def think(system: str, user: str, *, fast: bool = False, model: str | None = Non
     if think_hard:
         kwargs["thinking"] = {"type": "adaptive"}
     client = _client()
-    if max_tokens >= 4000:   # long generation (e.g. a full blog compose) -> STREAM with a generous timeout so a
-        # slow, lengthy response can't hit the short fail-fast per-request timeout (the #101/#116 compose failures).
-        with client.with_options(timeout=600.0).messages.stream(**kwargs) as _s:
-            resp = _s.get_final_message()
-    else:
-        resp = client.messages.create(**kwargs)
+    resp = _complete(client, kwargs)
     _log_usage(mdl, getattr(resp, "usage", None), purpose, company)
-    return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+    text = _text_of(resp)
+    stop = getattr(resp, "stop_reason", None)
+    if not text and think_hard and stop == "max_tokens":
+        # OUT OF ROOM, NOT OUT OF ANSWERS. Adaptive thinking on Sonnet 5 cannot be given a token budget
+        # (budget_tokens is rejected), so the model can spend the whole max_tokens reasoning and stop
+        # before writing a word. Card 545 did exactly that TWICE, 6,000 of 6,000 tokens each, and both
+        # came back as "" - saved as the draft and sent to the Inbox (10 Sep 2026). One retry with real
+        # headroom and effort lowered to medium, the documented lever for thinking depth.
+        kwargs["max_tokens"] = max(max_tokens * 4, 24000)
+        kwargs["output_config"] = {"effort": "medium"}
+        resp = _complete(client, kwargs)
+        _log_usage(mdl, getattr(resp, "usage", None), purpose, company)
+        text, stop = _text_of(resp), getattr(resp, "stop_reason", None)
+    if not text and think_hard:
+        # A generation call that produced nothing is a FAILURE, never an empty answer. Callers that
+        # write for a client must be able to tell "the model had nothing" from "the model said nothing".
+        raise EmptyCompletion(f"{purpose}: no text returned (stop_reason={stop})")
+    return text
+
+
+class EmptyCompletion(RuntimeError):
+    """A generation call returned no text at all (out of tokens mid-thought, or a refusal)."""
+
+
+def _complete(client, kwargs: dict):
+    if kwargs.get("max_tokens", 0) >= 4000:   # long generation -> STREAM with a generous timeout so a slow,
+        # lengthy response can't hit the short fail-fast per-request timeout (the #101/#116 compose failures).
+        with client.with_options(timeout=600.0).messages.stream(**kwargs) as _s:
+            return _s.get_final_message()
+    return client.messages.create(**kwargs)
+
+
+def _text_of(resp) -> str:
+    return "".join(b.text for b in (getattr(resp, "content", None) or [])
+                   if getattr(b, "type", None) == "text").strip()
 
 
 def think_research(system: str, user: str, *, model: str = "claude-fable-5", max_tokens: int = 4000,

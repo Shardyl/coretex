@@ -629,6 +629,11 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     if not claimed:
         return {"blocked": True, "error": "This card was already handled or just changed — reload it."}
     task = store.get_task(task["id"]) or task     # re-read: send exactly what the DB holds NOW
+    if not re.sub(r"\s+", "", task.get("draft") or ""):
+        # the last line of defence behind the approval gate: an empty body never leaves, whatever path
+        # reached this function. The card is released back to the owner, not left stuck in 'sending'.
+        store.update_task(task["id"], status="awaiting_correction")
+        return {"blocked": True, "error": "Refusing to send: the email body is empty. Nothing went out."}
     env = _email_envelope(task, company)
     mt = (task.get("request") or {}).get("meeting")
     if mt and not mt.get("event_id"):   # confirmed slot -> the event + Meet room must exist (still guest-less)
@@ -771,6 +776,21 @@ def process_new_tasks() -> None:
     for task in store.tasks_by_status("new"):
         try:
             _run_task(task)
+        except provider.EmptyCompletion as e:
+            # The model wrote nothing even after the retry with headroom. That must NOT become a silent
+            # 'failed' row the owner never sees (failed cards are not in the Inbox): the card stays in the
+            # Inbox, empty and unsendable - the approval gate blocks an empty body - with the reason on it.
+            store.update_task(task["id"], status="awaiting_correction", draft="",
+                              manager={"verdict": "escalate", "escalate": True, "aligned": False,
+                                       "confidence": "low", "issues": [str(e)], "rule_refs": [],
+                                       "summary": "Cortex could not write this draft - ask it to redraft."})
+            notifications.notify(f"Card #{task['id']}: Cortex could not write the draft",
+                                 "The model ran out of room before writing anything, even with extra room "
+                                 "on the retry. The card is in your Inbox, empty and blocked from sending. "
+                                 "Ask Cortex to redraft it.",
+                                 category="approval", company_id=task.get("company_id"),
+                                 target_type="task", target_id=str(task["id"]),
+                                 dedup_key=f"emptydraft:{task['id']}")
         except Exception as e:  # noqa: BLE001
             store.update_task(task["id"], status="failed")
             tg.send(f"Task #{task['id']} failed: {e}")
@@ -2101,6 +2121,12 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
                              "nothing can send until then"}
         # ADDRESSED TO SOMEONE WHO HAS LEFT: cc is filtered silently, but the To is not a detail to fix
         # quietly - the email would go nowhere and the chase would look answered. Stop and say so.
+        # NO BODY, NO SEND. An empty draft renders as just the signature, and approving it would have
+        # sent Antonio Rosello "Best regards" and nothing else (card 545, 10 Sep 2026).
+        if not re.sub(r"\s+", "", task.get("draft") or ""):
+            return {"ok": False, "blocked": True,
+                    "error": "this card has NO email body - nothing was drafted, so approving would send "
+                             "only a signature. Ask me to redraft it; nothing can send until then."}
         # WRONG PERSON IN THE BODY: never send an email that introduces itself as someone else.
         try:
             _cco = store.get_company(task.get("company_id")) or {}
@@ -2915,6 +2941,18 @@ def classify_email(company: dict, email: dict) -> dict:
 _DELIVERY_STAGES = {"Booked", "Production", "Final Payment", "Recurring"}
 
 
+def _addressed_person(co: dict, e: dict, mailbox: str | None) -> dict | None:
+    """The one person on OUR team an email is addressed TO, when the mailbox it was read from is only
+    cc'd. Returns that sender ({email, rt_key}), or None when the swept mailbox IS on the To line, or
+    when none or several of our people are. Pure header logic, no judgement."""
+    to = {a.lower() for a in re.findall(r"[\w.+-]+@[\w.-]+\.\w+", (e or {}).get("to") or "")}
+    if not to or (mailbox or "").strip().lower() in to:
+        return None
+    ours = {v["email"].lower(): v for v in _company_senders(co["id"]).values()}
+    named = {ours[a]["email"].lower(): ours[a] for a in to if a in ours}
+    return next(iter(named.values())) if len(named) == 1 else None
+
+
 def _deal_sender(company_id, deal_id) -> str:
     """WHO SENDS FOR THIS DEAL: the person who owns the relationship, not whoever last happened to
     email this contact.
@@ -3468,6 +3506,16 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
             lf = ((last or {}).get("f") or "").strip().lower()
             if lf and lf != (from_email or "").lower():
                 from_email, mailbox_rt = lf, _rt_for_sender(co, lf)
+        # THE TO LINE DECIDES WHOSE REPLY IT IS, not whose mailbox held the copy. Every team member is
+        # cc'd on everything, so a client writing TO Gino lands in Rashad's inbox too, and "personal
+        # mailboxes reply as themselves" made Rashad the sender of a reply to an email addressed to Gino
+        # (card 545, Antoni Entertainment, 10 Sep 2026). When the mailbox being swept is NOT on the To
+        # line and exactly one of our people IS, the reply is theirs, from their own mailbox. A header
+        # fact, never a judgement. High-value routing (the owner's own config) still outranks it.
+        if not catchall and not hv:
+            _s = _addressed_person(co, e, address)
+            if _s:
+                from_email, mailbox_rt = _s["email"], _s["rt_key"]
         req = {"brief": brief, "inquiry": inq,
                "from_email": from_email, "mailbox_rt": mailbox_rt,
                "gmail_id": e.get("gmail_id") or "",   # this mailbox's copy (attachments are fetched by it)

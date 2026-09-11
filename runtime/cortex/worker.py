@@ -382,8 +382,11 @@ def draft(skill: dict, company: dict, request: dict,
                 _mdl = provider.resolve_model(_fm) or _fm
         except Exception:  # noqa: BLE001 — a settings hiccup never blocks a draft
             pass
+    # 16,000, not 6,000: max_tokens is a ceiling the model cannot see, and adaptive thinking spends from
+    # it before a word is written. At 6,000 a hard brief exhausted it in thought (card 545). This streams,
+    # so the cap costs nothing unless it is actually used.
     out = provider.think(system, "\n\n".join(user), model=_mdl, think_hard=True,
-                         max_tokens=6000, purpose=f"draft:{skill.get('skill_key', '')}",
+                         max_tokens=16000, purpose=f"draft:{skill.get('skill_key', '')}",
                          company=company.get("slug"), images=atts)
     return _no_dashes(out) if is_email else out   # house rule: no em/en dashes in visible email copy
 
