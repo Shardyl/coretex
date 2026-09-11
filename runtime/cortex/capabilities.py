@@ -98,6 +98,13 @@ CAPABILITIES: list[tuple[str, str]] = [
      "deck and the earlier 'Brands agencies and government clients' builds are NOT it. Rebuilding with "
      "create_capabilities_deck makes a NEW file named from the audience; the standard only changes when Rashad "
      "says so, and then that file is renamed and ai_capabilities_deck_doc repointed."),
+    ("Prep cards that do the work",
+     "A 'Prepare quotation' card (spawned by a correction, or by the next-step engine when a client asks "
+     "for one) is ACTIONABLE: when Rashad answers ON THE CARD, in the cockpit or through correct_task, with "
+     "the details, Cortex builds the real quotation. Preset, client and contact come from the opportunity; "
+     "line prices come ONLY from his words or the rate card, anything else prints blank for him; then the "
+     "prep card closes pointing at the new quotation card. Internal cards never carry a sender or preparer "
+     "name, and their title names the opportunity."),
     ("Rebranding an existing deck — LIVE",
      "rebrand_deck takes a deck or proposal PDF already in the document library and re-lays it into the "
      "house format, keeping the content WORD FOR WORD. It transcribes, it never rewrites: the client "

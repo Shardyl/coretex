@@ -215,6 +215,22 @@ def _colleagues_named(company: dict, request: dict, me: str) -> list:
     return out
 
 
+_INTERNAL_PREP_RULE = (
+    "This is an INTERNAL card for the owner, not a message to anyone. Never write a preparer, author, "
+    "approver or sender line, never sign it, and never name who prepared it. Open with what it is for: "
+    "the opportunity and the job. Keep it short: what is ready, then exactly what is still needed, as a list.")
+_QUOTE_PREP_CLOSE = ("End with this line: \"Answer on this card with these details and the quotation is "
+                     "built from them.\"")
+
+
+def _is_internal_prep(request) -> bool:
+    """A prep card spawned from an owner's instruction or by the next-step engine: work FOR the owner."""
+    if not isinstance(request, dict):
+        return False
+    return bool(request.get("prep_action")) or str(request.get("brief") or "").startswith(
+        ("INTERNAL PREP", "NEXT STEP"))
+
+
 def draft(skill: dict, company: dict, request: dict,
           correction: str | None = None, manager_feedback: list[str] | None = None,
           author: str | None = None, prev_draft: str | None = None) -> str:
@@ -230,7 +246,10 @@ def draft(skill: dict, company: dict, request: dict,
         _now_line(),
         ident_block,
         _EMAIL_BODY_RULE if is_email else
-        "Produce the deliverable only — no preamble, no explanation, no meta-commentary.",
+        ("Produce the deliverable only — no preamble, no explanation, no meta-commentary."
+         + ((" " + _INTERNAL_PREP_RULE
+             + (" " + _QUOTE_PREP_CLOSE if (request or {}).get("prep_action") == "quotation" else ""))
+            if _is_internal_prep(request) else "")),
         _company_context(company, author),
         skill.get("craft") or "",
         _rules_block(skill),

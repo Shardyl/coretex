@@ -1339,12 +1339,146 @@ def _on_message(msg: dict) -> None:
     apply_correction(pending[0], text)
 
 
+def _is_quotation_prep(task: dict) -> bool:
+    req = task.get("request") or {}
+    if req.get("prep_action") == "quotation":
+        return True
+    brief = str(req.get("brief") or "")
+    return (task.get("kind") == "content" and brief.startswith(("INTERNAL PREP", "NEXT STEP"))
+            and bool(re.search(r"\bquot", f"{task.get('title') or ''} {brief}", re.I)))
+
+
+def _stated_numbers(text: str) -> set:
+    """Every figure the owner actually wrote: 15,000 / 15000 / 15k / 15 thousand / 1.5k."""
+    out = set()
+    for m in re.finditer(r"(\d[\d,]*(?:\.\d+)?)\s*(k|thousand)?\b", (text or "").lower()):
+        try:
+            v = float(m.group(1).replace(",", ""))
+        except ValueError:
+            continue
+        out.add(round(v * (1000 if m.group(2) else 1), 2))
+    return out
+
+
+def _prep_quote_spec(task: dict, company: dict, text: str) -> dict:
+    """His words on a quotation prep card, turned into create_quotation arguments. The model STRUCTURES
+    what he said; CODE decides every price: a figure survives only if it is in his own words on this card
+    or is a rate-card rate. Anything else prints blank for him to fill. Never an estimate."""
+    from . import pipeline as _pl, quotation as _q, ratecard as _rc
+    req = task.get("request") or {}
+    did = task.get("deal_id") or req.get("deal_id")
+    deal = db.one("select id, title, contact_email, account_id from crm_projects where id=%s",
+                  (int(did),)) if did else None
+    acct = (db.one("select name from crm_accounts where id=%s", (deal["account_id"],)) or {}).get("name") \
+        if deal and deal.get("account_id") else ""
+    said = [str(req.get("brief") or "")]
+    said += [d["note"] for d in db.query("select note from decisions where task_id=%s and action='correct' "
+                                         "order by id", (task["id"],)) if d.get("note")]
+    said.append(text or "")
+    words = "\n".join(s for s in said if s.strip())
+    try:
+        timeline = _pl.deal_context(int(did))[:4000] if did else ""
+    except Exception:  # noqa: BLE001
+        timeline = ""
+    slug = company.get("slug") or ""
+    presets = sorted((_q.presets() or {}).keys())
+    spec = provider.think_json(
+        worker._now_line() + " You turn the OWNER'S instructions into the arguments for a quotation. JSON: "
+        '{"preset": "<one of ' + ", ".join(presets) + '>", "customer": "<client company name>", '
+        '"title": "<document title, or empty>", "sections": [{"header": "A ·  SECTION NAME", "items": '
+        '[{"desc": "<what is delivered>", "unit": <price per unit as a number ONLY if he stated it or a rate '
+        'card line he named gives it, else null>, "qty": <number he stated, else 1>}]}], '
+        '"deliverables": ["<short bullet>"], "note": "<one line for under the totals, or empty>", '
+        '"total": <one overall figure ONLY if he gave a total instead of line prices, else null>}. '
+        "RULES: prices come ONLY from his words or the rate card; never estimate, a line he gave no price for "
+        "has unit null. Preset: shoot-production for any live filmed shoot, ai-production for AI video. "
+        "Describe the scope plainly from his words and the deal timeline; never invent counts, dates or "
+        "deliverables. Headers in the house style 'A ·  STUDIO & FACILITIES'. No em dashes.",
+        f"OWNER'S INSTRUCTIONS (oldest first):\n{words}\n\nOPPORTUNITY: "
+        + (f"#{deal['id']} {deal['title']} (client account: {acct or 'unknown'})" if deal else "none linked")
+        + f"\n\nDEAL TIMELINE:\n{timeline or '(none)'}\n\nRATE CARD:\n{_rc.render(slug) or '(none)'}",
+        model=provider.MODEL_FAST, max_tokens=2500, purpose="prep-quotation", company=slug) or {}
+    allowed = _stated_numbers(words)
+    for g in ((_rc.get(slug) or {}).get("groups") or []):
+        for it in g.get("items") or []:
+            for k in ("rate", "budget"):
+                if isinstance(it.get(k), (int, float)):
+                    allowed.add(round(float(it[k]), 2))
+    blanked = []
+
+    def ok(v):
+        try:
+            return round(float(v), 2) in allowed
+        except (TypeError, ValueError):
+            return False
+    for s in spec.get("sections") or []:
+        for it in s.get("items") or []:
+            if it.get("unit") not in (None, "") and not ok(it["unit"]):
+                blanked.append(str(it.get("desc") or "a line")[:60])
+                it["unit"] = None
+            q = it.get("qty")
+            if q not in (None, "", 1) and not ok(q):
+                it["qty"] = 1
+    if spec.get("total") not in (None, "") and not ok(spec["total"]):
+        blanked.append("the overall total")
+        spec["total"] = None
+    if spec.get("preset") not in presets:
+        spec["preset"] = "shoot-production" if re.search(r"shoot|filming|crew", words, re.I) else "ai-production"
+    head = re.split(r"\s*(?::|\s-\s)", (deal or {}).get("title") or "")[0].strip()
+    spec["customer"] = (spec.get("customer") or acct or head or "").strip()
+    spec["contact_email"] = (deal or {}).get("contact_email")
+    spec["deal_id"] = int(did) if did else None
+    spec["blanked"] = blanked
+    return spec
+
+
+def _prep_build_quotation(task: dict, skill: dict, company: dict, text: str) -> bool:
+    """Build the quotation his answer describes, file it like any other, and close the prep card with a
+    pointer to it. Returns False when there is nothing to build from, so the ordinary redraft runs."""
+    spec = _prep_quote_spec(task, company, text)
+    if not (spec.get("sections") or spec.get("total")):
+        return False
+    t = deliver_quotation(company["slug"], preset=spec["preset"], customer=spec["customer"],
+                          total=spec.get("total"), sections=spec.get("sections") or None,
+                          title=spec.get("title") or None, note=spec.get("note") or None,
+                          contact_email=spec.get("contact_email"), deliverables=spec.get("deliverables") or None)
+    did = spec.get("deal_id")
+    if did and t:
+        db.execute("update tasks set deal_id=%s where id=%s", (did, t["id"]))
+    rq = (t or {}).get("request") or {}
+    msg = (f"Quotation {rq.get('number')} built from your instruction: card #{(t or {}).get('id')}. "
+           f"{rq.get('summary', '')}")
+    if spec.get("blanked"):
+        msg += (" Left BLANK because no price was stated for: " + "; ".join(spec["blanked"])
+                + ". Fill them on the quotation or tell me the figures.")
+    store.update_task(task["id"], status="done", draft=msg)
+    store.log_decision(task["id"], skill["id"], "owner", "correct", note=text,
+                       snapshot={"built_quotation": rq.get("number"), "card": (t or {}).get("id")})
+    if did:
+        try:
+            from . import pipeline as _pl
+            _pl.log_deal(did, "note", f"Quotation {rq.get('number')} prepared from the owner's instruction on "
+                                      f"card #{task['id']} (quotation card #{(t or {}).get('id')}).")
+        except Exception:  # noqa: BLE001
+            pass
+    return True
+
+
 def apply_correction(task: dict, text: str) -> None:
     """Redraft a task from the owner's correction (works from Telegram OR the cockpit API)."""
     skill = store.get_skill(task["skill_id"])
     company = store.get_company(task["company_id"])
     store.reset_streak(skill["id"])   # the owner corrected a Manager-passed draft → streak breaks
     old = task.get("draft")
+    # A QUOTATION PREP CARD DOES THE WORK. His answer on the card is the brief: build the real quotation
+    # instead of redrafting a checklist about it (owner, 11 Sep 2026). Falls through to an ordinary
+    # redraft only when there is nothing to build from yet.
+    if _is_quotation_prep(task):
+        try:
+            if _prep_build_quotation(task, skill, company, text):
+                return
+        except Exception as _pe:  # noqa: BLE001 — never lose his words: the redraft below still runs
+            tg.send(f"Card #{task['id']}: couldn't build the quotation ({_pe}); redrafting the note instead.")
     site = _site_for(task, company)
 
     if site:
@@ -1649,13 +1783,24 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
         try:
             sk = store.get_skill_by_key(task["company_id"], "sales-quotation") \
                 or store.get_skill_by_key(task["company_id"], "sales-first-response")
+            # THE OPPORTUNITY IS RESOLVED NOW, not only copied from the parent: card 569 was made two
+            # minutes before its parent was linked to Sheraa's deal, so it asked for "the CRM deal number".
+            did = req.get("deal_id") or task.get("deal_id")
+            _em = (req.get("inquiry") or {}).get("email") or ""
+            if not did and _em:
+                _ds = crm.active_deals_for_email(_em, (store.get_company(task["company_id"]) or {}).get("slug"))
+                did = _ds[0]["id"] if len(_ds) == 1 else None
+            _dt = ((db.one("select title from crm_projects where id=%s", (int(did),)) or {}).get("title")
+                   if did else "")
+            _pt = p_.get("title") or "Prepare"
+            _quote = bool(re.search(r"\bquot", f"{_pt} {p_.get('brief') or ''}", re.I))
             store.create_card(task["company_id"], sk["id"], "content",
                               {"brief": "INTERNAL PREP (from the owner's instruction on card "
                                         f"#{task['id']}): {p_.get('brief') or p_.get('title')}",
-                               "title": p_.get("title"),
-                               **({"deal_id": req["deal_id"]} if req.get("deal_id") else {})},
-                              deal_id=req.get("deal_id"),
-                              contact=None if req.get("deal_id") else (req.get("inquiry") or {}).get("email"))
+                               "title": f"{_pt} · {_dt}" if _dt else _pt,
+                               **({"deal_id": did} if did else {}),
+                               **({"prep_action": "quotation"} if _quote else {})},
+                              deal_id=did, contact=None if did else _em)
             created.append(f"prep card '{p_.get('title')}'")
         except Exception:  # noqa: BLE001
             continue
