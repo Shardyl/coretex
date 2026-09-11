@@ -874,6 +874,12 @@ the Drive terms folder matches.
   participant data), and 6.3A licenses talent appearance for 12 months, GCC, online, which reads onto a
   client's own participants. Short Form Terms v1.2 still carries the 50% at 72 hours standard.
 
+RATE CARD v1.6 (11 Sep 2026, owner-stated while pricing Honor SEN-2026-0012): voiceover for a CAMPAIGN (one
+hero film and its cut-downs, every version in that language) is AED 3,000 English (British) and AED 5,000
+Arabic; the per-video voiceover rates (2,000 / 3,500) are for a single standalone video, and at per-video
+rates a five-film bilingual campaign came to 27,500, which he called far too much. A shoot location is
+AED 10,000 each (hire, filming permissions, preparation). v1.5 stays on file in the Drive terms folder.
+
 ## Pre-meeting briefs (`meetingprep.py`, 2026-08-31)
 
 ONLY FIRST MEETINGS WITH NEW COMPANIES (owner, 1 Sep 2026). A brief is an INTRODUCTION aid; before a
