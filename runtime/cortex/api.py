@@ -3117,6 +3117,14 @@ SKILL_TOOLS = [
     {"name": "crm_pipeline",
      "description": "The deal pipeline: open opportunities + forecast value, and won projects + value. Use to answer 'what's in the pipeline / the forecast / what have we won'. Optional business slug to scope it.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string", "description": "your business slug (sensa/tabscanner/...), omit for all"}}}},
+    {"name": "deal_timeline",
+     "description": "Open ONE opportunity or project: its stage, value, contacts, quotations already issued, and its "
+                    "full TIMELINE (the client's emails and brief, what we replied and promised, meeting notes). "
+                    "Read it before quoting, proposing or emailing about a deal, and when asked where a deal is up "
+                    "to. Pass deal_id when you know it ('opportunity 118'), otherwise words from its title.",
+     "input_schema": {"type": "object", "properties": {
+        "deal_id": {"type": "integer"},
+        "search": {"type": "string", "description": "words from the deal title or client name"}}}},
     {"name": "create_company",
      "description": "Create a CLIENT company (account) in the CRM.",
      "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "website": {"type": "string"}, "phone": {"type": "string"}}, "required": ["name"]}},
@@ -3496,6 +3504,37 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                                 "the list is INCOMPLETE. Refine the query before concluding anything about "
                                 "who exists; NEVER say a person or company is absent from a truncated list.")
         return json.dumps(out, default=str)
+    if name == "deal_timeline":
+        # Talk had no way to OPEN a deal: asked to quote "opportunity 118" it searched contacts for "118",
+        # never saw the brief, and asked the owner for scope the timeline already held (11 Sep 2026).
+        from . import pipeline as _pl
+        did, words = inp.get("deal_id"), (inp.get("search") or "").strip()
+        if did:
+            rows = db.query("select * from crm_projects where id=%s", (int(did),))
+        elif words:
+            rows = db.query("select * from crm_projects where title ilike %s order by id desc limit 6",
+                            (f"%{words}%",))
+        else:
+            return "Give me the deal number or words from its title."
+        if not rows:
+            return f"No opportunity found for {did or words!r}."
+        if len(rows) > 1:
+            return "Several match, which one? " + json.dumps(
+                [{"deal_id": r["id"], "title": r["title"], "stage": r.get("stage")} for r in rows])
+        d = rows[0]
+        scope = (u or {}).get("companies")
+        biz = str(d.get("business") or d.get("company") or d.get("organisation") or "").lower().replace(" ", "")
+        if scope and biz and biz not in [str(s).lower() for s in scope]:
+            return "That deal belongs to a business outside your access."
+        acct = (db.one("select name from crm_accounts where id=%s", (d["account_id"],)) or {}).get("name") \
+            if d.get("account_id") else None
+        quotes = [f"{r['n']} (card {r['id']}, {r['status']})" for r in db.query(
+            "select id, status, request->>'number' n from tasks where kind='quotation' and deal_id=%s "
+            "order by id", (d["id"],))]
+        head = {"deal_id": d["id"], "title": d["title"], "stage": d.get("stage"), "value": d.get("value"),
+                "currency": d.get("currency"), "client_account": acct, "contact_email": d.get("contact_email"),
+                "contacts": d.get("contacts"), "quotations": quotes, "automation": d.get("automation")}
+        return json.dumps(head, default=str) + "\n\n" + (_pl.deal_context(int(d["id"]), limit=40) or "")[:12000]
     if name == "crm_pipeline":
         slug = inp.get("company")
         opp, proj = crm_opportunities(slug, u=u), crm_projects(slug, u=u)
@@ -4072,7 +4111,7 @@ def _shared_behaviour() -> str:
 _CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "create_skill", "set_reminder",
                 # Chiefs can also DRAFT and look people up — anyone Rashad talks to should be able to act on a
                 # request, not just strategise. (Per-company RULE writes stay Manager-only to avoid scope bleed.)
-                "create_task", "draft_email", "draft", "crm_lookup", "crm_pipeline", "correct_task",
+                "create_task", "draft_email", "draft", "crm_lookup", "crm_pipeline", "deal_timeline", "correct_task",
                 "create_proposal", "create_capabilities_deck", "rebrand_deck", "rate_card", "set_rate", "media_library", "rate_film",
                 "research_client", "export_templates",
                 "approve_task", "skip_task", "run_report", "schedule_report", "create_quotation",

@@ -230,6 +230,21 @@ _GUARD_NOTE = ("\n\n(Cortex note: I could not confirm a new task was created thi
                "create or draft something, please re-send it so it's saved to your Inbox.)")
 
 
+_OUT_OF_ROUNDS = ("You have used every tool step available for this turn. Do not call any more tools. Tell the "
+                  "person plainly what you have done so far, what you found, and what is still left to do, so "
+                  "they can reply 'carry on'. Never claim something was created unless a tool created it.")
+_OUT_OF_ROUNDS_NOTE = ("\n\n(I ran out of steps before finishing this. Nothing more was created; say 'carry on' "
+                       "and I will pick it up from here.)")
+
+
+def _with_wrap_up(msgs: list) -> list:
+    """The history with the out-of-rounds instruction added to the last (tool-result) user turn."""
+    last = msgs[-1]
+    content = list(last["content"]) if isinstance(last.get("content"), list) else [
+        {"type": "text", "text": str(last.get("content") or "")}]
+    return msgs[:-1] + [{"role": "user", "content": content + [{"type": "text", "text": _OUT_OF_ROUNDS}]}]
+
+
 def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
                *, max_tokens: int = 1500, rounds: int = 6, purpose: str = "chat",
                company: str | None = None) -> str:
@@ -271,6 +286,16 @@ def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
                     out = f"error: {e}"
                 results.append({"type": "tool_result", "tool_use_id": b.id, "content": str(out)})
         msgs.append({"role": "user", "content": results})
+    if resp is not None and resp.stop_reason == "tool_use":
+        # OUT OF ROUNDS MID-TASK: one last call with tools switched off, so the person is told what was done
+        # and what is left. It used to hand back an EMPTY reply (Sheraa quotation test, 11 Sep 2026).
+        try:
+            resp = client.messages.create(model=MODEL, max_tokens=max_tokens, system=sys_blocks,
+                                           tools=cached_tools, tool_choice={"type": "none"},
+                                           messages=_with_wrap_up(msgs))
+            _log_usage(MODEL, getattr(resp, "usage", None), purpose, company)
+        except Exception:  # noqa: BLE001
+            return _OUT_OF_ROUNDS_NOTE
     if not resp:
         return ""
     text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
@@ -325,6 +350,19 @@ def chat_tools_stream(system: str, messages: list[dict], tools: list[dict], exec
                     out = f"error: {e}"
                 results.append({"type": "tool_result", "tool_use_id": b.id, "content": str(out)})
         msgs.append({"role": "user", "content": results})
+    if final is not None and final.stop_reason == "tool_use":      # out of rounds mid-task: say so, never ""
+        try:
+            with client.with_options(timeout=600.0).messages.stream(
+                    model=MODEL, max_tokens=max_tokens, system=sys_blocks, tools=cached_tools,
+                    tool_choice={"type": "none"}, messages=_with_wrap_up(msgs)) as stream:
+                for ev in stream:
+                    if ev.type == "content_block_delta" and getattr(ev.delta, "type", "") == "text_delta":
+                        final_text += ev.delta.text
+                        yield ("delta", {"text": ev.delta.text})
+                _log_usage(MODEL, getattr(stream.get_final_message(), "usage", None), purpose, company)
+        except Exception:  # noqa: BLE001
+            final_text += _OUT_OF_ROUNDS_NOTE
+            yield ("delta", {"text": _OUT_OF_ROUNDS_NOTE})
     reply = final_text.strip()
     # FINAL SAFETY NET: never end the stream on a false confirmation
     if _claims_action(reply) and not (called & _CREATING_TOOLS):
