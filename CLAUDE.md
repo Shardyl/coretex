@@ -767,6 +767,19 @@ with no deal: Muhanad Aouameh's reply on Sheraa deal 118 (card 568), because the
 account. Fixed BY HAND that once (account 1007 attached, card linked, thread logged). Anything that creates
 a deal by hand must set `account_id`; the code fix is to also match `contacts @> [{"email": ...}]`.
 
+## A quotation number is never issued twice (11 Sep 2026)
+
+A QUOTATION NUMBER IS NEVER ISSUED TWICE. `quotation_seq` only moved when `_next_number` issued a number; a
+number pinned by hand (SEN-2026-0011, cited by BioScience's proposal) never advanced it, so the counter sat
+at 10 and handed Honor 0011. Honor's quote was then filed as v4 of BioScience's version history, the shared
+box file `quotation-sensa-SEN-2026-0011.pdf` was overwritten under BioScience's cards, and Honor's new Drive
+folder got an ALL VERSIONS workbook with BioScience's priced tabs. Caught before anything was sent; undone
+(registry restored to v1-v3, box files restored from library doc 352 and Drive, the three Honor files
+binned, library doc 372 renamed VOID, card 570 cancelled) and reissued under a fresh number. Now:
+`_next_number` skips any number with a version history or a quotation card; `_claim_number` moves the
+counter past any pinned number; `generate_xlsx` refuses a pinned number whose history belongs to another
+client; and "one open card per quotation number" only ever closes the SAME client's cards.
+
 ## Prep cards do the work (11 Sep 2026)
 
 A "Prepare quotation" card (spawned by an owner correction's `prep` channel, or by

@@ -241,10 +241,30 @@ def _money(v: float, cur: str) -> str:
 
 
 def _next_number() -> str:
-    """Real, code-stamped quote number: SEN-YYYY-NNNN with a monotonic counter in settings."""
-    n = int(db.setting_get("quotation_seq") or 0) + 1
+    """Real, code-stamped quote number: SEN-YYYY-NNNN from a monotonic counter in settings.
+
+    The counter is not the only truth. A number pinned by hand (a proposal that already cited one) never
+    advanced it, so on 11 Sep 2026 the counter handed Honor SEN-2026-0011, BioScience's number, and Honor's
+    quote was filed as v4 of BioScience's history. A number that already has a version history or a
+    quotation card is never issued again."""
+    year = datetime.date.today().year
+    n = int(db.setting_get("quotation_seq") or 0)
+    while True:
+        n += 1
+        num = f"SEN-{year}-{n:04d}"
+        taken = db.setting_get(f"quote_versions:{num}") or db.one(
+            "select 1 from tasks where kind='quotation' and request->>'number'=%s limit 1", (num,))
+        if not taken:
+            break
     db.setting_set("quotation_seq", n)
-    return f"SEN-{datetime.date.today().year}-{n:04d}"
+    return num
+
+
+def _claim_number(number: str) -> None:
+    """A hand-pinned number moves the counter past itself, so the sequence can never re-issue it."""
+    m = re.match(r"^SEN-\d{4}-(\d+)$", number or "")
+    if m and int(m.group(1)) > int(db.setting_get("quotation_seq") or 0):
+        db.setting_set("quotation_seq", int(m.group(1)))
 
 
 # ---------------------------------------------------------------------------
@@ -339,6 +359,8 @@ def _resolve(company: str, preset: str, *, customer: str, sections, total, total
             terms = {"incorporated": _mt}
     vat = round((subtotal + fee) * vat_rate, 2)
     grand = round(subtotal + fee + vat, 2)
+    if number:
+        _claim_number(number)
     number = number or _next_number()   # reuse a pinned number when rendering both formats of one quote
     n_items = len([1 for s in sections for _ in s.get("items", [])])
     blank_note = f" {blanks} price(s) left blank." if blanks else ""
@@ -653,6 +675,11 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
     from openpyxl.drawing.image import Image as XLImage
     from openpyxl.styles import Alignment, Font, PatternFill
 
+    if wb is None and number:   # backstop: one client's number never carries another client's quotation
+        _reg = db.setting_get(f"quote_versions:{number}") or []
+        _who = ((_reg[-1].get("spec") or {}).get("customer") or "").strip() if _reg else ""
+        if _who and customer and _who.lower() != customer.strip().lower():
+            raise ValueError(f"{number} is {_who}'s quotation; it cannot carry one for {customer}.")
     m = _resolve(company, preset, customer=customer, sections=sections, total=total,
                  total_inclusive=total_inclusive, title=title, note=note, agency_fee=agency_fee,
                  terms=terms, deliverables=deliverables, number=number)

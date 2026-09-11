@@ -4520,7 +4520,9 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
         db.execute("update tasks set status='cancelled', updated_at=now(), "
                    "request = request || jsonb_build_object('superseded_by', %s::bigint) "
                    "where kind='quotation' and company_id=%s and status='awaiting_approval' "
-                   "and id <> %s and request->>'number' = %s", (t["id"], co["id"], t["id"], number))
+                   "and id <> %s and request->>'number' = %s "
+                   "and lower(coalesce(request->>'customer', '')) = lower(%s)",   # never another client's card
+                   (t["id"], co["id"], t["id"], number, customer or ""))
     return t
 
 
