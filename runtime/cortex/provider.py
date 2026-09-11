@@ -230,6 +230,12 @@ _GUARD_NOTE = ("\n\n(Cortex note: I could not confirm a new task was created thi
                "create or draft something, please re-send it so it's saved to your Inbox.)")
 
 
+# A Talk round that runs out of output room mid-answer is re-run once with this much room. The first cut
+# was a whole quotation (sections, components, descriptions) as one create_quotation call: it stopped at
+# the 1,500-token ceiling with the tool call unfinished, and the person got an EMPTY reply (11 Sep 2026).
+# A ceiling costs nothing unless it is used.
+_ROOMY = 16000
+
 _OUT_OF_ROUNDS = ("You have used every tool step available for this turn. Do not call any more tools. Tell the "
                   "person plainly what you have done so far, what you found, and what is still left to do, so "
                   "they can reply 'carry on'. Never claim something was created unless a tool created it.")
@@ -263,9 +269,12 @@ def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
     called: set = set()       # tool names actually executed this turn
     nudged = False            # have we already forced a corrective round?
     for _ in range(rounds):
-        resp = client.messages.create(model=MODEL, max_tokens=max_tokens, system=sys_blocks,
-                                       tools=cached_tools, messages=msgs)
-        _log_usage(MODEL, getattr(resp, "usage", None), purpose, company)
+        for _budget in (max_tokens, _ROOMY):      # OUT OF ROOM is not an answer: a cut-off round is re-run roomier
+            resp = client.messages.create(model=MODEL, max_tokens=_budget, system=sys_blocks,
+                                           tools=cached_tools, messages=msgs)
+            _log_usage(MODEL, getattr(resp, "usage", None), purpose, company)
+            if resp.stop_reason != "max_tokens":
+                break
         if resp.stop_reason != "tool_use":
             text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
             # GUARD: it claims it created/queued something but never called a tool that does -> force one real attempt
@@ -319,16 +328,19 @@ def chat_tools_stream(system: str, messages: list[dict], tools: list[dict], exec
     called: set = set()       # tool names actually executed this turn
     nudged = False            # have we already forced a corrective round?
     for _ in range(rounds):
-        round_text = ""
-        final = None
-        with client.with_options(timeout=600.0).messages.stream(
-                model=MODEL, max_tokens=max_tokens, system=sys_blocks, tools=cached_tools, messages=msgs) as stream:
-            for ev in stream:
-                if ev.type == "content_block_delta" and getattr(ev.delta, "type", "") == "text_delta":
-                    round_text += ev.delta.text
-                    yield ("delta", {"text": ev.delta.text})
-            final = stream.get_final_message()
-        _log_usage(MODEL, getattr(final, "usage", None), purpose, company)
+        for _budget in (max_tokens, _ROOMY):      # a round cut off by max_tokens is re-run with room to finish
+            round_text = ""
+            final = None
+            with client.with_options(timeout=600.0).messages.stream(
+                    model=MODEL, max_tokens=_budget, system=sys_blocks, tools=cached_tools, messages=msgs) as stream:
+                for ev in stream:
+                    if ev.type == "content_block_delta" and getattr(ev.delta, "type", "") == "text_delta":
+                        round_text += ev.delta.text
+                        yield ("delta", {"text": ev.delta.text})
+                final = stream.get_final_message()
+            _log_usage(MODEL, getattr(final, "usage", None), purpose, company)
+            if final.stop_reason != "max_tokens":
+                break
         final_text += round_text
         if final.stop_reason != "tool_use":
             # GUARD: claimed an action but no creating tool ran -> force one real corrective round (live)
