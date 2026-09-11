@@ -4258,7 +4258,10 @@ def deliver_rebrand(company: str, *, document: str = "", document_id: int | None
     safe = re.sub(r"[^A-Za-z0-9 -]", "", customer or co["name"])[:60].strip() or "Deck"
     name = f"{safe} - Proposal rebranded - {stamp}.pdf"
     data = open(out["path"], "rb").read()
-    saved = documents.save(co["id"], company, name, "application/pdf", data, uploaded_by="cortex")
+    # CLIENT WORK NEVER GOES TO THE OFFICIAL DOCUMENTS FOLDER (owner, 11 Sep 2026). save() used to push
+    # every document there as well, so each rebrand existed twice: once in the client folder, once in
+    # SENSA CORTEX/Documents. The library records it; the client folder is its only Drive home.
+    saved = documents.save(co["id"], company, name, "application/pdf", data, uploaded_by="cortex", push=False)
     filed = None
     try:                                  # same client-folder rule as quotations and proposals
         from . import drive as _drive
@@ -4269,7 +4272,9 @@ def deliver_rebrand(company: str, *, document: str = "", document_id: int | None
             tok = _drive.access_token()
             fo = _drive.ensure_client_folder(client, parent, token=tok)
             if fo.get("id"):
-                _drive.upload_to_folder(fo["id"], name, "application/pdf", data, token=tok)
+                _fid = _drive.upload_to_folder(fo["id"], name, "application/pdf", data, token=tok)
+                db.execute("update company_documents set drive_id=%s, client=%s where id=%s",
+                           (_fid, fo["name"], saved["id"]))
                 filed = fo["name"]
     except Exception:  # noqa: BLE001 — the card must survive a Drive hiccup
         pass
@@ -4392,7 +4397,8 @@ def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quota
                      out_dir=QUOTES_DIR, filename=f"proposal-{company}-{stamp}.pdf")
     data = open(out["path"], "rb").read()
     name = f"{safe} - Proposal{' ' + quotation_number if quotation_number else ''} - {stamp}.pdf"
-    doc = documents.save(co["id"], company, name, "application/pdf", data, uploaded_by="cortex")
+    # client work: recorded in the library, filed ONLY in the client folder (never also in Documents)
+    doc = documents.save(co["id"], company, name, "application/pdf", data, uploaded_by="cortex", push=False)
     filed = None
     try:                                       # same client-folder rule as quotations
         from . import drive as _drive
@@ -4403,7 +4409,14 @@ def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quota
             tok = _drive.access_token()
             f = _drive.ensure_client_folder(client, parent, token=tok)
             if f.get("id"):
-                _drive.upload_to_folder(f["id"], name, "application/pdf", data, token=tok)
+                _fid = _drive.upload_to_folder(f["id"], name, "application/pdf", data, token=tok)
+                db.execute("update company_documents set drive_id=%s, client=%s where id=%s",
+                           (_fid, f["name"], doc["id"]))
+                if quotation_number:      # latest proposal at the top, earlier ones for this quote in Archive
+                    try:
+                        _drive.archive_superseded(f["id"], f"Proposal {quotation_number}", {name}, token=tok)
+                    except Exception:  # noqa: BLE001
+                        pass
                 filed = f["name"]
     except Exception:  # noqa: BLE001 — the card must survive a Drive hiccup
         pass
@@ -4813,11 +4826,18 @@ def _push_quote_to_client_drive(co: dict, customer: str, number: str, x: dict, p
                 uploaded.append(name)
                 if ext == "pdf":     # the library points at THIS file as the canonical original
                     pdf_id, pdf_name = _fid, name
-        try:   # the living ALL VERSIONS workbook: one spreadsheet, a tab per iteration, updated in place
+        try:   # LATEST AT THE TOP, HISTORY IN ARCHIVE (owner, 11 Sep 2026): the version just filed stays in
+            # the client folder; every earlier version of this quote moves into the folder's Archive. The
+            # quote's companion terms document is never swept up with it.
+            _drive.archive_superseded(f["id"], f"Quotation {number}", set(uploaded), token=tok,
+                                      exclude="Terms and Conditions")
+        except Exception:  # noqa: BLE001
+            pass
+        try:   # the living ALL VERSIONS workbook is the history, so it lives in Archive
             vp = quotation.build_versions_workbook(x.get("company") or co.get("slug"), number, QUOTES_DIR)
             if vp:
-                _drive.upsert_in_folder(f["id"], f"{base} - ALL VERSIONS.xlsx", _XLSX,
-                                        open(vp, "rb").read(), token=tok)
+                _drive.upsert_in_folder(_drive.ensure_subfolder(f["id"], "Archive", tok),
+                                        f"{base} - ALL VERSIONS.xlsx", _XLSX, open(vp, "rb").read(), token=tok)
                 uploaded.append("ALL VERSIONS workbook updated")
         except Exception:  # noqa: BLE001 — the per-version files are already filed
             pass

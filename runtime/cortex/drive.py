@@ -102,6 +102,13 @@ def ensure_client_folder(client_name: str, parent_id: str, token: str | None = N
     existing = r.json().get("files", [])
     want = (client_name or "").strip()
     wl = want.lower()
+    # MERGED / RENAMED CLIENTS (owner, 11 Sep 2026): a client whose work was moved (Honor International
+    # FZCO into a project folder inside Honor; two Orion folders into one) must keep filing THERE, not
+    # into the emptied old folder an exact-name match would still find. Data, not code:
+    # setting `client_folder_aliases` maps a lower-case client name to the folder id that holds its work.
+    alias = (db.setting_get("client_folder_aliases") or {}).get(wl)
+    if alias:
+        return {"id": alias, "name": want, "created": False, "candidates": []}
     for f in existing:                                   # exact (case-insensitive) match wins
         if f["name"].strip().lower() == wl:
             return {"id": f["id"], "name": f["name"], "created": False, "candidates": []}
@@ -114,6 +121,37 @@ def ensure_client_folder(client_name: str, parent_id: str, token: str | None = N
                          "parents": [parent_id]}, timeout=30)
     c.raise_for_status()
     return {"id": c.json()["id"], "name": want, "created": True, "candidates": []}
+
+
+def move_file(file_id: str, from_id: str, to_id: str, token: str | None = None) -> None:
+    """Move one file between folders (same id, so every link and library reference keeps working)."""
+    tok = token or access_token()
+    r = httpx.patch(f"{API}/files/{file_id}", params={"addParents": to_id, "removeParents": from_id,
+                                                      "supportsAllDrives": "true"},
+                    headers={"Authorization": f"Bearer {tok}"}, timeout=30)
+    r.raise_for_status()
+
+
+def archive_superseded(folder_id_: str, match: str, keep: set, token: str | None = None,
+                       exclude: str | None = None) -> int:
+    """LATEST AT THE TOP, HISTORY IN ARCHIVE (owner, 11 Sep 2026). After a new version is filed, every
+    other file in the folder whose name contains `match` (a quote/proposal reference such as
+    SEN-2026-0013) moves into <folder>/Archive. `keep` = the names just filed. Cortex can only move files
+    it created; anything a person put there is left exactly where it is. Returns the number moved."""
+    tok = token or access_token()
+    arch, n = None, 0
+    for f in list_folder(folder_id_, tok):
+        nm = f.get("name") or ""
+        if f.get("mimeType") == "application/vnd.google-apps.folder" or not match or match not in nm \
+                or nm in keep or (exclude and exclude in nm):
+            continue
+        try:
+            arch = arch or ensure_subfolder(folder_id_, "Archive", tok)
+            move_file(f["id"], folder_id_, arch, tok)
+            n += 1
+        except Exception:  # noqa: BLE001 - not Cortex's file, or a Drive hiccup: leave it be
+            continue
+    return n
 
 
 def update_file(file_id: str, mime: str, data: bytes, token: str | None = None) -> str:

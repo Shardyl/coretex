@@ -151,6 +151,40 @@ Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` ad
 rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
 `sales-first-response`.
 
+## Drive filing: latest at the top, history in Archive (11 Sep 2026)
+
+The owner's rule for every Drive folder Cortex files into:
+- **SENSA CORTEX / Documents** holds ONLY Sensa's own official documents (company profile, AI Production
+  Capabilities Deck, trade licence, VAT certificate, terms, templates, rate card): the current version at
+  the top, older versions in `Documents/Archive`. **No client work is ever filed there.**
+- **SENSA CLIENTS / <client>** holds the LATEST version (the one sent or approved) at the top, beside
+  anything the team puts there by hand; earlier iterations go into `<client>/Archive`. A client with more
+  than one project gets a folder per project, each laid out the same way. An AGENCY (EY, Auditoire) always
+  gets a folder per project, because the work is for the agency's client.
+
+How the code keeps it that way:
+- `documents.push_to_drive` routes by document: a row with `client` -> that client's folder; an official
+  document (`_is_official`: kinds company-profile / trade-licence / vat-certificate / capabilities-deck /
+  terms, or a "Sensa ..." / "Sky Vision ..." name) -> Documents, the previous same-name copy moving to
+  Documents/Archive; anything else stays in the library only. It used to push EVERYTHING to Documents,
+  which is how that folder reached 122 files (one quotation template exported ten times).
+- Proposals and rebranded decks save with `push=False` and are filed only in the client folder, their
+  library row pointing at that file (`drive_id`, `client`). A new proposal for a quote number moves the
+  earlier ones for that number into Archive.
+- `_push_quote_to_client_drive`: filing quotation vN calls `drive.archive_superseded(folder, "Quotation
+  <number>", keep=just-filed names, exclude="Terms and Conditions")`, so only vN sits at the top and the
+  quote's terms document is never swept up. The ALL VERSIONS workbook lives in Archive.
+- `drive.ensure_client_folder` checks setting `client_folder_aliases` FIRST (lower-case client name ->
+  folder id), so merged or renamed clients keep filing into the merged folder, not the emptied old one.
+  Set: honor international fzco -> Honor / Honor - X9D x Noon KSA Campaign; orion global fzco,
+  orion global - fzco, orion event management, orion global -> Orion Global FZCO.
+- **Cortex's Drive login is `drive.file` + `drive.readonly`: it can only move, rename or modify files IT
+  created.** Anything a person put in a folder stays exactly where it is; say so rather than pretend.
+
+The one-off tidy that set this up is logged move by move in setting `drive_tidy_2026_09_11`
+(file id, from, to, why) so any of it can be reversed. Nothing was deleted. Two emptied folders were left
+for the owner to delete: `Orion Global - FZCO` and `Honor International FZCO`.
+
 ## Approving a quotation prep card builds the quotation (11 Sep 2026)
 
 A quotation PREP card (kind `content`, `request.prep_action == "quotation"`, see `_is_quotation_prep`)

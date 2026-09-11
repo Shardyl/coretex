@@ -50,14 +50,49 @@ def _drive_docs_folder(company_id: int, slug: str) -> str | None:
     return drive.ensure_subfolder(link, "Documents")
 
 
+_OFFICIAL_KINDS = {"company-profile", "trade-licence", "vat-certificate", "capabilities-deck", "terms"}
+_OFFICIAL_NAME = re.compile(r"^(Sensa( Productions)?|Sky ?Vision)\b", re.I)
+
+
+def _is_official(doc: dict) -> bool:
+    """One of the company's OWN standing documents (profile, licence, VAT, capabilities deck, terms,
+    templates), as opposed to work for a client."""
+    return not (doc.get("client") or "").strip() and (
+        (doc.get("kind") or "") in _OFFICIAL_KINDS or bool(_OFFICIAL_NAME.match(doc.get("filename") or "")))
+
+
 def push_to_drive(doc: dict) -> str | None:
-    """Upload a cached document to its canonical Drive home; records + returns the drive_id."""
-    from . import drive
+    """Upload a cached document to its ONE Drive home; records + returns the drive_id (owner, 11 Sep 2026):
+    - a CLIENT's document goes to that client's folder under the clients drive folder;
+    - the company's own OFFICIAL document goes to <CORTEX>/Documents, and the previous copy of the same
+      file moves into Documents/Archive, so the folder only ever shows the current version;
+    - anything else stays in the library (and the nightly backup) and is NOT dumped into Documents.
+    Documents used to receive every file saved, client drafts included, which is how it became a pile
+    of 122 files with the same quotation template exported ten times."""
+    from . import drive, profile
+    client = (doc.get("client") or "").strip()
+    official = _is_official(doc)
+    if not client and not official:
+        return None                      # decided before any Drive call: sync_drive retries these hourly
     co = store.get_company(doc["company_id"]) or {}
-    fid = _drive_docs_folder(doc["company_id"], co.get("slug") or "")
-    if not fid:
-        return None
-    did = drive.upload(fid, doc["filename"], doc["mime"], read_bytes(doc))
+    tok = drive.access_token()
+    if client:
+        parent = ((profile.get(doc["company_id"]) or {}).get("clients_drive_folder") or "").strip()
+        f = drive.ensure_client_folder(client, parent, token=tok) if parent else {}
+        if not f.get("id"):
+            return None                  # no clients folder, or near-duplicate client folders: never guess
+        did = drive.upload_to_folder(f["id"], doc["filename"], doc["mime"], read_bytes(doc), token=tok)
+    else:
+        fid = _drive_docs_folder(doc["company_id"], co.get("slug") or "")
+        if not fid:
+            return None
+        for old in drive.list_folder(fid, tok):       # the previous copy of this document -> Archive
+            if old.get("name") == doc["filename"] and old.get("mimeType") != "application/vnd.google-apps.folder":
+                try:
+                    drive.move_file(old["id"], fid, drive.ensure_subfolder(fid, "Archive", tok), tok)
+                except Exception:  # noqa: BLE001 - not Cortex's copy: leave it where it is
+                    pass
+        did = drive.upload(fid, doc["filename"], doc["mime"], read_bytes(doc), token=tok)
     db.execute("update company_documents set drive_id=%s where id=%s", (did, doc["id"]))
     return did
 
