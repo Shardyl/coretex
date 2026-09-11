@@ -943,6 +943,18 @@ the Drive terms folder matches.
   participant data), and 6.3A licenses talent appearance for 12 months, GCC, online, which reads onto a
   client's own participants. Short Form Terms v1.2 still carries the 50% at 72 hours standard.
 
+COMPONENT RATE CARD DRAFT (11 Sep 2026, awaiting the owner's confirmation): `Sensa - Rate Card v1.7 DRAFT -
+components.xlsx` in the terms folder (and on his Desktop). Built BY CODE from 331 quotations he issued by hand
+(the SENSA CLIENTS quotation spreadsheets, final version of each quote number, template tabs and Cortex-issued
+SEN- quotes excluded): 8,228 lines placed into 85 components by keyword rules, suggested normal = 2025-26 median,
+suggested budget = 25th percentile, permits unrounded at cost, kit packages = each quote's gear lines summed per
+day. It is deliberately NOT in the document library and NOT live, so nothing can price from or attach it. On
+confirmation his figures go into `rate_card:sensa` as v1.7 (`ratecard.set_item`), `export_templates` writes Rate
+Card v1.7.xlsx, and v1.6 plus the draft move to OLD. Its Package check tab showed the live packages against their
+parts: full crew day built 50,050 vs 45,000 live, crew of two 20,500 vs 15,000, drone light 15,000 vs 19,700.
+Profile `quote_target_flex_pct` = 20 is the owner's hit-a-number band (components may move up to 20% either way
+to reach a stated total); stored for that build, not yet read by any code.
+
 RATE CARD v1.6 (11 Sep 2026, owner-stated while pricing Honor SEN-2026-0012): voiceover for a CAMPAIGN (one
 hero film and its cut-downs, every version in that language) is AED 3,000 English (British) and AED 5,000
 Arabic; the per-video voiceover rates (2,000 / 3,500) are for a single standalone video, and at per-video
