@@ -762,7 +762,8 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
         for d in m["deliverables"]:
             ws.merge_cells(span(r)); ws[f"A{r}"].value = f"•  {d}"; ws[f"A{r}"].font = F(s=10, c=_INK)
             ws[f"A{r}"].alignment = Alignment(indent=1, wrap_text=True, vertical="center")
-            ws.row_dimensions[r].height = 15; r += 1
+            # a long bullet wraps, so its row grows with it (a fixed 15 clipped Honor's first line, 11 Sep 2026)
+            ws.row_dimensions[r].height = 15 * max(1, -(-len(f"•  {d}") // 115)); r += 1
         ws.row_dimensions[r].height = 6; r += 1
 
     # ---- line-item header ----
