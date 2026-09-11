@@ -72,6 +72,11 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
   is copied on which lanes and who is only half-covered; `check_coverage()` raises a deduped
   notification naming the missing lanes and runs on EVERY rule change, so partial coverage can never
   appear silently again. `promote_to_company()` moves a recipient to the profile.
+  ALWAYS-BCC IS THE RECORD COPY (owner, 11 Sep 2026): global setting `always_bcc` (rashadalsafar@gmail.com,
+  every company) plus the profile's `always_bcc` (Sensa: gino@sensa.digital) ride EVERY email, replies and
+  Talk outbound alike. Unlike cc, an always-bcc address is KEPT when that person is the sender, so Gino gets
+  a copy of what went out as him; anyone already on the cc is not bcc'd as well. Only never_cc and the To
+  recipient remove it. Checked on a Gino send: cc rashad, dalal, ayresh; bcc rashadalsafar@gmail.com, gino.
   CATCH-ALLS ARE NEVER COPIED, only received on: hello@sensa.digital and fly@skyvision.film are in
   their companies' `never_cc`. Fixing a misfiled rule means editing the RULE TEXT, not just the
   compiled config - a recompile rebuilds `skills.envelope` from the rules.
@@ -1013,7 +1018,9 @@ TALK FIXES FOUND BY THE FIRST RUN (Sheraa ERF, card 578):
   last call with `tool_choice: none` to say what was done and what is left, never "".
 Result: SEN-2026-0013 v2, 12 block lines all priced from the card, 40,850 net (v1 was one 45,000 package line,
 card 577, closed as superseded). Assumptions it listed: one shoot day, crew of four, travel to Sharjah, English
-VO (Arabic offered in the note), six stock clips.
+VO (Arabic offered in the note), six stock clips. The quotation header: the title is right-aligned in the
+black band with the logo on its left, so a long title now wraps onto two balanced lines and shrinks to fit
+(`generate_xlsx`); at 51 characters it used to run under the logo.
 
 RATE CARD v1.6 (11 Sep 2026, owner-stated while pricing Honor SEN-2026-0012): voiceover for a CAMPAIGN (one
 hero film and its cut-downs, every version in that language) is AED 3,000 English (British) and AED 5,000
