@@ -767,6 +767,26 @@ with no deal: Muhanad Aouameh's reply on Sheraa deal 118 (card 568), because the
 account. Fixed BY HAND that once (account 1007 attached, card linked, thread logged). Anything that creates
 a deal by hand must set `account_id`; the code fix is to also match `contacts @> [{"email": ...}]`.
 
+## Prep cards do the work (11 Sep 2026)
+
+A "Prepare quotation" card (spawned by an owner correction's `prep` channel, or by
+`pipeline.suggest_next_step` when a client asks for one; both set `request.prep_action = "quotation"`) is
+ACTIONABLE. Answering it, in the cockpit or through Talk's `correct_task`, runs `engine._prep_build_quotation`
+at the top of `apply_correction` instead of redrafting the checklist:
+- `_prep_quote_spec`: the model STRUCTURES his words (all his notes on the card, oldest first, plus the deal
+  timeline and rate card) into create_quotation arguments; CODE decides every price. A unit or total
+  survives only if it is a figure he wrote on the card (`_stated_numbers`: 15,000 / 15k / 15 thousand) or a
+  rate-card rate; anything else is blanked, and an unstated quantity falls back to 1. Preset, client and
+  contact come from the opportunity.
+- then `deliver_quotation`, the card linked to the deal, the prep card closed `done` pointing at the new
+  quotation card, a note on the deal timeline. Nothing to build from -> the ordinary redraft runs.
+Also: a prep card resolves its opportunity AT CREATION (`crm.active_deals_for_email` on the inquiry sender)
+rather than only copying its parent's, and its title names it. Card 569 was made two minutes before its
+parent 568 was linked to deal 118, so it asked for "the CRM deal number". Internal prep cards get
+`worker._INTERNAL_PREP_RULE`: no sender, preparer or signature line (569 wrote "Preparer/approver: Gino
+Palmes" on its own; no code put it there), and quotation preps end "Answer on this card with these details
+and the quotation is built from them."
+
 ## Where Cortex is told how terms travel (11 Sep 2026)
 
 WHERE CORTEX IS TOLD HOW TERMS TRAVEL - keep these four in step with each other and with the code:
