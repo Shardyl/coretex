@@ -313,11 +313,16 @@ def find(company_id: int, query: str, scope: str = "") -> list[dict]:
         return sum(1 for t in toks if t.replace("license", "licence") in hay)
     scored = [(score(r), r) for r in rows]
     best = [r for s, r in sorted(scored, key=lambda x: -x[0]) if s > 0]
+    # numbers identify no client: "2026" in one deal's title matched every dated file of every client
     stoks = [t for t in re.split(r"[^a-z0-9]+", (scope or "").lower())
-             if len(t) > 2 and t not in _GENERIC]
+             if len(t) > 2 and t not in _GENERIC and not t.isdigit()]
     if stoks:   # a standing company document is never another client's file, so the scope never drops it
-        best = [r for r in best if r["kind"] in CORE_KINDS
-                or any(t in (r["filename"] + " " + r["kind"]).lower() for t in stoks)]
+        # WHOLE WORDS, not substrings: "erf" from Sheraa's ERF film matched "perfumes" and let a Rasasi
+        # Perfumes proposal onto the Sheraa card (11 Sep 2026). The document's recorded client counts too.
+        def _words(r):
+            return set(re.split(r"[^a-z0-9]+", " ".join(
+                (r.get("filename") or "", r.get("kind") or "", r.get("client") or "")).lower()))
+        best = [r for r in best if r["kind"] in CORE_KINDS or any(t in _words(r) for t in stoks)]
     return best or []
 
 

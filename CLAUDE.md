@@ -706,6 +706,18 @@ build the capability when it is missing).
   (which stops another client's file going out) also hid our own standing documents, so "attach the AI deck"
   on a deal-linked card came back empty. A rebuild makes a NEW file named from the audience; the standard
   only moves when Rashad says so (rename it, repoint the profile key).
+- **THE DEAL SCOPE MATCHES WHOLE WORDS** (11 Sep 2026). `documents.find(scope=...)` is the hard filter that
+  keeps another client's file off a deal-linked card, and it matched FRAGMENTS: measured across all 46 live
+  deals it let 56 other-client files through and lost no genuine match by stopping (Sheraa's "ERF" inside
+  "Perfumes", "graphic" inside a Property Finder "Graphics" quote on Merck, "itc" inside "Ritchie", "003"
+  inside a Dawn Christine quote number, "brand" inside "Brandgate"). It now compares whole words from the
+  file name, kind and recorded client. NUMBERS ARE NOT CLIENT WORDS: "2026" in one deal's title matched
+  168 dated files of other clients, so all-digit tokens are dropped (no deal relies on one to identify it).
+  Standing documents (CORE_KINDS) pass any scope. STILL OPEN: ordinary words in a deal's TITLE still act as
+  client words ("agency" in Sheraa's title passes an Oliver Karstel Creative Agency quote; "awareness" and
+  "campaign" pass the EY/ITC invoice onto other campaign deals; "shoot", "group", "day", "website" likewise).
+  The real fix is to scope by the deal's CLIENT (account name, contact domain, the file's recorded client),
+  not its title words; ranking usually puts the right file first, but the filter is meant to be a guarantee.
 - **`rebrand_deck`** (2026-09-08) - re-lays an existing deck PDF from the document library into the
   house format, keeping the content WORD FOR WORD. `deck.render_spec()` has NO model in it: it lays out
   an explicit page list, because when the words are agreed (or already with the client) a model
