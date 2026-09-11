@@ -2722,6 +2722,63 @@ def qualify_suggest(co: dict, inq: dict) -> dict | None:
             "domain": domain, "free_email": free}
 
 
+# ---------- the facts triage can check without a model (11 Sep 2026) ----------
+# Form bots hit snap-rewards.com with "I would like more information. Please contact me by email" under
+# fake names and 555 numbers. Each was judged alone, so an address binned five times was judged fresh
+# the sixth (madamtaisia@mail.ru, 24 Aug to 6 Sep 2026: junk x5 under five names, genuine x2 under two
+# more), and 13 of 15 Snap Rewards reply cards went to robots. Two facts settle it before the model runs:
+# a fictional phone number, and an address this company has already filed as junk. Judgement stays on
+# the lead-qualification rules; this is memory and arithmetic. The book is a plain setting
+# (`enquiry_junk_senders:<slug>`), so a wrongly-binned address is un-binned by deleting its key.
+_FICTIONAL_PHONE_RX = re.compile(r"(?<!\d)\(?\d{3}\)?[\s.-]?555[\s.-]?\d{4}(?!\d)")
+
+
+def _junk_book(slug: str) -> dict:
+    v = db.setting_get(f"enquiry_junk_senders:{slug}")
+    return v if isinstance(v, dict) else {}
+
+
+def remember_junk_sender(slug: str, inq: dict, reason: str = "") -> None:
+    """Record that this company filed `inq['email']` as junk (called on every junk verdict, model or gate)."""
+    em = (inq.get("email") or "").strip().lower()
+    if not em or "@" not in em:
+        return
+    book = _junk_book(slug)
+    ent = book.get(em) if isinstance(book.get(em), dict) else {"count": 0, "names": []}
+    ent["count"] = int(ent.get("count") or 0) + 1
+    ent["last"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    nm = (inq.get("name") or "").strip()[:60]
+    names = [n for n in (ent.get("names") or []) if n]
+    if nm and nm not in names:
+        names.append(nm)
+    ent["names"] = names[-8:]
+    if reason:
+        ent["reason"] = reason[:160]
+    book[em] = ent
+    if len(book) > 3000:   # keep the book bounded: drop the oldest entries
+        keep = sorted(book.items(), key=lambda kv: (kv[1] or {}).get("last") or "")[-3000:]
+        book = dict(keep)
+    db.setting_set(f"enquiry_junk_senders:{slug}", book)
+
+
+def enquiry_hard_junk(slug: str, inq: dict) -> str | None:
+    """A reason string when the enquiry is junk on facts alone, else None. A free-mail address is junk after
+    ONE prior junk verdict; a corporate address only after two, so a real company whose first note read badly
+    is not locked out by a single call."""
+    ph = (inq.get("phone") or "").strip()
+    if ph and _FICTIONAL_PHONE_RX.search(ph):
+        return f"fictional 555 phone number ({ph})"
+    em = (inq.get("email") or "").strip().lower()
+    ent = _junk_book(slug).get(em) if em else None
+    if isinstance(ent, dict):
+        n = int(ent.get("count") or 0)
+        dom = em.split("@")[-1]
+        if n >= (1 if dom in _FREE_EMAIL_DOMAINS else 2):
+            names = ", ".join(ent.get("names") or []) or "no name"
+            return f"address already filed as junk {n}x (as {names})"
+    return None
+
+
 def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
     """Triage ONE website enquiry (parsed fields {name,email,phone,subject,message}) and route it: genuine ->
     CRM contact (+ optional drafted reply); spam/junk -> filed, NEVER CRM'd. Shared by the email FORM_INTAKE
@@ -2731,8 +2788,10 @@ def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
         return {"ok": False, "reason": "unknown company"}
     if not (inq.get("email") or "").strip():
         return {"ok": False, "reason": "no email"}
-    verdict = triage_inquiry(inq, slug)
+    hard = enquiry_hard_junk(slug, inq)              # facts first: no model call for a known robot
+    verdict = {"genuine": False, "category": "spam", "reason": hard} if hard else triage_inquiry(inq, slug)
     if not verdict["genuine"]:                       # spam/junk -> filed for audit, NOT CRM'd, NOT drafted
+        remember_junk_sender(slug, inq, verdict.get("reason") or "")
         flog = db.setting_get("enquiry_filtered") or []
         flog.append({"company": slug, "name": inq.get("name"), "email": inq.get("email"),
                      "category": verdict.get("category"), "reason": verdict.get("reason")})

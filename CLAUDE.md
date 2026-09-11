@@ -275,6 +275,30 @@ now draft). Massar -> not addressed, still skipped. Backfilled as deals 117 (Mas
 for vendors pitching TO us. Right outcome, wrong reason, and it means a DIRECT RFP could still be
 skipped under "sales emails" on the model's reading. Fix 1 only protects against the broadcast rule.
 
+## Website enquiries: facts before the model (11 Sep 2026)
+
+Form bots hit snap-rewards.com with "I would like more information. Please contact me by email" and
+"add me to the newsletter" under fake US names, free-mail or mail.ru addresses and 555 phone numbers.
+`triage_inquiry` judged each alone under "generous on doubt", so 13 of Snap Rewards' 15 reply cards
+went to robots, one was SENT (card 308, "consider yourself added") and then silence-chased three times,
+and 10 bot addresses became CRM contacts. The same address was binned five times under five names and
+passed twice under two more.
+
+- **`engine.enquiry_hard_junk(slug, inq)`** runs in `intake_enquiry` BEFORE any model call: a fictional
+  NNN-555-NNNN phone number, or an address this company has already filed as junk (free-mail after ONE
+  prior verdict, corporate after two). **`remember_junk_sender`** writes every junk verdict, model or
+  gate, into setting `enquiry_junk_senders:<slug>` (`{email: {count, last, names[], reason}}`, bounded
+  at 3000). Un-bin an address by deleting its key. Seeded for Snap Rewards from the `enquiry_filtered`
+  log plus the ten bot addresses (Rickson at NTUC Club, the one genuine lead, excluded).
+- **Judgement stays on `lead-qualification` rules**, which is the skill triage reads. The newsletter
+  rule the owner taught on 29 Aug sat on `sales-first-response` (the DRAFTING lane), so triage never saw
+  it; it now also lives on Snap's lead-qualification beside a rule naming the "more information" template.
+  A no-draft rule must be on the skill the gate actually reads.
+- **The site has its own gate first** (snap-rewards theme 1.2.8, `wpcf7_spam`): honeypot, 555 numbers,
+  bot phrases on short messages, Turnstile when its keys are set. Spam there never reaches Cortex.
+- Cleanup 11 Sep: card 522 rejected, the vitaevans chase disarmed, the ten bot contacts marked
+  `not_qualified` with a history note (kept, never deleted).
+
 ## The relationship decides the sender (8 Sep 2026)
 
 Thread-stickiness answers "who last emailed this CONTACT". That is the wrong question when one person
