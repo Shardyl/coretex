@@ -739,23 +739,23 @@ updated together. Quotations auto-fill the QUOTATION TO contact (name/email/phon
 explicit `contact_email` wins, an unambiguous single-contact account fills in, ambiguity stays blank
 (quotation._contact_for; deliver_quotation passes contact_email). TERMS MODULES: reusable clause modules live as `terms_module:<name>` settings (human-readable docx beside the T&Cs in the Drive terms folder + library). First module: `multi-version` (v1.0, 2026-08-30) - the approval-gate + enhanced-revision-service + masters-first versions structure for multi-cut/multi-language jobs, born on SEN-2026-0004 (Property Finder); the sales-quotation rule tells the drafter to apply it, gen path: pass a per-quote `terms` dict to generate_xlsx with the module clauses swapped into Revisions & Delivery.
 
-## Shoot cancellation: the standard is a FLOOR (8 Sep 2026)
+## Shoot cancellation standard (owner decision, 11 Sep 2026)
 
-The house standard (Master Terms v1.2 cl.5, Short Form v1.2, `ai-production` cl.19, `sales-quotation`
-rule 6) is **50% inside 72 hours of call time, 100% inside 24**. It was missing from
-`shoot-production` - the one preset that is entirely a shoot - and had already gone out on the
-BioScience quotation.
+**Within 4 working days of call time: 50% of the crew and production charges for that shoot. Within 48
+hours: 100%.** Earlier than that only third-party costs already committed are charged, at cost, and a
+postponed shoot is rebooked subject to availability. Cancelling and postponing are treated alike; working
+days are Monday to Friday, excluding UAE public holidays. It replaced the 21 day / 7 day / 72 hour / 24 hour
+ladder of 8 Sep, which Rashad judged unrealistic for Dubai, where shoots are often booked inside a week.
 
-DO NOT paste it in. That preset carries its own day-based ladder which is STRONGER from 7 days out
-(full studio and crew fee), so adding the 50% step underneath reads as a reduction, and the softer,
-more specific clause is the one a client argues. Clauses 6 and 7 now absorb the 72h and 24h rungs and
-stay continuous: >21 days rescheduled once free; inside 21 days committed third-party costs at cost;
-inside 7 days the full studio and crew fee; inside 72 hours that fee and not carried to the new date;
-inside 24 hours or a no-show, that fee plus post already carried out. Rule 6 says the standard is a
-floor a preset's own ladder can satisfy.
+Where it lives: **Production Short Form Terms v1.0** clause 4 (24 clauses, locked 11 Sep, the printed short
+form for live production, carried by the `shoot-production` preset), Master Terms clause 8.5 from v1.5, and
+`sales-quotation` rule 6, which forbids quoting a different ladder without the owner. STILL ON THE OLD
+STANDARD: the AI short form (`ai-production` clause 19 = Short Form Terms v1.2) says 50% inside 72 hours
+and 100% inside 24. The previous `shoot-production` printed terms are kept in
+`/opt/cortex-knowledge/documents/sensa/_preserved/`.
 
-WHEN A PRESET'S TERMS CHANGE: regenerate any un-sent quotation built on it (SEN-2026-0009 was
-superseded by SEN-2026-0010) and run `export_templates` so the Drive terms folder matches.
+WHEN A PRESET'S TERMS CHANGE: regenerate any un-sent quotation built on it and run `export_templates` so
+the Drive terms folder matches.
 
 ## High-value quotations issue under the Master Terms (11 Sep 2026)
 
@@ -765,8 +765,8 @@ superseded by SEN-2026-0010) and run `export_templates` so the Drive terms folde
   .docx beside it, as the client's copy (see THE CLIENT'S COPY below); filed in
   the client folder beside the quote and attached to the card with it. A replayed version keeps the terms
   it was issued with (explicit terms win), so an ALL VERSIONS tab never rewrites history.
-- TWO PROFILE KEYS, TWO JOBS. `master_terms_doc` = the current Master Terms PDF (Sensa: v1.4 since
-  11 Sep; v1.3 = docs 328/329, kept). `high_value_attach_doc` = the COMPANY PROFILE that rides on a high-value first reply
+- TWO PROFILE KEYS, TWO JOBS. `master_terms_doc` = the current Master Terms PDF (Sensa: v1.5 =
+  docs 370/371 since 11 Sep; every earlier version kept). `high_value_attach_doc` = the COMPANY PROFILE that rides on a high-value first reply
   (Sensa: doc 7). It pointed at Master Terms v1.2 from 28 Aug to 11 Sep, so a high-value first reply
   would have attached the terms instead of the profile; it never fired. Never repoint it at terms.
 - `create_quotation number=` issues a NEW VERSION of an existing quotation, same client only, so a
