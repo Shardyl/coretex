@@ -4313,7 +4313,7 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
     if _att:
         req["attach_docs"] = [{"id": d["id"], "filename": d["filename"], "mime": d["mime"],
                                "size": d["size"]} for d in _att]
-    _draft = x["summary"] + (f" The Master Terms copy issued with it: {terms_doc['filename']}."
+    _draft = x["summary"] + (f" The Terms and Conditions issued with it: {terms_doc['filename']}."
                              if terms_doc else "")
     return db.execute(
         "insert into tasks (company_id,skill_id,kind,request,draft,status,origin,title) "
@@ -4323,50 +4323,161 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
 
 def _issue_master_terms_copy(co: dict, customer: str, number: str, mt: dict,
                              drive_note: dict | None) -> dict | None:
-    """The Master Terms AS ISSUED WITH ONE QUOTATION: the company's current version with a line under
-    the title naming the quotation, its version and the client, so the two documents reference each
-    other. Built from the .docx beside the attached PDF so the house typography is untouched; falls back
-    to the plain PDF when no .docx is on file. Filed beside the quotation and into the library."""
+    """The Master Terms AS ISSUED WITH ONE QUOTATION: the client's copy.
+
+    "Master Terms" is OUR name for the long-form template, and its version line and "applies to tenders
+    at or above AED 250,000" note are internal (owner, 11 Sep 2026). The client's copy is titled Terms
+    and Conditions and names only what it belongs to: the quotation number exactly as the quotation
+    prints it, and the client. Which master version it came from lives in the PDF metadata and on the
+    card, never on the page. The signature section becomes a proper execution page: one row per field
+    with a line to write on and a box for each company stamp, on its own page so it never splits. The
+    fields and our own signatory are READ FROM THE TEMPLATE'S signature lines, so the document stays
+    the source of who signs for us. Falls back to the plain PDF when no .docx is on file."""
     import copy as _copy
     import io as _io
     import subprocess as _sp
     import docx as _docx
-    from docx.text.paragraph import Paragraph as _Para
+    from docx.enum.table import WD_ROW_HEIGHT_RULE, WD_CELL_VERTICAL_ALIGNMENT
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Cm, Pt, RGBColor
     n = (drive_note or {}).get("version") or len(db.setting_get(f"quote_versions:{number}") or []) or 1
     now = datetime.now(timezone.utc)
     client = (customer or "").split(",")[0].strip() or co["name"]
-    label = mt.get("label") or "Master Terms"
-    name = f"{client} - {label} - Quotation {number} v{n} - {now:%Y-%m-%d}.pdf"
+    name = f"{client} - Terms and Conditions - Quotation {number} v{n} - {now:%Y-%m-%d}.pdf"
     src = re.sub(r"\.pdf$", ".docx", mt.get("filename") or "", flags=re.I)
     row = db.one("select id from company_documents where company_id=%s and filename=%s "
                  "order by id desc limit 1", (co["id"], src))
-    if row:
+    if not row:
+        data = documents.read_bytes(documents.get(int(mt["doc_id"])))
+    else:
         d = _docx.Document(_io.BytesIO(documents.read_bytes(documents.get(row["id"]))))
-        anchor = next((p for p in d.paragraphs if p.text.strip().lower().startswith("applies to")),
-                      d.paragraphs[min(3, len(d.paragraphs) - 1)])
-        el = _copy.deepcopy(anchor._p)
-        anchor._p.addnext(el)
-        para = _Para(el, anchor._parent)
-        for i, run in enumerate(para.runs):
-            run.text = "" if i else (f"Issued with Quotation {number} v{n} for {client}, "
-                                     f"{now.day} {now:%B %Y}.")
-            if not i:
-                run.bold = True
+        INK, MUTE, TEAL, RULE = (RGBColor(0x1A, 0x1A, 0x1A), RGBColor(0x77, 0x77, 0x77),
+                                 RGBColor(0x0A, 0x7C, 0x8C), "9A9A9A")
+
+        def put(p, text):
+            runs = p.runs or [p.add_run("")]
+            runs[0].text = text
+            for r in runs[1:]:
+                r.text = ""
+            return runs[0]
+
+        def drop(p):
+            if p._p.find(".//" + qn("w:sectPr")) is None:      # never remove the page setup
+                p._p.getparent().remove(p._p)
+
+        # ---- the top: the title, then what this copy belongs to - nothing internal
+        head = d.paragraphs[:10]
+        title = next((p for p in head if "TERMS AND CONDITIONS" in p.text.upper()), None)
+        if title is not None:
+            put(title, "TERMS AND CONDITIONS")
+        ver = next((p for p in head if p.text.strip().lower().startswith("version")), None)
+        if ver is not None:
+            r = put(ver, f"Quotation {number}  ·  {client}")
+            r.bold, r.italic = True, False
+            r.font.size, r.font.color.rgb = Pt(11), INK
+        for p in [p for p in head if p.text.strip().lower().startswith(("applies to", "issued with"))]:
+            drop(p)
+
+        # ---- the execution page
+        paras = d.paragraphs
+        k = next((i for i in range(len(paras) - 1, -1, -1)
+                  if paras[i].text.strip().lower() in ("signature", "signatures")), None)
+        if k is not None:
+            sig, tail = paras[k], paras[k + 1:]
+            lines = [p.text.strip() for p in tail if p.text.strip()]
+            cust_line = next((t for t in lines if t.lower().startswith("customer")), "")
+            ours_line = next((t for t in lines if not t.lower().startswith("customer")), "")
+            fields = [f.strip() for f in cust_line.split(":", 1)[-1].split("/") if f.strip()] or \
+                ["Name", "Authorising person", "Position", "Date", "Signature", "Company stamp"]
+            fields = ["Company name" if f.lower() == "name" else f for f in fields]
+            order = {"company name": 0, "authorising person": 1, "position": 2, "signature": 3,
+                     "date": 4, "company stamp": 5}
+            fields.sort(key=lambda f: order.get(f.lower(), 9))
+            ours_party, _, ours_rest = ours_line.partition(":")
+            who = (ours_rest.split("/")[0] if ours_rest else "").strip()
+            ours_name, _, ours_role = who.partition(",")
+            ours = {"company name": ours_party.strip(), "authorising person": ours_name.strip(),
+                    "position": ours_role.strip()}
+            theirs = {"company name": client}
+            body = _copy.deepcopy(tail[0]._p) if tail else _copy.deepcopy(sig._p)
+            for p in tail:
+                drop(p)
+            sig.paragraph_format.page_break_before = True
+            sig._p.addnext(body)
+            stmt = d.paragraphs[[i for i, p in enumerate(d.paragraphs) if p._p is body][0]]
+            r = put(stmt, f"Signed by the authorised representative of each party, accepting Quotation "
+                          f"{number} and these Terms and Conditions, which together form the Contract.")
+            stmt.paragraph_format.space_after = Pt(14)
+
+            sec = d.sections[-1]
+            usable = sec.page_width - sec.left_margin - sec.right_margin
+            widths = [Cm(3.3), None, Cm(0.6), None]
+            widths[1] = widths[3] = int((usable - widths[0] - widths[2]) / 2)
+            tbl = d.add_table(rows=0, cols=4)
+            tbl.autofit = False
+
+            def border(cell, edges, sz=6, color=RULE):
+                tcPr = cell._tc.get_or_add_tcPr()
+                b = OxmlElement("w:tcBorders")
+                for edge in edges:
+                    el = OxmlElement(f"w:{edge}")
+                    for a, v in (("val", "single"), ("sz", str(sz)), ("space", "0"), ("color", color)):
+                        el.set(qn(f"w:{a}"), v)
+                    b.append(el)
+                tcPr.append(b)
+
+            def text(cell, s, size=10.5, bold=False, color=INK, font=None):
+                p = cell.paragraphs[0]
+                p.paragraph_format.space_after = Pt(2)
+                run = p.add_run(s)
+                run.bold, run.font.size, run.font.color.rgb = bold, Pt(size), color
+                if font:
+                    run.font.name = font
+
+            def add_row(height):
+                rw = tbl.add_row()
+                rw.height, rw.height_rule = height, WD_ROW_HEIGHT_RULE.AT_LEAST
+                rw._tr.get_or_add_trPr().append(OxmlElement("w:cantSplit"))
+                for i, c in enumerate(rw.cells):
+                    c.width = widths[i]
+                    c.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.BOTTOM
+                return rw.cells
+
+            c = add_row(Cm(1.0))
+            text(c[1], "Customer", size=12, bold=True, color=TEAL, font="Poppins")
+            text(c[3], "Sky Vision", size=12, bold=True, color=TEAL, font="Poppins")
+            for f in fields:
+                key = f.lower()
+                stamp = key == "company stamp"
+                c = add_row(Cm(3.4) if stamp else Cm(1.6) if key == "signature" else Cm(1.0))
+                if stamp:
+                    for cc in c:
+                        cc.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
+                text(c[0], f, size=9, color=MUTE)
+                for col, vals in ((1, theirs), (3, ours)):
+                    if vals.get(key):
+                        text(c[col], vals[key])
+                    border(c[col], ("top", "left", "bottom", "right") if stamp else ("bottom",))
+            for i, col in enumerate(tbl.columns):
+                col.width = widths[i]
+
+        d.core_properties.title = f"Terms and Conditions - Quotation {number} - {client}"
+        d.core_properties.subject = f"Issued from {mt.get('label') or 'the Master Terms'}"
+        d.core_properties.keywords = number
         tmp = tempfile.mkdtemp(prefix="terms-")
         dpath = os.path.join(tmp, "terms.docx")
         d.save(dpath)
         _sp.run(["soffice", "--headless", "--convert-to", "pdf", "--outdir", tmp, dpath],
                 capture_output=True, timeout=180, env={**os.environ, "HOME": tmp})
         data = open(os.path.join(tmp, "terms.pdf"), "rb").read()
-    else:
-        data = documents.read_bytes(documents.get(int(mt["doc_id"])))
     doc = documents.save(co["id"], co.get("slug"), name, "application/pdf", data, kind="terms",
                          uploaded_by=f"quotation:{number}", push=False)
     folder = (drive_note or {}).get("folder_id")
     if folder:
         try:
             from . import drive as _drive
-            fid = _drive.upload_to_folder(folder, name, "application/pdf", data, token=_drive.access_token())
+            fid = _drive.upsert_in_folder(folder, name, "application/pdf", data, token=_drive.access_token())
             if doc and fid:
                 db.execute("update company_documents set drive_id=%s, client=%s, verified_at=now() "
                            "where id=%s", (fid, (drive_note or {}).get("client") or client, doc["id"]))
@@ -4420,7 +4531,8 @@ def _push_quote_to_client_drive(co: dict, customer: str, number: str, x: dict, p
                                 (pdf_path, "application/pdf", "pdf")):
             if path and os.path.exists(path):
                 name = f"{base} v{n} - {stamp}.{ext}"
-                _fid = _drive.upload_to_folder(f["id"], name, mime, open(path, "rb").read(), token=tok)
+                # same name = same version, same day: replace it in place rather than duplicate it
+                _fid = _drive.upsert_in_folder(f["id"], name, mime, open(path, "rb").read(), token=tok)
                 uploaded.append(name)
                 if ext == "pdf":     # the library points at THIS file as the canonical original
                     pdf_id, pdf_name = _fid, name

@@ -521,9 +521,9 @@ def generate(company: str, preset: str = "ai-production", *, customer: str = "",
         story.append(PageBreak())
         story.append(Paragraph("Terms &amp; Conditions", H1))
         if terms.get("incorporated"):
-            story.append(Paragraph(f"This quotation is issued subject to the {terms['incorporated']['label']}, "
-                                   "supplied with it as a separate document and forming part of the Contract.",
-                                   SMALL))
+            story.append(Paragraph("This quotation is issued subject to the Terms and Conditions supplied with "
+                                   "it as a separate document, referenced to this quotation. Together they form "
+                                   "the Contract.", SMALL))
         if terms.get("intro"):
             story.append(Paragraph(terms["intro"], ParagraphStyle("TI", parent=SMALL, spaceAfter=6)))
         story.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceBefore=4, spaceAfter=6))
@@ -856,9 +856,9 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
     tt = m["terms"] or {}
     inc = tt.get("incorporated")
     if inc:     # high-value: the terms are their OWN document, and each names the other
-        tline(f"This quotation is issued subject to the {inc['label']}, supplied with it as a separate "
-              f"document bearing this quotation's reference, {m['number']}, and forming part of the "
-              "Contract. Signing the acceptance above accepts this quotation and those terms.",
+        tline("This quotation is issued subject to the Terms and Conditions supplied with it as a "
+              f"separate document, referenced to this quotation, {m['number']}. Together they form the "
+              "Contract, and signing the acceptance above accepts both.",
               size=10.5, h=44)
         r += 1
     else:
