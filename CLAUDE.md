@@ -739,6 +739,21 @@ updated together. Quotations auto-fill the QUOTATION TO contact (name/email/phon
 explicit `contact_email` wins, an unambiguous single-contact account fills in, ambiguity stays blank
 (quotation._contact_for; deliver_quotation passes contact_email). TERMS MODULES: reusable clause modules live as `terms_module:<name>` settings (human-readable docx beside the T&Cs in the Drive terms folder + library). First module: `multi-version` (v1.0, 2026-08-30) - the approval-gate + enhanced-revision-service + masters-first versions structure for multi-cut/multi-language jobs, born on SEN-2026-0004 (Property Finder); the sales-quotation rule tells the drafter to apply it, gen path: pass a per-quote `terms` dict to generate_xlsx with the module clauses swapped into Revisions & Delivery.
 
+## Where Cortex is told how terms travel (11 Sep 2026)
+
+WHERE CORTEX IS TOLD HOW TERMS TRAVEL - keep these four in step with each other and with the code:
+- `sales-quotation` rule 1: the live preset map. `ai-production` (AI video, 70/30, AI short form),
+  `shoot-production` (any live shoot, 50/25/25, Production Short Form Terms), `retainer`, `assignment`. No
+  preset adds an agency fee (the old "film production + 15%" line was retired: no preset applied it).
+- `sales-quotation` rule 8: the placement rule. Threshold = profile `high_value_threshold` on the NET value.
+  Under it the preset's short form prints on the quotation; at or above it numbers and scope only, and the
+  Master Terms go as a separate Terms and Conditions document, both on the card and in the client folder.
+- `email-handling` "Sending a quotation": a quotation cover email is drafted on email-handling, which does
+  NOT read sales-quotation rules (`related_skills`), so the attach-both rule has to live there.
+- `create_quotation`'s tool description and the capability manifest: which preset carries which terms, and
+  that the system places them. The Talk tool used to describe only `ai-production`, so a live-shoot quote
+  asked for through Talk would have printed the AI short form.
+
 ## Shoot cancellation standard (owner decision, 11 Sep 2026)
 
 **Within 4 working days of call time: 50% of the crew and production charges for that shoot. Within 48
