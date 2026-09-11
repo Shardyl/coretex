@@ -154,9 +154,18 @@ rules), so project-management behaviour is trained there; Opportunity-stage and 
 ## Drive filing: latest at the top, history in Archive (11 Sep 2026)
 
 The owner's rule for every Drive folder Cortex files into:
-- **SENSA CORTEX / Documents** holds ONLY Sensa's own official documents (company profile, AI Production
-  Capabilities Deck, trade licence, VAT certificate, terms, templates, rate card): the current version at
-  the top, older versions in `Documents/Archive`. **No client work is ever filed there.**
+- **SENSA CORTEX / Documents** holds ONLY Sensa's own FINAL official documents (company profiles, AI
+  Production Capabilities Deck, trade licence, VAT certificate): the current version at the top, older
+  versions in `Documents/Archive`. **No client work is ever filed there, and no terms either.**
+- **The terms folder** (profile `terms_drive_folder`, Sensa = `159mEGnuBsWh_GqfPfPTf3q3zaNautfnX`) holds
+  the standing contract documents: every terms set, terms modules, the quotation templates and the rate
+  card. Current version of each at the top, every lower version in `terms_archive_folder` (Sensa = his
+  `OLD` subfolder; Cortex CAN move its own files into it). `documents.push_to_drive` routes any official
+  file whose name says Terms / Rate Card / Quotation Template there and archives lower versions of the
+  same document (`_file_terms_set`); `_export_templates` reads the folder from the profile and records
+  its library rows against the terms-folder file (`push=False`), which is how Documents used to fill up
+  with template copies. Two files Rashad made himself stay at the top because Cortex cannot move them:
+  Master Terms v1.0 and Short Form Terms v1.0 (drag them into OLD by hand).
 - **SENSA CLIENTS / <client>** holds the LATEST version (the one sent or approved) at the top, beside
   anything the team puts there by hand; earlier iterations go into `<client>/Archive`. A client with more
   than one project gets a folder per project, each laid out the same way. An AGENCY (EY, Auditoire) always
@@ -881,10 +890,14 @@ ladder of 8 Sep, which Rashad judged unrealistic for Dubai, where shoots are oft
 
 Where it lives: **Production Short Form Terms v1.0** clause 4 (24 clauses, locked 11 Sep, the printed short
 form for live production, carried by the `shoot-production` preset), Master Terms clause 8.5 from v1.5, and
-`sales-quotation` rule 6, which forbids quoting a different ladder without the owner. STILL ON THE OLD
-STANDARD: the AI short form (`ai-production` clause 19 = Short Form Terms v1.2) says 50% inside 72 hours
-and 100% inside 24. The previous `shoot-production` printed terms are kept in
-`/opt/cortex-knowledge/documents/sensa/_preserved/`.
+`sales-quotation` rule 6, which forbids quoting a different ladder without the owner. The previous
+`shoot-production` printed terms are kept in `/opt/cortex-knowledge/documents/sensa/_preserved/`.
+
+**The AI short form has NO shoot clause (owner, 11 Sep 2026).** An AI production has no shoot date or call
+time, so the 72h/24h clause had nothing to attach to. Short Form Terms v1.3 (library docs 407/408) is v1.2
+with clause 18a removed and the version line restamped; the `ai-production` preset's clause 19 now ends at
+"non-refundable once work has begun". v1.2 is kept as the record. A quote that genuinely includes a shoot
+takes the `shoot-production` preset and its own terms.
 
 WHEN A PRESET'S TERMS CHANGE: regenerate any un-sent quotation built on it and run `export_templates` so
 the Drive terms folder matches.

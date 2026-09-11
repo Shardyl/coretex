@@ -61,9 +61,41 @@ def _is_official(doc: dict) -> bool:
         (doc.get("kind") or "") in _OFFICIAL_KINDS or bool(_OFFICIAL_NAME.match(doc.get("filename") or "")))
 
 
+_TERMS_SET = re.compile(r"\b(Terms|Rate Card|Quotation Template)\b", re.I)
+_VERSION = re.compile(r"\s+v(\d+(?:\.\d+)*)(?=\.[^.]+$)")
+
+
+def _version(name: str) -> tuple:
+    m = _VERSION.search(name or "")
+    return tuple(int(x) for x in m.group(1).split(".")) if m else ()
+
+
+def _file_terms_set(doc: dict, folder: str, archive: str, tok: str) -> str:
+    """File one of the company's standing contract documents (terms, a terms module, a quotation template,
+    the rate card) in the TERMS FOLDER: the current version at the top, every LOWER version of the same
+    document into the archive subfolder. Nothing is ever deleted; a person's file is never moved."""
+    from . import drive
+    name = doc["filename"]
+    did = drive.upsert_in_folder(folder, name, doc["mime"], read_bytes(doc), token=tok)
+    stem, ver = _VERSION.sub("", name), _version(name)
+    if ver:
+        for f in drive.list_folder(folder, tok):
+            n = f.get("name") or ""
+            if n != name and f.get("mimeType") != "application/vnd.google-apps.folder" \
+                    and _VERSION.sub("", n) == stem and _version(n) and _version(n) < ver:
+                try:
+                    drive.move_file(f["id"], folder, archive or drive.ensure_subfolder(folder, "Archive", tok), tok)
+                except Exception:  # noqa: BLE001 - not Cortex's file: leave it where it is
+                    pass
+    return did
+
+
 def push_to_drive(doc: dict) -> str | None:
     """Upload a cached document to its ONE Drive home; records + returns the drive_id (owner, 11 Sep 2026):
     - a CLIENT's document goes to that client's folder under the clients drive folder;
+    - the company's standing CONTRACT documents (terms, terms modules, quotation templates, the rate card)
+      go to the profile's `terms_drive_folder`, older versions into `terms_archive_folder`. They are NOT
+      final documents and never belong in Documents;
     - the company's own OFFICIAL document goes to <CORTEX>/Documents, and the previous copy of the same
       file moves into Documents/Archive, so the folder only ever shows the current version;
     - anything else stays in the library (and the nightly backup) and is NOT dumped into Documents.
@@ -75,8 +107,12 @@ def push_to_drive(doc: dict) -> str | None:
     if not client and not official:
         return None                      # decided before any Drive call: sync_drive retries these hourly
     co = store.get_company(doc["company_id"]) or {}
+    prof = profile.get(doc["company_id"]) or {}
+    terms_folder = (prof.get("terms_drive_folder") or "").strip()
     tok = drive.access_token()
-    if client:
+    if not client and terms_folder and _TERMS_SET.search(doc.get("filename") or ""):
+        did = _file_terms_set(doc, terms_folder, (prof.get("terms_archive_folder") or "").strip(), tok)
+    elif client:
         parent = ((profile.get(doc["company_id"]) or {}).get("clients_drive_folder") or "").strip()
         f = drive.ensure_client_folder(client, parent, token=tok) if parent else {}
         if not f.get("id"):

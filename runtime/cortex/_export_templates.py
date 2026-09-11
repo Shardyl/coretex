@@ -11,12 +11,13 @@ import sys
 from docx import Document
 from docx.shared import Pt, RGBColor
 
-from . import documents, drive, quotation, ratecard, store
+from . import db, documents, drive, profile, quotation, ratecard, store
 
 INK, MUT, TEAL = RGBColor(0x1A, 0x1A, 0x1A), RGBColor(0x5F, 0x6B, 0x70), RGBColor(0x0A, 0x7C, 0x8C)
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-TERMS_FOLDER = "159mEGnuBsWh_GqfPfPTf3q3zaNautfnX"
+# The folder is the company profile's `terms_drive_folder` (Sensa: the "Sensa terms and conditions"
+# folder), older versions in its `terms_archive_folder`. Data, not a constant in code.
 
 
 def _doc_for(key: str, preset: dict) -> str:
@@ -69,15 +70,20 @@ def _doc_for(key: str, preset: dict) -> str:
 
 def run(company: str = "sensa") -> str:
     out, tok = [], drive.access_token()
+    co0 = store.get_company_by_slug(company) or {}
+    folder = ((profile.get(co0["id"]) if co0 else {}) or {}).get("terms_drive_folder")
+    if not folder:
+        return f"No terms_drive_folder on the {company} company profile: nothing exported."
     presets = quotation.presets()
     for key, preset in presets.items():
         name = f"Sensa - Quotation Template - {key}.docx"
         data = open(_doc_for(key, preset), "rb").read()
-        drive.upsert_in_folder(TERMS_FOLDER, name, DOCX, data, token=tok)
+        fid = drive.upsert_in_folder(folder, name, DOCX, data, token=tok)
         for slug in ("sensa", "skyvision"):
             co = store.get_company_by_slug(slug)
-            if co:
-                documents.save(co["id"], slug, name, DOCX, data, uploaded_by="cortex export")
+            if co:   # library record of this export, pointing at the terms-folder file (never a Documents copy)
+                row = documents.save(co["id"], slug, name, DOCX, data, uploaded_by="cortex export", push=False)
+                db.execute("update company_documents set drive_id=%s where id=%s", (fid, row["id"]))
         out.append(name)
     card = ratecard.get(company)
     if card:
@@ -95,7 +101,7 @@ def run(company: str = "sensa") -> str:
         p = "/tmp/ratecard-export.xlsx"
         wb.save(p)
         nm = f"Sensa - Rate Card v{card.get('version', '1')}.xlsx"
-        drive.upsert_in_folder(TERMS_FOLDER, nm, XLSX, open(p, "rb").read(), token=tok)
+        drive.upsert_in_folder(folder, nm, XLSX, open(p, "rb").read(), token=tok)
         out.append(nm)
     return "Exported to the terms folder on Drive: " + "; ".join(out)
 
