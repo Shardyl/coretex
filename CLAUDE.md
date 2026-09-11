@@ -738,8 +738,8 @@ superseded by SEN-2026-0010) and run `export_templates` so the Drive terms folde
   .docx beside it, with "Issued with Quotation <ref> vN for <client>, <date>." under the title; filed in
   the client folder beside the quote and attached to the card with it. A replayed version keeps the terms
   it was issued with (explicit terms win), so an ALL VERSIONS tab never rewrites history.
-- TWO PROFILE KEYS, TWO JOBS. `master_terms_doc` = the current Master Terms PDF (Sensa: doc 328 = v1.3,
-  docx 329). `high_value_attach_doc` = the COMPANY PROFILE that rides on a high-value first reply
+- TWO PROFILE KEYS, TWO JOBS. `master_terms_doc` = the current Master Terms PDF (Sensa: v1.4 since
+  11 Sep; v1.3 = docs 328/329, kept). `high_value_attach_doc` = the COMPANY PROFILE that rides on a high-value first reply
   (Sensa: doc 7). It pointed at Master Terms v1.2 from 28 Aug to 11 Sep, so a high-value first reply
   would have attached the terms instead of the profile; it never fired. Never repoint it at terms.
 - `create_quotation number=` issues a NEW VERSION of an existing quotation, same client only, so a
@@ -756,10 +756,13 @@ superseded by SEN-2026-0010) and run `export_templates` so the Drive terms folde
   quotation's own line refers to "the Terms and Conditions supplied with it". The master version it came
   from is kept in the PDF metadata (Subject: "Issued from Sensa Master Terms v1.3") and on the card. A
   sales-quotation rule carries the same wording rule for notes and emails.
-- THE EXECUTION PAGE: the template's run-on signature lines become a table on its own page: a row per
-  field (company name, authorising person, position, signature, date) with a line to write on, a box per
-  company stamp, Customer beside Sky Vision. Fields and our signatory are READ FROM THE TEMPLATE'S own
-  signature lines, never typed into code, so editing the docx changes who signs for us.
+- THE EXECUTION PAGE lives IN THE TEMPLATE from Master Terms v1.4 (v1.3 + this page, wording unchanged):
+  the signature section on its own page, Customer beside Sky Vision, a row per field (company name,
+  authorising person, position, signature, date) with a line to write on and a box per company stamp;
+  our side pre-filled, the customer side blank. `engine._terms_execution_page` FILLS it on the client's
+  copy (the quotation number in the signing line, the client's company name) and only converts old
+  run-on signature lines when a template has no table, reading the fields and our signatory from those
+  lines. It never builds a second table: a copy showing two means the template changed shape.
 - ONE OPEN CARD PER QUOTATION NUMBER: a new version closes the older open cards for that number as
   `cancelled` (never `rejected`, which reads as a judgement on the skill) with `superseded_by`. A
   re-render of the same version replaces its client-folder files in place instead of duplicating them.
