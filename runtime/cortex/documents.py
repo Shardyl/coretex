@@ -77,17 +77,27 @@ def _file_terms_set(doc: dict, folder: str, archive: str, tok: str) -> str:
     from . import drive
     name = doc["filename"]
     did = drive.upsert_in_folder(folder, name, doc["mime"], read_bytes(doc), token=tok)
-    stem, ver = _VERSION.sub("", name), _version(name)
-    if ver:
-        for f in drive.list_folder(folder, tok):
-            n = f.get("name") or ""
-            if n != name and f.get("mimeType") != "application/vnd.google-apps.folder" \
-                    and _VERSION.sub("", n) == stem and _version(n) and _version(n) < ver:
-                try:
-                    drive.move_file(f["id"], folder, archive or drive.ensure_subfolder(folder, "Archive", tok), tok)
-                except Exception:  # noqa: BLE001 - not Cortex's file: leave it where it is
-                    pass
+    archive_lower_versions(folder, name, archive, tok)
     return did
+
+
+def archive_lower_versions(folder: str, name: str, archive: str, tok: str) -> int:
+    """Move every LOWER version of the document `name` (same name apart from ' vX.Y') out of the top of
+    `folder` into `archive` (or <folder>/Archive). Cortex can only move its own files. Returns the count."""
+    from . import drive
+    stem, ver, n_moved = _VERSION.sub("", name), _version(name), 0
+    if not ver:
+        return 0
+    for f in drive.list_folder(folder, tok):
+        n = f.get("name") or ""
+        if n != name and f.get("mimeType") != "application/vnd.google-apps.folder" \
+                and _VERSION.sub("", n) == stem and _version(n) and _version(n) < ver:
+            try:
+                drive.move_file(f["id"], folder, archive or drive.ensure_subfolder(folder, "Archive", tok), tok)
+                n_moved += 1
+            except Exception:  # noqa: BLE001 - not Cortex's file: leave it where it is
+                pass
+    return n_moved
 
 
 def push_to_drive(doc: dict) -> str | None:

@@ -3293,10 +3293,15 @@ SKILL_TOOLS = [
     {"name": "create_quotation",
      "description": "Produce a branded, house-format QUOTATION (an editable .xlsx spreadsheet plus a ready-to-"
                     "send .pdf by default) and drop it in the Inbox as a downloadable card. Use when Rashad asks "
-                    "to 'quote', 'do a quotation / quote', or 'price up' a job. Prices: "
-                    "pass `total` = the overall figure he states and Cortex splits it fairly across the line items "
-                    "(NEVER invent or guess a total — if he hasn't given one, omit it and the quote renders with "
-                    "blank prices). `total_inclusive`=true if the figure he gave already includes VAT (default is "
+                    "to 'quote', 'do a quotation / quote', or 'price up' a job. CALL rate_card FIRST: it returns "
+                    "the card (each item with its [key]) and the house rules for how a quotation is laid out. "
+                    "PRICES ARE CODE'S JOB: give every line `components` (rate-card keys with quantities) and "
+                    "leave `unit` out; code prices the line from the card. A typed `unit` survives only if it "
+                    "is a card rate or a figure Rashad wrote. `total` = a number Rashad states: with "
+                    "component-priced lines the lines are moved within the company's band to reach it (outside "
+                    "the band nothing is built and you are told why); without components it is split by the "
+                    "preset's weights. NEVER invent or guess a total. `total_inclusive`=true if the figure he "
+                    "gave already includes VAT (default is "
                     "the pre-VAT fee, VAT added on top). `preset` selects the line-item breakdown AND the terms: "
                     "'ai-production' (AI-produced video, the default; prints the AI short form terms, 70/30), "
                     "'shoot-production' (ANY live, filmed production or shoot; prints the Production Short Form "
@@ -3309,7 +3314,7 @@ SKILL_TOOLS = [
         "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"},
         "preset": {"type": "string", "description": "line-item breakdown; default 'ai-production'"},
         "customer": {"type": "string", "description": "the client name for the quote"},
-        "total": {"type": "number", "description": "the overall figure Rashad states; split into fair line rates. Omit if he gave none."},
+        "total": {"type": "number", "description": "the overall figure Rashad states (a target for component-priced lines, else split by weight). Omit if he gave none."},
         "total_inclusive": {"type": "boolean", "description": "true if `total` already includes VAT"},
         "fmt": {"type": "string", "enum": ["both", "xlsx", "pdf"], "description": "which files to deliver; default 'both' (spreadsheet + PDF)"},
         "sections": {"type": "array", "description": "EXPLICIT priced lines, when the figures are already "
@@ -3320,7 +3325,15 @@ SKILL_TOOLS = [
          "items": {"type": "object", "properties": {
             "header": {"type": "string", "description": "the section heading"},
             "items": {"type": "array", "items": {"type": "object", "properties": {
-                "desc": {"type": "string"}, "unit": {"type": "number"}, "qty": {"type": "number"}},
+                "desc": {"type": "string", "description": "what the line delivers, naming everything it includes"},
+                "components": {"type": "array", "description": "what the line is made of, from the rate "
+                               "card: code prices the line as the sum of rate x qty",
+                               "items": {"type": "object", "properties": {
+                                   "item": {"type": "string", "description": "the rate-card [key]"},
+                                   "qty": {"type": "number", "description": "days, people, films..."}},
+                                   "required": ["item"]}},
+                "unit": {"type": "number", "description": "ONLY a figure Rashad stated or a card rate"},
+                "qty": {"type": "number"}},
                "required": ["desc"]}}},
            "required": ["header", "items"]}},
         "title": {"type": "string", "description": "override the preset's document title"},
@@ -3542,8 +3555,15 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                 f"{cases}. {dropped}Filed to the document library and on card #{r['task_id']} for "
                 "review; nothing has been sent.")
     if name == "rate_card":
-        from . import ratecard
-        return ratecard.summary(inp["company"])
+        from . import ratecard, worker as _w
+        out = ratecard.summary(inp["company"])
+        # The house rules for HOW a quotation is laid out ride with the card (dumb waiter): they live on the
+        # company's sales-quotation skill, editable there, and Talk reads them here before building a quote.
+        _co = store.get_company_by_slug(inp["company"])
+        _sk = store.get_skill_by_key(_co["id"], "sales-quotation") if _co else None
+        _rules = _w._rules_block(_sk) if _sk else ""
+        return out + (f"\n\nHOW TO BUILD A QUOTATION (the live sales-quotation rules; follow them):\n{_rules}"
+                      if _rules else "")
     if name == "set_rate":
         from . import ratecard
         ratecard.set_item(inp["company"], inp["group"], inp["item"], inp.get("rate"), inp.get("unit", "each"),
@@ -3647,13 +3667,42 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         return f"generated the report — it's in your Inbox now (task #{t['id']})"
     if name == "create_quotation":
         slug = inp.get("company")
-        if not slug or not store.get_company_by_slug(slug):
+        _co = store.get_company_by_slug(slug) if slug else None
+        if not _co:
             return f"unknown business '{slug}' — tell me which of your businesses this quote is for"
+        # CODE PRICES EVERY LINE (owner, 11 Sep 2026). A line priced by `components` is costed from the rate
+        # card; a typed price survives only if it is a card rate or a figure the owner wrote in this
+        # conversation; a total counts only if he wrote it. The model decides what a line contains, never
+        # what it costs. Before this, Talk passed its own figures straight through.
+        from . import profile as _prof, quotation as _q, ratecard as _rc
+        _said = engine._stated_numbers(_TURN_SAID.get())
+        sections, total, _notes = inp.get("sections"), inp.get("total"), []
+        if total not in (None, ""):
+            try:
+                _ok = round(float(total), 2) in _said
+            except (TypeError, ValueError):
+                _ok = False
+            if not _ok:
+                _notes.append(f"the total {total} is not a figure you gave, so it was not used")
+                total = None
+        _priced = None
+        if sections:
+            _has_comp = any(it.get("components") for s in sections for it in (s.get("items") or []))
+            _target = None
+            if _has_comp and total is not None:     # his number is a TARGET for the rate-card lines
+                _target = float(total)
+                if inp.get("total_inclusive"):
+                    _target = round(_target / (1 + _q._vat_rate(_q._profile(_co["id"]))), 2)
+                total = None
+            _priced = _rc.price_lines(slug, sections, allowed=_said | _rc.rates(slug), target=_target,
+                                      flex_pct=(_prof.get(_co["id"]) or {}).get("quote_target_flex_pct"))
+            if _target is not None and _priced["error"]:
+                return "Quotation NOT built: " + _priced["error"]
         try:
             t = engine.deliver_quotation(slug, preset=inp.get("preset") or "ai-production",
-                                         customer=inp.get("customer", ""), total=inp.get("total"),
+                                         customer=inp.get("customer", ""), total=total,
                                          total_inclusive=bool(inp.get("total_inclusive")),
-                                         sections=inp.get("sections"), title=inp.get("title"),
+                                         sections=sections, title=inp.get("title"),
                                          note=inp.get("note"), contact_email=inp.get("contact_email"),
                                          number=inp.get("number"), deliverables=inp.get("deliverables"),
                                          fmt=inp.get("fmt") or "both")
@@ -3662,9 +3711,17 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         if inp.get("deal_id") and t.get("id"):
             db.execute("update tasks set deal_id=%s where id=%s", (int(inp["deal_id"]), t["id"]))
         req = t.get("request") or {}
+        if _priced:
+            if _priced.get("scaled") is not None:
+                _notes.append(f"the rate-card lines were moved {_priced['scaled']:+.1f}% to reach your figure")
+            if _priced.get("blanked"):
+                _notes.append("left BLANK, no approved price: " + "; ".join(_priced["blanked"][:8])
+                              + (f" (not on the rate card: {', '.join(sorted(set(_priced['missing'])))})"
+                                 if _priced.get("missing") else ""))
         return (f"created quotation {req.get('number')} — it's in your Inbox now to download (task #{t['id']}). "
                 f"{req.get('summary', '')}"
-                + (" Both documents are on the card." if req.get("master_terms") else ""))
+                + (" Both documents are on the card." if req.get("master_terms") else "")
+                + (" Pricing: " + "; ".join(_notes) + "." if _notes else ""))
     if name == "list_scheduled":
         co = store.get_company_by_slug(inp["company"]) if inp.get("company") else None
         flt, p = (" and company_id=%s", (co["id"],)) if co else ("", ())
@@ -4059,6 +4116,12 @@ class ChatTurn(BaseModel):
     image_names: list[str] | None = None  # original filenames, parallel to images (for display + send)
 
 
+import contextvars as _cv
+# What the person typed in this Talk turn: set by the chat executor, read by create_quotation's price check.
+# A context variable, not a tool input, so the model can never supply "the owner's words" itself.
+_TURN_SAID: _cv.ContextVar[str] = _cv.ContextVar("_TURN_SAID", default="")
+
+
 def _chat_prepare(body: ChatTurn, user: dict | None = None):
     """Shared prep for /api/chat and /api/chat/stream: build the working-memory window, route to a persona,
     attach images, resolve (system, tools), and build the tool executor. Returns (msgs, chosen, system, tools, exec)."""
@@ -4084,6 +4147,9 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
     def _exec(name: str, inp: dict) -> str:   # carry the turn's attachments through when a tool drafts/creates
         if name in ("create_task", "draft", "draft_email", "save_document") and body.images:
             inp = {**inp, "_images": body.images, "_image_names": body.image_names}
+        if name == "create_quotation":   # the price check reads the PERSON's own words, never the model's
+            _TURN_SAID.set("\n".join(m["content"] for m in msgs
+                                     if m["role"] == "user" and isinstance(m["content"], str)))
         if name == "add_rule" and inp.get("scope") == "universal" and (user or {}).get("role") != "owner":
             return ("Universal (all-company) rules are the owner's call alone. Save it for this user's own "
                     "company instead, and tell them Rashad can widen it to all companies.")

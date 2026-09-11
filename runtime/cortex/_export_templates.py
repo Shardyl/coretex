@@ -71,7 +71,8 @@ def _doc_for(key: str, preset: dict) -> str:
 def run(company: str = "sensa") -> str:
     out, tok = [], drive.access_token()
     co0 = store.get_company_by_slug(company) or {}
-    folder = ((profile.get(co0["id"]) if co0 else {}) or {}).get("terms_drive_folder")
+    prof = (profile.get(co0["id"]) if co0 else {}) or {}
+    folder = prof.get("terms_drive_folder")
     if not folder:
         return f"No terms_drive_folder on the {company} company profile: nothing exported."
     presets = quotation.presets()
@@ -102,6 +103,7 @@ def run(company: str = "sensa") -> str:
         wb.save(p)
         nm = f"Sensa - Rate Card v{card.get('version', '1')}.xlsx"
         drive.upsert_in_folder(folder, nm, XLSX, open(p, "rb").read(), token=tok)
+        documents.archive_lower_versions(folder, nm, prof.get("terms_archive_folder") or "", tok)
         out.append(nm)
     return "Exported to the terms folder on Drive: " + "; ".join(out)
 

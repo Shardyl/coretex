@@ -1410,14 +1410,16 @@ def _prep_quote_spec(task: dict, company: dict, text: str) -> dict:
         worker._now_line() + " You turn the OWNER'S instructions into the arguments for a quotation. JSON: "
         '{"preset": "<one of ' + ", ".join(presets) + '>", "customer": "<client company name>", '
         '"title": "<document title, or empty>", "sections": [{"header": "A ·  SECTION NAME", "items": '
-        '[{"desc": "<what is delivered>", "unit": <price per unit as a number ONLY if he stated it or a rate '
-        'card line he named gives it, else null>, "qty": <number he stated, else 1>}]}], '
+        '[{"desc": "<what is delivered, naming everything the line includes>", "components": [{"item": '
+        '"<rate card [key]>", "qty": <days, people or films>}], "unit": <a price ONLY if he stated that exact '
+        'figure, else null>, "qty": <number he stated, else 1>}]}], '
         '"deliverables": ["<short bullet>"], "note": "<one line for under the totals, or empty>", '
         '"total": <one overall figure ONLY if he gave a total instead of line prices, else null>, '
         '"assumptions": ["<each default you chose that he did not state himself: for the OWNER only, it is '
         'never printed on the client document>"]}. '
-        "RULES: prices come ONLY from his words or the rate card; never estimate, a line he gave no price for "
-        "has unit null. Preset: shoot-production for any live filmed shoot, ai-production for AI video. "
+        "RULES: you never price a line: list its rate-card components and code prices it; a figure he stated "
+        "himself goes in unit. Never estimate. Preset: shoot-production for any live filmed shoot, "
+        "ai-production for AI video. "
         "Describe the scope plainly from his words and the deal timeline; never invent counts, dates or "
         "deliverables. Headers in the house style 'A ·  STUDIO & FACILITIES'. No em dashes.",
         (f"QUOTATION SKILL {_rules}\n\n" if _rules else "")
@@ -1438,8 +1440,12 @@ def _prep_quote_spec(task: dict, company: dict, text: str) -> dict:
             return round(float(v), 2) in allowed
         except (TypeError, ValueError):
             return False
+    has_comp = False
     for s in spec.get("sections") or []:
         for it in s.get("items") or []:
+            if it.get("components"):        # priced from the rate card below, by code
+                has_comp = True
+                continue
             if it.get("unit") not in (None, "") and not ok(it["unit"]):
                 blanked.append(str(it.get("desc") or "a line")[:60])
                 it["unit"] = None
@@ -1449,6 +1455,14 @@ def _prep_quote_spec(task: dict, company: dict, text: str) -> dict:
     if spec.get("total") not in (None, "") and not ok(spec["total"]):
         blanked.append("the overall total")
         spec["total"] = None
+    if has_comp:        # component lines: costed from the card, his total (if any) is a target inside the band
+        from . import profile as _prof
+        target, spec["total"] = spec.get("total"), None
+        res = _rc.price_lines(slug, spec["sections"], allowed=allowed, target=target,
+                              flex_pct=(_prof.get(company["id"]) or {}).get("quote_target_flex_pct"))
+        blanked += res["blanked"]
+        if target and res.get("error"):
+            blanked.append(f"your figure {target}: {res['error']}")
     if spec.get("preset") not in presets:
         spec["preset"] = "shoot-production" if re.search(r"shoot|filming|crew", words, re.I) else "ai-production"
     head = re.split(r"\s*(?::|\s-\s)", (deal or {}).get("title") or "")[0].strip()
