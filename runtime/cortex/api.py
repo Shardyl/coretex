@@ -3659,8 +3659,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         req = t.get("request") or {}
         return (f"created quotation {req.get('number')} — it's in your Inbox now to download (task #{t['id']}). "
                 f"{req.get('summary', '')}"
-                + (" It is numbers and scope only: the Master Terms go with it as their own document, "
-                   "stamped with this reference, and both are on the card." if req.get("master_terms") else ""))
+                + (" Both documents are on the card." if req.get("master_terms") else ""))
     if name == "list_scheduled":
         co = store.get_company_by_slug(inp["company"]) if inp.get("company") else None
         flt, p = (" and company_id=%s", (co["id"],)) if co else ("", ())

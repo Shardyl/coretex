@@ -730,6 +730,31 @@ floor a preset's own ladder can satisfy.
 WHEN A PRESET'S TERMS CHANGE: regenerate any un-sent quotation built on it (SEN-2026-0009 was
 superseded by SEN-2026-0010) and run `export_templates` so the Drive terms folder matches.
 
+## High-value quotations issue under the Master Terms (11 Sep 2026)
+
+- At or above the profile's `high_value_threshold` (Sensa: AED 250,000 ex VAT) `quotation.master_terms_ref`
+  swaps the preset's printed terms for ONE incorporating paragraph: the sheet carries numbers and scope
+  only. `engine._issue_master_terms_copy` issues the current Master Terms as their own PDF, built from the
+  .docx beside it, with "Issued with Quotation <ref> vN for <client>, <date>." under the title; filed in
+  the client folder beside the quote and attached to the card with it. A replayed version keeps the terms
+  it was issued with (explicit terms win), so an ALL VERSIONS tab never rewrites history.
+- TWO PROFILE KEYS, TWO JOBS. `master_terms_doc` = the current Master Terms PDF (Sensa: doc 328 = v1.3,
+  docx 329). `high_value_attach_doc` = the COMPANY PROFILE that rides on a high-value first reply
+  (Sensa: doc 7). It pointed at Master Terms v1.2 from 28 Aug to 11 Sep, so a high-value first reply
+  would have attached the terms instead of the profile; it never fired. Never repoint it at terms.
+- `create_quotation number=` issues a NEW VERSION of an existing quotation, same client only, so a
+  proposal, its quotation and its terms carry one reference (BioScience: SEN-2026-0011 v2; v1 is an
+  earlier AED 360,000 scope). Drive filing takes vN from the version registry, not the folder count.
+- TERMS VERSIONING: a changed clause is a new version number, and a file named vX only ever contains vX.
+  Rashad edited Master Terms v1.2 in place on 11 Sep (clause 3.6, per batch); that became v1.3 together
+  with the 8.5 shoot ladder, the v1.2 file was restored (md5 8e1810d1), and the untouched original plus
+  his raw edit are kept in `/opt/cortex-knowledge/documents/sensa/_preserved/`. Every version stays in the
+  library and the Drive terms folder.
+- STILL OPEN: the Master Terms carry none of the shoot-specific protections the shoot-production preset
+  printed (participant attendance, consent, manifest deadline, on-day sign-off, overtime, retention,
+  participant data), and 6.3A licenses talent appearance for 12 months, GCC, online, which reads onto a
+  client's own participants. Short Form Terms v1.2 still carries the 50% at 72 hours standard.
+
 ## Pre-meeting briefs (`meetingprep.py`, 2026-08-31)
 
 ONLY FIRST MEETINGS WITH NEW COMPANIES (owner, 1 Sep 2026). A brief is an INTRODUCTION aid; before a
