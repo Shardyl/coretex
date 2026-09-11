@@ -699,6 +699,13 @@ build the capability when it is missing).
   opens the deck, and every build saves its spec beside the PDF (`.spec.json`) so `reuse_copy=true`
   re-lays the SAME words for a layout change instead of rewriting them. Final Sensa deck: cover, Farmer
   John, What we control, seven module pages, four case studies, close (15 pages, card 560).
+- **The AI Production Capabilities Deck** (named 11 Sep 2026) is Sensa's STANDARD AI showcase: library doc
+  327 (card 562, the approved 10 Sep build), renamed on Drive and in the library from "Brands agencies and
+  government clients - Capabilities deck", kind `capabilities-deck`, profile `ai_capabilities_deck_doc`.
+  `capabilities-deck` is a CORE kind, and core kinds now pass `documents.find`'s deal scope: that hard filter
+  (which stops another client's file going out) also hid our own standing documents, so "attach the AI deck"
+  on a deal-linked card came back empty. A rebuild makes a NEW file named from the audience; the standard
+  only moves when Rashad says so (rename it, repoint the profile key).
 - **`rebrand_deck`** (2026-09-08) - re-lays an existing deck PDF from the document library into the
   house format, keeping the content WORD FOR WORD. `deck.render_spec()` has NO model in it: it lays out
   an explicit page list, because when the words are agreed (or already with the client) a model
