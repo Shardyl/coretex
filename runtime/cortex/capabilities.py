@@ -86,7 +86,9 @@ CAPABILITIES: list[tuple[str, str]] = [
      "Terms (the profile's master_terms_doc) as the client's copy: titled Terms and Conditions, headed "
      "'Quotation <number> - <client>', its signature page filled in. Never call them Master Terms to a "
      "client. Both filed to the client folder and attached to the card. Below it the preset's "
-     "short form terms print on the sheet as before. Pass `number` to issue a new version of an existing "
+     "short form prints on the sheet (shoot-production: the Production Short Form Terms; ai-production: "
+     "the AI short form). When emailing a quotation attach BOTH PDFs from its card at or above the "
+     "threshold (the quotation and its Terms and Conditions), the quotation alone below it. Pass `number` to issue a new version of an existing "
      "quotation for the same client, so a proposal, its quotation and its terms carry one reference."),
     ("Rebranding an existing deck — LIVE",
      "rebrand_deck takes a deck or proposal PDF already in the document library and re-lays it into the "

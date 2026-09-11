@@ -3297,9 +3297,14 @@ SKILL_TOOLS = [
                     "pass `total` = the overall figure he states and Cortex splits it fairly across the line items "
                     "(NEVER invent or guess a total — if he hasn't given one, omit it and the quote renders with "
                     "blank prices). `total_inclusive`=true if the figure he gave already includes VAT (default is "
-                    "the pre-VAT fee, VAT added on top). `preset` selects the line-item breakdown; 'ai-production' "
-                    "(AI video: concept/treatment/scripting/storyboard/frames/generation/sound/music/render) is "
-                    "the default. `customer` is the client name for the PREPARED FOR field.",
+                    "the pre-VAT fee, VAT added on top). `preset` selects the line-item breakdown AND the terms: "
+                    "'ai-production' (AI-produced video, the default; prints the AI short form terms, 70/30), "
+                    "'shoot-production' (ANY live, filmed production or shoot; prints the Production Short Form "
+                    "Terms, 50/25/25), 'retainer' (Retainer Terms) and 'assignment' (project material handover). "
+                    "The system places the terms, never you: under the company's high-value threshold the preset's "
+                    "short form prints on the quotation; at or above it the quotation prints numbers and scope only "
+                    "and the Master Terms go with it as a separate Terms and Conditions document naming the "
+                    "quotation number and the client. `customer` is the client name for the PREPARED FOR field.",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"},
         "preset": {"type": "string", "description": "line-item breakdown; default 'ai-production'"},
