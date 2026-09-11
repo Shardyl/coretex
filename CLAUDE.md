@@ -151,6 +151,28 @@ Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` ad
 rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
 `sales-first-response`.
 
+## Approving a quotation prep card builds the quotation (11 Sep 2026)
+
+A quotation PREP card (kind `content`, `request.prep_action == "quotation"`, see `_is_quotation_prep`)
+used to fall through `_execute` to "mark done": the approve button silently threw the prep away and
+built nothing. Now:
+
+- **Answered** (the owner replies on the card): `apply_correction` -> `_prep_build_quotation` builds it
+  from his words. Unchanged.
+- **Approved without answers**: `_execute` calls the SAME `_prep_build_quotation`, with the card's own
+  draft as the brief ("APPROVED AS-IS"). What "the card's defaults" means is NOT in code: it is the
+  universal `sales-quotation` rule "APPROVED WITHOUT ANSWERS" (standard rate-card tier, never the budget
+  tier; first-listed alternative; open-quantity add-ons unpriced and named in the note; addressed to the
+  deal's primary contact; quotation only, never a proposal). `_prep_quote_spec` now reads the quotation
+  skill's rules for exactly this reason.
+- Prices keep the existing guard either way: a figure survives only if it is in the owner's own words
+  on the card or is a rate-card rate. Everything else prints blank.
+- The defaults the model assumed come back as `assumptions` and are appended to the CLOSED PREP CARD
+  for the owner. They are never printed on the client's quotation.
+- A failed build leaves the prep card `awaiting_approval` and returns `blocked`, which `_approve` hands
+  straight back (no streak bump) and the cockpit shows as a toast. Nothing is sent in any case: the
+  result is a quotation card for review.
+
 ## An empty draft is a failure, and the To line owns the reply (11 Sep 2026)
 
 Card 545 (Antoni Entertainment) reached the Inbox with an EMPTY body and the wrong sender. Approving
