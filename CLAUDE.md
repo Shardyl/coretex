@@ -750,6 +750,19 @@ superseded by SEN-2026-0010) and run `export_templates` so the Drive terms folde
   with the 8.5 shoot ladder, the v1.2 file was restored (md5 8e1810d1), and the untouched original plus
   his raw edit are kept in `/opt/cortex-knowledge/documents/sensa/_preserved/`. Every version stays in the
   library and the Drive terms folder.
+- THE CLIENT'S COPY SAYS "TERMS AND CONDITIONS" (owner, 11 Sep 2026). "Master Terms", the version line and
+  the "applies at or above AED 250,000" note are our internal names for the template, so the issued copy is
+  titled TERMS AND CONDITIONS with "Quotation <number as the quote prints it> · <client>" beneath, and the
+  quotation's own line refers to "the Terms and Conditions supplied with it". The master version it came
+  from is kept in the PDF metadata (Subject: "Issued from Sensa Master Terms v1.3") and on the card. A
+  sales-quotation rule carries the same wording rule for notes and emails.
+- THE EXECUTION PAGE: the template's run-on signature lines become a table on its own page: a row per
+  field (company name, authorising person, position, signature, date) with a line to write on, a box per
+  company stamp, Customer beside Sky Vision. Fields and our signatory are READ FROM THE TEMPLATE'S own
+  signature lines, never typed into code, so editing the docx changes who signs for us.
+- ONE OPEN CARD PER QUOTATION NUMBER: a new version closes the older open cards for that number as
+  `cancelled` (never `rejected`, which reads as a judgement on the skill) with `superseded_by`. A
+  re-render of the same version replaces its client-folder files in place instead of duplicating them.
 - STILL OPEN: the Master Terms carry none of the shoot-specific protections the shoot-production preset
   printed (participant attendance, consent, manifest deadline, on-day sign-off, overtime, retention,
   participant data), and 6.3A licenses talent appearance for 12 months, GCC, online, which reads onto a
