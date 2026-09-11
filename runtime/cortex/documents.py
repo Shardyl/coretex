@@ -115,7 +115,8 @@ def save_data_url(company_id: int, slug: str, filename: str, data_url: str,
 
 # The STANDING company papers - the only documents offered by default when attaching to a card
 # (owner, 30 Aug: everything else is project clutter and Cortex attaches what a draft needs itself).
-CORE_KINDS = ("company-profile", "trade-licence", "vat-certificate")
+# our own standing documents: they belong to no client, so a deal's document scope never hides them
+CORE_KINDS = ("company-profile", "trade-licence", "vat-certificate", "capabilities-deck")
 
 
 def listing(company_id: int, core_only: bool = False) -> list[dict]:
@@ -314,9 +315,9 @@ def find(company_id: int, query: str, scope: str = "") -> list[dict]:
     best = [r for s, r in sorted(scored, key=lambda x: -x[0]) if s > 0]
     stoks = [t for t in re.split(r"[^a-z0-9]+", (scope or "").lower())
              if len(t) > 2 and t not in _GENERIC]
-    if stoks:
-        best = [r for r in best
-                if any(t in (r["filename"] + " " + r["kind"]).lower() for t in stoks)]
+    if stoks:   # a standing company document is never another client's file, so the scope never drops it
+        best = [r for r in best if r["kind"] in CORE_KINDS
+                or any(t in (r["filename"] + " " + r["kind"]).lower() for t in stoks)]
     return best or []
 
 

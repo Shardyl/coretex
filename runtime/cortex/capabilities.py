@@ -90,6 +90,14 @@ CAPABILITIES: list[tuple[str, str]] = [
      "the AI short form). When emailing a quotation attach BOTH PDFs from its card at or above the "
      "threshold (the quotation and its Terms and Conditions), the quotation alone below it. Pass `number` to issue a new version of an existing "
      "quotation for the same client, so a proposal, its quotation and its terms carry one reference."),
+    ("The AI Production Capabilities Deck",
+     "Sensa's STANDARD document for showcasing its AI production work: 'Sensa - AI Production Capabilities "
+     "Deck.pdf' in the document library (kind capabilities-deck, the profile's ai_capabilities_deck_doc). When "
+     "Rashad says 'the capabilities deck', 'the AI deck' or 'our AI production deck', he means this file: "
+     "attach it by that name, on any card, since a deal's document scope never hides it. The Dubai Municipality "
+     "deck and the earlier 'Brands agencies and government clients' builds are NOT it. Rebuilding with "
+     "create_capabilities_deck makes a NEW file named from the audience; the standard only changes when Rashad "
+     "says so, and then that file is renamed and ai_capabilities_deck_doc repointed."),
     ("Rebranding an existing deck — LIVE",
      "rebrand_deck takes a deck or proposal PDF already in the document library and re-lays it into the "
      "house format, keeping the content WORD FOR WORD. It transcribes, it never rewrites: the client "
