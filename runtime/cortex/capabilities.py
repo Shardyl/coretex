@@ -80,6 +80,13 @@ CAPABILITIES: list[tuple[str, str]] = [
      "contradicts the deck the client is reading is the failure to avoid. `total` is for when Rashad "
      "gives one number and Cortex splits it by the preset's weights. Presets carry their own payment "
      "schedule (AI production 70/30; a shoot commits a studio and crew to a date, so 50/25/25)."),
+    ("High-value quotations and their Master Terms",
+     "At or above the company's high_value_threshold (Sensa: AED 250,000 ex VAT) create_quotation prints "
+     "numbers and scope only, with one line incorporating the Master Terms, and issues the CURRENT Master "
+     "Terms (the profile's master_terms_doc) as a separate document stamped 'Issued with Quotation <ref> "
+     "vN for <client>': both filed to the client folder and attached to the card. Below it the preset's "
+     "short form terms print on the sheet as before. Pass `number` to issue a new version of an existing "
+     "quotation for the same client, so a proposal, its quotation and its terms carry one reference."),
     ("Rebranding an existing deck — LIVE",
      "rebrand_deck takes a deck or proposal PDF already in the document library and re-lays it into the "
      "house format, keeping the content WORD FOR WORD. It transcribes, it never rewrites: the client "

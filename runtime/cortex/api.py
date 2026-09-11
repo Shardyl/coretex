@@ -3320,6 +3320,12 @@ SKILL_TOOLS = [
            "required": ["header", "items"]}},
         "title": {"type": "string", "description": "override the preset's document title"},
         "note": {"type": "string", "description": "the line printed under the totals"},
+        "number": {"type": "string", "description": "issue a NEW VERSION of an existing quotation "
+                   "(e.g. SEN-2026-0011) rather than a new number: it becomes vN in that quotation's ALL "
+                   "VERSIONS history. Only for the same client. Use it when a proposal already cites the "
+                   "number, so every document the client holds carries one reference."},
+        "deliverables": {"type": "array", "items": {"type": "string"},
+                         "description": "the DELIVERABLES bullets; omit to use the preset's"},
         "contact_email": {"type": "string", "description": "who the quotation is addressed to; "
                           "otherwise filled from the CRM"},
         "deal_id": {"type": "integer", "description": "the opportunity this quotation belongs to"}},
@@ -3638,17 +3644,23 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         slug = inp.get("company")
         if not slug or not store.get_company_by_slug(slug):
             return f"unknown business '{slug}' — tell me which of your businesses this quote is for"
-        t = engine.deliver_quotation(slug, preset=inp.get("preset") or "ai-production",
-                                     customer=inp.get("customer", ""), total=inp.get("total"),
-                                     total_inclusive=bool(inp.get("total_inclusive")),
-                                     sections=inp.get("sections"), title=inp.get("title"),
-                                     note=inp.get("note"), contact_email=inp.get("contact_email"),
-                                     fmt=inp.get("fmt") or "both")
+        try:
+            t = engine.deliver_quotation(slug, preset=inp.get("preset") or "ai-production",
+                                         customer=inp.get("customer", ""), total=inp.get("total"),
+                                         total_inclusive=bool(inp.get("total_inclusive")),
+                                         sections=inp.get("sections"), title=inp.get("title"),
+                                         note=inp.get("note"), contact_email=inp.get("contact_email"),
+                                         number=inp.get("number"), deliverables=inp.get("deliverables"),
+                                         fmt=inp.get("fmt") or "both")
+        except ValueError as _e:
+            return str(_e)
         if inp.get("deal_id") and t.get("id"):
             db.execute("update tasks set deal_id=%s where id=%s", (int(inp["deal_id"]), t["id"]))
         req = t.get("request") or {}
         return (f"created quotation {req.get('number')} — it's in your Inbox now to download (task #{t['id']}). "
-                f"{req.get('summary', '')}")
+                f"{req.get('summary', '')}"
+                + (" It is numbers and scope only: the Master Terms go with it as their own document, "
+                   "stamped with this reference, and both are on the card." if req.get("master_terms") else ""))
     if name == "list_scheduled":
         co = store.get_company_by_slug(inp["company"]) if inp.get("company") else None
         flt, p = (" and company_id=%s", (co["id"],)) if co else ("", ())

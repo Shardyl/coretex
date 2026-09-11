@@ -251,6 +251,30 @@ def _next_number() -> str:
 # Resolve — the shared model both renderers (PDF + XLSX) build from
 # ---------------------------------------------------------------------------
 
+def master_terms_ref(data: dict, net: float) -> dict | None:
+    """The Master Terms a quotation of this size is issued under, or None below the threshold.
+
+    Sales-quotation terms placement rule: under the company's `high_value_threshold` the short form
+    terms print on the quotation; AT OR ABOVE it the sheet carries numbers and scope only and the Master
+    Terms travel behind it as their own document. Which document that is lives on the company profile
+    (`master_terms_doc`, its own key: `high_value_attach_doc` is the first-contact attachment, a different
+    job), and its version is read from the filed name, never typed into code."""
+    try:
+        thr = float(data.get("high_value_threshold") or 0)
+        doc_id = int(data.get("master_terms_doc") or 0)
+    except (TypeError, ValueError):
+        return None
+    if not thr or not doc_id or float(net or 0) < thr:
+        return None
+    row = db.one("select id, filename from company_documents where id=%s", (doc_id,))
+    if not row:
+        return None
+    base = re.sub(r"\.(pdf|docx)$", "", row["filename"], flags=re.I).strip()
+    ver = re.search(r"\bv(\d+(?:\.\d+)*)\b", base)
+    return {"doc_id": row["id"], "filename": row["filename"], "version": ver.group(1) if ver else "",
+            "label": base.replace(" - ", " ")}
+
+
 def _resolve(company: str, preset: str, *, customer: str, sections, total, total_inclusive, title, note,
              agency_fee, terms, deliverables, number=None) -> dict:
     """Resolve house data + preset + priced line items into one model dict, stamping every figure in code.
@@ -268,6 +292,7 @@ def _resolve(company: str, preset: str, *, customer: str, sections, total, total
     title = title or pset.get("title", "QUOTATION")
     note = note if note is not None else pset.get("note", "")
     agency_fee = pset.get("agency_fee", False) if agency_fee is None else agency_fee
+    explicit_terms = bool(terms)
     terms = terms or pset.get("terms") or {}
     deliverables = deliverables if deliverables is not None else list(pset.get("deliverables") or [])
     cur = (data.get("currency") or "AED").upper()
@@ -308,6 +333,10 @@ def _resolve(company: str, preset: str, *, customer: str, sections, total, total
                     it["_amount"] = float(unit) * float(qty)
                     subtotal += it["_amount"]
         fee = round(subtotal * 0.15, 2) if agency_fee else 0.0
+    if not explicit_terms:
+        _mt = master_terms_ref(data, subtotal)
+        if _mt:
+            terms = {"incorporated": _mt}
     vat = round((subtotal + fee) * vat_rate, 2)
     grand = round(subtotal + fee + vat, 2)
     number = number or _next_number()   # reuse a pinned number when rendering both formats of one quote
@@ -315,6 +344,9 @@ def _resolve(company: str, preset: str, *, customer: str, sections, total, total
     blank_note = f" {blanks} price(s) left blank." if blanks else ""
     summary = (f"{co['name']} {preset} quotation {number}" + (f" for {customer}" if customer else "")
                + f": {n_items} line items, total {_money(grand, cur)} incl. VAT.{blank_note}")
+    if (terms or {}).get("incorporated"):
+        summary += (f" Numbers and scope only: issued under the {terms['incorporated']['label']}, "
+                    "as a separate document.")
     return {"company": company, "co": co, "data": data, "preset": preset, "title": title, "note": note,
             # HOW IT IS PAID IS PART OF THE PRESET, not a constant. 70/30 is the AI schedule; a shoot
             # commits a studio and a crew to a fixed date and runs 50/25/25 (8 Sep 2026).
@@ -328,7 +360,8 @@ def _resolve(company: str, preset: str, *, customer: str, sections, total, total
 def _return(m: dict, path: str) -> dict:
     return {"path": path, "number": m["number"], "title": m["title"], "summary": m["summary"],
             "company": m["company"], "customer": m["customer"], "total": m["grand"], "currency": m["cur"],
-            "blanks": m["blanks"], "stated": m["stated"], "preset": m["preset"]}
+            "blanks": m["blanks"], "stated": m["stated"], "preset": m["preset"],
+            "master_terms": (m.get("terms") or {}).get("incorporated")}
 
 
 # ---------------------------------------------------------------------------
@@ -487,6 +520,10 @@ def generate(company: str, preset: str = "ai-production", *, customer: str = "",
     if terms:
         story.append(PageBreak())
         story.append(Paragraph("Terms &amp; Conditions", H1))
+        if terms.get("incorporated"):
+            story.append(Paragraph(f"This quotation is issued subject to the {terms['incorporated']['label']}, "
+                                   "supplied with it as a separate document and forming part of the Contract.",
+                                   SMALL))
         if terms.get("intro"):
             story.append(Paragraph(terms["intro"], ParagraphStyle("TI", parent=SMALL, spaceAfter=6)))
         story.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceBefore=4, spaceAfter=6))
@@ -817,13 +854,21 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
         c.font = F(s=size, b=bold, i=italic, c=color)
         ws.row_dimensions[r].height = h or (max(1, -(-len(str(text)) // 120)) * 13 + 4); r += 1
     tt = m["terms"] or {}
-    if tt.get("intro"):
-        tline(tt["intro"], italic=True, color=_MUTE); r += 1
-    for g in tt.get("groups", []):
-        tline(g["heading"], bold=True, size=11, color=_TEALTX, h=18)
-        for ln in g.get("lines", []):
-            tline(ln)
+    inc = tt.get("incorporated")
+    if inc:     # high-value: the terms are their OWN document, and each names the other
+        tline(f"This quotation is issued subject to the {inc['label']}, supplied with it as a separate "
+              f"document bearing this quotation's reference, {m['number']}, and forming part of the "
+              "Contract. Signing the acceptance above accepts this quotation and those terms.",
+              size=10.5, h=44)
         r += 1
+    else:
+        if tt.get("intro"):
+            tline(tt["intro"], italic=True, color=_MUTE); r += 1
+        for g in tt.get("groups", []):
+            tline(g["heading"], bold=True, size=11, color=_TEALTX, h=18)
+            for ln in g.get("lines", []):
+                tline(ln)
+            r += 1
     tline(f"{hb['name']}  ·  {(m['data'].get('inbox_email') or '')}", italic=True, color=_MUTE)
 
     # ---- logo on the black band ----

@@ -4233,7 +4233,8 @@ def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quota
 def deliver_quotation(company: str, *, preset: str = "ai-production", customer: str = "",
                       total: float | None = None, total_inclusive: bool = False, sections: list | None = None,
                       title: str | None = None, note: str | None = None, fmt: str = "both",
-                      contact_email: str | None = None) -> dict:
+                      contact_email: str | None = None, number: str | None = None,
+                      deliverables: list | None = None) -> dict:
     """Render a quotation and drop it in the Inbox as a downloadable card (kind='quotation'). `fmt` = 'both'
     (default: editable .xlsx + ready-to-send .pdf), 'xlsx', or 'pdf'; both share one quote number. Delivery
     copies stored in R2 under <slug>/quotations/draft/. Prices come from the request (a stated total split by
@@ -4242,8 +4243,14 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
     co = store.get_company_by_slug(company)
     if not co:
         raise ValueError(f"unknown company {company}")
+    if number:      # a NEW VERSION of an existing quotation - never another client's number
+        _reg = db.setting_get(f"quote_versions:{number}") or []
+        _who = ((_reg[-1].get("spec") or {}).get("customer") or "").strip() if _reg else ""
+        if _who and _who.lower() != (customer or "").strip().lower():
+            raise ValueError(f"{number} is {_who}'s quotation; a new version must be for the same client.")
     kw = dict(customer=customer, total=total, total_inclusive=total_inclusive, sections=sections,
-              title=title, note=note, contact_email=contact_email, out_dir=QUOTES_DIR)
+              title=title, note=note, contact_email=contact_email, number=number,
+              deliverables=deliverables, out_dir=QUOTES_DIR)
     want_pdf = fmt in ("both", "pdf")
     want_xlsx = fmt in ("both", "xlsx")
     # The house-format .xlsx is the single source of truth; the PDF is that same sheet converted by
@@ -4268,6 +4275,7 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
             return None
 
     drive_note = _push_quote_to_client_drive(co, customer, number, x, pdf_path)
+    _doc = None
     # ...and straight into the DOCUMENT LIBRARY, so it can be attached to an email card immediately
     # instead of waiting for the hourly client-folder sync (owner, 31 Aug: "update the quotation to
     # today's date and share them both").
@@ -4286,16 +4294,85 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
                            "where id=%s", (_fid, (drive_note or {}).get("client") or customer, _doc["id"]))
     except Exception:  # noqa: BLE001 — the card and the Drive copy still stand
         pass
+    # HIGH-VALUE: the sheet carries numbers and scope only, so the Master Terms go with it as their
+    # own document, stamped with this quotation's reference - each document names the other.
+    terms_doc = None
+    if x.get("master_terms"):
+        try:
+            terms_doc = _issue_master_terms_copy(co, customer, number, x["master_terms"], drive_note)
+        except Exception as e:  # noqa: BLE001 — the quotation card must survive a terms hiccup
+            tg.send(f"Quotation {number}: the Master Terms copy failed ({e}); attach them by hand.")
     skill = store.get_skill_by_key(co["id"], QUOTE_SKILL_KEY)
     req = {"kind": "quotation", "company": company, "client_drive": drive_note,
            "file": pdf_path, "r2_url": _r2(pdf_path, "pdf"),
            "xlsx_file": xlsx_path, "xlsx_r2_url": _r2(xlsx_path, "xlsx"),
            "number": number, "title": x["title"], "summary": x["summary"], "customer": customer,
-           "preset": preset, "total": x["total"], "currency": x["currency"], "blanks": x["blanks"]}
+           "preset": preset, "total": x["total"], "currency": x["currency"], "blanks": x["blanks"],
+           "master_terms": x.get("master_terms")}
+    _att = [d for d in (_doc, terms_doc) if d]
+    if _att:
+        req["attach_docs"] = [{"id": d["id"], "filename": d["filename"], "mime": d["mime"],
+                               "size": d["size"]} for d in _att]
+    _draft = x["summary"] + (f" The Master Terms copy issued with it: {terms_doc['filename']}."
+                             if terms_doc else "")
     return db.execute(
         "insert into tasks (company_id,skill_id,kind,request,draft,status,origin,title) "
         "values (%s,%s,'quotation',%s,%s,'awaiting_approval','talk',%s) returning *",
-        (co["id"], skill["id"] if skill else None, Json(req), x["summary"], x["title"]))
+        (co["id"], skill["id"] if skill else None, Json(req), _draft, x["title"]))
+
+
+def _issue_master_terms_copy(co: dict, customer: str, number: str, mt: dict,
+                             drive_note: dict | None) -> dict | None:
+    """The Master Terms AS ISSUED WITH ONE QUOTATION: the company's current version with a line under
+    the title naming the quotation, its version and the client, so the two documents reference each
+    other. Built from the .docx beside the attached PDF so the house typography is untouched; falls back
+    to the plain PDF when no .docx is on file. Filed beside the quotation and into the library."""
+    import copy as _copy
+    import io as _io
+    import subprocess as _sp
+    import docx as _docx
+    from docx.text.paragraph import Paragraph as _Para
+    n = (drive_note or {}).get("version") or len(db.setting_get(f"quote_versions:{number}") or []) or 1
+    now = datetime.now(timezone.utc)
+    client = (customer or "").split(",")[0].strip() or co["name"]
+    label = mt.get("label") or "Master Terms"
+    name = f"{client} - {label} - Quotation {number} v{n} - {now:%Y-%m-%d}.pdf"
+    src = re.sub(r"\.pdf$", ".docx", mt.get("filename") or "", flags=re.I)
+    row = db.one("select id from company_documents where company_id=%s and filename=%s "
+                 "order by id desc limit 1", (co["id"], src))
+    if row:
+        d = _docx.Document(_io.BytesIO(documents.read_bytes(documents.get(row["id"]))))
+        anchor = next((p for p in d.paragraphs if p.text.strip().lower().startswith("applies to")),
+                      d.paragraphs[min(3, len(d.paragraphs) - 1)])
+        el = _copy.deepcopy(anchor._p)
+        anchor._p.addnext(el)
+        para = _Para(el, anchor._parent)
+        for i, run in enumerate(para.runs):
+            run.text = "" if i else (f"Issued with Quotation {number} v{n} for {client}, "
+                                     f"{now.day} {now:%B %Y}.")
+            if not i:
+                run.bold = True
+        tmp = tempfile.mkdtemp(prefix="terms-")
+        dpath = os.path.join(tmp, "terms.docx")
+        d.save(dpath)
+        _sp.run(["soffice", "--headless", "--convert-to", "pdf", "--outdir", tmp, dpath],
+                capture_output=True, timeout=180, env={**os.environ, "HOME": tmp})
+        data = open(os.path.join(tmp, "terms.pdf"), "rb").read()
+    else:
+        data = documents.read_bytes(documents.get(int(mt["doc_id"])))
+    doc = documents.save(co["id"], co.get("slug"), name, "application/pdf", data, kind="terms",
+                         uploaded_by=f"quotation:{number}", push=False)
+    folder = (drive_note or {}).get("folder_id")
+    if folder:
+        try:
+            from . import drive as _drive
+            fid = _drive.upload_to_folder(folder, name, "application/pdf", data, token=_drive.access_token())
+            if doc and fid:
+                db.execute("update company_documents set drive_id=%s, client=%s, verified_at=now() "
+                           "where id=%s", (fid, (drive_note or {}).get("client") or client, doc["id"]))
+        except Exception:  # noqa: BLE001 — the library copy still stands
+            pass
+    return doc
 
 
 def _push_quote_to_client_drive(co: dict, customer: str, number: str, x: dict, pdf_path: str | None) -> dict:
@@ -4322,6 +4399,11 @@ def _push_quote_to_client_drive(co: dict, customer: str, number: str, x: dict, p
             "includeItemsFromAllDrives": "true", "supportsAllDrives": "true", "fields": "files(id)"},
             headers={"Authorization": f"Bearer {tok}"}, timeout=30)
         n = (len(r.json().get("files", [])) // 2) + 1 if r.status_code == 200 else 1
+        # the VERSION REGISTRY is the truth for vN; a reissued number, a PDF-only render or a trashed
+        # file throws the folder count off, so the count is only the fallback
+        _reg = db.setting_get(f"quote_versions:{number}") or []
+        if _reg:
+            n = int(_reg[-1].get("v") or n)
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         # House naming convention (searchable in Drive): Client - Project - Quotation <number> vN - date
         project = (x.get("project") or "").strip()
