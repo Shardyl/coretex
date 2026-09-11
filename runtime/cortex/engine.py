@@ -4331,6 +4331,140 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
     return t
 
 
+def _terms_execution_page(d, number: str | None = None, client: str | None = None) -> bool:
+    """The execution page of a terms .docx: on its own page, Customer beside Sky Vision, one row per field
+    with a line to write on and a box for each company stamp.
+
+    A TEMPLATE THAT ALREADY CARRIES THE TABLE (Master Terms v1.4 on) is only FILLED: the quotation number
+    in the signing line and the client's company name. An older template's run-on signature lines are
+    converted into the table, reading the fields and our own signatory FROM THOSE LINES, so the document
+    stays the source of who signs for us. With no number or client (building the master itself) the
+    customer side stays blank. Returns False when the document has no signature section."""
+    import copy as _copy
+    from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_ROW_HEIGHT_RULE
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Cm, Pt, RGBColor
+    from docx.table import Table as _Table
+    from docx.text.paragraph import Paragraph as _Para
+    INK, MUTE, TEAL, RULE = (RGBColor(0x1A, 0x1A, 0x1A), RGBColor(0x77, 0x77, 0x77),
+                             RGBColor(0x0A, 0x7C, 0x8C), "9A9A9A")
+
+    def put(p, s):
+        runs = p.runs or [p.add_run("")]
+        runs[0].text = s
+        for r in runs[1:]:
+            r.text = ""
+        return runs[0]
+
+    def text(cell, s, size=10.5, bold=False, color=INK, font=None):
+        p = cell.paragraphs[0]
+        p.paragraph_format.space_after = Pt(2)
+        run = p.add_run(s)
+        run.bold, run.font.size, run.font.color.rgb = bold, Pt(size), color
+        if font:
+            run.font.name = font
+
+    paras = d.paragraphs
+    k = next((i for i in range(len(paras) - 1, -1, -1)
+              if paras[i].text.strip().lower() in ("signature", "signatures")), None)
+    if k is None:
+        return False
+    sig = paras[k]
+    statement = ("Signed by the authorised representative of each party, accepting "
+                 + (f"Quotation {number}" if number else "the Quotation")
+                 + " and these Terms and Conditions, which together form the Contract.")
+
+    # ---- already laid out: fill it
+    el = sig._p.getnext()
+    while el is not None and el.tag != qn("w:tbl"):
+        el = el.getnext()
+    if el is not None:
+        for p in paras[k + 1:]:
+            if p.text.strip().lower().startswith("signed by"):
+                put(p, statement)
+                break
+        if client:
+            for row in _Table(el, sig._parent).rows:
+                if row.cells[0].text.strip().lower() == "company name" and not row.cells[1].text.strip():
+                    text(row.cells[1], client)
+        return True
+
+    # ---- the run-on signature lines become the table
+    tail = paras[k + 1:]
+    lines = [p.text.strip() for p in tail if p.text.strip()]
+    cust_line = next((t for t in lines if t.lower().startswith("customer")), "")
+    ours_line = next((t for t in lines if not t.lower().startswith("customer")), "")
+    fields = [f.strip() for f in cust_line.split(":", 1)[-1].split("/") if f.strip()] or \
+        ["Name", "Authorising person", "Position", "Date", "Signature", "Company stamp"]
+    fields = ["Company name" if f.lower() == "name" else f for f in fields]
+    order = {"company name": 0, "authorising person": 1, "position": 2, "signature": 3,
+             "date": 4, "company stamp": 5}
+    fields.sort(key=lambda f: order.get(f.lower(), 9))
+    ours_party, _, ours_rest = ours_line.partition(":")
+    who = (ours_rest.split("/")[0] if ours_rest else "").strip()
+    ours_name, _, ours_role = who.partition(",")
+    ours = {"company name": ours_party.strip(), "authorising person": ours_name.strip(),
+            "position": ours_role.strip()}
+    theirs = {"company name": client} if client else {}
+    body = _copy.deepcopy(tail[0]._p) if tail else _copy.deepcopy(sig._p)
+    for p in tail:
+        if p._p.find(".//" + qn("w:sectPr")) is None:      # never remove the page setup
+            p._p.getparent().remove(p._p)
+    sig.paragraph_format.page_break_before = True
+    sig._p.addnext(body)
+    stmt = _Para(body, sig._parent)
+    put(stmt, statement)
+    stmt.paragraph_format.space_after = Pt(14)
+
+    sec = d.sections[-1]
+    usable = sec.page_width - sec.left_margin - sec.right_margin
+    widths = [Cm(3.3), None, Cm(0.6), None]
+    widths[1] = widths[3] = int((usable - widths[0] - widths[2]) / 2)
+    tbl = d.add_table(rows=0, cols=4)
+    tbl.autofit = False
+
+    def border(cell, edges, sz=6, color=RULE):
+        tcPr = cell._tc.get_or_add_tcPr()
+        b = OxmlElement("w:tcBorders")
+        for edge in edges:
+            e_ = OxmlElement(f"w:{edge}")
+            for a, v in (("val", "single"), ("sz", str(sz)), ("space", "0"), ("color", color)):
+                e_.set(qn(f"w:{a}"), v)
+            b.append(e_)
+        tcPr.append(b)
+
+    def add_row(height):
+        rw = tbl.add_row()
+        rw.height, rw.height_rule = height, WD_ROW_HEIGHT_RULE.AT_LEAST
+        rw._tr.get_or_add_trPr().append(OxmlElement("w:cantSplit"))
+        for i, c in enumerate(rw.cells):
+            c.width = widths[i]
+            c.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.BOTTOM
+        return rw.cells
+
+    c = add_row(Cm(1.0))
+    text(c[1], "Customer", size=12, bold=True, color=TEAL, font="Poppins")
+    text(c[3], "Sky Vision", size=12, bold=True, color=TEAL, font="Poppins")
+    for f in fields:
+        key = f.lower()
+        stamp = key == "company stamp"
+        if stamp:       # air first, or the box's top edge sits on the Date line and reads as it
+            add_row(Cm(0.6))
+        c = add_row(Cm(3.4) if stamp else Cm(1.6) if key == "signature" else Cm(1.0))
+        if stamp:
+            for cc in c:
+                cc.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
+        text(c[0], f, size=9, color=MUTE)
+        for col, vals in ((1, theirs), (3, ours)):
+            if vals.get(key):
+                text(c[col], vals[key])
+            border(c[col], ("top", "left", "bottom", "right") if stamp else ("bottom",))
+    for i, col in enumerate(tbl.columns):
+        col.width = widths[i]
+    return True
+
+
 def _issue_master_terms_copy(co: dict, customer: str, number: str, mt: dict,
                              drive_note: dict | None) -> dict | None:
     """The Master Terms AS ISSUED WITH ONE QUOTATION: the client's copy.
@@ -4339,18 +4473,13 @@ def _issue_master_terms_copy(co: dict, customer: str, number: str, mt: dict,
     at or above AED 250,000" note are internal (owner, 11 Sep 2026). The client's copy is titled Terms
     and Conditions and names only what it belongs to: the quotation number exactly as the quotation
     prints it, and the client. Which master version it came from lives in the PDF metadata and on the
-    card, never on the page. The signature section becomes a proper execution page: one row per field
-    with a line to write on and a box for each company stamp, on its own page so it never splits. The
-    fields and our own signatory are READ FROM THE TEMPLATE'S signature lines, so the document stays
-    the source of who signs for us. Falls back to the plain PDF when no .docx is on file."""
-    import copy as _copy
+    card, never on the page. The execution page is `_terms_execution_page`, filled with the quotation
+    number and the client. Falls back to the plain PDF when no .docx is on file."""
     import io as _io
     import subprocess as _sp
     import docx as _docx
-    from docx.enum.table import WD_ROW_HEIGHT_RULE, WD_CELL_VERTICAL_ALIGNMENT
-    from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
-    from docx.shared import Cm, Pt, RGBColor
+    from docx.shared import Pt, RGBColor
     n = (drive_note or {}).get("version") or len(db.setting_get(f"quote_versions:{number}") or []) or 1
     now = datetime.now(timezone.utc)
     client = (customer or "").split(",")[0].strip() or co["name"]
@@ -4362,8 +4491,6 @@ def _issue_master_terms_copy(co: dict, customer: str, number: str, mt: dict,
         data = documents.read_bytes(documents.get(int(mt["doc_id"])))
     else:
         d = _docx.Document(_io.BytesIO(documents.read_bytes(documents.get(row["id"]))))
-        INK, MUTE, TEAL, RULE = (RGBColor(0x1A, 0x1A, 0x1A), RGBColor(0x77, 0x77, 0x77),
-                                 RGBColor(0x0A, 0x7C, 0x8C), "9A9A9A")
 
         def put(p, text):
             runs = p.runs or [p.add_run("")]
@@ -4371,10 +4498,6 @@ def _issue_master_terms_copy(co: dict, customer: str, number: str, mt: dict,
             for r in runs[1:]:
                 r.text = ""
             return runs[0]
-
-        def drop(p):
-            if p._p.find(".//" + qn("w:sectPr")) is None:      # never remove the page setup
-                p._p.getparent().remove(p._p)
 
         # ---- the top: the title, then what this copy belongs to - nothing internal
         head = d.paragraphs[:10]
@@ -4385,94 +4508,12 @@ def _issue_master_terms_copy(co: dict, customer: str, number: str, mt: dict,
         if ver is not None:
             r = put(ver, f"Quotation {number}  ·  {client}")
             r.bold, r.italic = True, False
-            r.font.size, r.font.color.rgb = Pt(11), INK
+            r.font.size, r.font.color.rgb = Pt(11), RGBColor(0x1A, 0x1A, 0x1A)
         for p in [p for p in head if p.text.strip().lower().startswith(("applies to", "issued with"))]:
-            drop(p)
+            if p._p.find(".//" + qn("w:sectPr")) is None:
+                p._p.getparent().remove(p._p)
 
-        # ---- the execution page
-        paras = d.paragraphs
-        k = next((i for i in range(len(paras) - 1, -1, -1)
-                  if paras[i].text.strip().lower() in ("signature", "signatures")), None)
-        if k is not None:
-            sig, tail = paras[k], paras[k + 1:]
-            lines = [p.text.strip() for p in tail if p.text.strip()]
-            cust_line = next((t for t in lines if t.lower().startswith("customer")), "")
-            ours_line = next((t for t in lines if not t.lower().startswith("customer")), "")
-            fields = [f.strip() for f in cust_line.split(":", 1)[-1].split("/") if f.strip()] or \
-                ["Name", "Authorising person", "Position", "Date", "Signature", "Company stamp"]
-            fields = ["Company name" if f.lower() == "name" else f for f in fields]
-            order = {"company name": 0, "authorising person": 1, "position": 2, "signature": 3,
-                     "date": 4, "company stamp": 5}
-            fields.sort(key=lambda f: order.get(f.lower(), 9))
-            ours_party, _, ours_rest = ours_line.partition(":")
-            who = (ours_rest.split("/")[0] if ours_rest else "").strip()
-            ours_name, _, ours_role = who.partition(",")
-            ours = {"company name": ours_party.strip(), "authorising person": ours_name.strip(),
-                    "position": ours_role.strip()}
-            theirs = {"company name": client}
-            body = _copy.deepcopy(tail[0]._p) if tail else _copy.deepcopy(sig._p)
-            for p in tail:
-                drop(p)
-            sig.paragraph_format.page_break_before = True
-            sig._p.addnext(body)
-            stmt = d.paragraphs[[i for i, p in enumerate(d.paragraphs) if p._p is body][0]]
-            r = put(stmt, f"Signed by the authorised representative of each party, accepting Quotation "
-                          f"{number} and these Terms and Conditions, which together form the Contract.")
-            stmt.paragraph_format.space_after = Pt(14)
-
-            sec = d.sections[-1]
-            usable = sec.page_width - sec.left_margin - sec.right_margin
-            widths = [Cm(3.3), None, Cm(0.6), None]
-            widths[1] = widths[3] = int((usable - widths[0] - widths[2]) / 2)
-            tbl = d.add_table(rows=0, cols=4)
-            tbl.autofit = False
-
-            def border(cell, edges, sz=6, color=RULE):
-                tcPr = cell._tc.get_or_add_tcPr()
-                b = OxmlElement("w:tcBorders")
-                for edge in edges:
-                    el = OxmlElement(f"w:{edge}")
-                    for a, v in (("val", "single"), ("sz", str(sz)), ("space", "0"), ("color", color)):
-                        el.set(qn(f"w:{a}"), v)
-                    b.append(el)
-                tcPr.append(b)
-
-            def text(cell, s, size=10.5, bold=False, color=INK, font=None):
-                p = cell.paragraphs[0]
-                p.paragraph_format.space_after = Pt(2)
-                run = p.add_run(s)
-                run.bold, run.font.size, run.font.color.rgb = bold, Pt(size), color
-                if font:
-                    run.font.name = font
-
-            def add_row(height):
-                rw = tbl.add_row()
-                rw.height, rw.height_rule = height, WD_ROW_HEIGHT_RULE.AT_LEAST
-                rw._tr.get_or_add_trPr().append(OxmlElement("w:cantSplit"))
-                for i, c in enumerate(rw.cells):
-                    c.width = widths[i]
-                    c.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.BOTTOM
-                return rw.cells
-
-            c = add_row(Cm(1.0))
-            text(c[1], "Customer", size=12, bold=True, color=TEAL, font="Poppins")
-            text(c[3], "Sky Vision", size=12, bold=True, color=TEAL, font="Poppins")
-            for f in fields:
-                key = f.lower()
-                stamp = key == "company stamp"
-                if stamp:       # air first, or the box's top edge sits on the Date line and reads as it
-                    add_row(Cm(0.6))
-                c = add_row(Cm(3.4) if stamp else Cm(1.6) if key == "signature" else Cm(1.0))
-                if stamp:
-                    for cc in c:
-                        cc.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
-                text(c[0], f, size=9, color=MUTE)
-                for col, vals in ((1, theirs), (3, ours)):
-                    if vals.get(key):
-                        text(c[col], vals[key])
-                    border(c[col], ("top", "left", "bottom", "right") if stamp else ("bottom",))
-            for i, col in enumerate(tbl.columns):
-                col.width = widths[i]
+        _terms_execution_page(d, number=number, client=client)
 
         d.core_properties.title = f"Terms and Conditions - Quotation {number} - {client}"
         d.core_properties.subject = f"Issued from {mt.get('label') or 'the Master Terms'}"
