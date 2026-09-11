@@ -385,11 +385,13 @@ def _email_envelope(task: dict, company: dict) -> dict:
     # ALWAYS-BCC: the owner's silent copy of everything, from every company. Global setting first (so a
     # new company is covered the day it is created), then any per-company profile override. BCC because
     # the recipient must never see it (owner, 31 Aug 2026 - he reads everything in one personal inbox).
+    _abcc: set = set()
     try:
         _gb = db.setting_get("always_bcc") or []
-        bcc_list += [str(v).strip() for v in _gb if isinstance(v, str) and "@" in v]
-        bcc_list += [str(v).strip() for v in (data.get("always_bcc") or [])
-                     if isinstance(v, str) and "@" in v]
+        _ab = [str(v).strip() for v in list(_gb) + list(data.get("always_bcc") or [])
+               if isinstance(v, str) and "@" in v]
+        bcc_list += _ab
+        _abcc = {v.lower() for v in _ab}
     except Exception:  # noqa: BLE001
         pass
     # NEVER-COPY (company profile 'never_cc'): addresses the owner has ruled off every email, whatever
@@ -417,7 +419,15 @@ def _email_envelope(task: dict, company: dict) -> dict:
         pass
     drop.discard("")
     cc_list = [e for e in cc_list if e.lower() not in drop]
-    bcc_list = [e for e in bcc_list if e.lower() not in drop]
+    # ALWAYS-BCC IS THE RECORD COPY, so it survives even when that person is the SENDER (owner, 11 Sep 2026:
+    # Gino could not see what had gone out as him - the sender is dropped from every copy, and a send made
+    # through another mailbox's token never reaches his Sent folder). Anyone already on the cc is not
+    # bcc'd as well: one copy each.
+    _sender = (from_addr or "").lower()
+    _on_cc = {e.lower() for e in cc_list}
+    bcc_list = [e for e in bcc_list
+                if (e.lower() not in drop or (e.lower() in _abcc and e.lower() == _sender))
+                and e.lower() not in _on_cc]
     cc = ", ".join(dict.fromkeys(cc_list))     # dedupe, keep order
     bcc = ", ".join(dict.fromkeys(bcc_list))
     # per-sender signature: a reply sent FROM a specific person (e.g. gino@sensa.digital) carries THEIR

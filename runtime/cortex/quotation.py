@@ -714,9 +714,20 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
     band = ws["A1"]
     fill(band, _BLACK)
     ttl = (m["title"] or "QUOTATION").upper()
-    band.value = ttl
-    band.font = F(f=_DISP, s=15 if len(ttl) > 28 else 18, b=True, c=_WHT)
-    band.alignment = Alignment(horizontal="right", vertical="center", indent=1)
+    # The logo sits on the LEFT of this band, so the right-aligned title must end before it. A long title
+    # wraps onto two balanced lines and shrinks to fit (11 Sep 2026: "ENTREPRENEURS RESILIENCE FUND (ERF)
+    # FILM PRODUCTION" at 15pt ran under the Sensa logo on the Sheraa quotation).
+    avail, per_pt = 500.0, 0.96      # px right of the logo; px per point per uppercase Poppins Bold char
+    lines = [ttl]
+    size = min(18, int(avail / (len(ttl) * per_pt)))
+    if size < 13 and " " in ttl:
+        words = ttl.split()
+        lines = list(min(((" ".join(words[:i]), " ".join(words[i:])) for i in range(1, len(words))),
+                         key=lambda ab: max(len(ab[0]), len(ab[1]))))
+        size = min(15, int(avail / (max(len(x) for x in lines) * per_pt)))
+    band.value = "\n".join(lines)
+    band.font = F(f=_DISP, s=max(size, 9), b=True, c=_WHT)
+    band.alignment = Alignment(horizontal="right", vertical="center", indent=1, wrap_text=len(lines) > 1)
     ws.merge_cells("A5:E5"); ws.row_dimensions[5].height = 4; fill(ws["A5"], _CYAN)
     ws.row_dimensions[6].height = 6
 
