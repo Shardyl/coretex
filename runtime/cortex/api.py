@@ -3117,6 +3117,16 @@ SKILL_TOOLS = [
     {"name": "crm_pipeline",
      "description": "The deal pipeline: open opportunities + forecast value, and won projects + value. Use to answer 'what's in the pipeline / the forecast / what have we won'. Optional business slug to scope it.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string", "description": "your business slug (sensa/tabscanner/...), omit for all"}}}},
+    {"name": "rename_document",
+     "description": "Rename a document in the company's library, everywhere Cortex knows it by name: the library, "
+                    "its Drive file, and your own taught notes that used the old name. Use when Rashad renames "
+                    "or re-titles a standing document ('call the deck the AI Production Capabilities Deck'). "
+                    "Skill rules that mention the old name are listed back for him to decide.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string"},
+        "document": {"type": "string", "description": "the library id, or its current file name"},
+        "new_name": {"type": "string", "description": "the new file name (the extension is kept)"}},
+        "required": ["company", "document", "new_name"]}},
     {"name": "deal_timeline",
      "description": "Open ONE opportunity or project: its stage, value, contacts, quotations already issued, and its "
                     "full TIMELINE (the client's emails and brief, what we replied and promised, meeting notes). "
@@ -3504,6 +3514,31 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                                 "the list is INCOMPLETE. Refine the query before concluding anything about "
                                 "who exists; NEVER say a person or company is absent from a truncated list.")
         return json.dumps(out, default=str)
+    if name == "rename_document":
+        from . import documents as _docs
+        _co = store.get_company_by_slug(inp.get("company") or "")
+        if not _co:
+            return "Which business is the document for?"
+        ref = str(inp.get("document") or "").strip()
+        doc = _docs.get(int(ref), _co["id"]) if ref.isdigit() else None
+        if not doc:
+            hits = _docs.find(_co["id"], ref)
+            exact = [d for d in hits if d["filename"].lower() == ref.lower()]
+            hits = exact or hits
+            if len(hits) != 1:
+                return "Which one? " + json.dumps([{"id": d["id"], "filename": d["filename"]} for d in hits[:8]])
+            doc = hits[0]
+        try:
+            res = _docs.rename(doc["id"], inp.get("new_name") or "")
+        except ValueError as _e:
+            return str(_e)
+        msg = f"Renamed '{res['old']}' to '{res['new']}' (library #{doc['id']}; Drive: {res['drive']})."
+        if res["notes_updated"]:
+            msg += f" Updated {res['notes_updated']} of my taught notes that used the old name."
+        if res["rules_mentioning_old"]:
+            msg += (" These skill rules still mention the old name, tell me if they should change: "
+                    + ", ".join(res["rules_mentioning_old"]))
+        return msg
     if name == "deal_timeline":
         # Talk had no way to OPEN a deal: asked to quote "opportunity 118" it searched contacts for "118",
         # never saw the brief, and asked the owner for scope the timeline already held (11 Sep 2026).
@@ -4113,6 +4148,7 @@ _CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "cr
                 # request, not just strategise. (Per-company RULE writes stay Manager-only to avoid scope bleed.)
                 "create_task", "draft_email", "draft", "crm_lookup", "crm_pipeline", "deal_timeline", "correct_task",
                 "create_proposal", "create_capabilities_deck", "rebrand_deck", "rate_card", "set_rate", "media_library", "rate_film",
+                "rename_document",
                 "research_client", "export_templates",
                 "approve_task", "skip_task", "run_report", "schedule_report", "create_quotation",
                 "list_scheduled", "list_calendar",

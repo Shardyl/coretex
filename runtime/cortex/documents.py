@@ -37,6 +37,7 @@ alter table company_documents add column if not exists drive_id text;   -- canon
 alter table company_documents add column if not exists drive_md5 text;  -- Drive's checksum when cached
 alter table company_documents add column if not exists client text;     -- the client folder it lives in
 alter table company_documents add column if not exists verified_at timestamptz;
+alter table company_documents add column if not exists superseded_by bigint; -- retired: kept, never offered
 """
 
 
@@ -201,14 +202,72 @@ CORE_KINDS = ("company-profile", "trade-licence", "vat-certificate", "capabiliti
 
 
 def listing(company_id: int, core_only: bool = False) -> list[dict]:
+    """The documents Cortex may OFFER (list, search, attach). A superseded row is left out: it stays on
+    record, and any card that already references it by id still resolves through get()."""
     ensure_schema()
     if core_only:
         return db.query("select id, kind, filename, mime, size, created_at, drive_id, client "
                         "from company_documents where company_id=%s and kind = any(%s) "
-                        "order by kind, created_at desc", (company_id, list(CORE_KINDS)))
+                        "and superseded_by is null order by kind, created_at desc",
+                        (company_id, list(CORE_KINDS)))
     return db.query("select id, kind, filename, mime, size, created_at, drive_id, client "
-                    "from company_documents where company_id=%s order by kind, created_at desc",
-                    (company_id,))
+                    "from company_documents where company_id=%s and superseded_by is null "
+                    "order by kind, created_at desc", (company_id,))
+
+
+def supersede(doc_ids: list, by_id: int) -> list:
+    """Retire earlier versions of a document in favour of `by_id`: kept on record (and on Drive), never
+    offered for search or attachment again. Nothing is deleted. Returns the ids retired."""
+    ensure_schema()
+    return [r["id"] for r in db.query(
+        "update company_documents set superseded_by=%s where id = any(%s) and id <> %s returning id",
+        (int(by_id), [int(i) for i in doc_ids], int(by_id)))]
+
+
+def rename(doc_id: int, new_name: str) -> dict:
+    """Rename a library document EVERYWHERE Cortex knows it by name (owner, 11 Sep 2026): the library row,
+    its Drive file (when Cortex created it), and Talk's own taught notes (setting chat_self_rules). The AI
+    capabilities deck was renamed in the library and on Drive, but two of Talk's notes still named it by
+    its old file name, so Talk kept calling it that. Skill rules that mention the old name are REPORTED,
+    never rewritten: those are the owner's words."""
+    ensure_schema()
+    doc = db.one("select * from company_documents where id=%s", (int(doc_id),))
+    if not doc:
+        raise ValueError(f"no library document #{doc_id}")
+    old = doc["filename"]
+    ext = os.path.splitext(old)[1]
+    new = _safe_name((new_name or "").strip())
+    if not (new_name or "").strip():
+        raise ValueError("give the new name")
+    if ext and not new.lower().endswith(ext.lower()):
+        new += ext
+    drive_note = "renamed"
+    if doc.get("drive_id"):
+        try:
+            import httpx
+            from . import drive
+            r = httpx.patch(f"{drive.API}/files/{doc['drive_id']}", params={"supportsAllDrives": "true"},
+                            headers={"Authorization": f"Bearer {drive.access_token()}"}, json={"name": new},
+                            timeout=30)
+            r.raise_for_status()
+        except Exception as e:  # noqa: BLE001 - not Cortex's file, or Drive blinked: say so
+            drive_note = f"NOT renamed ({str(e)[:80]}); the library name changed"
+    else:
+        drive_note = "no Drive file"
+    db.execute("update company_documents set filename=%s where id=%s", (new, doc["id"]))
+    old_stem, new_stem = os.path.splitext(old)[0], os.path.splitext(new)[0]
+    notes, updated = db.setting_get("chat_self_rules") or [], 0
+    out = []
+    for n in notes:
+        m = str(n).replace(old, new).replace(old_stem, new_stem)   # full file name first, then the bare stem
+        updated += m != n
+        out.append(m)
+    if updated:
+        db.setting_set("chat_self_rules", out)
+    rules = [f"{r['skill_key']} (company {r['company_id']})" for r in db.query(
+        "select skill_key, company_id from skills where rules::text ilike %s or coalesce(craft,'') ilike %s",
+        (f"%{old_stem}%", f"%{old_stem}%"))]
+    return {"old": old, "new": new, "drive": drive_note, "notes_updated": updated, "rules_mentioning_old": rules}
 
 
 def get(doc_id: int, company_id: int | None = None) -> dict | None:
@@ -298,7 +357,9 @@ def sync_drive(company_id: int) -> dict:
                 pushed += 1
         except Exception:  # noqa: BLE001
             pass
-    have = {r["filename"] for r in listing(company_id)}
+    # every name on record, superseded ones included, so a retired file is never pulled back in as new
+    have = {r["filename"] for r in db.query("select filename from company_documents where company_id=%s",
+                                            (company_id,))}
     tok = drive.access_token()
     for f in drive.list_folder(fid, tok):
         if f.get("mimeType") == "application/vnd.google-apps.folder" or f.get("name") in have:
@@ -327,7 +388,9 @@ def _sync_client_folders(company_id: int, slug: str, tok: str) -> int:
     parent = ((profile.get(company_id) or {}).get("clients_drive_folder") or "").strip()
     if not parent:
         return 0
-    have = {r["filename"] for r in listing(company_id)}
+    # every name on record, superseded ones included, so a retired file is never pulled back in as new
+    have = {r["filename"] for r in db.query("select filename from company_documents where company_id=%s",
+                                            (company_id,))}
     n = 0
     try:
         folders = [f for f in drive.list_folder(parent, tok)

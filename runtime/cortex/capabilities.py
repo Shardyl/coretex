@@ -100,9 +100,10 @@ CAPABILITIES: list[tuple[str, str]] = [
      "Deck.pdf' in the document library (kind capabilities-deck, the profile's ai_capabilities_deck_doc). When "
      "Rashad says 'the capabilities deck', 'the AI deck' or 'our AI production deck', he means this file: "
      "attach it by that name, on any card, since a deal's document scope never hides it. The Dubai Municipality "
-     "deck and the earlier 'Brands agencies and government clients' builds are NOT it. Rebuilding with "
-     "create_capabilities_deck makes a NEW file named from the audience; the standard only changes when Rashad "
-     "says so, and then that file is renamed and ai_capabilities_deck_doc repointed."),
+     "deck and the earlier audience-named builds are NOT it (those builds are superseded in the library). "
+     "Rebuilding with create_capabilities_deck makes a NEW file named from the audience; the standard only "
+     "changes when Rashad says so, and then that file is renamed with rename_document (which also updates "
+     "your taught notes) and ai_capabilities_deck_doc repointed."),
     ("Prep cards that do the work",
      "A 'Prepare quotation' card (spawned by a correction, or by the next-step engine when a client asks "
      "for one) is ACTIONABLE: when Rashad answers ON THE CARD, in the cockpit or through correct_task, with "
