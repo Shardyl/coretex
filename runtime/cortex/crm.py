@@ -1576,12 +1576,25 @@ def update_contact(email: str, **fields) -> dict | None:
 def update_deal(deal_id: int, **fields) -> dict | None:
     allowed = {k: v for k, v in fields.items()
                if k in ("title", "value", "currency", "owner") and v is not None}
-    if not db.one("select 1 from crm_projects where id=%s", (deal_id,)):
+    cur = db.one("select value, currency from crm_projects where id=%s", (deal_id,))
+    if not cur:
         return None
     if allowed:
         sets = ", ".join(f"{k}=%s" for k in allowed)
         db.execute(f"update crm_projects set {sets}, updated_at=now() where id=%s",
                    tuple(allowed.values()) + (deal_id,))
+        # A VALUE TYPED BY HAND IS HISTORY TOO (owner, 12 Sep 2026): Massar showed 80,000 and Sheraa 42,000
+        # with nothing on either timeline to say where the figures came from.
+        try:
+            nv = allowed.get("value")
+            if nv is not None and (cur.get("value") is None or float(nv) != float(cur["value"])):
+                c = (allowed.get("currency") or cur.get("currency") or "AED")
+                was = f" (was {c} {float(cur['value']):,.0f})" if cur.get("value") is not None else ""
+                db.execute("update crm_projects set history = history || %s::jsonb where id=%s",
+                           (Json([{"ts": _now(), "event": "value_change",
+                                   "text": f"Value set by hand to {c} {float(nv):,.0f}{was}"}]), deal_id))
+        except (TypeError, ValueError):
+            pass
     return db.one("select * from crm_projects where id=%s", (deal_id,))
 
 

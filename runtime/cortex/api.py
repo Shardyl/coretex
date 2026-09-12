@@ -3076,6 +3076,9 @@ SKILL_TOOLS = [
                                                            "is written around the genuine link. Never invent a "
                                                            "time and never pass one he only vaguely implied."},
         "meeting_minutes": {"type": "integer", "description": "optional: length of that meeting, default 30"},
+        "deal_id": {"type": "integer", "description": "the opportunity this email belongs to. Pass it whenever "
+                                                     "the email is about a deal; when omitted Cortex links "
+                                                     "the recipient's one active deal itself"},
         "separate_email": {"type": "boolean", "description": "only after Rashad has been shown an existing "
                                                             "open card to this person and has explicitly "
                                                             "said he wants a SECOND, separate email as well"}},
@@ -4003,11 +4006,26 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         if inp.get("_images"):
             req["attachments"] = inp["_images"]
             req["attachment_names"] = inp.get("_image_names")
+        # THE EMAIL BELONGS TO ITS DEAL (owner, 12 Sep 2026): Talk drafted the Massar and Sheraa quotation
+        # emails with no deal on the card, so their sends never reached the deals' timelines, values or stages.
+        # An explicit deal_id wins; otherwise the recipient's one active deal is linked. Linked, the library
+        # lookup below is scoped to that deal too, so another client's file cannot be attached.
+        _did, _dtitle = inp.get("deal_id"), ""
+        if not _did and to_email:
+            try:
+                _ds = crm.active_deals_for_email(to_email, co["slug"])
+                _did = _ds[0]["id"] if len(_ds) == 1 else None
+            except Exception:  # noqa: BLE001
+                _did = None
+        if _did:
+            _drow = db.one("select id, title from crm_projects where id=%s", (int(_did),))
+            if _drow:
+                req["deal_id"], _dtitle = int(_drow["id"]), _drow.get("title") or ""
         missing = []
         if inp.get("attach_documents"):        # library documents requested by name -> resolve server-side
             refs = []
             for q in inp["attach_documents"][:6]:
-                hits = documents.find(co["id"], str(q))
+                hits = documents.find(co["id"], str(q), scope=_dtitle)
                 if hits:
                     d = hits[0]
                     refs.append(documents.card_ref(d))
@@ -4032,11 +4050,15 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                         "what he just said (use correct_task) or to send a genuinely separate email as "
                         "well (call draft_email again with separate_email true).")
         t = store.create_task(co["id"], sk["id"], "email_draft", req)
+        if req.get("deal_id"):
+            db.execute("update tasks set deal_id=%s where id=%s", (req["deal_id"], t["id"]))
         addr = f" <{to_email}>" if to_email else " (no email resolved)"
         extra = (f" Attached from the library: {', '.join(r['filename'] for r in req.get('attach_docs', []))}."
                  if req.get("attach_docs") else "")
         if missing:
             extra += (f" NOT in the library (tell Rashad, never pretend to attach): {', '.join(missing)}.")
+        if req.get("deal_id"):
+            extra += f" Linked to opportunity #{req['deal_id']}, so the send is recorded on it."
         return (f"Drafting an email to {to_name or 'the recipient'}{addr} — it's in your Inbox as task "
                 f"#{t['id']} showing the recipient, subject and logo, for your approval." + extra)
     if name == "save_document":

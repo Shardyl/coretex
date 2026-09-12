@@ -42,7 +42,10 @@ CAPABILITIES: list[tuple[str, str]] = [
      "know the whole flow. Stages advance on facts: a quotation/proposal send moves Opportunity->Quote; "
      "winning a deal auto-spawns a project kickoff card; Close & review surfaces the wrap-up. An inbound "
      "that needs a deliverable (quote revision, proposal) spawns its prep card alongside the reply. "
-     "Meetings on a deal land on its timeline with our action items tracked. deal_timeline opens one "
+     "Meetings on a deal land on its timeline with our action items tracked. An email drafted with "
+     "draft_email is LINKED to its deal (pass deal_id, or the recipient's one active deal is used), and when a "
+     "quotation goes out the deal's value becomes that quotation's total before VAT and the timeline says "
+     "which version went for how much. deal_timeline opens one "
      "deal (by id, or title words): read it when asked 'where is deal X up to', and BEFORE quoting, "
      "proposing or emailing about a deal, so the scope comes from the client's own brief."),
     ("Off-channel conversations — paste and it moves the clocks",

@@ -129,6 +129,19 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
     to = (env.get("to") or "").strip()
     subj = (env.get("subject") or "").strip()
     frm = (env.get("from") or "").strip()
+    if not did and to:
+        # AN UNLINKED CARD STILL BELONGS TO ITS DEAL (owner, 12 Sep 2026). Talk drafted the Massar and Sheraa
+        # quotation emails without a deal, so this returned at once, AND the sent sweep skips Cortex's own
+        # sends: both quotations fell through both nets and neither deal heard about them. Resolve it the
+        # way the sweep does, from the recipient, when exactly one active deal is theirs.
+        try:
+            _ds = crm.active_deals_for_email(to, (company or {}).get("slug"))
+            if len(_ds) == 1:
+                did = _ds[0]["id"]
+                if (task or {}).get("id"):
+                    db.execute("update tasks set deal_id=%s where id=%s and deal_id is null", (did, task["id"]))
+        except Exception:  # noqa: BLE001
+            pass
     if not did:
         return
     who = "manually sent" if manual else "sent (Cortex-approved)"
@@ -138,6 +151,10 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
              f"{who} from {frm or 'company mailbox'} to {to}: {subj or '(no subject)'}", ref=ref)
     try:   # FIRST settle what this email fulfils, THEN track the new promises it makes
         settle_commitments(int(did), body, to)
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # a QUOTATION going out: logged with its amount, and the deal's value becomes that quotation
+        record_quotation_sent(int(did), task, env, company)
     except Exception:  # noqa: BLE001
         pass
     try:   # a quotation/proposal going out advances Opportunity -> Quote
@@ -256,7 +273,10 @@ def _sweep_mailbox(co: dict, mailbox: str, rt_key: str, client: str | None, own:
         deal = deals[0] if deals else crm.open_deal_for_domain(to, slug)
         env = {"to": to, "subject": m.get("subject") or "", "from": mailbox}
         if deal:
-            record_send({}, env, co, manual=True, deal_id=deal["id"], draft=m.get("body") or "",
+            # the attachment names travel too, so a quotation sent BY HAND is recognised and valued as well
+            record_send({"request": {"attachment_names": [a.get("filename") for a in m.get("attachments") or []
+                                                          if a.get("filename")]}},
+                        env, co, manual=True, deal_id=deal["id"], draft=m.get("body") or "",
                         ref=gmail.mail_ref(m))
             try:
                 crm.resume_followups(int(deal["id"]))   # a human replied — cadence re-arms at its gap
@@ -311,6 +331,65 @@ def sweep_sent(min_gap_minutes: int = 30) -> int:
 
 
 # ---------- stage engine (deterministic transitions; the model never moves a stage) ----------
+
+_QNUM = re.compile(r"\b([A-Z]{2,5}-\d{4}-\d{3,5})\b(?:[^\n]{0,12}?\bv(\d+)\b)?")
+
+
+def record_quotation_sent(deal_id: int, task: dict, env: dict, company: dict | None = None) -> dict | None:
+    """A QUOTATION went out on this deal (owner, 12 Sep 2026). Which one is a FACT: its number in an attached
+    file's name, or in the subject. The timeline gets 'Quotation SEN-2026-0014 v2 sent: AED 74,850 + VAT', and
+    while the deal is still being sold (Opportunity / Quote) its VALUE becomes that quotation's total BEFORE
+    VAT, the revenue. The amount is summed by code from the version registry, never read from the email or
+    a model. Before this, nothing set a deal's value from a quotation: deals carried hand-typed figures."""
+    req = (task or {}).get("request") or {}
+    names = [a.get("filename") or "" for a in req.get("attach_docs") or []] + list(req.get("attachment_names") or [])
+    hay = [n for n in names if "quot" in n.lower()] + [(env or {}).get("subject") or ""]
+    found = None
+    for h in hay:
+        m = _QNUM.search(h or "")
+        if m and db.setting_get(f"quote_versions:{m.group(1)}"):
+            found = (m.group(1), int(m.group(2)) if m.group(2) else None)
+            break
+    if not found:
+        return None
+    num, ver = found
+    reg = db.setting_get(f"quote_versions:{num}") or []
+    entry = (next((e for e in reg if e.get("v") == ver), None) if ver else None) or reg[-1]
+    spec = entry.get("spec") or {}
+    net = 0.0
+    for s in spec.get("sections") or []:
+        for it in s.get("items") or []:
+            try:
+                if it.get("unit") not in (None, ""):
+                    net += float(it["unit"]) * float(it.get("qty") or 1)
+            except (TypeError, ValueError):
+                continue
+    try:
+        from . import quotation as _q
+        if (_q.presets().get(spec.get("preset")) or {}).get("agency_fee"):
+            net += round(net * 0.15, 2)          # the agency fee is part of the fee, VAT is not
+    except Exception:  # noqa: BLE001
+        pass
+    net = round(net, 2)
+    if net <= 0:
+        return None
+    cur = "AED"
+    try:
+        from . import profile as _prof
+        cur = (((_prof.get(company["id"]) or {}).get("currency") if company else None) or "AED").upper()
+    except Exception:  # noqa: BLE001
+        pass
+    d = db.one("select stage, value from crm_projects where id=%s", (int(deal_id),)) or {}
+    text = f"Quotation {num} v{entry.get('v')} sent: {cur} {net:,.0f} + VAT"
+    if d.get("stage") in crm.FORECAST_STAGES:
+        old = d.get("value")
+        db.execute("update crm_projects set value=%s, currency=%s, updated_at=now() where id=%s",
+                   (net, cur, int(deal_id)))
+        text += "; deal value set from it" + (f" (was {cur} {float(old):,.0f})"
+                                               if old not in (None, "") and float(old) != net else "")
+    log_deal(int(deal_id), "quotation_sent", text, ref=f"quotation-sent:{num}:v{entry.get('v')}")
+    return {"number": num, "v": entry.get("v"), "net": net}
+
 
 def maybe_advance_on_send(deal_id: int, task: dict, env: dict) -> None:
     """A quotation/proposal going out moves a forecast deal Opportunity -> Quote. The trigger is a
