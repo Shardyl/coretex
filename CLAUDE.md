@@ -1034,6 +1034,21 @@ VO (Arabic offered in the note), six stock clips. The quotation header: the titl
 black band with the logo on its left, so a long title now wraps onto two balanced lines and shrinks to fit
 (`generate_xlsx`); at 51 characters it used to run under the logo.
 
+AI PRODUCTION PRICING is a rule on Sensa `sales-quotation` (owner, 12 Sep 2026, first applied SEN-2026-0014
+Massar, 74,850 net, his chosen opening price): per film, the per-finished-minute rate pro rata to the APPROVED
+running time PLUS generation volume (key frames, AI video generation, upscaling); then motion graphics/edit/grade/
+sound; an interface restyle line when client screens appear; one pre-production block per job; perpetual music
+for government/semi-government; options in the note only, never in a line. The rate card item carries the
+reasoning (the per-minute rate is the director's time, prompting and selection across takes; the generation lines
+are the takes), so it is never "corrected" as double counting.
+
+CREATIVE PITCH PIPELINE (designed 12 Sep 2026, desktop-trialled on Massar, NOT yet built into Cortex): ideation
+card -> script card -> style frames card -> pitch deck -> quotation, Fable 5 for every creative stage, Gemini
+frames. The deck layout standard is LOCKED as rule "CREATIVE DECK STANDARD" on Sensa `sales-proposal` (full-bleed
+page per beat, hero per film, contact sheet, imagery behind every text page, minimal words). Build notes and the
+failures found on the trial (Fable output ceilings, the imagegen text prepass, the 8-image media cap, a logo in a
+frame, an invented date) are in memory `project_cortex_creative_pipeline.md`.
+
 RATE CARD v1.6 (11 Sep 2026, owner-stated while pricing Honor SEN-2026-0012): voiceover for a CAMPAIGN (one
 hero film and its cut-downs, every version in that language) is AED 3,000 English (British) and AED 5,000
 Arabic; the per-video voiceover rates (2,000 / 3,500) are for a single standalone video, and at per-video
