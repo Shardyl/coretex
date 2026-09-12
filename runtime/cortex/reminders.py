@@ -184,11 +184,27 @@ def _spawn_task(r: dict, action: dict) -> int | None:
         return None
 
 
+def _closed_deal(r: dict) -> bool:
+    """A reminder CORTEX set on a deal that has since closed (Lost, Dormant, Completed). The last check before
+    anything fires: closing a deal cancels these, and this catches any that slip past (owner, 12 Sep 2026)."""
+    if r.get("target_type") != "deal" or not str(r.get("created_by") or "").startswith("cortex"):
+        return False
+    try:
+        d = db.one("select stage from crm_projects where id=%s", (int(r.get("target_id")),))
+    except (TypeError, ValueError):
+        return False
+    from . import crm
+    return bool(d) and d.get("stage") in crm.CLOSED_STAGES
+
+
 def fire_due() -> dict:
     """Called from the engine 60s loop: fire every due reminder."""
     fired = []
     for r in due():
         try:
+            if _closed_deal(r):          # dropped quietly: a closed deal owes nothing
+                db.execute("update reminders set status='cancelled' where id=%s", (r["id"],))
+                continue
             fire(r)
             fired.append(r["id"])
         except Exception:  # noqa: BLE001

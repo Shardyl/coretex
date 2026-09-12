@@ -727,6 +727,14 @@ when the preset has one, never VAT), sets the deal's `value` while it is in FORE
 sent BY HAND is valued too; `crm.update_deal` logs a hand-typed value as a `value_change` event. Deal value =
 BEFORE VAT (owner). Both sends were backfilled through the same code.
 
+**A CLOSED DEAL OWES NOTHING (owner, 12 Sep 2026).** Property Finder (deal 104) was marked Lost on 11 Sep and
+a commitment reminder Cortex had set on 7 Sep still fired the next day: closing a deal stopped its chases but
+cancelled none of its reminders, and firing never looked at the deal. Now `crm.set_project_stage` into
+`CLOSED_STAGES` (Lost, Dormant, Completed; NOT Close & review, where delivery promises can still be owed)
+cancels the deal's pending reminders whose `created_by` starts with `cortex` and logs a `reminders_cancelled`
+event naming them; the owner's own reminders (created_by a person) are left alone. `reminders.fire_due` drops,
+as cancelled, any Cortex reminder whose deal has closed since it was set.
+
 Phase 2 (same day): the full flow-of-intelligence. All triggers are deterministic code; models only
 extract/judge, never move stages or invent values:
 - **Stage engine:** a send carrying a Quotation/Proposal (attach_docs filename or subject — a fact,

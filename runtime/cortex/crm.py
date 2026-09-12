@@ -1079,6 +1079,26 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
             pass
 
 
+# A CLOSED DEAL OWES NOTHING (owner, 12 Sep 2026): Property Finder (deal 104) was marked Lost on 11 Sep and
+# the next day a reminder Cortex had set on 7 Sep ("schedule a call to discuss the proposal") still fired.
+# Close & review is NOT here: delivery promises can still be owed while a project wraps up.
+CLOSED_STAGES = (LOST_STAGE, DORMANT_STAGE, COMPLETED_STAGE)
+
+
+def _cancel_cortex_reminders(p: dict, stage: str) -> list:
+    """Cancel the reminders CORTEX set on a deal that has just closed, and say so on its timeline. The
+    owner's own reminders (created_by a person) are left alone: he set those on purpose."""
+    rows = db.query("update reminders set status='cancelled' where target_type='deal' and target_id=%s "
+                    "and status in ('pending','snoozed') and coalesce(created_by,'') like 'cortex%%' "
+                    "returning id, title", (str(p["id"]),))
+    if rows:
+        db.execute("update crm_projects set history = history || %s::jsonb where id=%s",
+                   (Json([{"ts": _now(), "event": "reminders_cancelled",
+                           "text": f"Deal moved to {stage}: cancelled {len(rows)} reminder(s) Cortex had set: "
+                                   + "; ".join(f"#{r['id']} {r['title'][:90]}" for r in rows)}]), p["id"]))
+    return rows
+
+
 def set_project_stage(project_id: int, stage: str, actor: str = "system") -> dict | None:
     """Move a deal to a new stage; logs the change, and (un)marks the linked contact a client across the
     Booked boundary. Moving across 'Booked' shifts it between the Opportunities and Projects screens."""
@@ -1090,6 +1110,8 @@ def set_project_stage(project_id: int, stage: str, actor: str = "system") -> dic
     db.execute("update crm_projects set stage=%s, history = history || %s::jsonb, updated_at=now() where id=%s",
                (stage, Json([ev]), project_id))
     p["stage"] = stage
+    if stage in CLOSED_STAGES and old not in CLOSED_STAGES:
+        _cancel_cortex_reminders(p, stage)
     if stage in WON_STAGES:
         flag_clients_for_deal(p)        # won = the people/company on it become clients (sticky)
     if p.get("contact_email"):
