@@ -714,6 +714,19 @@ Aug 2026). Four mechanisms, all fail-soft, wired into the engine:
 Deal lookup (`crm.open_deal_for_email` / `active_deals_for_email`) falls back to the deal's own
 `contact_email` when the contact has no account row — account-less opportunities still resolve.
 
+**A SEND ALWAYS REACHES ITS DEAL, AND A QUOTATION SETS ITS VALUE (owner, 12 Sep 2026).** The Massar and Sheraa
+quotation emails (cards 586, 579) were drafted through Talk with NO deal on the card: `record_send` returned
+at once and the sent sweep skips Cortex's own sends, so both fell through both nets; the deals showed no email,
+Massar stayed at Opportunity, and both carried hand-typed values (80,000 / 42,000) with no history behind them.
+Now: `draft_email` links the card to its deal (explicit `deal_id`, else the recipient's ONE active deal) and
+scopes its library lookup to that deal; `record_send` resolves an unlinked card's deal from the recipient
+the same way as a backstop; `record_quotation_sent` reads the quotation number (and version) off the attached
+file name or the subject, sums that version's lines from the `quote_versions` registry (plus the agency fee
+when the preset has one, never VAT), sets the deal's `value` while it is in FORECAST_STAGES and logs
+"Quotation SEN-2026-0014 v2 sent: AED 74,850 + VAT"; the sent sweep passes attachment names so a quotation
+sent BY HAND is valued too; `crm.update_deal` logs a hand-typed value as a `value_change` event. Deal value =
+BEFORE VAT (owner). Both sends were backfilled through the same code.
+
 Phase 2 (same day): the full flow-of-intelligence. All triggers are deterministic code; models only
 extract/judge, never move stages or invent values:
 - **Stage engine:** a send carrying a Quotation/Proposal (attach_docs filename or subject — a fact,
