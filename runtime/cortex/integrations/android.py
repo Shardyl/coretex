@@ -79,6 +79,7 @@ class Phone:
             x1, y1, x2, y2 = map(int, m.groups())
             out.append({"label": label, "id": n.get("resource-id", ""), "cls": n.get("class", ""),
                         "clickable": n.get("clickable") == "true", "enabled": n.get("enabled") != "false",
+                        "checked": n.get("checked") == "true",
                         "x": (x1 + x2) // 2, "y": (y1 + y2) // 2, "box": (x1, y1, x2, y2)})
         return out
 
@@ -107,6 +108,17 @@ class Phone:
 
     def type_text(self, s: str):
         self.shell("input text " + "'" + s.replace("'", "").replace(" ", "%s") + "'")
+
+    def keyboard_shown(self) -> bool:
+        return "mInputShown=true" in self.shell("dumpsys input_method | grep -o 'mInputShown=[a-z]*'")
+
+    def hide_keyboard(self):
+        """Close the on-screen keyboard if it is up. It covers bottom buttons: a tap meant for Viya's
+        'Confirm Players' landed on the space bar instead (13 Sep 2026). BACK only when it is shown, so it
+        never navigates away."""
+        if self.keyboard_shown():
+            self.shell("input keyevent KEYCODE_BACK")
+            time.sleep(0.6)
 
     def swipe(self, x1, y1, x2, y2, ms=250):
         self.shell(f"input swipe {x1} {y1} {x2} {y2} {ms}")

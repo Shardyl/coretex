@@ -210,6 +210,8 @@ class Viya:
             cur = _date(day.year, _dt.strptime(cm, "%b").month, int(cd))
             gap = (day - cur).days
             items = sorted(_by(ns, "hc_text_middle"), key=lambda n: n["x"])
+            self.r.log(f"select_day try {attempt + 1}: centred {cd} {cm}, gap {gap} to {want_d} {want_m}, "
+                       f"strip {[(n['label'], n['x']) for n in items]}")
             if gap <= 0 or len(items) < 5:
                 return False
             plus2, plus1 = items[-1], items[-2]
@@ -253,9 +255,36 @@ class Viya:
             self.ph.tap(lasts[i]); self.ph.type_text(last or "x")
 
     def finalize(self) -> str:
-        """'Confirm Players' and the booking confirmation screen(s): mapped from the Thursday test booking.
-        Until mapped this stops the run on purpose, so nothing is ever confirmed blind."""
-        raise NotImplementedError("the final confirm screens are not mapped yet")
+        """Confirm Players -> the held summary ('You have 57 sec...', players, prices, terms switch,
+        'Proceed') -> 'Booking Confirmed'. Mapped from the authorised Thu 24 Sep 2026 test booking.
+        The keyboard is closed first: it covers 'Confirm Players' and the tap lands on the space bar.
+        MONEY GUARD: never proceeds if the total is above PLAN max_total_aed (default 0)."""
+        self.ph.hide_keyboard()
+        self.ph.tap_text(r"^Confirm Players$", timeout=5)
+        ns, end = [], time.monotonic() + 20
+        while time.monotonic() < end:
+            ns = self.ph.nodes()
+            if _by(ns, "btnConfirmtime"):
+                break
+            time.sleep(0.3)
+        else:
+            raise LookupError("the booking summary (Proceed) did not appear after Confirm Players")
+        total = [n["label"] for n in _by(ns, "txtTotalPrice")]
+        m = re.search(r"(\d[\d,]*(?:\.\d+)?)", total[0]) if total else None
+        if not m:
+            raise LookupError(f"could not read the booking total ({total}): not confirmed")
+        amount, limit = float(m.group(1).replace(",", "")), float(self.p.get("max_total_aed", 0))
+        if amount > limit:
+            raise LookupError(f"booking total {total[0]} is above the plan's AED {limit:.2f} limit: not confirmed")
+        when = " ".join(n["label"] for n in _by(ns, "txtDate") + _by(ns, "txt_time"))
+        sw = _by(ns, "termSwitch")
+        if sw and not sw[0].get("checked"):
+            self.ph.tap(sw[0]); time.sleep(0.5)
+        self.ph.tap(_by(ns, "btnConfirmtime")[0])
+        if not self.ph.wait_for(r"^Booking Confirmed$", timeout=20):
+            raise LookupError("no 'Booking Confirmed' after Proceed: check the app")
+        self.r.log(f"Booking Confirmed: {when}, total {total[0]}")
+        return f"confirmed {when}, total {total[0]}"
 
 
 def book(run) -> dict:
