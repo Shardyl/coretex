@@ -1429,3 +1429,10 @@ thing every new conversation reads; a stale line here costs a future session rea
   (Users -> Profile) and it is placed in cortex.env. `_run_blog_scheduled_task` now catches a publish error, writes
   `last_status = publish failed: <why>`, raises a high-priority Inbox notification and a Telegram line, and leaves the
   staged draft untouched, instead of a silent `failed` row.
+- UNSUBSCRIBE MUST BE A REAL LINK (13 Sep 2026): Mailgun substitutes `%unsubscribe_url%` ONLY when the domain's
+  unsubscribe tracking is ON. It was off on every news.* domain, so the first 1,900 HBMSU emails carried the
+  literal token. Now: tracking ON on all five sending domains; `mailgun.send` auto-enables/refuses when the token
+  is present and adds `List-Unsubscribe` + `List-Unsubscribe-Post: One-Click`; verified by reading a test email
+  back through the Gmail API (rashad@sensa.digital). The stored copy in Mailgun is PRE-substitution, so never
+  judge the link from `storage.url`. Inbox poll: a short "unsubscribe / remove me / stop sending" reply sets
+  newsletter_opt_out deterministically (`_is_unsubscribe_request` / `_apply_unsubscribe`), no draft, Telegram line.
