@@ -2190,12 +2190,17 @@ async function confirmLiveSend(id, r){
       toast('Confirm to send…');
       const su=await stepUp();   // no intent: a live-list send always re-states its recipient count
       if(!su||!su.token){ toast('Send needs your PIN or fingerprint'); return; }
+      const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;   // building / queuing: 20-50s
+      toast(r.action==='test'?'Building the issue and sending your test… (about a minute)':'Working on it…');
       cr=await api(`/api/tasks/${id}/confirm-send`,{method:'POST',headers:{'X-Stepup':su.token},body:JSON.stringify({count:Number(c)})});
     }
     const res=cr&&cr.result;
+    const done=cr&&cr.ok&&res&&(res.scheduled||res.sent_to);
     if(cr&&cr.ok&&res&&res.scheduled) toast('Scheduled for '+res.scheduled+' ✓');
     else if(cr&&cr.ok&&res&&res.sent_to) toast(res.sent_to+' ✓');
     else toast('Not done: '+((cr&&cr.error)||(res&&res.error)||'cancelled'));
+    if(done){ const card=document.getElementById('t'+id); if(card) card.remove(); }   // the card is finished: gone now, not on the next refresh
+    else { const card=document.getElementById('t'+id); if(card) card.style.opacity=1; }
     render(); }
   catch(e){ toast('Error: '+e.message); }
 }
