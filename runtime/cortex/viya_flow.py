@@ -144,6 +144,17 @@ class Viya:
             rows = rows + [r for r in self.slot_rows(ns, players) if r[1] not in {x[1] for x in rows}]
         return ns, sorted(rows)
 
+    def to_form(self, course: str, day):
+        """From the slots list back to the form on another course; if the form lost its state, redo it."""
+        for _ in range(3):
+            ns = self.ph.nodes()
+            if _by(ns, "btnFindAvailability"):
+                break
+            self.ph.back(); time.sleep(1.0)
+        self.pick_course(course)
+        time.sleep(0.6)
+        self.pick_holes(int(self.p.get("holes", 18)))
+
     # ---- players ----
     def fill_players(self, names: list[str], member_type: str):
         """One dump, then type straight through. Names are 'First Last'."""
@@ -163,3 +174,70 @@ class Viya:
             first, _, last = full.partition(" ")
             self.ph.tap(firsts[i]); self.ph.type_text(first or "x")
             self.ph.tap(lasts[i]); self.ph.type_text(last or "x")
+
+    def finalize(self) -> str:
+        """'Confirm Players' and the booking confirmation screen(s): mapped from the Thursday test booking.
+        Until mapped this stops the run on purpose, so nothing is ever confirmed blind."""
+        raise NotImplementedError("the final confirm screens are not mapped yet")
+
+
+def book(run) -> dict:
+    """Pre-release form prep, wait, poll until the day opens, then the PLAN attempts in order."""
+    from datetime import datetime, timedelta, timezone
+    v, p = Viya(run), run.p
+    n_players = 1 + len(p["players"])
+    attempts = p["attempts"]
+    first = attempts[0]["course"]
+    v.prepare(first, run.day)
+    while True:   # sleep until one second before the expected release
+        left = (run.rel - datetime.now(timezone.utc)).total_seconds()
+        if left <= 1.0:
+            break
+        time.sleep(min(left - 1.0, 5.0))
+    deadline = run.rel + timedelta(minutes=int(p.get("give_up_minutes", 20)))
+    tries, state = 0, None
+    while datetime.now(timezone.utc) < deadline:
+        tries += 1
+        state = v.find_availability()
+        if state not in ("closed", "timeout"):
+            break
+    if state in (None, "closed", "timeout"):
+        return {"booked": False, "summary": f"{run.day:%a %-d %b} never opened within "
+                                            f"{p.get('give_up_minutes', 20)} min of the expected release ({tries} tries)"}
+    opened = datetime.now(timezone.utc)
+    lag = (opened - run.rel).total_seconds()
+    run.log(f"day OPEN after {tries} tries, {lag:+.1f}s vs the expected release")
+    run.ph.snap("01-open")
+    skipped, current, notes = set(), first, []
+    for a in attempts:
+        c = a["course"]
+        if c in skipped:
+            continue
+        if c != current:
+            v.to_form(c, run.day)
+            state, current = v.find_availability(), c
+        if state != "slots":
+            if p.get("skip_time_only_course", True):
+                skipped.add(c)
+                notes.append(f"{c} skipped ({state}: no pick-your-own list, tournament day?)")
+                run.log(notes[-1]); run.ph.snap(f"skip-{c}")
+                continue
+        want_until = _hhmm(a["latest"]) if a.get("latest") else None
+        ns, rows = v.rows_view(n_players, want_until)
+        hit = v.choose(a, rows)
+        run.log(f"{c}: times with {n_players} places free {[r[1] for r in rows][:10]} -> "
+                f"{'take ' + hit[1] if hit else 'nothing for ' + (a.get('exact') or 'up to ' + a['latest'])}")
+        if not hit:
+            notes.append(f"{c} {a.get('exact') or 'up to ' + a['latest']}: taken")
+            continue
+        run.ph.tap(hit[2])
+        run.ph.tap_text(r"^Select Time$", timeout=5)
+        if not run.ph.wait_for(r"^Confirm Players$", timeout=15):
+            raise LookupError("the Players screen did not open after Select Time")
+        v.fill_players(p["players"], p["member_type"])
+        run.ph.snap("02-players")
+        ref = v.finalize()
+        return {"booked": True,
+                "summary": f"{c} {hit[1]}, {run.day:%a %-d %b}, {n_players} players{(' (' + ref + ')') if ref else ''}. "
+                           f"The day opened {lag:+.0f}s from the expected release."}
+    return {"booked": False, "summary": "nothing in the plan was free: " + "; ".join(notes)}

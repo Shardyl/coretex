@@ -96,11 +96,18 @@ class Run:
         print(line, flush=True)
 
     def shot(self, tag: str):
+        """Saved ON the phone (fast); pulled to self.dir after the run (a PNG across Dubai<->US takes 20s+)."""
         self.n += 1
         try:
-            self.ph.screenshot(os.path.join(self.dir, f"{self.n:02d}-{tag}.png"))
+            self.ph.snap(f"{self.n:02d}-{tag}")
         except Exception as e:  # noqa: BLE001 - evidence must never break the run
             self.log(f"screenshot failed: {e}")
+
+    def pull_evidence(self):
+        try:
+            self.ph.pull_snaps(self.dir)
+        except Exception as e:  # noqa: BLE001
+            self.log(f"could not pull screenshots: {e}")
 
     def precheck(self) -> str | None:
         if not self.ph.connect():
@@ -122,7 +129,9 @@ class Run:
 
 
 def _finish(task_id: int, ok: bool, summary: str, r: "Run | None"):
-    tail = ("\n\nRun log:\n" + "\n".join(r.log_lines[-60:])) if r else ""
+    if r:
+        r.pull_evidence()
+    tail =("\n\nRun log:\n" + "\n".join(r.log_lines[-60:])) if r else ""
     evid = f"\n\nScreenshots: {r.dir}" if r else ""
     store.update_task(task_id, status="done" if ok else "failed", last_status=summary[:300],
                       draft=((store.get_task(task_id) or {}).get("draft") or "") + "\n\nRESULT: " + summary + evid + tail)
