@@ -958,6 +958,19 @@ async function setProjStage(id,i){
   try{ await api('/api/crm/project/'+id+'/stage',{method:'POST',body:JSON.stringify({stage:s})}); toast('Moved to '+s); openProject(id); }
   catch(e){ toast('Could not update ('+e.message+')'); }
 }
+// ---- the deal's OWN contacts (p.contacts): shown even when no organisation is set ----
+function dealPeople(p){
+  const cs=p.contacts||[];
+  const rows=cs.map(c=>{ const n=(c.name||'').trim()||c.email;
+    return `<div class="crow" style="padding:6px 0;cursor:pointer" onclick="openContact('${esc(c.email)}')"><div class="cav" style="width:28px;height:28px;font-size:10px">${esc(initials(n))}</div><div style="flex:1;min-width:0"><div class="cname" style="font-size:13.5px">${esc(n)}${c.primary?' <span class="chip" style="font-size:9px">primary</span>':''}</div><div class="csub">${esc([c.role,c.email].filter(Boolean).join(' · '))}</div></div></div>`; }).join('');
+  return `<div class="dsec"><div class="dlbl">Contacts on this deal</div>${rows||'<div class="csub">No contact on this deal yet</div>'}
+    <div class="row" style="margin:7px 0 2px"><button class="btn sm" onclick="addDealContact(${p.id})">${ic('plus',14)} Add contact</button></div></div>`;
+}
+async function addDealContact(id){
+  const email=(prompt('Contact email:')||'').trim(); if(!email) return;
+  try{ await api('/api/crm/project/'+id+'/contacts',{method:'POST',body:JSON.stringify({email})}); toast('Contact added'); openProject(id); }
+  catch(e){ toast('Could not add ('+e.message+')'); }
+}
 // ---- company-mediated: a deal's people = its client company's contacts ----
 let ACCOUNTS=[], _saving=false;
 async function accountsCache(force){ if(force||!ACCOUNTS.length){ try{ ACCOUNTS=await api('/api/crm/accounts'); }catch(e){ ACCOUNTS=[]; } } return ACCOUNTS; }
@@ -1146,6 +1159,7 @@ async function openProject(id){
       <div class="csub" style="margin-bottom:10px">${esc(p.company||'')}</div>
       <div class="row" style="margin-bottom:12px">${stageChip(p.stage)}<span class="chip cy">${money(p.value)} ${esc(p.currency||'')}</span></div>
       ${projStagePicker(p)}
+      ${dealPeople(p)}
       ${dealCompany(p)}
       ${dealAutomation(p)}
       ${noteBox('p',p.id)}

@@ -892,14 +892,26 @@ updated together. Quotations auto-fill the QUOTATION TO contact (name/email/phon
 explicit `contact_email` wins, an unambiguous single-contact account fills in, ambiguity stays blank
 (quotation._contact_for; deliver_quotation passes contact_email). TERMS MODULES: reusable clause modules live as `terms_module:<name>` settings (human-readable docx beside the T&Cs in the Drive terms folder + library). First module: `multi-version` (v1.0, 2026-08-30) - the approval-gate + enhanced-revision-service + masters-first versions structure for multi-cut/multi-language jobs, born on SEN-2026-0004 (Property Finder); the sales-quotation rule tells the drafter to apply it, gen path: pass a per-quote `terms` dict to generate_xlsx with the module clauses swapped into Revisions & Delivery.
 
-## KNOWN GAP: secondary contacts do not match a deal (11 Sep 2026, left open by the owner)
+## Every deal has its organisation, and everyone on it matches (13 Sep 2026)
 
-`crm.active_deals_for_email` / `open_deal_for_email` link an inbound email to an opportunity only by the
-deal's MAIN `contact_email` or by the sender's CRM account (`account_id`). They never read the deal's own
-`contacts` list. So a colleague listed there as a secondary contact, on a deal with no account, gets a card
-with no deal: Muhanad Aouameh's reply on Sheraa deal 118 (card 568), because the back-filled deal had no
-account. Fixed BY HAND that once (account 1007 attached, card linked, thread logged). Anything that creates
-a deal by hand must set `account_id`; the code fix is to also match `contacts @> [{"email": ...}]`.
+ECBD deal 100 had its contact (Sunwoo Yoo) and no organisation: only `auto_opportunity` ever filed a deal under
+a client organisation, so deals made by hand, through Talk or by `_track_tender` had none. The deal page showed
+people ONLY through the organisation, so it looked empty, and a colleague mailing from ecbd.gov.ae would not
+have matched it. Seven open deals were like it (Sensa 88, 90, 92, 100, 101, 102; Sky Vision 87).
+- `crm.ensure_deal_account(deal_id, email)` runs from `add_deal_contact` (so qualify, tenders and the cockpit's
+  add-contact all pass through it) and `create_project`. A deal with a contact and no organisation is filed
+  under: the contact's own organisation, else one already on that email domain (by `crm_accounts.domain`, then
+  by a colleague already filed there), else a new one named from the contact's company or the domain. The
+  contact is filed under it too. Free-mail and our own domains are left alone; an organisation already set is
+  never replaced; an `organisation_linked` event lands on the timeline. A domain-named organisation ("Ecbd")
+  is a placeholder: rename it properly when you see one.
+- `open_deal_for_email` / `active_deals_for_email` also match anyone in the deal's own `contacts` list
+  (`_ON_DEAL_CONTACTS`), not only the primary `contact_email` and the account. That was the Sheraa gap (card
+  568, Muhanad Aouameh as a secondary contact, fixed by hand on 11 Sep).
+- Cockpit: the deal page has a "Contacts on this deal" section (the deal's own `contacts`, with Add contact)
+  above the Organisation section, so a deal's people show whether or not an organisation is set.
+- The seven were backfilled 13 Sep: ECBD as "Emirates Council for Balanced Development (ECBD)", Maison
+  Pyramide onto its existing account 12307 (domain added), the rest named from the deal title.
 
 ## A quotation number is never issued twice (11 Sep 2026)
 

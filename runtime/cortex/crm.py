@@ -212,6 +212,12 @@ def _org(company: str | None) -> str:
     return ORG.get((company or "").lower(), (company or "").title())
 
 
+# Anyone listed on the deal itself is its contact, not only the primary in contact_email. Before 13 Sep 2026 a
+# secondary contact on a deal with no organisation (Muhanad Aouameh, Sheraa deal 118) got a card with no deal.
+_ON_DEAL_CONTACTS = ("exists (select 1 from jsonb_array_elements(coalesce(contacts, '[]'::jsonb)) dc "
+                     "where lower(dc->>'email') = lower(%s))")
+
+
 def open_deal_for_email(email: str, company: str | None) -> dict | None:
     """The sender's most recent ACTIVE deal for one of our businesses — via their account, or via the
     deal's own contact_email (a deal created before its client had an account row still resolves), so an
@@ -222,9 +228,10 @@ def open_deal_for_email(email: str, company: str | None) -> dict | None:
     c = db.one("select account_id from crm_master where lower(email)=lower(%s)", (email,))
     acc = (c or {}).get("account_id")
     return db.one("select id, title, stage, company, value from crm_projects "
-                  "where (lower(contact_email)=lower(%s) or (%s::int is not null and account_id=%s)) "
+                  f"where (lower(contact_email)=lower(%s) or {_ON_DEAL_CONTACTS} "
+                  "or (%s::int is not null and account_id=%s)) "
                   "and company=%s and stage not in ('Lost','Close & review') order by id desc limit 1",
-                  (email, acc, acc, _org(company)))
+                  (email, email, acc, acc, _org(company)))
 
 
 def active_deals_for_email(email: str, company: str | None) -> list[dict]:
@@ -238,9 +245,10 @@ def active_deals_for_email(email: str, company: str | None) -> list[dict]:
     acc = (c or {}).get("account_id")
     return db.query("select id, title, stage, company, automation, followup_step, next_followup, note "
                     "from crm_projects "
-                    "where (lower(contact_email)=lower(%s) or (%s::int is not null and account_id=%s)) "
+                    f"where (lower(contact_email)=lower(%s) or {_ON_DEAL_CONTACTS} "
+                    "or (%s::int is not null and account_id=%s)) "
                     "and company=%s and stage not in ('Lost','Close & review') order by id desc",
-                    (email, acc, acc, _org(company)))
+                    (email, email, acc, acc, _org(company)))
 
 
 def open_deal_for_domain(email: str, company: str | None) -> dict | None:
@@ -667,7 +675,54 @@ def add_deal_contact(deal_id: int, email: str, role: str = "", primary: bool = F
     db.execute("update crm_projects set contacts=%s::jsonb, contact_email=%s, updated_at=now() where id=%s",
                (Json(lst), prim, deal_id))
     log_event(email, "deal_linked", f"Linked to deal: {db.one('select title from crm_projects where id=%s',(deal_id,))['title']}")
+    ensure_deal_account(deal_id, prim)
     return db.one("select * from crm_projects where id=%s", (deal_id,))
+
+
+def ensure_deal_account(deal_id: int, email: str | None = None) -> int | None:
+    """A deal is always filed under its client ORGANISATION (owner, 13 Sep 2026). Only auto_opportunity used to
+    set one, so ECBD deal 100 (created by hand) had a contact and no organisation: the deal page showed nobody,
+    and a colleague mailing from ecbd.gov.ae would not have matched it. Now whenever a deal has a contact and
+    no organisation: the contact's own organisation wins; else one already on that email domain (by domain,
+    then by a colleague already filed there); else a new one named from the contact's company, or the domain.
+    The contact is filed under it too if they had none. Free-mail and our own domains prove nothing and are
+    left alone. Never replaces an organisation already set. Fail-soft: a filing hiccup never blocks the deal."""
+    try:
+        p = db.one("select account_id, contact_email from crm_projects where id=%s", (deal_id,))
+        if not p or p.get("account_id"):
+            return (p or {}).get("account_id")
+        email = (email or p.get("contact_email") or "").strip().lower()
+        if "@" not in email:
+            return None
+        c = db.one("select account_id, company_name from crm_master where lower(email)=%s", (email,)) or {}
+        aid = c.get("account_id")
+        if not aid:
+            domain = email.split("@")[-1]
+            from . import pipeline
+            if "." not in domain or domain in FREE_EMAIL or domain in pipeline._own_domains():
+                return None
+            a = (db.one("select id from crm_accounts where lower(domain)=%s order by id limit 1", (domain,))
+                 or db.one("select account_id as id from crm_master where account_id is not null and "
+                           "lower(email) like %s group by account_id order by count(*) desc limit 1",
+                           ("%@" + domain,)))
+            if a:
+                aid = a["id"]
+            else:
+                name = (c.get("company_name") or "").strip() or domain.split(".")[0].title()
+                if _is_own_brand(name):
+                    return None
+                aid = get_or_create_account(name, domain)
+            link_account(aid, email=email)
+        db.execute("update crm_projects set account_id=%s, updated_at=now(), "
+                   "history = coalesce(history, '[]'::jsonb) || %s::jsonb "
+                   "where id=%s and account_id is null",
+                   (aid, Json([{"ts": _now(), "event": "organisation_linked",
+                                "text": f"Filed under {(db.one('select name from crm_accounts where id=%s', (aid,)) or {}).get('name', aid)}"
+                                        f" (from {email})"}]), deal_id))
+        return aid
+    except Exception as ex:  # noqa: BLE001
+        print(f"[crm] ensure_deal_account({deal_id}) failed: {ex}")
+        return None
 
 
 def remove_deal_contact(deal_id: int, email: str) -> dict | None:
@@ -1416,6 +1471,7 @@ def create_project(company: str, contact_email: str, title: str, value=None,
         ce = contact_email.strip().lower()
         db.execute("update crm_projects set contacts=%s::jsonb where id=%s",
                    (Json([{"email": ce, "name": _name_of(ce), "role": "", "primary": True}]), row["id"]))
+        ensure_deal_account(row["id"], ce)
         if stage in WON_STAGES:
             db.execute("update crm_master set is_client=true where lower(email)=lower(%s)", (contact_email,))
         log_event(contact_email, "deal_created", f"{title} ({stage})"
