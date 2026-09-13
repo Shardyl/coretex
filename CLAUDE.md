@@ -1226,7 +1226,22 @@ coordinates). The API-interception route is parked: apk-mitm'd Viya still reject
   coarse) -> pre-check (adb reachable, unlocked, Viya in front; critical alert + retry) -> book via
   `viya_flow.book` -> task `done`/`failed` + critical notify. Screenshots in `/var/tmp/cortex-golf/<id>/`.
 - adb pairing keys live in the cortex user's `~/.android`. After a phone reboot wireless debugging must be
-  re-enabled and reconnected (`adb tcpip 5555` pins the port until the next reboot).
+  re-enabled and reconnected (`adb tcpip 5555` pins the port until the next reboot). Use Google's
+  platform-tools adb at `/opt/platform-tools/adb`: the Ubuntu `adb` package cannot wireless-pair.
+- **Viya screen facts** (1.2.25, mapped live; full detail in the skill craft and `viya_flow.py`): the form's
+  selected day is the one CENTRED on the day strip (last two strip days are padding); the strip's range is
+  fixed when the form opens, so a newly released day needs a form opened after release (`reopen_form`);
+  day selection taps forward (+2 rightmost, +1 next) because swipes are unreliable. Weekend/function days
+  show a "Peak Booking View" (players + preferred time, matched for you): skipped for the other course.
+  Confirm = close keyboard (it covers Confirm Players) -> Confirm Players -> 57-second held summary ->
+  terms switch -> Proceed -> "Booking Confirmed". **Money guard**: never Proceed if TOTAL > PLAN
+  `max_total_aed` (0). Booking detail pages raise calendar-permission popups: answer "Don't allow" /
+  "NOT NOW", never grant.
+- **Speed**: the box is in Virginia and the phone in Dubai: ~0.4s per tap, ~2.7s per screen read
+  (`uiautomator dump /dev/tty`), so a release booking takes tens of seconds. Moving adb to a Dubai machine
+  or an on-device automation server is the next speed step.
+- **Test bookings** only more than 7 days ahead, on a weekday with no existing booking, cancelled straight
+  after (the app blocks cancelling within ~3-4 days and then charges).
 
 ## Media library (the YouTube catalog + review UI)
 

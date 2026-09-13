@@ -200,7 +200,9 @@ class Viya:
         (`blind_swipes` is ignored; kept for the caller's signature.)"""
         from datetime import date as _date, datetime as _dt
         want_d, want_m = f"{day.day:02d}", f"{day:%b}"
-        for attempt in range(3):
+        # ~1s between taps: a tap sent while the strip is still scrolling is swallowed (13 Sep rehearsal:
+        # 10 taps at 0.45s moved the strip 3 steps). 5 rounds self-correct any that are still lost.
+        for attempt in range(5):
             ns = self.ph.nodes()
             cd, cm = self._centred(ns, "hc_text_middle"), self._centred(ns, "hc_text_top")
             if not (cd.isdigit() and cm):
@@ -216,10 +218,9 @@ class Viya:
                 return False
             plus2, plus1 = items[-1], items[-2]
             for _ in range(gap // 2):
-                self.ph.tap(plus2); time.sleep(0.45)
+                self.ph.tap(plus2); time.sleep(1.0)
             if gap % 2:
-                self.ph.tap(plus1); time.sleep(0.45)
-            time.sleep(0.4)
+                self.ph.tap(plus1); time.sleep(1.0)
         ns = self.ph.nodes()
         return self._centred(ns, "hc_text_middle") == want_d and self._centred(ns, "hc_text_top") == want_m
 
@@ -277,6 +278,9 @@ class Viya:
         if amount > limit:
             raise LookupError(f"booking total {total[0]} is above the plan's AED {limit:.2f} limit: not confirmed")
         when = " ".join(n["label"] for n in _by(ns, "txtDate") + _by(ns, "txt_time"))
+        if getattr(self.r, "dry_run", False):   # rehearsal: everything up to Proceed, never books
+            self.r.log(f"DRY RUN: would switch terms on and Proceed for {when}, total {total[0]}")
+            return f"DRY RUN stopped before Proceed ({when}, total {total[0]})"
         sw = _by(ns, "termSwitch")
         if sw and not sw[0].get("checked"):
             self.ph.tap(sw[0]); time.sleep(0.5)
