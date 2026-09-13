@@ -1424,7 +1424,7 @@ async function renderCalendar(v){
       h+=`<div class="card prow"><div style="flex:1;min-width:0">
         <div class="cname">${esc(t.title||t.kind)}</div>
         <div class="csub"><span class="chip cy">${esc(t.company)}</span> ${esc(kindLabel(t.kind))} · ${esc(whenText(t.run_at))}</div></div>
-        <div class="row" style="gap:6px;flex:none">${calLinkBtn(t)}${t.kind==='blog_scheduled'?`<button class="iconbtn sm" title="Move up one slot (earlier)" onclick="moveCal(${t.id},'up')">${ic('up',15)}</button><button class="iconbtn sm" title="Move down one slot (later)" onclick="moveCal(${t.id},'down')">${ic('down',15)}</button>`:''}<button class="iconbtn sm" title="Cancel" onclick="delCal(${t.id})">${ic('trash',15)}</button></div></div>`;
+        <div class="row" style="gap:6px;flex:none">${calLinkBtn(t)}${(t.kind==='blog_scheduled'||t.kind==='newsletter_scheduled')?`<button class="iconbtn sm" title="Move up one slot (earlier)" onclick="moveCal(${t.id},'up')">${ic('up',15)}</button><button class="iconbtn sm" title="Move down one slot (later)" onclick="moveCal(${t.id},'down')">${ic('down',15)}</button>`:''}${t.kind==='newsletter_scheduled'?`<button class="iconbtn sm" title="Send now instead of waiting for its slot" onclick="sendNowNL(${t.id})">${ic('send',15)}</button>`:''}<button class="iconbtn sm" title="Cancel" onclick="delCal(${t.id})">${ic('trash',15)}</button></div></div>`;
     });
   }
 
@@ -1470,6 +1470,15 @@ async function toggleCal(id){ try{ await api('/api/calendar/'+id+'/toggle',{meth
 async function delCal(id){ try{ await api('/api/calendar/'+id,{method:'DELETE'}); renderCalendar(document.getElementById('view')); }catch(e){ toast(e.message); } }
 async function cancelReminderCal(rid){ try{ await api('/api/reminders/'+rid+'/cancel',{method:'POST'}); toast('Reminder cancelled'); renderCalendar(document.getElementById('view')); }catch(e){ toast(e.message); } }
 async function runCal(id){ try{ toast('Running…'); await api('/api/calendar/'+id+'/run',{method:'POST'}); toast('Done — it is heading to your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
+async function sendNowNL(id){
+  // Owner: send this issue NOW instead of its monthly slot. Converts the card to a send card server-side, then
+  // runs the SAME count + PIN confirm as any live send. Nothing goes out without that confirm.
+  try{ const r=await api('/api/newsletter/'+id+'/send-now',{method:'POST'});
+    if(!(r&&r.ok)){ toast('Not done: '+((r&&r.error)||'failed')); return; }
+    await act(id,'approve');   // the send card answers needs_confirm -> count prompt -> PIN -> drip
+    if(document.getElementById('calbody')) renderCalendar(document.getElementById('view'));
+  }catch(e){ toast('Failed: '+e.message); }
+}
 async function bumpCal(id){ try{ const r=await api('/api/calendar/'+id+'/bump',{method:'POST'}); toast('Bumped to front ('+(r.front||'')+')'); renderCalendar(document.getElementById('view')); }catch(e){ toast('Failed: '+e.message); } }
 async function moveCal(id,dir){ try{ const r=await api('/api/calendar/'+id+'/move?dir='+dir,{method:'POST'}); if(r&&r.noop){ toast(dir==='up'?'Already at the top':'Already at the bottom'); return; } renderCalendar(document.getElementById('view')); }catch(e){ toast('Failed: '+e.message); } }
 async function runReportNow(){ try{ toast('Generating…'); await api('/api/report/run?company='+encodeURIComponent(fval('scCo')),{method:'POST'}); toast('Done — check your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
@@ -1754,7 +1763,7 @@ function actionCard(t){
       <div id="ap${t.id}" style="display:none"></div>
 ${t.owner_only?`<div class="csub" style="margin-bottom:6px;color:var(--mut)">${ic('lock',12)} Money approval — owner only (Rashad's PIN or fingerprint)</div>`:''}
       <div class="row">
-        <button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||'Approve')}</button>
+        <button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||'Approve')}</button>${t.kind==='newsletter_review'?`<button class="btn go" onclick="sendNowNL(${t.id})">Approve &amp; send now</button>`:''}
         ${isEmail?`<button class="btn" onclick="openSchedule(${t.id})" title="Approve now, send later">${ic('calendar',16)} Schedule</button>`:''}
         <button class="btn warn" id="cm${t.id}" onclick="voiceCorrect(${t.id},this)">${ic('mic',16)} Tap to talk</button>
         <button class="btn" id="ty${t.id}" onclick="typeCorrect(${t.id})">${ic('edit',16)} Type</button>

@@ -1334,3 +1334,8 @@ thing every new conversation reads; a stale line here costs a future session rea
   `/api/newsletter/{tid}/send-now`, owner only) turns a review/scheduled issue into the Stage-3 send card;
   the owner still types the count + PIN, then it drips. Sensa phasing is OFF (owner): `cold_sources = []`,
   the whole subscribed list every issue. Card 596 converted 13 Sep: 7,759 recipients, 5 HBMSU excluded.
+- COCKPIT (13 Sep 2026): a `newsletter_review` card offers BOTH "Approve & schedule" (next monthly slot) and
+  "Approve & send now" (`sendNowNL` -> POST send-now -> the normal count + PIN confirm). Queued newsletters on
+  the Calendar get the same move up/down as blogs (the queue code was already generic, `contentqueue.KINDS`)
+  plus a send-now icon. The "rolling-6 queue" in the June rule = the Calendar queue of `newsletter_scheduled`
+  items, one per monthly slot, reorderable; there is no separate store and none is needed.
