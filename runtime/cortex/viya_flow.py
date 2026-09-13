@@ -106,12 +106,18 @@ class Viya:
                 seen_month_end = True
             hit = [n for n in days if n["label"] == want]
             if hit and seen_month_end:
+                self.day_node = hit[0]
                 self.ph.tap(hit[0]); time.sleep(0.8)
                 self.r.log(f"form ready: {course}, {self.p.get('holes', 18)} holes, day {want} tapped")
                 return
             y = days[0]["y"] - 24
             self.ph.swipe(972, y, 108, y, 200); time.sleep(0.7)
         raise LookupError(f"could not reach day {want} on the strip")
+
+    def form_mode(self) -> str:
+        """'peak' when the form shows Number of Players + Booking Time (the matched, preferred-time page),
+        else 'normal' (holes + date only, leading to the pick-your-own list)."""
+        return "peak" if _by(self.ph.nodes(), "textNumPlayers") else "normal"
 
     def find_availability(self, timeout=15.0) -> str:
         """Tap Find Availability -> 'slots' (the list), 'closed' (Viya's 'Incomplete Data' popup, which is
@@ -198,15 +204,28 @@ def book(run) -> dict:
             break
         time.sleep(min(left, 5.0))
     deadline = run.rel + timedelta(minutes=int(p.get("give_up_minutes", 20)))
-    tries, state = 0, None
+    # A day past the normal window shows the 'Peak Booking View' form (Number of Players + preferred Booking
+    # Time, matched to the nearest time: Rashad does not want it). Re-tap the day and read the form (~3.5s)
+    # until that view is gone, then ask for the pick-your-own list. Reopen the form every 90s of peak in
+    # case the app only re-evaluates on a fresh open.
+    tries, state, peak_since = 0, None, time.monotonic()
     while datetime.now(timezone.utc) < deadline:
         tries += 1
+        run.ph.tap(v.day_node); time.sleep(0.4)
+        if v.form_mode() == "peak":
+            state = "peak"
+            if time.monotonic() - peak_since > 90:
+                run.log("still the peak (preferred-time) form after 90s: reopening the form")
+                v.prepare(first, run.day); peak_since = time.monotonic()
+            continue
         state = v.find_availability()
         if state not in ("closed", "timeout"):
             break
-    if state in (None, "closed", "timeout"):
-        return {"booked": False, "summary": f"{run.day:%a %-d %b} never opened within "
-                                            f"{p.get('give_up_minutes', 20)} min of the expected release ({tries} tries)"}
+    if state in (None, "closed", "timeout", "peak"):
+        why = ("stayed on the preferred-time (peak) booking page, which the plan does not use"
+               if state == "peak" else "never showed the pick-your-own list")
+        return {"booked": False, "summary": f"{run.day:%a %-d %b} {why} within "
+                                            f"{p.get('give_up_minutes', 20)} min of the expected release ({tries} checks)"}
     opened = datetime.now(timezone.utc)
     lag = (opened - run.rel).total_seconds()
     run.log(f"day OPEN after {tries} tries, {lag:+.1f}s vs the expected release")
