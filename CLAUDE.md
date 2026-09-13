@@ -1351,3 +1351,9 @@ thing every new conversation reads; a stale line here costs a future session rea
   news.filmspoke.ai via the Cortex Cloudflare token, all Mailgun-verified. news.tabscanner.com still needs it,
   in the OTHER Cloudflare account (owner). The box CF token is an ACCOUNT token: read it with grep+cut, never
   `source` the env; verify at /accounts/{id}/tokens/verify. See memory reference_dns_access_by_domain.
+- CADENCE + STATS (owner, 13 Sep 2026): `company_profiles.data.publish_cadence = {"newsletter_scheduled": 14}`
+  makes `contentqueue.next_slot`/`bump_to_front` stack every 14 days instead of monthly (Sensa: 5 Oct, 19 Oct,
+  2 Nov ...; the skill rule says so). `newsletter.campaign_stats` / `stats_line` read Mailgun events per send
+  (unique recipients: accepted/delivered/failed/opened/clicked/unsubscribed/complained + rates); Talk
+  `newsletter_stats`, GET `/api/newsletter/stats?company=`, and the "fully sent" alert carries the line.
+  Reminder 115 (22 Oct 2026): review cadence, move to weekly if the numbers hold.
