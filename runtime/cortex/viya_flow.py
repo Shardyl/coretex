@@ -189,11 +189,14 @@ def book(run) -> dict:
     attempts = p["attempts"]
     first = attempts[0]["course"]
     v.prepare(first, run.day)
-    while True:   # sleep until one second before the expected release
-        left = (run.rel - datetime.now(timezone.utc)).total_seconds()
-        if left <= 1.0:
+    # First ask at release + 0.5s: each 'closed' round trip costs ~10s over Dubai<->US, so an early ask that
+    # is answered 'not open' would waste the first 10 seconds after release (rehearsal, 13 Sep 2026).
+    fire_at = run.rel + timedelta(seconds=0.5)
+    while True:
+        left = (fire_at - datetime.now(timezone.utc)).total_seconds()
+        if left <= 0:
             break
-        time.sleep(min(left - 1.0, 5.0))
+        time.sleep(min(left, 5.0))
     deadline = run.rel + timedelta(minutes=int(p.get("give_up_minutes", 20)))
     tries, state = 0, None
     while datetime.now(timezone.utc) < deadline:
