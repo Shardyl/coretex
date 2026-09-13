@@ -3410,6 +3410,37 @@ def _is_internal(addr: str, own_domain: str = "", index: dict | None = None) -> 
     return False
 
 
+_UNSUB_RE = re.compile(r"\b(unsubscribe|unsuscribe|opt[- ]?out|remove me|take me off|stop (sending|emailing)|"
+                       r"no more (emails|newsletters)|delete my (email|address))\b", re.I)
+
+
+def _is_unsubscribe_request(e: dict) -> bool:
+    """A short inbound message whose point is to be taken off the list. Short on purpose: a long email that
+    merely mentions unsubscribing is a conversation, and goes to the classifier like any other."""
+    subj = (e.get("subject") or "")
+    body = (e.get("body") or e.get("snippet") or "")
+    text = (subj + "\n" + body).strip()
+    if not text or len(body) > 600:
+        return False
+    return bool(_UNSUB_RE.search(text))
+
+
+def _apply_unsubscribe(e: dict, company_slug: str) -> int:
+    """Opt the sender out of newsletters on every CRM row with that address (the flag is one column across
+    organisations), with a history line. Returns rows touched."""
+    addr = (e.get("email") or "").strip().lower()
+    if not addr or "@" not in addr:
+        return 0
+    ev = Json([{"event": "newsletter_opt_out", "text": f"Replied asking to unsubscribe ({company_slug} inbox, "
+                                                       f"{datetime.now(_GST).strftime('%Y-%m-%d')})"}])
+    rows = db.query("update crm_master set newsletter_opt_out=true, newsletter_subscriber='False', "
+                    "history=(case when jsonb_typeof(history)='array' then history else '[]'::jsonb end) || %s::jsonb, "
+                    "updated_at=now() where lower(email)=%s returning id", (ev, addr))
+    store.log_decision(None, None, "system", "newsletter_opt_out", note=addr, snapshot={"rows": len(rows)}) if rows else None
+    tg.send(f"[{company_slug}] {addr} asked to unsubscribe by email -> opted out ({len(rows)} CRM row(s)).")
+    return len(rows)
+
+
 def classify_email(company: dict, email: dict) -> dict:
     """Classify ONE inbound email via the `sales-triage` universal skill, on Haiku. Reads the skill's rules
     + the company context, so the intelligence lives in the skill. Returns {category, to_crm, reason}."""
@@ -4134,6 +4165,19 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
             results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
                             "category": "other-company", "to_crm": False,
                             "reason": "addressed to another of our companies"})
+            continue
+        if _is_unsubscribe_request(e):
+            # DETERMINISTIC (13 Sep 2026): "unsubscribe / remove me / stop sending" is an opt-out, not a lead.
+            # Code sets newsletter_opt_out on that address across the CRM, no reply is drafted, the classifier
+            # never sees it. Needed because the first 1,900 HBMSU emails carried a dead unsubscribe link.
+            if commit:
+                seen.add(gid)
+                try:
+                    _apply_unsubscribe(e, company_slug)
+                except Exception as _ue:  # noqa: BLE001
+                    tg.send(f"(unsubscribe handling hiccup [{company_slug}]: {_ue})")
+            results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
+                            "category": "unsubscribe", "to_crm": False, "reason": "opt-out request, applied"})
             continue
         cls = classify_email(co, e)
         # DETERMINISTIC client override: a sender on an ACTIVE deal/project is project correspondence,

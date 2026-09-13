@@ -91,6 +91,59 @@ class Viya:
             hit = [r for r in rows if r[0] <= _hhmm(attempt["latest"])]
         return hit[0] if hit else None
 
+    # ---- form ----
+    def prepare(self, course: str, day):
+        """Fresh form on `course`, holes from PLAN, day strip swiped to `day` and tapped. Before release."""
+        self.home_to_booking(course)
+        self.pick_holes(int(self.p.get("holes", 18)))
+        want = f"{day.day:02d}"
+        seen_month_end = day.day > 20      # a low target day (e.g. 05) must come AFTER the month wrap
+        for _ in range(12):
+            ns = self.ph.nodes()
+            days = _by(ns, "hc_text_middle")
+            labels = [n["label"] for n in days]
+            if any(int(x) < int(labels[0]) for x in labels if x.isdigit()) or "01" in labels:
+                seen_month_end = True
+            hit = [n for n in days if n["label"] == want]
+            if hit and seen_month_end:
+                self.ph.tap(hit[0]); time.sleep(0.8)
+                self.r.log(f"form ready: {course}, {self.p.get('holes', 18)} holes, day {want} tapped")
+                return
+            y = days[0]["y"] - 24
+            self.ph.swipe(972, y, 108, y, 200); time.sleep(0.7)
+        raise LookupError(f"could not reach day {want} on the strip")
+
+    def find_availability(self, timeout=15.0) -> str:
+        """Tap Find Availability -> 'slots' (the list), 'closed' (Viya's 'Incomplete Data' popup, which is
+        what an unopened day returns; dismissed here), 'assigned' (anything else, e.g. a tournament day
+        where the app assigns the time)."""
+        self.ph.tap_text(r"^Find Availability$", timeout=5)
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            ns = self.ph.nodes()
+            if _by(ns, "btnConfirmTime") or _by(ns, "player_one_txt"):
+                return "slots" if _by(ns, "player_one_txt") else "assigned"
+            if [n for n in _by(ns, "tv_title") if n["label"] == "Incomplete Data"]:
+                self.ph.tap_text(r"^Ok$", timeout=3)
+                return "closed"
+            if _by(ns, "btnConfirmPlayer") or (self.title(ns) and self.title(ns) != "Book Tee Time"):
+                return "assigned"
+            time.sleep(0.2)
+        return "timeout"
+
+    def rows_view(self, players: int, want_until: int | None = None):
+        """Slot rows with N places free; pages 'Later' while the last visible row is before want_until."""
+        ns = self.ph.nodes()
+        rows = self.slot_rows(ns, players)
+        for _ in range(3):
+            times = sorted(_hhmm(t["label"]) for t in _by(ns, "txt_time") if re.match(r"^\d\d:\d\d$", t["label"]))
+            if want_until is None or not times or times[-1] >= want_until or not _by(ns, "later_layout"):
+                break
+            self.ph.tap(_by(ns, "later_layout")[0]); time.sleep(0.8)
+            ns = self.ph.nodes()
+            rows = rows + [r for r in self.slot_rows(ns, players) if r[1] not in {x[1] for x in rows}]
+        return ns, sorted(rows)
+
     # ---- players ----
     def fill_players(self, names: list[str], member_type: str):
         """One dump, then type straight through. Names are 'First Last'."""
