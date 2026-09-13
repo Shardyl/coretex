@@ -149,6 +149,33 @@ class Viya:
             time.sleep(0.2)
         return "timeout"
 
+    def find_slot(self, attempt: dict, players: int):
+        """Page through the list ONE PAGE AT A TIME and return (hit, seen) where hit's button comes from the
+        screen currently showing. Rows merged across pages kept stale positions: dry run #2 chose 07:40
+        and landed on 08:30 (13 Sep). `seen` = times with N places free, for the log."""
+        first_tee = _hhmm(attempt.get("exact") or "06:00")
+        limit = _hhmm(attempt["exact"] if attempt.get("exact") else attempt["latest"])
+        seen: list[str] = []
+        ns = self.ph.nodes()
+        for _ in range(3):   # back to the start of the list if an earlier attempt paged it
+            times = sorted(_hhmm(t["label"]) for t in _by(ns, "txt_time") if re.match(r"^\d\d:\d\d$", t["label"]))
+            if not times or times[0] <= first_tee or not _by(ns, "layout_earlier"):
+                break
+            self.ph.tap(_by(ns, "layout_earlier")[0]); time.sleep(0.8)
+            ns = self.ph.nodes()
+        for _ in range(6):
+            rows = self.slot_rows(ns, players)
+            seen += [r[1] for r in rows if r[1] not in seen]
+            hit = self.choose(attempt, rows)
+            if hit:
+                return hit, seen
+            times = sorted(_hhmm(t["label"]) for t in _by(ns, "txt_time") if re.match(r"^\d\d:\d\d$", t["label"]))
+            if not times or times[-1] >= limit or not _by(ns, "later_layout"):
+                return None, seen
+            self.ph.tap(_by(ns, "later_layout")[0]); time.sleep(0.8)
+            ns = self.ph.nodes()
+        return None, seen
+
     def rows_view(self, players: int, want_until: int | None = None):
         """Slot rows with N places free; pages 'Later' while the last visible row is before want_until."""
         ns = self.ph.nodes()
@@ -258,7 +285,7 @@ class Viya:
             self.ph.tap(firsts[i]); self.ph.type_text(first or "x")
             self.ph.tap(lasts[i]); self.ph.type_text(last or "x")
 
-    def finalize(self) -> str:
+    def finalize(self, expect_time: str = "", expect_date: str = "") -> str:
         """Confirm Players -> the held summary ('You have 57 sec...', players, prices, terms switch,
         'Proceed') -> 'Booking Confirmed'. Mapped from the authorised Thu 24 Sep 2026 test booking.
         The keyboard is closed first: it covers 'Confirm Players' and the tap lands on the space bar.
@@ -281,6 +308,13 @@ class Viya:
         if amount > limit:
             raise LookupError(f"booking total {total[0]} is above the plan's AED {limit:.2f} limit: not confirmed")
         when = " ".join(n["label"] for n in _by(ns, "txtDate") + _by(ns, "txt_time"))
+        # WRONG-SLOT GUARD: the held summary must show exactly the date and time that were chosen
+        s_time = [n["label"] for n in _by(ns, "txt_time")]
+        s_date = [n["label"] for n in _by(ns, "txtDate")]
+        if expect_time and s_time != [expect_time]:
+            raise LookupError(f"summary shows {s_time}, not the chosen {expect_time}: not confirmed")
+        if expect_date and s_date != [expect_date]:
+            raise LookupError(f"summary shows {s_date}, not {expect_date}: not confirmed")
         if getattr(self.r, "dry_run", False):   # rehearsal: everything up to Proceed, never books
             self.r.log(f"DRY RUN: would switch terms on and Proceed for {when}, total {total[0]}")
             return f"DRY RUN stopped before Proceed ({when}, total {total[0]})"
@@ -364,10 +398,8 @@ def book(run) -> dict:
                 notes.append(f"{c} skipped ({state}: no pick-your-own list, tournament day?)")
                 run.log(notes[-1]); run.ph.snap(f"skip-{c}")
                 continue
-        want_until = _hhmm(a["latest"]) if a.get("latest") else None
-        ns, rows = v.rows_view(n_players, want_until)
-        hit = v.choose(a, rows)
-        run.log(f"{c}: times with {n_players} places free {[r[1] for r in rows][:10]} -> "
+        hit, seen = v.find_slot(a, n_players)
+        run.log(f"{c}: times with {n_players} places free {seen[:10]} -> "
                 f"{'take ' + hit[1] if hit else 'nothing for ' + (a.get('exact') or 'up to ' + a['latest'])}")
         if not hit:
             notes.append(f"{c} {a.get('exact') or 'up to ' + a['latest']}: taken")
@@ -378,7 +410,7 @@ def book(run) -> dict:
             raise LookupError("the Players screen did not open after Select Time")
         v.fill_players(p["players"], p["member_type"])
         run.ph.snap("02-players")
-        ref = v.finalize()
+        ref = v.finalize(expect_time=hit[1], expect_date=want_hdr)
         return {"booked": True,
                 "summary": f"{c} {hit[1]}, {run.day:%a %-d %b}, {n_players} players{(' (' + ref + ')') if ref else ''}. "
                            f"The day opened {lag:+.0f}s from the expected release."}
