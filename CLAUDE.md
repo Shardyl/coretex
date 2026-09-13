@@ -1364,3 +1364,9 @@ thing every new conversation reads; a stale line here costs a future session rea
   refresh while running, never decrements when Mailgun's event retention expires, frozen 14 days after
   `finished_at`). Calendar: "Sending now" and greyed "History" lanes, both click to a stats page
   (`GET /api/newsletter/job/{id}`, `/api/newsletter/history`), with View issue.
+- HEADER IMAGE PRECEDENCE (owner, 13 Sep 2026): an image attached to the idea card (Talk attachment, data: URL
+  in `request.attachments`) is the hero, full stop (`_upload_from_request`, kept on the issue as
+  `hero_upload_b64` so corrections keep it); else the featured film's own YouTube frame when the writer sets
+  `hero.source = "film"` (the schema tells it to when the brief/correction asks for a still, frame,
+  screenshot or thumbnail); else the generated hero. Corrections on scheduled issues: `newsletter.correct_issue`
+  then restore `status='scheduled'` + run_at (the engine only routes review/send cards).
