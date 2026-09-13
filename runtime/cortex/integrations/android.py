@@ -8,11 +8,16 @@ the adb pairing key lives in that user's ~/.android.
     python -m cortex.integrations.android <serial> probe   # print every labelled element on screen
     python -m cortex.integrations.android <serial> shot out.png
 """
+import os
 import re
 import subprocess
 import sys
 import time
 import xml.etree.ElementTree as ET
+
+# Google's official platform-tools adb: the Ubuntu 'adb' package cannot do wireless pairing
+# ("protocol fault (couldn't read status message)"), so prefer the official build when present.
+ADB = os.environ.get("CORTEX_ADB") or ("/opt/platform-tools/adb" if os.path.exists("/opt/platform-tools/adb") else "adb")
 
 
 class Phone:
@@ -21,7 +26,7 @@ class Phone:
 
     # ---- transport ----
     def adb(self, *args, timeout=15, binary=False):
-        r = subprocess.run(["adb", "-s", self.serial, *args], capture_output=True, timeout=timeout)
+        r = subprocess.run([ADB, "-s", self.serial, *args], capture_output=True, timeout=timeout)
         if r.returncode != 0:
             raise RuntimeError(f"adb {' '.join(args)}: {r.stderr.decode(errors='replace').strip()[:200]}")
         return r.stdout if binary else r.stdout.decode(errors="replace")
@@ -30,7 +35,7 @@ class Phone:
         return self.adb("shell", cmd, timeout=timeout)
 
     def connect(self) -> bool:
-        r = subprocess.run(["adb", "connect", self.serial], capture_output=True, text=True, timeout=20)
+        r = subprocess.run([ADB, "connect", self.serial], capture_output=True, text=True, timeout=20)
         if "connected" not in r.stdout:
             return False
         try:
