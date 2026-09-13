@@ -292,7 +292,8 @@ class Viya:
         MONEY GUARD: never proceeds if the total is above PLAN max_total_aed (default 0)."""
         self.ph.hide_keyboard()
         self.ph.tap_text(r"^Confirm Players$", timeout=5)
-        ns, end = [], time.monotonic() + 20
+        # Viya can take 20s+ to create the hold (dry run #3); the hold itself lasts ~57s, so wait up to 45
+        ns, end = [], time.monotonic() + 45
         while time.monotonic() < end:
             ns = self.ph.nodes()
             if _by(ns, "btnConfirmtime"):
