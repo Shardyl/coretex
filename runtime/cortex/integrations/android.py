@@ -26,7 +26,9 @@ class Phone:
 
     # ---- transport ----
     def adb(self, *args, timeout=15, binary=False):
-        r = subprocess.run([ADB, "-s", self.serial, *args], capture_output=True, timeout=timeout)
+        # stdin=DEVNULL: `adb shell` reads stdin, and would swallow a caller's piped script
+        r = subprocess.run([ADB, "-s", self.serial, *args], capture_output=True, timeout=timeout,
+                           stdin=subprocess.DEVNULL)
         if r.returncode != 0:
             raise RuntimeError(f"adb {' '.join(args)}: {r.stderr.decode(errors='replace').strip()[:200]}")
         return r.stdout if binary else r.stdout.decode(errors="replace")
