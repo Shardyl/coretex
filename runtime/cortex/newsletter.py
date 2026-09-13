@@ -130,7 +130,8 @@ _SUPPRESS = ("newsletter_opt_out is true "
 
 
 _FREEMAIL = {"gmail.com", "hotmail.com", "yahoo.com", "outlook.com", "icloud.com", "live.com", "aol.com",
-             "protonmail.com", "me.com", "msn.com", "ymail.com", "googlemail.com"}
+             "protonmail.com", "me.com", "msn.com", "ymail.com", "googlemail.com", "yahoo.co.uk", "hotmail.co.uk",
+             "outlook.co.uk", "live.co.uk", "yahoo.co.in", "eim.ae", "emirates.net.ae", "etisalat.ae", "du.ae"}
 
 
 def audience_config(company_id: int) -> dict:
@@ -184,16 +185,21 @@ def client_exclusions(company_id: int, films: list[dict]) -> dict:
         if not label or label.lower() in {x.lower() for x in labels}:
             continue
         labels.append(label)
-        for r in db.query("select email from crm_master where company_name ilike %s and email like '%%@%%'",
-                          (f"%{label}%",)):
-            d = r["email"].strip().lower().rsplit("@", 1)[-1]
-            if d and d not in _FREEMAIL:
+        # Candidate domains come from contacts filed under the client. A domain is only excluded when it is
+        # clearly the client's own: at least 80% of ALL contacts on that domain are linked to the client. Card 601
+        # (13 Sep 2026) had excluded Al Futtaim, Etisalat webmail and yahoo.co.uk because supplier accounts named
+        # "X / Dubai Police" and vendors on ISP mail were swept in: 34 innocent contacts, zero real ones.
+        linked = db.query("select lower(split_part(email,'@',2)) d, count(*) n from crm_master where email like '%%@%%' "
+                          "and (company_name ilike %s or account_id in (select id from crm_accounts where "
+                          "lower(name)=lower(%s) or lower(name) like lower(%s) || ' (%%')) group by 1",
+                          (f"%{label}%", label, label))
+        for r in linked:
+            d = r["d"]
+            if not d or d in _FREEMAIL:
+                continue
+            total = db.one("select count(*) n from crm_master where lower(split_part(email,'@',2))=%s", (d,))["n"]
+            if total and r["n"] >= max(1, round(0.8 * total)):
                 domains.add(d)
-        for acc in db.query("select id from crm_accounts where name ilike %s", (f"%{label}%",)):
-            for r in db.query("select email from crm_master where account_id=%s and email like '%%@%%'", (acc["id"],)):
-                d = r["email"].strip().lower().rsplit("@", 1)[-1]
-                if d and d not in _FREEMAIL:
-                    domains.add(d)
     if not labels:
         return {}
     return {"labels": labels, "domains": sorted(domains), "emails": [],
