@@ -1238,8 +1238,13 @@ coordinates). The API-interception route is parked: apk-mitm'd Viya still reject
   `max_total_aed` (0). Booking detail pages raise calendar-permission popups: answer "Don't allow" /
   "NOT NOW", never grant.
 - **Speed**: the box is in Virginia and the phone in Dubai: ~0.4s per tap, ~2.7s per screen read
-  (`uiautomator dump /dev/tty`), so a release booking takes tens of seconds. Moving adb to a Dubai machine
-  or an on-device automation server is the next speed step.
+  (`uiautomator dump /dev/tty`). Measured end-to-end dry run (13 Sep): slot list ~85s after release,
+  held summary ~125s, so a confirm lands ~2 min after midnight. The day strip swallows roughly every
+  other tap after a change, so reaching a day 20 out takes several read-and-tap rounds. Moving adb to a
+  Dubai machine or an on-device automation server is the next speed step.
+- **Rehearse** with a fake Run (`dry_run=True`, `rel=now`, a >7-day weekday): `finalize` stops before
+  Proceed. Guards that must stay: list date check, summary date+time must equal the chosen slot (a merged
+  multi-page row list once landed on 08:30 instead of 07:40), TOTAL <= `max_total_aed`.
 - **Test bookings** only more than 7 days ahead, on a weekday with no existing booking, cancelled straight
   after (the app blocks cancelling within ~3-4 days and then charges).
 
