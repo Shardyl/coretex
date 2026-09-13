@@ -1548,7 +1548,7 @@ async function openJobStats(jobId){
   host.onclick=e=>{ if(e.target===host) host.remove(); };
   try{
     const j=await api('/api/newsletter/job/'+jobId);
-    const s=Object.assign({accepted:0,delivered:0,failed:0,opened:0,clicked:0,unsubscribed:0,complained:0},j.stats||{}), pct=j.total?Math.round(100*j.sent/j.total):0;
+    const s=Object.assign({accepted:0,delivered:0,failed:0,hard_bounces:0,opened:0,clicked:0,unsubscribed:0,complained:0},j.stats||{}), pct=j.total?Math.round(100*j.sent/j.total):0;
     const state=j.paused_all?'PAUSED (all sending stopped)':(j.status==='running'?`sending, ${j.per_hour}/hr`:j.status);
     const row=(k,v,sub)=>`<tr><td style="padding:6px 0;color:var(--mut)">${k}</td><td style="padding:6px 0;text-align:right;font-weight:600">${v}${sub?` <span style="color:var(--mut);font-weight:400">${sub}</span>`:''}</td></tr>`;
     calLinks[j.task_id]={url:j.preview,fetch:true};
@@ -1561,7 +1561,8 @@ async function openJobStats(jobId){
       <table style="width:100%;border-collapse:collapse;font-size:14px">
         ${row('Sent',`${Number(j.sent).toLocaleString()} / ${Number(j.total).toLocaleString()}`,`(${pct}%)`)}
         ${row('Delivered',Number(s.delivered||0).toLocaleString())}
-        ${row('Failed / bounced',Number(s.failed||0).toLocaleString(),`${s.bounce_rate||0}% of sent`)}
+        ${row('Hard bounces',Number(s.hard_bounces||0).toLocaleString(),`${s.hard_bounce_rate||0}% of sent · auto-pause at 8%`)}
+        ${row('All failures',Number(s.failed||0).toLocaleString(),`${s.bounce_rate||0}% of sent, incl. temporary + one-off rejections`)}
         ${row('Opened',Number(s.opened||0).toLocaleString(),`${s.open_rate||0}% of delivered`)}
         ${row('Clicked',Number(s.clicked||0).toLocaleString(),`${s.click_rate||0}% of delivered`)}
         ${row('Unsubscribed',Number(s.unsubscribed||0).toLocaleString())}

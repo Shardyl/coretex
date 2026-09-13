@@ -1338,7 +1338,7 @@ def usage_line(n_new: int | None = None) -> str:
 
 
 # ---------- per-send stats (cached on the job; Mailgun keeps events only for a while) ----------
-_STAT_KEYS = ("accepted", "delivered", "failed", "opened", "clicked", "unsubscribed", "complained")
+_STAT_KEYS = ("accepted", "delivered", "failed", "opened", "clicked", "unsubscribed", "complained", "hard_bounces")
 
 
 def job_stats(job_id: int, max_age_min: int = 10, force: bool = False) -> dict:
@@ -1367,6 +1367,7 @@ def job_stats(job_id: int, max_age_min: int = 10, force: bool = False) -> dict:
     merged["open_rate"] = round(100 * merged["opened"] / d, 1) if d else 0.0
     merged["click_rate"] = round(100 * merged["clicked"] / d, 1) if d else 0.0
     merged["bounce_rate"] = round(100 * merged["failed"] / s, 1) if s else 0.0
+    merged["hard_bounce_rate"] = round(100 * (merged.get("hard_bounces") or 0) / s, 1) if s else 0.0
     db.execute("update newsletter_send_jobs set stats=%s, stats_at=now() where id=%s", (Json(merged), job_id))
     return merged
 
@@ -1549,11 +1550,19 @@ def campaign_stats(company_id: int, job_id: int | None = None) -> dict:
         except Exception:  # noqa: BLE001
             items = []
         out[ev] = len({i.get("recipient") for i in items})
+    # HARD bounces = what the 8% auto-pause actually watches: NEW addresses on Mailgun's bounce list since the
+    # job started. "failed" also counts temporary failures and one-off rejections, so it reads high (owner
+    # saw 10% and asked; the hard-bounce rate was 4.3%).
+    try:
+        out["hard_bounces"] = max(0, len(mailgun.suppressions(domain, "bounces")) - int(job.get("bounces_at_start") or 0))
+    except Exception:  # noqa: BLE001
+        out["hard_bounces"] = None
     d = out.get("delivered") or 0
     out["open_rate"] = round(100 * out["opened"] / d, 1) if d else 0.0
     out["click_rate"] = round(100 * out["clicked"] / d, 1) if d else 0.0
     s = out.get("sent") or 0
     out["bounce_rate"] = round(100 * out["failed"] / s, 1) if s else 0.0
+    out["hard_bounce_rate"] = round(100 * (out["hard_bounces"] or 0) / s, 1) if s else 0.0
     return out
 
 
@@ -1562,7 +1571,8 @@ def stats_line(company_id: int, job_id: int | None = None) -> str:
     if st.get("error"):
         return st["error"]
     return (f"'{st['subject']}' ({st['status']}): {st['sent']:,}/{st['total']:,} sent, {st['delivered']:,} delivered, "
-            f"{st['failed']:,} failed ({st['bounce_rate']}%), {st['opened']:,} opened ({st['open_rate']}%), "
+            f"{st['failed']:,} failed ({st['bounce_rate']}%, of which {st.get('hard_bounces') or 0} hard bounces = "
+            f"{st['hard_bounce_rate']}%, the auto-pause line is 8%), {st['opened']:,} opened ({st['open_rate']}%), "
             f"{st['clicked']:,} clicked ({st['click_rate']}%), {st['unsubscribed']} unsubscribed, "
             f"{st['complained']} complaints")
 
