@@ -1377,3 +1377,31 @@ thing every new conversation reads; a stale line here costs a future session rea
   `hero.source = "film"` (the schema tells it to when the brief/correction asks for a still, frame,
   screenshot or thumbnail); else the generated hero. Corrections on scheduled issues: `newsletter.correct_issue`
   then restore `status='scheduled'` + run_at (the engine only routes review/send cards).
+
+## Blog refill = a pick-list MENU, not a nudge (owner, 13 Sep 2026)
+
+- WHEN a company's blog queue drops to the refill point (`queue_refill_at`, default 3), `contentqueue.check_refills`
+  no longer raises a "top up the queue" notification for blogs. It calls `engine.ensure_blog_menu(cid, need)`, which
+  creates ONE `blog_menu` card (kind class internal, skill `content-blog-posts`) or, if one is already open for that
+  company, re-surfaces it with a push. Newsletters keep the plain nudge until their menu is built.
+- WHO: any company with WordPress connected (`wp.for_company`), so FilmSpoke (never published) gets a menu too. The
+  old "has ever produced this kind" gate stays for the other kinds only.
+- THE CARD: `blog.menu()` proposes N options (`queue_menu_size` setting, default 12; Talk `count`) spread across the
+  MENU CATEGORIES, each a specific title plus a two-line angle, grouped under category headings. Categories are the
+  universal rule on content-blog-posts that starts `MENU CATEGORIES:` (semicolon-separated, up to the first full stop;
+  a company-local rule with the same prefix wins). `blog.menu_exclusions` feeds every blog card title the company has
+  plus the site's live posts, so nothing repeats. Nothing is written or staged at this point.
+- THE PICK: he replies with numbers. Cockpit = tick-list + "Build selected" (`POST /api/tasks/{id}/menu-pick`);
+  typed/voice reply or Telegram reply = `apply_correction` -> `engine.menu_reply` (parses "1, 5 and 7", "number two");
+  a bare numbers message on Telegram with nothing awaiting correction goes to the newest open menu; Talk = correct_task
+  on the card. `_menu_build` creates one normal `blog` card per pick (count=1, brief = the concept, `menu_id`/`menu_n`
+  on the request), closes the menu (status done, `request.picked` + `created`), and the existing flow takes over:
+  full-text idea card -> Approve & build -> Approve & schedule -> publishes on the 1st. "more"/"different" regenerates
+  the menu. Approve with nothing ticked returns blocked and the card stays open.
+- NEVER a streak event: a menu pick or dismiss does not bump or reset `trust_streak` (`_approve`, `_skip`,
+  `apply_correction` all special-case `blog_menu`). And the cockpit's "let the Manager auto-approve this lane" offer is
+  now hidden on every blog-flow kind (`blog`, `blog_idea`, `blog_scheduled`, `blog_menu`), matching Telegram: the engine
+  never auto-runs blogs, so the offer on card 618 would have set authority=auto for nothing.
+- On demand: Talk `create_task kind=blog_menu` on content-blog-posts ("give me blog options for Sensa").
+- First live run 13 Sep 2026: the three old refill notifications (Tabscanner 662, Sky Vision 636, FilmSpoke 457) were
+  dismissed and `check_refills` fired menus 619 (Sky Vision, depth 3) and 620 (FilmSpoke, depth 0).
