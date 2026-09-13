@@ -31,6 +31,10 @@ def send(domain: str, sender: str, to: list[str], subject: str, html: str, text:
         data["h:Reply-To"] = reply_to
     if tag:
         data["o:tag"] = tag
+    if "%unsubscribe_url%" in (html or "") or "%unsubscribe_url%" in (text or ""):
+        ensure_unsubscribe_tracking(domain)   # never let the token go out as literal text
+        data["h:List-Unsubscribe"] = "<%unsubscribe_url%>"                 # one-click unsubscribe (Gmail/Yahoo bulk rules)
+        data["h:List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     files = [("inline", (cid, content, "image/jpeg")) for cid, content in (inline or [])]
     r = httpx.post(f"{BASE}/{domain}/messages", auth=("api", key),
                    data=data, files=files or None, timeout=90)
@@ -61,6 +65,37 @@ def events(domain: str, event: str, begin: int, *, tag: str | None = None, end: 
             break
         url, params = nxt, {}
     return out
+
+
+_UNSUB_OK: dict[str, float] = {}
+
+
+def unsubscribe_tracking_on(domain: str, max_age: float = 600.0) -> bool:
+    """Is Mailgun's unsubscribe tracking active for this domain? Without it %unsubscribe_url% is sent as
+    LITERAL TEXT (the HBMSU issue went to 1,900 people with a dead unsubscribe, 13 Sep 2026). Cached 10 min."""
+    import time as _t
+    now = _t.time()
+    if _UNSUB_OK.get(domain, 0) > now:
+        return True
+    key = config.require("MAILGUN_API_KEY")
+    r = httpx.get(f"{BASE}/domains/{domain}/tracking", auth=("api", key), timeout=30)
+    r.raise_for_status()
+    ok = bool(((r.json().get("tracking") or {}).get("unsubscribe") or {}).get("active"))
+    if ok:
+        _UNSUB_OK[domain] = now + max_age
+    return ok
+
+
+def ensure_unsubscribe_tracking(domain: str) -> None:
+    """Switch unsubscribe tracking ON for the domain if it is off (idempotent), then verify."""
+    if unsubscribe_tracking_on(domain):
+        return
+    key = config.require("MAILGUN_API_KEY")
+    httpx.put(f"{BASE}/domains/{domain}/tracking/unsubscribe", auth=("api", key), data={"active": "true"},
+              timeout=30).raise_for_status()
+    _UNSUB_OK.pop(domain, None)
+    if not unsubscribe_tracking_on(domain):
+        raise RuntimeError(f"unsubscribe tracking could not be enabled on {domain}; refusing to send")
 
 
 def suppressions(domain: str, kind: str) -> list[str]:
