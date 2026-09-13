@@ -1262,7 +1262,9 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"draft": task.get("draft")})
         return {"sent_to": f"WhatsApp — {who}"}
     if task["kind"] == "golf_booking":   # approving ARMS the timed runner (golf.py run); nothing books at approval
-        store.update_task(task["id"], status="queued")
+        # 'armed', never 'queued': store.promote_queued turns key-less queued cards back into 'new', and the
+        # worker then drafts and fails them (card 621, 13 Sep 2026).
+        store.update_task(task["id"], status="armed")
         store.log_decision(task["id"], skill["id"], actor, "approve",
                            snapshot={"plan": (task.get("request") or {}).get("plan")})
         return {"sent_to": "the golf runner, which books the moment the day opens"}

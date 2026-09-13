@@ -7,7 +7,7 @@ time, phone address) is read from the skill craft's single `PLAN = {...}` line, 
 Nothing books without an approved card:
 
     python -m cortex.golf card 2026-10-05   -> 'golf_booking' approval card (awaiting_approval)
-    (owner approves)                        -> engine._execute marks it 'queued'; nothing books yet
+    (owner approves)                        -> engine._execute marks it 'armed'; nothing books yet
     python -m cortex.golf run <task_id>     -> timed runner: pre-check, wait for release, book, report
 
 The runner is launched by a one-off systemd timer a few minutes before release, because the engine's
@@ -135,7 +135,7 @@ def run(task_id: int):
     t = store.get_task(task_id)
     if not t or t.get("kind") != "golf_booking":
         sys.exit(f"#{task_id} is not a golf_booking card")
-    if t["status"] != "queued":
+    if t["status"] != "armed":
         notifications.notify(f"Golf booking #{task_id} did not run", f"The card is '{t['status']}', not approved.",
                              priority="critical", category="system", company_id=COMPANY_ID,
                              target_type="task", target_id=task_id)

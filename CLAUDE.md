@@ -1220,7 +1220,8 @@ coordinates). The API-interception route is parked: apk-mitm'd Viya still reject
 - **All behaviour lives in the skill**: the craft's single `PLAN = {...}` line (courses, fallback order,
   players, days ahead, release time, phone address). `golf.py` reads only that line; never hardcode.
 - **Flow**: `python -m cortex.golf card YYYY-MM-DD` creates a `golf_booking` card (outward, NEVER_AUTO) ->
-  approving sets it `queued` (engine `_execute`, nothing books) -> a one-off `systemd-run --on-calendar`
+  approving sets it `armed` (engine `_execute`, nothing books; NOT `queued`, which `store.promote_queued`
+  flips back to `new` for key-less cards, so the worker drafts and fails it) -> a one-off `systemd-run --on-calendar`
   unit runs `python -m cortex.golf run <id>` a few minutes before release (the engine's 60s tick is too
   coarse) -> pre-check (adb reachable, unlocked, Viya in front; critical alert + retry) -> book via
   `viya_flow.book` -> task `done`/`failed` + critical notify. Screenshots in `/var/tmp/cortex-golf/<id>/`.
