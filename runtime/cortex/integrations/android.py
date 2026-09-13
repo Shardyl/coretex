@@ -112,7 +112,17 @@ class Phone:
 
     def screenshot(self, path: str):
         with open(path, "wb") as f:
-            f.write(self.adb("exec-out", "screencap", "-p", binary=True, timeout=20))
+            f.write(self.adb("exec-out", "screencap", "-p", binary=True, timeout=60))
+
+    # A full PNG across Dubai<->US takes 20s+, so time-critical runs save on the phone (fast) and pull later.
+    PHONE_DIR = "/sdcard/cortex-shots"
+
+    def snap(self, name: str):
+        self.shell(f"mkdir -p {self.PHONE_DIR} && screencap -p {self.PHONE_DIR}/{name}.png", timeout=15)
+
+    def pull_snaps(self, local_dir: str):
+        self.adb("pull", self.PHONE_DIR + "/.", local_dir, timeout=300)
+        self.shell(f"rm -rf {self.PHONE_DIR}")
 
 
 if __name__ == "__main__":
