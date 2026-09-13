@@ -150,6 +150,52 @@ class Viya:
             rows = rows + [r for r in self.slot_rows(ns, players) if r[1] not in {x[1] for x in rows}]
         return ns, sorted(rows)
 
+    def reopen_form(self, course: str):
+        """Back to the golf course list, then the course's Book Now: a freshly opened form rebuilds the day
+        strip's range, which is how a newly released day becomes selectable. Falls back to a cold start."""
+        for _ in range(4):
+            ns = self.ph.nodes()
+            name = [n for n in ns if n["label"] == f"{course} Course" and _rid(n) == "courseNameTxt"]
+            if name:
+                book = min(self.ph.find(r"^Book Now$", ns), key=lambda n: abs(n["y"] - name[0]["y"]))
+                self.ph.tap(book)
+                if self.ph.wait_for(r"^Find Availability$", timeout=10):
+                    self.pick_holes(int(self.p.get("holes", 18)))
+                    return
+                break
+            self.ph.back(); time.sleep(0.8)
+        self.home_to_booking(course)
+        self.pick_holes(int(self.p.get("holes", 18)))
+
+    def select_day(self, day, blind_swipes: int = 0) -> bool:
+        """Swipe the day strip to `day`, tap it, and return True only if it ends up CENTRED (the app's
+        selection). A day the form cannot centre (not released yet, or strip padding) returns False."""
+        want = f"{day.day:02d}"
+        ns = self.ph.nodes()
+        days = _by(ns, "hc_text_middle")
+        if not days:
+            return False
+        y = days[0]["y"] - 24
+        for _ in range(blind_swipes):
+            self.ph.swipe(972, y, 108, y, 200); time.sleep(0.35)
+        seen_wrap = day.day > 20
+        for _ in range(10):
+            ns = self.ph.nodes()
+            days = _by(ns, "hc_text_middle")
+            labels = [n["label"] for n in days]
+            if "01" in labels or any(x.isdigit() and labels[0].isdigit() and int(x) < int(labels[0]) for x in labels):
+                seen_wrap = True
+            hit = [n for n in days if n["label"] == want]
+            if hit and seen_wrap:
+                self.ph.tap(hit[0]); time.sleep(0.7)
+                centred = [n for n in _by(self.ph.nodes(), "hc_text_middle") if n["label"] == want and abs(n["x"] - 540) < 80]
+                return bool(centred)
+            before = labels
+            self.ph.swipe(972, y, 108, y, 200); time.sleep(0.6)
+            if [n["label"] for n in _by(self.ph.nodes(), "hc_text_middle")] == before:
+                return False   # end of the strip and the day is not on it
+        return False
+
     def to_form(self, course: str, day):
         """From the slots list back to the form on another course; if the form lost its state, redo it."""
         for _ in range(3):
@@ -194,7 +240,8 @@ def book(run) -> dict:
     n_players = 1 + len(p["players"])
     attempts = p["attempts"]
     first = attempts[0]["course"]
-    v.prepare(first, run.day)
+    v.home_to_booking(first)   # warm: Viya open on the form; the new day needs a form opened after release
+    run.log(f"ready on the {first} form, waiting for release")
     # First ask at release + 0.5s: each 'closed' round trip costs ~10s over Dubai<->US, so an early ask that
     # is answered 'not open' would waste the first 10 seconds after release (rehearsal, 13 Sep 2026).
     fire_at = run.rel + timedelta(seconds=0.5)
@@ -204,28 +251,30 @@ def book(run) -> dict:
             break
         time.sleep(min(left, 5.0))
     deadline = run.rel + timedelta(minutes=int(p.get("give_up_minutes", 20)))
-    # A day past the normal window shows the 'Peak Booking View' form (Number of Players + preferred Booking
-    # Time, matched to the nearest time: Rashad does not want it). Re-tap the day and read the form (~3.5s)
-    # until that view is gone, then ask for the pick-your-own list. Reopen the form every 90s of peak in
-    # case the app only re-evaluates on a fresh open.
-    tries, state, peak_since = 0, None, time.monotonic()
+    # The day strip's range is built when the form OPENS, and the selected day is the one CENTRED on the strip
+    # (the last two strip days are padding and cannot be centred). So after release: reopen the form, swipe
+    # to the target day, tap it and check it is centred (really selected), then ask for the list. Repeat
+    # until the new day is selectable. The list's date is verified before any slot is touched.
+    want_hdr = f"{run.day:%d %b %Y}"
+    tries, state = 0, None
     while datetime.now(timezone.utc) < deadline:
         tries += 1
-        run.ph.tap(v.day_node); time.sleep(0.4)
-        if v.form_mode() == "peak":
-            state = "peak"
-            if time.monotonic() - peak_since > 90:
-                run.log("still the peak (preferred-time) form after 90s: reopening the form")
-                v.prepare(first, run.day); peak_since = time.monotonic()
+        v.reopen_form(first)
+        if not v.select_day(run.day, blind_swipes=2):
+            state = "not_listed"
+            run.log(f"try {tries}: {want_hdr} not selectable yet")
             continue
         state = v.find_availability()
-        if state not in ("closed", "timeout"):
+        if state == "slots":
+            hdr = [n["label"] for n in _by(run.ph.nodes(), "member_date_time")]
+            if hdr and hdr[0] != want_hdr:
+                raise LookupError(f"the list is for {hdr[0]}, not {want_hdr}: stopped before touching a slot")
             break
-    if state in (None, "closed", "timeout", "peak"):
-        why = ("stayed on the preferred-time (peak) booking page, which the plan does not use"
-               if state == "peak" else "never showed the pick-your-own list")
-        return {"booked": False, "summary": f"{run.day:%a %-d %b} {why} within "
-                                            f"{p.get('give_up_minutes', 20)} min of the expected release ({tries} checks)"}
+        if state in ("assigned", "closed"):
+            break   # this course assigns the time today (peak/function): the attempts loop skips it
+    if state in (None, "not_listed", "timeout"):
+        return {"booked": False, "summary": f"{run.day:%a %-d %b} never became selectable within "
+                                            f"{p.get('give_up_minutes', 20)} min of the expected release ({tries} tries)"}
     opened = datetime.now(timezone.utc)
     lag = (opened - run.rel).total_seconds()
     run.log(f"day OPEN after {tries} tries, {lag:+.1f}s vs the expected release")
