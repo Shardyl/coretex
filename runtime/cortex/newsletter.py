@@ -247,7 +247,7 @@ def audience(company_id: int, task_id: int | None = None) -> dict:
            "and not (do_not_market @> %s::jsonb) "
            f"and not ({_SUPPRESS})")
     if a.get("mode") == "subscribers":
-        sql += " and newsletter_subscriber is true"
+        sql += " and lower(coalesce(newsletter_subscriber::text,'')) = 'true'"   # column is text ('True'/'False')
     if a["exclude_sources"]:
         sql += " and coalesce(lead_source,'') <> all(%s)"
         params.append(list(a["exclude_sources"]))
