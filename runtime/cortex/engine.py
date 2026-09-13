@@ -2495,6 +2495,25 @@ def _dispatch_newsletter(task, skill, company, art, n) -> dict:
                                    "queued": True, "job": jid, "streak": streak}}
 
 
+def newsletter_send_now(task_id: int) -> dict:
+    """Owner asks for a one-off send NOW instead of waiting for the monthly slot: turn the review card (or an
+    already-scheduled issue) into the Stage-3 send card. NOTHING sends here: the owner still confirms the exact
+    count + PIN on that card, and the send drips as usual. The monthly cadence is untouched (13 Sep 2026)."""
+    task = store.get_task(task_id)
+    if not task or task["kind"] not in ("newsletter_review", "newsletter_scheduled", "newsletter_send"):
+        return {"ok": False, "error": "not a built newsletter card (review / scheduled / send)"}
+    art = db.setting_get(f"newsletter:{task_id}")
+    if not art:
+        return {"ok": False, "error": "no built newsletter found for this card"}
+    cid = task["company_id"]
+    summary = newsletter.audience_summary(cid, task_id)
+    store.update_task(task_id, kind="newsletter_send", schedule_kind=None, run_at=None, enabled=True,
+                      draft=f"Subject: {art['subject']}\n\nONE-OFF SEND NOW (owner request). Confirm the exact count to "
+                            f"start the drip.\nAudience: {summary}", status="awaiting_approval")
+    return {"ok": True, "task_id": task_id, "audience": summary,
+            "recipients": len(newsletter.recipients(cid, task_id))}
+
+
 def set_newsletter_paused(paused: bool) -> dict:
     """Emergency stop for ALL newsletter sending: pauses in-flight drips and blocks scheduled/auto sends."""
     db.setting_set("newsletter_paused", bool(paused))

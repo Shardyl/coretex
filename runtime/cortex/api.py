@@ -2877,6 +2877,15 @@ def newsletter_audience(task_id: int, u: dict = Depends(current_user)) -> dict:
             "exclusions": au["exclusions"], "summary": newsletter.audience_summary(t["company_id"], task_id)}
 
 
+@app.post("/api/newsletter/{task_id}/send-now")
+def newsletter_send_now(task_id: int, u: dict = Depends(current_user)) -> dict:
+    """Turn a review/scheduled issue into an immediate send card. Sending still needs the count + PIN confirm."""
+    _guard_task(u, task_id)
+    if (u or {}).get("role") != "owner":
+        raise HTTPException(status_code=403, detail="Only the owner can send a newsletter outside its monthly slot.")
+    return engine.newsletter_send_now(task_id)
+
+
 @app.get("/api/newsletter/status")
 def newsletter_status_get(_: None = Depends(auth)) -> dict:
     return engine.newsletter_status()
@@ -3417,6 +3426,11 @@ SKILL_TOOLS = [
         "task_id": {"type": "integer"}, "labels": {"type": "array", "items": {"type": "string"}},
         "domains": {"type": "array", "items": {"type": "string"}}, "emails": {"type": "array", "items": {"type": "string"}},
         "why": {"type": "string"}}, "required": ["task_id"]}},
+    {"name": "newsletter_send_now",
+     "description": "Rashad wants a built newsletter issue sent NOW rather than on its monthly slot: converts the review "
+                    "or scheduled card into a send card in his Inbox. It does NOT send: he still confirms the exact "
+                    "recipient count + PIN on that card, then it drips at the normal rate. Owner only.",
+     "input_schema": {"type": "object", "properties": {"task_id": {"type": "integer"}}, "required": ["task_id"]}},
     {"name": "list_calendar",
      "description": "Read the unified Calendar to answer 'what's on my calendar / what's piling up / what's "
                     "due'. Returns three lanes: now_to_deal_with (un-dated open work in the Inbox), recurring "
@@ -3933,6 +3947,12 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             slugs.append(c["slug"])
         return (f"created '{inp['skill_key']}' across all companies ({', '.join(slugs)})"
                 + (f" in {dept}" if dept else " — but no department set; tell me which department it belongs to"))
+    if name == "newsletter_send_now":
+        if (u or {}).get("role") != "owner":
+            return "Only the owner can send a newsletter outside its monthly slot."
+        r = engine.newsletter_send_now(int(inp["task_id"]))
+        return (f"card #{inp['task_id']} is now a SEND card in the Inbox: confirm {r['recipients']:,} + PIN to start "
+                f"the drip. {r['audience']}") if r.get("ok") else r.get("error", "failed")
     if name == "newsletter_audience":
         t = store.get_task(int(inp["task_id"]))
         if not t:
