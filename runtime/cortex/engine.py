@@ -1546,6 +1546,17 @@ def apply_correction(task: dict, text: str) -> None:
     company = store.get_company(task["company_id"])
     store.reset_streak(skill["id"])   # the owner corrected a Manager-passed draft → streak breaks
     old = task.get("draft")
+    if task["kind"] in ("newsletter_review", "newsletter_send"):
+        # A BUILT ISSUE IS REBUILT, never re-summarised (card 599, 13 Sep 2026): compose again from the idea
+        # plus every correction, re-send the [TEST], replace artifact + title + summary. Rule inference still runs.
+        r = newsletter.correct_issue(task, skill, company, text)
+        if not r.get("ok"):
+            tg.send(f"Card #{task['id']}: couldn't rebuild the newsletter ({r.get('error')}).")
+            return
+        store.log_decision(task["id"], skill["id"], "owner", "correct", note=text,
+                           snapshot={"old": old, "new": r.get("subject")})
+        _maybe_propose_rule(task, skill, text, old or "", r.get("subject") or "")
+        return
     # A QUOTATION PREP CARD DOES THE WORK. His answer on the card is the brief: build the real quotation
     # instead of redrafting a checklist about it (owner, 11 Sep 2026). Falls through to an ordinary
     # redraft only when there is nothing to build from yet.

@@ -1108,8 +1108,62 @@ def execute_idea_approval(task: dict, skill: dict, company: dict, actor: str) ->
     store.update_task(rev["id"], draft=summary, status="awaiting_approval")
     db.setting_set(f"newsletter:{rev['id']}", {"exclude": built.get("exclude") or {},
         "subject": built["subject"], "html": built["html"], "text": built["text"],
-        "images_b64": [[cid, base64.b64encode(b).decode()] for cid, b in built["images"]]})
+        "images_b64": [[cid, base64.b64encode(b).decode()] for cid, b in built["images"]],
+        "idea_task_id": task["id"], "idea": task.get("draft") or "",
+        "brief": str((task.get("request") or {}).get("brief") or ""), "corrections": []})
     return {"sent_to": f"the test group ({len(group)})", "review_task": rev["id"]}
+
+
+def correct_issue(task: dict, skill: dict, company: dict, text: str, actor: str = "owner") -> dict:
+    """A correction on a REVIEW / SEND card REBUILDS the issue and re-sends the test. Card 599 (13 Sep 2026):
+    the generic correction rewrote the card's two-line summary only, while the built HTML, the subject and
+    the card title kept the old wording, so an approve would have sent the uncorrected issue. Now: the idea
+    the issue was built from + every correction so far -> compose again -> render -> [TEST] to the group ->
+    artifact, title and summary all replaced. Nothing goes to the live list here."""
+    cid, tid = company["id"], task["id"]
+    art = db.setting_get(f"newsletter:{tid}") or {}
+    if not art.get("html"):
+        return {"ok": False, "error": "no built newsletter on this card"}
+    idea = (art.get("idea") or "").strip()
+    if not idea:   # issues built before the artifact carried its idea: find the idea card by subject
+        subj = ((task.get("request") or {}).get("subject") or art.get("subject") or "").strip()
+        row = db.one("select id, draft, request from tasks where company_id=%s and kind='newsletter_idea' "
+                     "and status='done' and title=%s order by id desc limit 1", (cid, subj))
+        if row:
+            idea = row.get("draft") or ""
+            art["idea_task_id"] = row["id"]
+            art["brief"] = str((row.get("request") or {}).get("brief") or "")
+    if not idea:
+        idea = f"Subject line: {art.get('subject')}" + chr(10) + (art.get("text") or "")[:1500]
+    corrections = list(art.get("corrections") or []) + [text.strip()]
+    idea_text = (idea + chr(10) + chr(10) + "OWNER CORRECTIONS on the previous build. Apply EVERY one of them; "
+                 "they override the idea and any earlier wording:" + chr(10)
+                 + chr(10).join(f"- {c}" for c in corrections))
+    built = build(cid, idea_text, brief=str(art.get("brief") or ""))
+    group = test_group(cid)
+    if group:
+        send_bulk(cid, "[TEST] " + built["subject"], built["html"], built["text"],
+                  [{"email": g["email"], "first_name": g.get("name")} for g in group],
+                  built["images"], tag="newsletter-test")
+    ex = dict(art.get("exclude") or {})
+    auto = built.get("exclude") or {}
+    for k in ("labels", "domains", "emails"):
+        ex[k] = sorted({*(ex.get(k) or []), *(auto.get(k) or [])})
+    db.setting_set(f"newsletter:{tid}", {**art, "exclude": ex, "subject": built["subject"], "html": built["html"],
+        "text": built["text"], "images_b64": [[c, base64.b64encode(b).decode()] for c, b in built["images"]],
+        "idea": idea, "corrections": corrections})
+    req = dict(task.get("request") or {})
+    req["title"] = f"Newsletter ready: {built['subject']}"
+    req["subject"] = built["subject"]
+    verb = "send" if task["kind"] == "newsletter_send" else "schedule"
+    summary = (f"Subject: {built['subject']}" + chr(10) + chr(10) +
+               f"Rebuilt with your correction and sent again to your test group ({len(group)}). "
+               f"Approve to {verb} it for the full {company['name']} list.")
+    store.update_task(tid, title=built["subject"], draft=summary, request=req, status="awaiting_approval",
+                      attempts=int(task.get("attempts") or 0) + 1)
+    store.log_decision(tid, skill["id"], actor, "newsletter_rebuilt", note=text[:200],
+                       snapshot={"subject": built["subject"], "corrections": len(corrections)})
+    return {"ok": True, "subject": built["subject"], "test_group": len(group)}
 
 
 def live_sends_on() -> bool:
