@@ -1164,10 +1164,34 @@ def _cal_company_name(r: dict) -> str:
     return co["name"] if co else ""
 
 
+_EMAIL_KINDS = ("email_draft", "email_reply", "followup")
+
+
+def _email_summary(r: dict) -> dict:
+    """What an EMAIL card actually is: who it goes to, the subject, who sends it, which deal it belongs to and
+    the email itself (owner, 13 Sep 2026: the Calendar showed a scheduled send to ChainX as 'email_draft' and
+    nothing else, so it was unrecognisable)."""
+    req = r.get("request") or {}
+    inq = req.get("inquiry") or {}
+    to_name, to_email = (inq.get("name") or "").strip(), (inq.get("email") or "").strip()
+    subj = (inq.get("subject") or "").strip()
+    if subj and not req.get("outbound") and not subj.lower().startswith(("re:", "fwd:", "fw:")):
+        subj = "Re: " + subj
+    did = r.get("deal_id") or req.get("deal_id")
+    deal = (db.one("select title from crm_projects where id=%s", (int(did),)) or {}).get("title") if did else None
+    body = re.sub(r"<[^>]+>", " ", r.get("draft") or "")
+    body = re.sub(r"[ \t]+", " ", re.sub(r"\n\s*\n+", "\n\n", body)).strip()
+    return {"title": r.get("title") or f"Email to {to_name or to_email or 'recipient'}",
+            "to": to_email, "to_name": to_name, "subject": subj, "from": req.get("from_email") or "",
+            "deal": deal, "deal_id": int(did) if did else None, "preview": body[:2000]}
+
+
 def _cal_card(r: dict) -> dict:
     card = {"id": r["id"], "company": _cal_company_name(r), "company_id": r["company_id"],
             "kind": r["kind"], "title": r.get("title") or KINDS.get(r["kind"], r["kind"])}
     k = str(r["kind"])
+    if k in _EMAIL_KINDS:
+        card.update(_email_summary(r))
     # always give content cards a link to the actual content (blog draft / newsletter issue)
     if k in ("blog", "blog_scheduled"):
         wp = db.setting_get(f"wp:{r['id']}") or {}
@@ -3996,8 +4020,15 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                         "'awaiting_correction') and schedule_kind is null" + flt + " order by created_at", p)
         recq = db.query("select title,cadence,next_run from tasks where schedule_kind='recurring'" + flt
                         + " order by next_run nulls last", p)
-        upcq = db.query("select title,kind,run_at from tasks where schedule_kind='once' and status='scheduled'"
-                        + flt + " order by run_at nulls last", p)
+        upcq = db.query("select id,title,kind,run_at,request,deal_id,draft from tasks where schedule_kind='once' "
+                        "and status='scheduled'" + flt + " order by run_at nulls last", p)
+        for r in upcq:      # a scheduled EMAIL says who it goes to and what it is about, not 'email_draft'
+            if r["kind"] in _EMAIL_KINDS:
+                s = _email_summary(r)
+                r["title"] = (f"card #{r['id']}: {s['title']}" + (f" <{s['to']}>" if s["to"] else "")
+                              + (f", subject '{s['subject']}'" if s["subject"] else "")
+                              + (f", from {s['from']}" if s["from"] else "")
+                              + (f", deal '{s['deal']}'" if s["deal"] else ""))
         return json.dumps({
             "now_to_deal_with": [(r["title"] or r["kind"]) for r in nowq],
             "recurring": [f"{r['title']} ({r['cadence']}, next {r['next_run']})" for r in recq],

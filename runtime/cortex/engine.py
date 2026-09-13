@@ -2393,9 +2393,18 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
             return {"ok": False, "error": "could not read that date/time"}
         if when <= datetime.now(timezone.utc):
             return {"ok": False, "error": "that time is in the past"}
+        # a scheduled EMAIL gets a title that says what it is: the Calendar and the send notice used to show
+        # an untitled card as 'email_draft' (owner, 13 Sep 2026)
+        _r = db.one("select kind, request from tasks where id=%s", (task_id,)) or {}
+        _inq = (_r.get("request") or {}).get("inquiry") or {}
+        _label = None
+        if _r.get("kind") in ("email_draft", "email_reply", "followup") and (_inq.get("name") or _inq.get("email")):
+            _label = (f"Email to {_inq.get('name') or _inq.get('email')}"
+                      + (f": {_inq.get('subject')}" if _inq.get("subject") else ""))[:200]
         db.execute("update tasks set status='scheduled', schedule_kind='once', run_at=%s, enabled=true, "
+                   "title = coalesce(nullif(title, ''), %s), "
                    "request = request || '{\"approved_send\": true}'::jsonb, updated_at=now() where id=%s",
-                   (when, task_id))
+                   (when, _label, task_id))
         store.log_decision(task_id, skill["id"], "owner", "approved_scheduled",
                            note=when.astimezone(_GST).strftime("%a %-d %b %H:%M"))
         return {"ok": True, "scheduled": when.astimezone(_GST).strftime("%a %-d %b, %H:%M"),
