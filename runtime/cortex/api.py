@@ -3043,10 +3043,10 @@ SKILL_TOOLS = [
         "brief": {"type": "string"}, "revision": {"type": "string", "description": "optional: how to change a previous draft"}},
         "required": ["company", "skill", "brief"]}},
     {"name": "create_task",
-     "description": "THE DEFAULT for any 'draft/write/create' request (emails, notes, posts, replies, copy) and any work to do: it runs through the worker + manager and lands in Rashad's INBOX for approval. Use THIS — never the inline draft tool — whenever he asks you to draft something. After calling it, just tell him it's in his Inbox; do NOT paste a draft into the chat. kind: content (default; emails/notes/copy) or blog. For kind=blog it proposes readable CONCEPT(S) (title + summary) to approve first, then builds the formatted post — set count to how many ideas he asked for (e.g. 6). Pick a REAL skill_key (call list_skills if unsure).",
+     "description": "THE DEFAULT for any 'draft/write/create' request (emails, notes, posts, replies, copy) and any work to do: it runs through the worker + manager and lands in Rashad's INBOX for approval. Use THIS — never the inline draft tool — whenever he asks you to draft something. After calling it, just tell him it's in his Inbox; do NOT paste a draft into the chat. kind: content (default; emails/notes/copy), blog, or newsletter_idea (ANY newsletter issue/idea request on the content-newsletter skill: it lands as a plain-text idea card; approving that builds the HTML and sends the [TEST] to the test group. The skill routes there anyway). For kind=blog it proposes readable CONCEPT(S) (title + summary) to approve first, then builds the formatted post — set count to how many ideas he asked for (e.g. 6). Pick a REAL skill_key (call list_skills if unsure).",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string"}, "skill": {"type": "string"},
-        "kind": {"type": "string", "description": "content (default) or blog"}, "brief": {"type": "string"},
+        "kind": {"type": "string", "description": "content (default), blog, or newsletter_idea"}, "brief": {"type": "string"},
         "count": {"type": "integer", "description": "blog only: how many concepts to propose (1 default; 6 if he asks for six ideas)"}},
         "required": ["company", "skill", "brief"]}},
     {"name": "draft_email",

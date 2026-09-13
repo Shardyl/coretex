@@ -60,8 +60,9 @@ _IDEATION = (
 # ---------- ideation ----------
 
 def generate_idea(company_id: int, skill_key: str = "content-newsletter",
-                  model: str | None = None) -> str:
-    """model=None uses the skill's tier. Pass a model id to override (e.g. provider.MODEL_FAST) for A/B."""
+                  model: str | None = None, brief: str | None = None) -> str:
+    """model=None uses the skill's tier. Pass a model id to override (e.g. provider.MODEL_FAST) for A/B.
+    brief = the operator's own steer from Talk (film to feature, angle, facts): the idea is built FROM it."""
     company = store.get_company(company_id)
     skill = store.get_skill_by_key(company_id, skill_key)
     system = "\n\n".join(filter(None, [
@@ -72,6 +73,10 @@ def generate_idea(company_id: int, skill_key: str = "content-newsletter",
         _IDEATION,
     ]))
     user = "Propose ONE strong newsletter idea for the next issue. Plain text only, no HTML."
+    if (brief or "").strip():
+        user = ("Propose the newsletter idea for the next issue FROM THIS BRIEF from the operator. Follow it: the "
+                "film, the angle and any facts it gives are fixed. Do not add production facts about the work that "
+                "the brief does not give. Plain text only, no HTML.\n\nBRIEF:\n" + brief.strip())
     text = provider.think(system, user, model=model or worker._model_for(skill), think_hard=True,
                           max_tokens=1200, purpose="newsletter_idea", company=company.get("slug"))
     return worker._no_dashes(text.strip())

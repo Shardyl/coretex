@@ -216,11 +216,22 @@ _EMAIL_KEYS = {"brief", "inquiry", "triage", "qual_suggest", "thread", "thread_r
                "cc_remove", "system_note", "serialize_key", "context_manifest", "title"}
 
 
-def _coerce_kind(kind: str, request) -> str:
-    """An email card with NO RECIPIENT is not an email - it is internal work that was mislabelled, and
+_NEWSLETTER_KINDS = ("newsletter_idea", "newsletter_review", "newsletter_send")
+
+
+def _coerce_kind(kind: str, request, skill_key: str | None = None) -> str:
+    """A request on the content-newsletter skill IS a newsletter idea, whatever kind the caller passed.
+    Talk's create_task defaults to 'content', which made card 590 a generic content card: the worker wrote
+    the whole email HTML onto the card text (the cockpit strips tags, so it read as 42 blank lines) and
+    approving it would have built nothing, sent no test and dropped no review card. The newsletter flow
+    starts at a plain-text idea card, so that is where every newsletter request lands (13 Sep 2026).
+    An email card with NO RECIPIENT is not an email - it is internal work that was mislabelled, and
     labelling it email_reply makes it render with a From/Cc/'Re: your enquiry' envelope and be judged as
     client-facing prose. Card 391 was a call-prep brief for Rashad that said 'internal only, not for
     sending' inside an email card. Downgrade it to internal content instead (31 Aug 2026)."""
+    if skill_key == "content-newsletter" and kind not in _NEWSLETTER_KINDS:
+        print(f"[contract] '{kind}' card on content-newsletter -> created as newsletter_idea", flush=True)
+        return "newsletter_idea"
     try:
         if kind in ("email_reply", "email_draft") and isinstance(request, dict):
             if "@" not in ((request.get("inquiry") or {}).get("email") or ""):
@@ -254,7 +265,8 @@ def _validate_card(kind: str, request) -> None:
 
 
 def create_task(company_id, skill_id, kind, request) -> dict:
-    kind = _coerce_kind(kind, request)
+    _sk = get_skill(skill_id) or {}
+    kind = _coerce_kind(kind, request, skill_key=_sk.get("skill_key"))
     _validate_card(kind, request)
     return db.execute(
         "insert into tasks (company_id,skill_id,kind,request) values (%s,%s,%s,%s) returning *",

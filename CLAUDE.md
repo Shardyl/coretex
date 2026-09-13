@@ -1275,3 +1275,20 @@ good for intent, stale for detail; the DB and this file win.
 If this session changes anything this file describes (access, deploy mechanics, structure,
 standing rules), update this CLAUDE.md in the same commit and push it. This file is the first
 thing every new conversation reads; a stale line here costs a future session real time.
+
+## Newsletter flow (13 Sep 2026)
+
+- ANY request on a company's `content-newsletter` skill becomes a `newsletter_idea` card, whatever kind the
+  caller passed (`store._coerce_kind`): Talk's create_task defaulted to `content`, so card 590 arrived as a
+  full HTML email on a content card (the cockpit strips tags -> 42 blank lines) and was off the flow entirely.
+- Stage 1 `newsletter_idea` = PLAIN TEXT only (`engine._run_newsletter_ideation` -> `newsletter.generate_idea`
+  with the operator's brief; the brief's film, angle and facts are fixed, nothing invented on top). Approving
+  it (count echo = test-group size + PIN) builds the HTML + plain-text twin, sends the `[TEST]` issue to the
+  `newsletter_test_group` table ONLY, and drops the `newsletter_review` card whose "View issue" link renders
+  the HTML in-app. Stage 2 approve banks the issue on the company's monthly slot (Sensa = the 5th); Stage 3 on
+  the day sends to the live list, drip 250/hr, behind `newsletter_live_sends` (default OFF).
+- Sensa test group (owner, 13 Sep 2026): rashadalsafar@gmail.com, dalalalsafar@gmail.com, gino@sensa.digital,
+  ayresh@sensa.digital. The table is what the send reads; the skill rule mirrors it.
+- OPEN: `newsletter.recipients()` matches `organisation ilike '%<company name>%'`, so Sensa's live audience is
+  ~380 ("Sensa Productions") while ~13k contacts carry "Sensa" / "Sensa, Sky Vision". Decide before a real send.
+  The cold-cohort warm-up drip is a skill rule only, not enforced in code. View counts are not code-stamped yet.

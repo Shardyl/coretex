@@ -157,8 +157,10 @@ CAPABILITIES: list[tuple[str, str]] = [
      "their company scope with their own PIN at the step-up gate. MONEY-class approvals always require "
      "Rashad's own fingerprint/PIN. Team logins are company-scoped; push alerts follow the same scope."),
     ("Newsletters",
-     "Newsletter issues are drafted, then either scheduled to the 1st of the month or sent to the live list — "
-     "both require his approval, an exact recipient-count echo, and biometric/PIN. Never auto."),
+     "A newsletter request (create_task on content-newsletter) lands as a plain-text IDEA card; approving it "
+     "builds the HTML issue and sends the [TEST] to the company's test group only; the review card then "
+     "schedules it to the company's monthly slot; the send card on the day sends to the live list — every step "
+     "requires his approval, an exact recipient-count echo, and biometric/PIN. Never auto."),
     ("Unified Calendar",
      "Everything schedulable is on ONE timeline (list_calendar to read it): a 'Now / to deal with' lane of "
      "un-dated open work, recurring jobs (e.g. weekly SEO reports), and dated one-offs (e.g. a scheduled "

@@ -841,6 +841,9 @@ def _run_task(task: dict) -> None:
     if task["kind"] == "blog":   # a blog request -> IDEATION: propose readable concept(s) to approve first
         _run_blog_ideation(task, skill, company)   # NO HTML built/staged yet; the build happens on approval
         return
+    if task["kind"] == "newsletter_idea":   # a newsletter request -> plain-text IDEA card; HTML only on approval
+        _run_newsletter_ideation(task, skill, company)
+        return
 
     dreq = _request_for_draft(task)   # inbound attachment refs -> data: URLs, drafter's eyes only
     draft = worker.draft(skill, company, dreq)
@@ -967,6 +970,26 @@ def _run_blog_ideation(task: dict, skill: dict, company: dict) -> None:
         _push_approval(t, skill, company)
     tg.send(f"[{company['name']}] {total} blog draft{'s' if total > 1 else ''} ready to read in your Inbox "
             f"(full text). Iterate the writing, then approve to build the formatted post.")
+
+
+def _run_newsletter_ideation(task: dict, skill: dict, company: dict) -> None:
+    """IDEATION for a newsletter request: ONE plain-text idea built from the operator's brief (working subject
+    line + angle), rules-aware. Nothing is built or sent here: approving the idea card is what builds the HTML,
+    sends the [TEST] issue to the test group and drops the review card. Card 590 (13 Sep 2026) went through the
+    generic worker instead and arrived as a full HTML email on a content card - unreadable and off the flow."""
+    from . import newsletter
+    req = task.get("request") or {}
+    idea = newsletter.generate_idea(company["id"], brief=req.get("brief", ""))
+    if not (idea or "").strip():
+        store.update_task(task["id"], status="failed", last_status="no newsletter idea generated")
+        tg.send(f"[{company['name']}] couldn't generate a newsletter idea - try again or give a brief.")
+        return
+    first = next((ln.strip() for ln in idea.splitlines() if ln.strip()), "Newsletter idea")
+    title = re.sub(r"^(working )?subject( line)?\s*[:\-]\s*", "", first, flags=re.I).strip(" *#") or "Newsletter idea"
+    store.update_task(task["id"], title=title[:120], draft=idea, status="awaiting_approval")
+    _push_approval(store.get_task(task["id"]), skill, company)
+    tg.send(f"[{company['name']}] newsletter idea ready in your Inbox. Approve it to build the issue and send "
+            f"the [TEST] to your test group.")
 
 
 def _build_blog_bg(task_id: int) -> None:
