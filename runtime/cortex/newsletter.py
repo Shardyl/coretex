@@ -472,6 +472,18 @@ def _films_block(films: list[dict]) -> str:
             "exact URL and nothing else. Never link any other film, library, playlist or media page.\n" + "\n".join(lines))
 
 
+def _upload_from_request(req: dict | None) -> bytes | None:
+    """The FIRST image the operator attached to the card (Talk attachments ride as data: URLs). An attached
+    image is the header, full stop: card 613 (13 Sep 2026) carried one and the build ignored it."""
+    for a in (req or {}).get("attachments") or []:
+        try:
+            if isinstance(a, str) and a.startswith("data:image/") and "," in a:
+                return base64.b64decode(a.split(",", 1)[1])
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
 class EmptyIssue(RuntimeError):
     """compose() came back with no issue (empty, truncated or unparseable JSON). Never render or send it."""
 
@@ -644,7 +656,9 @@ _FS_GUIDE = (
 _FS_SCHEMA = (
     "Return JSON only with these fields (set any optional block's \"use\" to false when not needed):\n"
     "subject; preheader (~80 chars); header_eyebrow (short issue type); "
-    "hero {use, image_prompt, alt}; eyebrow_pill (short red kicker or null); headline; intro; "
+    "hero {use, source (\"generate\" = an Imagen prompt, or \"film\" = the featured film's own YouTube frame; "
+    "choose \"film\" whenever the brief or an owner correction asks for a still, frame, screenshot, thumbnail "
+    "or cover of the film as the header), image_prompt, alt}; eyebrow_pill (short red kicker or null); headline; intro; "
     "primary_cta {label, url}; format_chips (array, e.g. 30s/9:16/16:9, or empty); "
     "sections (array of {heading, body, image:{use, kind:\"feature\"|\"grid\", "
     "items:[{image_prompt, alt, caption}]}}); steps {use, title, items:[{title, text}]}; "
@@ -710,7 +724,8 @@ def _optimize_jpeg(data: bytes | None, max_w: int, q: int = 82) -> bytes | None:
         return data
 
 
-def _build_filmspoke(company_id: int, idea_text: str, kit: dict, films: list[dict] | None = None) -> dict:
+def _build_filmspoke(company_id: int, idea_text: str, kit: dict, films: list[dict] | None = None,
+                     hero_upload: bytes | None = None) -> dict:
     company = store.get_company(company_id)
     films = films or []
     c = compose_filmspoke(company_id, idea_text, films)
@@ -718,7 +733,18 @@ def _build_filmspoke(company_id: int, idea_text: str, kit: dict, films: list[dic
 
     jobs: list[tuple[str, str, str]] = []
     hero = c.get("hero") or {}
-    if hero.get("use") and hero.get("image_prompt"):
+    # HEADER IMAGE PRECEDENCE (owner, 13 Sep 2026): an image the owner attached > the featured film's own
+    # YouTube frame when asked for (hero.source == "film") > a generated hero. Previously only "generated" existed,
+    # so attachments and "use a screenshot of the film" corrections changed nothing.
+    fixed_hero: bytes | None = None
+    if hero_upload:
+        fixed_hero = hero_upload
+        c["hero"] = {**hero, "use": True, "source": "upload", "alt": hero.get("alt") or "Header image"}
+    elif hero.get("use") and str(hero.get("source") or "").lower() == "film" and films:
+        fixed_hero = _thumb_bytes(films[0]["id"])
+        if fixed_hero:
+            c["hero"] = {**hero, "use": True, "alt": hero.get("alt") or (films[0].get("title") or "Film frame")}
+    if fixed_hero is None and hero.get("use") and hero.get("image_prompt"):
         jobs.append(("hero", hero["image_prompt"], "16:9"))
     for i, s in enumerate(c.get("sections") or []):
         img = s.get("image") or {}
@@ -733,7 +759,10 @@ def _build_filmspoke(company_id: int, idea_text: str, kit: dict, films: list[dic
     logo_b64 = kit.get("logo_dark_b64")
     if logo_b64:
         images.append(("logo.png", base64.b64decode(logo_b64)))
-    if gen.get("hero"):
+    if fixed_hero:
+        images.append(("hero.jpg", _optimize_jpeg(fixed_hero, 1200)))
+        c.setdefault("hero", {})["cid"] = "hero.jpg"
+    elif gen.get("hero"):
         images.append(("hero.jpg", _optimize_jpeg(gen["hero"], 1200)))
         c.setdefault("hero", {})["cid"] = "hero.jpg"
     elif c.get("hero"):
@@ -1019,17 +1048,20 @@ def render_text_filmspoke(company_id: int, c: dict) -> str:
     return worker._no_dashes("\n".join(x for x in L if x is not None))
 
 
-def build(company_id: int, idea_text: str, brief: str = "") -> dict:
+def build(company_id: int, idea_text: str, brief: str = "", hero_upload: bytes | None = None) -> dict:
     """Compose + render one issue. Dispatches on the brand kit's `template`: a 'dark*' template (FilmSpoke)
     uses the dark cinematic renderer with multiple inline images; everything else uses the light card."""
     kit = brand.get_brand_kit(company_id) or {}
     _tmpl = str(kit.get("template") or "")
     films = featured_films(company_id, brief, idea_text)   # the operator's links are data, carried by code
     if _tmpl.startswith("dark") or _tmpl == "light-saas":   # rich, brand-kit-driven renderer (dark OR light)
-        return _build_filmspoke(company_id, idea_text, kit, films)
+        return _build_filmspoke(company_id, idea_text, kit, films, hero_upload)
     c = compose(company_id, idea_text, films)
     check_links(c, company_id, films)
-    hero = imagegen.hero(c.get("hero_prompt") or "", purpose="image:newsletter") if c.get("hero_prompt") else None
+    if hero_upload:
+        hero = _optimize_jpeg(hero_upload, 1200)
+    else:
+        hero = imagegen.hero(c.get("hero_prompt") or "", purpose="image:newsletter") if c.get("hero_prompt") else None
     images = [("hero.jpg", hero)] if hero else []
     c["films"] = _attach_films(films, images)
     return {"subject": c.get("subject") or f"{store.get_company(company_id)['name']} newsletter",
@@ -1087,8 +1119,10 @@ def execute_idea_approval(task: dict, skill: dict, company: dict, actor: str) ->
     if not group:
         store.update_task(task["id"], status="done")
         return {"error": "no test group configured for this company"}
+    upload = _upload_from_request(task.get("request"))
     try:
-        built = build(cid, task.get("draft") or "", brief=str((task.get("request") or {}).get("brief") or ""))
+        built = build(cid, task.get("draft") or "", brief=str((task.get("request") or {}).get("brief") or ""),
+                      hero_upload=upload)
     except Exception as e:  # noqa: BLE001 - a failed build keeps the idea card approvable; nothing is sent
         msg = f"build failed: {e}"[:200]
         store.update_task(task["id"], status="awaiting_approval", last_status=msg)
@@ -1116,7 +1150,8 @@ def execute_idea_approval(task: dict, skill: dict, company: dict, actor: str) ->
         "subject": built["subject"], "html": built["html"], "text": built["text"],
         "images_b64": [[cid, base64.b64encode(b).decode()] for cid, b in built["images"]],
         "idea_task_id": task["id"], "idea": task.get("draft") or "",
-        "brief": str((task.get("request") or {}).get("brief") or ""), "corrections": []})
+        "brief": str((task.get("request") or {}).get("brief") or ""), "corrections": [],
+        "hero_upload_b64": base64.b64encode(upload).decode() if upload else None})
     return {"sent_to": f"the test group ({len(group)})", "review_task": rev["id"]}
 
 
@@ -1145,7 +1180,17 @@ def correct_issue(task: dict, skill: dict, company: dict, text: str, actor: str 
     idea_text = (idea + chr(10) + chr(10) + "OWNER CORRECTIONS on the previous build. Apply EVERY one of them; "
                  "they override the idea and any earlier wording:" + chr(10)
                  + chr(10).join(f"- {c}" for c in corrections))
-    built = build(cid, idea_text, brief=str(art.get("brief") or ""))
+    upload = _upload_from_request(task.get("request"))   # an image attached with the correction wins
+    if upload:
+        art["hero_upload_b64"] = base64.b64encode(upload).decode()
+    elif art.get("hero_upload_b64"):
+        upload = base64.b64decode(art["hero_upload_b64"])
+    elif not art.get("idea_task_id") is None:
+        src = store.get_task(int(art["idea_task_id"])) if art.get("idea_task_id") else None
+        upload = _upload_from_request((src or {}).get("request")) if src else None
+        if upload:
+            art["hero_upload_b64"] = base64.b64encode(upload).decode()
+    built = build(cid, idea_text, brief=str(art.get("brief") or ""), hero_upload=upload)
     group = test_group(cid)
     if group:
         send_bulk(cid, "[TEST] " + built["subject"], built["html"], built["text"],
