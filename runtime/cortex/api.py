@@ -1181,7 +1181,8 @@ def _email_summary(r: dict) -> dict:
     deal = (db.one("select title from crm_projects where id=%s", (int(did),)) or {}).get("title") if did else None
     body = re.sub(r"<[^>]+>", " ", r.get("draft") or "")
     body = re.sub(r"[ \t]+", " ", re.sub(r"\n\s*\n+", "\n\n", body)).strip()
-    return {"title": r.get("title") or f"Email to {to_name or to_email or 'recipient'}",
+    # the headline is WHO; the subject gets its own line, so a stored "Email to X: subject" title is not reused
+    return {"title": f"Email to {to_name or to_email or 'recipient'}",
             "to": to_email, "to_name": to_name, "subject": subj, "from": req.get("from_email") or "",
             "deal": deal, "deal_id": int(did) if did else None, "preview": body[:2000]}
 

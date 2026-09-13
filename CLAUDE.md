@@ -735,6 +735,13 @@ cancels the deal's pending reminders whose `created_by` starts with `cortex` and
 event naming them; the owner's own reminders (created_by a person) are left alone. `reminders.fire_due` drops,
 as cancelled, any Cortex reminder whose deal has closed since it was set.
 
+**A SCHEDULED EMAIL SAYS WHAT IT IS (owner, 13 Sep 2026).** Approve-and-schedule left email cards untitled, so
+the Calendar showed card 611 (the ChainX follow-up) as "email_draft · Sensa Productions email draft". Now
+`api._email_summary` gives every email card on the Calendar its recipient, subject, sender, deal (a chip that
+opens the deal) and the email itself behind "Show the email"; Talk's `list_calendar` describes scheduled emails
+the same way; and `engine.approve_task(run_at=...)` titles an untitled email card "Email to <name>: <subject>"
+when it schedules it, so the scheduled-send notice names it too.
+
 Phase 2 (same day): the full flow-of-intelligence. All triggers are deterministic code; models only
 extract/judge, never move stages or invent values:
 - **Stage engine:** a send carrying a Quotation/Proposal (attach_docs filename or subject — a fact,
