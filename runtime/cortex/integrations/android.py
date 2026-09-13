@@ -63,9 +63,13 @@ class Phone:
 
     # ---- screen ----
     def nodes(self) -> list[dict]:
-        xml = self.adb("exec-out", "sh", "-c", "uiautomator dump /sdcard/u.xml >/dev/null && cat /sdcard/u.xml",
-                       timeout=20)
-        xml = xml[xml.find("<?xml"):] if "<?xml" in xml else xml
+        # straight to stdout (/dev/tty) is ~0.65s faster per read than dump-to-file + cat (measured 13 Sep);
+        # it appends a 'UI hierchary dumped to' line after the XML, so keep only <?xml ... </hierarchy>
+        xml = self.adb("exec-out", "uiautomator", "dump", "/dev/tty", timeout=20)
+        start, end = xml.find("<?xml"), xml.rfind("</hierarchy>")
+        if start < 0 or end < 0:
+            raise RuntimeError(f"uiautomator returned no hierarchy: {xml[:120]!r}")
+        xml = xml[start:end + len("</hierarchy>")]
         out = []
         for n in ET.fromstring(xml).iter("node"):
             label = (n.get("text") or "").strip() or (n.get("content-desc") or "").strip()

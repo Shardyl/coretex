@@ -169,7 +169,7 @@ class Viya:
         if xy:   # fast path: back to the list, tap the Book Now read earlier, confirm the form by text
             self.ph.back(); time.sleep(1.2)
             self.ph.tap(xy)
-            if self.ph.wait_for(r"^Find Availability$", timeout=8):
+            if self.ph.wait_for(r"^Find Availability$", timeout=15):   # a screen read alone is ~4s
                 self.pick_holes(int(self.p.get("holes", 18)))
                 return
         for _ in range(4):
@@ -192,35 +192,34 @@ class Viya:
         return c[0]["label"] if c else ""
 
     def select_day(self, day, blind_swipes: int = 0) -> bool:
-        """Swipe the day strip to `day`, tap it, and return True only if the CENTRED month and day are the
-        target (the centred item is the app's selection). A day the form cannot centre (not released yet,
-        or strip padding) returns False. The month strip follows the day strip, so it disambiguates '05'."""
+        """Select `day` on the form's day strip; True only if the CENTRED month and day are the target (the
+        centred item is the app's selection). Swipes proved unreliable (a second swipe often does not
+        register), but tapping a day centres it: tapping the rightmost item advances 2 days, the next one 1.
+        So: one read to learn the centred date, blind taps to cover the gap, one read to verify. A day the
+        form cannot centre (not released yet, or strip padding) stops advancing and returns False.
+        (`blind_swipes` is ignored; kept for the caller's signature.)"""
+        from datetime import date as _date, datetime as _dt
         want_d, want_m = f"{day.day:02d}", f"{day:%b}"
-        y = self.cache.get("strip_y")
-        if y is None:
-            days = _by(self.ph.nodes(), "hc_text_middle")
-            if not days:
-                return False
-            y = self.cache["strip_y"] = days[0]["y"] - 24
-        for _ in range(blind_swipes):
-            self.ph.swipe(972, y, 108, y, 200); time.sleep(0.35)
-        prev = None
-        for _ in range(10):
+        for attempt in range(3):
             ns = self.ph.nodes()
-            days = _by(ns, "hc_text_middle")
-            labels = [n["label"] for n in days]
-            if self._centred(ns, "hc_text_middle") == want_d and self._centred(ns, "hc_text_top") == want_m:
+            cd, cm = self._centred(ns, "hc_text_middle"), self._centred(ns, "hc_text_top")
+            if not (cd.isdigit() and cm):
+                return False
+            if cd == want_d and cm == want_m:
                 return True
-            hit = [n for n in days if n["label"] == want_d]
-            if hit and self._centred(ns, "hc_text_top") in (want_m, ""):
-                self.ph.tap(hit[0]); time.sleep(0.8)
-                ns = self.ph.nodes()
-                return self._centred(ns, "hc_text_middle") == want_d and self._centred(ns, "hc_text_top") == want_m
-            if labels == prev:
-                return False   # end of the strip and the day is not selectable on it
-            prev = labels
-            self.ph.swipe(972, y, 108, y, 200); time.sleep(0.6)
-        return False
+            cur = _date(day.year, _dt.strptime(cm, "%b").month, int(cd))
+            gap = (day - cur).days
+            items = sorted(_by(ns, "hc_text_middle"), key=lambda n: n["x"])
+            if gap <= 0 or len(items) < 5:
+                return False
+            plus2, plus1 = items[-1], items[-2]
+            for _ in range(gap // 2):
+                self.ph.tap(plus2); time.sleep(0.45)
+            if gap % 2:
+                self.ph.tap(plus1); time.sleep(0.45)
+            time.sleep(0.4)
+        ns = self.ph.nodes()
+        return self._centred(ns, "hc_text_middle") == want_d and self._centred(ns, "hc_text_top") == want_m
 
     def to_form(self, course: str, day):
         """From the slots list back to the form on another course; if the form lost its state, redo it."""
