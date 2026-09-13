@@ -130,7 +130,7 @@ def clear_satisfied() -> int:
     _, refill_at, _ = _cfg()
     n = 0
     try:
-        for r in db.query("select id, dedup_key from notifications where state='unread' and dedup_key like 'refill:%'"):
+        for r in db.query("select id, dedup_key from notifications where state in ('unread','snoozed') and dedup_key like 'refill:%'"):
             try:
                 _, kind, cid = r["dedup_key"].split(":", 2)
                 if kind in KINDS and depth(int(cid), kind) > refill_at:
