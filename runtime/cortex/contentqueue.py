@@ -13,7 +13,7 @@ the skill key). The actual drafting/publishing of each kind stays in its own han
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from . import db, notifications, profile, schedule
 
@@ -47,14 +47,29 @@ def publish_day(company_id: int) -> int:
     return min(max(d, 1), 28)
 
 
+def cadence_days(company_id: int, kind: str) -> int | None:
+    """Optional fixed interval for a kind on this company (`company_profiles.data.publish_cadence`, e.g.
+    {"newsletter_scheduled": 14}). None = the default monthly slot on the publishing day. Sensa newsletters went
+    fortnightly on 13 Sep 2026 (owner): the 5th, then every 14 days."""
+    try:
+        v = ((profile.get(company_id) or {}).get("publish_cadence") or {}).get(kind)
+        return int(v) if v else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def next_slot(company_id: int, kind: str, hour: int = 9) -> datetime:
-    """Next free monthly slot for `kind` on the company's publishing day; stacks one item per month (if one is
-    already queued, take the company's day in the month after the latest)."""
+    """Next free slot for `kind`: one item per slot, stacked after the latest queued. Monthly on the company's
+    publishing day by default; every `cadence_days` when the profile sets one for this kind (anchored on the
+    publishing day when the queue is empty)."""
     now = datetime.now(schedule._GST)
     day = publish_day(company_id)
     row = db.one("select run_at from tasks where company_id=%s and kind=%s and schedule_kind='once' "
                  "and status='scheduled' and run_at is not null order by run_at desc limit 1", (company_id, kind))
+    every = cadence_days(company_id, kind)
     if row and row["run_at"] and row["run_at"] > now:
+        if every:
+            return row["run_at"] + timedelta(days=every)
         return schedule.next_month_day(row["run_at"], day, hour)
     return schedule.day_of_month(now, day, hour)
 
@@ -80,8 +95,9 @@ def bump_to_front(task_id: int) -> dict:
                       "and id<>%s and run_at is not null order by run_at", (cid, kind, task_id))
     db.execute("update tasks set run_at=%s where id=%s", (front, task_id))
     prev = front
+    every = cadence_days(cid, kind)
     for o in others:
-        prev = schedule.next_month_day(prev, day)
+        prev = (prev + timedelta(days=every)) if every else schedule.next_month_day(prev, day)
         db.execute("update tasks set run_at=%s where id=%s", (prev, o["id"]))
     return {"ok": True, "front": front.strftime("%-d %b %Y"), "shifted": len(others), "kind": kind}
 

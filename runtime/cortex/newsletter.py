@@ -1436,5 +1436,43 @@ def _drain_one(job: dict) -> dict | None:
     return None
 
 
+def campaign_stats(company_id: int, job_id: int | None = None) -> dict:
+    """Live numbers for one newsletter send (the latest job for the company by default), from Mailgun's event
+    log, unique recipients per event: sent, accepted, delivered, failed (with the bounce share), opened, clicked,
+    unsubscribed, complained, plus open/click rates on delivered. Code computes; nothing is estimated."""
+    if job_id:
+        job = db.one("select * from newsletter_send_jobs where id=%s", (job_id,))
+    else:
+        job = db.one("select * from newsletter_send_jobs where company_id=%s order by id desc limit 1", (company_id,))
+    if not job:
+        return {"error": "no send found"}
+    domain = send_domain(job["company_id"])
+    begin = int(job["created_at"].timestamp())
+    out = {"job_id": job["id"], "subject": job["subject"], "status": job["status"], "sent": job["sent"],
+           "total": job["total"], "started": job["created_at"].isoformat()}
+    for ev in ("accepted", "delivered", "failed", "opened", "clicked", "unsubscribed", "complained"):
+        try:
+            items = mailgun.events(domain, ev, begin, tag="newsletter")
+        except Exception:  # noqa: BLE001
+            items = []
+        out[ev] = len({i.get("recipient") for i in items})
+    d = out.get("delivered") or 0
+    out["open_rate"] = round(100 * out["opened"] / d, 1) if d else 0.0
+    out["click_rate"] = round(100 * out["clicked"] / d, 1) if d else 0.0
+    s = out.get("sent") or 0
+    out["bounce_rate"] = round(100 * out["failed"] / s, 1) if s else 0.0
+    return out
+
+
+def stats_line(company_id: int, job_id: int | None = None) -> str:
+    st = campaign_stats(company_id, job_id)
+    if st.get("error"):
+        return st["error"]
+    return (f"'{st['subject']}' ({st['status']}): {st['sent']:,}/{st['total']:,} sent, {st['delivered']:,} delivered, "
+            f"{st['failed']:,} failed ({st['bounce_rate']}%), {st['opened']:,} opened ({st['open_rate']}%), "
+            f"{st['clicked']:,} clicked ({st['click_rate']}%), {st['unsubscribed']} unsubscribed, "
+            f"{st['complained']} complaints")
+
+
 def brand_kit(company_id: int) -> dict | None:
     return brand.get_brand_kit(company_id)

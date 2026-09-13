@@ -2940,6 +2940,16 @@ def blog_publish_now(task_id: int, u: dict = Depends(current_user)) -> dict:
     return engine.blog_publish_now(task_id)
 
 
+@app.get("/api/newsletter/stats")
+def newsletter_stats(company: str, job_id: int | None = None, u: dict = Depends(current_user)) -> dict:
+    """Live delivery/open/click/bounce numbers for a company's latest (or a given) newsletter send."""
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise HTTPException(status_code=404, detail="no such company")
+    _assert_company_allowed(u, co["id"])
+    return {"ok": True, **newsletter.campaign_stats(co["id"], job_id)}
+
+
 @app.get("/api/newsletter/status")
 def newsletter_status_get(_: None = Depends(auth)) -> dict:
     return engine.newsletter_status()
@@ -3471,6 +3481,12 @@ SKILL_TOOLS = [
     {"name": "list_scheduled",
      "description": "List the scheduled recurring jobs (e.g. SEO reports).",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}}},
+    {"name": "newsletter_stats",
+     "description": "Live numbers for a company's newsletter send (latest by default, or job_id): sent, delivered, "
+                    "failed + bounce rate, opened + open rate, clicked + click rate, unsubscribes, complaints. Read "
+                    "straight from Mailgun's event log, computed by code. Use it for 'how is the newsletter doing'.",
+     "input_schema": {"type": "object", "properties": {"company": {"type": "string"}, "job_id": {"type": "integer"}},
+                      "required": ["company"]}},
     {"name": "newsletter_audience",
      "description": "Who a built newsletter issue will reach: established contacts, this issue's cold-cohort batch, "
                     "how many cold contacts are still waiting, and who is excluded. Pass the card id (review, "
@@ -4025,6 +4041,11 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         r = engine.newsletter_send_now(int(inp["task_id"]))
         return (f"card #{inp['task_id']} is now a SEND card in the Inbox: confirm {r['recipients']:,} + PIN to start "
                 f"the drip. {r['audience']}") if r.get("ok") else r.get("error", "failed")
+    if name == "newsletter_stats":
+        co = store.get_company_by_slug(inp["company"])
+        if not co:
+            return "unknown company " + str(inp["company"])
+        return newsletter.stats_line(co["id"], inp.get("job_id"))
     if name == "newsletter_audience":
         t = store.get_task(int(inp["task_id"]))
         if not t:

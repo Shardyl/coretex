@@ -38,6 +38,31 @@ def send(domain: str, sender: str, to: list[str], subject: str, html: str, text:
     return r.json()
 
 
+def events(domain: str, event: str, begin: int, *, tag: str | None = None, end: int | None = None,
+           limit: int = 300, pages: int = 20) -> list[dict]:
+    """Mailgun event log for a domain: all `event` items since `begin` (unix ts), following pagination.
+    Used for per-send stats (accepted/delivered/failed/opened/clicked/unsubscribed/complained)."""
+    key = config.require("MAILGUN_API_KEY")
+    params: dict = {"event": event, "begin": begin, "ascending": "yes", "limit": limit}
+    if end:
+        params["end"] = end
+    if tag:
+        params["tags"] = tag
+    url = f"{BASE}/{domain}/events"
+    out: list[dict] = []
+    for _ in range(pages):
+        r = httpx.get(url, auth=("api", key), params=params, timeout=30)
+        r.raise_for_status()
+        d = r.json()
+        items = d.get("items") or []
+        out += items
+        nxt = (d.get("paging") or {}).get("next")
+        if not items or not nxt or len(items) < limit:
+            break
+        url, params = nxt, {}
+    return out
+
+
 def suppressions(domain: str, kind: str) -> list[str]:
     """List a domain's suppression addresses. kind = 'unsubscribes' | 'complaints' | 'bounces'."""
     key = config.require("MAILGUN_API_KEY")

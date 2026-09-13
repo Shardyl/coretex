@@ -5151,7 +5151,12 @@ def drain_newsletter_sends() -> None:
             if t:
                 store.log_decision(ev["task_id"], t["skill_id"], "owner", "newsletter_sent",
                                    note=ev["subject"], snapshot={"recipients": ev["sent"]})
-            tg.send(f"✅ Newsletter fully sent: '{ev['subject']}' -> {ev['sent']:,}/{ev['total']:,} {coname} contacts.")
+            try:
+                line = newsletter.stats_line(ev["company_id"], ev.get("job_id"))
+            except Exception:  # noqa: BLE001
+                line = ""
+            tg.send(f"✅ Newsletter fully sent: '{ev['subject']}' -> {ev['sent']:,}/{ev['total']:,} {coname} contacts. "
+                    f"{line}")
         elif ev["status"] == "paused":
             tg.send(f"⚠️ Newsletter PAUSED (bounce spike): '{ev['subject']}' at "
                     f"{ev['sent']:,}/{ev['total']:,} {coname}, {ev.get('bounces')} bounces. Check the list/domain.")
