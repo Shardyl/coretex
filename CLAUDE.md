@@ -1436,3 +1436,6 @@ thing every new conversation reads; a stale line here costs a future session rea
   back through the Gmail API (rashad@sensa.digital). The stored copy in Mailgun is PRE-substitution, so never
   judge the link from `storage.url`. Inbox poll: a short "unsubscribe / remove me / stop sending" reply sets
   newsletter_opt_out deterministically (`_is_unsubscribe_request` / `_apply_unsubscribe`), no draft, Telegram line.
+  `newsletter.require_unsubscribe` runs on every build (token in html + text, tracking on, else `NoUnsubscribe`);
+  `_drain_one` pauses a job whose html lacks the token. Universal rule "UNSUBSCRIBE MUST WORK" on content-newsletter.
+  Retro-checked 13 Sep 2026: all 5 queued Sensa issues + job 3 + all 5 domains pass.
