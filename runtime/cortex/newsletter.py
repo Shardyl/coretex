@@ -16,6 +16,10 @@ from __future__ import annotations
 
 import base64
 import html as _html
+import re
+from urllib.parse import urlparse
+
+import httpx
 from concurrent.futures import ThreadPoolExecutor
 
 from psycopg.types.json import Json
@@ -76,7 +80,8 @@ def generate_idea(company_id: int, skill_key: str = "content-newsletter",
     if (brief or "").strip():
         user = ("Propose the newsletter idea for the next issue FROM THIS BRIEF from the operator. Follow it: the "
                 "film, the angle and any facts it gives are fixed. Do not add production facts about the work that "
-                "the brief does not give. Plain text only, no HTML.\n\nBRIEF:\n" + brief.strip())
+                "the brief does not give. Repeat EVERY URL in the brief verbatim in the idea (the system carries "
+                "them into the build). Plain text only, no HTML.\n\nBRIEF:\n" + brief.strip())
     text = provider.think(system, user, model=model or worker._model_for(skill), think_hard=True,
                           max_tokens=1200, purpose="newsletter_idea", company=company.get("slug"))
     return worker._no_dashes(text.strip())
@@ -164,6 +169,127 @@ _LIGHT_SCHEMA = (
 )
 
 
+# ---------- featured films (DATA, never prose) + link guard ----------
+#
+# Card 592 (13 Sep 2026): the operator gave the exact YouTube link in Talk, ideation dropped it, and the writer
+# linked the INTERNAL media library instead. Film links and their cover art are not something a model chooses:
+# code extracts every YouTube video from the brief + idea, looks it up in the media library, renders its official
+# thumbnail as a card linked to the video, and refuses any link that is not the company's own site or a known film.
+
+_YT_ID = re.compile(r"(?:youtube\.com/(?:watch\?(?:[^\s&]*&)*v=|shorts/|embed/)|youtu\.be/)([A-Za-z0-9_-]{11})")
+_URL = re.compile(r"https?://[^\s\"'<>)\]]+")
+
+
+class BadLink(RuntimeError):
+    """The composed issue carries a link that is not allowed (internal library, unknown film, foreign site)."""
+
+
+def featured_films(company_id: int, *texts: str) -> list[dict]:
+    """Every YouTube video mentioned in the given texts (brief first, then idea), in order of first appearance,
+    resolved against the media library: [{id, url, title, in_library}]. The operator's own links count even
+    when the library has no row for them (the brief is operator-supplied data)."""
+    seen: list[str] = []
+    for t in texts:
+        for vid in _YT_ID.findall(t or ""):
+            if vid not in seen:
+                seen.append(vid)
+    out = []
+    for vid in seen:
+        row = db.one("select title, watch_url from media_assets where youtube_video_id=%s "
+                     "order by (company_id=%s) desc limit 1", (vid, company_id))
+        out.append({"id": vid, "url": f"https://www.youtube.com/watch?v={vid}",
+                    "title": ((row or {}).get("title") or "").strip(), "in_library": bool(row)})
+    return out
+
+
+def _thumb_bytes(video_id: str) -> bytes | None:
+    """The official YouTube cover art for a video, largest available first. None if YouTube has nothing."""
+    for name in ("maxresdefault", "sddefault", "hqdefault"):
+        try:
+            r = httpx.get(f"https://i.ytimg.com/vi/{video_id}/{name}.jpg", timeout=15, follow_redirects=True)
+            if r.status_code == 200 and len(r.content) > 2000:
+                return r.content
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+def _company_hosts(company_id: int) -> set[str]:
+    """Hostnames the company owns or publishes on: profile domains / live_site / social, the send domain's root."""
+    prof = _profile(company_id)
+    hosts: set[str] = set()
+    blobs = [str(prof.get("domains") or ""), str(prof.get("live_site") or ""), str(prof.get("social") or "")]
+    for blob in blobs:
+        for m in re.findall(r"(?:https?://)?((?:[a-z0-9-]+\.)+[a-z]{2,})", blob, flags=re.I):
+            hosts.add(m.lower())
+    root = (send_domain(company_id) or "").split(".", 1)
+    if len(root) == 2:
+        hosts.add(root[1].lower())
+    hosts.discard("github.com")   # website_repo links live in live_site for some companies; never a public link
+    return hosts
+
+
+def _link_allowed(url: str, company_id: int, film_ids: set[str], hosts: set[str], social_urls: set[str]) -> bool:
+    if url.strip() == "%unsubscribe_url%":
+        return True
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except Exception:  # noqa: BLE001
+        return False
+    if not host:
+        return False
+    if host in ("youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"):
+        m = _YT_ID.search(url)
+        if m:
+            return m.group(1) in film_ids
+        return any(url.rstrip("/").lower().endswith(s) for s in social_urls)   # the company's own channel
+    if host in ("coretex.uk", "www.coretex.uk"):
+        return False   # the internal media library / cockpit, never public
+    return any(host == h or host.endswith("." + h) for h in hosts)
+
+
+def _walk_strings(x):
+    if isinstance(x, dict):
+        for v in x.values():
+            yield from _walk_strings(v)
+    elif isinstance(x, list):
+        for v in x:
+            yield from _walk_strings(v)
+    elif isinstance(x, str):
+        yield x
+
+
+def check_links(c: dict, company_id: int, films: list[dict]) -> None:
+    """Every URL in a composed issue must be the company's own site/social, or a featured film's YouTube link.
+    Anything else fails the build. Film ids also include the company's whole media library, so a writer may
+    cite another of the company's films by its real link, but never an invented id or the internal library."""
+    lib = {r["youtube_video_id"] for r in db.query(
+        "select youtube_video_id from media_assets where company_id=%s and youtube_video_id is not null", (company_id,))}
+    film_ids = lib | {f["id"] for f in films}
+    hosts = _company_hosts(company_id)
+    social_urls = {u.rstrip("/").lower() for u in re.findall(r"(?:https?://)?(?:www\.)?(youtube\.com/[@\w/-]+)",
+                                                             str(_profile(company_id).get("social") or ""), flags=re.I)}
+    bad = []
+    for s in _walk_strings(c):
+        for u in _URL.findall(s):
+            u = u.rstrip(".,;:!?")
+            if not _link_allowed(u, company_id, film_ids, hosts, social_urls):
+                bad.append(u)
+    if bad:
+        raise BadLink("issue carries a link that is not allowed (only the company's own site/social and known "
+                      "YouTube films may be linked): " + ", ".join(sorted(set(bad))))
+
+
+def _films_block(films: list[dict]) -> str:
+    if not films:
+        return ""
+    lines = [f"- {f['title'] or 'the film'}: {f['url']}" for f in films]
+    return ("FEATURED FILM(S), FIXED DATA. The system renders each one as its official YouTube cover art linked to "
+            "the video, placed right after the section that presents the work, so you do NOT need to describe or "
+            "link the artwork. Refer to the film by name in the work section; if you include a link to it use this "
+            "exact URL and nothing else. Never link any other film, library, playlist or media page.\n" + "\n".join(lines))
+
+
 class EmptyIssue(RuntimeError):
     """compose() came back with no issue (empty, truncated or unparseable JSON). Never render or send it."""
 
@@ -177,7 +303,7 @@ def _require_issue(c: dict) -> dict:
     return c
 
 
-def compose(company_id: int, idea_text: str) -> dict:
+def compose(company_id: int, idea_text: str, films: list[dict] | None = None) -> dict:
     company = store.get_company(company_id)
     skill = store.get_skill_by_key(company_id, "content-newsletter")
     system = "\n\n".join(filter(None, [
@@ -187,6 +313,7 @@ def compose(company_id: int, idea_text: str) -> dict:
         worker._rules_block(skill),
         store.examples_block(company_id, "newsletters"),   # distilled approved exemplars
         _LIGHT_SCHEMA,                            # structural output the renderer parses — stays in code
+        _films_block(films or []),
     ]))
     user = f"Approved idea:\n{idea_text}\n\nCompose the full issue now as JSON."
     out = provider.think_json(system, user, model=worker._model_for(skill), max_tokens=6000,
@@ -224,6 +351,13 @@ def render_html(company_id: int, c: dict, hero_cid: str | None = None) -> str:
             f'<p style="margin:0 0 14px;font:16px/1.6 {bodyfont};color:{body};">{_esc(par)}</p>'
             for par in paras)
 
+    films_html = ""
+    for f in (c.get("films") or []):
+        label = _esc(f"Watch {f['title']} on YouTube" if f.get("title") else "Watch the film on YouTube")
+        img = (f'<a href="{_esc(f["url"])}"><img src="cid:{f["cid"]}" width="536" alt="{_esc(f.get("title") or "Watch the film")}" '
+               f'style="display:block;width:100%;height:auto;border-radius:10px;border:0;"></a>') if f.get("cid") else ""
+        films_html += (f'<tr><td style="padding:6px 32px 12px;">{img}<p style="margin:10px 0 0;font:600 14px/1.4 {bodyfont};">'
+                       f'<a href="{_esc(f["url"])}" style="color:{primary};text-decoration:none;">{label} &rarr;</a></p></td></tr>')
     sections = ""
     for s in (c.get("sections") or []):
         sections += (
@@ -269,6 +403,7 @@ def render_html(company_id: int, c: dict, hero_cid: str | None = None) -> str:
 <h1 style="margin:0 0 12px;font:700 26px/1.25 {headfont};color:{ink};">{_esc(c.get("headline"))}</h1>
 {p(c.get("intro"))}</td></tr>
 {sections}
+{films_html}
 {cta}
 <tr><td style="padding:26px 32px 28px;">
 <hr style="border:0;border-top:1px solid {hairline};margin:18px 0;">
@@ -287,6 +422,8 @@ def render_text(company_id: int, c: dict) -> str:
     lines = [c.get("headline") or company["name"], "", (c.get("intro") or "").strip(), ""]
     for s in (c.get("sections") or []):
         lines += [str(s.get("heading") or "").upper(), (s.get("body") or "").strip(), ""]
+    for f in (c.get("films") or []):
+        lines += [f"Watch {f['title'] or 'the film'} on YouTube: {f['url']}", ""]
     if c.get("cta_label") and c.get("cta_url"):
         lines += [f"{c['cta_label']}: {c['cta_url']}", ""]
     lines += ["-" * 40,
@@ -335,7 +472,7 @@ _FS_SCHEMA = (
 _FS_COMPOSE = _FS_GUIDE + "\n\n" + _FS_SCHEMA   # back-compat alias
 
 
-def compose_filmspoke(company_id: int, idea_text: str) -> dict:
+def compose_filmspoke(company_id: int, idea_text: str, films: list[dict] | None = None) -> dict:
     company = store.get_company(company_id)
     skill = store.get_skill_by_key(company_id, "content-newsletter")
     system = "\n\n".join(filter(None, [
@@ -345,6 +482,7 @@ def compose_filmspoke(company_id: int, idea_text: str) -> dict:
         worker._rules_block(skill),
         store.examples_block(company_id, "newsletters"),   # distilled approved exemplars
         _FS_SCHEMA,                               # structural output the renderer parses — stays in code
+        _films_block(films or []),
     ]))
     user = f"Approved idea:\n{idea_text}\n\nCompose the full issue now as JSON."
     out = provider.think_json(system, user, model=worker._model_for(skill), max_tokens=6000,
@@ -390,9 +528,11 @@ def _optimize_jpeg(data: bytes | None, max_w: int, q: int = 82) -> bytes | None:
         return data
 
 
-def _build_filmspoke(company_id: int, idea_text: str, kit: dict) -> dict:
+def _build_filmspoke(company_id: int, idea_text: str, kit: dict, films: list[dict] | None = None) -> dict:
     company = store.get_company(company_id)
-    c = compose_filmspoke(company_id, idea_text)
+    films = films or []
+    c = compose_filmspoke(company_id, idea_text, films)
+    check_links(c, company_id, films)
 
     jobs: list[tuple[str, str, str]] = []
     hero = c.get("hero") or {}
@@ -416,6 +556,7 @@ def _build_filmspoke(company_id: int, idea_text: str, kit: dict) -> dict:
         c.setdefault("hero", {})["cid"] = "hero.jpg"
     elif c.get("hero"):
         c["hero"]["use"] = False
+    c["films"] = _attach_films(films, images)
     for i, s in enumerate(c.get("sections") or []):
         img = s.get("image") or {}
         if not img.get("use"):
@@ -435,6 +576,19 @@ def _build_filmspoke(company_id: int, idea_text: str, kit: dict) -> dict:
     return {"subject": c.get("subject") or f"{company['name']} newsletter",
             "html": render_filmspoke(company_id, c, "logo.png" if logo_b64 else None),
             "text": render_text_filmspoke(company_id, c), "images": images, "content": c}
+
+
+def _attach_films(films: list[dict], images: list[tuple[str, bytes]]) -> list[dict]:
+    """Fetch each featured film's official YouTube cover art as an inline attachment (film{n}.jpg)."""
+    out = []
+    for n, f in enumerate(films):
+        b = _thumb_bytes(f["id"])
+        item = {"title": f.get("title") or "", "url": f["url"], "cid": None}
+        if b:
+            item["cid"] = f"film{n}.jpg"
+            images.append((item["cid"], _optimize_jpeg(b, 1200)))
+        out.append(item)
+    return out
 
 
 def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
@@ -521,12 +675,27 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
     if chips:
         rows.append(f'<tr><td style="padding:18px 44px 0;">{chips}</td></tr>')
 
+    def film_cards():
+        out = ""
+        for f in (c.get("films") or []):
+            label = _esc(f"Watch {f['title']} on YouTube" if f.get("title") else "Watch the film on YouTube")
+            img = (f'<a href="{_esc(f["url"])}" style="text-decoration:none;"><img src="cid:{f["cid"]}" width="512" '
+                   f'alt="{_esc(f.get("title") or "Watch the film")}" style="display:block;width:100%;height:auto;'
+                   f'border-radius:12px;border:0;"></a>') if f.get("cid") else ""
+            out += (f'<tr><td style="padding:16px 44px 0;">{img}<p style="margin:10px 0 0;font:600 14px/1.4 {bodyf};">'
+                    f'<a href="{_esc(f["url"])}" style="color:{red};text-decoration:none;">{label} &rarr;</a></p></td></tr>')
+        return out
+
     secs = c.get("sections") or []
     if secs:
         rows.append(divider())
-    for s in secs:
+    else:
+        rows.append(film_cards())
+    for si, s in enumerate(secs):
         rows.append(f'<tr><td style="padding:26px 44px 0;"><h2 style="margin:0 0 10px;font:700 22px/1.25 {headf};'
                     f'color:{ink};">{_esc(s.get("heading"))}</h2>{para(s.get("body"))}</td></tr>')
+        if si == 0:
+            rows.append(film_cards())
         img = s.get("image") or {}
         if img.get("use") and img.get("items"):
             if img.get("kind") == "grid":
@@ -642,8 +811,11 @@ def render_text_filmspoke(company_id: int, c: dict) -> str:
     cta = c.get("primary_cta") or {}
     if cta.get("label") and cta.get("url"):
         L += [f"{cta['label']}: {cta['url']}", ""]
-    for s in (c.get("sections") or []):
+    for si, s in enumerate(c.get("sections") or []):
         L += [str(s.get("heading") or "").upper(), (s.get("body") or "").strip(), ""]
+        if si == 0:
+            for f in (c.get("films") or []):
+                L += [f"Watch {f['title'] or 'the film'} on YouTube: {f['url']}", ""]
     st = c.get("steps") or {}
     if st.get("use") and st.get("items"):
         L += [str(st.get("title") or "How it works").upper()]
@@ -664,16 +836,19 @@ def render_text_filmspoke(company_id: int, c: dict) -> str:
     return worker._no_dashes("\n".join(x for x in L if x is not None))
 
 
-def build(company_id: int, idea_text: str) -> dict:
+def build(company_id: int, idea_text: str, brief: str = "") -> dict:
     """Compose + render one issue. Dispatches on the brand kit's `template`: a 'dark*' template (FilmSpoke)
     uses the dark cinematic renderer with multiple inline images; everything else uses the light card."""
     kit = brand.get_brand_kit(company_id) or {}
     _tmpl = str(kit.get("template") or "")
+    films = featured_films(company_id, brief, idea_text)   # the operator's links are data, carried by code
     if _tmpl.startswith("dark") or _tmpl == "light-saas":   # rich, brand-kit-driven renderer (dark OR light)
-        return _build_filmspoke(company_id, idea_text, kit)
-    c = compose(company_id, idea_text)
+        return _build_filmspoke(company_id, idea_text, kit, films)
+    c = compose(company_id, idea_text, films)
+    check_links(c, company_id, films)
     hero = imagegen.hero(c.get("hero_prompt") or "", purpose="image:newsletter") if c.get("hero_prompt") else None
     images = [("hero.jpg", hero)] if hero else []
+    c["films"] = _attach_films(films, images)
     return {"subject": c.get("subject") or f"{store.get_company(company_id)['name']} newsletter",
             "html": render_html(company_id, c, hero_cid="hero.jpg" if hero else None),
             "text": render_text(company_id, c), "images": images, "content": c}
@@ -729,7 +904,7 @@ def execute_idea_approval(task: dict, skill: dict, company: dict, actor: str) ->
         store.update_task(task["id"], status="done")
         return {"error": "no test group configured for this company"}
     try:
-        built = build(cid, task.get("draft") or "")
+        built = build(cid, task.get("draft") or "", brief=str((task.get("request") or {}).get("brief") or ""))
     except Exception as e:  # noqa: BLE001 - a failed build keeps the idea card approvable; nothing is sent
         msg = f"build failed: {e}"[:200]
         store.update_task(task["id"], status="awaiting_approval", last_status=msg)
