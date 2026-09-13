@@ -151,6 +151,16 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .ml{font-size:11.5px;color:var(--mut)}
 .mv{font-family:Poppins;font-size:21px;font-weight:600;color:var(--ink);margin-top:2px}
 .prow{display:flex;align-items:center;gap:11px;padding:13px}
+/* CALENDAR ROWS ON A PHONE (13 Sep 2026): the text shared one line with up to five buttons and was
+   squeezed to a few characters a line ("Why D..."). Under 640px the text takes the full width and the
+   buttons sit on their own line underneath, right-aligned. */
+@media (max-width:640px){
+  .calrow{flex-wrap:wrap;align-items:flex-start;row-gap:10px}
+  .calrow>div:first-child{flex:1 1 100% !important}
+  .calrow>.row{margin-left:auto}
+  .calrow .cname{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35}
+  .calrow .csub{line-height:1.6}
+}
 .pval{font-family:Poppins;font-weight:600;font-size:14px;color:var(--ink)}
 .orow{display:flex;align-items:center;gap:8px}
 .qhead{display:flex;align-items:center;gap:10px;margin:16px 2px 8px;font-family:Poppins;font-weight:600}
@@ -1395,7 +1405,7 @@ async function renderCalendar(v){
     sending.forEach(j=>{
       const pct=j.total?Math.round(100*j.sent/j.total):0;
       const st=j.paused_all?'PAUSED (all newsletter sending stopped)':(j.status==='paused'?'PAUSED (bounce spike)':`sending at ${j.per_hour}/hr, ~${j.hours_left}h left`);
-      h+=`<div class="card prow" style="border-left:3px solid var(--cy);cursor:pointer" onclick="openJobStats(${j.job_id})">
+      h+=`<div class="card prow calrow" style="border-left:3px solid var(--cy);cursor:pointer" onclick="openJobStats(${j.job_id})">
         <div style="flex:1;min-width:0"><div class="cname">${esc(j.title||'Newsletter')}</div>
         <div class="csub"><span class="chip cy">${esc(j.company)}</span> ${Number(j.sent).toLocaleString()} / ${Number(j.total).toLocaleString()} sent (${pct}%) · ${esc(st)} · started ${esc(whenText(j.started))}</div>
         <div style="height:4px;border-radius:2px;background:var(--ln);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--cy)"></div></div></div>
@@ -1413,7 +1423,7 @@ async function renderCalendar(v){
   if(now.length){
     now.forEach(t=>{
       const st=t.status==='awaiting_correction'?'correcting':'needs your yes';
-      h+=`<div class="card prow" style="cursor:pointer;border-left:3px solid var(--cy)" onclick="go('inbox')">
+      h+=`<div class="card prow calrow" style="cursor:pointer;border-left:3px solid var(--cy)" onclick="go('inbox')">
         <div style="flex:1;min-width:0"><div class="cname">${esc(t.title||t.kind)}</div>
         <div class="csub"><span class="chip cy">${esc(t.company)}</span> ${esc(kindLabel(t.kind))} · ${st} · ${esc(whenText(t.when))}</div></div>
         <div class="row" style="flex:none;gap:6px">${calLinkBtn(t)}${ic('back',16)}</div></div>`;
@@ -1424,7 +1434,7 @@ async function renderCalendar(v){
   h+=`<div class="h">Recurring</div>`;
   if(rec.length){
     rec.forEach(t=>{
-      h+=`<div class="card prow" style="${t.enabled?'':'opacity:.5'}"><div style="flex:1;min-width:0">
+      h+=`<div class="card prow calrow" style="${t.enabled?'':'opacity:.5'}"><div style="flex:1;min-width:0">
         <div class="cname">${esc(t.title||'Task')}</div>
         <div class="csub"><span class="chip cy">${esc(t.company)}</span> ${esc(cadenceText(t))} · next ${esc(whenText(t.next_run))}${t.last_status?' · last: '+esc(t.last_status):''}</div></div>
         <div class="row" style="gap:6px;flex:none">
@@ -1440,7 +1450,7 @@ async function renderCalendar(v){
     h+=`<div class="h">Upcoming</div>`;
     upc.forEach(t=>{
       const isMail=!!(t.to||t.subject);   // a scheduled EMAIL: who, what, from whom, which deal, and the email itself
-      h+=`<div class="card prow"><div style="flex:1;min-width:0">
+      h+=`<div class="card prow calrow"><div style="flex:1;min-width:0">
         <div class="cname">${esc(t.title||t.kind)}${t.to?` <span class="csub" style="font-weight:400">&lt;${esc(t.to)}&gt;</span>`:''}</div>
         ${t.subject?`<div class="csub" style="margin-top:2px;color:var(--ink)">${esc(t.subject)}</div>`:''}
         <div class="csub"><span class="chip cy">${esc(t.company)}</span> ${esc(kindLabel(t.kind))}${t.from?' from '+esc(t.from):''} · ${isMail?'sends ':''}${esc(whenText(t.run_at))}${t.deal?` · <span class="chip" style="cursor:pointer" onclick="openProject(${t.deal_id})">${esc(t.deal)}</span>`:''}</div>
@@ -1455,7 +1465,7 @@ async function renderCalendar(v){
     h+=`<div class="h">Reminders</div>`;
     rems.forEach(t=>{
       const opp=t.opportunity?` · <span class="chip">${esc(t.opportunity)}</span>`:'';
-      h+=`<div class="card prow"${t.deal_id?` style="cursor:pointer" onclick="openProject(${t.deal_id})"`:''}><div style="flex:1;min-width:0">
+      h+=`<div class="card prow calrow"${t.deal_id?` style="cursor:pointer" onclick="openProject(${t.deal_id})"`:''}><div style="flex:1;min-width:0">
         <div class="cname">${esc(t.title)}</div>
         <div class="csub"><span class="chip cy">${esc(t.company||'')}</span> ${esc(whenText(t.run_at))} · ${t.drafts?'drafts a reply':'nudge'}${opp}</div></div>
         <div class="row" style="gap:6px;flex:none"><button class="iconbtn sm" title="Cancel" onclick="event.stopPropagation();cancelReminderCal(${t.id})">${ic('trash',15)}</button></div></div>`;
@@ -1468,7 +1478,7 @@ async function renderCalendar(v){
     hist.forEach(j=>{
       const s=j.stats||{};
       const line=s.delivered!=null?`${Number(s.delivered).toLocaleString()} delivered · ${s.open_rate||0}% opened · ${s.click_rate||0}% clicked · ${s.bounce_rate||0}% bounced`:`${Number(j.sent).toLocaleString()} sent`;
-      h+=`<div class="card prow" style="opacity:.62;cursor:pointer" onclick="openJobStats(${j.job_id})">
+      h+=`<div class="card prow calrow" style="opacity:.62;cursor:pointer" onclick="openJobStats(${j.job_id})">
         <div style="flex:1;min-width:0"><div class="cname">${esc(j.title||'Newsletter')}</div>
         <div class="csub"><span class="chip">${esc(j.company)}</span> ${esc(whenText(j.finished||j.started))} · ${esc(line)}</div></div>
         <div class="row" style="gap:6px;flex:none">${calLinkBtn(j)}</div></div>`;
