@@ -37,6 +37,10 @@ def _hhmm(s: str) -> int:
 class Viya:
     def __init__(self, run):
         self.r, self.ph, self.p = run, run.ph, run.p
+        # positions read by TEXT earlier in this run (Book Now per course, holes, strip y): reused after
+        # release to save a ~3s screen read each, and always verified by the next text check
+        self.cache: dict = {}
+        self.last_ns: list = []
 
     def title(self, ns) -> str:
         t = _by(ns, "toolbar_title")
@@ -53,6 +57,7 @@ class Viya:
         if not name:
             raise LookupError(f"{course} Course not on the golf screen")
         book = min(self.ph.find(r"^Book Now$", ns), key=lambda n: abs(n["y"] - name[0]["y"]))
+        self.cache[("book", course)] = (book["x"], book["y"])
         self.ph.tap(book)
         if not self.ph.wait_for(r"^Find Availability$", timeout=15):
             raise LookupError("Book Tee Time screen did not open")
@@ -66,9 +71,15 @@ class Viya:
         self.ph.tap(lay)
 
     def pick_holes(self, holes: int, ns=None):
+        xy = self.cache.get(("holes", holes))
+        if xy and ns is None:
+            self.ph.tap(xy)
+            return
         ns = ns or self.ph.nodes()
         h = [n for n in _by(ns, "count_text") if n["label"] == str(holes)]
         if h:
+            if not _by(ns, "textNumPlayers"):   # only cache the normal form's position
+                self.cache[("holes", holes)] = (h[0]["x"], h[0]["y"])
             self.ph.tap(h[0])
 
     # ---- slots ----
@@ -128,6 +139,7 @@ class Viya:
         while time.monotonic() < end:
             ns = self.ph.nodes()
             if _by(ns, "btnConfirmTime") or _by(ns, "player_one_txt"):
+                self.last_ns = ns
                 return "slots" if _by(ns, "player_one_txt") else "assigned"
             if [n for n in _by(ns, "tv_title") if n["label"] == "Incomplete Data"]:
                 self.ph.tap_text(r"^Ok$", timeout=3)
@@ -153,6 +165,13 @@ class Viya:
     def reopen_form(self, course: str):
         """Back to the golf course list, then the course's Book Now: a freshly opened form rebuilds the day
         strip's range, which is how a newly released day becomes selectable. Falls back to a cold start."""
+        xy = self.cache.get(("book", course))
+        if xy:   # fast path: back to the list, tap the Book Now read earlier, confirm the form by text
+            self.ph.back(); time.sleep(1.2)
+            self.ph.tap(xy)
+            if self.ph.wait_for(r"^Find Availability$", timeout=8):
+                self.pick_holes(int(self.p.get("holes", 18)))
+                return
         for _ in range(4):
             ns = self.ph.nodes()
             name = [n for n in ns if n["label"] == f"{course} Course" and _rid(n) == "courseNameTxt"]
@@ -167,33 +186,40 @@ class Viya:
         self.home_to_booking(course)
         self.pick_holes(int(self.p.get("holes", 18)))
 
+    @staticmethod
+    def _centred(ns, rid):
+        c = [n for n in _by(ns, rid) if abs(n["x"] - 540) < 80]
+        return c[0]["label"] if c else ""
+
     def select_day(self, day, blind_swipes: int = 0) -> bool:
-        """Swipe the day strip to `day`, tap it, and return True only if it ends up CENTRED (the app's
-        selection). A day the form cannot centre (not released yet, or strip padding) returns False."""
-        want = f"{day.day:02d}"
-        ns = self.ph.nodes()
-        days = _by(ns, "hc_text_middle")
-        if not days:
-            return False
-        y = days[0]["y"] - 24
+        """Swipe the day strip to `day`, tap it, and return True only if the CENTRED month and day are the
+        target (the centred item is the app's selection). A day the form cannot centre (not released yet,
+        or strip padding) returns False. The month strip follows the day strip, so it disambiguates '05'."""
+        want_d, want_m = f"{day.day:02d}", f"{day:%b}"
+        y = self.cache.get("strip_y")
+        if y is None:
+            days = _by(self.ph.nodes(), "hc_text_middle")
+            if not days:
+                return False
+            y = self.cache["strip_y"] = days[0]["y"] - 24
         for _ in range(blind_swipes):
             self.ph.swipe(972, y, 108, y, 200); time.sleep(0.35)
-        seen_wrap = day.day > 20
+        prev = None
         for _ in range(10):
             ns = self.ph.nodes()
             days = _by(ns, "hc_text_middle")
             labels = [n["label"] for n in days]
-            if "01" in labels or any(x.isdigit() and labels[0].isdigit() and int(x) < int(labels[0]) for x in labels):
-                seen_wrap = True
-            hit = [n for n in days if n["label"] == want]
-            if hit and seen_wrap:
-                self.ph.tap(hit[0]); time.sleep(0.7)
-                centred = [n for n in _by(self.ph.nodes(), "hc_text_middle") if n["label"] == want and abs(n["x"] - 540) < 80]
-                return bool(centred)
-            before = labels
+            if self._centred(ns, "hc_text_middle") == want_d and self._centred(ns, "hc_text_top") == want_m:
+                return True
+            hit = [n for n in days if n["label"] == want_d]
+            if hit and self._centred(ns, "hc_text_top") in (want_m, ""):
+                self.ph.tap(hit[0]); time.sleep(0.8)
+                ns = self.ph.nodes()
+                return self._centred(ns, "hc_text_middle") == want_d and self._centred(ns, "hc_text_top") == want_m
+            if labels == prev:
+                return False   # end of the strip and the day is not selectable on it
+            prev = labels
             self.ph.swipe(972, y, 108, y, 200); time.sleep(0.6)
-            if [n["label"] for n in _by(self.ph.nodes(), "hc_text_middle")] == before:
-                return False   # end of the strip and the day is not on it
         return False
 
     def to_form(self, course: str, day):
@@ -266,7 +292,7 @@ def book(run) -> dict:
             continue
         state = v.find_availability()
         if state == "slots":
-            hdr = [n["label"] for n in _by(run.ph.nodes(), "member_date_time")]
+            hdr = [n["label"] for n in _by(v.last_ns or run.ph.nodes(), "member_date_time")]
             if hdr and hdr[0] != want_hdr:
                 raise LookupError(f"the list is for {hdr[0]}, not {want_hdr}: stopped before touching a slot")
             break
