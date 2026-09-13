@@ -164,6 +164,19 @@ _LIGHT_SCHEMA = (
 )
 
 
+class EmptyIssue(RuntimeError):
+    """compose() came back with no issue (empty, truncated or unparseable JSON). Never render or send it."""
+
+
+def _require_issue(c: dict) -> dict:
+    """An issue with no subject and no body is not an issue. Card 592 (13 Sep 2026) rendered header + footer
+    around nothing and sent that to the test group; the fallback subject hid the failure. Fail loudly instead."""
+    has_body = bool((c.get("sections") or []) or (c.get("intro") or "").strip() or (c.get("headline") or "").strip())
+    if not (c.get("subject") or "").strip() or not has_body:
+        raise EmptyIssue("the writer returned no usable issue (empty or cut-off JSON); nothing built, nothing sent")
+    return c
+
+
 def compose(company_id: int, idea_text: str) -> dict:
     company = store.get_company(company_id)
     skill = store.get_skill_by_key(company_id, "content-newsletter")
@@ -176,9 +189,9 @@ def compose(company_id: int, idea_text: str) -> dict:
         _LIGHT_SCHEMA,                            # structural output the renderer parses — stays in code
     ]))
     user = f"Approved idea:\n{idea_text}\n\nCompose the full issue now as JSON."
-    out = provider.think_json(system, user, model=worker._model_for(skill), max_tokens=2200,
+    out = provider.think_json(system, user, model=worker._model_for(skill), max_tokens=6000,
                               purpose="newsletter_compose", company=company.get("slug"))
-    return out or {}
+    return _require_issue(out or {})
 
 
 def _profile(company_id: int) -> dict:
@@ -334,9 +347,9 @@ def compose_filmspoke(company_id: int, idea_text: str) -> dict:
         _FS_SCHEMA,                               # structural output the renderer parses — stays in code
     ]))
     user = f"Approved idea:\n{idea_text}\n\nCompose the full issue now as JSON."
-    out = provider.think_json(system, user, model=worker._model_for(skill), max_tokens=2600,
+    out = provider.think_json(system, user, model=worker._model_for(skill), max_tokens=6000,
                               purpose="newsletter_compose", company=company.get("slug"))
-    return out or {}
+    return _require_issue(out or {})
 
 
 _FS_MAX_IMAGES = 5   # excluding the logo; bounds Gemini cost + latency per issue
@@ -715,7 +728,18 @@ def execute_idea_approval(task: dict, skill: dict, company: dict, actor: str) ->
     if not group:
         store.update_task(task["id"], status="done")
         return {"error": "no test group configured for this company"}
-    built = build(cid, task.get("draft") or "")
+    try:
+        built = build(cid, task.get("draft") or "")
+    except Exception as e:  # noqa: BLE001 - a failed build keeps the idea card approvable; nothing is sent
+        msg = f"build failed: {e}"[:200]
+        store.update_task(task["id"], status="awaiting_approval", last_status=msg)
+        try:
+            from .integrations import telegram as tg
+            tg.send(f"[{company['name']}] newsletter build failed on card #{task['id']}: {e}. Nothing sent. "
+                    f"Approve again to retry.")
+        except Exception:  # noqa: BLE001
+            pass
+        return {"error": msg}
     send_bulk(cid, "[TEST] " + built["subject"], built["html"], built["text"],
               [{"email": g["email"], "first_name": g.get("name")} for g in group],
               built["images"], tag="newsletter-test")

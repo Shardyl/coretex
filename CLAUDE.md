@@ -1292,3 +1292,9 @@ thing every new conversation reads; a stale line here costs a future session rea
 - OPEN: `newsletter.recipients()` matches `organisation ilike '%<company name>%'`, so Sensa's live audience is
   ~380 ("Sensa Productions") while ~13k contacts carry "Sensa" / "Sensa, Sky Vision". Decide before a real send.
   The cold-cohort warm-up drip is a skill rule only, not enforced in code. View counts are not code-stamped yet.
+- BUILD CAN FAIL, A SEND CANNOT BE EMPTY (13 Sep 2026): compose for card 592 hit its 2,600-token output cap,
+  the JSON never closed, `_loads` gave `{}` and a header-plus-footer email with the fallback subject went to
+  the test group. Now: `provider.think_json` retries ONCE with 3x headroom when stop_reason is max_tokens;
+  both compose paths run at 6,000 tokens; `newsletter._require_issue` raises `EmptyIssue` on no subject or
+  no body; `execute_idea_approval` catches any build error, keeps the idea card approvable with
+  `last_status`, alerts Telegram and returns the error to the cockpit toast. Nothing is sent on a failed build.

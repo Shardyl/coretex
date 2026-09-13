@@ -84,7 +84,15 @@ def media_blocks(urls: list[str] | None) -> list[dict]:
 def think(system: str, user: str, *, fast: bool = False, model: str | None = None,
           think_hard: bool = False, max_tokens: int = 6000, purpose: str = "think",
           company: str | None = None, cache: bool = False, images: list[str] | None = None) -> str:
-    """One-shot completion → plain text. `model` overrides the fast/slow default when given.
+    """One-shot completion -> plain text. See _think for the (text, stop_reason) form."""
+    return _think(system, user, fast=fast, model=model, think_hard=think_hard, max_tokens=max_tokens,
+                  purpose=purpose, company=company, cache=cache, images=images)[0]
+
+
+def _think(system: str, user: str, *, fast: bool = False, model: str | None = None,
+           think_hard: bool = False, max_tokens: int = 6000, purpose: str = "think",
+           company: str | None = None, cache: bool = False, images: list[str] | None = None) -> tuple[str, str | None]:
+    """One-shot completion -> (text, stop_reason). stop_reason == "max_tokens" means the answer was CUT OFF. `model` overrides the fast/slow default when given.
     `cache=True` prompt-caches the system prompt — set it on REPEAT jobs (same big system prefix
     re-sent often: the inbox classifier, manager reviews, drafts) so the prefix reads at ~10%.
     `images` = data: URLs (images/PDFs) the worker should actually see when drafting."""
@@ -116,7 +124,7 @@ def think(system: str, user: str, *, fast: bool = False, model: str | None = Non
         # A generation call that produced nothing is a FAILURE, never an empty answer. Callers that
         # write for a client must be able to tell "the model had nothing" from "the model said nothing".
         raise EmptyCompletion(f"{purpose}: no text returned (stop_reason={stop})")
-    return text
+    return text, stop
 
 
 class EmptyCompletion(RuntimeError):
@@ -406,8 +414,19 @@ def think_json(system: str, user: str, *, fast: bool = True, model: str | None =
 
     `images` = data: URLs the model should read (screenshots, PDFs), same contract as think()."""
     sys = system + "\n\nRespond with ONLY a valid JSON object — no prose, no markdown fences."
-    return _loads(think(sys, user, fast=fast, model=model, max_tokens=max_tokens,
-                        purpose=purpose, company=company, cache=cache, images=images))
+    text, stop = _think(sys, user, fast=fast, model=model, max_tokens=max_tokens,
+                        purpose=purpose, company=company, cache=cache, images=images)
+    out = _loads(text)
+    if not out and stop == "max_tokens":
+        # CUT OFF MID-JSON, NOT A BAD ANSWER. Newsletter compose for card 592 (13 Sep 2026) spent exactly
+        # its 2,600-token cap, the JSON never closed, _loads returned {} and an EMPTY issue went to the
+        # test group. A truncated JSON call gets ONE retry with real headroom before anyone sees {}.
+        big = max(max_tokens * 3, 8000)
+        print(f"[provider] {purpose}: JSON truncated at {max_tokens} tokens -> retry at {big}", flush=True)
+        text, stop = _think(sys, user, fast=fast, model=model, max_tokens=big,
+                            purpose=purpose, company=company, cache=cache, images=images)
+        out = _loads(text)
+    return out
 
 
 def research_json(system: str, user: str, *, model: str | None = None,
