@@ -1298,3 +1298,11 @@ thing every new conversation reads; a stale line here costs a future session rea
   both compose paths run at 6,000 tokens; `newsletter._require_issue` raises `EmptyIssue` on no subject or
   no body; `execute_idea_approval` catches any build error, keeps the idea card approvable with
   `last_status`, alerts Telegram and returns the error to the cockpit toast. Nothing is sent on a failed build.
+- FEATURED FILMS ARE DATA (13 Sep 2026): `newsletter.featured_films` pulls every YouTube id from the brief +
+  idea, resolves it in `media_assets`, and the build renders the official YouTube cover art (`i.ytimg.com`
+  maxres/sd/hq) as an inline card linked to the video after THE WORK section (both renderers + plain text).
+  `check_links` fails the build on any URL that is not the company's own site (profile domains/live_site/send
+  root), one of its own social pages, or a real film id (featured or in its library); coretex.uk is always
+  blocked. Ideation must repeat every brief URL verbatim. Verified on card 592 -> review 596.
+- SENSA NEVER DOES FREE (owner, 13 Sep 2026): no free sample/frame/trial in any newsletter; CTA = see the work
+  or talk. Universal rule: film links are public YouTube URLs, never the internal media library.
