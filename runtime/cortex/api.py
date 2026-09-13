@@ -33,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Json
 from pydantic import BaseModel
 
-from . import (anchor_score, capabilities, catalog, config, contentqueue, crm, db, documents, engine, fitness, gmail, knowledge, meetingprep, nurture, pipeline,
+from . import (newsletter, anchor_score, capabilities, catalog, config, contentqueue, crm, db, documents, engine, fitness, gmail, knowledge, meetingprep, nurture, pipeline,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
                skillqa, social, social_comments, social_config, social_connect, social_dm, social_warm, store, webauthn_auth, whatsapp,
                worker)
@@ -2846,6 +2846,37 @@ class PauseToggle(BaseModel):
     paused: bool
 
 
+class ExcludeBody(BaseModel):
+    labels: list[str] | None = None
+    domains: list[str] | None = None
+    emails: list[str] | None = None
+    why: str = ""
+
+
+@app.post("/api/newsletter/{task_id}/exclude")
+def newsletter_exclude(task_id: int, body: ExcludeBody, u: dict = Depends(current_user)) -> dict:
+    """Add exclusions to one built issue (review / scheduled / send card): company labels, email domains,
+    single addresses. The next count and the frozen send list both honour them."""
+    _guard_task(u, task_id)
+    t = store.get_task(task_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="no such card")
+    ex = newsletter.add_issue_exclusions(task_id, body.labels, body.domains, body.emails, body.why)
+    return {"ok": True, "exclude": ex, "audience": newsletter.audience_summary(t["company_id"], task_id)}
+
+
+@app.get("/api/newsletter/{task_id}/audience")
+def newsletter_audience(task_id: int, u: dict = Depends(current_user)) -> dict:
+    _guard_task(u, task_id)
+    t = store.get_task(task_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="no such card")
+    au = newsletter.audience(t["company_id"], task_id)
+    return {"ok": True, "established": len(au["established"]), "cold_batch": len(au["cold_batch"]),
+            "cold_waiting": au["cold_waiting"], "cold_cap": au["cold_cap"], "excluded": len(au["excluded"]),
+            "exclusions": au["exclusions"], "summary": newsletter.audience_summary(t["company_id"], task_id)}
+
+
 @app.get("/api/newsletter/status")
 def newsletter_status_get(_: None = Depends(auth)) -> dict:
     return engine.newsletter_status()
@@ -3372,6 +3403,20 @@ SKILL_TOOLS = [
     {"name": "list_scheduled",
      "description": "List the scheduled recurring jobs (e.g. SEO reports).",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}}},
+    {"name": "newsletter_audience",
+     "description": "Who a built newsletter issue will reach: established contacts, this issue's cold-cohort batch, "
+                    "how many cold contacts are still waiting, and who is excluded. Pass the card id (review, "
+                    "scheduled or send card). Use it to answer 'how many will this go to / who gets it'.",
+     "input_schema": {"type": "object", "properties": {"task_id": {"type": "integer"}}, "required": ["task_id"]}},
+    {"name": "newsletter_exclude",
+     "description": "Exclude people from ONE newsletter issue (never the whole list): company labels matched on the "
+                    "contact's company name (e.g. 'HBMSU'), email domains (e.g. 'hbmsu.ac.ae'), or single addresses. "
+                    "Pass the card id. The featured client of a case-study issue is excluded automatically; use this "
+                    "for anyone else Rashad names.",
+     "input_schema": {"type": "object", "properties": {
+        "task_id": {"type": "integer"}, "labels": {"type": "array", "items": {"type": "string"}},
+        "domains": {"type": "array", "items": {"type": "string"}}, "emails": {"type": "array", "items": {"type": "string"}},
+        "why": {"type": "string"}}, "required": ["task_id"]}},
     {"name": "list_calendar",
      "description": "Read the unified Calendar to answer 'what's on my calendar / what's piling up / what's "
                     "due'. Returns three lanes: now_to_deal_with (un-dated open work in the Inbox), recurring "
@@ -3888,6 +3933,22 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             slugs.append(c["slug"])
         return (f"created '{inp['skill_key']}' across all companies ({', '.join(slugs)})"
                 + (f" in {dept}" if dept else " — but no department set; tell me which department it belongs to"))
+    if name == "newsletter_audience":
+        t = store.get_task(int(inp["task_id"]))
+        if not t:
+            return "no such card"
+        return newsletter.audience_summary(t["company_id"], t["id"])
+    if name == "newsletter_exclude":
+        t = store.get_task(int(inp["task_id"]))
+        if not t:
+            return "no such card"
+        try:
+            ex = newsletter.add_issue_exclusions(t["id"], inp.get("labels"), inp.get("domains"), inp.get("emails"),
+                                                 inp.get("why") or "")
+        except ValueError as e:
+            return str(e)
+        return (f"excluded on card #{t['id']}: labels {ex.get('labels')}, domains {ex.get('domains')}, "
+                f"emails {ex.get('emails')}. Now: {newsletter.audience_summary(t['company_id'], t['id'])}")
     if name == "add_rule":
         if inp.get("scope") == "universal":
             store.add_universal_rule(inp["skill"], inp["rule"])

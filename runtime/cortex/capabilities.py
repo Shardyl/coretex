@@ -160,7 +160,9 @@ CAPABILITIES: list[tuple[str, str]] = [
      "A newsletter request (create_task on content-newsletter) lands as a plain-text IDEA card; approving it "
      "builds the HTML issue and sends the [TEST] to the company's test group only; the review card then "
      "schedules it to the company's monthly slot; the send card on the day sends to the live list — every step "
-     "requires his approval, an exact recipient-count echo, and biometric/PIN. Never auto."),
+     "requires his approval, an exact recipient-count echo, and biometric/PIN. Never auto. Audience per issue "
+     "(newsletter_audience): established contacts every issue + a capped cold-cohort batch that doubles on clean "
+     "sends; the featured client of a case study is excluded automatically; newsletter_exclude adds more."),
     ("Unified Calendar",
      "Everything schedulable is on ONE timeline (list_calendar to read it): a 'Now / to deal with' lane of "
      "un-dated open work, recurring jobs (e.g. weekly SEO reports), and dated one-offs (e.g. a scheduled "

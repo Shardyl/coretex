@@ -129,24 +129,173 @@ _SUPPRESS = ("newsletter_opt_out is true "
              "or coalesce(lead_status,'') ilike '%%not interest%%'")
 
 
-def recipients(company_id: int) -> list[dict]:
-    """The full newsletter audience for a company: its contacts minus opt-out / bounced / not-interested,
-    valid email only, de-duplicated. Returns [{email, first_name}]."""
+_FREEMAIL = {"gmail.com", "hotmail.com", "yahoo.com", "outlook.com", "icloud.com", "live.com", "aol.com",
+             "protonmail.com", "me.com", "msn.com", "ymail.com", "googlemail.com"}
+
+
+def audience_config(company_id: int) -> dict:
+    """WHO a company's newsletter goes to, from `company_profiles.data.newsletter_audience` (owner-set data,
+    not code). Defaults reproduce the old behaviour (organisation label = company name, no exclusions, no
+    phasing) so a company without the block is unchanged.
+      org_labels                 organisation labels that count as this company's list (ilike, any)
+      exclude_sources            lead_source values never on the newsletter (e.g. bought outreach prospects)
+      exclude_instantly_campaigns contacts sitting in an Instantly campaign are left to that sequence
+      cold_sources               lead_source values of the COLD cohort: never mailed, dripped in capped batches
+      cold_cap / cold_cap_max    first batch size, and the ceiling the cap doubles towards on clean sends"""
+    co = store.get_company(company_id) or {}
+    a = dict((_profile(company_id).get("newsletter_audience") or {}))
+    a.setdefault("org_labels", [co.get("name") or ""])
+    a.setdefault("exclude_sources", [])
+    a.setdefault("exclude_instantly_campaigns", False)
+    a.setdefault("cold_sources", [])
+    a.setdefault("cold_cap", 500)
+    a.setdefault("cold_cap_max", 4000)
+    return a
+
+
+def cold_cap(company_id: int) -> int:
+    """Current cold-cohort batch size (state, in settings); starts at the profile's cold_cap."""
+    a = audience_config(company_id)
+    v = db.setting_get(f"nl_cold_cap:{company_id}")
+    return int(v) if v else int(a["cold_cap"])
+
+
+def issue_exclusions(task_id: int | None) -> dict:
+    """Per-issue exclusions stored on the built issue: {labels, domains, emails, why}."""
+    if not task_id:
+        return {}
+    art = db.setting_get(f"newsletter:{task_id}") or {}
+    return dict(art.get("exclude") or {})
+
+
+def client_exclusions(company_id: int, films: list[dict]) -> dict:
+    """A case-study issue never goes to the client it features (owner rule, 13 Sep 2026). From each featured
+    film's `client` label in the media library: the label itself (matched on company_name) plus the email
+    domains of contacts filed under it, free-mail excluded. Stored on the issue; the send applies it."""
+    labels, domains = [], set()
+    for f in films:
+        row = db.one("select client from media_assets where youtube_video_id=%s and client is not null "
+                     "order by (company_id=%s) desc limit 1", (f["id"], company_id))
+        label = ((row or {}).get("client") or "").strip()
+        if not label or label.lower() in {x.lower() for x in labels}:
+            continue
+        labels.append(label)
+        for r in db.query("select email from crm_master where company_name ilike %s and email like '%%@%%'",
+                          (f"%{label}%",)):
+            d = r["email"].strip().lower().rsplit("@", 1)[-1]
+            if d and d not in _FREEMAIL:
+                domains.add(d)
+        for acc in db.query("select id from crm_accounts where name ilike %s", (f"%{label}%",)):
+            for r in db.query("select email from crm_master where account_id=%s and email like '%%@%%'", (acc["id"],)):
+                d = r["email"].strip().lower().rsplit("@", 1)[-1]
+                if d and d not in _FREEMAIL:
+                    domains.add(d)
+    if not labels:
+        return {}
+    return {"labels": labels, "domains": sorted(domains), "emails": [],
+            "why": "featured client(s) are never sent the issue about them"}
+
+
+def add_issue_exclusions(task_id: int, labels=None, domains=None, emails=None, why: str = "") -> dict:
+    """Merge manual exclusions onto a built issue (review / scheduled / send card). Returns the merged block."""
+    key = f"newsletter:{task_id}"
+    art = db.setting_get(key)
+    if not art:
+        raise ValueError(f"card #{task_id} has no built newsletter to exclude from")
+    ex = dict(art.get("exclude") or {})
+    ex["labels"] = sorted({*(ex.get("labels") or []), *[x.strip() for x in (labels or []) if x.strip()]})
+    ex["domains"] = sorted({*(ex.get("domains") or []), *[x.strip().lower().lstrip("@") for x in (domains or []) if x.strip()]})
+    ex["emails"] = sorted({*(ex.get("emails") or []), *[x.strip().lower() for x in (emails or []) if x.strip()]})
+    if why:
+        ex["why"] = ((ex.get("why") or "") + "; " + why).strip("; ")
+    art["exclude"] = ex
+    db.setting_set(key, art)
+    return ex
+
+
+def _excluded(r: dict, ex: dict) -> bool:
+    if not ex:
+        return False
+    e = (r.get("email") or "").strip().lower()
+    dom = e.rsplit("@", 1)[-1] if "@" in e else ""
+    if e in set(ex.get("emails") or []):
+        return True
+    if dom and dom in set(ex.get("domains") or []):
+        return True
+    cn = (r.get("company_name") or "").lower()
+    return any(cn and lab.lower() in cn for lab in (ex.get("labels") or []))
+
+
+def audience(company_id: int, task_id: int | None = None) -> dict:
+    """The audience for ONE issue, split so the owner can see exactly what a send reaches:
+       established  contacts sent every issue (everyone not in the cold cohort, plus cold contacts already
+                    delivered once)
+       cold_batch   the next capped slice of the cold cohort (never mailed before), in import order
+       cold_waiting how many cold contacts are still queued for later issues
+       excluded     contacts removed by this issue's exclusions (featured client, manual)"""
+    a = audience_config(company_id)
     co = store.get_company(company_id)
-    org, slug = co["name"], co.get("slug")
-    rows = db.query(
-        "select email, first_name from crm_master where organisation ilike %s "
-        "and email ~ '^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$' "
-        "and not (do_not_market @> %s::jsonb) "   # per-company DO NOT MARKET
-        f"and not ({_SUPPRESS}) order by email",
-        (f"%{org}%", Json([slug])))
-    seen, out = set(), []
+    labels = [x for x in a["org_labels"] if x] or [co["name"]]
+    org_sql = " or ".join(["organisation ilike %s"] * len(labels))
+    params: list = [f"%{x}%" for x in labels] + [Json([co.get("slug")])]
+    sql = (f"select id, email, first_name, company_name, lead_source, created_at from crm_master where ({org_sql}) "
+           "and email ~ '^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$' "
+           "and not (do_not_market @> %s::jsonb) "
+           f"and not ({_SUPPRESS})")
+    if a["exclude_sources"]:
+        sql += " and coalesce(lead_source,'') <> all(%s)"
+        params.append(list(a["exclude_sources"]))
+    if a["exclude_instantly_campaigns"]:
+        sql += " and coalesce(campaign_name,'') = ''"
+    sql += " order by created_at, id"
+    rows = db.query(sql, tuple(params))
+    ex = issue_exclusions(task_id)
+    delivered: set[str] = set()
+    cold_src = set(a["cold_sources"])
+    if cold_src:
+        ensure_jobs_table()
+        delivered = {r["email"] for r in db.query(
+            "select distinct email from newsletter_deliveries where company_id=%s", (company_id,))}
+    seen: set[str] = set()
+    established, cold, excluded = [], [], []
     for r in rows:
         e = (r["email"] or "").strip().lower()
-        if e and e not in seen:
-            seen.add(e)
-            out.append({"email": e, "first_name": (r.get("first_name") or "").strip()})
-    return out
+        if not e or e in seen:
+            continue
+        seen.add(e)
+        item = {"email": e, "first_name": (r.get("first_name") or "").strip()}
+        if _excluded(r, ex):
+            excluded.append(item)
+        elif cold_src and (r.get("lead_source") in cold_src) and e not in delivered:
+            cold.append(item)
+        else:
+            established.append(item)
+    cap = cold_cap(company_id) if cold_src else len(cold)
+    return {"established": established, "cold_batch": cold[:cap], "cold_waiting": max(0, len(cold) - cap),
+            "cold_cap": cap, "excluded": excluded, "exclusions": ex}
+
+
+def recipients(company_id: int, task_id: int | None = None) -> list[dict]:
+    """The list ONE send reaches: established contacts plus this issue's cold batch, minus the issue's
+    exclusions. De-duplicated, valid email only. Returns [{email, first_name}]. Pass the card id so the count
+    the owner confirms and the list the job freezes are computed the same way."""
+    au = audience(company_id, task_id)
+    return au["established"] + au["cold_batch"]
+
+
+def audience_summary(company_id: int, task_id: int | None = None) -> str:
+    """One line the owner reads on the card: what this send reaches and why."""
+    au = audience(company_id, task_id)
+    n = len(au["established"]) + len(au["cold_batch"])
+    parts = [f"{n:,} recipients: {len(au['established']):,} established"]
+    if au["cold_batch"] or au["cold_waiting"]:
+        parts.append(f"+ {len(au['cold_batch']):,} cold-cohort (batch cap {au['cold_cap']:,}, "
+                     f"{au['cold_waiting']:,} still waiting)")
+    if au["excluded"]:
+        ex = au["exclusions"]
+        who = ", ".join((ex.get("labels") or []) + (ex.get("domains") or [])) or "manual"
+        parts.append(f"| {len(au['excluded']):,} excluded ({who})")
+    return " ".join(parts)
 
 
 # ---------- build ----------
@@ -596,7 +745,8 @@ def _build_filmspoke(company_id: int, idea_text: str, kit: dict, films: list[dic
 
     return {"subject": c.get("subject") or f"{company['name']} newsletter",
             "html": render_filmspoke(company_id, c, "logo.png" if logo_b64 else None),
-            "text": render_text_filmspoke(company_id, c), "images": images, "content": c}
+            "text": render_text_filmspoke(company_id, c), "images": images, "content": c,
+            "exclude": client_exclusions(company_id, films)}
 
 
 def _attach_films(films: list[dict], images: list[tuple[str, bytes]]) -> list[dict]:
@@ -872,7 +1022,8 @@ def build(company_id: int, idea_text: str, brief: str = "") -> dict:
     c["films"] = _attach_films(films, images)
     return {"subject": c.get("subject") or f"{store.get_company(company_id)['name']} newsletter",
             "html": render_html(company_id, c, hero_cid="hero.jpg" if hero else None),
-            "text": render_text(company_id, c), "images": images, "content": c}
+            "text": render_text(company_id, c), "images": images, "content": c,
+            "exclude": client_exclusions(company_id, films)}
 
 
 # ---------- send ----------
@@ -947,9 +1098,9 @@ def execute_idea_approval(task: dict, skill: dict, company: dict, actor: str) ->
     # The card is a SIMPLE message (subject line only), never raw HTML. The built HTML lives in the
     # artifact below and in the real test email the operator reviews in their inbox.
     summary = (f"Subject: {built['subject']}\n\n"
-               f"Sent to your test group. Approve to send to the full {company['name']} list.")
+               f"Sent to your test group. Approve to schedule it for the full {company['name']} list.")
     store.update_task(rev["id"], draft=summary, status="awaiting_approval")
-    db.setting_set(f"newsletter:{rev['id']}", {
+    db.setting_set(f"newsletter:{rev['id']}", {"exclude": built.get("exclude") or {},
         "subject": built["subject"], "html": built["html"], "text": built["text"],
         "images_b64": [[cid, base64.b64encode(b).decode()] for cid, b in built["images"]]})
     return {"sent_to": f"the test group ({len(group)})", "review_task": rev["id"]}
@@ -976,7 +1127,7 @@ def execute_send_all(task: dict, skill: dict, company: dict, actor: str, confirm
     if not art:
         store.update_task(task["id"], status="done")
         return {"error": "no built newsletter found for this card"}
-    n = len(recipients(cid))
+    n = len(recipients(cid, task["id"]))
     if not live_sends_on():
         store.update_task(task["id"], status="awaiting_approval")
         return {"blocked": True, "recipients": n,
@@ -985,7 +1136,7 @@ def execute_send_all(task: dict, skill: dict, company: dict, actor: str, confirm
     if not confirmed:
         store.update_task(task["id"], status="awaiting_approval")
         return {"needs_confirm": True, "recipients": n}
-    recips = recipients(cid)
+    recips = recipients(cid, task["id"])
     images = _decode_images(art.get("images_b64"), art.get("hero_b64"))
     sent = send_bulk(cid, art["subject"], art["html"], art["text"], recips, images, tag="newsletter")
     store.update_task(task["id"], status="done")
@@ -1049,9 +1200,89 @@ create table if not exists newsletter_send_jobs (
 """
 
 
+_DELIVERIES_DDL = """
+create table if not exists newsletter_deliveries (
+    id bigserial primary key,
+    company_id bigint not null,
+    email text not null,
+    job_id bigint,
+    sent_at timestamptz not null default now()
+);
+create index if not exists newsletter_deliveries_co_email on newsletter_deliveries (company_id, email);
+"""
+_COLD_CLEAN_PCT = 0.03   # a finished send with bounces under this share of sent doubles the cold cap
+
+
+_DELIVERIES_DDL = """
+create table if not exists newsletter_deliveries (
+    id bigserial primary key,
+    company_id bigint not null,
+    email text not null,
+    job_id bigint,
+    sent_at timestamptz not null default now()
+);
+create index if not exists newsletter_deliveries_co_email on newsletter_deliveries (company_id, email);
+"""
+_COLD_CLEAN_PCT = 0.03   # a finished send with bounces under this share of sent doubles the cold cap
+
+
 def ensure_jobs_table() -> None:
     db.execute(_JOBS_DDL)
     db.execute("alter table newsletter_send_jobs add column if not exists images_b64 jsonb")
+    db.execute(_DELIVERIES_DDL)
+
+
+def _record_deliveries(company_id: int, job_id: int, chunk: list[dict]) -> None:
+    """Who has now received a newsletter from this company: the cold cohort graduates through this table."""
+    emails = [c["email"] for c in chunk if c.get("email")]
+    if emails:
+        db.execute("insert into newsletter_deliveries (company_id, email, job_id) "
+                   "select %s, unnest(%s::text[]), %s", (company_id, emails, job_id))
+
+
+def _ramp_cold_cap(job: dict, sent: int) -> None:
+    """A finished send that stayed clean (new bounces under 3% of sent) earns the next cold batch double the
+    size, up to the profile's ceiling. A dirty send leaves the cap where it is (the 8% spike already pauses)."""
+    cid = job["company_id"]
+    a = audience_config(cid)
+    if not a["cold_sources"] or sent <= 0:
+        return
+    try:
+        bnew = len(mailgun.suppressions(send_domain(cid), "bounces")) - (job["bounces_at_start"] or 0)
+    except Exception:  # noqa: BLE001
+        return
+    if bnew <= sent * _COLD_CLEAN_PCT:
+        cur = cold_cap(cid)
+        nxt = min(cur * 2, int(a["cold_cap_max"]))
+        if nxt != cur:
+            db.setting_set(f"nl_cold_cap:{cid}", nxt)
+    db.execute(_DELIVERIES_DDL)
+
+
+def _record_deliveries(company_id: int, job_id: int, chunk: list[dict]) -> None:
+    """Who has now received a newsletter from this company: the cold cohort graduates through this table."""
+    emails = [c["email"] for c in chunk if c.get("email")]
+    if emails:
+        db.execute("insert into newsletter_deliveries (company_id, email, job_id) "
+                   "select %s, unnest(%s::text[]), %s", (company_id, emails, job_id))
+
+
+def _ramp_cold_cap(job: dict, sent: int) -> None:
+    """A finished send that stayed clean (new bounces under 3% of sent) earns the next cold batch double the
+    size, up to the profile's ceiling. A dirty send leaves the cap where it is (the 8% spike already pauses)."""
+    cid = job["company_id"]
+    a = audience_config(cid)
+    if not a["cold_sources"] or sent <= 0:
+        return
+    try:
+        bnew = len(mailgun.suppressions(send_domain(cid), "bounces")) - (job["bounces_at_start"] or 0)
+    except Exception:  # noqa: BLE001
+        return
+    if bnew <= sent * _COLD_CLEAN_PCT:
+        cur = cold_cap(cid)
+        nxt = min(cur * 2, int(a["cold_cap_max"]))
+        if nxt != cur:
+            db.setting_set(f"nl_cold_cap:{cid}", nxt)
 
 
 def enqueue_send(company_id: int, task_id: int, art: dict, recips: list[dict],
@@ -1115,6 +1346,7 @@ def _drain_one(job: dict) -> dict | None:
     chunk = recips[sent:sent + batch]
     if not chunk:
         db.execute("update newsletter_send_jobs set status='done', updated_at=now() where id=%s", (jid,))
+        _ramp_cold_cap(job, sent)
         return {"status": "done", "job_id": jid, "task_id": job["task_id"], "company_id": cid,
                 "subject": job["subject"], "sent": sent, "total": total}
     images = _decode_images(job.get("images_b64"), job.get("hero_b64"))
@@ -1127,7 +1359,12 @@ def _drain_one(job: dict) -> dict | None:
     done = newsent >= total
     db.execute("update newsletter_send_jobs set sent=%s, status=%s, last_batch_at=now(), updated_at=now() where id=%s",
                (newsent, "done" if done else "running", jid))
+    try:
+        _record_deliveries(cid, jid, chunk[:n])
+    except Exception:  # noqa: BLE001 - bookkeeping must never stop a send
+        pass
     if done:
+        _ramp_cold_cap(job, newsent)
         return {"status": "done", "job_id": jid, "task_id": job["task_id"], "company_id": cid,
                 "subject": job["subject"], "sent": newsent, "total": total}
     return None

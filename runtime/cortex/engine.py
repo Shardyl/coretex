@@ -1094,7 +1094,7 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         # through the cockpit confirm — it shows exactly who it reaches + takes the PIN/fingerprint. A plain
         # approve (cockpit OR Telegram) NEVER fires one.
         n = (len(newsletter.test_group(company["id"])) if task["kind"] == "newsletter_idea"
-             else len(newsletter.recipients(company["id"])))
+             else len(newsletter.recipients(company["id"], task["id"])))
         who = "test-group" if task["kind"] == "newsletter_idea" else "recipient"
         return {"needs_confirm": True, "recipients": n,
                 "error": f"Confirm with the {who} count ({n:,}) in the cockpit."}
@@ -2325,9 +2325,10 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
         return {"ok": False, "needs_confirm": True, "action": "test", "company": company["name"],
                 "recipients": len(g), "to": [{"email": x["email"], "name": x.get("name")} for x in g]}
     if task["kind"] in ("newsletter_review", "newsletter_send"):
-        n = len(newsletter.recipients(task["company_id"]))
+        n = len(newsletter.recipients(task["company_id"], task["id"]))
         action = "schedule" if task["kind"] == "newsletter_review" else "send"
-        info = {"ok": False, "needs_confirm": True, "recipients": n, "company": company["name"], "action": action}
+        info = {"ok": False, "needs_confirm": True, "recipients": n, "company": company["name"], "action": action,
+                "audience": newsletter.audience_summary(task["company_id"], task["id"])}
         if action == "schedule":
             info["date"] = _next_newsletter_slot(company["id"]).strftime("%-d %b %Y")
         return info
@@ -2399,7 +2400,7 @@ def confirm_send_task(task_id: int, count: int, stepup_token: str | None = None)
         return {"ok": False, "error": "not a newsletter card"}
     is_test = task["kind"] == "newsletter_idea"
     n = (len(newsletter.test_group(task["company_id"])) if is_test
-         else len(newsletter.recipients(task["company_id"])))
+         else len(newsletter.recipients(task["company_id"], task["id"])))
     try:
         if int(count) != n:
             label = "test group" if is_test else "list"
@@ -2478,7 +2479,7 @@ def bump_blog_to_front(task_id: int) -> dict:
 def _dispatch_newsletter(task, skill, company, art, n) -> dict:
     """Stage 3 confirm: actually send (throttled drip). Counts toward earned-auto (offer at 5)."""
     cid = company["id"]
-    recips = newsletter.recipients(cid)
+    recips = newsletter.recipients(cid, task["id"])
     per_hour = int(db.setting_get("newsletter_per_hour") or newsletter.DEFAULT_PER_HOUR)
     jid = newsletter.enqueue_send(cid, task["id"], art, recips, per_hour)
     store.update_task(task["id"], status="done")
@@ -4977,7 +4978,7 @@ def _run_newsletter_scheduled_task(task: dict, skill: dict | None, company: dict
         store.update_task(task["id"], status="failed", last_status="no built newsletter found")
         return
     if db.setting_get(f"nl_auto:{cid}"):
-        recips = newsletter.recipients(cid)
+        recips = newsletter.recipients(cid, task["id"])
         per_hour = int(db.setting_get("newsletter_per_hour") or newsletter.DEFAULT_PER_HOUR)
         newsletter.enqueue_send(cid, task["id"], art, recips, per_hour)
         store.update_task(task["id"], kind="newsletter_send", schedule_kind=None, run_at=None,
@@ -4985,10 +4986,10 @@ def _run_newsletter_scheduled_task(task: dict, skill: dict | None, company: dict
         tg.send(f"📤 Auto-sending {company['name']} newsletter '{art['subject']}' to {len(recips):,} "
                 f"contacts (drip {per_hour}/hr).")
         return
-    n = len(newsletter.recipients(cid))
+    summary = newsletter.audience_summary(cid, task["id"])
     store.update_task(task["id"], kind="newsletter_send", schedule_kind=None, run_at=None,
-                      draft=f"Subject: {art['subject']}\n\nScheduled for today. Confirm to send to the full "
-                            f"{company['name']} list ({n:,} contacts).", status="awaiting_approval")
+                      draft=f"Subject: {art['subject']}\n\nScheduled for today. Confirm to send.\n"
+                            f"Audience: {summary}", status="awaiting_approval")
     tg.send(f"🗓 {company['name']} newsletter due today: '{art['subject']}'. Confirm the send in your Inbox.")
 
 
