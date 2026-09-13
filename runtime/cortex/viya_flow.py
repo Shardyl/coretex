@@ -167,11 +167,14 @@ class Viya:
         strip's range, which is how a newly released day becomes selectable. Falls back to a cold start."""
         xy = self.cache.get(("book", course))
         if xy:   # fast path: back to the list, tap the Book Now read earlier, confirm the form by text
-            self.ph.back(); time.sleep(1.2)
-            self.ph.tap(xy)
-            if self.ph.wait_for(r"^Find Availability$", timeout=15):   # a screen read alone is ~4s
-                self.pick_holes(int(self.p.get("holes", 18)))
-                return
+            self.ph.back()
+            # wait for the course list itself: a blind tap before it had drawn was lost and cost the 15s
+            # timeout plus the slow path (dry run, 13 Sep)
+            if self.ph.wait_for(rf"^{course} Course$", timeout=8):
+                self.ph.tap(xy)
+                if self.ph.wait_for(r"^Find Availability$", timeout=12):   # a screen read alone is ~3s
+                    self.pick_holes(int(self.p.get("holes", 18)))
+                    return
         for _ in range(4):
             ns = self.ph.nodes()
             name = [n for n in ns if n["label"] == f"{course} Course" and _rid(n) == "courseNameTxt"]
@@ -200,9 +203,9 @@ class Viya:
         (`blind_swipes` is ignored; kept for the caller's signature.)"""
         from datetime import date as _date, datetime as _dt
         want_d, want_m = f"{day.day:02d}", f"{day:%b}"
-        # ~1s between taps: a tap sent while the strip is still scrolling is swallowed (13 Sep rehearsal:
-        # 10 taps at 0.45s moved the strip 3 steps). 5 rounds self-correct any that are still lost.
-        for attempt in range(5):
+        # 1.8s between taps: a tap sent while the strip is still settling is swallowed (13 Sep rehearsals:
+        # 10 taps at 0.45s moved 3 steps, 5 taps at 1.0s moved 3). 8 rounds self-correct any still lost.
+        for attempt in range(8):
             ns = self.ph.nodes()
             cd, cm = self._centred(ns, "hc_text_middle"), self._centred(ns, "hc_text_top")
             if not (cd.isdigit() and cm):
@@ -218,9 +221,9 @@ class Viya:
                 return False
             plus2, plus1 = items[-1], items[-2]
             for _ in range(gap // 2):
-                self.ph.tap(plus2); time.sleep(1.0)
+                self.ph.tap(plus2); time.sleep(1.8)
             if gap % 2:
-                self.ph.tap(plus1); time.sleep(1.0)
+                self.ph.tap(plus1); time.sleep(1.8)
         ns = self.ph.nodes()
         return self._centred(ns, "hc_text_middle") == want_d and self._centred(ns, "hc_text_top") == want_m
 
@@ -343,8 +346,18 @@ def book(run) -> dict:
         if c in skipped:
             continue
         if c != current:
-            v.to_form(c, run.day)
-            state, current = v.find_availability(), c
+            # switch via the course list + that course's Book Now: tapping another course ON the form raises
+            # 'Booking Information: Please reconfirm your chosen date.' and blocks it (dry run, 13 Sep)
+            current = c
+            v.reopen_form(c)
+            if not v.select_day(run.day):
+                notes.append(f"{c}: could not select {want_hdr}")
+                run.log(notes[-1])
+                continue
+            state = v.find_availability()
+            hdr = [n["label"] for n in _by(v.last_ns, "member_date_time")] if state == "slots" else []
+            if hdr and hdr[0] != want_hdr:
+                raise LookupError(f"the {c} list is for {hdr[0]}, not {want_hdr}: stopped before touching a slot")
         if state != "slots":
             if p.get("skip_time_only_course", True):
                 skipped.add(c)
