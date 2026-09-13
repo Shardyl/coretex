@@ -14,7 +14,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
-from . import brand, imagegen, media, profile, provider, store, worker
+from . import brand, db, imagegen, media, profile, provider, store, worker
 from .newsletter import _optimize_jpeg
 
 _DUBAI = timezone(timedelta(hours=4))   # Cortex TZ (GST, no DST)
@@ -333,6 +333,96 @@ def concepts(company_id: int, brief: str, n: int = 1) -> list[dict]:
                               purpose="blog:ideate", company=company.get("slug"))
     ideas = [i for i in ((out or {}).get("ideas") or []) if i.get("title") and i.get("summary")]
     return ideas[:n]
+
+
+_MENU_DEFAULT_CATEGORIES = [
+    "buyer-intent (comparisons, pricing, alternatives)",
+    "problem-led (a pain the product solves)",
+    "use-case (a customer scenario or story)",
+    "technical how-to",
+    "AI angle (where AI changes the topic)",
+    "trust and proof (numbers, process, results)",
+]
+
+
+def menu_categories(skill: dict) -> list[str]:
+    """The refill menu's categories come from a skill rule that starts 'MENU CATEGORIES:' (universal or
+    company-local, semicolon-separated, up to the first full stop). Editable in the cockpit/Talk like any rule;
+    the list above is only the fallback when no such rule exists."""
+    uni, local = store.effective_rules(skill)
+    for r in list(local) + list(uni):     # a company rule wins over the universal one
+        m = re.match(r"\s*MENU CATEGORIES\s*:\s*(.+)", str(r or ""), re.I | re.S)
+        if m:
+            body = re.split(r"\.\s", m.group(1), 1)[0]
+            cats = [c.strip(" .") for c in body.split(";") if c.strip(" .")]
+            if cats:
+                return cats
+    return list(_MENU_DEFAULT_CATEGORIES)
+
+
+def menu_exclusions(company: dict, limit: int = 80) -> list[str]:
+    """Titles the menu must not repeat: every blog card this company has (published, queued, in review, or on an
+    open menu) plus the site's live posts. Titles only, never bodies."""
+    out, seen = [], set()
+    rows = db.query("select title, request from tasks where company_id=%s and kind in "
+                    "('blog','blog_idea','blog_scheduled','blog_menu') order by id desc limit %s",
+                    (company["id"], limit))
+    for r in rows:
+        t = (r.get("title") or "").strip()
+        if t and t.lower() not in seen and not t.lower().startswith("blog menu"):
+            seen.add(t.lower()); out.append(t)
+    for pg in _linkable_pages(company, limit=limit):
+        t = (pg.get("title") or "").strip()
+        if t and t.lower() not in seen:
+            seen.add(t.lower()); out.append(t)
+    return out[:limit * 2]
+
+
+def menu(company_id: int, n: int = 12, brief: str = "") -> list[dict]:
+    """REFILL MENU: N numbered blog concepts spread across the skill's MENU CATEGORIES, each a specific title plus
+    a two-line angle, none repeating a published or queued post. Plain text, nothing built. The owner replies with
+    the numbers he wants; only those become blog cards. Returns [{n, category, title, summary}]."""
+    company = store.get_company(company_id)
+    skill = store.get_skill_by_key(company_id, "content-blog-posts")
+    n = max(3, min(int(n or 12), 24))
+    cats = menu_categories(skill)
+    exclude = menu_exclusions(company)
+    system = "\n\n".join(filter(None, [
+        f"You are proposing a MENU of {n} blog post concepts for {company['name']} to choose from.",
+        skill.get("craft") or "",
+        worker._company_context(company),
+        worker._rules_block(skill),
+        store.examples_block(company_id, "blog"),
+        ("CATEGORIES (spread the concepts as evenly as possible across ALL of these, in this order):\n"
+         + "\n".join(f"- {c}" for c in cats)),
+        ("ALREADY PUBLISHED OR QUEUED (do NOT propose these or close variants of them):\n"
+         + "\n".join(f"- {t}" for t in exclude)) if exclude else "",
+        (f"Propose EXACTLY {n} distinct, on-brand concepts. For EACH give: the category (copy the category's "
+         "first words exactly), a specific, compelling working TITLE, and a two-sentence SUMMARY of the angle and "
+         "what the reader gets. Concrete and specific, never generic. Plain prose only: NO HTML, NO markdown, NO "
+         "em-dashes or en-dashes. These are options for the owner to pick from, NOT the posts. Return JSON "
+         '{"ideas":[{"category":"...","title":"...","summary":"..."}]} with exactly ' + str(n) + " items."),
+    ]))
+    out = provider.think_json(system, brief or "Build the menu now.", model=worker._model_for(skill),
+                              max_tokens=6000, purpose="blog:menu", company=company.get("slug"))
+    ideas = [i for i in ((out or {}).get("ideas") or []) if i.get("title") and i.get("summary")]
+    return [{"n": k, "category": (i.get("category") or "").strip(), "title": i["title"].strip(),
+             "summary": i["summary"].strip()} for k, i in enumerate(ideas[:n], 1)]
+
+
+def menu_text(company: dict, options: list[dict], need: int | None = None) -> str:
+    """The readable card body: numbered options grouped under their category headings."""
+    head = (f"The {company['name']} blog queue is down to its refill point. " if need else "")
+    head += "Pick the posts you want written: reply with the numbers (for example: 1, 5, 7). "             "Say 'more' for a fresh menu."
+    lines, last = [head, ""], None
+    for o in options:
+        if o.get("category") != last:
+            last = o.get("category")
+            lines.append(f"{last.upper()}" if last else "OTHER")
+        lines.append(f"{o['n']}. {o['title']}")
+        lines.append(f"   {o['summary']}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 def compose(company_id: int, brief: str) -> dict:

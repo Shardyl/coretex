@@ -1840,7 +1840,7 @@ function actionCard(t){
     if(t.kind==='social_action') return socialActionCard(t,co);
     const isEmail=t.kind==='email_reply'||t.kind==='email_draft';
     const isOutbound=t.kind==='email_draft';
-    const kindLabel=t.kind==='blog_idea'?'blog idea':t.kind==='blog'?'blog post — review':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to schedule':t.kind==='newsletter_send'?'newsletter due to send':t.kind==='email_draft'?'email draft':t.kind==='lead_escalation'?'strategic lead — yours to take':(isEmail?'email reply':esc(t.kind||'task'));
+    const kindLabel=t.kind==='blog_menu'?'blog menu — pick the next posts':t.kind==='blog_idea'?'blog idea':t.kind==='blog'?'blog post — review':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to schedule':t.kind==='newsletter_send'?'newsletter due to send':t.kind==='email_draft'?'email draft':t.kind==='lead_escalation'?'strategic lead — yours to take':(isEmail?'email reply':esc(t.kind||'task'));
     const title=esc(isEmail&&em?((isOutbound?'Email to ':'Reply to ')+(em.inquiry&&em.inquiry.name||em.to||'recipient')):(t.title||(wp&&wp.title)||('Task #'+t.id)));
     const body=esc(plainText(isEmail&&em&&em.preview?em.preview:(t.body||t.draft||'')));
     return `<div class="card" id="t${t.id}">
@@ -1850,7 +1850,8 @@ function actionCard(t){
       ${isEmail&&em?envHeader(em):''}
       ${isEmail&&em&&!isOutbound?emailBlock(em):''}
       ${mgrVerdict(t.manager)}
-      ${isEmail&&em&&em.html
+      ${t.kind==='blog_menu'?menuList(t):''}
+      ${t.kind==='blog_menu'?'':isEmail&&em&&em.html
         ? `<div class="body"><div class="meta" style="margin-bottom:6px">${ic('file',14)} ${isOutbound?'your email draft':'the email that will send'} (logo + signature)</div><div style="background:#fff;border-radius:10px;padding:16px 18px;white-space:normal">${em.html}</div></div>`
         : (body?`<div class="body"${isEmail?' style="white-space:pre-wrap"':''}>${isEmail?'<div class="meta" style="margin-bottom:5px;white-space:normal">'+ic('file',14)+' '+(isOutbound?'your email draft':'the email that will send')+' (signature included)</div>':''}${body}</div>`:'')}
       ${wp&&wp.preview?`<div class="meta">${ic('file',14)} draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
@@ -1861,14 +1862,14 @@ function actionCard(t){
       <div id="ap${t.id}" style="display:none"></div>
 ${t.owner_only?`<div class="csub" style="margin-bottom:6px;color:var(--mut)">${ic('lock',12)} Money approval — owner only (Rashad's PIN or fingerprint)</div>`:''}
       <div class="row">
-        <button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||'Approve')}</button>${pairBtn(t)}
+        ${t.kind==='blog_menu'?`<button class="btn go" onclick="menuPick(${t.id})">${ic('check',16)} Build selected</button>`:`<button class="btn go" onclick="act(${t.id},'approve')">${esc(t.approve_label||'Approve')}</button>${pairBtn(t)}`}
         ${isEmail?`<button class="btn" onclick="openSchedule(${t.id})" title="Approve now, send later">${ic('calendar',16)} Approve &amp; schedule</button>`:''}
         <button class="btn warn" id="cm${t.id}" onclick="voiceCorrect(${t.id},this)">${ic('mic',16)} Tap to talk</button>
         <button class="btn" id="ty${t.id}" onclick="typeCorrect(${t.id})">${ic('edit',16)} Type</button>
-        <button class="btn bad" onclick="act(${t.id},'skip')">${t.kind==='blog'?'Discard':'Skip'}</button>
+        <button class="btn bad" onclick="act(${t.id},'skip')">${t.kind==='blog'?'Discard':t.kind==='blog_menu'?'Dismiss menu':'Skip'}</button>
       </div>
       <div class="corr" id="cp${t.id}" style="display:none;margin-top:9px">
-        <div class="meta" style="margin:1px 0 6px">${ic('mic',13)} Explain what's right or wrong — Cortex redrafts from it and can learn a standing rule.</div>
+        <div class="meta" style="margin:1px 0 6px">${ic('mic',13)} ${t.kind==='blog_menu'?"Say the numbers you want (for example: 1, 5 and 7), or 'more' for a fresh menu.":"Explain what's right or wrong — Cortex redrafts from it and can learn a standing rule."}</div>
         <textarea id="corr${t.id}" rows="3" placeholder="Tap to talk above, or type here…" style="width:100%;box-sizing:border-box;background:var(--bg2,#0e1620);color:var(--fg,#dfe7ef);border:1px solid var(--ln,#22303f);border-radius:11px;padding:9px 11px;font:inherit;font-size:14px;resize:vertical"></textarea>
         <div class="row" style="margin-top:7px">
           <button class="btn go" onclick="sendCorr(${t.id})">Send correction</button>
@@ -2095,6 +2096,32 @@ function mgrVerdict(v){
   if(vv==='pass') return `<div style="color:#6ee7a8;font-size:12.5px;margin:6px 0">${ic('tool',14)} Manager passed${sm?' · '+sm:''}</div>`;
   const lbl=vv==='escalate'?'needs your judgement':'flagged';
   return `<div style="color:var(--warn);font-size:12.5px;margin:6px 0">${ic('alert',14)} Manager ${lbl}${sm?' · '+sm:''}</div>`;
+}
+// Blog MENU card: numbered options grouped by category, each with a checkbox; 'Build selected' sends the ticks.
+function menuList(t){
+  const opts=(t.request&&t.request.options)||[];
+  if(!opts.length) return `<div class="body">${esc(plainText(t.draft||''))}</div>`;
+  const need=t.request&&t.request.need;
+  let h=`<div class="csub" style="margin-bottom:8px">${need?'The queue is down to its refill point. ':''}Tick the posts you want written, then Build selected. Only those become drafts.</div>`;
+  let last=null;
+  for(const o of opts){
+    if(o.category!==last){ last=o.category; h+=`<div class="meta" style="margin:10px 0 4px;letter-spacing:.04em;text-transform:uppercase">${esc(last||'other')}</div>`; }
+    h+=`<label style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--ln,#22303f);cursor:pointer">
+      <input type="checkbox" class="mopt${t.id}" value="${o.n}" style="margin-top:4px;width:17px;height:17px;flex:none">
+      <span style="flex:1;min-width:0"><b>${o.n}. ${esc(o.title)}</b><div style="color:var(--mut);font-size:13px;margin-top:2px">${esc(o.summary)}</div></span></label>`;
+  }
+  return `<div class="body" style="white-space:normal">${h}</div>`;
+}
+async function menuPick(id){
+  const picks=[...document.querySelectorAll('.mopt'+id+':checked')].map(x=>parseInt(x.value,10));
+  if(!picks.length){ toast('Tick at least one post first'); return; }
+  const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;
+  try{ const r=await api(`/api/tasks/${id}/menu-pick`,{method:'POST',body:JSON.stringify({picks})});
+    if(card) card.style.opacity=1;
+    if(!(r&&r.ok)){ toast('Not done: '+((r&&r.error)||'failed')); return; }
+    toast(`Writing ${r.built_from_menu} post${r.built_from_menu===1?'':'s'} — full-text drafts land in your Inbox shortly ✓`);
+    if(card) card.remove(); refreshBadge();
+  }catch(e){ if(card) card.style.opacity=1; toast('Error: '+e.message); }
 }
 function laneRow(lane){
   if(!lane) return '';

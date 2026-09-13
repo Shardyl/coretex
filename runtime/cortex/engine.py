@@ -60,6 +60,7 @@ KIND_CLASS = {
     "quotation": "internal",   # a downloadable quote card; SENDING it to a client is a separate outward step
     "email_reply": "outward", "email_draft": "outward", "email_send": "outward", "blog": "outward",
     "blog_idea": "internal", "blog_scheduled": "outward",
+    "blog_menu": "internal",      # a numbered menu of concepts to pick from; nothing is built until he picks
     "newsletter_idea": "outward", "newsletter_review": "outward", "newsletter_send": "outward",
     "social_post": "outward", "dm_reply": "outward", "sms": "outward",
     "social_shift": "outward", "social_relogin": "internal", "social_action": "outward",
@@ -77,7 +78,7 @@ def kind_class(kind: str) -> str:
 # is never ambiguous (email sends, blog publishes, newsletter schedules/sends). Add a line when you add a kind.
 APPROVE_ACTION = {
     "email_reply": "Approve & send", "email_draft": "Approve & send",
-    "blog_idea": "Approve & build", "blog": "Approve & schedule",
+    "blog_idea": "Approve & build", "blog": "Approve & schedule", "blog_menu": "Build selected",
     "project_plan": "Confirm plan",
     "newsletter_idea": "Approve & build", "newsletter_review": "Approve & schedule",
     "newsletter_send": "Approve & send now",
@@ -841,6 +842,9 @@ def _run_task(task: dict) -> None:
     if task["kind"] == "blog":   # a blog request -> IDEATION: propose readable concept(s) to approve first
         _run_blog_ideation(task, skill, company)   # NO HTML built/staged yet; the build happens on approval
         return
+    if task["kind"] == "blog_menu":   # the refill menu: N concepts to pick from; picks become blog cards
+        _run_blog_menu(task, skill, company)
+        return
     if task["kind"] == "newsletter_idea":   # a newsletter request -> plain-text IDEA card; HTML only on approval
         _run_newsletter_ideation(task, skill, company)
         return
@@ -970,6 +974,119 @@ def _run_blog_ideation(task: dict, skill: dict, company: dict) -> None:
         _push_approval(t, skill, company)
     tg.send(f"[{company['name']}] {total} blog draft{'s' if total > 1 else ''} ready to read in your Inbox "
             f"(full text). Iterate the writing, then approve to build the formatted post.")
+
+
+def _run_blog_menu(task: dict, skill: dict, company: dict) -> None:
+    """REFILL MENU (owner, 13 Sep 2026): instead of a 'top up the queue' nudge, Cortex proposes a numbered menu
+    of concepts across the skill's MENU CATEGORIES (a rule, not code). The owner replies with the numbers he
+    wants (card reply, Telegram, or Talk); only those become normal `blog` cards and flow through the
+    existing idea -> build -> schedule approvals. Nothing is written or staged until he picks."""
+    from . import blog
+    req = task.get("request") or {}
+    n = int(req.get("count") or db.setting_get("queue_menu_size") or 12)
+    options = blog.menu(company["id"], n=n, brief=req.get("brief", ""))
+    if not options:
+        store.update_task(task["id"], status="failed", last_status="no menu generated")
+        tg.send(f"[{company['name']}] couldn't build the blog menu - try again from Talk.")
+        return
+    need = req.get("need")
+    title = f"Blog menu: pick the next {company['name']} posts"
+    store.update_task(task["id"], title=title, draft=blog.menu_text(company, options, need=need),
+                      request={**req, "options": options}, status="awaiting_approval")
+    t = store.get_task(task["id"])
+    msg = tg.send(_fmt(t, skill, company, None), _approval_buttons(task["id"]))
+    store.update_task(task["id"], tg_message_id=msg["message_id"])
+    _push_approval(t, skill, company)
+
+
+def _menu_parse_picks(text: str, options: list[dict]) -> list[int]:
+    """'1, 5 and 7' / '#3' / 'number two' -> [1, 5, 7], limited to numbers that exist on the menu."""
+    words = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+             "ten": 10, "eleven": 11, "twelve": 12}
+    nums = [int(x) for x in re.findall(r"\d+", text or "")]
+    nums += [v for w, v in words.items() if re.search(rf"\b{w}\b", (text or "").lower())]
+    valid = {int(o["n"]) for o in options}
+    out: list[int] = []
+    for k in nums:
+        if k in valid and k not in out:
+            out.append(k)
+    return out
+
+
+def _menu_build(task: dict, skill: dict, company: dict, picks: list[int], actor: str = "owner") -> dict:
+    """Turn the picked menu numbers into normal `blog` cards (one concept each, count=1) and close the menu.
+    Each pick starts the existing flow: full-text idea card -> approve & build -> approve & schedule."""
+    req = task.get("request") or {}
+    options = req.get("options") or []
+    by_n = {int(o["n"]): o for o in options}
+    chosen = [by_n[k] for k in picks if k in by_n]
+    if not chosen:
+        store.update_task(task["id"], status="awaiting_approval")   # the card stays open, nothing built
+        return {"blocked": True, "error": "Reply with the numbers you want written (for example: 1, 5, 7)."}
+    created = []
+    for o in chosen:
+        brief = (f"{o['title']}\n\n{o['summary']}\n\nCategory: {o.get('category') or 'general'}. "
+                 f"Write this exact concept as the post.")
+        t = store.create_task(company["id"], skill["id"], "blog", {"brief": brief, "count": 1, "menu_id": task["id"],
+                                                                     "menu_n": o["n"]})
+        created.append({"id": t["id"], "n": o["n"], "title": o["title"]})
+    store.update_task(task["id"], status="done", request={**req, "picked": picks, "created": created})
+    store.log_decision(task["id"], skill["id"], actor, "menu_pick", note=", ".join(str(k) for k in picks),
+                       snapshot={"created": created})
+    names = "; ".join(f"{c['n']}. {c['title']}" for c in created)
+    tg.send(f"[{company['name']}] writing {len(created)} post{'s' if len(created) != 1 else ''} from the menu: "
+            f"{names}. Full-text drafts land in your Inbox shortly.")
+    return {"built_from_menu": len(created), "created": created,
+            "sent_to": f"the writer - {len(created)} draft{'s' if len(created) != 1 else ''} will land in your Inbox"}
+
+
+def menu_reply(task: dict, text: str) -> dict:
+    """A reply on a menu card: numbers -> build those; 'more' / 'different' / 'new' -> a fresh menu (the
+    unpicked options are not repeated, the exclusions cover what is queued). Never touches the trust streak:
+    a menu is a choice, not a Manager-passed draft."""
+    skill = store.get_skill(task["skill_id"])
+    company = store.get_company(task["company_id"])
+    options = (task.get("request") or {}).get("options") or []
+    picks = _menu_parse_picks(text, options)
+    if picks:
+        return _menu_build(task, skill, company, picks)
+    if re.search(r"\b(more|different|another|new|again|fresh|other)\b", (text or "").lower()):
+        req = {**(task.get("request") or {}), "brief": (text or "").strip()}
+        store.update_task(task["id"], request=req, status="drafting")
+        _run_blog_menu(store.get_task(task["id"]), skill, company)
+        return {"regenerated": True}
+    store.update_task(task["id"], status="awaiting_approval")
+    return {"blocked": True, "error": "Reply with the numbers you want (for example: 1, 5, 7), or say 'more' for a fresh menu."}
+
+
+def menu_pick(task_id: int, picks: list[int]) -> dict:
+    """Cockpit 'Build selected' on a menu card (POST /api/tasks/{id}/menu-pick)."""
+    task, skill, company = _load(task_id)
+    if not task or task["kind"] != "blog_menu":
+        return {"ok": False, "error": "not a menu card"}
+    if task["status"] not in ("awaiting_approval", "awaiting_correction"):
+        return {"ok": False, "error": f"menu is '{task['status']}', not open"}
+    r = _menu_build(task, skill, company, [int(k) for k in (picks or [])])
+    return {"ok": not r.get("blocked"), **r}
+
+
+def ensure_blog_menu(company_id: int, need: int, reason: str = "refill") -> dict | None:
+    """The refill trigger (contentqueue): one OPEN menu per company at a time. If one is open, re-surface it
+    (the daily nag becomes a push to the same card); otherwise create a new menu card on the blog skill."""
+    company = store.get_company(company_id)
+    skill = store.get_skill_by_key(company_id, "content-blog-posts")
+    if not (company and skill):
+        return None
+    open_menu = db.one("select * from tasks where company_id=%s and kind='blog_menu' and status in "
+                       "('new','drafting','awaiting_approval','awaiting_correction') order by id desc limit 1",
+                       (company_id,))
+    if open_menu:
+        notifications.push_only("Pick the next posts", f"{company['name']}: the blog menu is waiting for your picks",
+                                url="/", category="approval")
+        return open_menu
+    n = int(db.setting_get("queue_menu_size") or 12)
+    return store.create_task(company_id, skill["id"], "blog_menu", {"brief": "", "count": n, "need": need,
+                                                                    "reason": reason})
 
 
 def _run_newsletter_ideation(task: dict, skill: dict, company: dict) -> None:
@@ -1107,6 +1224,9 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
                 "sent_to": "the build — the formatted post returns to your Inbox for review when ready"}
     if task["kind"] == "blog":   # approving the BUILT post QUEUES it to publish on the company's monthly day
         return _schedule_blog(task, skill, company, actor)
+    if task["kind"] == "blog_menu":   # 'Build selected' with the picks on the request; nothing picked = stays open
+        return _menu_build(task, skill, company, [int(k) for k in ((task.get("request") or {}).get("selected") or [])],
+                           actor)
     if task["kind"] == "social_shift":   # approving CLEARS the runner to run today's governed shift, then stop
         req = task.get("request") or {}
         acct = req.get("account", "")
@@ -1233,7 +1353,8 @@ def _approve(task: dict, skill: dict, company: dict, stepped_up: bool = False) -
             tg.edit(task["tg_message_id"],
                     f"⚠️ Not sent — {result.get('error', 'confirmation needed')}. Confirm a live send in the cockpit.")
         return result
-    skill = store.bump_streak(skill["id"])
+    if task["kind"] != "blog_menu":   # a menu pick is a choice, not a Manager-passed draft: no streak
+        skill = store.bump_streak(skill["id"])
     if task.get("tg_message_id"):
         if result and result.get("link"):
             tg.edit(task["tg_message_id"],
@@ -1247,7 +1368,7 @@ def _approve(task: dict, skill: dict, company: dict, stepped_up: bool = False) -
         else:
             tg.edit(task["tg_message_id"], f"✅ Approved — '{skill['name']}' (streak {skill['trust_streak']}). Done.")
     # Offer auto only for non-blog skills (blog ideation + publishing must never go auto).
-    if task["kind"] not in ("blog", "blog_idea") and skill["authority"] == "ask" and skill["trust_streak"] >= skill["auto_threshold"]:
+    if task["kind"] not in ("blog", "blog_idea", "blog_menu") and skill["authority"] == "ask" and skill["trust_streak"] >= skill["auto_threshold"]:
         higher = skill["trust_streak"] + 20
         tg.send(f"'{skill['name']}' has {skill['trust_streak']} clean approvals. "
                 f"Put it on auto for low-stakes work, or raise the bar for extra confidence?",
@@ -1277,6 +1398,12 @@ def _arm_on_done_reminders(task: dict) -> None:
 def _skip(task: dict, skill: dict, company: dict) -> None:
     # Blog drafts (concept or formatted): a skip AUTO-DELETES — trash the staged WP draft AND remove the card
     # + its stashed content, so a discarded blog leaves nothing behind (Rashad: skipped drafts auto-delete).
+    if task["kind"] == "blog_menu":   # dismissing a menu builds nothing and breaks no streak
+        store.update_task(task["id"], status="rejected")
+        store.log_decision(task["id"], skill["id"], "owner", "menu_dismissed")
+        if task.get("tg_message_id"):
+            tg.edit(task["tg_message_id"], "Menu dismissed - nothing written. Ask Talk for a fresh one any time.")
+        return
     if task["kind"] in ("blog", "blog_idea"):
         info = db.setting_get(f"wp:{task['id']}") or {}
         note = "Discarded"
@@ -1386,6 +1513,13 @@ def _on_message(msg: dict) -> None:
         return
     pending = db.query("select * from tasks where status='awaiting_correction' order by updated_at desc limit 1")
     if not pending:
+        if re.fullmatch(r"[\d\s,and&#.]+", text.lower()):   # '1, 5 and 7' with no card in correction = menu picks
+            menu = db.one("select * from tasks where kind='blog_menu' and status='awaiting_approval' "
+                          "order by id desc limit 1")
+            if menu:
+                r = menu_reply(menu, text)
+                if r.get("blocked"):
+                    tg.send(r["error"])
         return
     apply_correction(pending[0], text)
 
@@ -1542,6 +1676,11 @@ def _prep_build_quotation(task: dict, skill: dict, company: dict, text: str) -> 
 
 def apply_correction(task: dict, text: str) -> None:
     """Redraft a task from the owner's correction (works from Telegram OR the cockpit API)."""
+    if task["kind"] == "blog_menu":   # a reply on the menu = his picks (or 'more'); never a streak event
+        r = menu_reply(task, text)
+        if r.get("blocked"):
+            tg.send(f"Card #{task['id']}: {r['error']}")
+        return
     skill = store.get_skill(task["skill_id"])
     company = store.get_company(task["company_id"])
     store.reset_streak(skill["id"])   # the owner corrected a Manager-passed draft → streak breaks

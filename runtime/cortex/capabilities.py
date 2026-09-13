@@ -18,6 +18,12 @@ CAPABILITIES: list[tuple[str, str]] = [
      "biometric/PIN. You never send directly, and outward email can NEVER auto-send — it always needs his "
      "approval + step-up. So when he asks you to send an email, draft it into his Inbox and tell him to approve "
      "it to send. Do NOT say he has to send it himself — approving the card sends it."),
+    ("Blog menu — pick-list refill (LIVE)",
+     "When a company's blog queue drops to its refill point, Cortex puts a MENU card in the Inbox: 12 numbered "
+     "concepts across categories (buyer-intent, problem-led, use-case, technical, AI angle, trust). He replies "
+     "with the numbers he wants (on the card, Telegram, or here via correct_task on that card, e.g. '1, 5, 7'); "
+     "only those become blog cards and run the normal idea -> build -> schedule approvals. 'more' = a fresh "
+     "menu. On demand: create_task kind=blog_menu on content-blog-posts. Categories are a MENU CATEGORIES rule."),
     ("Blog imagery — provided photos win",
      "Images Rashad attaches when briefing a blog post ride the task all the way to the build: the FIRST "
      "provided image becomes the banner (WP featured image) and the rest are placed through the sections. "

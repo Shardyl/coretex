@@ -143,6 +143,14 @@ def clear_satisfied() -> int:
     return n
 
 
+def _wp_connected(company: dict) -> bool:
+    try:
+        from .integrations import wordpress as wp
+        return wp.for_company(company) is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def check_refills() -> list[dict]:
     """Rolling-N refill. Once a day, for every company x content kind that is ALREADY running a program, if the
     queue has dropped to the threshold, fire ONE reminder to ideate the next batch. Guarded to at most one
@@ -154,21 +162,34 @@ def check_refills() -> list[dict]:
     db.setting_set("refill_check_day", today)
     target, refill_at, batch = _cfg()
     fired: list[dict] = []
-    for co in db.query("select id, name from companies order by id"):
+    for co in db.query("select id, slug, name from companies order by id"):
         cid = co["id"]
         for kind, meta in KINDS.items():
-            # only nudge programs that are actually running (have ever produced this kind); never nag a
-            # company that hasn't started publishing this content type.
-            if not db.one("select 1 from tasks where company_id=%s and kind=%s limit 1", (cid, kind)):
+            if kind == "blog_scheduled":
+                # BLOG: any company with WordPress connected runs the blog program (owner, 13 Sep 2026), so a
+                # company that has never published (FilmSpoke) still gets a menu, not silence.
+                if not _wp_connected(co):
+                    continue
+            elif not db.one("select 1 from tasks where company_id=%s and kind=%s limit 1", (cid, kind)):
+                # other kinds: only nudge programs that are actually running (have ever produced this kind)
                 continue
             d = depth(cid, kind)
             if d > refill_at:
+                continue
+            need = max(batch, target - d)
+            if kind == "blog_scheduled":
+                # THE MENU REPLACES THE NUDGE (owner, 13 Sep 2026): Cortex proposes a numbered menu of concepts
+                # on a card; he replies with the numbers he wants and only those become drafts. One open menu
+                # per company; while it is open the daily nag is a push to that same card.
+                from . import engine
+                m = engine.ensure_blog_menu(cid, need)
+                fired.append({"company": co["name"], "kind": kind, "depth": d, "need": need,
+                              "menu": (m or {}).get("id")})
                 continue
             # Nag DAILY while the queue is low (Rashad 2026-06-20: "nag me about important things; it's my
             # job to get it done so it doesn't nag me"). The daily gate above means this fires once per day;
             # the dedup_key coalesces into the same card if it is still UNREAD, but if Rashad DISMISSED
             # yesterday's a fresh one appears today — so it keeps coming back until the queue is topped up.
-            need = max(batch, target - d)
             notifications.notify(
                 f"Top up the {co['name']} {meta['plural']} queue",
                 f"{d} {meta['plural']} scheduled (target {target}). Time to ideate {need} more.",

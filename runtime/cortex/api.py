@@ -471,7 +471,7 @@ def _enrich_action_card(t: dict) -> dict:
     sk = store.get_skill(t["skill_id"])         # the lane's autonomy state for the Inbox UI
     if sk:
         offer = (sk["authority"] == "ask" and sk["trust_streak"] >= sk["auto_threshold"]
-                 and t["kind"] != "blog" and sk["stakes"] == "low")
+                 and t["kind"] not in ("blog", "blog_idea", "blog_scheduled", "blog_menu") and sk["stakes"] == "low")
         t["lane"] = {"skill_id": sk["id"], "name": sk["name"], "trust_streak": sk["trust_streak"],
                      "auto_threshold": sk["auto_threshold"], "authority": sk["authority"],
                      "stakes": sk["stakes"], "auto_offer": offer}
@@ -2690,6 +2690,17 @@ def correct(task_id: int, body: Correction, u: dict = Depends(current_user)) -> 
     return engine.correct_task(task_id, body.text)
 
 
+class MenuPicks(BaseModel):
+    picks: list[int]
+
+
+@app.post("/api/tasks/{task_id}/menu-pick")
+def menu_pick(task_id: int, body: MenuPicks, u: dict = Depends(current_user)) -> dict:
+    """Blog menu card: the ticked numbers become blog cards (one concept each); the menu closes."""
+    _guard_task(u, task_id)
+    return engine.menu_pick(task_id, body.picks)
+
+
 @app.get("/api/tasks/{task_id}/pending-rule")
 def task_pending_rule(task_id: int, _: None = Depends(auth)) -> dict:
     """Cockpit polls this after a correction: the rule the background inference proposed, if any."""
@@ -3208,11 +3219,11 @@ SKILL_TOOLS = [
         "brief": {"type": "string"}, "revision": {"type": "string", "description": "optional: how to change a previous draft"}},
         "required": ["company", "skill", "brief"]}},
     {"name": "create_task",
-     "description": "THE DEFAULT for any 'draft/write/create' request (emails, notes, posts, replies, copy) and any work to do: it runs through the worker + manager and lands in Rashad's INBOX for approval. Use THIS — never the inline draft tool — whenever he asks you to draft something. After calling it, just tell him it's in his Inbox; do NOT paste a draft into the chat. kind: content (default; emails/notes/copy), blog, or newsletter_idea (ANY newsletter issue/idea request on the content-newsletter skill: it lands as a plain-text idea card; approving that builds the HTML and sends the [TEST] to the test group. The skill routes there anyway). For kind=blog it proposes readable CONCEPT(S) (title + summary) to approve first, then builds the formatted post — set count to how many ideas he asked for (e.g. 6). Pick a REAL skill_key (call list_skills if unsure).",
+     "description": "THE DEFAULT for any 'draft/write/create' request (emails, notes, posts, replies, copy) and any work to do: it runs through the worker + manager and lands in Rashad's INBOX for approval. Use THIS — never the inline draft tool — whenever he asks you to draft something. After calling it, just tell him it's in his Inbox; do NOT paste a draft into the chat. kind: content (default; emails/notes/copy), blog, or newsletter_idea (ANY newsletter issue/idea request on the content-newsletter skill: it lands as a plain-text idea card; approving that builds the HTML and sends the [TEST] to the test group. The skill routes there anyway). For kind=blog it proposes readable CONCEPT(S) (title + summary) to approve first, then builds the formatted post — set count to how many ideas he asked for (e.g. 6). kind=blog_menu (skill content-blog-posts) = a numbered MENU of options across categories (12 default) for him to pick from; he replies with numbers on the card (or via correct_task with text like '1, 5, 7') and only those become blog cards. Use blog_menu when he asks for 'options', 'a menu', 'ideas to choose from'. Pick a REAL skill_key (call list_skills if unsure).",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string"}, "skill": {"type": "string"},
-        "kind": {"type": "string", "description": "content (default), blog, or newsletter_idea"}, "brief": {"type": "string"},
-        "count": {"type": "integer", "description": "blog only: how many concepts to propose (1 default; 6 if he asks for six ideas)"}},
+        "kind": {"type": "string", "description": "content (default), blog, blog_menu, or newsletter_idea"}, "brief": {"type": "string"},
+        "count": {"type": "integer", "description": "blog: how many concepts to propose (1 default; 6 if he asks for six ideas). blog_menu: how many options on the menu (12 default)"}},
         "required": ["company", "skill", "brief"]}},
     {"name": "draft_email",
      "description": "Draft an OUTBOUND email (a new email, not a reply). It lands in his Inbox rendered as a "
@@ -4169,6 +4180,8 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         req = {"brief": inp.get("brief", "")}
         if inp.get("kind") == "blog":   # blog ideation: how many concepts to propose (default 1)
             req["count"] = max(1, min(int(inp.get("count") or 1), 10))
+        if inp.get("kind") == "blog_menu":   # the pick-list menu: how many options (default 12)
+            req["count"] = max(3, min(int(inp.get("count") or 12), 24))
         if inp.get("_images"):   # files/images shared in this Talk turn -> the worker drafts WITH them
             req["attachments"] = inp["_images"]
             req["attachment_names"] = inp.get("_image_names")
