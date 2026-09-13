@@ -1439,3 +1439,7 @@ thing every new conversation reads; a stale line here costs a future session rea
   `newsletter.require_unsubscribe` runs on every build (token in html + text, tracking on, else `NoUnsubscribe`);
   `_drain_one` pauses a job whose html lacks the token. Universal rule "UNSUBSCRIBE MUST WORK" on content-newsletter.
   Retro-checked 13 Sep 2026: all 5 queued Sensa issues + job 3 + all 5 domains pass.
+- TEST COPIES GO THROUGH A CARD (owner, 13 Sep 2026): `engine.newsletter_test_card(source_task_id, emails)`
+  (Talk `newsletter_test_send`, POST `/api/newsletter/{tid}/test-copy`) raises a `newsletter_test` card; approve
+  -> type the recipient count -> PIN -> `newsletter.send_test_copy` sends the stored issue (card artifact, or the
+  send job's copy after dispatch, via `issue_artifact`) as [TEST] to exactly those addresses. Never script a send.
