@@ -3012,6 +3012,17 @@ def newsletter_job(job_id: int, refresh: bool = True, u: dict = Depends(current_
             "preview": f"/api/content/preview/{j['task_id']}"}
 
 
+class TestCopyBody(BaseModel):
+    emails: list[str]
+
+
+@app.post("/api/newsletter/{task_id}/test-copy")
+def newsletter_test_copy(task_id: int, body: TestCopyBody, u: dict = Depends(current_user)) -> dict:
+    """Raise a card to send a test copy of a built issue to named addresses; the card's confirm does the send."""
+    _guard_task(u, task_id)
+    return engine.newsletter_test_card(task_id, body.emails)
+
+
 @app.get("/api/newsletter/stats")
 def newsletter_stats(company: str, job_id: int | None = None, u: dict = Depends(current_user)) -> dict:
     """Live delivery/open/click/bounce numbers for a company's latest (or a given) newsletter send."""
@@ -3553,6 +3564,12 @@ SKILL_TOOLS = [
     {"name": "list_scheduled",
      "description": "List the scheduled recurring jobs (e.g. SEO reports).",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}}},
+    {"name": "newsletter_test_send",
+     "description": "Rashad wants a TEST copy of a built newsletter issue sent to one or more addresses (his own, a "
+                    "colleague's). Pass the card id (review, scheduled, send or finished) and the emails. This raises "
+                    "an Inbox card; NOTHING sends until he approves it, types the recipient count and gives his PIN.",
+     "input_schema": {"type": "object", "properties": {"task_id": {"type": "integer"},
+        "emails": {"type": "array", "items": {"type": "string"}}}, "required": ["task_id", "emails"]}},
     {"name": "newsletter_stats",
      "description": "Live numbers for a company's newsletter send (latest by default, or job_id): sent, delivered, "
                     "failed + bounce rate, opened + open rate, clicked + click rate, unsubscribes, complaints. Read "
@@ -4120,6 +4137,10 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         r = engine.newsletter_send_now(int(inp["task_id"]))
         return (f"card #{inp['task_id']} is now a SEND card in the Inbox: confirm {r['recipients']:,} + PIN to start "
                 f"the drip. {r['audience']}") if r.get("ok") else r.get("error", "failed")
+    if name == "newsletter_test_send":
+        r = engine.newsletter_test_card(int(inp["task_id"]), list(inp.get("emails") or []))
+        return (f"card #{r['task_id']} in the Inbox: test copy of '{r['subject']}' to {', '.join(r['to'])}. "
+                f"Approve it, type {len(r['to'])}, PIN.") if r.get("ok") else r.get("error", "failed")
     if name == "newsletter_stats":
         co = store.get_company_by_slug(inp["company"])
         if not co:

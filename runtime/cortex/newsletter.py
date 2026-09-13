@@ -1646,5 +1646,36 @@ def stats_line(company_id: int, job_id: int | None = None) -> str:
             f"{st['complained']} complaints")
 
 
+def issue_artifact(task_id: int) -> dict:
+    """The built issue behind a card: the artifact while it is a review/scheduled/send card, or the send job's
+    copy once it has been dispatched (the artifact is cleared at dispatch)."""
+    art = db.setting_get(f"newsletter:{task_id}") or {}
+    if art.get("html"):
+        return art
+    j = db.one("select subject, html, body_text, images_b64, hero_b64 from newsletter_send_jobs where task_id=%s "
+               "order by id desc limit 1", (task_id,))
+    if j and j.get("html"):
+        return {"subject": j["subject"], "html": j["html"], "text": j["body_text"],
+                "images_b64": j.get("images_b64") or [], "hero_b64": j.get("hero_b64")}
+    return {}
+
+
+def send_test_copy(task: dict, skill: dict, company: dict, to: list[str], actor: str) -> dict:
+    """Send the stored issue, unchanged, as a [TEST] to exactly `to`. Called only from confirm_send_task after
+    the count + PIN gate. Marks the card done and logs the decision."""
+    src_id = int((task.get("request") or {}).get("source_task_id") or 0)
+    art = issue_artifact(src_id)
+    if not art.get("html"):
+        return {"error": "no built issue found for the source card"}
+    require_unsubscribe(company["id"], {"html": art["html"], "text": art.get("text") or ""})
+    images = _decode_images(art.get("images_b64"), art.get("hero_b64"))
+    n = send_bulk(company["id"], "[TEST] " + art["subject"], art["html"], art.get("text") or "",
+                  [{"email": e, "first_name": ""} for e in to], images, tag="newsletter-test")
+    store.update_task(task["id"], status="done", last_status=f"test copy sent to {len(to)}")
+    store.log_decision(task["id"], skill["id"], actor, "newsletter_test_sent", note=art["subject"],
+                       snapshot={"to": to, "source_task_id": src_id})
+    return {"sent_to": f"{n} test cop{'y' if n == 1 else 'ies'}: {', '.join(to)}"}
+
+
 def brand_kit(company_id: int) -> dict | None:
     return brand.get_brand_kit(company_id)

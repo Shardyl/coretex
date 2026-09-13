@@ -37,13 +37,13 @@ MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
 EMAIL_KINDS = {"email_reply"}              # an inbound-reply, sent via Gmail on approval
 EMAIL_SEND_KINDS = {"email_reply", "email_draft"}    # ALL kinds that actually SEND an email on approval
 EMAIL_RENDER_KINDS = EMAIL_KINDS | {"email_draft"}   # rendered as an email (envelope + logo) in the Inbox
-NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send", "email_reply", "email_draft",
+NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send", "newsletter_test", "email_reply", "email_draft",
                     "wa_reply", "golf_booking"}  # outward sends always need the owner
 # PUBLIC actions (go OUT to the public) — approving these needs a biometric step-up (see
 # feedback_public_actions_biometric). Internal items use the normal approve. Split by where the action fires:
 _APPROVE_PUBLIC = {"email_reply", "email_draft", "newsletter_idea", "blog", "social_shift", "social_action",
                    "wa_reply"}   # the action happens in approve_task
-_CONFIRM_PUBLIC = {"newsletter_review", "newsletter_send"}        # the action happens in confirm_send_task
+_CONFIRM_PUBLIC = {"newsletter_review", "newsletter_send", "newsletter_test"}   # the action happens in confirm_send_task
 
 # Phase 3.2 — central kind -> security class (the single source of truth for gating; merged spec §3a).
 #   internal : may auto-run on an auto lane with a clean manager verdict.
@@ -62,6 +62,7 @@ KIND_CLASS = {
     "blog_idea": "internal", "blog_scheduled": "outward",
     "blog_menu": "internal",      # a numbered menu of concepts to pick from; nothing is built until he picks
     "newsletter_idea": "outward", "newsletter_review": "outward", "newsletter_send": "outward",
+    "newsletter_test": "outward",
     "social_post": "outward", "dm_reply": "outward", "sms": "outward",
     "social_shift": "outward", "social_relogin": "internal", "social_action": "outward",
     "wa_reply": "outward",     # an approved WhatsApp reply the runner types back — goes to a real person
@@ -83,6 +84,7 @@ APPROVE_ACTION = {
     "project_plan": "Confirm plan",
     "newsletter_idea": "Approve & build", "newsletter_review": "Approve & schedule",
     "newsletter_send": "Approve & send now",
+    "newsletter_test": "Approve & send the test copy",
     "social_shift": "Approve today's run", "social_relogin": "I've logged back in",
     "social_action": "Approve & run",
     "wa_reply": "Approve & send on WhatsApp",
@@ -2483,6 +2485,12 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
         g = newsletter.test_group(task["company_id"])
         return {"ok": False, "needs_confirm": True, "action": "test", "company": company["name"],
                 "recipients": len(g), "to": [{"email": x["email"], "name": x.get("name")} for x in g]}
+    if task["kind"] == "newsletter_test":
+        # A TEST COPY of a built issue to named addresses (owner, 13 Sep 2026: "send it through Cortex so I can
+        # confirm it's one recipient"). Same gate as every outward send: the typed count + PIN. Nothing else.
+        to = [x for x in ((task.get("request") or {}).get("to") or []) if x]
+        return {"ok": False, "needs_confirm": True, "action": "test", "company": company["name"],
+                "recipients": len(to), "to": [{"email": x, "name": ""} for x in to]}
     if task["kind"] in ("newsletter_review", "newsletter_send"):
         n = len(newsletter.recipients(task["company_id"], task["id"]))
         action = "schedule" if task["kind"] == "newsletter_review" else "send"
@@ -2565,10 +2573,13 @@ def confirm_send_task(task_id: int, count: int, stepup_token: str | None = None)
     """Confirm a newsletter with the EXACT recipient count. Stage 2 (newsletter_review) -> SCHEDULE for the
     next free 1st; Stage 3 (newsletter_send) -> SEND now (drip). Count must match, so a misclick can't fire."""
     task, skill, company = _load(task_id)
-    if not task or task["kind"] not in ("newsletter_idea", "newsletter_review", "newsletter_send"):
+    if not task or task["kind"] not in ("newsletter_idea", "newsletter_review", "newsletter_send", "newsletter_test"):
         return {"ok": False, "error": "not a newsletter card"}
     is_test = task["kind"] == "newsletter_idea"
+    is_copy = task["kind"] == "newsletter_test"
+    copy_to = [x for x in ((task.get("request") or {}).get("to") or []) if x] if is_copy else []
     n = (len(newsletter.test_group(task["company_id"])) if is_test
+         else len(copy_to) if is_copy
          else len(newsletter.recipients(task["company_id"], task["id"])))
     try:
         if int(count) != n:
@@ -2581,6 +2592,8 @@ def confirm_send_task(task_id: int, count: int, stepup_token: str | None = None)
         return gate
     if is_test:   # build the issue + send the test to the (now-confirmed) reviewers + drop the review card
         return {"ok": True, "result": newsletter.execute_idea_approval(task, skill, company, "owner")}
+    if is_copy:   # the stored issue, unchanged, to exactly the confirmed addresses
+        return {"ok": True, "result": newsletter.send_test_copy(task, skill, company, copy_to, "owner")}
     art = db.setting_get(f"newsletter:{task_id}")
     if not art:
         return {"ok": False, "error": "no built newsletter found for this card"}
@@ -2688,6 +2701,30 @@ def newsletter_send_now(task_id: int) -> dict:
                             f"start the drip.\nAudience: {summary}", status="awaiting_approval")
     return {"ok": True, "task_id": task_id, "audience": summary,
             "recipients": len(newsletter.recipients(cid, task_id))}
+
+
+def newsletter_test_card(source_task_id: int, emails: list[str], actor: str = "owner") -> dict:
+    """Raise an Inbox card to send a TEST COPY of a built issue (review / scheduled / send card, or a finished
+    send by its task id) to named addresses. The card is the gate: approve -> type the recipient count -> PIN ->
+    it sends. Never sends here."""
+    src = store.get_task(source_task_id)
+    if not src:
+        return {"ok": False, "error": "no such card"}
+    art = newsletter.issue_artifact(source_task_id)
+    if not art.get("html"):
+        return {"ok": False, "error": "that card has no built issue"}
+    to = sorted({(e or "").strip().lower() for e in emails if e and "@" in e})
+    if not to:
+        return {"ok": False, "error": "no valid email addresses"}
+    t = store.create_task(src["company_id"], src["skill_id"], "newsletter_test",
+                          {"title": f"Test copy: {art['subject']}", "subject": art["subject"],
+                           "source_task_id": source_task_id, "to": to})
+    store.update_task(t["id"], title=f"Test copy: {art['subject']}", status="awaiting_approval",
+                      draft=f"Subject: {art['subject']}" + chr(10) + chr(10) +
+                            f"Send a TEST copy of this issue to: {', '.join(to)}" + chr(10) +
+                            "Approve, then type the number of recipients to confirm.")
+    _push_approval(store.get_task(t["id"]), store.get_skill(src["skill_id"]), store.get_company(src["company_id"]))
+    return {"ok": True, "task_id": t["id"], "to": to, "subject": art["subject"]}
 
 
 def newsletter_schedule_later(task_id: int) -> dict:
