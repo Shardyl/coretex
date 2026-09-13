@@ -1048,6 +1048,25 @@ def render_text_filmspoke(company_id: int, c: dict) -> str:
     return worker._no_dashes("\n".join(x for x in L if x is not None))
 
 
+class NoUnsubscribe(RuntimeError):
+    """The built issue would go out without a working unsubscribe. Never build, test or send it."""
+
+
+def require_unsubscribe(company_id: int, built: dict) -> dict:
+    """EVERY built issue must carry a working unsubscribe (owner rule, 13 Sep 2026): the %unsubscribe_url%
+    token in BOTH the HTML and the plain text, and Mailgun unsubscribe tracking ON for the sending domain
+    (otherwise the token goes out as literal text, which is what the first 1,900 HBMSU emails got)."""
+    html, text = built.get("html") or "", built.get("text") or ""
+    if "%unsubscribe_url%" not in html or "%unsubscribe_url%" not in text:
+        raise NoUnsubscribe("the issue has no %unsubscribe_url% in its HTML and/or plain text")
+    dom = send_domain(company_id)
+    if not dom:
+        raise NoUnsubscribe("no sending domain configured")
+    mailgun.ensure_unsubscribe_tracking(dom)   # turns it on if off; raises if it cannot
+    built["unsubscribe_checked"] = True
+    return built
+
+
 def build(company_id: int, idea_text: str, brief: str = "", hero_upload: bytes | None = None) -> dict:
     """Compose + render one issue. Dispatches on the brand kit's `template`: a 'dark*' template (FilmSpoke)
     uses the dark cinematic renderer with multiple inline images; everything else uses the light card."""
@@ -1055,7 +1074,7 @@ def build(company_id: int, idea_text: str, brief: str = "", hero_upload: bytes |
     _tmpl = str(kit.get("template") or "")
     films = featured_films(company_id, brief, idea_text)   # the operator's links are data, carried by code
     if _tmpl.startswith("dark") or _tmpl == "light-saas":   # rich, brand-kit-driven renderer (dark OR light)
-        return _build_filmspoke(company_id, idea_text, kit, films, hero_upload)
+        return require_unsubscribe(company_id, _build_filmspoke(company_id, idea_text, kit, films, hero_upload))
     c = compose(company_id, idea_text, films)
     check_links(c, company_id, films)
     if hero_upload:
@@ -1064,10 +1083,11 @@ def build(company_id: int, idea_text: str, brief: str = "", hero_upload: bytes |
         hero = imagegen.hero(c.get("hero_prompt") or "", purpose="image:newsletter") if c.get("hero_prompt") else None
     images = [("hero.jpg", hero)] if hero else []
     c["films"] = _attach_films(films, images)
-    return {"subject": c.get("subject") or f"{store.get_company(company_id)['name']} newsletter",
+    return require_unsubscribe(company_id, {
+            "subject": c.get("subject") or f"{store.get_company(company_id)['name']} newsletter",
             "html": render_html(company_id, c, hero_cid="hero.jpg" if hero else None),
             "text": render_text(company_id, c), "images": images, "content": c,
-            "exclude": client_exclusions(company_id, films)}
+            "exclude": client_exclusions(company_id, films)})
 
 
 # ---------- send ----------
@@ -1554,6 +1574,10 @@ def _drain_one(job: dict) -> dict | None:
         return {"status": "done", "job_id": jid, "task_id": job["task_id"], "company_id": cid,
                 "subject": job["subject"], "sent": sent, "total": total}
     images = _decode_images(job.get("images_b64"), job.get("hero_b64"))
+    if "%unsubscribe_url%" not in (job.get("html") or ""):
+        db.execute("update newsletter_send_jobs set status='paused', updated_at=now() where id=%s", (jid,))
+        return {"status": "paused", "job_id": jid, "task_id": job["task_id"], "company_id": cid,
+                "subject": job["subject"], "sent": sent, "total": total, "bounces": "no unsubscribe link in the issue"}
     try:
         n = send_bulk(cid, job["subject"], job["html"], job["body_text"], chunk, images, tag="newsletter")
     except Exception:  # noqa: BLE001 — transient; don't advance, retry next tick
