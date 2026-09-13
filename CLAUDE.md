@@ -1345,3 +1345,9 @@ thing every new conversation reads; a stale line here costs a future session rea
   review: Approve & schedule / Approve & send now (`newsletter_send_now`). Newsletter send card: Approve & send
   now / Approve & schedule (`newsletter_schedule_later` -> back to a review card). Calendar rows: queued blogs
   and newsletters both have move up/down and a now icon. Cockpit `pairBtn(t)` is the one place the pair lives.
+- MX ON EVERY news.* DOMAIN (13 Sep 2026): strict UAE corporate/government mail servers rejected the first Sensa
+  send ("sender domain does not exist") because the Mailgun subdomains had no MX. Added MX 10 mxa.mailgun.org +
+  mxb.mailgun.org: news.sensa.digital in GoDaddy (sensa.digital DNS is GoDaddy, no API), news.skyvision.film +
+  news.filmspoke.ai via the Cortex Cloudflare token, all Mailgun-verified. news.tabscanner.com still needs it,
+  in the OTHER Cloudflare account (owner). The box CF token is an ACCOUNT token: read it with grep+cut, never
+  `source` the env; verify at /accounts/{id}/tokens/verify. See memory reference_dns_access_by_domain.
