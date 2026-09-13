@@ -1405,3 +1405,9 @@ thing every new conversation reads; a stale line here costs a future session rea
 - On demand: Talk `create_task kind=blog_menu` on content-blog-posts ("give me blog options for Sensa").
 - First live run 13 Sep 2026: the three old refill notifications (Tabscanner 662, Sky Vision 636, FilmSpoke 457) were
   dismissed and `check_refills` fired menus 619 (Sky Vision, depth 3) and 620 (FilmSpoke, depth 0).
+- SNAP REWARDS PUBLISH PATH (found 13 Sep 2026): tasks 122 + 124 failed because the site's WordPress app password
+  (`SNAPREWARDS_WP_APP_PASSWORD` in cortex.env) is REJECTED: every authenticated call returns 401 (anonymous GETs work).
+  Task 125 (17 Sep) will fail the same way until the owner issues a new Application Password in Snap Rewards wp-admin
+  (Users -> Profile) and it is placed in cortex.env. `_run_blog_scheduled_task` now catches a publish error, writes
+  `last_status = publish failed: <why>`, raises a high-priority Inbox notification and a Telegram line, and leaves the
+  staged draft untouched, instead of a silent `failed` row.

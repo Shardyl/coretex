@@ -5212,7 +5212,22 @@ def _run_blog_scheduled_task(task: dict, skill: dict | None, company: dict | Non
     info = db.setting_get(f"wp:{task['id']}") or {}
     pid = info.get("post_id")
     site = wp.for_company(company) if company else None
-    result = site.go_live(pid) if (site and pid) else {}
+    try:
+        result = site.go_live(pid) if (site and pid) else {}
+    except Exception as e:  # noqa: BLE001
+        # A failed publish must say WHY and reach the Inbox. Snap Rewards 122 + 124 (Jul/Aug 2026) failed with an
+        # empty last_status; the cause was the site's WordPress app password being rejected (401) and nobody saw.
+        why = f"{type(e).__name__}: {str(e)[:100]}"
+        store.update_task(task["id"], status="failed", last_status=f"publish failed: {why}"[:120])
+        name = company["name"] if company else "?"
+        notifications.notify(f"Blog did not publish: {info.get('title', '')[:60]}",
+                             f"{name}: the scheduled publish failed ({why}). The staged draft is untouched; fix "
+                             "the site connection (a 401 means the WordPress application password is invalid) "
+                             "and re-run the card from the Calendar.",
+                             priority="high", category="approval", company_id=(company or {}).get("id"),
+                             target_type="task", target_id=str(task["id"]), dedup_key=f"pubfail:{task['id']}")
+        tg.send(f"[{name}] blog '{info.get('title', '')}' did NOT publish: {why}")
+        return
     store.update_task(task["id"], status="done", last_status="published")
     store.log_decision(task["id"], task.get("skill_id"), "system", "blog_published",
                        snapshot={"post_id": pid, "link": result.get("link"), "title": info.get("title")})
