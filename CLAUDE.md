@@ -1330,3 +1330,7 @@ thing every new conversation reads; a stale line here costs a future session rea
   recipient count + PIN at Stage 2 (schedule) and again at Stage 3 (send), the send drips at 250/hr with the
   8% bounce auto-pause, and `newsletter_paused` (POST /api/newsletter/pause) is the emergency stop and mid-send
   kill switch. The June rule "keep the lock OFF except for a deliberate real send" is retired.
+- SEND NOW (13 Sep 2026): `engine.newsletter_send_now(tid)` (Talk `newsletter_send_now`, POST
+  `/api/newsletter/{tid}/send-now`, owner only) turns a review/scheduled issue into the Stage-3 send card;
+  the owner still types the count + PIN, then it drips. Sensa phasing is OFF (owner): `cold_sources = []`,
+  the whole subscribed list every issue. Card 596 converted 13 Sep: 7,759 recipients, 5 HBMSU excluded.
