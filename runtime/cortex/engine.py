@@ -5274,6 +5274,10 @@ def run(poll_idle: float = 1.0) -> None:
         now = time.time()
         if now - last_poll >= 60:        # check Gmail for new enquiries + run any due scheduled tasks
             last_poll = now
+            try:
+                drain_newsletter_sends()   # FIRST: a live drip must not wait behind inbox polling (13 Sep 2026)
+            except Exception as e:  # noqa: BLE001
+                tg.send(f"(newsletter drip hiccup: {e})")
             _beat("poll_inquiries")
             try:
                 poll_inquiries()
@@ -5355,8 +5359,4 @@ def run(poll_idle: float = 1.0) -> None:
                 contentqueue.check_refills()   # rolling-N: nudge to ideate more when any content queue runs low
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(queue refill hiccup: {e})")
-            try:
-                drain_newsletter_sends()
-            except Exception as e:  # noqa: BLE001
-                tg.send(f"(newsletter drip hiccup: {e})")
         time.sleep(poll_idle)
