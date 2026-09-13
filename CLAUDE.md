@@ -1317,3 +1317,11 @@ thing every new conversation reads; a stale line here costs a future session rea
   `/api/newsletter/{tid}/exclude` add more, `newsletter_audience` / GET `/audience` read it back.
   Sensa (set 13 Sep 2026): labels ["Sensa"], exclude "Instantly Super Search" + Instantly-campaign contacts,
   cold = the June email scrape, cap 500 -> 4000. Live: 7,764 total = 3,636 established + 4,128 cold.
+- THE SUBSCRIBER FLAG IS THE LIST (owner, 13 Sep 2026): `newsletter_audience.mode = "subscribers"` on Sensa and
+  Tabscanner: the list = org label + `newsletter_subscriber = 'True'` (TEXT column holding 'True'/'False'/null,
+  compare as text). Flags set 13 Sep: Sensa 3,485 -> True, 6,703 -> False (bought prospects, Instantly-campaign,
+  unreachable; NOT an opt-out); Tabscanner 13,117 -> True (everyone reachable; the June ~16k send was the test).
+  Each changed row carries a `newsletter_list` history line. Adding someone to a newsletter = set the flag.
+  Universal rule rewritten to match. Live: Sensa 7,759 (3,634 + 4,125 cold), Tabscanner 15,293. Sky Vision and
+  FilmSpoke stay on mode "label" until the owner decides their lists. The flag is ONE column across organisations:
+  a contact filed under both Sensa and Tabscanner shares it (per-business layer is the real fix, see memory).
