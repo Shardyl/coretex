@@ -1339,3 +1339,9 @@ thing every new conversation reads; a stale line here costs a future session rea
   the Calendar get the same move up/down as blogs (the queue code was already generic, `contentqueue.KINDS`)
   plus a send-now icon. The "rolling-6 queue" in the June rule = the Calendar queue of `newsletter_scheduled`
   items, one per monthly slot, reorderable; there is no separate store and none is needed.
+- THE STANDARD PAIR (owner, 13 Sep 2026): every outbound card offers BOTH "now" and "schedule". Email: Approve &
+  send / Approve & schedule (datetime picker, run_at). Blog: Approve & schedule (monthly slot) / Approve & publish
+  now (`blog_publish_now`: approve + PIN, then run_at = now, the clock publishes within a minute). Newsletter
+  review: Approve & schedule / Approve & send now (`newsletter_send_now`). Newsletter send card: Approve & send
+  now / Approve & schedule (`newsletter_schedule_later` -> back to a review card). Calendar rows: queued blogs
+  and newsletters both have move up/down and a now icon. Cockpit `pairBtn(t)` is the one place the pair lives.

@@ -80,7 +80,7 @@ APPROVE_ACTION = {
     "blog_idea": "Approve & build", "blog": "Approve & schedule",
     "project_plan": "Confirm plan",
     "newsletter_idea": "Approve & build", "newsletter_review": "Approve & schedule",
-    "newsletter_send": "Approve & send",
+    "newsletter_send": "Approve & send now",
     "social_shift": "Approve today's run", "social_relogin": "I've logged back in",
     "social_action": "Approve & run",
     "wa_reply": "Approve & send on WhatsApp",
@@ -2512,6 +2512,34 @@ def newsletter_send_now(task_id: int) -> dict:
                             f"start the drip.\nAudience: {summary}", status="awaiting_approval")
     return {"ok": True, "task_id": task_id, "audience": summary,
             "recipients": len(newsletter.recipients(cid, task_id))}
+
+
+def newsletter_schedule_later(task_id: int) -> dict:
+    """The other half of the pair on a send card: put this issue back on the monthly queue instead of sending
+    now. Converts the send card to a review card; the owner then confirms count + PIN and it takes the next
+    free slot. Nothing sends (13 Sep 2026)."""
+    task = store.get_task(task_id)
+    if not task or task["kind"] != "newsletter_send":
+        return {"ok": False, "error": "not a newsletter send card"}
+    art = db.setting_get(f"newsletter:{task_id}")
+    if not art:
+        return {"ok": False, "error": "no built newsletter found for this card"}
+    store.update_task(task_id, kind="newsletter_review", schedule_kind=None, run_at=None, enabled=True,
+                      draft=f"Subject: {art['subject']}" + chr(10) + chr(10) +
+                            "Approve to schedule it on the next free monthly slot.", status="awaiting_approval")
+    return {"ok": True, "task_id": task_id}
+
+
+def blog_publish_now(task_id: int) -> dict:
+    """Publish an already-approved, queued blog post NOW instead of on its monthly slot: its run_at becomes now,
+    the unified clock promotes it within a minute and go_live publishes the staged draft. The card must already
+    be `blog_scheduled` (approval + PIN happened at approve), so this is a timing change, not an approval."""
+    task = store.get_task(task_id)
+    if not task or task["kind"] != "blog_scheduled" or task.get("status") != "scheduled":
+        return {"ok": False, "error": "not a queued (approved) blog post"}
+    db.execute("update tasks set run_at=now(), updated_at=now() where id=%s", (task_id,))
+    store.log_decision(task_id, task.get("skill_id"), "owner", "blog_publish_now", note=task.get("title"))
+    return {"ok": True, "task_id": task_id, "publishes": "within a minute"}
 
 
 def set_newsletter_paused(paused: bool) -> dict:

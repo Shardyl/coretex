@@ -2886,6 +2886,20 @@ def newsletter_send_now(task_id: int, u: dict = Depends(current_user)) -> dict:
     return engine.newsletter_send_now(task_id)
 
 
+@app.post("/api/newsletter/{task_id}/schedule-later")
+def newsletter_schedule_later(task_id: int, u: dict = Depends(current_user)) -> dict:
+    """Turn a send card back into a review card so the owner can schedule it on the monthly queue instead."""
+    _guard_task(u, task_id)
+    return engine.newsletter_schedule_later(task_id)
+
+
+@app.post("/api/blog/{task_id}/publish-now")
+def blog_publish_now(task_id: int, u: dict = Depends(current_user)) -> dict:
+    """Publish an approved, queued blog post now (run_at = now); approval + PIN already happened at approve."""
+    _guard_task(u, task_id)
+    return engine.blog_publish_now(task_id)
+
+
 @app.get("/api/newsletter/status")
 def newsletter_status_get(_: None = Depends(auth)) -> dict:
     return engine.newsletter_status()
