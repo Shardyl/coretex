@@ -1207,7 +1207,28 @@ def calendar_view(company: str | None = None, u: dict = Depends(current_user)) -
             opp = d["title"] if d else None
         rem_cards.append({"id": r["id"], "kind": "reminder", "title": r["title"], "company": co["name"] if co else "",
                           "run_at": r["due_at"], "drafts": r["drafts"], "opportunity": opp, "deal_id": deal_id})
+    # SENDING NOW: in-flight newsletter drips (owner, 13 Sep 2026: "I want a record of it on Cortex"). A running
+    # job used to be invisible once its send card was done; now it sits on the Calendar with live progress.
+    jflt = "" if cids is None else " and company_id = any(%s)"
+    sending = []
+    try:
+        for j in db.query("select id, company_id, task_id, subject, status, sent, total, per_hour, created_at, "
+                          "last_batch_at from newsletter_send_jobs where status in ('running','paused')" + jflt
+                          + " order by created_at", p):
+            co = store.get_company(j["company_id"])
+            left = max(0, (j["total"] or 0) - (j["sent"] or 0))
+            rate = j["per_hour"] or 250
+            sending.append({"job_id": j["id"], "id": j["task_id"], "kind": "newsletter_sending",
+                            "title": j["subject"], "company": co["name"] if co else "", "status": j["status"],
+                            "sent": j["sent"], "total": j["total"], "per_hour": rate,
+                            "hours_left": round(left / rate, 1), "started": j["created_at"],
+                            "last_batch": j["last_batch_at"], "paused_all": bool(db.setting_get("newsletter_paused")),
+                            "link": f"/api/content/preview/{j['task_id']}", "link_label": "View issue",
+                            "link_fetch": True})
+    except Exception:  # noqa: BLE001 - the lane is informational; never break the Calendar
+        sending = []
     return {
+        "sending": sending,
         "now": [{**_cal_card(r), "status": r["status"], "when": r["created_at"]} for r in now],
         "recurring": [{**_cal_card(r), "cadence": r["cadence"], "weekday": r["weekday"], "hour": r["hour"],
                        "minute": r["minute"], "next_run": r["next_run"], "enabled": r["enabled"],
@@ -1228,6 +1249,12 @@ def content_preview(tid: int, _: None = Depends(auth)):
     k = str(t["kind"])
     if k.startswith("newsletter"):
         art = db.setting_get(f"newsletter:{tid}") or {}
+        if not art.get("html"):   # dispatched issues live on the send job (the artifact is cleared at dispatch)
+            j = db.one("select subject, html, images_b64, hero_b64 from newsletter_send_jobs where task_id=%s "
+                       "order by id desc limit 1", (tid,))
+            if j and j.get("html"):
+                art = {"subject": j["subject"], "html": j["html"], "images_b64": j.get("images_b64") or [],
+                       "hero_b64": j.get("hero_b64")}
         if art.get("html"):
             # The email references its images as inline attachments (cid:logo.png, cid:hero.jpg, cid:film0.jpg).
             # A browser cannot resolve cid:, so the preview showed broken logos and images (owner, 13 Sep 2026).

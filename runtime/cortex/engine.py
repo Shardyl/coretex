@@ -2493,7 +2493,10 @@ def _dispatch_newsletter(task, skill, company, art, n) -> dict:
     recips = newsletter.recipients(cid, task["id"])
     per_hour = int(db.setting_get("newsletter_per_hour") or newsletter.DEFAULT_PER_HOUR)
     jid = newsletter.enqueue_send(cid, task["id"], art, recips, per_hour)
-    store.update_task(task["id"], status="done")
+    store.update_task(task["id"], status="done", last_status=f"sending (job {jid})")
+    store.log_decision(task["id"], skill["id"], "owner", "newsletter_dispatched", note=art["subject"],
+                       snapshot={"job_id": jid, "recipients": len(recips), "per_hour": per_hour,
+                                 "audience": newsletter.audience_summary(cid, task["id"])})
     db.setting_set(f"newsletter:{task['id']}", None)
     streak = int(db.setting_get(f"nl_streak:{cid}") or 0) + 1
     db.setting_set(f"nl_streak:{cid}", streak)

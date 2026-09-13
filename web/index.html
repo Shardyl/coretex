@@ -1386,8 +1386,22 @@ async function renderCalendar(v){
   let d; try{ d=await api('/api/calendar'+(fco?'?company='+encodeURIComponent(fco):'')); }catch(e){ d={now:[],recurring:[],upcoming:[],kinds:{},companies:{}}; }
   schedCompanies=d.companies||{}; schedKinds=d.kinds||{};
   const cos=Object.entries(schedCompanies);
-  const now=d.now||[], rec=d.recurring||[], upc=d.upcoming||[];
+  const now=d.now||[], rec=d.recurring||[], upc=d.upcoming||[], sending=d.sending||[];
   let h='';
+
+  // SENDING NOW - in-flight newsletter drips with live progress (a record of every send, while it runs)
+  if(sending.length){
+    h+=`<div class="h" style="display:flex;align-items:center;gap:8px">${ic('send',16)} Sending now<span class="chip cy" style="margin-left:auto">${sending.length}</span></div>`;
+    sending.forEach(j=>{
+      const pct=j.total?Math.round(100*j.sent/j.total):0;
+      const st=j.paused_all?'PAUSED (all newsletter sending stopped)':(j.status==='paused'?'PAUSED (bounce spike)':`sending at ${j.per_hour}/hr, ~${j.hours_left}h left`);
+      h+=`<div class="card prow" style="border-left:3px solid var(--cy)">
+        <div style="flex:1;min-width:0"><div class="cname">${esc(j.title||'Newsletter')}</div>
+        <div class="csub"><span class="chip cy">${esc(j.company)}</span> ${Number(j.sent).toLocaleString()} / ${Number(j.total).toLocaleString()} sent (${pct}%) · ${esc(st)} · started ${esc(whenText(j.started))}</div>
+        <div style="height:4px;border-radius:2px;background:var(--ln);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--cy)"></div></div></div>
+        <div class="row" style="gap:6px;flex:none">${calLinkBtn(j)}</div></div>`;
+    });
+  }
 
   // NOW / TO DEAL WITH — un-dated open work piling up (deep-links to the Inbox)
   h+=`<div class="h" style="display:flex;align-items:center;gap:8px">${ic('pulse',16)} Now · to deal with`
