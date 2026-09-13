@@ -1229,7 +1229,20 @@ def content_preview(tid: int, _: None = Depends(auth)):
     if k.startswith("newsletter"):
         art = db.setting_get(f"newsletter:{tid}") or {}
         if art.get("html"):
-            return HTMLResponse(content=art["html"])
+            # The email references its images as inline attachments (cid:logo.png, cid:hero.jpg, cid:film0.jpg).
+            # A browser cannot resolve cid:, so the preview showed broken logos and images (owner, 13 Sep 2026).
+            # Swap each cid for the attachment itself as a data: URI, so the preview looks like the real email.
+            html = art["html"]
+            for pair in (art.get("images_b64") or []):
+                try:
+                    cid, b64 = pair[0], pair[1]
+                except Exception:  # noqa: BLE001
+                    continue
+                mime = "image/png" if str(cid).lower().endswith(".png") else "image/jpeg"
+                html = html.replace(f"cid:{cid}", f"data:{mime};base64,{b64}")
+            if art.get("hero_b64") and "cid:hero.jpg" in html:   # legacy single-hero artifacts
+                html = html.replace("cid:hero.jpg", f"data:image/jpeg;base64,{art['hero_b64']}")
+            return HTMLResponse(content=html)
     if k in ("blog", "blog_scheduled"):
         wp = db.setting_get(f"wp:{tid}") or {}
         if wp.get("preview"):
