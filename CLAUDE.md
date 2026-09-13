@@ -1325,3 +1325,8 @@ thing every new conversation reads; a stale line here costs a future session rea
   Universal rule rewritten to match. Live: Sensa 7,759 (3,634 + 4,125 cold), Tabscanner 15,293. Sky Vision and
   FilmSpoke stay on mode "label" until the owner decides their lists. The flag is ONE column across organisations:
   a contact filed under both Sensa and Tabscanner shares it (per-business layer is the real fix, see memory).
+- LIVE-SEND LOCK IS ON, STANDING (owner, 13 Sep 2026): `settings.newsletter_live_sends = true` stays on. The
+  safeguards that remain are the ones that matter: a plain approve never sends, the owner types the exact
+  recipient count + PIN at Stage 2 (schedule) and again at Stage 3 (send), the send drips at 250/hr with the
+  8% bounce auto-pause, and `newsletter_paused` (POST /api/newsletter/pause) is the emergency stop and mid-send
+  kill switch. The June rule "keep the lock OFF except for a deliberate real send" is retired.
