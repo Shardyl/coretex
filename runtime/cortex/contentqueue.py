@@ -124,10 +124,30 @@ def move_one(task_id: int, direction: str) -> dict:
     return {"ok": True, "moved": direction}
 
 
+def clear_satisfied() -> int:
+    """Mark refill reminders done for any queue that is now ABOVE the threshold, so a card raised at depth 1
+    does not sit in the Inbox after the owner has queued five. Returns how many were closed."""
+    _, refill_at, _ = _cfg()
+    n = 0
+    try:
+        for r in db.query("select id, dedup_key from notifications where state='unread' and dedup_key like 'refill:%'"):
+            try:
+                _, kind, cid = r["dedup_key"].split(":", 2)
+                if kind in KINDS and depth(int(cid), kind) > refill_at:
+                    notifications.set_state(r["id"], "done")
+                    n += 1
+            except Exception:  # noqa: BLE001
+                continue
+    except Exception:  # noqa: BLE001
+        return n
+    return n
+
+
 def check_refills() -> list[dict]:
     """Rolling-N refill. Once a day, for every company x content kind that is ALREADY running a program, if the
     queue has dropped to the threshold, fire ONE reminder to ideate the next batch. Guarded to at most one
     nudge per queue per calendar month, so it never nags daily. Returns the reminders fired (for logging)."""
+    clear_satisfied()   # every tick: a topped-up queue closes its own reminder (owner, 13 Sep 2026)
     today = datetime.now(schedule._GST).strftime("%Y-%m-%d")
     if db.setting_get("refill_check_day") == today:   # daily gate (engine loop calls this every tick)
         return []
