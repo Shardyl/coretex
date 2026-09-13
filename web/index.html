@@ -1548,7 +1548,7 @@ async function openJobStats(jobId){
   host.onclick=e=>{ if(e.target===host) host.remove(); };
   try{
     const j=await api('/api/newsletter/job/'+jobId);
-    const s=j.stats||{}, pct=j.total?Math.round(100*j.sent/j.total):0;
+    const s=Object.assign({accepted:0,delivered:0,failed:0,opened:0,clicked:0,unsubscribed:0,complained:0},j.stats||{}), pct=j.total?Math.round(100*j.sent/j.total):0;
     const state=j.paused_all?'PAUSED (all sending stopped)':(j.status==='running'?`sending, ${j.per_hour}/hr`:j.status);
     const row=(k,v,sub)=>`<tr><td style="padding:6px 0;color:var(--mut)">${k}</td><td style="padding:6px 0;text-align:right;font-weight:600">${v}${sub?` <span style="color:var(--mut);font-weight:400">${sub}</span>`:''}</td></tr>`;
     calLinks[j.task_id]={url:j.preview,fetch:true};
