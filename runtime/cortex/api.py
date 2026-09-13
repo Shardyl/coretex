@@ -3330,9 +3330,14 @@ SKILL_TOOLS = [
                     "and example work. Filter by lowercase category slugs (interviews, real-estate, aerial, "
                     "2d-animation, corporate, event-coverage, construction, apps, products...); it returns "
                     "the intersection first, highest-rated first, with watch URLs. Use it whenever an email "
-                    "or proposal should show relevant work, and never pick films any other way.",
+                    "or proposal should show relevant work, and never pick films any other way. When Rashad "
+                    "gives a YouTube link or id, pass it as video_id: that looks the film up DIRECTLY (rating "
+                    "does not matter) - never say a film is missing from the library without a video_id lookup. "
+                    "search matches title OR client name.",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string"},
+        "video_id": {"type": "string", "description": "a YouTube id or watch URL Rashad gave: exact lookup"},
+        "search": {"type": "string", "description": "words from the title or the client name"},
         "categories": {"type": "array", "items": {"type": "string"}, "description": "lowercase slugs"},
         "search": {"type": "string", "description": "optional words to match in the title"},
         "limit": {"type": "integer", "description": "default 5"}},
@@ -3729,12 +3734,25 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         if not co:
             return "unknown company " + str(inp["company"])
         from . import deck as _deck
-        rows = _deck.pick_samples(co["id"], inp.get("categories") or [], int(inp.get("limit") or 5))
-        if not rows and inp.get("search"):
-            rows = db.query("select youtube_video_id, title, rating, duration, categories from media_assets "
-                            "where company_id=%s and status='live' and title ilike %s "
+        import re as _re
+        rows = []
+        vid = str(inp.get("video_id") or "").strip()
+        if vid:   # exact lookup by id or watch URL: a film Rashad points at is in the library or it is not
+            m = _re.search(r"([A-Za-z0-9_-]{11})(?:[&?#].*)?$", vid)
+            vid = m.group(1) if m else vid
+            rows = db.query("select youtube_video_id, title, rating, duration, categories, client, status from "
+                            "media_assets where youtube_video_id=%s order by (company_id=%s) desc limit 1",
+                            (vid, co["id"]))
+            if not rows:
+                return f"No film with YouTube id {vid} in the media library (any company)."
+        if not rows and inp.get("search"):   # title OR client, rating does not gate it
+            q = "%" + str(inp["search"]) + "%"
+            rows = db.query("select youtube_video_id, title, rating, duration, categories, client from media_assets "
+                            "where company_id=%s and status='live' and (title ilike %s or client ilike %s) "
                             "order by rating desc nulls last limit %s",
-                            (co["id"], "%" + str(inp["search"]) + "%", int(inp.get("limit") or 5)))
+                            (co["id"], q, q, int(inp.get("limit") or 10)))
+        if not rows:
+            rows = _deck.pick_samples(co["id"], inp.get("categories") or [], int(inp.get("limit") or 5))
         if not rows:
             return ("Nothing in the media library matches those categories. Widen them, or tell Rashad the "
                     "library has no film for this - never substitute a film from anywhere else.")
