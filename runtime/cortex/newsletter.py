@@ -141,7 +141,10 @@ def audience_config(company_id: int) -> dict:
       exclude_sources            lead_source values never on the newsletter (e.g. bought outreach prospects)
       exclude_instantly_campaigns contacts sitting in an Instantly campaign are left to that sequence
       cold_sources               lead_source values of the COLD cohort: never mailed, dripped in capped batches
-      cold_cap / cold_cap_max    first batch size, and the ceiling the cap doubles towards on clean sends"""
+      cold_cap / cold_cap_max    first batch size, and the ceiling the cap doubles towards on clean sends
+      mode                       "label" (default: every contact under the org labels) or "subscribers"
+                                 (only contacts with newsletter_subscriber = true: the flag IS the list;
+                                 owner decision 13 Sep 2026, Sensa + Tabscanner)"""
     co = store.get_company(company_id) or {}
     a = dict((_profile(company_id).get("newsletter_audience") or {}))
     a.setdefault("org_labels", [co.get("name") or ""])
@@ -150,6 +153,7 @@ def audience_config(company_id: int) -> dict:
     a.setdefault("cold_sources", [])
     a.setdefault("cold_cap", 500)
     a.setdefault("cold_cap_max", 4000)
+    a.setdefault("mode", "label")
     return a
 
 
@@ -242,6 +246,8 @@ def audience(company_id: int, task_id: int | None = None) -> dict:
            "and email ~ '^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$' "
            "and not (do_not_market @> %s::jsonb) "
            f"and not ({_SUPPRESS})")
+    if a.get("mode") == "subscribers":
+        sql += " and newsletter_subscriber is true"
     if a["exclude_sources"]:
         sql += " and coalesce(lead_source,'') <> all(%s)"
         params.append(list(a["exclude_sources"]))
