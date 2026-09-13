@@ -226,7 +226,27 @@ def _company_hosts(company_id: int) -> set[str]:
     if len(root) == 2:
         hosts.add(root[1].lower())
     hosts.discard("github.com")   # website_repo links live in live_site for some companies; never a public link
+    hosts -= _SOCIAL_HOSTS         # social hosts are shared with the whole world: only the company's own pages pass
     return hosts
+
+
+_SOCIAL_HOSTS = {"youtube.com", "youtu.be", "instagram.com", "linkedin.com", "vimeo.com", "facebook.com",
+                 "x.com", "twitter.com", "tiktok.com"}
+
+
+def _social_pages(company_id: int) -> set[str]:
+    """The company's own social pages from the profile, normalised (host/path, no scheme, no www, no slash)."""
+    out = set()
+    for m in re.findall(r"(?:https?://)?(?:www\.)?((?:[a-z0-9-]+\.)+[a-z]{2,}/[^\s|,;)]+)",
+                        str(_profile(company_id).get("social") or ""), flags=re.I):
+        out.add(m.rstrip("/").lower().split("?", 1)[0])
+    return out
+
+
+def _norm(url: str) -> str:
+    u = re.sub(r"^https?://", "", url.strip(), flags=re.I)
+    u = re.sub(r"^(www|m)\.", "", u, flags=re.I)
+    return u.rstrip("/").lower().split("?", 1)[0]
 
 
 def _link_allowed(url: str, company_id: int, film_ids: set[str], hosts: set[str], social_urls: set[str]) -> bool:
@@ -238,13 +258,15 @@ def _link_allowed(url: str, company_id: int, film_ids: set[str], hosts: set[str]
         return False
     if not host:
         return False
-    if host in ("youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"):
-        m = _YT_ID.search(url)
-        if m:
-            return m.group(1) in film_ids
-        return any(url.rstrip("/").lower().endswith(s) for s in social_urls)   # the company's own channel
     if host in ("coretex.uk", "www.coretex.uk"):
         return False   # the internal media library / cockpit, never public
+    bare = host[4:] if host.startswith("www.") else host
+    if bare in _SOCIAL_HOSTS or bare == "m.youtube.com":
+        m = _YT_ID.search(url)
+        if m:
+            return m.group(1) in film_ids            # a real film: featured, or in the company's library
+        n = _norm(url)
+        return any(n == p or n.startswith(p + "/") for p in social_urls)   # the company's own page only
     return any(host == h or host.endswith("." + h) for h in hosts)
 
 
@@ -267,8 +289,7 @@ def check_links(c: dict, company_id: int, films: list[dict]) -> None:
         "select youtube_video_id from media_assets where company_id=%s and youtube_video_id is not null", (company_id,))}
     film_ids = lib | {f["id"] for f in films}
     hosts = _company_hosts(company_id)
-    social_urls = {u.rstrip("/").lower() for u in re.findall(r"(?:https?://)?(?:www\.)?(youtube\.com/[@\w/-]+)",
-                                                             str(_profile(company_id).get("social") or ""), flags=re.I)}
+    social_urls = _social_pages(company_id)
     bad = []
     for s in _walk_strings(c):
         for u in _URL.findall(s):
