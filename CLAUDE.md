@@ -1306,3 +1306,14 @@ thing every new conversation reads; a stale line here costs a future session rea
   blocked. Ideation must repeat every brief URL verbatim. Verified on card 592 -> review 596.
 - SENSA NEVER DOES FREE (owner, 13 Sep 2026): no free sample/frame/trial in any newsletter; CTA = see the work
   or talk. Universal rule: film links are public YouTube URLs, never the internal media library.
+- AUDIENCE IS DATA (13 Sep 2026): `company_profiles.data.newsletter_audience` = {org_labels, exclude_sources,
+  exclude_instantly_campaigns, cold_sources, cold_cap, cold_cap_max}; absent = old behaviour (label = company
+  name). `newsletter.audience(cid, task_id)` splits established / cold_batch / cold_waiting / excluded;
+  `recipients(cid, task_id)` = established + cold batch, and EVERY count the owner confirms and every frozen
+  job use it. Cold contacts graduate via `newsletter_deliveries` (written per drip batch); a finished job with
+  new bounces under 3% doubles `nl_cold_cap:{cid}` up to cold_cap_max. Per-issue exclusions live on the built
+  issue (`newsletter:{tid}.exclude` = labels/domains/emails): a case-study issue gets the featured film's
+  `media_assets.client` automatically (`client_exclusions`), Talk `newsletter_exclude` / POST
+  `/api/newsletter/{tid}/exclude` add more, `newsletter_audience` / GET `/audience` read it back.
+  Sensa (set 13 Sep 2026): labels ["Sensa"], exclude "Instantly Super Search" + Instantly-campaign contacts,
+  cold = the June email scrape, cap 500 -> 4000. Live: 7,764 total = 3,636 established + 4,128 cold.
