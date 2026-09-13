@@ -1227,8 +1227,15 @@ def calendar_view(company: str | None = None, u: dict = Depends(current_user)) -
                             "link_fetch": True})
     except Exception:  # noqa: BLE001 - the lane is informational; never break the Calendar
         sending = []
+    try:
+        hist = newsletter.history(None, limit=80)
+        if cids is not None:
+            hist = [h for h in hist if h.get("company_id") in set(cids)]
+        usage = newsletter.monthly_usage()
+    except Exception:  # noqa: BLE001
+        hist, usage = [], {}
     return {
-        "sending": sending,
+        "sending": sending, "history": hist, "mail_month": usage,
         "now": [{**_cal_card(r), "status": r["status"], "when": r["created_at"]} for r in now],
         "recurring": [{**_cal_card(r), "cadence": r["cadence"], "weekday": r["weekday"], "hour": r["hour"],
                        "minute": r["minute"], "next_run": r["next_run"], "enabled": r["enabled"],
@@ -2938,6 +2945,35 @@ def blog_publish_now(task_id: int, u: dict = Depends(current_user)) -> dict:
     """Publish an approved, queued blog post now (run_at = now); approval + PIN already happened at approve."""
     _guard_task(u, task_id)
     return engine.blog_publish_now(task_id)
+
+
+@app.get("/api/newsletter/history")
+def newsletter_history(company: str | None = None, u: dict = Depends(current_user)) -> dict:
+    cid = None
+    if company:
+        co = store.get_company_by_slug(company)
+        if not co:
+            raise HTTPException(status_code=404, detail="no such company")
+        _assert_company_allowed(u, co["id"])
+        cid = co["id"]
+    return {"ok": True, "history": newsletter.history(cid), "mail_month": newsletter.monthly_usage()}
+
+
+@app.get("/api/newsletter/job/{job_id}")
+def newsletter_job(job_id: int, refresh: bool = True, u: dict = Depends(current_user)) -> dict:
+    """One send in full: live progress + stats (refreshed from Mailgun when older than 10 minutes)."""
+    j = db.one("select id, company_id, task_id, subject, status, sent, total, per_hour, created_at, finished_at, "
+               "last_batch_at from newsletter_send_jobs where id=%s", (job_id,))
+    if not j:
+        raise HTTPException(status_code=404, detail="no such send")
+    _assert_company_allowed(u, j["company_id"])
+    co = store.get_company(j["company_id"])
+    st = newsletter.job_stats(job_id, force=bool(refresh) and j["status"] in ("running", "paused"))
+    return {"ok": True, "job_id": j["id"], "task_id": j["task_id"], "company": co["name"] if co else "",
+            "subject": j["subject"], "status": j["status"], "sent": j["sent"], "total": j["total"],
+            "per_hour": j["per_hour"], "started": j["created_at"], "finished": j.get("finished_at"),
+            "last_batch": j.get("last_batch_at"), "stats": st, "paused_all": bool(db.setting_get("newsletter_paused")),
+            "preview": f"/api/content/preview/{j['task_id']}"}
 
 
 @app.get("/api/newsletter/stats")

@@ -1395,12 +1395,16 @@ async function renderCalendar(v){
     sending.forEach(j=>{
       const pct=j.total?Math.round(100*j.sent/j.total):0;
       const st=j.paused_all?'PAUSED (all newsletter sending stopped)':(j.status==='paused'?'PAUSED (bounce spike)':`sending at ${j.per_hour}/hr, ~${j.hours_left}h left`);
-      h+=`<div class="card prow" style="border-left:3px solid var(--cy)">
+      h+=`<div class="card prow" style="border-left:3px solid var(--cy);cursor:pointer" onclick="openJobStats(${j.job_id})">
         <div style="flex:1;min-width:0"><div class="cname">${esc(j.title||'Newsletter')}</div>
         <div class="csub"><span class="chip cy">${esc(j.company)}</span> ${Number(j.sent).toLocaleString()} / ${Number(j.total).toLocaleString()} sent (${pct}%) · ${esc(st)} · started ${esc(whenText(j.started))}</div>
         <div style="height:4px;border-radius:2px;background:var(--ln);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--cy)"></div></div></div>
         <div class="row" style="gap:6px;flex:none">${calLinkBtn(j)}</div></div>`;
     });
+  }
+  if(d.mail_month&&d.mail_month.cap){
+    const m=d.mail_month, pct=Math.round(100*m.committed/m.cap);
+    h+=`<div class="csub" style="margin:-4px 0 12px 2px">Mailgun ${esc(m.month)}: ${Number(m.sent_month).toLocaleString()} sent + ${Number(m.in_flight).toLocaleString()} in flight of ${Number(m.cap).toLocaleString()} (${pct}%)</div>`;
   }
 
   // NOW / TO DEAL WITH — un-dated open work piling up (deep-links to the Inbox)
@@ -1452,6 +1456,19 @@ async function renderCalendar(v){
         <div class="cname">${esc(t.title)}</div>
         <div class="csub"><span class="chip cy">${esc(t.company||'')}</span> ${esc(whenText(t.run_at))} · ${t.drafts?'drafts a reply':'nudge'}${opp}</div></div>
         <div class="row" style="gap:6px;flex:none"><button class="iconbtn sm" title="Cancel" onclick="event.stopPropagation();cancelReminderCal(${t.id})">${ic('trash',15)}</button></div></div>`;
+    });
+  }
+  // HISTORY - every newsletter that has been sent (greyed, still clickable: opens the stats page)
+  const hist=(d.history||[]).filter(j=>j.status==='done');
+  if(hist.length){
+    h+=`<div class="h" style="display:flex;align-items:center;gap:8px">${ic('check',16)} History<span class="chip" style="margin-left:auto">${hist.length}</span></div>`;
+    hist.forEach(j=>{
+      const s=j.stats||{};
+      const line=s.delivered!=null?`${Number(s.delivered).toLocaleString()} delivered · ${s.open_rate||0}% opened · ${s.click_rate||0}% clicked · ${s.bounce_rate||0}% bounced`:`${Number(j.sent).toLocaleString()} sent`;
+      h+=`<div class="card prow" style="opacity:.62;cursor:pointer" onclick="openJobStats(${j.job_id})">
+        <div style="flex:1;min-width:0"><div class="cname">${esc(j.title||'Newsletter')}</div>
+        <div class="csub"><span class="chip">${esc(j.company)}</span> ${esc(whenText(j.finished||j.started))} · ${esc(line)}</div></div>
+        <div class="row" style="gap:6px;flex:none">${calLinkBtn(j)}</div></div>`;
     });
   }
   h+=`<div class="h">Schedule a recurring job</div><div class="card">
@@ -1521,6 +1538,40 @@ async function sendNowNL(id){
     await act(id,'approve');   // the send card answers needs_confirm -> count prompt -> PIN -> drip
     if(document.getElementById('calbody')) renderCalendar(document.getElementById('view'));
   }catch(e){ toast('Failed: '+e.message); }
+}
+// STATS PAGE for one newsletter send: live while it runs, historical once done (cached on the job)
+async function openJobStats(jobId){
+  let host=document.getElementById('jobstats');
+  if(!host){ host=document.createElement('div'); host.id='jobstats'; document.body.appendChild(host); }
+  host.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto';
+  host.innerHTML=`<div class="card" style="max-width:560px;width:100%;margin:0">Loading…</div>`;
+  host.onclick=e=>{ if(e.target===host) host.remove(); };
+  try{
+    const j=await api('/api/newsletter/job/'+jobId);
+    const s=j.stats||{}, pct=j.total?Math.round(100*j.sent/j.total):0;
+    const state=j.paused_all?'PAUSED (all sending stopped)':(j.status==='running'?`sending, ${j.per_hour}/hr`:j.status);
+    const row=(k,v,sub)=>`<tr><td style="padding:6px 0;color:var(--mut)">${k}</td><td style="padding:6px 0;text-align:right;font-weight:600">${v}${sub?` <span style="color:var(--mut);font-weight:400">${sub}</span>`:''}</td></tr>`;
+    calLinks[j.task_id]={url:j.preview,fetch:true};
+    host.innerHTML=`<div class="card" style="max-width:560px;width:100%;margin:0" onclick="event.stopPropagation()">
+      <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px">
+        <div><div class="cname" style="font-size:16px">${esc(j.subject)}</div>
+        <div class="csub"><span class="chip cy">${esc(j.company)}</span> ${esc(state)} · started ${esc(whenText(j.started))}${j.finished?' · finished '+esc(whenText(j.finished)):''}</div></div>
+        <button class="iconbtn sm" title="Close" onclick="document.getElementById('jobstats').remove()">${ic('x',15)}</button></div>
+      <div style="height:6px;border-radius:3px;background:var(--ln);margin:12px 0;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--cy)"></div></div>
+      <table style="width:100%;border-collapse:collapse;font-size:14px">
+        ${row('Sent',`${Number(j.sent).toLocaleString()} / ${Number(j.total).toLocaleString()}`,`(${pct}%)`)}
+        ${row('Delivered',Number(s.delivered||0).toLocaleString())}
+        ${row('Failed / bounced',Number(s.failed||0).toLocaleString(),`${s.bounce_rate||0}% of sent`)}
+        ${row('Opened',Number(s.opened||0).toLocaleString(),`${s.open_rate||0}% of delivered`)}
+        ${row('Clicked',Number(s.clicked||0).toLocaleString(),`${s.click_rate||0}% of delivered`)}
+        ${row('Unsubscribed',Number(s.unsubscribed||0).toLocaleString())}
+        ${row('Complaints',Number(s.complained||0).toLocaleString())}
+      </table>
+      <div class="row" style="margin-top:14px;gap:8px">
+        <button class="btn" onclick="openContent(${j.task_id})">${ic('file',16)} View issue</button>
+        <button class="btn" onclick="openJobStats(${jobId})">${ic('pulse',16)} Refresh</button>
+      </div></div>`;
+  }catch(e){ host.innerHTML=`<div class="card" style="max-width:560px;width:100%;margin:0">Could not load (${esc(e.message)})</div>`; }
 }
 async function bumpCal(id){ try{ const r=await api('/api/calendar/'+id+'/bump',{method:'POST'}); toast('Bumped to front ('+(r.front||'')+')'); renderCalendar(document.getElementById('view')); }catch(e){ toast('Failed: '+e.message); } }
 async function moveCal(id,dir){ try{ const r=await api('/api/calendar/'+id+'/move?dir='+dir,{method:'POST'}); if(r&&r.noop){ toast(dir==='up'?'Already at the top':'Already at the bottom'); return; } renderCalendar(document.getElementById('view')); }catch(e){ toast('Failed: '+e.message); } }
@@ -2129,7 +2180,7 @@ async function confirmLiveSend(id, r){
   } else if(r.action==='schedule'){
     msg = `SCHEDULE THIS NEWSLETTER\n\nIt will be queued to send to ${n} ${co} contacts on ${r.date}, then go out automatically that day.\nType the number ${n} to confirm, or Cancel.`;
   } else {
-    msg = `SEND TO THE LIVE LIST\n\nThis sends to ${n} REAL ${co} contacts now (drip 250/hr) — cannot be undone.\nType the number ${n} to confirm, or Cancel.`;
+    msg = `SEND TO THE LIVE LIST\n\nThis sends to ${n} REAL ${co} contacts now (drip 250/hr) — cannot be undone.\n${r.mail_month?r.mail_month+'\n':''}Type the number ${n} to confirm, or Cancel.`;
   }
   const c=prompt(msg);
   if(c===null){ toast('Cancelled — nothing done'); return; }

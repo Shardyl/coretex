@@ -1295,7 +1295,98 @@ _COLD_CLEAN_PCT = 0.03   # a finished send with bounces under this share of sent
 def ensure_jobs_table() -> None:
     db.execute(_JOBS_DDL)
     db.execute("alter table newsletter_send_jobs add column if not exists images_b64 jsonb")
+    db.execute("alter table newsletter_send_jobs add column if not exists stats jsonb")
+    db.execute("alter table newsletter_send_jobs add column if not exists stats_at timestamptz")
+    db.execute("alter table newsletter_send_jobs add column if not exists finished_at timestamptz")
     db.execute(_DELIVERIES_DDL)
+
+
+# ---------- monthly cap (the Mailgun plan) ----------
+DEFAULT_MONTHLY_CAP = 50000   # emails per calendar month across ALL companies (owner, 13 Sep 2026)
+
+
+def monthly_usage() -> dict:
+    """Where the shared Mailgun allowance stands this calendar month (UTC): what every company's jobs have sent,
+    what in-flight jobs still have to send, the cap, and what is left for new sends. Code computes it; the send
+    gate reads it."""
+    ensure_jobs_table()
+    cap = int(db.setting_get("mailgun_monthly_cap") or DEFAULT_MONTHLY_CAP)
+    r = db.one("select coalesce(sum(sent),0) s from newsletter_send_jobs "
+               "where created_at >= date_trunc('month', now() at time zone 'utc')")
+    f = db.one("select coalesce(sum(total - sent),0) s from newsletter_send_jobs where status in ('running','paused')")
+    sent = int(r["s"] or 0)
+    inflight = int(f["s"] or 0)
+    return {"cap": cap, "sent_month": sent, "in_flight": inflight, "committed": sent + inflight,
+            "remaining": max(0, cap - sent - inflight), "month": db.one("select to_char(now() at time zone 'utc','Mon YYYY') m")["m"]}
+
+
+def check_monthly_cap(n_new: int) -> dict:
+    """Would sending `n_new` more this month break the plan cap? {ok, ...usage, would_be}. The Stage-3 send and
+    the auto-send both refuse when ok is False; Stage-2 scheduling only warns (the send month may differ)."""
+    u = monthly_usage()
+    u["would_be"] = u["committed"] + int(n_new)
+    u["ok"] = u["would_be"] <= u["cap"]
+    return u
+
+
+def usage_line(n_new: int | None = None) -> str:
+    u = check_monthly_cap(n_new or 0)
+    s = f"Mailgun {u['month']}: {u['sent_month']:,} sent + {u['in_flight']:,} in flight of {u['cap']:,}"
+    if n_new:
+        s += f"; this send takes it to {u['would_be']:,}" + ("" if u["ok"] else " - OVER THE CAP")
+    return s
+
+
+# ---------- per-send stats (cached on the job; Mailgun keeps events only for a while) ----------
+_STAT_KEYS = ("accepted", "delivered", "failed", "opened", "clicked", "unsubscribed", "complained")
+
+
+def job_stats(job_id: int, max_age_min: int = 10, force: bool = False) -> dict:
+    """Stats for one send, refreshed from Mailgun when older than max_age_min and merged so a counter never goes
+    DOWN when Mailgun's event retention expires (the cached history is the record). Returns the stats dict."""
+    ensure_jobs_table()
+    job = db.one("select * from newsletter_send_jobs where id=%s", (job_id,))
+    if not job:
+        return {}
+    cached = dict(job.get("stats") or {})
+    fresh_enough = job.get("stats_at") and (db.one("select now() - %s < make_interval(mins => %s) as ok",
+                                                     (job["stats_at"], max_age_min)) or {}).get("ok")
+    finished_long_ago = job.get("finished_at") and (db.one("select now() - %s > interval '14 days' as ok",
+                                                            (job["finished_at"],)) or {}).get("ok")
+    if cached and not force and (fresh_enough or finished_long_ago):
+        return cached
+    live = campaign_stats(job["company_id"], job_id)
+    if live.get("error"):
+        return cached
+    merged = dict(cached)
+    for k in _STAT_KEYS:
+        merged[k] = max(int(cached.get(k) or 0), int(live.get(k) or 0))
+    merged["sent"], merged["total"], merged["status"] = live["sent"], live["total"], live["status"]
+    d = merged.get("delivered") or 0
+    s = merged.get("sent") or 0
+    merged["open_rate"] = round(100 * merged["opened"] / d, 1) if d else 0.0
+    merged["click_rate"] = round(100 * merged["clicked"] / d, 1) if d else 0.0
+    merged["bounce_rate"] = round(100 * merged["failed"] / s, 1) if s else 0.0
+    db.execute("update newsletter_send_jobs set stats=%s, stats_at=now() where id=%s", (Json(merged), job_id))
+    return merged
+
+
+def history(company_id: int | None = None, limit: int = 50) -> list[dict]:
+    """Every send, newest first, with its cached stats (no Mailgun call here; the detail view refreshes)."""
+    ensure_jobs_table()
+    flt = "" if company_id is None else " where company_id=%s"
+    p: tuple = () if company_id is None else (company_id,)
+    rows = db.query("select id, company_id, task_id, subject, status, sent, total, per_hour, created_at, "
+                    f"finished_at, stats, stats_at from newsletter_send_jobs{flt} order by created_at desc limit %s",
+                    p + (limit,))
+    out = []
+    for j in rows:
+        co = store.get_company(j["company_id"])
+        out.append({"job_id": j["id"], "id": j["task_id"], "kind": "newsletter_history", "title": j["subject"],
+                    "company": co["name"] if co else "", "company_id": j["company_id"], "status": j["status"], "sent": j["sent"], "total": j["total"],
+                    "started": j["created_at"], "finished": j.get("finished_at"), "stats": j.get("stats") or {},
+                    "link": f"/api/content/preview/{j['task_id']}", "link_label": "View issue", "link_fetch": True})
+    return out
 
 
 def _record_deliveries(company_id: int, job_id: int, chunk: list[dict]) -> None:
@@ -1411,7 +1502,8 @@ def _drain_one(job: dict) -> dict | None:
     batch = max(1, round((job["per_hour"] or DEFAULT_PER_HOUR) / SEND_BATCHES_PER_HOUR))
     chunk = recips[sent:sent + batch]
     if not chunk:
-        db.execute("update newsletter_send_jobs set status='done', updated_at=now() where id=%s", (jid,))
+        db.execute("update newsletter_send_jobs set status='done', finished_at=coalesce(finished_at, now()), "
+                   "updated_at=now() where id=%s", (jid,))
         _ramp_cold_cap(job, sent)
         return {"status": "done", "job_id": jid, "task_id": job["task_id"], "company_id": cid,
                 "subject": job["subject"], "sent": sent, "total": total}
@@ -1430,6 +1522,7 @@ def _drain_one(job: dict) -> dict | None:
     except Exception:  # noqa: BLE001 - bookkeeping must never stop a send
         pass
     if done:
+        db.execute("update newsletter_send_jobs set finished_at=coalesce(finished_at, now()) where id=%s", (jid,))
         _ramp_cold_cap(job, newsent)
         return {"status": "done", "job_id": jid, "task_id": job["task_id"], "company_id": cid,
                 "subject": job["subject"], "sent": newsent, "total": total}

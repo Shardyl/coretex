@@ -2339,7 +2339,8 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
         n = len(newsletter.recipients(task["company_id"], task["id"]))
         action = "schedule" if task["kind"] == "newsletter_review" else "send"
         info = {"ok": False, "needs_confirm": True, "recipients": n, "company": company["name"], "action": action,
-                "audience": newsletter.audience_summary(task["company_id"], task["id"])}
+                "audience": newsletter.audience_summary(task["company_id"], task["id"]),
+                "mail_month": newsletter.usage_line(n)}
         if action == "schedule":
             info["date"] = _next_newsletter_slot(company["id"]).strftime("%-d %b %Y")
         return info
@@ -2428,6 +2429,10 @@ def confirm_send_task(task_id: int, count: int, stepup_token: str | None = None)
         return {"ok": False, "error": "no built newsletter found for this card"}
     if task["kind"] == "newsletter_review":
         return _schedule_newsletter(task, skill, company, art, n)
+    cap = newsletter.check_monthly_cap(n)   # the shared Mailgun plan: never start a send that breaks it
+    if not cap["ok"]:
+        return {"ok": False, "error": f"Over the Mailgun monthly cap: {newsletter.usage_line(n)}. Nothing sent. "
+                                      f"Raise the cap (settings.mailgun_monthly_cap) or wait for next month."}
     return _dispatch_newsletter(task, skill, company, art, n)
 
 
@@ -5038,7 +5043,7 @@ def _run_newsletter_scheduled_task(task: dict, skill: dict | None, company: dict
     if not art:
         store.update_task(task["id"], status="failed", last_status="no built newsletter found")
         return
-    if db.setting_get(f"nl_auto:{cid}"):
+    if db.setting_get(f"nl_auto:{cid}") and newsletter.check_monthly_cap(len(newsletter.recipients(cid, task["id"])))["ok"]:
         recips = newsletter.recipients(cid, task["id"])
         per_hour = int(db.setting_get("newsletter_per_hour") or newsletter.DEFAULT_PER_HOUR)
         newsletter.enqueue_send(cid, task["id"], art, recips, per_hour)
