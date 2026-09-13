@@ -1357,3 +1357,10 @@ thing every new conversation reads; a stale line here costs a future session rea
   (unique recipients: accepted/delivered/failed/opened/clicked/unsubscribed/complained + rates); Talk
   `newsletter_stats`, GET `/api/newsletter/stats?company=`, and the "fully sent" alert carries the line.
   Reminder 115 (22 Oct 2026): review cadence, move to weekly if the numbers hold.
+- MONTHLY CAP + HISTORY (owner, 13 Sep 2026): `newsletter.monthly_usage()` / `check_monthly_cap(n)` (cap =
+  `settings.mailgun_monthly_cap`, default 50,000/month across all companies; counts jobs created this UTC month
+  plus in-flight remainder). Stage-3 confirm and the auto-send REFUSE a send that would break it; the confirm
+  prompt shows the month line. Per-send stats are cached on `newsletter_send_jobs.stats` (`job_stats`, 10-min
+  refresh while running, never decrements when Mailgun's event retention expires, frozen 14 days after
+  `finished_at`). Calendar: "Sending now" and greyed "History" lanes, both click to a stats page
+  (`GET /api/newsletter/job/{id}`, `/api/newsletter/history`), with View issue.
