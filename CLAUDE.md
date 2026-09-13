@@ -1210,6 +1210,23 @@ one "Google hasn't verified this app" click and carries a 100-new-user cap that 
 user. Gmail scopes are RESTRICTED, so a Google password change revokes that token; Calendar + Drive
 are only "sensitive" and survive it.
 
+## Golf tee booking (personal, skill `golf-booking`, 2026-09-13)
+
+Books Rashad's Viya (Wasl golf) tee time the moment a day opens. **Method = phone automation**: the box,
+as `cortex`, drives the real Play Store Viya on his S24 (Tailscale `rashads-s24` 100.65.62.23) with adb
+over wireless debugging (`runtime/cortex/integrations/android.py`, elements found by visible text, never
+coordinates). The API-interception route is parked: apk-mitm'd Viya still rejected the mitmproxy CA.
+
+- **All behaviour lives in the skill**: the craft's single `PLAN = {...}` line (courses, fallback order,
+  players, days ahead, release time, phone address). `golf.py` reads only that line; never hardcode.
+- **Flow**: `python -m cortex.golf card YYYY-MM-DD` creates a `golf_booking` card (outward, NEVER_AUTO) ->
+  approving sets it `queued` (engine `_execute`, nothing books) -> a one-off `systemd-run --on-calendar`
+  unit runs `python -m cortex.golf run <id>` a few minutes before release (the engine's 60s tick is too
+  coarse) -> pre-check (adb reachable, unlocked, Viya in front; critical alert + retry) -> book via
+  `viya_flow.book` -> task `done`/`failed` + critical notify. Screenshots in `/var/tmp/cortex-golf/<id>/`.
+- adb pairing keys live in the cortex user's `~/.android`. After a phone reboot wireless debugging must be
+  re-enabled and reconnected (`adb tcpip 5555` pins the port until the next reboot).
+
 ## Media library (the YouTube catalog + review UI)
 
 `media_assets` (live DB) is the catalog of every video on a company's YouTube channel — one row

@@ -38,7 +38,7 @@ EMAIL_KINDS = {"email_reply"}              # an inbound-reply, sent via Gmail on
 EMAIL_SEND_KINDS = {"email_reply", "email_draft"}    # ALL kinds that actually SEND an email on approval
 EMAIL_RENDER_KINDS = EMAIL_KINDS | {"email_draft"}   # rendered as an email (envelope + logo) in the Inbox
 NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send", "email_reply", "email_draft",
-                    "wa_reply"}  # outward sends always need the owner
+                    "wa_reply", "golf_booking"}  # outward sends always need the owner
 # PUBLIC actions (go OUT to the public) — approving these needs a biometric step-up (see
 # feedback_public_actions_biometric). Internal items use the normal approve. Split by where the action fires:
 _APPROVE_PUBLIC = {"email_reply", "email_draft", "newsletter_idea", "blog", "social_shift", "social_action",
@@ -65,6 +65,7 @@ KIND_CLASS = {
     "social_post": "outward", "dm_reply": "outward", "sms": "outward",
     "social_shift": "outward", "social_relogin": "internal", "social_action": "outward",
     "wa_reply": "outward",     # an approved WhatsApp reply the runner types back — goes to a real person
+    "golf_booking": "outward",  # a real tee booking on Rashad's own Viya account (golf.py): never auto
     "payment": "money", "invoice_send": "money", "refund": "money",
 }
 
@@ -85,6 +86,7 @@ APPROVE_ACTION = {
     "social_shift": "Approve today's run", "social_relogin": "I've logged back in",
     "social_action": "Approve & run",
     "wa_reply": "Approve & send on WhatsApp",
+    "golf_booking": "Approve & book at release",
     # lead_escalation: an INTERNAL strategic-lead briefing card — nothing sends anywhere; approving only
     # acknowledges the owner is taking the lead over. Deliberately NOT in KIND_CLASS (unknown kinds fail safe
     # to 'outward' = never auto) and not in _APPROVE_PUBLIC (internal ack, no biometric).
@@ -1259,6 +1261,11 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
             store.update_task(task["id"], status="queued")
         store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"draft": task.get("draft")})
         return {"sent_to": f"WhatsApp — {who}"}
+    if task["kind"] == "golf_booking":   # approving ARMS the timed runner (golf.py run); nothing books at approval
+        store.update_task(task["id"], status="queued")
+        store.log_decision(task["id"], skill["id"], actor, "approve",
+                           snapshot={"plan": (task.get("request") or {}).get("plan")})
+        return {"sent_to": "the golf runner, which books the moment the day opens"}
     if task["kind"] == "social_relogin":   # acknowledging the re-login clears the logged-out flag so shifts resume
         db.setting_set(f"social_loggedout:{(task.get('request') or {}).get('account', '')}", False)
         store.update_task(task["id"], status="done")
