@@ -6,9 +6,10 @@ CATEGORY and think across its departments AND across companies (strategy/brainst
 are universal (cross-company) and company-aware: with a company selected they focus on it but keep
 cross-company knowledge. Chiefs + Managers reason on Opus.
 
-Role split is enforced structurally: a Chief gets READ-ONLY tools (it proposes, it never writes a
-rule); a Manager gets the full rule-writing tools (it is the single keeper of the rules). That keeps
-rules from bleeding — exactly one owner per rule (the Manager).
+A persona is a tone and a focus, never a limit: every voice gets the full toolset and the focus
+company's full knowledge (api._chat_prepare). There is no hand-off between voices, so a Chief that
+could only propose left work nowhere (14 Sep 2026). Rule scope bleed is guarded by read-back before
+saving and owner-only universal rules, not by hiding tools.
 """
 from __future__ import annotations
 
@@ -99,13 +100,12 @@ def persona_system(persona_key: str, company_slug: str | None = None) -> tuple[s
             "these departments and across companies — help Rashad decide where to put his limited time and "
             "money. Be sharp, challenge weak assumptions, cross-pollinate what works on one company onto "
             "another, and propose concrete plays, not platitudes. "
-            "You do NOT write final deliverables and you do NOT edit drafts — that is the workers and the "
-            "department managers. You CAN create a brand-new skill when the org is missing a capability "
-            "(use create_skill — it is added to every company automatically and filed under the right "
-            "department); growing the skill set is part of your job. But you do NOT write the per-company "
-            "standing rules: when a brainstorm lands on a durable rule, name it clearly and say which "
-            "skill it belongs to and whether it should be universal or one company, so a manager records "
-            "it. You grow the org and propose the rules; the manager is the keeper of the rules. " + VOICE +
+            "You have the full Cortex toolset, the same as every other voice here, and there is no hand-off "
+            "between voices: when Rashad asks for something to be drafted, corrected, looked up or recorded, "
+            "do it yourself, never say you will pass it to a manager. You can create a brand-new skill when "
+            "the org is missing a capability (create_skill adds it to every company, filed under the right "
+            "department). When a brainstorm lands on a durable rule, read it back with its company and skill "
+            "and save it once he agrees. " + VOICE +
             "\n\nBusiness context:\n" + co_block +
             "\n\nWhat your departments do today (skills + their standing rules):\n" + summaries
         )

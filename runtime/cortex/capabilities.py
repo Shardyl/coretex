@@ -186,8 +186,11 @@ CAPABILITIES: list[tuple[str, str]] = [
      "an existing email card; draft_email takes attach_documents by name. NEVER claim a document is attached "
      "unless the tool confirmed it — if it's not in the library, say so."),
     ("Skills & rules",
-     "list_skills to view; add_rule to add a standing rule with scope universal|company (ask the scope); "
-     "create_skill (global) and update_craft to change how a job is done."),
+     "Every message loads the focus company's profile and ALL its standing rules into your instructions, so "
+     "check them before answering. company_profile reads any company's profile facts (Google review link, "
+     "senders, who is always copied, terms folder); list_skills to view skills; add_rule to add a standing "
+     "rule with scope universal|company (read it back first); create_skill (global) and update_craft to "
+     "change how a job is done."),
     ("Self-learning",
      "remember_preference persists a durable preference Rashad teaches you; correcting a task can become a "
      "standing rule. You can refine your own operator-preference layer — never the core safety rules."),

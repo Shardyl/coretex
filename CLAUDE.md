@@ -1137,7 +1137,8 @@ PRICING IS CODE, `ratecard.price_lines(slug, sections, allowed=, target=, flex_p
 TALK FIXES FOUND BY THE FIRST RUN (Sheraa ERF, card 578):
 - Talk had no tool to OPEN a deal. Asked for "opportunity 118" it searched contacts for "118" and asked the owner
   for scope the timeline already held. `deal_timeline` (deal_id or title words) returns the deal, its contacts,
-  its quotations and `pipeline.deal_context(limit=40)`; it is in `_CHIEF_TOOLS`.
+  its quotations and `pipeline.deal_context(limit=40)`; every Talk voice has it (`_CHIEF_TOOLS` is gone, see
+  "Talk knows the company").
 - `provider.chat_tools` / `chat_tools_stream` run at max_tokens 1,500. A whole quotation as one tool call was
   cut at exactly 1,500 and the owner got an EMPTY reply. A round stopped by `max_tokens` is now re-run once at
   `_ROOMY` (16,000; a ceiling costs nothing unless used). And a turn that runs out of rounds mid-task makes one
@@ -1562,3 +1563,23 @@ thing every new conversation reads; a stale line here costs a future session rea
   `require_unsubscribe` at build and every drip batch (a batch waits, never sends http/uncertified links).
   Everything sent before 08:05 UTC on 14 Sep carries http tracking links: they still redirect, strict browsers
   warn. The Mailgun stored copy (`storage.url`) is PRE-rewrite: never judge links or the unsubscribe from it.
+
+## Talk knows the company (14 Sep 2026)
+Owner, after Talk said Sensa's Google review link wasn't in Cortex: it was on the profile (`review_link`) and in
+both sales-followup rule sets. Talk only saw rules it chose to look up (`list_skills`, local rules only), could
+not read the profile at all, and a Chief persona had a cut-down toolset with no hand-off to anyone who could act.
+- ONE TOOLSET: `_CHIEF_TOOLS` is deleted. Every voice (Cortex, any Chief, any Manager) gets all of `SKILL_TOOLS`.
+  A persona is a tone and a focus, never a limit (`personas.py` Chief prompt says so; no "hand it to the manager").
+- KNOWLEDGE PACK: `api._chat_prepare` appends `_company_knowledge(co)` for the focus company on EVERY message: the
+  profile (minus `_TALK_PROFILE_SKIP`: google_access, signatures, signature_html, brand, booking, voice) and every
+  skill's effective rules (universal minus overrides, marked "(all companies)", then local; skills with none are
+  left out). It rides in the prompt-cached system prompt. Sensa is ~134k chars / ~33k tokens; measured on the
+  Convert Chief: first message $0.46 (cache write of ~73k), each later step $0.04. No company in focus ->
+  `_NO_FOCUS_NOTE` (use company_profile + list_skills). Labelled as reference, not a style guide for chat.
+- `company_profile` Talk tool reads any company's profile facts. `_talk_company(slug, u)` clamps to the user's
+  scope: Gino/Ayresh load, read and `list_skills` only their own companies (list_skills was unscoped before).
+- Shared rules added: check the loaded knowledge before answering (and admit it if you didn't); read a rule back
+  (wording, company, skill) before add_rule / update_craft unless he dictated all three; never promise a hand-off.
+- TRUSTED PROFILE LINKS: `profile.trusted_links(cid)` = review_link + live_site. The invented-link guard
+  (`engine`, the `_URL_RX` check) and the Manager's REAL LINKS list include them, so a review ask carrying the
+  review link is never redrafted or flagged as invented.

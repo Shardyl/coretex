@@ -2580,6 +2580,8 @@ def _ensure_real_links(skill: dict, company: dict, dreq: dict, draft: str) -> st
         if not found:
             return draft
         ctx = json.dumps(dreq, default=str)
+        if isinstance(company, dict):   # the profile's own links (review link, live site) are real by construction
+            ctx += " " + " ".join(worker.profile.trusted_links(company.get("id")))
         site = ((company.get("data") or {}).get("website") or "") if isinstance(company, dict) else ""
         bad = [u for u in found
                if u.rstrip(".,;") not in ctx

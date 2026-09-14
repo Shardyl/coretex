@@ -176,6 +176,18 @@ def get(company_id):
     return (_row(company_id)["data"]) or {}
 
 
+def trusted_links(company_id) -> list[str]:
+    """Links on the profile that are real by construction (the Google review link, the live site), so the
+    invented-link guard and the Manager trust them in any draft. They live here, not in any one skill's
+    rules (14 Sep 2026: the review link was on the profile and still read as 'not in Cortex')."""
+    try:
+        data = get(company_id)
+    except Exception:  # noqa: BLE001
+        return []
+    return [data[k].strip() for k in ("review_link", "live_site")
+            if isinstance(data.get(k), str) and data[k].strip().startswith("http")]
+
+
 def resolve_identity(company_id, email: str | None) -> dict:
     """WHO an outbound message is written as: {email, name, role} from the company's signature store
     (data.signatures is keyed by email and already holds each person's real name and role). Returns

@@ -54,7 +54,8 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
         _lib = _rx.findall(str(request.get("media_library") or "")) if isinstance(request, dict) else []
         _rest = _rx.findall(_json.dumps(request, default=str))
         _seen, _urls = set(), []
-        for _u in _lib + sorted(_rest):
+        _prof = worker.profile.trusted_links(company.get("id"))   # the review link, the live site
+        for _u in _lib + _prof + sorted(_rest):
             if _u not in _seen:
                 _seen.add(_u)
                 _urls.append(_u)

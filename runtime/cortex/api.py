@@ -3195,6 +3195,12 @@ SKILL_TOOLS = [
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string", "description": "company slug"},
         "department": {"type": "string", "description": "department name e.g. 'Content & SEO' — zooms in with full detail"}}}},
+    {"name": "company_profile",
+     "description": "Read a company's profile facts: the Google review link, website, senders and reply-from, "
+                    "who is always copied, payment terms, currency, VAT, terms Drive folder, team. The company "
+                    "in focus is already loaded in your instructions; use this for any other company.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "company slug"}}, "required": ["company"]}},
     {"name": "add_rule",
      "description": "Add a standing rule to a skill. scope='universal' applies it to EVERY company; "
                     "scope='company' applies it to just the named company. If Rashad hasn't made the scope "
@@ -3675,6 +3681,9 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             where.append("c.slug=%s"); params.append(slug)
         if dept:
             where.append("s.department=%s"); params.append(dept)
+        _cids = _user_cids(u) if u else None
+        if _cids is not None:   # a scoped user (Gino, Ayresh) reads only their own companies' skills
+            where.append("s.company_id = any(%s)"); params.append(_cids)
         clause = (" where " + " and ".join(where)) if where else ""
         rows = db.query(
             "select s.skill_key, s.name, s.category, s.department, s.authority, s.rules, s.craft, "
@@ -3689,6 +3698,9 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                 item["craft"] = (r["craft"] or "")[:300]
             out.append(item)
         return json.dumps(out) if out else "no skills found"
+    if name == "company_profile":
+        co = _talk_company(inp.get("company"), u)
+        return (_company_profile_text(co) if co else "") or f"no profile available for '{inp.get('company')}'"
     if name == "list_tasks":
         status = inp.get("status")
         rows = db.query(
@@ -4400,9 +4412,9 @@ def _chat_system() -> str:
     dept_line = "; ".join(d["department"] for d in depts) or "(none)"
     note = (f"Every company runs the SAME granular skill catalog ({n} skill rows in total), grouped by "
             f"department. Companies: {co_line}. Departments (all companies have all of them): "
-            f"{dept_line}. Most skills are empty (no rules yet) and you tune them one at a time. Use "
-            f"list_skills(company, department) to read a department's skills and their rules before "
-            f"answering — never assume a skill's rules.")
+            f"{dept_line}. Most skills are empty (no rules yet) and you tune them one at a time. The "
+            f"company in focus has its profile and every rule loaded below; for any other company use "
+            f"company_profile and list_skills before answering — never assume a skill's rules.")
     return "\n\n".join(p for p in (CHAT_SYSTEM_BASE, note, _shared_behaviour()) if p)
 
 
@@ -4437,6 +4449,14 @@ def _shared_behaviour() -> str:
         "summarise it or paste it back instead of calling the tool. A made-up confirmation silently loses his work.",
         "When he teaches you a durable preference or fact ('remember…', 'always…', 'from now on…'), call "
         "remember_preference to persist it, then confirm. This only adds operator preferences, never safety rules.",
+        "CHECK BEFORE YOU ANSWER: the focus company's profile and every standing rule are in your instructions. "
+        "Read them before answering anything about how the company handles something or a fact (a link, a "
+        "sender, who is copied, terms). If you answered without checking, say so and check.",
+        "Before saving a standing rule (add_rule) or rewriting a skill's craft (update_craft), read it back in "
+        "one sentence: the exact wording, the company (or all companies) and the skill. Save once he says yes, "
+        "unless he dictated the exact rule and named its company and skill himself.",
+        "Every voice in Talk has the same tools and there is no hand-off: never say you will pass something to "
+        "a manager, a chief or a colleague. Do it yourself.",
     ]
     block = "ALWAYS-ON RULES (true no matter which persona is speaking):\n" + "\n".join(f"- {r}" for r in rules)
     block += "\n\n" + capabilities.manifest()   # live capability registry — always current as features ship
@@ -4446,19 +4466,66 @@ def _shared_behaviour() -> str:
     return block
 
 
-# A Chief CAN grow the org — create_skill is global-by-nature (added to every company), so there's no
-# scope to bleed. But the scoped, bleed-risky part — writing per-company RULES (add_rule/update_craft)
-# — stays with the Manager (one keeper of rules). Managers + general Cortex get the full set.
-_CHIEF_TOOLS = {"system_knowledge", "list_skills", "list_tasks", "get_task", "create_skill", "set_reminder",
-                # Chiefs can also DRAFT and look people up — anyone Rashad talks to should be able to act on a
-                # request, not just strategise. (Per-company RULE writes stay Manager-only to avoid scope bleed.)
-                "create_task", "draft_email", "draft", "crm_lookup", "crm_pipeline", "deal_timeline", "correct_task",
-                "create_proposal", "create_capabilities_deck", "rebrand_deck", "rate_card", "set_rate", "media_library", "rate_film",
-                "rename_document",
-                "research_client", "export_templates",
-                "approve_task", "skip_task", "run_report", "schedule_report", "create_quotation",
-                "list_scheduled", "list_calendar",
-                "remember_preference", "forget_preference", "list_preferences"}
+# ---- Talk's company knowledge ----
+# Owner, 14 Sep 2026: Talk told him the Google review link wasn't in Cortex. It was on the Sensa profile and in
+# the follow-up rules, neither of which Talk could see without choosing to look (and the profile not at all).
+# So the company in focus is loaded on EVERY message: its profile facts and every standing rule its drafting
+# follows. It rides in the system prompt, which is prompt-cached, so a conversation pays for it once.
+
+# Profile keys Talk never needs: rendering markup, the Google access record, booking internals and the long
+# voice/signature stores. Plumbing, not answers.
+_TALK_PROFILE_SKIP = {"google_access", "signature_html", "signatures", "brand", "booking", "voice"}
+
+_NO_FOCUS_NOTE = ("No company is in focus, so no company's profile or rules are loaded. Before answering "
+                  "anything about a company's facts or how it handles something, call company_profile and "
+                  "list_skills for the company he means.")
+
+
+def _talk_company(slug: str | None, u: dict | None) -> dict | None:
+    """The company Talk may load for this user: None when none is in focus, it is unknown, or it is outside
+    a scoped user's access (Gino and Ayresh only ever see Sensa)."""
+    if not slug or slug == "all":
+        return None
+    co = store.get_company_by_slug(slug)
+    if not co:
+        return None
+    cids = _user_cids(u) if u else None
+    return co if cids is None or co["id"] in cids else None
+
+
+def _company_profile_text(co: dict) -> str:
+    data = profile.get(co["id"]) or {}
+    lines = []
+    for k, v in data.items():
+        if not v or k in _TALK_PROFILE_SKIP:
+            continue
+        val = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
+        lines.append(f"- {k}: {val[:600]}")
+    return (f"{co['name']} PROFILE:\n" + "\n".join(lines)) if lines else ""
+
+
+def _company_knowledge(co: dict) -> str:
+    """Everything Talk needs about the company in focus: the profile facts, then every skill's effective rules
+    (universal minus this company's overrides, then local; the same set store.effective_rules gives a worker)."""
+    out = [f"COMPANY KNOWLEDGE: {co['name']} (slug {co['slug']}), loaded fresh on every message. This is "
+           "reference, not a style guide for your own replies: the rules below are what Cortex's drafting "
+           "follows. Check it before answering, and never say something isn't in Cortex without checking "
+           "here and in list_documents."]
+    prof = _company_profile_text(co)
+    if prof:
+        out.append(prof)
+    uni_all = {r["skill_key"]: (r["rules"] or []) for r in db.query("select skill_key, rules from universal_skill_rules")}
+    blocks = []
+    for s in db.query("select skill_key, name, department, rules, overrides from skills where company_id=%s "
+                      "order by department nulls last, name", (co["id"],)):
+        ov = s["overrides"] or []
+        uni = [r for r in uni_all.get(s["skill_key"], []) if r not in ov]
+        loc = s["rules"] or []
+        if uni or loc:
+            blocks.append(f"[{s['department'] or 'Other'}] {s['name']} ({s['skill_key']}):\n"
+                          + "\n".join([f"  - (all companies) {r}" for r in uni] + [f"  - {r}" for r in loc]))
+    out.append("STANDING RULES by skill (a skill not listed has no rules yet):\n" + ("\n".join(blocks) or "(none)"))
+    return "\n\n".join(out)
 
 
 @app.get("/api/heads")
@@ -4520,14 +4587,16 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
     blocks = _image_blocks(body.images or [])
     if blocks:
         msgs[-1]["content"] = blocks + [{"type": "text", "text": msgs[-1]["content"]}]
+    # every voice gets the full toolset: a persona is a tone and a focus, never a limit (14 Sep 2026)
     system, tools = _chat_system(), SKILL_TOOLS
     if chosen:
-        psys, _model, is_chief = personas.persona_system(chosen, body.company)
+        psys, _model, _is_chief = personas.persona_system(chosen, body.company)
         if psys:
             system = psys + "\n\n" + _shared_behaviour()   # personas get the always-on rules too
-            tools = [t for t in SKILL_TOOLS if t["name"] in _CHIEF_TOOLS] if is_chief else SKILL_TOOLS
         else:
             chosen = ""
+    co = _talk_company(body.company, user)
+    system += "\n\n" + (_company_knowledge(co) if co else _NO_FOCUS_NOTE)
     def _exec(name: str, inp: dict) -> str:   # carry the turn's attachments through when a tool drafts/creates
         if name in ("create_task", "draft", "draft_email", "save_document") and body.images:
             inp = {**inp, "_images": body.images, "_image_names": body.image_names}
