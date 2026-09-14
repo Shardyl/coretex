@@ -95,6 +95,16 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
   `crm.auto_opportunity`) - low volume, insight quality is the point; and FIRST replies on the
   sales-first-response lane (not thread continuations) draft on Fable 5 in `worker.draft` - the
   opener + insight set the conversation's direction.
+  **COST GUARDS (14 Sep 2026, after a $30 day, double the usual):** "first reply" now means a REAL inbound
+  message answered for the first time (`worker.draft` `_first`: not a follow-up, not outbound, not a correction
+  or redraft, not a thread continuation). It used to be anything without `thread_reply`, so automatic chases,
+  corrections and guard redrafts all ran on Fable: 29 Fable drafts ($10.34) on one Monday, when the weekend's
+  chases roll over. The drafter's system prompt is now stable per skill + company + sender (the code-stamped
+  date moved to the top of the user message) and prompt-cached; the Manager's stable half (its brief, the
+  company, the standing rules) moved into its cached system prompt, the per-draft facts and the draft stay in
+  the user message. `anchor_score.classify_leads` runs on Haiku (it said Haiku but `fast=True` meant Sonnet,
+  $1.40 to $3.80 a day). Blog compose/revise start at 24,000 tokens and internal/inbound links at 4,000: at
+  8,000 every post truncated and was paid for twice.
 - No emoji in the cockpit UI — clean monochrome line-icons (Tabler-style) only.
 - Ship a new Talk capability? Add its one-liner to `runtime/cortex/capabilities.py` in the same
   commit — that manifest is injected into every system prompt.

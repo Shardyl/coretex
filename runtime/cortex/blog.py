@@ -189,7 +189,7 @@ def add_internal_links(company_id: int, content: dict) -> dict:
         + "Return JSON {\"links\":[{\"section\":<int>,\"anchor\":\"exact phrase from that section\",\"url\":\"one listed URL\"}]}.")
     user = f"EXISTING PAGES (use these URLs only):\n{pages_txt}\n\nPOST BODY (by section index):\n{body_txt}"
     try:
-        out = provider.think_json(system, user, model=provider.MODEL_FAST, max_tokens=500,
+        out = provider.think_json(system, user, model=provider.MODEL_FAST, max_tokens=4000,
                                   purpose="internal_links", company=company.get("slug"))
     except Exception:  # noqa: BLE001 — linking must never break the draft
         return content
@@ -239,7 +239,7 @@ def seed_inbound_links(company: dict, new_post_id: int, new_url: str, new_title:
         + (rules + " " if rules else "")
         + "Return JSON {\"links\":[{\"post_id\":<int>,\"anchor\":\"verbatim phrase from that post\"}]}.")
     try:
-        out = provider.think_json(system, "\n\n".join(blocks), model=provider.MODEL_FAST, max_tokens=500,
+        out = provider.think_json(system, "\n\n".join(blocks), model=provider.MODEL_FAST, max_tokens=4000,
                                   purpose="inbound_links", company=company.get("slug"))
     except Exception:  # noqa: BLE001
         return []
@@ -436,8 +436,10 @@ def compose(company_id: int, brief: str) -> dict:
         store.examples_block(company_id, "blog"),   # distilled approved exemplars (what good looks like)
         _BLOG_SCHEMA,                       # structural output the renderer parses
     ]))
+    # 24,000 up front: at 8,000 EVERY post ran out of room and was written a second time at 24,000, so each
+    # one was paid for twice (17 posts on 14 Sep 2026). A ceiling costs nothing unless it is used.
     out = provider.think_json(system, f"Brief: {brief}\n\nWrite the full post now as JSON.",
-                              model=worker._model_for(skill), max_tokens=8000,
+                              model=worker._model_for(skill), max_tokens=24000,
                               purpose="blog:filmspoke", company=company.get("slug"))
     return _stamp_byline(out or {})
 
@@ -1048,7 +1050,7 @@ def revise_surgical(company_id: int, c: dict, correction: str) -> dict:
     ]))
     user = (f"Current post (JSON):\n{json.dumps(c, ensure_ascii=False)}\n\nThe ONLY change to make:\n"
             f"{correction}\n\nReturn the full post JSON with just that change applied, everything else identical.")
-    out = provider.think_json(system, user, model=worker._model_for(skill), max_tokens=8000,
+    out = provider.think_json(system, user, model=worker._model_for(skill), max_tokens=24000,
                               purpose="blog:revise", company=company.get("slug"))
     if not out or not out.get("title"):
         return c

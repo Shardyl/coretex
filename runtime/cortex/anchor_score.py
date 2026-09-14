@@ -49,8 +49,10 @@ def classify_leads(leads: list[dict], company_id: int = 5, chunk: int = 35) -> l
         part = leads[start:start + chunk]
         items = [{"i": j, "title": (l.get("headline") or "")[:160], "comment": (l.get("engagement") or "")[:280]}
                  for j, l in enumerate(part)]
-        out = provider.think_json(sysmsg, "Classify these leads:\n" + json.dumps(items), fast=True, cache=True,
-                                  purpose="anchor-classify", company="filmspoke", max_tokens=3500)
+        # Haiku, as the module says and the standing rule requires for bulk jobs: `fast=True` resolved to
+        # Sonnet, and this ran 100+ calls a day on it ($1.40 to $3.80 daily, 14 Sep 2026).
+        out = provider.think_json(sysmsg, "Classify these leads:\n" + json.dumps(items), model=provider.MODEL_ROUTER,
+                                  cache=True, purpose="anchor-classify", company="filmspoke", max_tokens=3500)
         by_i = {r.get("i"): r for r in (out.get("results") or []) if isinstance(r.get("i"), int)}
         annotated.extend(by_i.get(j, {}) for j in range(len(part)))
     return annotated

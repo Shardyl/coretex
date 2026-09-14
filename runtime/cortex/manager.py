@@ -105,20 +105,24 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
     except Exception:  # noqa: BLE001
         pass
     facts_block = "SYSTEM FACTS (authoritative — judge with these):\n" + "\n".join(f"- {f}" for f in facts)
+    # The STABLE part (the Manager's brief, the company and the standing rules) is the system prompt, so it
+    # is prompt-cached across a batch of drafts and the check + recheck of one draft; everything that
+    # changes per draft (date, task, facts, the draft) is the user message (14 Sep 2026: 65 checks in one
+    # day re-sent ~22k uncached tokens each).
     system = (
         "You are the department Manager at Cortex — the keeper of the standard. Review a worker's draft "
         "and decide if it is ready to go out: does it follow EVERY standing rule, match the company's "
         "brand and voice, and do the task well? Be strict but fair: flag only genuine problems, never "
         "nitpicks. Choose a verdict: 'pass' (ready as-is), 'revise' (fixable issues the worker should "
         "redo), or 'escalate' (needs the owner's judgement: a rule is ambiguous, the draft makes a risky "
-        "or unverifiable claim, or you are simply not confident). State your confidence: high, medium, low.")
+        "or unverifiable claim, or you are simply not confident). State your confidence: high, medium, low."
+        "\n\n" + worker._company_context(company) + "\n\n"
+        "Standing rules the draft MUST follow:\n"
+        + ("\n".join(f"- {r}" for r in rules) or "- (none set yet)"))
     user = (
         worker._now_line() + "\n\n"
-        + worker._company_context(company) + "\n\n"
         f"Task: {brief}\n\n"
-        + facts_block + "\n\n"
-        "Standing rules the draft MUST follow:\n"
-        + ("\n".join(f"- {r}" for r in rules) or "- (none set yet)")
+        + facts_block
         + f"\n\nDRAFT:\n{draft}\n\n"
         'Return JSON: {"verdict":"pass|revise|escalate","confidence":"high|medium|low",'
         '"summary":"one short line the owner reads","issues":["concrete rule/brand problems, [] if none"],'
@@ -130,7 +134,7 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
         "rule break, verdict is 'pass' and the summary says 'style suggestions only' plus the main one. "
         "If issues is empty, verdict is 'pass' and the summary is simply what the draft does well, in "
         "five words or fewer.")
-    out = provider.think_json(system, user, max_tokens=1500,
+    out = provider.think_json(system, user, max_tokens=1500, cache=True,
                               purpose=f"manager:{skill.get('skill_key', '')}", company=company.get("slug"))
 
     verdict = (out.get("verdict") or "pass").lower().strip()

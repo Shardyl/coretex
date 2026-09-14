@@ -241,9 +241,11 @@ def draft(skill: dict, company: dict, request: dict,
     # ORDER IS AUTHORITY. Everything written in code goes FIRST and the editable rules go LAST, nearest
     # the task, closed by an explicit precedence statement. The code blocks used to sit AFTER the rules,
     # so wherever the two disagreed the hardcoded line won on position alone.
+    # The system prompt is kept STABLE per skill, company and sender so it can be prompt-cached across a
+    # batch and across redrafts (14 Sep 2026: drafts re-sent ~30k uncached tokens per call). The code-stamped
+    # date changes every minute, so it opens the user message instead; it is still authoritative (_PRECEDENCE).
     system = "\n\n".join(filter(None, [
         f"You are Cortex's worker for the '{skill['name']}' skill.",
-        _now_line(),
         ident_block,
         _EMAIL_BODY_RULE if is_email else
         ("Produce the deliverable only — no preamble, no explanation, no meta-commentary."
@@ -257,7 +259,7 @@ def draft(skill: dict, company: dict, request: dict,
         _PRECEDENCE,
     ]))
     atts = request.get("attachments") if isinstance(request, dict) else None
-    user = [f"Task: {request.get('brief') if isinstance(request, dict) else request}"]
+    user = [_now_line(), f"Task: {request.get('brief') if isinstance(request, dict) else request}"]
     if is_email:   # tell the worker WHO it's writing to, so it greets the recipient (not Rashad/itself)
         inq = request.get("inquiry") or {}
         # THEIR EMAIL must always reach the drafter. Some lanes embed it in the brief (_email_brief);
@@ -397,7 +399,13 @@ def draft(skill: dict, company: dict, request: dict,
     # DATA (setting 'first_reply_models'), not a model id in code, so the tier is visible and editable
     # rather than a silent upgrade nobody can see (7 Sep 2026).
     _mdl = _model_for(skill)
-    if isinstance(request, dict) and not request.get("thread_reply"):
+    # A GENUINE FIRST REPLY ONLY (14 Sep 2026): a real inbound message, answered for the first time. It used to
+    # be "anything not flagged thread_reply", so automatic follow-ups, corrections and guard redrafts all ran on
+    # the top tier: 29 Fable drafts on one Monday (the weekend's chases rolled over), $10.34 of a $30 day.
+    _first = (isinstance(request, dict) and not request.get("thread_reply") and not request.get("followup")
+              and not request.get("outbound") and not (correction or prev_draft or manager_feedback)
+              and bool(((request.get("inquiry") or {}).get("message") or "").strip()))
+    if _first:
         try:
             from . import db as _db
             _fm = (_db.setting_get("first_reply_models") or {}).get(skill.get("skill_key") or "")
@@ -410,7 +418,7 @@ def draft(skill: dict, company: dict, request: dict,
     # so the cap costs nothing unless it is actually used.
     out = provider.think(system, "\n\n".join(user), model=_mdl, think_hard=True,
                          max_tokens=16000, purpose=f"draft:{skill.get('skill_key', '')}",
-                         company=company.get("slug"), images=atts)
+                         company=company.get("slug"), images=atts, cache=True)
     return _no_dashes(out) if is_email else out   # house rule: no em/en dashes in visible email copy
 
 
@@ -445,7 +453,7 @@ def draft_article(skill: dict, company: dict, request: dict,
                     "takes out the date, not the day of the week); when he asks to change or add something, "
                     "touch only that. Produce the new version:\n" + correction)
     out = provider.think_json(system, "\n\n".join(user), model=_model_for(skill), fast=False,
-                              max_tokens=8000, purpose=f"blog:{skill.get('skill_key', '')}",
+                              max_tokens=24000, purpose=f"blog:{skill.get('skill_key', '')}",
                               company=company.get("slug"))
     title = _no_dashes((out.get("title") or "").strip()) or "Untitled"
     html = _no_dashes((out.get("html") or "").strip())
