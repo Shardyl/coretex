@@ -33,7 +33,8 @@ def _ads_search(cid: str, query: str) -> list[dict]:
         f"https://googleads.googleapis.com/v25/customers/{cid}/googleAds:searchStream",
         data=json.dumps({"query": query}).encode(),
         headers={"Authorization": f"Bearer {tok}",
-                 "developer-token": str(cfg["developer_token"]),
+                 # developer-token header dropped 2026-09-14: Google sunset it in favour of
+                 # Cloud-project access (verified working token-less); header dies H1 2027.
                  "login-customer-id": str(cfg["login_customer_id"]),
                  "Content-Type": "application/json"}, method="POST")
     try:
