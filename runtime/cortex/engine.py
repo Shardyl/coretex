@@ -2447,6 +2447,49 @@ _ATTACH_CLAIM = re.compile(
     r"|enclosed\s+(?:is|are|please)|(?:i|we)\s+attach\b|attaching\s+(?:our|the|a|both|it|them))", re.I)
 
 
+_GREET = re.compile(r"^\s*(?:hello|hi|hey|dear|good\s+(?:morning|afternoon|evening))[\s,]+([A-Za-z][\w'\-]*)",
+                    re.I)
+_GENERIC_GREET = {"all", "team", "there", "everyone", "both", "sir", "madam", "sirs", "colleagues", "friends",
+                  "guys", "folks", "again"}
+
+
+def _greeting_mismatch(draft: str, req: dict) -> str:
+    """'' unless the email GREETS a known person who is not who it is addressed to (card 651: "Hello Mai" on
+    an email to Hussein Osman). Deterministic: the greeted first name against the To name and address;
+    'known person' = someone on the thread, on the deal, or in the CRM at the recipient's own domain. A name
+    we do not know (a nickname, a spelling) is never blocked."""
+    first = next((ln for ln in (draft or "").splitlines() if ln.strip()), "")
+    mm = _GREET.match(first)
+    if not mm:
+        return ""
+    g = mm.group(1).lower()
+    if g in _GENERIC_GREET or len(g) < 2:
+        return ""
+    req = req or {}
+    inq = req.get("inquiry") or {}
+    to = [inq.get("email") or ""] + [str(x) for x in (req.get("to_extra") or [])]
+    for h in [(inq.get("name") or "").lower()] + [t.split("@")[0].lower() for t in to]:
+        if g in re.split(r"[^a-z]+", h) or (len(g) >= 3 and g in re.sub(r"[^a-z]", "", h)):
+            return ""
+    known = any(g in re.split(r"[^a-z]+", str(a).split("@")[0].lower())
+                for a in (req.get("thread_cc") or []) + (req.get("cc_extra") or []))
+    try:
+        dom = (inq.get("email") or "").split("@")[-1].lower()
+        if not known and dom:
+            known = bool(db.one("select 1 from crm_master where lower(email) like %s and lower(first_name)=%s "
+                                "limit 1", ("%@" + dom, g)))
+        if not known and req.get("deal_id"):
+            d = db.one("select contacts from crm_projects where id=%s", (int(req["deal_id"]),)) or {}
+            known = any(g in re.split(r"[^a-z]+", str((c or {}).get("name") or "").lower())
+                        for c in (d.get("contacts") or []))
+    except Exception:  # noqa: BLE001
+        pass
+    if not known:
+        return ""
+    return (f"it greets '{mm.group(1)}' but it is addressed to {inq.get('name') or inq.get('email')} "
+            f"({inq.get('email')})")
+
+
 def _has_outgoing_attachment(req: dict) -> bool:
     """Does this email genuinely carry a file? Library documents on the card, or our own files (never the
     client's inbound ones, which are the drafter's eyes only and never re-sent)."""
@@ -2480,6 +2523,14 @@ def _ensure_clean_email(skill: dict, company: dict, dreq: dict, draft: str,
                 "two actions to set', 'OWNER TO CONFIRM'). The email body must contain ONLY the message "
                 "the client reads. Remove every non-client line; reminders and internal work are handled "
                 "by the system, never written into the email."])
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # greeting someone who is not the recipient: one redraft here; the approval gate is the guarantee
+        _gm = _greeting_mismatch(draft, dreq)
+        if _gm:
+            draft = worker.draft(skill, company, dreq, prev_draft=draft, manager_feedback=[
+                f"WRONG PERSON: {_gm}. Write to the person this email is addressed to and greet them by "
+                "their own name; never greet anyone else."])
     except Exception:  # noqa: BLE001
         pass
     try:   # an attachment claimed but not carried: one redraft here; the approval gate is the guarantee
@@ -2620,6 +2671,12 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
             return {"ok": False, "blocked": True,
                     "error": "this card has NO email body - nothing was drafted, so approving would send "
                              "only a signature. Ask me to redraft it; nothing can send until then."}
+        # THE GREETING MATCHES THE RECIPIENT: never "Hello Mai" on an email to Hussein (card 651, MAH Gold).
+        _gm = _greeting_mismatch(task.get("draft") or "", task.get("request") or {})
+        if _gm:
+            return {"ok": False, "blocked": True,
+                    "error": f"WRONG PERSON: {_gm}. Fix the greeting or who it goes to; nothing can send "
+                             "until then."}
         # NOTHING IS "ATTACHED" UNLESS IT IS: the guarantee, whatever the drafter did (card 631, Brandgate).
         _claim = _attachment_claim(task.get("draft") or "", task.get("request") or {})
         if _claim:
@@ -3810,6 +3867,36 @@ def _request_for_draft(task: dict) -> dict:
     return _draft_context_for_reply(task, req)
 
 
+def _thread_counterpart(m: dict, ours: dict) -> str:
+    """Who a thread is actually WITH: the sender when they are not us, else the first outside address we
+    wrote TO on it. '' when it cannot tell."""
+    from .identity import OWN_COMPANY_DOMAINS
+    frm = (m.get("email") or "").lower()
+    if frm and frm not in ours and frm.split("@")[-1] not in OWN_COMPANY_DOMAINS:
+        return frm
+    for a in re.findall(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", str(m.get("to") or "")):
+        al = a.lower()
+        if al not in ours and al.split("@")[-1] not in OWN_COMPANY_DOMAINS:
+            return al
+    return ""
+
+
+def _deal_contact(deal_id, email: str) -> dict | None:
+    """This person as the DEAL records them (its contacts list or main contact), with a name; else None."""
+    if not deal_id or not email:
+        return None
+    d = db.one("select contact_email, contacts from crm_projects where id=%s", (int(deal_id),)) or {}
+    e = email.lower()
+    hit = next(({"email": c["email"], "name": c.get("name") or ""} for c in (d.get("contacts") or [])
+                if isinstance(c, dict) and (c.get("email") or "").lower() == e), None)
+    if not hit and (d.get("contact_email") or "").lower() == e:
+        hit = {"email": d["contact_email"], "name": ""}
+    if hit and not hit["name"]:
+        c = db.one("select first_name, last_name from crm_master where lower(email)=%s", (e,)) or {}
+        hit["name"] = " ".join(x for x in (c.get("first_name"), c.get("last_name")) if x).strip()
+    return hit
+
+
 def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
     """THREAD ADOPTION: a follow-up or deal-linked draft to a known contact must continue the REAL Gmail
     thread from the mailbox that owns it (thread-true reply + thread-sticky sender) — never open a fresh
@@ -3937,6 +4024,22 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
             return                       # owner's mailbox has no local copy: no safe threadId to reply with
         _, s, m = hits[owner["rt_key"]]  # threadIds are mailbox-local: take them from the OWNER's mailbox
     s = owner
+    # THE THREAD DECIDES WHO A FOLLOW-UP GOES TO (14 Sep 2026). Card 651 was addressed to Hussein, the MAH
+    # Gold deal's primary contact, but continued "LBMA final revised", which is Gino's conversation with Mai
+    # (Hussein only sat in its copy line): the writer followed the thread and wrote "Hello Mai" to Hussein.
+    # On a follow-up, the person this thread is actually with is the recipient, provided the deal lists
+    # them. If the deal does not, this thread is not continued at all.
+    _rekey = {}
+    if req.get("followup"):
+        cp = _thread_counterpart(m, ours)
+        if cp and cp != email.lower():
+            on_deal = _deal_contact(req.get("deal_id") or task.get("deal_id"), cp)
+            if not on_deal:
+                return
+            req["inquiry"] = {**(req.get("inquiry") or {}), "email": on_deal["email"], "name": on_deal["name"]}
+            email = on_deal["email"]
+            _rekey = {"serialize_key": email}
+            manifest.append(f"readdressed_to_thread({email})")
     req["thread"] = {"id": m["thread_id"], "msg_id": m.get("msg_id") or "",
                      "references": m.get("references") or ""}
     req["thread_cc"] = _thread_participants(m, email)
@@ -3950,7 +4053,7 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
             db.execute(
                 "update tasks set request = request || %s::jsonb where id=%s",
                 (json.dumps({"thread": req["thread"], "from_email": req["from_email"],
-                             "mailbox_rt": req["mailbox_rt"], "inquiry": req["inquiry"]}), task["id"]))
+                             "mailbox_rt": req["mailbox_rt"], "inquiry": req["inquiry"], **_rekey}), task["id"]))
     except Exception:  # noqa: BLE001
         pass
 
@@ -3980,6 +4083,8 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
             req["mailbox_rt"] = _rt_for_sender(co, _ds)
             manifest.append("deal_owner_sender")
     _adopt_existing_thread(task, req, manifest)
+    # adoption may have re-addressed a follow-up to the person the thread is with: every shelf below is theirs
+    email = ((req.get("inquiry") or {}).get("email") or "").strip() or email
     # ONE SENDER, DECIDED ONCE, BEFORE THE DRAFT. The envelope used to fall back to the company's
     # reply_from at SEND time, long after the drafter had been told nothing about who it was writing
     # as - so the model picked a person for itself. Card 451 opened "Rashad here, founder of Sensa" on

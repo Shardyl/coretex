@@ -659,6 +659,18 @@ never "the attached brief", which is their file) when the email carries no outgo
 our own `attachments`; a client's inbound files never count). `_ensure_clean_email` redrafts once to remove
 the claim, and `approve_task` BLOCKS any email that still makes one, naming the sentence. Code, not a rule:
 the email-handling rule saying the same thing existed and was not enough.
+THE THREAD DECIDES WHO A FOLLOW-UP GOES TO, AND THE GREETING MUST MATCH THE TO (14 Sep 2026). Card 651, an
+automatic check-in on MAH Gold (deal 33), was addressed to Hussein (the deal's primary contact) but continued
+"LBMA final revised", which is Gino's conversation with Mai (Hussein only in its copy line): the writer
+followed the thread and wrote "Hello Mai" to Hussein, and the Manager passed it. Two parts decided "who"
+separately. Now, in `_adopt_existing_thread`, a FOLLOW-UP is re-addressed to the person the adopted thread is
+actually with (`_thread_counterpart`: the outside sender, else the outside address we wrote to), provided the
+deal lists them (`_deal_contact`); if it does not, that thread is not continued. The card's `inquiry` and
+`serialize_key` are persisted, and every shelf after adoption reads the new recipient. Backstop,
+deterministic like the sender check: `_greeting_mismatch` flags an opening that greets a KNOWN other person
+(on the thread, on the deal, or in the CRM at the recipient's domain); `_ensure_clean_email` redrafts once and
+`approve_task` blocks. Unknown names (nicknames, spellings) never block. Replies to inbound mail are not
+re-addressed: whoever wrote is who we answer.
 
 ## WhatsApp (inbound)
 
