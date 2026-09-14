@@ -642,6 +642,15 @@ it (cockpit, Telegram, Talk `correct_task`), and Talk's `draft_email` / `create_
 `correct_task` add the links from the person's last three messages (`_TURN_LINKS`, a context variable, never
 a tool input). The guard and the Manager trust everything in the request, and the drafter is shown them as
 "LINKS THE OWNER OR TEAM GAVE YOU". A link the MODEL invents is still stripped.
+NOTHING IS "ATTACHED" UNLESS IT IS (owner, 14 Sep 2026: "you can never say you're attaching something without
+a validation that the attachment is there"). Card 631, an automatic chase, told Ahmad at Brandgate "please find
+attached our proposal and quotation" with nothing on it and was approved and sent: the drafter read the deal
+note naming the files, and follow-up cards never attach. `engine._attachment_claim(draft, request)` finds OUR
+claims to attach ("please find attached", "I've attached", "attached is", "we are attaching", "enclosed is"...,
+never "the attached brief", which is their file) when the email carries no outgoing file (`attach_docs`, or
+our own `attachments`; a client's inbound files never count). `_ensure_clean_email` redrafts once to remove
+the claim, and `approve_task` BLOCKS any email that still makes one, naming the sentence. Code, not a rule:
+the email-handling rule saying the same thing existed and was not enough.
 
 ## WhatsApp (inbound)
 

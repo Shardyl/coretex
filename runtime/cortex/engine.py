@@ -2399,6 +2399,38 @@ def reconcile_attachments(task_id: int) -> None:
 
 _META_LEAK = re.compile(r"\bCORTEX\b\s*[,:]|OWNER TO CONFIRM|\bactions? to set\b|\[internal\b", re.I)
 
+# NOTHING IS "ATTACHED" UNLESS IT IS (owner, 14 Sep 2026: "you can never say you're attaching something without
+# a validation that the attachment is there"). Card 631 told Ahmad at Brandgate "please find attached our
+# proposal and quotation" with nothing on it: the chase read the deal note naming the files, and follow-up
+# cards never attach. These are OUR claims to attach; "the attached brief" (their file) is deliberately not one.
+_ATTACH_CLAIM = re.compile(
+    r"\b(?:please\s+(?:find|see)\s+(?:attached|enclosed)|find\s+(?:attached|enclosed)"
+    r"|(?:i|we)\s*(?:'ve|\s+have)\s+(?:also\s+)?(?:attached|enclosed)"
+    r"|(?:i|we)\s*(?:'m|\s+am|'re|\s+are)\s+(?:also\s+)?(?:attaching|enclosing)"
+    r"|attached\s+(?:is|are|you\s+will\s+find|herewith|to\s+this\s+(?:e-?mail|message))"
+    r"|enclosed\s+(?:is|are|please)|(?:i|we)\s+attach\b|attaching\s+(?:our|the|a|both|it|them))", re.I)
+
+
+def _has_outgoing_attachment(req: dict) -> bool:
+    """Does this email genuinely carry a file? Library documents on the card, or our own files (never the
+    client's inbound ones, which are the drafter's eyes only and never re-sent)."""
+    req = req or {}
+    if req.get("attach_docs"):
+        return True
+    return bool(req.get("attachments")) and not req.get("inbound_attachments")
+
+
+def _attachment_claim(draft: str, req: dict) -> str:
+    """'' when the email is truthful; else the sentence claiming an attachment the email does not carry."""
+    if _has_outgoing_attachment(req):
+        return ""
+    m = _ATTACH_CLAIM.search(draft or "")
+    if not m:
+        return ""
+    start = max(draft.rfind(".", 0, m.start()), draft.rfind("\n", 0, m.start())) + 1
+    end = min([i for i in (draft.find(".", m.end()), draft.find("\n", m.end())) if i >= 0] or [len(draft)])
+    return re.sub(r"\s+", " ", draft[start:end + 1]).strip()[:220]
+
 
 def _ensure_clean_email(skill: dict, company: dict, dreq: dict, draft: str,
                         prev: str | None = None) -> str:
@@ -2412,6 +2444,15 @@ def _ensure_clean_email(skill: dict, company: dict, dreq: dict, draft: str,
                 "two actions to set', 'OWNER TO CONFIRM'). The email body must contain ONLY the message "
                 "the client reads. Remove every non-client line; reminders and internal work are handled "
                 "by the system, never written into the email."])
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # an attachment claimed but not carried: one redraft here; the approval gate is the guarantee
+        _claim = _attachment_claim(draft, dreq)
+        if _claim:
+            draft = worker.draft(skill, company, dreq, prev_draft=draft, manager_feedback=[
+                f"Your draft says a file is attached, but NOTHING is attached to this email: \"{_claim}\". "
+                "Never say anything is attached, enclosed or included unless it genuinely is. Remove that "
+                "claim: offer to send it, or refer to what was sent before, in your own words."])
     except Exception:  # noqa: BLE001
         pass
     return _ensure_real_links(skill, company, dreq, draft)
@@ -2543,6 +2584,13 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
             return {"ok": False, "blocked": True,
                     "error": "this card has NO email body - nothing was drafted, so approving would send "
                              "only a signature. Ask me to redraft it; nothing can send until then."}
+        # NOTHING IS "ATTACHED" UNLESS IT IS: the guarantee, whatever the drafter did (card 631, Brandgate).
+        _claim = _attachment_claim(task.get("draft") or "", task.get("request") or {})
+        if _claim:
+            return {"ok": False, "blocked": True,
+                    "error": f"this email says something is attached, but NOTHING is attached (\"{_claim}\"). "
+                             "Attach the file on the card, or ask me to take that line out; nothing can "
+                             "send until then."}
         # WRONG PERSON IN THE BODY: never send an email that introduces itself as someone else.
         try:
             _cco = store.get_company(task.get("company_id")) or {}
