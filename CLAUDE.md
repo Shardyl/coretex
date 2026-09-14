@@ -1371,7 +1371,7 @@ shown hollow until he rates). Endpoints: `GET /api/media/library`, `POST /api/me
 Rashad's training log. Data lives in the **`fitness` schema** (not the company tables) in the same
 `cortex` DB, so it is in the nightly Drive dump like everything else. **STANDALONE since 14 Sep 2026:**
 the PWA lives at **fitness.coretex.uk** (source still `web/fitness/` in this repo; served by the
-`fitness-web` systemd unit, python http.server on 127.0.0.1:8090, tunnel public hostname -> 8090).
+`fitness-web` systemd unit, python http.server on 127.0.0.1:8090, tunnel public hostname -> 8090; ingress edited via API — the box CF token gained Cloudflare Tunnel Write on 14 Sep 2026, so tunnel hostnames need no dashboard).
 It calls the API at coretex.uk by absolute URL (the CORS regex admits *.coretex.uk). Auth is a
 ten-year owner token delivered ONCE via the setup link's `#k=` fragment and stored in the app's
 localStorage (`fitness_device_key`) — no PIN, no cockpit bounce, no 14-day expiry. The owner ruled
