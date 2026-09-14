@@ -554,6 +554,24 @@ Tabscanner's 5 open opportunities were silently doing nothing. Never armed for L
 (its own account-level loop)/Completed (silent by design). A deal with NO contact anywhere is left
 off and raises ONE deduped "no contact" notification rather than nudging into a void every 3 days.
 Existing pre-31-Aug deals were NOT retro-armed - that would fire a chase blast.
+
+**NEVER CHASE A CLOSED DEAL OR AN UNANSWERED REPLY (14 Sep 2026).** Card 629 chased Yann Prudent (Codexa, deal
+80) a fourth time, saying "they have not replied", three days after he had replied ("tested it, works really
+well, will keep you in mind") and two days after the deal went to Lost. Three faults, three fixes:
+- `crm.NO_CHASE_STAGES` = Lost and Completed. `set_project_stage` into either switches automation off and logs
+  it on the timeline; `advance_followup` refuses a deal in either stage whatever its flag says. DORMANT IS NOT
+  IN IT on purpose: nobody who approached us is dumped as dead, so a dormant deal keeps its soft revivals.
+  Swept on the day: 80 and 104 (Property Finder) were Lost with chases on; both switched off.
+- THEY SPOKE LAST: `_spawn_followup_card` reads the thread it quotes (`_deal_thread_msgs`) and
+  `_they_spoke_last` returns their newest HUMAN message (auto-replies excluded) when it is newer than anything
+  we sent them. "What we sent" is the thread's other messages PLUS the deal timeline's `email_out` /
+  `email_out_manual` entries, because the mailbox the thread is read from may never see our replies (Sensa
+  reads hello@, which is never copied). If they spoke last: no card, the step is not counted, the cadence
+  pauses (`pause_followups`), their message goes on the timeline (`record_inbound`) and a high-priority
+  notification quotes it. Tested live: Codexa caught; Sheraa 118 and Massar 117 (we replied last) not.
+- rashad@tabscanner.com is now in `inbox_registry` (rt `gmail_send_refresh_token:tabscanner`), so Tabscanner
+  replies to Rashad land on the deal and pause the cadence like Sensa's. Before, Tabscanner read api@ only for
+  inbound and rashad@ for SENT mail only. Dry run first: 5 recent emails, all correctly ignored, no cards.
 `_spawn_followup_card` resolves the contact the same way the quotation does: deal contact wins, else
 the ACCOUNT's single emailable contact fills in, ambiguity stays blank (a deal whose contact sat on
 the account but not the deal, Codexa, silently never drafted). The greeting name comes from

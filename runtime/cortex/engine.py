@@ -3228,22 +3228,58 @@ def run_opportunity_followups() -> dict:
     return {"fired": fired}
 
 
-def _deal_thread_context(co: dict, email: str, limit: int = 5) -> str:
+def _deal_thread_msgs(co: dict, email: str, limit: int = 5) -> list:
+    """The recent REAL messages with this contact, newest first, from the company's sales/send mailbox.
+    Fail-soft: an unreadable mailbox returns []."""
+    try:
+        slug = co.get("slug")
+        rt = next((k for k in (f"gmail_send_refresh_token:{slug}", f"gmail_refresh_token:{slug}")
+                   if db.setting_get(k)), None)
+        if not rt:
+            return []
+        return gmail.list_recent(days=180, limit=limit, rt_key=rt,
+                                 q=f"(from:{email} OR to:{email}) newer_than:180d",
+                                 company=_inbox_client_company(slug))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _msg_time(m: dict):
+    from email.utils import parsedate_to_datetime
+    try:
+        dt = parsedate_to_datetime(m.get("date") or "")
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _they_spoke_last(opp: dict, email: str, msgs: list) -> dict | None:
+    """Their newest HUMAN message in the thread, when it is newer than anything we have sent them; else None.
+    'What we sent' is the thread's own messages from anyone else PLUS the deal timeline's sends, because the
+    mailbox the thread is read from may never see our replies (Sensa reads hello@, which is never copied)."""
+    from . import autoreply as _ar
+    e = (email or "").strip().lower()
+    theirs = [m for m in msgs if (m.get("email") or "").strip().lower() == e and not _ar.is_auto(m) and _msg_time(m)]
+    if not theirs:
+        return None
+    newest = max(theirs, key=_msg_time)
+    ours = [_msg_time(m) for m in msgs if (m.get("email") or "").strip().lower() != e and _msg_time(m)]
+    for h in (opp.get("history") or []):
+        if h.get("event") in ("email_out", "email_out_manual") and not h.get("voided") and h.get("ts"):
+            try:
+                t = datetime.fromisoformat(str(h["ts"]).replace("Z", "+00:00"))
+                ours.append(t if t.tzinfo else t.replace(tzinfo=timezone.utc))
+            except ValueError:
+                pass
+    return newest if not ours or _msg_time(newest) > max(ours) else None
+
+
+def _deal_thread_context(co: dict, email: str, limit: int = 5, msgs: list | None = None) -> str:
     """The recent REAL correspondence with this contact (newest first, trimmed), read from the company's
     sales/send mailbox — so a follow-up references what was actually said, never a generic chase. Fail-soft:
     an unreadable mailbox returns '' and the follow-up still goes out (just less informed)."""
     try:
-        slug = co.get("slug")
-        rt = None
-        for k in (f"gmail_send_refresh_token:{slug}", f"gmail_refresh_token:{slug}"):
-            if db.setting_get(k):
-                rt = k
-                break
-        if not rt:
-            return ""
-        msgs = gmail.list_recent(days=180, limit=limit, rt_key=rt,
-                                 q=f"(from:{email} OR to:{email}) newer_than:180d",
-                                 company=_inbox_client_company(slug))
+        msgs = _deal_thread_msgs(co, email, limit) if msgs is None else msgs
         lines = []
         for m in msgs:
             body = re.sub(r"\s+", " ", (m.get("body") or m.get("snippet") or "")).strip()[:900]
@@ -3315,7 +3351,31 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
         except Exception:  # noqa: BLE001
             pass
         # a revival hinges on WHY the deal faded, which often sits deep in the thread — serve more of it
-        thread = _deal_thread_context(co, email, limit=10 if action == "revive" else 5)
+        msgs = _deal_thread_msgs(co, email, limit=10 if action == "revive" else 5)
+        # THEY SPOKE LAST: never chase an unanswered reply (14 Sep 2026). Yann Prudent answered our chase on
+        # 11 Sep ("tested it, works really well, will keep you in mind") into rashad@tabscanner.com, a mailbox
+        # Cortex then read for SENT mail only, so the reply never paused the cadence and a fourth chase was
+        # drafted saying "they have not replied". The chase maker reads the very thread it quotes: when their
+        # message is the newest, the ball is in our court, so no chase, the cadence pauses, the owner is told.
+        last = _they_spoke_last(opp, email, msgs)
+        if last:
+            db.execute("update crm_projects set followup_step=%s where id=%s",
+                       (opp.get("followup_step") or 0, opp["id"]))     # the chase that did not fire is not counted
+            crm.pause_followups(opp["id"])
+            try:
+                pipeline.record_inbound(last, opp, co)
+            except Exception:  # noqa: BLE001
+                pass
+            said = re.sub(r"\s+", " ", last.get("body") or last.get("snippet") or "").strip()[:220]
+            who = (primary or {}).get("name") or email
+            notifications.notify(
+                f"{who} replied: no {label} sent",
+                f"'{opp['title']}': their reply of {last.get('date') or 'recently'} is the newest message, so the "
+                f"{label} was not drafted and the follow-ups are paused until we answer. They said: \"{said}\"",
+                priority="high", category="lead", company_id=co.get("id"), target_type="deal",
+                target_id=opp["id"], dedup_key=f"spoke-last:{opp['id']}:{gmail.mail_ref(last)}")
+            return
+        thread = _deal_thread_context(co, email, msgs=msgs)
         if thread:
             brief += ("\nRECENT CORRESPONDENCE with them (newest first — reference it, stay consistent "
                       "with it, and never repeat a chase they already answered):\n" + thread[:5000])

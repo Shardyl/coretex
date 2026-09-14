@@ -1138,6 +1138,9 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
 # the next day a reminder Cortex had set on 7 Sep ("schedule a call to discuss the proposal") still fired.
 # Close & review is NOT here: delivery promises can still be owed while a project wraps up.
 CLOSED_STAGES = (LOST_STAGE, DORMANT_STAGE, COMPLETED_STAGE)
+# A deal in these stages is NEVER chased (14 Sep 2026). Dormant is deliberately not here: the owner's rule is
+# that nobody who approached us is dumped as dead, so a dormant deal keeps its soft revivals.
+NO_CHASE_STAGES = (LOST_STAGE, COMPLETED_STAGE)
 
 
 def _cancel_cortex_reminders(p: dict, stage: str) -> list:
@@ -1167,6 +1170,13 @@ def set_project_stage(project_id: int, stage: str, actor: str = "system") -> dic
     p["stage"] = stage
     if stage in CLOSED_STAGES and old not in CLOSED_STAGES:
         _cancel_cortex_reminders(p, stage)
+    if stage in NO_CHASE_STAGES and (p.get("automation") == "auto" or p.get("next_followup")):
+        # MOVING A DEAL TO LOST OR COMPLETED SWITCHES ITS CHASES OFF (14 Sep 2026): Codexa went to Lost on
+        # 12 Sep with automation left on, so a fourth chase was drafted two days later and another booked.
+        db.execute("update crm_projects set automation=null, next_followup=null, updated_at=now(), "
+                   "history = history || %s::jsonb where id=%s",
+                   (Json([{"ts": _now(), "event": "note",
+                           "text": f"Automatic follow-ups switched off: the deal moved to {stage}."}]), project_id))
     if stage in WON_STAGES:
         flag_clients_for_deal(p)        # won = the people/company on it become clients (sticky)
     if p.get("contact_email"):
@@ -1290,6 +1300,10 @@ def advance_followup(deal_id: int) -> dict | None:
     ('chase'/'checkin') and arms the NEXT step, or marks the opportunity Lost when the sequence ends."""
     p = db.one("select * from crm_projects where id=%s", (deal_id,))
     if not p or p.get("automation") != "auto":
+        return None
+    if p.get("stage") in NO_CHASE_STAGES:     # a lost or completed deal is never chased, whatever the flag says
+        db.execute("update crm_projects set automation=null, next_followup=null, updated_at=now() where id=%s",
+                   (deal_id,))
         return None
     cad = (p.get("cadence") if isinstance(p.get("cadence"), dict) and p["cadence"].get("steps")
            else get_cadence(p["company"]))   # a per-deal cadence (decision-chase, recurring) wins
