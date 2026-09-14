@@ -1063,6 +1063,9 @@ def require_unsubscribe(company_id: int, built: dict) -> dict:
     if not dom:
         raise NoUnsubscribe("no sending domain configured")
     mailgun.ensure_unsubscribe_tracking(dom)   # turns it on if off; raises if it cannot
+    ok, why = mailgun.https_links_ready(dom)    # every tracked link (CTA, film, unsubscribe) must be https + certified
+    if not ok:
+        raise NoUnsubscribe(f"tracked links on {dom} are not https-ready: {why}")
     built["unsubscribe_checked"] = True
     return built
 
@@ -1578,6 +1581,13 @@ def _drain_one(job: dict) -> dict | None:
         db.execute("update newsletter_send_jobs set status='paused', updated_at=now() where id=%s", (jid,))
         return {"status": "paused", "job_id": jid, "task_id": job["task_id"], "company_id": cid,
                 "subject": job["subject"], "sent": sent, "total": total, "bounces": "no unsubscribe link in the issue"}
+    try:
+        ok, why = mailgun.https_links_ready(domain)
+    except Exception:  # noqa: BLE001 - a Mailgun API blip must not stop a send; the next tick re-checks
+        ok, why = True, ""
+    if not ok:   # links would go out http (blocked by strict browsers) or https without a certificate (dead)
+        db.execute("update newsletter_send_jobs set last_batch_at=now(), updated_at=now() where id=%s", (jid,))
+        return None
     try:
         n = send_bulk(cid, job["subject"], job["html"], job["body_text"], chunk, images, tag="newsletter")
     except Exception:  # noqa: BLE001 — transient; don't advance, retry next tick

@@ -86,6 +86,28 @@ def unsubscribe_tracking_on(domain: str, max_age: float = 600.0) -> bool:
     return ok
 
 
+_HTTPS_OK: dict[str, float] = {}
+
+
+def https_links_ready(domain: str, max_age: float = 600.0) -> tuple[bool, str]:
+    """Do this domain's tracked links go out as https with a live certificate? Mailgun rewrites every link
+    through email.<domain>; with web_scheme http a strict browser blocks the click, with web_scheme https but
+    no certificate the click fails outright (Matthew at Uscenes, 14 Sep 2026). Cached 10 min when ready."""
+    import time as _t
+    if _HTTPS_OK.get(domain, 0) > _t.time():
+        return True, "ok"
+    key = config.require("MAILGUN_API_KEY")
+    d = httpx.get(f"{BASE.replace('/v3', '/v4')}/domains/{domain}", auth=("api", key), timeout=30).json().get("domain") or {}
+    if d.get("web_scheme") != "https":
+        return False, "web_scheme is http"
+    host = f"{d.get('web_prefix') or 'email'}.{domain}"
+    st = httpx.get(f"{BASE.replace('/v3', '/v2')}/x509/{host}/status", auth=("api", key), timeout=30).json()
+    if st.get("status") != "active":
+        return False, f"tracking certificate for {host}: {st.get('status') or st.get('message') or 'missing'}"
+    _HTTPS_OK[domain] = _t.time() + max_age
+    return True, "ok"
+
+
 def ensure_unsubscribe_tracking(domain: str) -> None:
     """Switch unsubscribe tracking ON for the domain if it is off (idempotent), then verify."""
     if unsubscribe_tracking_on(domain):
