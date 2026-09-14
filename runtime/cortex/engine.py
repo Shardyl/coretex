@@ -5533,8 +5533,44 @@ def promote_due_tasks() -> None:
             db.execute("update tasks set last_status=%s where id=%s", (f"error: {e}"[:120], t["id"]))
 
 
+_DRIP_LOCK = threading.Lock()
+_DRIP_STARTED = False
+
+
+def _start_drip_thread() -> None:
+    """Run the newsletter drip on a daemon thread with its own 60s clock. The main loop is single-threaded and
+    a blog build with two 4-minute model calls starved the HBMSU send for 25 minutes (14 Sep 2026). The drip
+    only reads/writes the jobs table and Mailgun, so it is safe beside the loop; the lock keeps exactly one
+    drain running at a time (two drains on the same `sent` offset would mail the same batch twice)."""
+    global _DRIP_STARTED
+    if _DRIP_STARTED:
+        return
+    _DRIP_STARTED = True
+
+    def _loop() -> None:
+        while True:
+            try:
+                drain_newsletter_sends()
+            except Exception as e:  # noqa: BLE001
+                try:
+                    tg.send(f"(newsletter drip hiccup: {e})")
+                except Exception:  # noqa: BLE001
+                    pass
+            time.sleep(60)
+    threading.Thread(target=_loop, name="newsletter-drip", daemon=True).start()
+
+
 def drain_newsletter_sends() -> None:
     """Push the next throttled batch of any in-flight newsletter, and alert when one finishes or auto-pauses."""
+    if not _DRIP_LOCK.acquire(blocking=False):
+        return   # a drain is already running (thread + manual call): never double-send a batch
+    try:
+        _drain_locked()
+    finally:
+        _DRIP_LOCK.release()
+
+
+def _drain_locked() -> None:
     for ev in newsletter.drain_send_jobs():
         co = store.get_company(ev["company_id"])
         coname = co["name"] if co else ""
@@ -5661,6 +5697,7 @@ def run(poll_idle: float = 1.0) -> None:
         except Exception:  # noqa: BLE001
             pass
     _beat("start")
+    _start_drip_thread()   # the newsletter drip ticks on its own clock, never behind a slow model call
     while True:
         _beat("tasks")
         try:
@@ -5674,10 +5711,6 @@ def run(poll_idle: float = 1.0) -> None:
         now = time.time()
         if now - last_poll >= 60:        # check Gmail for new enquiries + run any due scheduled tasks
             last_poll = now
-            try:
-                drain_newsletter_sends()   # FIRST: a live drip must not wait behind inbox polling (13 Sep 2026)
-            except Exception as e:  # noqa: BLE001
-                tg.send(f"(newsletter drip hiccup: {e})")
             _beat("poll_inquiries")
             try:
                 poll_inquiries()
