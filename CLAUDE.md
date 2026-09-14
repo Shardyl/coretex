@@ -1541,3 +1541,10 @@ thing every new conversation reads; a stale line here costs a future session rea
   its own 60s clock and `_DRIP_LOCK` (non-blocking; a manual drain and the thread never double-send a batch).
   The main loop no longer calls it: a FilmSpoke blog build with repeated 4-minute model calls (plus engine
   restarts from another session) starved the HBMSU send for 25 minutes.
+- TRACKED LINKS MUST BE HTTPS (14 Sep 2026, reported by a recipient whose browser blocked the http tracking
+  link): Mailgun rewrites every link through `email.<domain>`; `web_scheme` was http on all five domains.
+  Now `web_scheme=https` (PUT /v4/domains/{d}) and a Let's Encrypt cert per tracking host (POST
+  /v2/x509/email.<d>, GET .../status = active) on all five. `mailgun.https_links_ready(domain)` gates
+  `require_unsubscribe` at build and every drip batch (a batch waits, never sends http/uncertified links).
+  Everything sent before 08:05 UTC on 14 Sep carries http tracking links: they still redirect, strict browsers
+  warn. The Mailgun stored copy (`storage.url`) is PRE-rewrite: never judge links or the unsubscribe from it.
