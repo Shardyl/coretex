@@ -350,6 +350,10 @@ def draft(skill: dict, company: dict, request: dict,
                     "ONLY sample-work links that exist. Copy any you use EXACTLY as written, and NEVER "
                     "write, guess or adapt any other portfolio/library/media URL. Your standing rules "
                     "govern how many to share and when to share none.\n" + _ml[:4000])
+    _ol = [str(u) for u in (request.get("owner_links") or [])] if isinstance(request, dict) else []
+    if _ol:
+        user.append("LINKS THE OWNER OR TEAM GAVE YOU for this card (real: copy them exactly as written, and "
+                    "use one wherever their instruction or the brief calls for it): " + ", ".join(_ol[:10]))
     _av = (request.get("availability") or "").strip() if isinstance(request, dict) else ""
     if _av:
         # Which timezone to state them in, and how to word the offer, are scheduling rules on the skill.

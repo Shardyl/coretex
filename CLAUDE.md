@@ -633,6 +633,15 @@ watch_urls) — sample-work links come ONLY from it; `engine._ensure_real_links`
 URLs aren't in the served context, and the manager receives the same computed URL allowlist plus a
 code-computed 28-day calendar (it never does weekday arithmetic) and may only summarise its own listed
 issues (2026-08-30, after invented library links on card 384 and a false date error on 385).
+A LINK A PERSON GIVES IS REAL (owner, 14 Sep 2026: "any link provided through any card, on any company, and
+through Talk, should be accepted, otherwise we can't give it the right feedback"). The guard trusted only
+links already in the card's context, so a YouTube link typed into card feedback was called invented and
+stripped on the redraft. Now every URL in a person's words is kept on the card as `request.owner_links`
+(`engine._remember_owner_links`): `apply_correction` does it on the raw feedback before any channel rewrites
+it (cockpit, Telegram, Talk `correct_task`), and Talk's `draft_email` / `create_task` / `draft` /
+`correct_task` add the links from the person's last three messages (`_TURN_LINKS`, a context variable, never
+a tool input). The guard and the Manager trust everything in the request, and the drafter is shown them as
+"LINKS THE OWNER OR TEAM GAVE YOU". A link the MODEL invents is still stripped.
 
 ## WhatsApp (inbound)
 

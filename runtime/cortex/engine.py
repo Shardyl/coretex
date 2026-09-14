@@ -1687,6 +1687,8 @@ def _prep_build_quotation(task: dict, skill: dict, company: dict, text: str) -> 
 
 def apply_correction(task: dict, text: str) -> None:
     """Redraft a task from the owner's correction (works from Telegram OR the cockpit API)."""
+    # a link in his words is REAL: kept on the card before anything else reads or rewrites the text
+    task = _remember_owner_links(task, text)
     if task["kind"] == "blog_menu":   # a reply on the menu = his picks (or 'more'); never a streak event
         r = menu_reply(task, text)
         if r.get("blocked"):
@@ -2416,6 +2418,30 @@ def _ensure_clean_email(skill: dict, company: dict, dreq: dict, draft: str,
 
 
 _URL_RX = re.compile(r"https?://[^\s<>\")\]]+")
+
+
+def _links_in(text: str) -> list:
+    """Every URL in a piece of text, trailing punctuation trimmed, in order, once each."""
+    return list(dict.fromkeys(u.rstrip(".,;:!?'") for u in _URL_RX.findall(text or "")))
+
+
+def _remember_owner_links(task: dict, text: str) -> dict:
+    """A LINK A PERSON GIVES IS REAL (owner, 14 Sep 2026: "any link that's provided through any card, on any
+    company, and through Talk, should be accepted, otherwise we can't give it the right feedback"). The
+    invented-link guard only trusted links already in the card's context, so a YouTube link typed into card
+    feedback was treated as made up and stripped on the redraft. Links from a person's own words are kept on
+    the card as `request.owner_links`: the guard and the Manager both trust everything in the request, and
+    the drafter is shown them. Returns the (refreshed) task."""
+    links = _links_in(text)
+    if not links or not task:
+        return task
+    req = dict(task.get("request") or {})
+    have = list(req.get("owner_links") or [])
+    new = [u for u in links if u not in have]
+    if not new:
+        return task
+    req["owner_links"] = have + new
+    return store.update_task(task["id"], request=req) or {**task, "request": req}
 
 
 def _ensure_real_links(skill: dict, company: dict, dreq: dict, draft: str) -> str:

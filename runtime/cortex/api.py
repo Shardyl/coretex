@@ -3709,6 +3709,8 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                            "request": t.get("request"), "draft": t.get("draft"),
                            "manager": t.get("manager")}, default=str)
     if name == "correct_task":
+        if _TURN_LINKS.get():      # links he typed in Talk are trusted on the card he is correcting
+            engine._remember_owner_links(store.get_task(int(inp["task_id"])), " ".join(_TURN_LINKS.get()))
         return json.dumps(engine.correct_task(int(inp["task_id"]), inp.get("feedback", "")), default=str)
     if name == "approve_task":
         return json.dumps(engine.approve_task(int(inp["task_id"])), default=str)
@@ -4189,6 +4191,8 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         if not sk:
             return f"no skill '{inp.get('skill')}' for {co['slug']}"
         req = {"brief": inp.get("brief", "")}
+        if _TURN_LINKS.get():
+            req["owner_links"] = list(_TURN_LINKS.get())
         if inp.get("_images"):
             req["attachments"] = inp["_images"]
             req["attachment_names"] = inp.get("_image_names")
@@ -4203,6 +4207,8 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             req["count"] = max(1, min(int(inp.get("count") or 1), 10))
         if inp.get("kind") == "blog_menu":   # the pick-list menu: how many options (default 12)
             req["count"] = max(3, min(int(inp.get("count") or 12), 24))
+        if _TURN_LINKS.get():    # links he typed are real on this card
+            req["owner_links"] = list(_TURN_LINKS.get())
         if inp.get("_images"):   # files/images shared in this Talk turn -> the worker drafts WITH them
             req["attachments"] = inp["_images"]
             req["attachment_names"] = inp.get("_image_names")
@@ -4249,6 +4255,8 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                "inquiry": {"name": to_name, "email": to_email, "subject": inp.get("subject", ""), "message": ""}}
         if inp.get("from_email"):
             req["from_email"] = inp["from_email"]
+        if _TURN_LINKS.get():    # links he typed in Talk are real: the invented-link guard keeps them
+            req["owner_links"] = list(_TURN_LINKS.get())
         # An outbound email that offers ONE named slot books it the same way a reply does. The reply path
         # gets there through _maybe_extract_meeting, which only reads email_reply cards, so an outbound
         # draft had no way to carry a real Meet link and would have promised to "send one separately".
@@ -4493,6 +4501,9 @@ import contextvars as _cv
 # What the person typed in this Talk turn: set by the chat executor, read by create_quotation's price check.
 # A context variable, not a tool input, so the model can never supply "the owner's words" itself.
 _TURN_SAID: _cv.ContextVar[str] = _cv.ContextVar("_TURN_SAID", default="")
+# Links the person typed in their last few Talk messages: trusted on any card Talk creates or corrects
+# (owner, 14 Sep 2026), so the invented-link guard never strips a link he gave on purpose.
+_TURN_LINKS: _cv.ContextVar[tuple] = _cv.ContextVar("_TURN_LINKS", default=())
 
 
 def _chat_prepare(body: ChatTurn, user: dict | None = None):
@@ -4520,9 +4531,11 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
     def _exec(name: str, inp: dict) -> str:   # carry the turn's attachments through when a tool drafts/creates
         if name in ("create_task", "draft", "draft_email", "save_document") and body.images:
             inp = {**inp, "_images": body.images, "_image_names": body.image_names}
-        if name == "create_quotation":   # the price check reads the PERSON's own words, never the model's
-            _TURN_SAID.set("\n".join(m["content"] for m in msgs
-                                     if m["role"] == "user" and isinstance(m["content"], str)))
+        # the PERSON's own words, never the model's: read by create_quotation's price check and by every
+        # card-making tool, which keeps any link he typed as trusted (owner_links)
+        _users = [m["content"] for m in msgs if m["role"] == "user" and isinstance(m["content"], str)]
+        _TURN_SAID.set("\n".join(_users))
+        _TURN_LINKS.set(tuple(engine._links_in("\n".join(_users[-3:]))))
         if name == "add_rule" and inp.get("scope") == "universal" and (user or {}).get("role") != "owner":
             return ("Universal (all-company) rules are the owner's call alone. Save it for this user's own "
                     "company instead, and tell them Rashad can widen it to all companies.")
