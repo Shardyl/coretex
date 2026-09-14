@@ -1511,3 +1511,7 @@ thing every new conversation reads; a stale line here costs a future session rea
   (Talk `newsletter_test_send`, POST `/api/newsletter/{tid}/test-copy`) raises a `newsletter_test` card; approve
   -> type the recipient count -> PIN -> `newsletter.send_test_copy` sends the stored issue (card artifact, or the
   send job's copy after dispatch, via `issue_artifact`) as [TEST] to exactly those addresses. Never script a send.
+- DRIP THREAD (14 Sep 2026): `engine._start_drip_thread` runs `drain_newsletter_sends` on a daemon thread with
+  its own 60s clock and `_DRIP_LOCK` (non-blocking; a manual drain and the thread never double-send a batch).
+  The main loop no longer calls it: a FilmSpoke blog build with repeated 4-minute model calls (plus engine
+  restarts from another session) starved the HBMSU send for 25 minutes.
