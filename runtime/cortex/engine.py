@@ -787,28 +787,64 @@ def _site_for(task: dict, company: dict):
 
 # ---------- task processing ----------
 
+# THE SLOW LANE (14 Sep 2026): long-form generation runs OFF the main loop. The loop is single-threaded and
+# drafted every new card before it polled mail, so a run of FilmSpoke blog drafts (a couple of minutes each,
+# retried at 24k tokens) held the inbox sweep for 20+ minutes: Honor's email asking for the proposal as a PPT
+# sat unseen, and two client replies waited to be drafted. Emails and every other card stay on the loop; these
+# kinds drain one at a time on their own thread, the same way the newsletter drip already runs on its own.
+_SLOW_KINDS = ("blog", "blog_menu", "newsletter_idea", "seo_report", "ppc_report")
+_slow_thread = None
+
+
+def _start_slow_lane() -> None:
+    global _slow_thread
+    if _slow_thread is not None and _slow_thread.is_alive():
+        return
+
+    def _drain() -> None:
+        tried: set = set()
+        while True:
+            nxt = [t for t in store.tasks_by_status("new") if t["kind"] in _SLOW_KINDS and t["id"] not in tried]
+            if not nxt:
+                return
+            tried.add(nxt[0]["id"])          # a card that somehow stays 'new' is never retried in a tight loop
+            print(f"[slow-lane] {nxt[0]['kind']} #{nxt[0]['id']}", flush=True)
+            _process_task(nxt[0])
+
+    _slow_thread = threading.Thread(target=_drain, name="cortex-slow-lane", daemon=True)
+    _slow_thread.start()
+
+
 def process_new_tasks() -> None:
-    for task in store.tasks_by_status("new"):
-        try:
-            _run_task(task)
-        except provider.EmptyCompletion as e:
-            # The model wrote nothing even after the retry with headroom. That must NOT become a silent
-            # 'failed' row the owner never sees (failed cards are not in the Inbox): the card stays in the
-            # Inbox, empty and unsendable - the approval gate blocks an empty body - with the reason on it.
-            store.update_task(task["id"], status="awaiting_correction", draft="",
-                              manager={"verdict": "escalate", "escalate": True, "aligned": False,
-                                       "confidence": "low", "issues": [str(e)], "rule_refs": [],
-                                       "summary": "Cortex could not write this draft - ask it to redraft."})
-            notifications.notify(f"Card #{task['id']}: Cortex could not write the draft",
-                                 "The model ran out of room before writing anything, even with extra room "
-                                 "on the retry. The card is in your Inbox, empty and blocked from sending. "
-                                 "Ask Cortex to redraft it.",
-                                 category="approval", company_id=task.get("company_id"),
-                                 target_type="task", target_id=str(task["id"]),
-                                 dedup_key=f"emptydraft:{task['id']}")
-        except Exception as e:  # noqa: BLE001
-            store.update_task(task["id"], status="failed")
-            tg.send(f"Task #{task['id']} failed: {e}")
+    queued = store.tasks_by_status("new")
+    for task in queued:
+        if task["kind"] not in _SLOW_KINDS:
+            _process_task(task)
+    if any(t["kind"] in _SLOW_KINDS for t in queued):
+        _start_slow_lane()
+
+
+def _process_task(task: dict) -> None:
+    try:
+        _run_task(task)
+    except provider.EmptyCompletion as e:
+        # The model wrote nothing even after the retry with headroom. That must NOT become a silent
+        # 'failed' row the owner never sees (failed cards are not in the Inbox): the card stays in the
+        # Inbox, empty and unsendable - the approval gate blocks an empty body - with the reason on it.
+        store.update_task(task["id"], status="awaiting_correction", draft="",
+                          manager={"verdict": "escalate", "escalate": True, "aligned": False,
+                                   "confidence": "low", "issues": [str(e)], "rule_refs": [],
+                                   "summary": "Cortex could not write this draft - ask it to redraft."})
+        notifications.notify(f"Card #{task['id']}: Cortex could not write the draft",
+                             "The model ran out of room before writing anything, even with extra room "
+                             "on the retry. The card is in your Inbox, empty and blocked from sending. "
+                             "Ask Cortex to redraft it.",
+                             category="approval", company_id=task.get("company_id"),
+                             target_type="task", target_id=str(task["id"]),
+                             dedup_key=f"emptydraft:{task['id']}")
+    except Exception as e:  # noqa: BLE001
+        store.update_task(task["id"], status="failed")
+        tg.send(f"Task #{task['id']} failed: {e}")
 
 
 def _push_approval(task: dict, skill: dict, company: dict) -> None:

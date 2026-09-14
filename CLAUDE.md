@@ -109,6 +109,14 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
 
 ## Email intake (full-mailbox triage)
 
+**THE SLOW LANE: long generation never holds up email (14 Sep 2026).** `engine.run` is one loop that drafts
+every new card (`process_new_tasks`) BEFORE it polls mail, so a run of FilmSpoke blog drafts (a couple of
+minutes each, retried at 24k tokens) held the inbox sweep for 20+ minutes: Honor's email asking for the
+proposal as a PPT sat unseen and two client replies waited to be drafted. Kinds in `engine._SLOW_KINDS`
+(blog, blog_menu, newsletter_idea, seo_report, ppc_report) now drain one at a time on their own thread
+(`_start_slow_lane`, like the newsletter drip); emails and every other card stay on the loop. When mail
+"never arrived", check `engine_heartbeat` and the seen set before assuming the sweep missed it.
+
 `poll_all_inboxes()` (60s loop) sweeps every CONNECTED inbox in the `inbox_registry` setting — adding a
 mailbox is one OAuth consent + `register_inbox()`, no code. Sensa runs FOUR mailboxes (hello@, gino@,
 rashad@, ayresh@). Each email: `classify_email` (Haiku, sales-triage skill; categories incl. `finance`)
