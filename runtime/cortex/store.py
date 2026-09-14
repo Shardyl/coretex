@@ -195,6 +195,7 @@ def promote_queued(company_id=None, key: str | None = None) -> int:
         select distinct on (q.request->>'serialize_key') q.id
         from tasks q
         where q.status='queued' {where_co.replace('company_id','q.company_id')} {where_key.replace('request','q.request')}
+          and coalesce(q.request->>'serialize_key','') <> ''
           and not exists (
             select 1 from tasks o
             where o.company_id = q.company_id and o.id <> q.id

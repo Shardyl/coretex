@@ -104,7 +104,9 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
   company, the standing rules) moved into its cached system prompt, the per-draft facts and the draft stay in
   the user message. `anchor_score.classify_leads` runs on Haiku (it said Haiku but `fast=True` meant Sonnet,
   $1.40 to $3.80 a day). Blog compose/revise start at 24,000 tokens and internal/inbound links at 4,000: at
-  8,000 every post truncated and was paid for twice.
+  8,000 every post truncated and was paid for twice. The Manager's verdict gets 4,000 (it truncated at 1,500
+  and re-ran). Verified live: a Manager check now reads ~19,000 tokens from cache and sends ~4,300 fresh,
+  about $0.027 a check against ~$0.065 before.
 - No emoji in the cockpit UI — clean monochrome line-icons (Tabler-style) only.
 - Ship a new Talk capability? Add its one-liner to `runtime/cortex/capabilities.py` in the same
   commit — that manifest is injected into every system prompt.
@@ -1304,8 +1306,10 @@ coordinates). The API-interception route is parked: apk-mitm'd Viya still reject
 - **All behaviour lives in the skill**: the craft's single `PLAN = {...}` line (courses, fallback order,
   players, days ahead, release time, phone address). `golf.py` reads only that line; never hardcode.
 - **Flow**: `python -m cortex.golf card YYYY-MM-DD` creates a `golf_booking` card (outward, NEVER_AUTO) ->
-  approving sets it `armed` (engine `_execute`, nothing books; NOT `queued`, which `store.promote_queued`
-  flips back to `new` for key-less cards, so the worker drafts and fails it) -> a one-off `systemd-run --on-calendar`
+  approving sets it `armed` (engine `_execute`, nothing books; card 621 was first set `queued`, and
+  `store.promote_queued` flipped key-less queued cards back to `new` for the worker to redraft. Fixed
+  14 Sep: the conveyor now promotes only cards with a `serialize_key`, so runner-queued `social_action` /
+  `wa_reply` cards stay `queued` until the runner takes them) -> a one-off `systemd-run --on-calendar`
   unit runs `python -m cortex.golf run <id>` a few minutes before release (the engine's 60s tick is too
   coarse) -> pre-check (adb reachable, unlocked, Viya in front; critical alert + retry) -> book via
   `viya_flow.book` -> task `done`/`failed` + critical notify. Screenshots in `/var/tmp/cortex-golf/<id>/`.
