@@ -134,7 +134,8 @@ def check(skill: dict, company: dict, draft: str, request: dict) -> dict:
         "rule break, verdict is 'pass' and the summary says 'style suggestions only' plus the main one. "
         "If issues is empty, verdict is 'pass' and the summary is simply what the draft does well, in "
         "five words or fewer.")
-    out = provider.think_json(system, user, max_tokens=1500, cache=True,
+    # 4,000, not 1,500: a verdict that ran out of room re-ran at 8,000, paying for the check twice (14 Sep 2026)
+    out = provider.think_json(system, user, max_tokens=4000, cache=True,
                               purpose=f"manager:{skill.get('skill_key', '')}", company=company.get("slug"))
 
     verdict = (out.get("verdict") or "pass").lower().strip()
