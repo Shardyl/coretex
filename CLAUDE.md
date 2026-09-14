@@ -814,6 +814,12 @@ extract/judge, never move stages or invent values:
   the Inbox alongside the reply draft — kind `content`, `sales-quotation` lane, timeline-grounded,
   prices/dates the owner hasn't stated marked OWNER TO CONFIRM. Deduped per message
   (`nextstep_seen:<deal>`); conservative (most mail spawns nothing).
+  **A CARD THAT CANNOT DO THE WORK IS A REMINDER (owner, 14 Sep 2026).** Only a QUOTATION next step becomes
+  an approvable card (marked `prep_action: quotation`; approving builds it). Every other next step (a
+  proposal revision, a document, "fix the links in the PPT") is a high-priority REMINDER on the deal plus a
+  notification, with no approve button, until a real tool exists for it. `_is_quotation_prep` now reads
+  ONLY that marker: it used to match wording, so card 649 counted because it said the quotation "stands",
+  and approving it would have built a new Honor quotation.
 - **Meetings feed the loop:** `meetnotes.sweep` -> `pipeline.record_meeting` on deal-matched
   meetings: summary onto the timeline, OUR action items become commitments with reminders.
   BACKFILL: `sweep(days_back=N, min_gap_minutes=0, backfill=True)` recovers OLD meetings as memory

@@ -570,6 +570,19 @@ def suggest_next_step(e: dict, deal: dict, company: dict) -> None:
     if not sk:
         return
     title = deal.get("title") or f"deal {did}"
+    # A CARD THAT CANNOT DO THE WORK IS A REMINDER (owner, 14 Sep 2026: "these cards should be reminders only if
+    # they do not do anything; they should not force actions until we build them properly"). Card 649 asked to
+    # fix the video links in Honor's PowerPoint, which Cortex has no tool for, and approving it would have built
+    # a new quotation because its text mentioned one. Only a quotation next step becomes an approvable card
+    # (approving it genuinely builds the quotation); everything else is a reminder on the deal, no approve.
+    is_quote = act == "prepare_quotation" or bool(re.search(r"\bquot", what, re.I))
+    if not is_quote:
+        reminders.create(f"Next step on {title[:60]}: {what[:160]}",
+                         datetime.now(timezone.utc) + timedelta(hours=2), company_id=company.get("id"),
+                         target_type="deal", target_id=did, priority="high", created_by="cortex-nextstep")
+        notifications.notify("Next step (reminder)", f"{title}: {what}", category="crm",
+                             company_id=company.get("id"), target_type="deal", target_id=did)
+        return
     brief = (f"NEXT STEP for deal {did} ({title}) - the client latest email requires: {what} ({act}). "
              "Prepare it as a clear internal work-up the owner can approve and act on: exactly what "
              "changes/content is needed, based ONLY on the timeline below and the client's words. Any price "
@@ -577,7 +590,7 @@ def suggest_next_step(e: dict, deal: dict, company: dict) -> None:
              + deal_context(did) + "\n\nTHEIR EMAIL:\n" + ((e.get("body") or "")[:2000]))
     t = store.create_card(company["id"], sk["id"], "content",
                           {"brief": brief, "deal_id": did, "title": f"Next step: {what[:70]}",
-                           **({"prep_action": "quotation"} if re.search(r"\bquot", what, re.I) else {})},
+                           "prep_action": "quotation"},
                           deal_id=did)
     if t:
         db.execute("update tasks set deal_id=%s where id=%s", (did, t["id"]))

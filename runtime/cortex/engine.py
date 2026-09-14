@@ -1572,12 +1572,10 @@ def _on_message(msg: dict) -> None:
 
 
 def _is_quotation_prep(task: dict) -> bool:
-    req = task.get("request") or {}
-    if req.get("prep_action") == "quotation":
-        return True
-    brief = str(req.get("brief") or "")
-    return (task.get("kind") == "content" and brief.startswith(("INTERNAL PREP", "NEXT STEP"))
-            and bool(re.search(r"\bquot", f"{task.get('title') or ''} {brief}", re.I)))
+    """Only a card EXPLICITLY marked as a quotation prep builds a quotation on approval. It used to match on
+    wording, so card 649 (fix the video links in Honor's PowerPoint) counted because it said the quotation
+    "stands", and approving it would have built a new one (14 Sep 2026)."""
+    return (task.get("request") or {}).get("prep_action") == "quotation"
 
 
 def _stated_numbers(text: str) -> set:
