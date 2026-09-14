@@ -414,6 +414,18 @@ a fresh one. That is right for FYIs and worth remembering when judging a "duplic
 **Cockpit:** grouped `items` are not always contacts. Only `contact`/`lead` cards get the "N new
 contacts captured" headline; everything else keeps its own title and body.
 
+**One email, one handling (14 Sep 2026).** The per-step guards above kept leaving gaps: the chase
+reschedule in `_draft_direct_reply` ran before any of them, so HONOR's reply (three mailboxes) re-set
+deal 119's clock and raised the same "Follow-up rescheduled" notice three times. `poll_inbox` now
+CLAIMS each email by `mail_ref` before classifying it (`_claim_mail`, table `inbox_mail_claims`,
+atomic insert-or-nothing, primary key company_id + mail_ref). Every other mailbox's copy is marked seen
+and skipped, so classification, CRM, cadence, timeline, next step and the reply card all run once per
+email. Only the claiming copy may retry; a failed card releases the claim (`_release_mail`). First copy
+wins, which is what the card dedup already did, and the To-line sender routing still decides whose reply
+it is. A NEW per-message step needs no guard of its own as long as it runs inside `poll_inbox`. The
+manual `backfill_missed_client_drafts` bypasses the claim: it checks `mail_ref` on cards, and the
+reschedule notice carries `dedup_key reschedule:<deal>:<mail_ref>`.
+
 ## The dumb waiter, enforced (7 Sep 2026)
 
 **The skills decide, the code fetches.** Card 501 sent from `gino@sensa.digital` and wrote *"Gino has

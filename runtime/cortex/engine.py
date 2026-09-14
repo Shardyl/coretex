@@ -4201,7 +4201,7 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
     return req
 
 
-def _pause_or_reschedule_followups(co: dict, deals: list, sender: str, body: str) -> None:
+def _pause_or_reschedule_followups(co: dict, deals: list, sender: str, body: str, ref: str = "") -> None:
     """The contact wrote to us -> every armed auto-chase clock on their deals pauses (the ball is now in
     OUR court; it re-arms when our reply sends). If their email STATES a timeframe ('give us a couple of
     weeks', 'ready after Ramadan'), Haiku reads the phrase, CODE stamps the actual date, the clock re-arms
@@ -4232,7 +4232,9 @@ def _pause_or_reschedule_followups(co: dict, deals: list, sender: str, body: str
                     f"Follow-up on '{d['title']}' rescheduled to {when.strftime('%d %b %Y')} — they said "
                     f"“{wait.get('quote') or 'a timeframe'}”. Adjust on the deal if that's wrong.",
                     "Follow-up cadence", category="reminder", company_id=co["id"],
-                    target_type="deal", target_id=str(d["id"]))
+                    target_type="deal", target_id=str(d["id"]),
+                    # the manual backfill reaches here without the inbox claim: one notice per email even then
+                    dedup_key=f"reschedule:{d['id']}:{ref}" if ref else None)
             else:
                 # SILENT. A client replying and the chase clock stopping is the system working exactly as
                 # designed: nothing is owed, nothing is decided, and the reply draft is already in the
@@ -4277,7 +4279,7 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
         if robot and not deals:
             return
         deal = deals[0] if len(deals) == 1 else None   # attach a deal_id only when it is unambiguous
-        _pause_or_reschedule_followups(co, deals, sender, body)
+        _pause_or_reschedule_followups(co, deals, sender, body, ref=gmail.mail_ref(e))
         # PROJECT correspondence (deal already in delivery) drafts on the company's general email-handling
         # skill (+ its related project skills' rules), not the sales lane — that is where project-management
         # behaviour gets trained. Opportunity-stage and no-deal mail stays on sales-first-response.
@@ -4443,6 +4445,51 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
     return True
 
 
+_MAIL_CLAIMS_SCHEMA = """
+create table if not exists inbox_mail_claims (
+  company_id bigint not null,
+  mail_ref   text not null,            -- gmail.mail_ref: the sender's Message-Id, the same in every mailbox
+  gmail_id   text not null,            -- the mailbox copy that claimed it (only that copy may retry)
+  claimed_at timestamptz not null default now(),
+  primary key (company_id, mail_ref)
+);
+"""
+_mail_claims_ready = False
+
+
+def _claim_mail(company_id, ref: str, gid: str) -> bool:
+    """ONE EMAIL, ONE HANDLING (14 Sep 2026). The team is cc'd on everything, so one client email sits in
+    several of our mailboxes and every mailbox's sweep met it again. Guards were added one step at a time
+    (the timeline 4 Sep, cards and tender notices 7 Sep) and each step without one repeated: HONOR's reply
+    re-set deal 119's chase clock and raised the same reschedule notice three times. The first copy now
+    CLAIMS the message by its Message-Id before anything runs, atomically (insert or nothing), so two
+    sweeps can never both win. True = this copy handles it (first seen, or the claimant retrying)."""
+    global _mail_claims_ready
+    if not ref:
+        return True
+    if not _mail_claims_ready:
+        with db.connect() as c:
+            c.execute(_MAIL_CLAIMS_SCHEMA)
+        _mail_claims_ready = True
+    for _ in range(2):   # a claim released between the insert and the read is simply claimed again
+        if db.execute("insert into inbox_mail_claims (company_id, mail_ref, gmail_id) values (%s,%s,%s) "
+                      "on conflict (company_id, mail_ref) do nothing returning gmail_id",
+                      (company_id, ref, gid or "")):
+            return True
+        held = db.one("select gmail_id from inbox_mail_claims where company_id=%s and mail_ref=%s",
+                      (company_id, ref))
+        if held:
+            return held["gmail_id"] == (gid or "")
+    return False
+
+
+def _release_mail(company_id, ref: str, gid: str) -> None:
+    """A claimant that failed lets go, so the next copy (or its own retry) handles the email: never lost."""
+    if ref:
+        db.execute("delete from inbox_mail_claims where company_id=%s and mail_ref=%s and gmail_id=%s",
+                   (company_id, ref, gid or ""))
+
+
 def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_token",
                days: int = 2, limit: int = 40, commit: bool = True, company: str | None = None,
                address: str | None = None) -> dict:
@@ -4490,6 +4537,16 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                     tg.send(f"(unsubscribe handling hiccup [{company_slug}]: {_ue})")
             results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
                             "category": "unsubscribe", "to_crm": False, "reason": "opt-out request, applied"})
+            continue
+        # ONE EMAIL, ONE HANDLING: another mailbox's copy of an email already handled is marked seen here and
+        # goes no further, so classification, the CRM, the chase clock, the timeline and the reply card run
+        # once per email however many of our mailboxes it reached (see _claim_mail).
+        mref = gmail.mail_ref(e)
+        if commit and not _claim_mail(co["id"], mref, gid):
+            seen.add(gid)
+            results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
+                            "category": "duplicate", "to_crm": False,
+                            "reason": "same email, already handled from another mailbox"})
             continue
         cls = classify_email(co, e)
         # DETERMINISTIC client override: a sender on an ACTIVE deal/project is project correspondence,
@@ -4541,6 +4598,8 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
             _record_contact()
             if card_ok:      # a failed card leaves the mail unseen -> retried next sweep, never lost
                 seen.add(gid)
+            else:            # ...and lets go of the claim, so no other copy is skipped on its behalf
+                _release_mail(co["id"], mref, gid)
         results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60], **cls})
     if commit:
         db.setting_set(key, (seen_list + [g for g in seen if g not in set(seen_list)])[-3000:])
@@ -4575,8 +4634,9 @@ def backfill_missed_client_drafts(slug: str = "sensa", days: int = 7, limit: int
             if not sender or _is_internal(sender, own_domain, intl):
                 continue
             if gid and db.one("select id from tasks where company_id=%s and kind='email_reply' and "
-                              "request->>'gmail_id'=%s limit 1", (co["id"], gid)):
-                continue                       # this exact message already has (or had) a card
+                              "(request->>'gmail_id'=%s or request->>'mail_ref'=%s) limit 1",
+                              (co["id"], gid, gmail.mail_ref(m))):
+                continue                       # this message already has (or had) a card, from any mailbox
             try:
                 deal = crm.open_deal_for_email(sender, slug) or crm.open_deal_for_domain(sender, slug)
             except Exception:  # noqa: BLE001
