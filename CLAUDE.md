@@ -1357,10 +1357,19 @@ shown hollow until he rates). Endpoints: `GET /api/media/library`, `POST /api/me
 ## Fitness (personal, not a company)
 
 Rashad's training log. Data lives in the **`fitness` schema** (not the company tables) in the same
-`cortex` DB, so it is in the nightly Drive dump like everything else. The PWA is served from the
-box at **coretex.uk/fitness** (`web/fitness/`), same origin as the cockpit, so it reuses the
-`cortex_token` from the cockpit login: no API key on the phone, no CORS. If the pill top-right says
-"Sign in to sync", log into the cockpit in the same browser and reopen.
+`cortex` DB, so it is in the nightly Drive dump like everything else. **STANDALONE since 14 Sep 2026:**
+the PWA lives at **fitness.coretex.uk** (source still `web/fitness/` in this repo; served by the
+`fitness-web` systemd unit, python http.server on 127.0.0.1:8090, tunnel public hostname -> 8090).
+It calls the API at coretex.uk by absolute URL (the CORS regex admits *.coretex.uk). Auth is a
+ten-year owner token delivered ONCE via the setup link's `#k=` fragment and stored in the app's
+localStorage (`fitness_device_key`) — no PIN, no cockpit bounce, no 14-day expiry. The owner ruled
+security a non-issue here; rotate by minting a new token (patch `api.TOKEN_TTL`, `_make_token('owner')`)
+and reopening a new setup link. WHY standalone: borrowing the cockpit's identity caused three real
+faults in three weeks — the 14-day token expiry silently stopped sync, the sign-in pill dumped him
+into the cockpit from inside the fitness app, and Chrome refused to install the nested-scope app at
+coretex.uk/fitness while Cortex was installed at scope /. The old path still serves in a browser but
+is NOT the install target. Anti-clobber (14 Sep): applyServerState MERGES by id and refuses to apply
+while a local change is queued — a pull once erased a cardio session seconds after it was saved.
 
 - Sync is whole-document (`POST/GET /api/fitness/state`): a few hundred rows, one device, so a full
   push/pull is easier to reason about than field-level merge. Upserts by the client's id, never
