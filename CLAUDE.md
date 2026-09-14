@@ -113,7 +113,7 @@ skill craft+rules (editable via cockpit/Talk), never hardcoded — code is schem
 - New scheduled work goes on the unified clock (`tasks` recurring templates +
   `engine.promote_due_tasks`) — `scheduled_tasks` is long dead. Report kinds on the clock:
   `seo_report` (weekly, per company) + `ppc_report` (daily 08:00 GST, Sensa Google Ads via
-  `cortex/ppc_report.py`, REST creds `/etc/cortex/google-ads.yaml`, card lands on the
+  `cortex/ppc_report.py`, REST creds `/etc/cortex/google-ads.yaml`, no developer-token header since 2026-09-14 (Google's Cloud-project transition; access = OAuth project sunny-jetty-428307-a4), card lands on the
   `ads-google-search` lane). The daily report also runs `cortex/ppc_prune.py` first: Haiku
   classifies yesterday's paid search terms, junk becomes PHRASE negatives in the "Sensa PPC
   shared negatives" set, and the card lists every prune for operator veto. That shared set
