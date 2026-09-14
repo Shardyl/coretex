@@ -135,8 +135,14 @@ def pull() -> dict:
     vo2 = [{"id": r["uid"], "date": r["day"].isoformat(), "value": float(r["value"]),
             "method": r["method"], "notes": r["notes"]}
            for r in db.query("select * from fitness.vo2 where not deleted order by day")]
+    tombstones = [r["uid"] for r in db.query(
+        "select uid from fitness.lift_sessions where deleted union all "
+        "select uid from fitness.cardio_sessions where deleted union all "
+        "select uid from fitness.plans where deleted union all "
+        "select uid from fitness.cardio_presets where deleted union all "
+        "select uid from fitness.vo2 where deleted")]
     return {"bodyweight": bw, "plans": plans, "liftSessions": lifts, "cardioPresets": presets,
-            "cardioSessions": cardio, "vo2": vo2,
+            "cardioSessions": cardio, "vo2": vo2, "tombstones": tombstones,
             "counts": {"bodyweight": len(bw), "plans": len(plans), "liftSessions": len(lifts),
                        "cardioPresets": len(presets), "cardioSessions": len(cardio), "vo2": len(vo2)}}
 
@@ -169,7 +175,7 @@ def push(doc: dict, source: str = "app") -> dict:
             continue
         db.execute("insert into fitness.plans (uid, name, exercises, deleted) values (%s,%s,%s,%s) "
                    "on conflict (uid) do update set name=excluded.name, exercises=excluded.exercises, "
-                   "deleted=excluded.deleted, updated_at=now()",
+                   "deleted=plans.deleted or excluded.deleted, updated_at=now()",
                    (r["id"], r.get("name") or "", Json(r.get("exercises") or []),
                     bool(r.get("deleted"))))
         counts["plans"] += 1
@@ -189,7 +195,7 @@ def push(doc: dict, source: str = "app") -> dict:
             "total_reps=excluded.total_reps, best_set=excluded.best_set, "
             "volume_load=excluded.volume_load, rest=excluded.rest, target=excluded.target, "
             "next_target=excluded.next_target, readings=excluded.readings, notes=excluded.notes, "
-            "deleted=excluded.deleted, updated_at=now()",
+            "deleted=lift_sessions.deleted or excluded.deleted, updated_at=now()",
             (_lift_uid(r), r["exercise"], d, r.get("workoutId"), r.get("weight"), kg,
              Json(r.get("sets") or []), _num(r.get("totalReps")), _num(r.get("bestSet")),
              volume_load(kg, r.get("totalReps")), r.get("rest"), r.get("target"),
@@ -210,7 +216,7 @@ def push(doc: dict, source: str = "app") -> dict:
             "on conflict (uid) do update set name=excluded.name, brand=excluded.brand, "
             "location=excluded.location, machine=excluded.machine, machine_note=excluded.machine_note, "
             "is_hiit=excluded.is_hiit, target_duration=excluded.target_duration, "
-            "manual_fields=excluded.manual_fields, deleted=excluded.deleted, updated_at=now()",
+            "manual_fields=excluded.manual_fields, deleted=cardio_presets.deleted or excluded.deleted, updated_at=now()",
             (r["id"], r.get("name") or "", r.get("brand"), r.get("location"), r.get("machine"),
              r.get("machineNote"), bool(r.get("isHIIT")), r.get("targetDuration"),
              Json(fields), bool(r.get("deleted"))))
@@ -245,7 +251,7 @@ def push(doc: dict, source: str = "app") -> dict:
             "minutes=excluded.minutes, avg_hr=excluded.avg_hr, max_hr=excluded.max_hr, "
             "calories=excluded.calories, distance_km=excluded.distance_km, "
             "m_per_beat=excluded.m_per_beat, extra=excluded.extra, next_target=excluded.next_target, "
-            "notes=excluded.notes, deleted=excluded.deleted, updated_at=now()",
+            "notes=excluded.notes, deleted=cardio_sessions.deleted or excluded.deleted, updated_at=now()",
             (r["id"], r.get("exerciseId"), r.get("exerciseName"), d, r.get("duration"), mins,
              avg_hr, _num(r.get("maxHR")), _num(r.get("calories")), dist, mpb, Json(extra),
              Json(r.get("nextTarget")) if r.get("nextTarget") is not None else None,

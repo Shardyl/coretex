@@ -942,7 +942,7 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='10';                         // keep in step with CACHE in sw.js
+const APP_VERSION='11';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1021,8 +1021,15 @@ function setSyncState(state,detail){
 async function syncApi(path,opts){
   const t=syncToken();
   if(!t){setSyncState('auth');return null;}
-  const res=await fetch(API_BASE+path,Object.assign({headers:{'Content-Type':'application/json',
-    'Authorization':'Bearer '+t}},opts||{}));
+  // A fetch with no timeout can stall forever on gym wifi, and the pill then says "Syncing…"
+  // until the app is killed. 25s covers the slowest real push; after that, abort and show error.
+  const ctl=new AbortController();
+  const timer=setTimeout(()=>ctl.abort(),25000);
+  let res;
+  try{
+    res=await fetch(API_BASE+path,Object.assign({signal:ctl.signal,
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+t}},opts||{}));
+  }finally{clearTimeout(timer);}
   if(res.status===401){setSyncState('auth');return null;}
   if(!res.ok)throw new Error('HTTP '+res.status);
   return res.json();
@@ -1043,7 +1050,8 @@ async function syncNow(manual){
       const first=await syncApi('/api/fitness/state');
       if(first===null){_syncing=false;return;}
       if(first&&first.counts&&first.counts.liftSessions){
-        applyServerState(first);
+        if(_syncTimer){clearTimeout(_syncTimer);_syncTimer=null;}
+        applyServerState(first,true);
         localStorage.setItem(SYNC_AT_KEY,new Date().toISOString());
         setSyncState('idle');
         _syncing=false;
@@ -1082,14 +1090,23 @@ function mergeById(server,local,key){
   const ids=new Set((server||[]).map(r=>r&&r[key]).filter(Boolean));
   return (server||[]).concat((local||[]).filter(r=>r&&r[key]&&!ids.has(r[key])));
 }
-function applyServerState(state){
+function applyServerState(state,force){
   if(!state||!state.counts)return;
   // A queued or pending sync means something changed locally AFTER this state was fetched.
   // Applying it now would overwrite the newer local data — skip; the queued push-then-pull
-  // reconciles in a few seconds anyway.
-  if(_syncTimer||_syncPending)return;
+  // reconciles in a few seconds anyway. A FRESH INSTALL forces through: its local data is the
+  // baked-in seed, and keeping that over the server is exactly the 35-duplicate bug of 14 Sep.
+  if(!force&&(_syncTimer||_syncPending))return;
   _applyingServer=true;
   try{
+  // Tombstones: rows deleted server-side (any device, or an admin fix) are dropped from the
+  // local copy BEFORE the merge, otherwise the local-only-survives rule resurrects them.
+  const _tomb=new Set(state.tombstones||[]);
+  if(_tomb.size){
+    const dropT=a=>(a||[]).filter(r=>!(r&&r.id&&_tomb.has(r.id)));
+    liftSessions=dropT(liftSessions);cardioSessions=dropT(cardioSessions);
+    liftWorkouts=dropT(liftWorkouts);cardioExercises=dropT(cardioExercises);vo2Records=dropT(vo2Records);
+  }
   // The server is authoritative after a successful push, so what comes back includes everything
   // this device just sent plus anything it did not have.
   if(state.liftSessions)liftSessions=mergeById(state.liftSessions.map(s=>Object.assign({},s,{
