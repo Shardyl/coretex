@@ -97,9 +97,16 @@ def https_links_ready(domain: str, max_age: float = 600.0) -> tuple[bool, str]:
     if _HTTPS_OK.get(domain, 0) > _t.time():
         return True, "ok"
     key = config.require("MAILGUN_API_KEY")
-    d = httpx.get(f"{BASE.replace('/v3', '/v4')}/domains/{domain}", auth=("api", key), timeout=30).json().get("domain") or {}
+    v4 = f"{BASE.replace('/v3', '/v4')}/domains/{domain}"
+    d = httpx.get(v4, auth=("api", key), timeout=30).json().get("domain") or {}
     if d.get("web_scheme") != "https":
-        return False, "web_scheme is http"
+        # SELF-HEAL: news.sensa.digital flipped back to http on its own ~10 min after being set (14 Sep 2026).
+        # Re-apply and re-read; only report failure if it will not stick.
+        httpx.put(v4, auth=("api", key), data={"web_scheme": "https"}, timeout=30)
+        d = httpx.get(v4, auth=("api", key), timeout=30).json().get("domain") or {}
+        if d.get("web_scheme") != "https":
+            return False, "web_scheme is http and could not be set to https"
+        print(f"[mailgun] {domain}: web_scheme was http, re-applied https", flush=True)
     host = f"{d.get('web_prefix') or 'email'}.{domain}"
     st = httpx.get(f"{BASE.replace('/v3', '/v2')}/x509/{host}/status", auth=("api", key), timeout=30).json()
     if st.get("status") != "active":
