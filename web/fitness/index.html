@@ -942,13 +942,22 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='9';                         // keep in step with CACHE in sw.js
-const SYNC_TOKEN_KEY='cortex_token';           // written by the cockpit login, same origin
+const APP_VERSION='10';                         // keep in step with CACHE in sw.js
+// The app now lives on its own hostname, so API calls go to the box by absolute URL (the
+// cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
+// once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
+const API_BASE=(location.hostname==='coretex.uk'||location.hostname==='localhost'||location.hostname==='127.0.0.1')?'':'https://coretex.uk';
+const FIT_KEY_STORE='fitness_device_key';
+(function(){try{
+  const m=(location.hash||'').match(/k=([^&]+)/);
+  if(m){localStorage.setItem(FIT_KEY_STORE,decodeURIComponent(m[1]));history.replaceState(null,'',location.pathname+location.search);}
+}catch(e){}})();
+const SYNC_TOKEN_KEY='cortex_token';           // legacy: cockpit token, still honoured on coretex.uk
 const SYNC_SENT_KEY='fitness_sync_sent_v1';    // ids last pushed, so local deletes become tombstones
 const SYNC_AT_KEY='fitness_sync_at';
 let _syncTimer=null,_syncing=false,_syncPending=false,_syncState='idle',_applyingServer=false;
 
-function syncToken(){try{return localStorage.getItem(SYNC_TOKEN_KEY)||'';}catch(e){return'';}}
+function syncToken(){try{return localStorage.getItem(FIT_KEY_STORE)||localStorage.getItem(SYNC_TOKEN_KEY)||'';}catch(e){return'';}}
 
 // Every row needs a stable id. Historic rows predate ids, so derive the same key the server does:
 // one exercise on one day is one session.
@@ -1001,16 +1010,18 @@ function setSyncState(state,detail){
   const at=localStorage.getItem(SYNC_AT_KEY);
   const when=at?new Date(at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';
   const label={idle:when?('Synced '+when):'Not synced yet',syncing:'Syncing…',
-               offline:'Offline — will sync',error:(detail||'Sync failed'),auth:'Sign in to sync'}[state];
+               offline:'Offline — will sync',error:(detail||'Sync failed'),auth:'Setup needed'}[state];
   el.textContent=label;
   el.className='sync-pill '+state;
-  el.onclick=state==='auth'?function(){location.href='/';}:function(){syncNow(true);};
+  el.onclick=state==='auth'
+    ?function(){toast('Open your Fitness setup link once to connect this phone');}
+    :function(){syncNow(true);};
 }
 
 async function syncApi(path,opts){
   const t=syncToken();
   if(!t){setSyncState('auth');return null;}
-  const res=await fetch(path,Object.assign({headers:{'Content-Type':'application/json',
+  const res=await fetch(API_BASE+path,Object.assign({headers:{'Content-Type':'application/json',
     'Authorization':'Bearer '+t}},opts||{}));
   if(res.status===401){setSyncState('auth');return null;}
   if(!res.ok)throw new Error('HTTP '+res.status);
@@ -1063,19 +1074,31 @@ function queueSync(){
   _syncTimer=setTimeout(()=>syncNow(false),2500);
 }
 
+// Union by id: server rows win for rows both sides know, and any local-only row survives —
+// it is a not-yet-pushed addition, and the very race that once erased a session seconds after
+// it was saved. Real deletions still propagate as explicit tombstones, never as absence.
+function mergeById(server,local,key){
+  key=key||'id';
+  const ids=new Set((server||[]).map(r=>r&&r[key]).filter(Boolean));
+  return (server||[]).concat((local||[]).filter(r=>r&&r[key]&&!ids.has(r[key])));
+}
 function applyServerState(state){
   if(!state||!state.counts)return;
+  // A queued or pending sync means something changed locally AFTER this state was fetched.
+  // Applying it now would overwrite the newer local data — skip; the queued push-then-pull
+  // reconciles in a few seconds anyway.
+  if(_syncTimer||_syncPending)return;
   _applyingServer=true;
   try{
   // The server is authoritative after a successful push, so what comes back includes everything
   // this device just sent plus anything it did not have.
-  if(state.liftSessions)liftSessions=state.liftSessions.map(s=>Object.assign({},s,{
-    sets:s.sets||[],isManual:!!(s.readings&&Object.keys(s.readings).length)}));
-  if(state.cardioSessions)cardioSessions=state.cardioSessions;
-  if(state.plans&&state.plans.length)liftWorkouts=state.plans;
-  if(state.cardioPresets&&state.cardioPresets.length)cardioExercises=state.cardioPresets;
-  if(state.bodyweight)bodyweightLog=state.bodyweight.map(b=>Object.assign({id:'bw_'+b.date},b));
-  if(state.vo2)vo2Records=state.vo2;
+  if(state.liftSessions)liftSessions=mergeById(state.liftSessions.map(s=>Object.assign({},s,{
+    sets:s.sets||[],isManual:!!(s.readings&&Object.keys(s.readings).length)})),liftSessions);
+  if(state.cardioSessions)cardioSessions=mergeById(state.cardioSessions,cardioSessions);
+  if(state.plans&&state.plans.length)liftWorkouts=mergeById(state.plans,liftWorkouts);
+  if(state.cardioPresets&&state.cardioPresets.length)cardioExercises=mergeById(state.cardioPresets,cardioExercises);
+  if(state.bodyweight)bodyweightLog=mergeById(state.bodyweight,bodyweightLog,'date').map(b=>Object.assign({id:'bw_'+b.date},b));
+  if(state.vo2)vo2Records=mergeById(state.vo2,vo2Records);
   saveLift();saveLiftWorkouts();saveCardio();saveCardioExercises();saveVO2();saveBodyweight();
   rememberSent();
   }finally{_applyingServer=false;}
@@ -1818,7 +1841,7 @@ async function extractFromScreenshot(file){
   try{
     const base64=await fileToBase64(file);
     const mediaType=file.type||'image/jpeg';
-    const res=await fetch('/api/fitness/scan',{
+    const res=await fetch(API_BASE+'/api/fitness/scan',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+syncToken()},
       body:JSON.stringify({image:'data:'+mediaType+';base64,'+base64})
