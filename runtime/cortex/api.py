@@ -3458,6 +3458,21 @@ SKILL_TOOLS = [
                                                    "out on this deal and has said he wants a revised one "
                                                    "built anyway"}},
       "required": ["company", "customer", "brief"]}},
+    {"name": "create_creative_proposal",
+     "description": "Build a CREATIVE PROPOSAL in one run, for a brief that asks us to develop the idea itself "
+                    "(a concept, hero film or campaign film): location research, concept, beat-by-beat script, "
+                    "storyboard frames of the real place, the quotation (priced from the rate card by code, a new "
+                    "version when the deal already has a quote number) and a visual deck, filed on the deal and "
+                    "attached to the quotation card. Use it only when Rashad asks for a creative proposal, concept "
+                    "deck or pitch for a film we would create; create_proposal is the words-led proposal. Needs the "
+                    "opportunity (deal_id). Put Rashad's direction in `direction` WORD FOR WORD: constraints (one "
+                    "location, budget, talent), exclusions and any figure he states. Runs 10 to 15 minutes in the "
+                    "background and lands as a card; replies on the card (correct_task) revise only what they touch.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"},
+        "deal_id": {"type": "integer", "description": "the opportunity it is for"},
+        "direction": {"type": "string", "description": "Rashad's direction, in his words"}},
+      "required": ["company", "deal_id"]}},
     {"name": "rate_card",
      "description": "Read a company's RATE CARD: the owner-approved per-unit prices every quotation is built "
                     "from, including the Budget tier and every item still marked OWNER TO CONFIRM. Use it "
@@ -3861,6 +3876,18 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                            "projects_count": proj["count"], "won_value": proj["total_value"],
                            "projects": [{"title": p["title"], "value": p["value"], "stage": p["stage"]}
                                         for p in proj["projects"][:10]]}, default=str)
+    if name == "create_creative_proposal":
+        _filed = _file_turn_files_on_deal(inp)   # a brief attached in this turn joins the deal record first
+        from . import creative
+        try:
+            r = creative.start(inp.get("company") or "sensa", int(inp["deal_id"]),
+                               direction=inp.get("direction", ""), said=_TURN_SAID.get())
+        except (ValueError, KeyError) as _e:
+            return str(_e)
+        return (f"Building the creative proposal on card #{r['task_id']}: brief, location research, concept, "
+                "script, storyboard frames, quotation and deck. It takes about 10 to 15 minutes and the card "
+                "returns to the Inbox when it is ready; nothing is sent to the client."
+                + (f" Filed on the deal first: {', '.join(_filed)}." if _filed else ""))
     if name == "create_proposal":
         _filed = _file_turn_files_on_deal(inp)   # a brief attached in this turn joins the deal record first
         try:
@@ -4696,7 +4723,7 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
     system += "\n\n" + (_company_knowledge(co) if co else _NO_FOCUS_NOTE)
     def _exec(name: str, inp: dict) -> str:   # carry the turn's attachments through when a tool drafts/creates
         if name in ("create_task", "draft", "draft_email", "save_document", "create_proposal",
-                    "create_quotation") and body.images:
+                    "create_creative_proposal", "create_quotation") and body.images:
             inp = {**inp, "_images": body.images, "_image_names": body.image_names}
         # the PERSON's own words, never the model's: read by create_quotation's price check and by every
         # card-making tool, which keeps any link he typed as trusted (owner_links)

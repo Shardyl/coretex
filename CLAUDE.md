@@ -1641,6 +1641,38 @@ rewrote its summary text, Talk could not read a PDF attached to a message, and a
   asked by name ("draft an opportunity" produced card 679 for White & Co unasked).
 - deck-spec / deck-revise run at 8,000 tokens (4,000 truncated and re-ran at 12,000 on the first SEF'27 build).
 
+## Creative proposals: one run, revised by reply (15 Sep 2026)
+Two proposal types now: the **Proposal** (`create_proposal`, words-led, above) and the **Creative proposal**
+(`create_creative_proposal`, `runtime/cortex/creative.py`): when a brief asks us to develop the idea itself. Built so
+Cortex does what was done BY HAND in session for SEF'27 / Sheraa (deal 123: SEN-2026-0015 v2 + proposal v4/v5, desktop
+scripts), on the owner's call "one run with the ability to do revisions" (not a card per stage).
+- STAGES (state saved to `/opt/coretex/creative/<job>/state.json` after each, so a failure RESUMES): brief (Sonnet,
+  `_deal_facts` + his direction) -> location (`think_research` Fable 5 + web search, one pick against the constraint,
+  facts with source URLs; `_commons_photos` = Wikimedia Commons free-licence photos WITH credit, the only photos a deck
+  may show; `_official_refs` = the venue site's photos, PRIVATE references for the frames only) -> concept (Fable 5,
+  3 routes, one chosen, look, verbatim asset descriptors, reads the reference photos) -> script (Fable 5, 7-11 beats,
+  `_timing_problem` checks contiguity and running time, one retry) -> frames (`imagegen.generate`: Gemini WITH up to 3
+  reference photos and NO text prepass; 2 per beat + 9:16 contributor tiles; Fable 5 cull, legible text/logo = hard
+  reject; cap `creative_image_cap` on the profile, default 40) -> quote (Sonnet structures blocks from the scope, CODE
+  prices with `price_lines`, typed figures allowed only from HIS words (`said` = `_TURN_SAID` + direction), exclusions
+  listed; the deal's existing same-client quote number gets the next VERSION) -> copy (Fable 5, CREATIVE DECK STANDARD,
+  `_drop_invented_dates`, no dashes) -> render (`deck.CreativeDeck`: hero, beat, sheet, tiles, with_bg; investment READ
+  BACK from `quote_versions`; pypdf page count vs planned, one compact re-set, else flagged on the card) -> file
+  (`_file_proposal_pdf`, earlier proposals on the deal retired, deck attached to the quotation card, timeline entry).
+- CARD: kind `content`, `request.kind = 'creative_proposal'`, inserted `drafting` at once, the run on a thread in the
+  process that started it (Talk = cortex-api); `awaiting_approval` with a summary (concept, routes passed over,
+  location and why, quote, exclusions, assumptions, weak frames, overflow) when done; `awaiting_correction` on failure.
+  REPLY = `creative.revise`: an unfinished run resumes; a finished one gets a Sonnet plan of what the words touch
+  (location / concept / script / regenerate_beats / quote / copy), only those re-run, next version filed on the card.
+  APPROVE = closes (the quotation was issued in the run). A deploy mid-run leaves the card `drafting`; reply to resume.
+- COST (measured on the stages' logged equivalents): about USD 8-12 a run, USD 0.50-2 a revision.
+- RULES added (Sensa): sales-proposal "CREATIVE PROPOSAL" (licensed photos only, venue photos are references, frames
+  are illustrations, post-made crowds stated) and sales-quotation "EXCLUSIONS" (additional NOC fees, influencer costs,
+  post-made crowds; permits as their own line).
+- `deck.phases()` now shows 5 steps (was 4): SEF'27 v4's fifth step, post and delivery, was silently dropped.
+- CLI: `python -m cortex.creative dry <deal_id> "<direction>"` (no card, no quote issued, no filing; output in the job
+  dir) and `python -m cortex.creative resume <job> [task_id]`.
+
 ## Phishing guard + one email, one company (15 Sep 2026)
 Heba at Jump (a real July contact) had her mailbox hacked. It bcc'd Sensa and Sky Vision an empty "Re: RFQ#
 Videography Services" with a 1-page PDF (made by Aspose minutes before) whose VIEW RFP DOCUMENT button went to a

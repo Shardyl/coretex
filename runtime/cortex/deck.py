@@ -340,7 +340,7 @@ class _Deck:
         p = "".join(
             f'<div class="phase{" hasimg" if (i < len(ims) and ims[i]) else ""}">{_pimg(ims[i] if i < len(ims) else None)}'
             f'<div class="num">{_esc(x.get("when"))}</div>'
-            f'<b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>' for i, x in enumerate(phases[:4]))
+            f'<b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>' for i, x in enumerate(phases[:5]))
         c = ""
         if cards:
             c = ('<div class="cols" style="margin-top:26px">'
@@ -595,6 +595,112 @@ class _Deck:
     def html(self) -> str:
         return ('<html><head><meta charset="utf-8"><style>' + _css(self.accent) + "</style></head><body>"
                 + "".join(self.pages) + "</body></html>")
+
+
+# --------------------------------------------------------------------------- creative proposal pages
+
+_CREATIVE_CSS = """
+.bgimg { position:absolute; top:0; left:0; width:1280px; height:720px; object-fit:cover; opacity:.85; }
+.bgshade { position:absolute; top:0; left:0; width:1280px; height:720px;
+           background:linear-gradient(to bottom, rgba(10,10,10,.62), rgba(10,10,10,.70) 55%, rgba(10,10,10,.86)); }
+.onbg .pad { position:relative; z-index:2; }
+.onbg .card, .onbg .gcell, .onbg .scol { background:rgba(14,15,18,.80); border-color:rgba(255,255,255,.08); }
+.onbg .phase { background:rgba(14,15,18,.80); border-top:2px solid ACCENT; border-radius:0 0 8px 8px; padding:12px 14px 14px; }
+.onbg table.t { background:rgba(14,15,18,.72); }
+.full { position:absolute; top:0; left:0; width:1280px; height:720px; object-fit:cover; }
+.fshade { position:absolute; top:0; left:0; width:1280px; height:720px;
+          background:linear-gradient(to top, rgba(10,10,10,.92) 6%, rgba(10,10,10,.35) 38%, rgba(10,10,10,0) 62%); }
+.hshade { position:absolute; top:0; left:0; width:1280px; height:720px;
+          background:linear-gradient(to right, rgba(10,10,10,.94) 38%, rgba(10,10,10,.55) 58%, rgba(10,10,10,.08) 82%); }
+.bk { position:absolute; top:44px; left:60px; font-size:11.5px; letter-spacing:2.5px; color:ACCENT; font-weight:600;
+      text-transform:uppercase; background:rgba(10,10,10,.66); padding:7px 12px; border-radius:4px; }
+.bk span { color:#C4C4CC; margin-left:14px; }
+.ost { position:absolute; left:72px; right:120px; bottom:112px; font-family:Poppins,sans-serif; font-size:44px;
+       font-weight:600; color:#FFFFFF; line-height:1.15; letter-spacing:-.3px; }
+.ost.none { font-size:13px; letter-spacing:2.5px; color:#9A9AA4; font-weight:500; }
+.obar { position:absolute; left:72px; bottom:96px; width:44px; height:3px; background:ACCENT; }
+.cap { position:absolute; left:72px; bottom:58px; right:320px; font-size:14px; color:#C4C4CC; }
+.hero h1 { font-size:52px; }
+.hstats { display:flex; gap:34px; margin-top:26px; }
+.hstats div { border-left:2px solid ACCENT; padding-left:12px; }
+.cs { display:grid; grid-template-columns:repeat(5,1fr); gap:14px 14px; margin-top:6px; }
+.cs img { width:100%; height:122px; object-fit:cover; border-radius:6px; display:block; }
+.csnote { font-size:11px; color:#7A7A84; margin:-6px 0 10px; }
+.cs .t { font-size:10px; color:ACCENT; letter-spacing:1.5px; font-weight:600; margin-top:5px; }
+.cs .o { font-size:11.5px; color:#EDEDF2; line-height:1.3; }
+.tiles { display:flex; gap:14px; margin-top:18px; }
+.tiles div { width:150px; }
+.tiles img { width:150px; height:267px; object-fit:cover; border-radius:10px; display:block; }
+.tiles .t { font-size:11px; color:ACCENT; letter-spacing:1.5px; font-weight:600; margin-top:7px; text-transform:uppercase; }
+"""
+_COMPACT_CSS = """
+.pad { padding:44px 64px; } h2 { font-size:23px; margin-bottom:10px; }
+p, li, td, th { font-size:12.5px; line-height:1.45; }
+.card p, .gcell p, .scol p, .phase p { font-size:11.5px; }
+table.t td, table.t th { padding:6px 10px; font-size:12.5px; }
+"""
+
+
+class CreativeDeck(_Deck):
+    """The CREATIVE DECK STANDARD (owner, locked 12 Sep 2026: "people don't want to read, they want to see"):
+    a full-bleed page per beat with its on-screen line set on the picture, a hero page for the idea, a contact
+    sheet, contributor tiles, and every text page on one of the project's own frames. Built by creative.py;
+    first used by hand on Massar (12 Sep) and SEF'27 (15 Sep). `compact` tightens type when a page overflows."""
+
+    def __init__(self, *a, compact: bool = False, **k):
+        super().__init__(*a, **k)
+        self.compact = compact
+
+    def with_bg(self, image):
+        """Put a frame BEHIND the page just added, darkened so its words stay readable."""
+        if not image or not self.pages:
+            return
+        bg = f'<img class="bgimg" src="{_b64(image)}"><div class="bgshade"></div>'
+        self.pages[-1] = self.pages[-1].replace('<div class="pg">', '<div class="pg onbg">' + bg, 1)
+
+    def hero(self, kicker, title, sub, line, stats, image, section=""):
+        st = "".join(f'<div><div class="pk">{_esc(s.get("k"))}</div><div class="pv">{_esc(s.get("v"))}</div></div>'
+                     for s in (stats or [])[:4])
+        img = f'<img class="full" src="{_b64(image)}">' if image else ""
+        self.pages.append(
+            f'<div class="pg hero">{img}<div class="hshade"></div>'
+            f'<div style="position:absolute;top:0;left:0;width:1280px;height:6px;background:{self.accent}"></div>'
+            f'<div style="position:absolute;left:72px;top:170px;width:540px"><h3>{_esc(kicker)}</h3>'
+            f'<div class="rule"></div><h1>{_esc(title)}</h1><div class="psub" style="margin-top:10px">{_esc(sub)}</div>'
+            f'<p style="margin-top:16px;font-size:17px;color:#DADAE0">{_esc(line)}</p>'
+            f'<div class="hstats">{st}</div></div>{self._foot(section or kicker)}</div>')
+
+    def beat(self, film_label, n, total, time, text, cap, image, section=""):
+        o = f'<div class="ost">{_esc(text)}</div>' if text else '<div class="ost none">PICTURE ONLY, NO TEXT</div>'
+        img = f'<img class="full" src="{_b64(image)}">' if image else ""
+        self.pages.append(
+            f'<div class="pg">{img}<div class="fshade"></div><div class="bk">{_esc(film_label)} · Beat {n} of {total}'
+            f'<span>{_esc(time)}</span></div>{o}<div class="obar"></div><div class="cap">{_esc(cap)}</div>'
+            f'{self._foot(section)}</div>')
+
+    def sheet(self, kicker, heading, cells, section="", note=""):
+        c = "".join((f'<div><img src="{_b64(x["img"])}">' if x.get("img") else "<div>")
+                    + f'<div class="t">{_esc(x.get("time"))}</div><div class="o">{_esc(x.get("text") or "Picture only")}</div></div>'
+                    for x in (cells or [])[:12])
+        self.pages.append(
+            f'<div class="pg"><div class="pad" style="padding-top:44px"><h3>{_esc(kicker)}</h3>'
+            f'<div class="rule" style="margin-bottom:10px"></div><h2 style="font-size:23px;margin-bottom:12px">'
+            f'{_esc(heading)}</h2>' + (f'<p class="csnote">{_esc(note)}</p>' if note else "")
+            + f'<div class="cs">{c}</div></div>{self._foot(section or kicker)}</div>')
+
+    def tiles(self, kicker, heading, body, tiles, note="", section=""):
+        t = "".join(f'<div><img src="{_b64(x["img"])}"><div class="t">{_esc(x.get("label"))}</div></div>'
+                    for x in (tiles or [])[:7])
+        self.pages.append(
+            f'<div class="pg"><div class="pad" style="padding-top:48px"><h3>{_esc(kicker)}</h3>'
+            f'<div class="rule"></div><h2 style="margin-bottom:8px">{_esc(heading)}</h2>'
+            f'<p style="max-width:1080px">{_esc(body)}</p><div class="tiles">{t}</div>'
+            + (f'<p class="csnote" style="margin-top:16px">{_esc(note)}</p>' if note else "")
+            + f'</div>{self._foot(section or kicker)}</div>')
+
+    def html(self) -> str:
+        css = _css(self.accent) + _CREATIVE_CSS.replace("ACCENT", self.accent) + (_COMPACT_CSS if self.compact else "")
+        return '<html><head><meta charset="utf-8"><style>' + css + "</style></head><body>" + "".join(self.pages) + "</body></html>"
 
 
 def to_pdf(html_str: str, out_path: str) -> str:

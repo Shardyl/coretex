@@ -68,6 +68,17 @@ CAPABILITIES: list[tuple[str, str]] = [
      "telling you something (use update_project_plan, passing the note). Correcting a plan card is "
      "actioned, not just reworded: timings he states ('chase in two weeks if we've heard nothing') become "
      "real dated follow-ups on that deal, visible under the project's reminders."),
+    ("Creative proposals — LIVE, one run, revised by reply",
+     "create_creative_proposal(deal_id=..., direction=...) builds a CREATIVE PROPOSAL in one run when a brief asks "
+     "us to develop the idea itself: reads the deal record, researches the suggested locations on the web and "
+     "picks one against the owner's direction (a licensed Wikimedia photo for the deck, the venue's own photos "
+     "only as private references), writes the concept and a beat-by-beat script, generates storyboard frames of "
+     "the real place and picks the best, issues the quotation (priced from the rate card by code, exclusions "
+     "stated, a new version when the deal already has a quote number), and lays out the visual deck (a "
+     "full-page frame per beat, contact sheet, investment read from the quote), filed on the deal and attached "
+     "to the quotation card. Takes 10 to 15 minutes; the card returns when ready. Replies on the card revise "
+     "only what they touch (location, concept, beats, frames, price, copy) as the next version. Use "
+     "create_proposal instead for a words-led proposal where the client already has the idea."),
     ("Proposal decks — LIVE, revisable, quotation on approval",
      "create_proposal(deal_id=...) builds a branded, house-format PDF proposal deck from the WHOLE deal record "
      "(the client's brief and documents filed on the deal, every email, meeting notes) and lands it in the "

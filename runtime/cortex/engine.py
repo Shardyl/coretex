@@ -1246,6 +1246,15 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         store.update_task(task["id"], status="awaiting_approval")   # never silently closed
         return {"blocked": True, "error": f"Couldn't build the quotation ({err}). The card is still open: "
                                           "answer its questions on the card and it builds from those."}
+    if (task.get("request") or {}).get("kind") == "creative_proposal":   # its quotation was issued in the run
+        rq = task.get("request") or {}
+        if not rq.get("attach_docs"):
+            store.update_task(task["id"], status="awaiting_approval")
+            return {"blocked": True, "error": "the creative proposal has not finished building yet"}
+        store.update_task(task["id"], status="done")
+        store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"version": rq.get("version")})
+        return {"approved": True, "note": (f"Approved. Quotation {rq.get('quotation_number')} and the deck are on the "
+                                           "quotation card; ask Talk to draft the email and attach both.")}
     if (task.get("request") or {}).get("kind") == "proposal":   # approving a deck issues its quotation
         return _approve_proposal(task, skill, company, actor)
     if task["kind"] in ("newsletter_idea", "newsletter_review", "newsletter_send"):
@@ -1732,6 +1741,18 @@ def apply_correction(task: dict, text: str) -> None:
         return
     skill = store.get_skill(task["skill_id"])
     company = store.get_company(task["company_id"])
+    if (task.get("request") or {}).get("kind") == "creative_proposal":
+        # A CREATIVE PROPOSAL IS REVISED IN PLACE (15 Sep 2026): only the parts his words touch re-run
+        # (location, concept, beats, frames, price, copy), the deck is filed as the next version on this card.
+        from . import creative
+        try:
+            if creative.revise(task, text):
+                return
+        except Exception as _ce:  # noqa: BLE001
+            notifications.notify(f"Card #{task['id']}: the creative proposal could not be revised",
+                                 f"{type(_ce).__name__}: {str(_ce)[:200]}", category="approval",
+                                 company_id=task.get("company_id"), target_type="task", target_id=str(task["id"]))
+            return
     if (task.get("request") or {}).get("kind") == "proposal":
         # A PROPOSAL CARD REBUILDS ITS DECK from his feedback (15 Sep 2026); a failure is said, never a
         # worker redraft of the summary text in the deck's place.
@@ -6166,8 +6187,15 @@ def _recover_stranded_tasks() -> None:
     """On startup, rescue any task orphaned in 'drafting' by the previous process. The engine restarts on every
     deploy; a long compose caught mid-flight would otherwise sit in 'drafting' forever and never reach the Inbox.
     Already has a draft -> surface it for approval; nothing drafted yet -> requeue it to run again cleanly."""
-    rows = db.query("select id, draft from tasks where status='drafting'")
+    rows = db.query("select id, draft, request->>'kind' rk from tasks where status='drafting'")
     for r in rows:
+        if r.get("rk") == "creative_proposal":
+            # its "Building..." line is not a deliverable: surfacing it for approval would show an unbuilt deck
+            # as ready. The run saved its state after every stage, so a reply resumes it where it stopped.
+            store.update_task(r["id"], status="awaiting_correction",
+                              draft="The creative proposal was interrupted by a restart. Reply 'resume' on this "
+                                    "card and it continues from the last finished stage.")
+            continue
         store.update_task(r["id"], status="awaiting_approval" if (r.get("draft") or "").strip() else "new")
     if rows:
         tg.send(f"Recovered {len(rows)} task(s) stranded in 'drafting' by a restart.")

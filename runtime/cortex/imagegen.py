@@ -92,6 +92,39 @@ def _company_image_directives(company: str | None) -> str:
         return ""
 
 
+def generate(prompt: str, aspect: str = "16:9", refs: list | None = None, purpose: str = "image",
+             company: str | None = None) -> bytes | None:
+    """A STYLE FRAME: the prompt as written, with up to three reference photographs as architecture references
+    (creative.py, 15 Sep 2026). Unlike hero() there is NO text prepass: that prepass writes verbatim words into
+    the image, the opposite of a frame whose typography is set in post. Retries twice; None on failure."""
+    key = config.get("GEMINI_API_KEY")
+    if not key or not prompt:
+        return None
+    parts = []
+    for p in (refs or [])[:3]:
+        try:
+            parts.append({"inlineData": {"mimeType": "image/jpeg",
+                                         "data": base64.b64encode(open(p, "rb").read()).decode()}})
+        except OSError:
+            continue
+    parts.append({"text": prompt})
+    for _ in range(3):
+        try:
+            r = httpx.post(ENDPOINT, params={"key": key}, timeout=240, json={
+                "contents": [{"parts": parts}],
+                "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": aspect}}})
+            r.raise_for_status()
+            for cand in r.json().get("candidates", []):
+                for part in (cand.get("content") or {}).get("parts", []):
+                    inline = part.get("inlineData") or part.get("inline_data")
+                    if inline and inline.get("data"):
+                        _log_image(purpose, company)
+                        return base64.b64decode(inline["data"])
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
 def hero(prompt: str, aspect: str = "16:9", purpose: str = "image", company: str | None = None) -> bytes | None:
     key = config.get("GEMINI_API_KEY")
     if not key or not prompt:
