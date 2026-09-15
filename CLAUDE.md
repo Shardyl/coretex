@@ -1644,9 +1644,12 @@ rewrote its summary text, Talk could not read a PDF attached to a message, and a
 ## Agency AI production: trade tier, preset, guide quotation, standard deck (15 Sep 2026)
 An AGENCY buying AI video to resell (Promocell, card 684: per-video with/without VO, bundles of 5/10/15) was priced
 from the direct-client card (one short AI piece 8,000; ten with English VO 100,000). Owner-set trade tier, rate card
-**v1.8** group "Agency AI production (trade)" (v1.7 kept whole as `rate_card:sensa:v1.7`): single video up to 30s
-4,500; bundles 5/10/15 = 20,000/36,000/49,500; AI voice-over 500 per video; human voice artist EN 1,000 / AR 1,800;
-extra aspect ratio 400; extra revision round 1,000. Keys `agency-*`, priced by `price_lines` like any component.
+group "Agency AI production (trade)", now rate card **v1.9** (v1.7 and v1.8 kept as `rate_card:sensa:v1.7/v1.8`):
+single video up to 30s 4,500; batches 5/10/15 = 20,000/36,000/49,500; AI voice-over 500 per video; two social formats
+per video included, each further format 400; two consolidated revision rounds PER BATCH, a further round 1,000.
+Revision 1 (owner, same day): NO human voice-over ("we just don't do them, and we're pitching AI"); the deck carries
+the prices, so no quotation goes with it unless the agency confirms a scope. Keys `agency-*`, priced by
+`price_lines` like any component; `install_rate_card` makes any change a new card version.
 - `runtime/cortex/agency.py`: `install_rate_card` / `install_preset` (idempotent), `guide_quotation`,
   `build_deck` / `deliver_deck`. Preset **`agency-ai`** = the ai-production terms and 70/30 payment with the agency
   title, lines, deliverables (supplied without Sensa branding, two rounds per video) and note (brief and approved
