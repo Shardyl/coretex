@@ -3458,6 +3458,18 @@ SKILL_TOOLS = [
                                                    "out on this deal and has said he wants a revised one "
                                                    "built anyway"}},
       "required": ["company", "customer", "brief"]}},
+    {"name": "agency_rates_deck",
+     "description": "The AGENCY AI PRODUCTION RATES deck: Sensa's standard deck for agencies that outsource AI video "
+                    "(trade rates, what one video includes, how it works, sample films, add-ons, terms), every price "
+                    "read from the rate card's 'Agency AI production (trade)' group. With no customer it returns the "
+                    "standard deck (library document, profile agency_rates_deck_doc) to attach to an email. With a "
+                    "customer it builds a version with that agency's name on the cover, filed on its deal and client "
+                    "folder. Offer it whenever an agency asks what AI video production costs.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug (sensa)"},
+        "customer": {"type": "string", "description": "the agency's name, only for a version made for them"},
+        "deal_id": {"type": "integer", "description": "their opportunity, for a version made for them"}},
+      "required": ["company"]}},
     {"name": "create_creative_proposal",
      "description": "Build a CREATIVE PROPOSAL in one run, for a brief that asks us to develop the idea itself "
                     "(a concept, hero film or campaign film): location research, concept, beat-by-beat script, "
@@ -3562,7 +3574,10 @@ SKILL_TOOLS = [
                     "quotation number and the client. `customer` is the client name for the PREPARED FOR field.",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"},
-        "preset": {"type": "string", "description": "line-item breakdown; default 'ai-production'"},
+        "preset": {"type": "string", "description": "line-item breakdown and printed terms: 'ai-production' "
+                                                   "(default, direct clients), 'agency-ai' (an AGENCY buying AI "
+                                                   "video to resell: trade rates from the rate card's Agency AI "
+                                                   "production group), 'shoot-production', 'retainer', 'assignment'"},
         "customer": {"type": "string", "description": "the client name for the quote"},
         "total": {"type": "number", "description": "the overall figure Rashad states (a target for component-priced lines, else split by weight). Omit if he gave none."},
         "total_inclusive": {"type": "boolean", "description": "true if `total` already includes VAT"},
@@ -3876,6 +3891,24 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                            "projects_count": proj["count"], "won_value": proj["total_value"],
                            "projects": [{"title": p["title"], "value": p["value"], "stage": p["stage"]}
                                         for p in proj["projects"][:10]]}, default=str)
+    if name == "agency_rates_deck":
+        from . import agency, profile as _pf
+        _slug = inp.get("company") or "sensa"
+        _co = store.get_company_by_slug(_slug)
+        if not _co:
+            return f"unknown business '{_slug}'"
+        if not inp.get("customer"):
+            _did = (_pf.get(_co["id"]) or {}).get("agency_rates_deck_doc")
+            _row = documents.get(int(_did)) if _did else None
+            if _row:
+                return (f"The standard Agency AI Production Rates deck is library document #{_row['id']} "
+                        f"'{_row['filename']}'. Attach it to the email with draft_email attach_documents.")
+        try:
+            _r = agency.deliver_deck(_slug, customer=inp.get("customer"), deal_id=inp.get("deal_id"))
+        except ValueError as _e:
+            return str(_e)
+        return (f"Built '{_r['name']}' ({_r['pages']} pages), library document #{_r['doc_id']}"
+                + (f", filed to {_r['filed_to']}" if _r.get("filed_to") else "") + ". Nothing has been sent.")
     if name == "create_creative_proposal":
         _filed = _file_turn_files_on_deal(inp)   # a brief attached in this turn joins the deal record first
         from . import creative

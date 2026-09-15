@@ -101,7 +101,7 @@ def _drive_docs_folder(company_id: int, slug: str) -> str | None:
     return drive.ensure_subfolder(link, "Documents")
 
 
-_OFFICIAL_KINDS = {"company-profile", "trade-licence", "vat-certificate", "capabilities-deck", "terms"}
+_OFFICIAL_KINDS = {"company-profile", "trade-licence", "vat-certificate", "capabilities-deck", "agency-deck", "terms"}
 _OFFICIAL_NAME = re.compile(r"^(Sensa( Productions)?|Sky ?Vision)\b", re.I)
 
 
@@ -254,7 +254,7 @@ def save_data_url(company_id: int, slug: str, filename: str, data_url: str,
 # The STANDING company papers - the only documents offered by default when attaching to a card
 # (owner, 30 Aug: everything else is project clutter and Cortex attaches what a draft needs itself).
 # our own standing documents: they belong to no client, so a deal's document scope never hides them
-CORE_KINDS = ("company-profile", "trade-licence", "vat-certificate", "capabilities-deck")
+CORE_KINDS = ("company-profile", "trade-licence", "vat-certificate", "capabilities-deck", "agency-deck")
 
 
 def listing(company_id: int, core_only: bool = False) -> list[dict]:
