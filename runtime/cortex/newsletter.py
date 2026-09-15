@@ -1625,7 +1625,9 @@ def campaign_stats(company_id: int, job_id: int | None = None) -> dict:
            "total": job["total"], "started": job["created_at"].isoformat()}
     for ev in ("accepted", "delivered", "failed", "opened", "clicked", "unsubscribed", "complained"):
         try:
-            items = mailgun.events(domain, ev, begin, tag="newsletter")
+            # unsubscribe / complaint events do not carry the message tag: the stats page showed 0 unsubscribes
+            # while Mailgun's list held 42 (15 Sep 2026). Count those by the send window, not by tag.
+            items = mailgun.events(domain, ev, begin, tag=None if ev in ("unsubscribed", "complained") else "newsletter")
         except Exception:  # noqa: BLE001
             items = []
         out[ev] = len({i.get("recipient") for i in items})
