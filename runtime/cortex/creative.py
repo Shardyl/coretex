@@ -122,6 +122,27 @@ def _drop_invented_dates(x, source: str, dropped: list):
     return " ".join(keep) if keep else _DATE.sub("", x).strip(" ,")
 
 
+_MONEY = re.compile(r"\bAED\b|\bdirhams?\b|\bVAT\b|\bSEN-\d{4}-\d{4}\b", re.I)
+
+
+def _strip_money(x, dropped: list):
+    """Prices, totals, VAT and quotation numbers are printed by CODE from the quotation. The first dry run's
+    writer copied 'AED 119,900' out of the deal record onto a deck whose own quote came to 124,850."""
+    if isinstance(x, dict):
+        return {k: _strip_money(v, dropped) for k, v in x.items()}
+    if isinstance(x, list):
+        return [_strip_money(v, dropped) for v in x]
+    if not isinstance(x, str) or not _MONEY.search(x):
+        return x
+    keep = []
+    for sent in re.split(r"(?<=[.!?])\s+", x):
+        if _MONEY.search(sent):
+            dropped.append(sent)
+            continue
+        keep.append(sent)
+    return " ".join(keep)
+
+
 def _rules(company: dict, *keys: str) -> str:
     out = []
     for k in keys:
@@ -329,7 +350,9 @@ class Job:
                "\"0:00-0:06\", \"on_screen_text\": \"short line or empty\", \"caption\": \"12-20 words, what we "
                "see\", \"frame_prompt\": \"one style frame: subject, action, setting, time of day, light, lens, "
                "camera position, composition; paste the asset descriptors it uses WORD FOR WORD; under 120 "
-               "words\", \"refs\": [numbers of the reference photographs that show this view]}], \"tiles\": "
+               "words\", \"refs\": [numbers of the reference photographs that show this view], \"assets\": "
+               "[\"the @tags of every asset this beat shows\"], \"cover\": <true on the ONE beat that makes the "
+               "best cover: the location at its most striking, never a phone clip>}], \"tiles\": "
                "{\"heading\": \"\", \"body\": \"\", \"items\": [{\"label\": \"\", \"prompt\": \"a vertical phone "
                "selfie still of the contributor, place and action\"}]} or null}. "
                f"Between 7 and 11 beats; contiguous timings from 0:00 ending exactly at {dur // 60}:{dur % 60:02d}. "
@@ -357,6 +380,10 @@ class Job:
         for i, b in enumerate(out["beats"]):     # numbered by code, never trusted from the writer
             b["n"] = i + 1
             b["refs"] = [int(r) for r in (b.get("refs") or []) if str(r).strip().isdigit()]
+            descs = [a["descriptor"] for a in (c.get("assets") or []) if a.get("tag") in (b.get("assets") or [])
+                     and a.get("descriptor") and a["descriptor"][:40] not in (b.get("frame_prompt") or "")]
+            if descs:     # the asset descriptors ride in every frame BY CODE: the first dry run's writer left the
+                b["frame_prompt"] = (b.get("frame_prompt") or "") + " " + " ".join(descs)   # choir out of beat 7
         out["changed_frames"] = [b["n"] for b in out["beats"] if not prev or old.get(b["n"]) != b.get("frame_prompt")]
         self.s["script"] = out
         self.log(f"script: {len(out['beats'])} beats, {dur}s, {len((out.get('tiles') or {}).get('items') or [])} tiles")
@@ -416,6 +443,7 @@ class Job:
     def _cull(self, beats: list):
         """Fable 5 picks the better of two frames per beat; legible text or a logo is a hard reject."""
         sc = {b["n"]: b for b in self.s["script"]["beats"]}
+        assets = {a.get("tag"): a.get("descriptor", "") for a in self.s["concept"].get("assets") or []}
         frames = self.s["frames"]
 
         def one(n):
@@ -428,8 +456,11 @@ class Job:
                 "beat, 'a' then 'b'. Pick the one that best shows the beat and looks least AI-generated. HARD "
                 "REJECT any frame with legible text, a logo, readable signage or numbers. Also check: waxy skin, "
                 "malformed hands or faces, repeated identical people, flares or light streaks, anything that "
-                'contradicts the beat. JSON: {"pick": "a|b", "reason": "one sentence", "reject_a": false, '
-                '"reject_b": false}', f"BEAT {n}: {sc[n].get('caption')}", fast=False, model=MODEL, max_tokens=6000,
+                'contradicts the beat. HARD REJECT a frame whose people, their number, their wardrobe or the '
+                'place contradict MUST SHOW. JSON: {"pick": "a|b", "reason": "one sentence", "reject_a": false, '
+                '"reject_b": false}', f"BEAT {n}: {sc[n].get('caption')}\nMUST SHOW: "
+                + " ".join(assets.get(t, "") for t in (sc[n].get("assets") or [])), fast=False, model=MODEL,
+                max_tokens=6000,
                 purpose="creative-cull", company=self.s["company"], images=[_thumb(p) for _, p in cands])
             return n, res
 
@@ -474,7 +505,7 @@ class Job:
              f"{json.dumps(prev, ensure_ascii=False)}\n\nOWNER'S FEEDBACK:\n{feedback}\n\n" if prev else "")
             + f"OWNER'S OWN WORDS (the only source of typed prices):\n{said.strip() or '(none)'}\n\nSCOPE:\n"
             + json.dumps(scope, ensure_ascii=False) + f"\n\nRATE CARD:\n{ratecard.render(slug)}",
-            fast=False, model=provider.MODEL_FAST, max_tokens=8000, purpose="creative-quote", company=slug) or {}
+            fast=False, model=provider.MODEL_FAST, max_tokens=16000, purpose="creative-quote", company=slug) or {}
         if not spec.get("sections"):
             raise RuntimeError("the quotation came back with no lines")
         spec = _clean_text(spec)
@@ -545,7 +576,8 @@ class Job:
                 "RULES: write to the client ('you'); plain and specific; no superlatives; no em dashes. Use ONLY "
                 "facts in the material: no invented figure, date, award or name. Loglines, not paragraphs: every "
                 "card body under 40 words. Faces in the frames are illustrations; anything shown that is made in "
-                "post or not quoted (a crowd, an audience) is said plainly.",
+                "post or not quoted (a crowd, an audience) is said plainly. Never write a price, a total, a VAT figure or "
+                "a quotation number anywhere: the investment page prints them from the quotation.",
                 'RETURN JSON: {"cover": {"kicker": "Creative proposal", "title1": "", "title2": "", "standfirst": '
                 '"1-2 sentences"}, "brief": {"heading": "", "cards": [{"title": "", "body": ""}], "bullets": [""]}, '
                 '"location": {"heading": "", "sub": "", "body": "50-70 words", "stats": [{"k": "", "v": ""}]}, '
@@ -572,9 +604,9 @@ class Job:
         source = (json.dumps(src, ensure_ascii=False) + (self.s.get("facts") or "")
                   + (self.s.get("words") or "")).lower()
         dropped: list = []
-        self.s["copy"] = _drop_invented_dates(_clean_text(out), source, dropped)
+        self.s["copy"] = _strip_money(_drop_invented_dates(_clean_text(out), source, dropped), dropped)
         if dropped:
-            self.log(f"copy: dropped {len(dropped)} sentence(s) with dates not in the source")
+            self.log(f"copy: dropped {len(dropped)} sentence(s) with a date not in the source or a price")
         self.log("copy: written")
 
     # ---------------------------------------------------------------- 8 render + check
@@ -603,7 +635,8 @@ class Job:
         if q.get("number"):
             meta.append({"k": "Quotation", "v": f"{q['number']} v{q.get('version')}"})
         meta.append({"k": "Date", "v": f"{today.day} {today:%B %Y}"})
-        climax = pick(beats[max(0, int(len(beats) * .75) - 1)]["n"]) or bgi(0)
+        cov = next((b for b in beats if b.get("cover")), None) or beats[max(0, len(beats) - 2)]
+        climax = pick(cov["n"]) or bgi(0)
         d.covermeta(cp["cover"].get("kicker") or "Creative proposal", cp["cover"].get("title1") or c.get("title"),
                     cp["cover"].get("title2") or "", cp["cover"].get("standfirst") or c.get("logline"), meta,
                     climax, "Creative proposal")
@@ -657,17 +690,25 @@ class Job:
         d.samples(f"{n:02d} · Our work", cp["samples"].get("heading") or "Films we have made", "", films)
         n += 1
         det = (cp.get("investment") or {}).get("details") or {}
-        inv = [{"item": r["item"], "detail": det.get(r["item"]) or "; ".join(str(x) for x in r["items"])[:120],
+        short = lambda t: t if len(t) <= 95 else t[:92].rsplit(" ", 1)[0] + "..."     # noqa: E731
+        inv = [{"item": r["item"], "detail": short(str(det.get(r["item"]) or "; ".join(str(x) for x in r["items"]))),
                 "amount": r["amount"]} for r in rows]
-        inv += [{"item": "Not included", "detail": x, "amount": "Excluded"}
-                for x in (q["spec"].get("exclusions") or [])[:3]]
+        exc = [re.split(r"[:;(]", str(x))[0].strip() for x in (q["spec"].get("exclusions") or [])]
+        if exc:     # ONE row: a row per exclusion ran the table off the page in the first dry run
+            inv.append({"item": "Not included", "detail": short("; ".join(exc)), "amount": "Excluded"})
+        if len(inv) > 8:
+            d.compact = True
         blurb = ("Excluding VAT" + (f", as Quotation {q['number']} v{q.get('version')}" if q.get("number") else "")
                  + ". " + ((cp.get("investment") or {}).get("blurb") or ""))
         d.investment(f"{n:02d} · Investment", f"AED {net:,.0f}", blurb.strip(), inv)
         d.with_bg(bgi(len(bg) - 1))
         n += 1
+        tcards = [x for x in (cp["terms"].get("cards") or [])
+                  if not re.search(r"includ|exclu", str(x.get("title", "")), re.I)][:2]
+        if exc:     # what is not included comes from the QUOTATION, by code
+            tcards.append({"title": "Not included", "body": "; ".join(exc)[:260]})
         d.cards(f"{n:02d} · Terms at a glance", cp["terms"].get("heading") or "Usage, payment and exclusions",
-                (cp["terms"].get("cards") or [])[:3], None)
+                tcards[:3], None)
         d.with_bg(bgi(0))
         n += 1
         cells = [{"num": f"{i + 1:02d}", **x} for i, x in enumerate((cp["needs"].get("cells") or [])[:4])]
@@ -941,5 +982,7 @@ if __name__ == "__main__":      # python -m cortex.creative dry <deal_id> "<dire
     if sys.argv[1] == "dry":
         print(start(sys.argv[4] if len(sys.argv) > 4 else "sensa", int(sys.argv[2]), direction=sys.argv[3],
                     dry=True, background=False))
+    elif sys.argv[1] == "rerun":      # python -m cortex.creative rerun <job> <stage>: dry, nothing issued or filed
+        run_task(sys.argv[2], None, dry=True, start_at=sys.argv[3])
     elif sys.argv[1] == "resume":
         run_task(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else None)
