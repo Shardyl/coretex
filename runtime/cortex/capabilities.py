@@ -71,10 +71,12 @@ CAPABILITIES: list[tuple[str, str]] = [
     ("Agency AI production — trade rates, guide quotation, standard deck",
      "Agencies that outsource AI video (they resell to their own clients and ask per-video or bundle prices) are "
      "priced on the rate card's 'Agency AI production (trade)' group with create_quotation preset 'agency-ai', never "
-     "the direct-client AI rates: single video up to 30 seconds, bundles of 5, 10 and 15, AI voice-over per video, "
-     "human voice artist, extra aspect ratio, extra revision round. agency_rates_deck returns the standard Agency AI "
-     "Production Rates deck to attach, or builds a version with the agency's name on it; offer it whenever an agency "
-     "asks what AI video costs. A worked 'Agency Guide Quotation' sits in the terms folder beside the templates."),
+     "the direct-client AI rates: single video up to 30 seconds, batches of 5, 10 and 15, AI voice-over per video "
+     "(no human voice-over: we pitch AI), two social formats included, extra format, two revision rounds per batch. "
+     "agency_rates_deck returns the standard Agency AI Production Rates deck (the prices are IN the deck: send it on "
+     "its own, never a quotation with it unless the agency confirms a scope), or builds a version with the agency's "
+     "name on it; offer it whenever an agency asks what AI video costs. A worked 'Agency Guide Quotation' sits in the "
+     "terms folder as a team reference."),
     ("Creative proposals — LIVE, one run, revised by reply",
      "create_creative_proposal(deal_id=..., direction=...) builds a CREATIVE PROPOSAL in one run when a brief asks "
      "us to develop the idea itself: reads the deal record, researches the suggested locations on the web and "

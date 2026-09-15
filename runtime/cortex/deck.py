@@ -689,8 +689,12 @@ class CreativeDeck(_Deck):
             + f'<div class="cs">{c}</div></div>{self._foot(section or kicker)}</div>')
 
     def tiles(self, kicker, heading, body, tiles, note="", section=""):
-        t = "".join(f'<div><img src="{_b64(x["img"])}"><div class="t">{_esc(x.get("label"))}</div></div>'
-                    for x in (tiles or [])[:7])
+        def one(x):     # an `href` makes the tile a link to its film
+            img = f'<img src="{_b64(x["img"])}">'
+            if x.get("href"):
+                img = f'<a href="{_esc(x["href"])}" style="display:block">{img}</a>'
+            return f'<div>{img}<div class="t">{_esc(x.get("label"))}</div></div>'
+        t = "".join(one(x) for x in (tiles or [])[:7])
         self.pages.append(
             f'<div class="pg"><div class="pad" style="padding-top:48px"><h3>{_esc(kicker)}</h3>'
             f'<div class="rule"></div><h2 style="margin-bottom:8px">{_esc(heading)}</h2>'
