@@ -1641,6 +1641,28 @@ rewrote its summary text, Talk could not read a PDF attached to a message, and a
   asked by name ("draft an opportunity" produced card 679 for White & Co unasked).
 - deck-spec / deck-revise run at 8,000 tokens (4,000 truncated and re-ran at 12,000 on the first SEF'27 build).
 
+## Agency AI production: trade tier, preset, guide quotation, standard deck (15 Sep 2026)
+An AGENCY buying AI video to resell (Promocell, card 684: per-video with/without VO, bundles of 5/10/15) was priced
+from the direct-client card (one short AI piece 8,000; ten with English VO 100,000). Owner-set trade tier, rate card
+**v1.8** group "Agency AI production (trade)" (v1.7 kept whole as `rate_card:sensa:v1.7`): single video up to 30s
+4,500; bundles 5/10/15 = 20,000/36,000/49,500; AI voice-over 500 per video; human voice artist EN 1,000 / AR 1,800;
+extra aspect ratio 400; extra revision round 1,000. Keys `agency-*`, priced by `price_lines` like any component.
+- `runtime/cortex/agency.py`: `install_rate_card` / `install_preset` (idempotent), `guide_quotation`,
+  `build_deck` / `deliver_deck`. Preset **`agency-ai`** = the ai-production terms and 70/30 payment with the agency
+  title, lines, deliverables (supplied without Sensa branding, two rounds per video) and note (brief and approved
+  script from the agency; concept/script writing, a consistent AI character, second-language captions, rush and
+  broadcast/outdoor usage quoted separately).
+- GUIDE QUOTATION: 10 videos + AI VO, reference `GUIDE-AGENCY` (never a SEN number), "Sensa - Agency Guide Quotation
+  v1.0" .xlsx/.pdf at the top of the terms folder beside `Sensa - Quotation Template - agency-ai.docx`.
+- STANDARD DECK "Sensa - Agency AI Production Rates v1.0.pdf" (9 pages): library kind **`agency-deck`**, official
+  and a CORE kind (a deal's scope never hides it), Documents on Drive, profile `agency_rates_deck_doc` (doc 472).
+  Every figure read from the rate card by key; its words are the setting `agency_deck_spec:sensa` (edit there, then
+  `python -m cortex.agency deck`). A version FOR an agency (`agency_rates_deck(customer=, deal_id=)` or
+  `python -m cortex.agency deck "<Agency>"`) is client work, filed on the deal and client folder.
+- Talk tool `agency_rates_deck`; `create_quotation` lists `agency-ai`. Rules (Sensa): sales-quotation "AGENCY RATES";
+  sales-first-response and email-handling "AGENCY PRICING ENQUIRIES" (give the indication they asked for and attach
+  the deck; a call is offered, never a condition for pricing).
+
 ## Creative proposals: one run, revised by reply (15 Sep 2026)
 Two proposal types now: the **Proposal** (`create_proposal`, words-led, above) and the **Creative proposal**
 (`create_creative_proposal`, `runtime/cortex/creative.py`): when a brief asks us to develop the idea itself. Built so
