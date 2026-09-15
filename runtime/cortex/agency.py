@@ -164,7 +164,7 @@ def guide_quotation(slug: str = "sensa") -> list[str]:
 # --------------------------------------------------------------------------- the deck
 
 DEFAULT_SPEC = {
-    "version": "1.3",
+    "version": "1.4",
     "cover": {"kicker": "AI production for agencies", "title1": "Your AI studio,", "title2": "on call.",
               "standfirst": "Short AI-generated videos for your clients, directed by filmmakers, delivered under "
                             "your name, at trade rates.", "image": "IN9Q7RcttlI"},
@@ -187,7 +187,7 @@ DEFAULT_SPEC = {
         {"kicker": "AI influencers", "heading": "A face for the brand, episode after episode",
          "body": "Characters we design once and keep consistent, so a brand can run a presenter or a guide across a "
                  "whole series without a casting call.",
-         "films": [["Gm8PGtOoFgw", "Zayd Adventure"], ["zlSV_2oM980", "Leo Iconik"], ["x7pYhmCYZVI", "Leo Iconik"]]}],
+         "films": [["x7pYhmCYZVI", "Leo Iconik"], ["Gm8PGtOoFgw", "Zayd Adventure"], ["zlSV_2oM980", "Leo Iconik"]]}],
     "products": {"heading": "AI brand and product films", "films": [
         ["o3aYpr5t1Bc", "MAH Gold, five centuries of Italian gold craftsmanship"],
         ["vfi2IaDgjpw", "HBMSU, an AI campaign now on billboards across the UAE"],
