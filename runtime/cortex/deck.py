@@ -172,7 +172,7 @@ table.t { border-collapse:collapse; width:100%; }
 table.t td, table.t th { padding:9px 12px; text-align:left; border-bottom:1px solid #1C1D22;
                          font-size:14px; vertical-align:top; }
 table.t th { font-size:11.5px; color:ACCENT; text-transform:uppercase; letter-spacing:1.5px; font-weight:600; }
-table.t td.r, table.t th.r { text-align:right; }
+table.t td.r, table.t th.r { text-align:right; white-space:nowrap; }
 .stat { font-family:Poppins,sans-serif; font-size:38px; font-weight:700; color:ACCENT; line-height:1; }
 .big { font-family:Poppins,sans-serif; font-size:38px; font-weight:600; color:#EDEDF2; }
 table.meta td { font-size:13px; padding:4px 0; color:#C4C4CC; }
@@ -628,6 +628,7 @@ _CREATIVE_CSS = """
 .csnote { font-size:11px; color:#7A7A84; margin:-6px 0 10px; }
 .cs .t { font-size:10px; color:ACCENT; letter-spacing:1.5px; font-weight:600; margin-top:5px; }
 .cs .o { font-size:11.5px; color:#EDEDF2; line-height:1.3; }
+.gcell.hasimg .cimg { height:210px; }
 .tiles { display:flex; gap:14px; margin-top:18px; }
 .tiles div { width:150px; }
 .tiles img { width:150px; height:267px; object-fit:cover; border-radius:10px; display:block; }
@@ -688,12 +689,14 @@ class CreativeDeck(_Deck):
             f'{_esc(heading)}</h2>' + (f'<p class="csnote">{_esc(note)}</p>' if note else "")
             + f'<div class="cs">{c}</div></div>{self._foot(section or kicker)}</div>')
 
-    def tiles(self, kicker, heading, body, tiles, note="", section=""):
-        def one(x):     # an `href` makes the tile a link to its film
-            img = f'<img src="{_b64(x["img"])}">'
+    def tiles(self, kicker, heading, body, tiles, note="", section="", width: int = 150):
+        h = int(width * 16 / 9)
+
+        def one(x):     # an `href` makes the tile a link to its film; `width` sizes every tile (portrait 9:16)
+            img = f'<img src="{_b64(x["img"])}" style="width:{width}px;height:{h}px">'
             if x.get("href"):
                 img = f'<a href="{_esc(x["href"])}" style="display:block">{img}</a>'
-            return f'<div>{img}<div class="t">{_esc(x.get("label"))}</div></div>'
+            return f'<div style="width:{width}px">{img}<div class="t">{_esc(x.get("label"))}</div></div>'
         t = "".join(one(x) for x in (tiles or [])[:7])
         self.pages.append(
             f'<div class="pg"><div class="pad" style="padding-top:48px"><h3>{_esc(kicker)}</h3>'

@@ -164,7 +164,7 @@ def guide_quotation(slug: str = "sensa") -> list[str]:
 # --------------------------------------------------------------------------- the deck
 
 DEFAULT_SPEC = {
-    "version": "1.1",
+    "version": "1.2",
     "cover": {"kicker": "AI production for agencies", "title1": "Your AI studio,", "title2": "on call.",
               "standfirst": "Short AI-generated videos for your clients, directed by filmmakers, delivered under "
                             "your name, at trade rates.", "image": "2-3tPJfn3RQ"},
@@ -205,8 +205,8 @@ DEFAULT_SPEC = {
         "image": "Gxf2QAdvET4"},
     "prices": {"heading": "From {per_video_min} per video", "blurb": "Excluding VAT. The more videos in a batch, the lower "
                                                                   "the rate per video.",
-               "on_request": "Concept and script writing, a consistent AI character across videos, captions in a second "
-                             "language, rush turnaround, broadcast or outdoor usage", "image": "5JrI6GmwIBQ"},
+               "on_request": "Script writing, a consistent AI character, second-language captions, rush, "
+                             "broadcast or outdoor usage", "image": "5JrI6GmwIBQ"},
     "close": {"heading": "Send us a brief", "cards": [
         {"title": "Payment", "body": "70% to start, 30% on delivery, under our AI production terms."},
         {"title": "White-label", "body": "Delivered without Sensa branding; shown in our portfolio only with your consent."},
@@ -294,7 +294,7 @@ def build_deck(slug: str = "sensa", customer: str | None = None) -> dict:
     for sec in s["sections"]:
         tiles = [{"img": _vthumb(v), "label": lbl, "href": _watch(v)} for v, lbl in sec["films"][:7]]
         d.tiles(f"{n:02d} · {sec['kicker']}", sec["heading"], sec["body"], [t for t in tiles if t["img"]],
-                "Tap any film to watch it.", sec["kicker"])
+                "Tap any film to watch it.", sec["kicker"], width=200)
         n += 1
     films = [{"youtube_video_id": v, "label": lbl.split(",")[0], "caption": lbl.split(",", 1)[1].strip()
               if "," in lbl else "", "thumb": land(v)} for v, lbl in s["products"]["films"][:3]]
