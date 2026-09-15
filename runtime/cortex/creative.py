@@ -623,7 +623,8 @@ class Job:
         bgi = lambda i: bg[i % len(bg)]                             # noqa: E731
         q = self.s["quote"]
         rows, net = self.quote_rows()
-        label = f"{self.s['brief'].get('project') or 'Creative proposal'} · Creative proposal"
+        # the concept's short title: the full project name wrapped over the logo on the photo page's narrow footer
+        label = f"{(c.get('title') or self.s['brief'].get('project') or 'Proposal')[:34]} · Creative proposal"
         d = deck.CreativeDeck(co, self.s["customer"], deck._ACCENT_DEFAULT, deck._logo(co), label[:80],
                               compact=compact)
         today = datetime.now(timezone.utc).date()
