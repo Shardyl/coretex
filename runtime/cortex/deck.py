@@ -705,6 +705,25 @@ class CreativeDeck(_Deck):
             + (f'<p class="csnote" style="margin-top:16px">{_esc(note)}</p>' if note else "")
             + f'</div>{self._foot(section or kicker)}</div>')
 
+    def films_grid(self, kicker, heading, films, section=""):
+        """Up to six films, three across in two rows, each at native 16:9 and a link to its film."""
+        w = 340
+        h = int(w * 9 / 16)
+        cells = []
+        for f in (films or [])[:6]:
+            img = (f'<img src="{_b64(f["img"])}" style="width:{w}px;height:{h}px;display:block;border-radius:8px;'
+                   'object-fit:cover">')
+            if f.get("href"):
+                img = f'<a href="{_esc(f["href"])}" style="display:block">{img}</a>'
+            cap = (f'<p class="thumbcap" style="margin-top:6px"><b>{_esc(f.get("label"))}</b>'
+                   + (f' &middot; {_esc(f.get("caption"))}' if f.get("caption") else "") + "</p>")
+            cells.append(f'<div style="width:{w}px">{img}{cap}</div>')
+        self.pages.append(
+            f'<div class="pg"><div class="pad" style="padding-top:44px"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2 style="margin-bottom:14px">{_esc(heading)}</h2>'
+            f'<div style="display:grid;grid-template-columns:repeat(3,{w}px);gap:18px 28px">{"".join(cells)}</div>'
+            f'</div>{self._foot(section or "Our work")}</div>')
+
     def html(self) -> str:
         css = _css(self.accent) + _CREATIVE_CSS.replace("ACCENT", self.accent) + (_COMPACT_CSS if self.compact else "")
         return '<html><head><meta charset="utf-8"><style>' + css + "</style></head><body>" + "".join(self.pages) + "</body></html>"

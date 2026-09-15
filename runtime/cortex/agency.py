@@ -164,10 +164,10 @@ def guide_quotation(slug: str = "sensa") -> list[str]:
 # --------------------------------------------------------------------------- the deck
 
 DEFAULT_SPEC = {
-    "version": "1.2",
+    "version": "1.3",
     "cover": {"kicker": "AI production for agencies", "title1": "Your AI studio,", "title2": "on call.",
               "standfirst": "Short AI-generated videos for your clients, directed by filmmakers, delivered under "
-                            "your name, at trade rates.", "image": "2-3tPJfn3RQ"},
+                            "your name, at trade rates.", "image": "IN9Q7RcttlI"},
     "make": {"heading": "What we make", "cells": [
         {"title": "CGI social films", "body": "A real scene shot on a phone, with a CGI element dropped in. Portrait, "
                                               "built for feeds.", "film": "WydqL_1V1wI"},
@@ -176,22 +176,25 @@ DEFAULT_SPEC = {
         {"title": "AI product films", "body": "Products shown in worlds that would cost a fortune to build, from cars "
                                               "to fragrance.", "film": "5JrI6GmwIBQ"},
         {"title": "AI brand films", "body": "Longer stories told with AI imagery, for brands, hospitals and "
-                                            "institutions.", "film": "Gxf2QAdvET4"}]},
+                                            "institutions.", "film": "IN9Q7RcttlI"}]},
+    "lead": {"film": "IN9Q7RcttlI", "kicker": "AI brand commercials", "title": "Full AI brand commercials",
+             "caption": "CFI Trading: a financial services commercial made entirely with AI. Tap to watch."},
     "sections": [
         {"kicker": "CGI social films", "heading": "Real life, with something impossible in it",
          "body": "A real scene filmed on a phone, with a CGI element that could never have been there. Made in portrait "
                  "for Reels, TikTok and Shorts, and short enough to stop the scroll.",
-         "films": [["WydqL_1V1wI", "Zed"], ["gGdpiIsOGzU", "Huru, banner"], ["hf4FvzrYr6c", "Huru, drone"],
-                   ["49uk8Y24Ruc", "Nameless Ventures, 3D"], ["falzuk31ciE", "Nameless Ventures, social"]]},
+         "films": [["WydqL_1V1wI", "Zed"], ["gGdpiIsOGzU", "Huru"], ["49uk8Y24Ruc", "Nameless Ventures"]]},
         {"kicker": "AI influencers", "heading": "A face for the brand, episode after episode",
          "body": "Characters we design once and keep consistent, so a brand can run a presenter or a guide across a "
                  "whole series without a casting call.",
-         "films": [["zlSV_2oM980", "Leo Iconik"], ["x7pYhmCYZVI", "Leo Iconik"], ["IQgqyD_MC-4", "Zayd Adventure, 1"],
-                   ["e9y7kj9TWTA", "Zayd Adventure, 2"], ["Gm8PGtOoFgw", "Zayd Adventure, 3"]]}],
-    "products": {"heading": "AI product and brand films", "films": [
+         "films": [["Gm8PGtOoFgw", "Zayd Adventure"], ["zlSV_2oM980", "Leo Iconik"], ["x7pYhmCYZVI", "Leo Iconik"]]}],
+    "products": {"heading": "AI brand and product films", "films": [
+        ["o3aYpr5t1Bc", "MAH Gold, five centuries of Italian gold craftsmanship"],
+        ["vfi2IaDgjpw", "HBMSU, an AI campaign now on billboards across the UAE"],
+        ["Gxf2QAdvET4", "Al Rahba Hospital, the heart of our community"],
         ["2-3tPJfn3RQ", "Mercedes E-Class, a showcase built with AI"],
-        ["5JrI6GmwIBQ", "Orientica Crown, a fragrance showcase built with AI"],
-        ["Gxf2QAdvET4", "Al Rahba Hospital, the heart of our community"]]},
+        ["5JrI6GmwIBQ", "Orientica Crown, a fragrance showcase"],
+        ["gJ45runhsTc", "Red Bull, a product showcase"]]},
     "how": {"heading": "How it works", "phases": [
         {"when": "STEP 1", "title": "Brief", "body": "You send the brief and approved script for each video."},
         {"when": "STEP 2", "title": "Key frames", "body": "You approve the key frames before any video is generated."},
@@ -291,14 +294,19 @@ def build_deck(slug: str = "sensa", customer: str | None = None) -> dict:
            [{"num": f"{i + 1:02d}", "title": x["title"], "body": x["body"]} for i, x in enumerate(mk["cells"][:4])],
            images=[{"path": land(x["film"]), "href": _watch(x["film"])} for x in mk["cells"][:4]])
     n = 2
+    ld = s.get("lead")
+    if ld:      # one film full frame, the whole page a link (owner: the CFI commercial, "one massive big film")
+        d.lead(f"{n:02d} · {ld['kicker']}", ld["title"], ld.get("caption", ""), land(ld["film"]), _watch(ld["film"]),
+               ld["kicker"])
+        n += 1
     for sec in s["sections"]:
         tiles = [{"img": _vthumb(v), "label": lbl, "href": _watch(v)} for v, lbl in sec["films"][:7]]
         d.tiles(f"{n:02d} · {sec['kicker']}", sec["heading"], sec["body"], [t for t in tiles if t["img"]],
-                "Tap any film to watch it.", sec["kicker"], width=200)
+                "Tap any film to watch it.", sec["kicker"], width=230)
         n += 1
-    films = [{"youtube_video_id": v, "label": lbl.split(",")[0], "caption": lbl.split(",", 1)[1].strip()
-              if "," in lbl else "", "thumb": land(v)} for v, lbl in s["products"]["films"][:3]]
-    d.samples(f"{n:02d} · Our work", s["products"]["heading"], "", films)
+    films = [{"href": _watch(v), "label": lbl.split(",")[0], "caption": lbl.split(",", 1)[1].strip()
+              if "," in lbl else "", "img": land(v)} for v, lbl in s["products"]["films"][:6]]
+    d.films_grid(f"{n:02d} · Our work", s["products"]["heading"], [f for f in films if f["img"]])
     n += 1
     h = s["how"]
     d.phases(f"{n:02d} · How it works", h["heading"], h["phases"][:5],
