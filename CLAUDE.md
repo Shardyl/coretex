@@ -1657,7 +1657,9 @@ the prices, so no quotation goes with it unless the agency confirms a scope. Key
   broadcast/outdoor usage quoted separately).
 - GUIDE QUOTATION: 10 videos + AI VO, reference `GUIDE-AGENCY` (never a SEN number), "Sensa - Agency Guide Quotation
   v1.0" .xlsx/.pdf at the top of the terms folder beside `Sensa - Quotation Template - agency-ai.docx`.
-- STANDARD DECK "Sensa - Agency AI Production Rates v1.3.pdf" (9 pages, owner-reviewed three times on 15 Sep): cover
+- STANDARD DECK "Sensa - Agency AI Production Rates v1.4.pdf" (doc 499; v1.4 only reorders the influencers page to
+  Leo Iconik, Zayd Adventure, Leo Iconik; Talk's `chat_self_rules` note names it; first sent on card 684, Promocell,
+  as a short cover note with the deck attached and no price list in the body). v1.3 structure, owner-reviewed: cover
   on the CFI commercial, what we make (4 pictured formats), CFI full page as "Full AI brand commercials", CGI social
   films (Zed, Huru, Nameless Ventures), AI influencers (Zayd Adventure, Leo Iconik x2), six brand and product films
   (MAH Gold, HBMSU, Al Rahba / Mercedes E-Class, Orientica Crown, Red Bull; `CreativeDeck.films_grid`), how it works,
