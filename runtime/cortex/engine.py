@@ -1246,6 +1246,8 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         store.update_task(task["id"], status="awaiting_approval")   # never silently closed
         return {"blocked": True, "error": f"Couldn't build the quotation ({err}). The card is still open: "
                                           "answer its questions on the card and it builds from those."}
+    if (task.get("request") or {}).get("kind") == "proposal":   # approving a deck issues its quotation
+        return _approve_proposal(task, skill, company, actor)
     if task["kind"] in ("newsletter_idea", "newsletter_review", "newsletter_send"):
         # EVERY outward newsletter send (the test send to reviewers, the schedule, the live send) routes
         # through the cockpit confirm — it shows exactly who it reaches + takes the PIN/fingerprint. A plain
@@ -1638,7 +1640,7 @@ def _prep_quote_spec(task: dict, company: dict, text: str) -> dict:
         + f"OWNER'S INSTRUCTIONS (oldest first):\n{words}\n\nOPPORTUNITY: "
         + (f"#{deal['id']} {deal['title']} (client account: {acct or 'unknown'})" if deal else "none linked")
         + f"\n\nDEAL TIMELINE:\n{timeline or '(none)'}\n\nRATE CARD:\n{_rc.render(slug) or '(none)'}",
-        model=provider.MODEL_FAST, max_tokens=2500, purpose="prep-quotation", company=slug) or {}
+        model=provider.MODEL_FAST, max_tokens=6000, purpose="prep-quotation", company=slug) or {}
     allowed = _stated_numbers(words)
     for g in ((_rc.get(slug) or {}).get("groups") or []):
         for it in g.get("items") or []:
@@ -1730,6 +1732,19 @@ def apply_correction(task: dict, text: str) -> None:
         return
     skill = store.get_skill(task["skill_id"])
     company = store.get_company(task["company_id"])
+    if (task.get("request") or {}).get("kind") == "proposal":
+        # A PROPOSAL CARD REBUILDS ITS DECK from his feedback (15 Sep 2026); a failure is said, never a
+        # worker redraft of the summary text in the deck's place.
+        try:
+            if _revise_proposal(task, skill, company, text):
+                return
+        except Exception as _pe:  # noqa: BLE001
+            tg.send(f"Card #{task['id']}: couldn't revise the proposal ({type(_pe).__name__}: {_pe}).")
+            notifications.notify(f"Card #{task['id']}: the proposal could not be revised",
+                                 f"{type(_pe).__name__}: {str(_pe)[:200]}. The card still holds the last version.",
+                                 category="approval", company_id=task.get("company_id"),
+                                 target_type="task", target_id=str(task["id"]))
+            return
     store.reset_streak(skill["id"])   # the owner corrected a Manager-passed draft → streak breaks
     old = task.get("draft")
     if task["kind"] in ("newsletter_review", "newsletter_send"):
@@ -2216,7 +2231,8 @@ _TIME_HINT = re.compile(r"\b\d{1,2}(:\d{2})?\s*(am|pm)\b|\b\d{1,2}:\d{2}\b", re.
 _NO_REPLY_RX = re.compile(r"^\s*(recommendation\s*:\s*skip|no\s+reply(\s+needed)?\s*:|do\s+not\s+reply\s*:)", re.I)
 
 
-def _flag_skipped_opportunity(co: dict, e: dict, reason: str) -> None:
+def _flag_skipped_opportunity(co: dict, e: dict, reason: str, rt_key: str | None = None,
+                              client: str | None = None) -> None:
     """A no-draft rule stopped a reply - correct for broadcasts, but a tender circular can still be
     work we want. Judge relevance against what the company actually sells and, if it is in scope,
     surface it to the owner as an opportunity to consider (with its closing date) instead of letting
@@ -2254,14 +2270,14 @@ def _flag_skipped_opportunity(co: dict, e: dict, reason: str) -> None:
             dedup_key=f"skipped-opp:{(e.get('email') or '').lower()}:{_subj or _day}:{_day}",
             item={"cat": due or "tender", "name": what[:160]})
         try:
-            _track_tender(co, e, what)
+            _track_tender(co, e, what, rt_key=rt_key, client=client)
         except Exception as _te:  # noqa: BLE001 - tracking must never lose the notification above
             print(f"[tender] {type(_te).__name__}: {_te}", flush=True)
     except Exception:  # noqa: BLE001 - a relevance hiccup must never disturb the inbox sweep
         pass
 
 
-def _track_tender(co: dict, e: dict, what: str) -> dict | None:
+def _track_tender(co: dict, e: dict, what: str, rt_key: str | None = None, client: str | None = None) -> dict | None:
     """A relevant supplier blast is PICKED UP, not merely announced: it becomes a tracked opportunity,
     with its closing date as a reminder. Owner, 10 Sep 2026: "we do get those supplier blasts from time
     to time, so definitely they should be picked up". Massar's RFP arrived by BCC, was rightly not
@@ -2300,6 +2316,10 @@ def _track_tender(co: dict, e: dict, what: str) -> dict | None:
             pass
     _pl.log_deal(d["id"], "tender", f"Supplier circular from {email}: {what}", ref=gmail.mail_ref(e))
     closing_reminder(co, d["id"], e, what)
+    try:   # the RFP brief itself, not just the email's first lines (SEF'27: "60-90 minute" read off the email)
+        _file_inbound_attachments(co, e, d["id"], rt_key, client)
+    except Exception as _fe:  # noqa: BLE001
+        print(f"[deal-doc] tender: {type(_fe).__name__}: {_fe}", flush=True)
     return d
 
 
@@ -3833,6 +3853,99 @@ def _inbound_att_refs(e: dict, rt_key: str | None, client: str | None) -> list[d
     return refs
 
 
+# ---------- documents ON a deal (15 Sep 2026) ----------
+# Sheraa's SEF'27 brief arrived as a PDF on a bcc'd invitation. The tender path read 1,500 characters of the
+# email and never opened the file; the reply path reads attachments while drafting and then forgets them. So
+# a client's documents are FILED on the deal (library row with deal_id + extracted text, the client's Drive
+# folder, an event on the timeline) on every route, and Talk, the proposal writer and the quotation prep read
+# them back from there.
+
+def _deal_client_name(deal_id: int) -> str:
+    d = db.one("select title, account_id from crm_projects where id=%s", (int(deal_id),)) or {}
+    if d.get("account_id"):
+        a = db.one("select name from crm_accounts where id=%s", (d["account_id"],)) or {}
+        if a.get("name"):
+            return a["name"]
+    title = d.get("title") or ""
+    if re.match(r"^\s*tender\s*:", title, re.I):
+        return ""
+    return re.split(r"\s*(?::|\s-\s)", title)[0].strip()
+
+
+def _file_deal_document(co: dict, deal_id: int, filename: str, mime: str, data: bytes, *,
+                        kind: str = "client-document", source: str = "", ref: str | None = None) -> dict | None:
+    """File one document on a deal: library (with its text), the client's Drive folder (once, best effort),
+    the deal timeline (once per ref). Idempotent on the bytes."""
+    if not deal_id or not data:
+        return None
+    text = documents.extract_text(mime, filename, data)
+    doc = documents.save(co["id"], co.get("slug") or "", filename, mime or "application/octet-stream", data,
+                         kind=kind, uploaded_by=(source or "cortex")[:120], push=False,
+                         deal_id=int(deal_id), text=text or None)
+    if text and not doc.get("text"):
+        db.execute("update company_documents set text=%s where id=%s", (text, doc["id"]))
+    if not doc.get("drive_id"):
+        try:
+            from . import drive as _drive
+            parent = ((profile.get(co["id"]) or {}).get("clients_drive_folder") or "").strip()
+            client = _deal_client_name(int(deal_id))
+            if parent and client:
+                tok = _drive.access_token()
+                f = _drive.ensure_client_folder(client, parent, token=tok)
+                if f.get("id"):
+                    fid = _drive.upload_to_folder(f["id"], doc["filename"], doc["mime"], data, token=tok)
+                    db.execute("update company_documents set drive_id=%s, client=%s where id=%s",
+                               (fid, f["name"], doc["id"]))
+                    doc = {**doc, "drive_id": fid, "client": f["name"]}
+        except Exception as _de:  # noqa: BLE001 — the library copy and the timeline entry still stand
+            print(f"[deal-doc] drive: {type(_de).__name__}: {_de}", flush=True)
+    pipeline.log_deal(int(deal_id), "document_filed",
+                      f"Filed on the deal: {doc['filename']}"
+                      + (f" ({len(text):,} chars of readable text)" if text else " (no readable text)")
+                      + (f", {source}" if source else "") + f". Library #{doc['id']}.",
+                      ref=ref or f"doc:{doc['id']}")
+    return doc
+
+
+def _file_inbound_attachments(co: dict, e: dict, deal_id: int, rt_key: str | None, client: str | None) -> list:
+    """Every readable document on an inbound email (PDF, Word, Excel, PowerPoint; not images) filed on the
+    deal it belongs to. Fetched from the mailbox that holds this copy."""
+    filed = []
+    for a in (e.get("attachments") or [])[:6]:
+        mime, fn = (a.get("mime") or "").lower(), a.get("filename") or ""
+        if mime.startswith("image/"):
+            continue
+        if not (mime == "application/pdf" or fn.lower().endswith(".pdf") or doctext.kind_for(mime, fn)):
+            continue
+        if not 0 < int(a.get("size") or 0) <= documents.MAX_BYTES:
+            continue
+        try:
+            data = gmail.get_attachment(e.get("gmail_id"), a["att_id"], rt_key or "gmail_refresh_token",
+                                        company=client)
+        except Exception:  # noqa: BLE001
+            continue
+        doc = _file_deal_document(co, deal_id, fn or mime, mime, data, source=f"from {e.get('email')}'s email",
+                                  ref=f"doc:{gmail.mail_ref(e)}:{fn}")
+        if doc:
+            filed.append(doc)
+    return filed
+
+
+def _deal_facts(co: dict, deal_id: int, budget: int = 40_000) -> str:
+    """Everything Cortex holds on a deal, for the proposal writer and the quotation prep: the timeline (the
+    client's emails, what we promised, meeting notes) and the full text of every document filed on it."""
+    parts = []
+    try:
+        parts.append(pipeline.deal_context(int(deal_id), limit=40))
+    except Exception:  # noqa: BLE001
+        pass
+    for doc in documents.for_deal(int(deal_id)):
+        t = documents.text_of(doc)
+        if t:
+            parts.append(f"DOCUMENT #{doc['id']} {doc['filename']} (filed {doc['created_at']:%d %b %Y}):\n{t[:14000]}")
+    return "\n\n".join(p for p in parts if p)[:budget]
+
+
 def _request_for_draft(task: dict) -> dict:
     """The task's request with inbound attachment refs resolved to data: URLs, for the drafter's eyes only.
     The DB row keeps just the refs; the send path never sees these bytes (so a client's own files can never
@@ -4406,6 +4519,11 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
                         _notify_new_opportunity(co, opp, "auto-qualified from direct email")
             except Exception:  # noqa: BLE001 — qualification is best-effort; the reply card must exist regardless
                 pass
+        if req.get("deal_id") and atts:   # the client's documents live on the deal, not only on this reply
+            try:
+                _file_inbound_attachments(co, e, int(req["deal_id"]), rt_key, _inbox_client_company(co.get("slug")))
+            except Exception as _fe:  # noqa: BLE001
+                print(f"[deal-doc] {type(_fe).__name__}: {_fe}", flush=True)
         # RE-CHECK the open-card state at WRITE time: qualification, attachment refs and the sticky-sender
         # lookup above can take many seconds, and the same email lands in several team mailboxes — a sibling
         # copy may have written a card in that gap (bit Sunwoo/ECBD: cards #358+#359, 2026-08-27).
@@ -4659,7 +4777,7 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                 results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
                                 "category": cls["category"], "to_crm": cls.get("to_crm"),
                                 "reason": f"no draft - {_skip['reason']}"})
-                _flag_skipped_opportunity(co, e, _skip["reason"])   # in-scope tender -> tracked
+                _flag_skipped_opportunity(co, e, _skip["reason"], rt_key=rt_key, client=company)   # in-scope tender -> tracked
                 seen.add(gid)
                 continue
             card_ok = _draft_direct_reply(co, e, cls, rt_key=rt_key, address=address) is not False
@@ -4864,6 +4982,12 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
                 fu["brief"] += (" Their reply includes attachment(s): "
                                 + ", ".join(a["filename"] or a["mime"] for a in fu_atts)
                                 + " — they are provided to you; READ them before drafting.")
+                try:   # and they live on the deal from now on
+                    _d = crm.open_deal_for_email(frm, slug) or crm.open_deal_for_domain(frm, slug)
+                    if _d:
+                        _file_inbound_attachments(co, m, _d["id"], send_rt, client)
+                except Exception as _fe:  # noqa: BLE001
+                    print(f"[deal-doc] reply: {type(_fe).__name__}: {_fe}", flush=True)
             store.create_card(co["id"], skill["id"], "email_reply", fu, contact=frm)
         try:                                                         # re-qualify on the new info
             sug = qualify_suggest(co, inq)
@@ -5201,28 +5325,85 @@ def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quota
                 "the client holds, and it is rebuilt from today's film ratings so it may be a weaker "
                 "version. Tell Rashad what went and ask whether he wants a genuine REVISION (say redo)."
             )
-    q = None
-    if quotation_number:                       # reuse the real quote so the deck can never contradict it
-        reg = db.setting_get(f"quote_versions:{quotation_number}") or []
-        if reg:
-            spec = (reg[-1].get("spec") or {})
-            net = sum(float(i.get("unit") or 0) * float(i.get("qty") or 1)
-                      for sec in (spec.get("sections") or []) for i in sec.get("items", []))
-            q = {"number": quotation_number, "sections": spec.get("sections"), "net": round(net, 2),
-                 "currency": "AED"}
-    safe = re.sub(r"[^A-Za-z0-9 -]", "", customer or co["name"])[:60].strip() or "Proposal"
+    q = _quotation_facts(quotation_number)
+    if not customer and deal_id:
+        customer = _deal_client_name(int(deal_id))
+    customer = customer or co["name"]
+    # THE DECK IS WRITTEN FROM THE WHOLE DEAL (owner, 15 Sep 2026): the client's brief and clarification
+    # documents filed on it, every email either way, meeting notes and research. Talk's one-line brief
+    # used to be all the writer saw.
+    facts = ""
+    if deal_id:
+        facts = _deal_facts(co, int(deal_id))
+        if facts:
+            facts = ("DEAL RECORD (the client's own documents and every exchange so far; the deck must answer "
+                     "THIS brief, in their words where it matters):\n" + facts)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    out = deck.build(company, customer or co["name"], brief, quotation=q, label=label,
-                     out_dir=QUOTES_DIR, filename=f"proposal-{company}-{stamp}.pdf")
-    data = open(out["path"], "rb").read()
-    name = f"{safe} - Proposal{' ' + quotation_number if quotation_number else ''} - {stamp}.pdf"
+    tag = secrets.token_hex(3)
+    out = deck.build(company, customer, brief, quotation=q, label=label, extra_facts=facts,
+                     out_dir=QUOTES_DIR, filename=f"proposal-{company}-{stamp}-{tag}.pdf")
+    name = _proposal_name(customer, quotation_number, 1, stamp)
+    doc, filed = _file_proposal_pdf(co, customer, name, out["path"], deal_id, quotation_number)
+    skill = store.get_skill_by_key(co["id"], "sales-quotation")
+    # THE DECK IS ALREADY BUILT, so this card must be inserted READY. Created as 'new' it went to the
+    # worker, which had nothing to write and invented a full HTML document instead - card 441 showed
+    # Rashad 7,000 characters of raw CSS where a summary belonged, and eight earlier ones were
+    # dismissed for the same reason (3 Sep 2026). Same rule as the pre-meeting brief: a card whose
+    # deliverable already exists is never left for the drafter to fill.
+    summary = _proposal_summary(co, customer, out, filed, quotation_number, version=1)
+    req = {"brief": f"Proposal deck for {customer}: {out['pages']} pages, "
+                    f"{len(out['films'])} sample films from the media library.",
+           "title": name, "file": out["path"], "kind": "proposal", "customer": customer,
+           "proposal_brief": brief, "deck_spec": out.get("spec") or {}, "cover": out.get("cover"),
+           "quotation_number": quotation_number, "version": 1, "label": label,
+           "attach_docs": [{"id": doc["id"], "filename": doc["filename"], "mime": doc["mime"],
+                            "size": doc["size"]}]}
+    if deal_id:
+        req["deal_id"] = int(deal_id)
+    t = db.execute("insert into tasks (company_id, skill_id, kind, request, draft, status, title, deal_id) "
+                   "values (%s,%s,'content',%s,%s,'awaiting_approval',%s,%s) returning *",
+                   (co["id"], skill["id"], Json(req), summary, name, int(deal_id) if deal_id else None))
+    if t and deal_id:
+        pipeline.log_deal(int(deal_id), "note",
+                          f"Proposal deck built ({out['pages']} pages, films: {', '.join(out['films']) or 'none'}"
+                          f"; read {len(facts):,} chars of the deal record) and filed"
+                          + (f" to the {filed} client folder" if filed else "") + f". Card {t['id']}.")
+    return {"path": out["path"], "pages": out["pages"], "films": out["films"], "doc_id": doc["id"],
+            "filed_to": filed, "task_id": (t or {}).get("id"), "filename": name,
+            "read_deal_chars": len(facts)}
+
+
+def _quotation_facts(number: str | None) -> dict | None:
+    """The real quotation's lines and net figure, so a deck can never contradict it."""
+    if not number:
+        return None
+    reg = db.setting_get(f"quote_versions:{number}") or []
+    if not reg:
+        return None
+    spec = (reg[-1].get("spec") or {})
+    net = sum(float(i.get("unit") or 0) * float(i.get("qty") or 1)
+              for sec in (spec.get("sections") or []) for i in sec.get("items", []))
+    return {"number": number, "sections": spec.get("sections"), "net": round(net, 2), "currency": "AED"}
+
+
+def _proposal_name(customer: str, quotation_number: str | None, version: int, stamp: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9 -]", "", customer or "")[:60].strip() or "Proposal"
+    return (f"{safe} - Proposal{' ' + quotation_number if quotation_number else ''}"
+            f"{' v' + str(version) if version > 1 else ''} - {stamp}.pdf")
+
+
+def _file_proposal_pdf(co: dict, customer: str, name: str, path: str, deal_id, quotation_number: str | None,
+                       supersede: list | None = None) -> tuple[dict, str | None]:
+    """Library row (on the deal) + the client's Drive folder, earlier versions of this proposal into the
+    folder's Archive and retired in the library. Returns (doc, client folder name or None)."""
+    data = open(path, "rb").read()
     # client work: recorded in the library, filed ONLY in the client folder (never also in Documents)
-    doc = documents.save(co["id"], company, name, "application/pdf", data, uploaded_by="cortex", push=False)
+    doc = documents.save(co["id"], co.get("slug") or "", name, "application/pdf", data, kind="proposal",
+                         uploaded_by="cortex", push=False, deal_id=int(deal_id) if deal_id else None)
     filed = None
     try:                                       # same client-folder rule as quotations
         from . import drive as _drive
-        prof = profile.get(co["id"]) or {}
-        parent = (prof.get("clients_drive_folder") or "").strip()
+        parent = ((profile.get(co["id"]) or {}).get("clients_drive_folder") or "").strip()
         client = (customer or "").split(",")[0].strip()
         if parent and client:
             tok = _drive.access_token()
@@ -5231,57 +5412,174 @@ def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quota
                 _fid = _drive.upload_to_folder(f["id"], name, "application/pdf", data, token=tok)
                 db.execute("update company_documents set drive_id=%s, client=%s where id=%s",
                            (_fid, f["name"], doc["id"]))
-                if quotation_number:      # latest proposal at the top, earlier ones for this quote in Archive
-                    try:
-                        _drive.archive_superseded(f["id"], f"Proposal {quotation_number}", {name}, token=tok)
-                    except Exception:  # noqa: BLE001
-                        pass
+                try:      # latest at the top, earlier versions of THIS client's proposal in Archive
+                    safe = re.sub(r"[^A-Za-z0-9 -]", "", customer or "")[:60].strip()
+                    _drive.archive_superseded(f["id"], f"{safe} - Proposal", {name}, token=tok)
+                except Exception:  # noqa: BLE001
+                    pass
                 filed = f["name"]
     except Exception:  # noqa: BLE001 — the card must survive a Drive hiccup
         pass
-    skill = store.get_skill_by_key(co["id"], "sales-quotation")
-    # THE DECK IS ALREADY BUILT, so this card must be inserted READY. Created as 'new' it went to the
-    # worker, which had nothing to write and invented a full HTML document instead - card 441 showed
-    # Rashad 7,000 characters of raw CSS where a summary belonged, and eight earlier ones were
-    # dismissed for the same reason (3 Sep 2026). Same rule as the pre-meeting brief: a card whose
-    # deliverable already exists is never left for the drafter to fill.
+    if supersede:
+        try:
+            documents.supersede([int(i) for i in supersede if i], doc["id"])
+        except Exception:  # noqa: BLE001
+            pass
+    return doc, filed
+
+
+def _proposal_summary(co: dict, customer: str, out: dict, filed: str | None, quotation_number: str | None,
+                      version: int = 1, changed: str = "") -> str:
     try:      # real film titles read far better than YouTube ids
-        _titles = [r["title"] for r in db.query(
+        titles = [r["title"] for r in db.query(
             "select title from media_assets where youtube_video_id = any(%s)", (out["films"],))] \
             if out.get("films") else []
     except Exception:  # noqa: BLE001
-        _titles = []
-    summary = (f"Proposal deck built for {customer or co['name']}"
-               + (f" against quotation {quotation_number}" if quotation_number else "")
-               + f".\n\n{out['pages']} pages. The PDF is attached to this card"
-               + (f" and filed to the {filed} client folder on Drive" if filed else "")
-               + ".\n\n"
-               + ("Sample films included: " + ", ".join(_titles) + "\n\n" if _titles else
-                  ("Sample films: " + str(len(out.get("films") or [])) + " from the media library.\n\n"
-                   if out.get("films") else "No sample films were included.\n\n"))
-               + "Nothing has been sent. Read the PDF, then ask me to email it when you are happy.")
-    req = {"brief": f"Proposal deck for {customer}: {out['pages']} pages, "
-                    f"{len(out['films'])} sample films from the media library.",
-           "title": name, "file": out["path"], "kind": "proposal",
-           "attach_docs": [{"id": doc["id"], "filename": doc["filename"], "mime": doc["mime"],
-                            "size": doc["size"]}]}
-    if deal_id:
-        req["deal_id"] = int(deal_id)
-    t = db.execute("insert into tasks (company_id, skill_id, kind, request, draft, status, title) "
-                   "values (%s,%s,'content',%s,%s,'awaiting_approval',%s) returning *",
-                   (co["id"], skill["id"], Json(req), summary, name))
-    if t and deal_id:
-        db.execute("update tasks set deal_id=%s where id=%s", (int(deal_id), t["id"]))
-        try:
-            from . import pipeline as _pl
-            _pl.log_deal(int(deal_id), "note",
-                         f"Proposal deck built ({out['pages']} pages, films: "
-                         f"{', '.join(out['films']) or 'none'}) and filed"
-                         + (f" to the {filed} client folder" if filed else "") + f". Card {t['id']}.")
-        except Exception:  # noqa: BLE001
-            pass
-    return {"path": out["path"], "pages": out["pages"], "films": out["films"], "doc_id": doc["id"],
-            "filed_to": filed, "task_id": (t or {}).get("id"), "filename": name}
+        titles = []
+    head = (f"Proposal deck {'revised, v' + str(version) if version > 1 else 'built'} for {customer or co['name']}"
+            + (f" against quotation {quotation_number}" if quotation_number else "") + ".")
+    if changed:
+        head += f"\n\nYour change: {changed.strip()[:400]}"
+    return (head + f"\n\n{out['pages']} pages. The PDF is attached to this card"
+            + (f" and filed to the {filed} client folder on Drive" if filed else "") + ".\n\n"
+            + ("Sample films included: " + ", ".join(titles) + "\n\n" if titles else
+               ("Sample films: " + str(len(out.get("films") or [])) + " from the media library.\n\n"
+                if out.get("films") else "No sample films were included.\n\n"))
+            + "Nothing has been sent. Reply on this card (or tell Talk) with any change and I rebuild the deck. "
+            + ("Approve it and I issue the quotation that matches it, then ask me to email both."
+               if not quotation_number else "Approve it when you are happy, then ask me to email it."))
+
+
+def _revise_proposal(task: dict, skill: dict, company: dict, text: str) -> bool:
+    """His feedback on a proposal card REBUILDS THE DECK (owner, 15 Sep 2026): the spec is revised from his
+    words, rendered again as the next version, filed over the last one, and the same card carries it. The
+    cover is kept unless the feedback is about the cover. Returns False when the card holds no spec."""
+    req = dict(task.get("request") or {})
+    spec = req.get("deck_spec") or {}
+    if not spec:
+        return False
+    did = task.get("deal_id") or req.get("deal_id")
+    customer = req.get("customer") or (_deal_client_name(int(did)) if did else "") or company["name"]
+    qn = req.get("quotation_number")
+    facts = ""
+    if did:
+        facts = _deal_facts(company, int(did), budget=30_000)
+        if facts:
+            facts = "DEAL RECORD (reference only; keep every fact true to it):\n" + facts
+    new = deck.revise_spec(company, customer, spec, text, _quotation_facts(qn), facts) or spec
+    ver = int(req.get("version") or 1) + 1
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    same_cover = ((new.get("cover") or {}).get("image_subject") or "") == ((spec.get("cover") or {}).get("image_subject") or "")
+    out = deck.render(company, customer, new, label=req.get("label"), out_dir=QUOTES_DIR,
+                      filename=f"proposal-{company.get('slug')}-{stamp}-{secrets.token_hex(3)}-v{ver}.pdf",
+                      cover_path=req.get("cover") if same_cover else None)
+    name = _proposal_name(customer, qn, ver, stamp)
+    old_ids = [d.get("id") for d in (req.get("attach_docs") or []) if d.get("id")]
+    doc, filed = _file_proposal_pdf(company, customer, name, out["path"], did, qn, supersede=old_ids)
+    req.update({"title": name, "file": out["path"], "deck_spec": new, "cover": out.get("cover"),
+                "version": ver, "customer": customer,
+                "attach_docs": [{"id": doc["id"], "filename": doc["filename"], "mime": doc["mime"],
+                                 "size": doc["size"]}]})
+    summary = _proposal_summary(company, customer, out, filed, qn, version=ver, changed=text)
+    store.update_task(task["id"], request=req, draft=summary, title=name, status="awaiting_approval",
+                      attempts=(task.get("attempts") or 0) + 1)
+    store.log_decision(task["id"], skill["id"], "owner", "correct", note=text,
+                       snapshot={"version": ver, "doc": doc["id"]})
+    if did:
+        pipeline.log_deal(int(did), "note", f"Proposal revised to v{ver} from the owner's feedback: "
+                                            f"{text.strip()[:220]}. Card {task['id']}.")
+    _maybe_propose_rule(task, skill, text, json.dumps(spec, ensure_ascii=False)[:3000],
+                        json.dumps(new, ensure_ascii=False)[:3000])
+    return True
+
+
+def _approve_proposal(task: dict, skill: dict, company: dict, actor: str) -> dict:
+    """APPROVING A PROPOSAL ISSUES ITS QUOTATION (owner, 15 Sep 2026). The approved deck's investment page
+    and the deal record become the quotation prep; code prices every line from the rate card; the deck is
+    rendered once more with the quotation's real figures on its investment page and rides on the
+    quotation card, so one email sends both. A deck built against an existing quotation just closes."""
+    req = dict(task.get("request") or {})
+    did = task.get("deal_id") or req.get("deal_id")
+    customer = req.get("customer") or company["name"]
+    if req.get("quotation_number"):
+        store.update_task(task["id"], status="done")
+        store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"version": req.get("version")})
+        return {"approved": True, "note": f"Quotation {req['quotation_number']} already exists for it. Ask Talk to "
+                                          "draft the email and attach both."}
+    spec = req.get("deck_spec") or {}
+    inv = spec.get("investment") or {}
+    inv_lines = "\n".join(f"- {r.get('item')}: {r.get('detail')} = {r.get('amount')}" for r in (inv.get("rows") or []))
+    # The prep words are the brief and the deck's investment rows ONLY. Feeding the whole deal record here
+    # made the prep model write 8,000+ tokens of scope prose and truncate twice (first SEF'27 run); the deal
+    # timeline already rides inside _prep_quote_spec, and the deck's rows are the scope he approved.
+    words = ((req.get("proposal_brief") or "") + "\n\nTHE APPROVED PROPOSAL DECK'S INVESTMENT PAGE"
+             + (f" (headline '{inv.get('headline')}')" if inv.get("headline") else "") + ":\n"
+             + (inv_lines or "(no rows)"))
+    text = ("APPROVED PROPOSAL: build the quotation that matches the approved deck. One line per investment "
+            "row, in the same order, each named as the deck names it and made of rate-card components; a "
+            "figure the owner stated himself is kept. Never estimate. BE BRIEF: each desc one line under 25 "
+            "words, at most 10 lines in total, at most 6 short assumptions, no explanations.")
+    fake = {**task, "request": {**req, "brief": words}}
+    try:
+        qspec = _prep_quote_spec(fake, company, text)
+    except Exception as _pe:  # noqa: BLE001
+        store.update_task(task["id"], status="awaiting_approval")
+        return {"blocked": True, "error": f"Couldn't prepare the quotation ({type(_pe).__name__}: {_pe}). "
+                                          "The proposal card is still open."}
+    if not (qspec.get("sections") or qspec.get("total")):
+        store.update_task(task["id"], status="awaiting_approval")
+        return {"blocked": True, "error": "the proposal has no investment lines to quote from yet; add them on "
+                                          "the card (reply with the lines) and approve again"}
+    qspec["customer"] = qspec.get("customer") or customer
+    t = deliver_quotation(company["slug"], preset=qspec["preset"], customer=qspec["customer"],
+                          total=qspec.get("total"), sections=qspec.get("sections") or None,
+                          title=qspec.get("title") or None, note=qspec.get("note") or None,
+                          contact_email=qspec.get("contact_email"), deliverables=qspec.get("deliverables") or None)
+    if did and t:
+        db.execute("update tasks set deal_id=%s where id=%s", (int(did), t["id"]))
+    rq = (t or {}).get("request") or {}
+    number = rq.get("number")
+    # the FINAL deck: the same spec, its investment page stamped from the quotation just issued
+    final = None
+    try:
+        qf = {"number": number, "sections": qspec.get("sections"), "currency": rq.get("currency") or "AED"}
+        stamped = deck.investment_from_quotation(qf)
+        qf["net"] = stamped["net"]
+        new = dict(spec)
+        new["investment"] = {**inv, "rows": stamped["rows"], "headline": stamped["headline"],
+                             "kicker": inv.get("kicker") or "05 - The investment"}
+        ver = int(req.get("version") or 1) + 1
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        out = deck.render(company, customer, new, label=req.get("label"), out_dir=QUOTES_DIR,
+                          filename=f"proposal-{company.get('slug')}-{stamp}-{secrets.token_hex(3)}-final.pdf",
+                          cover_path=req.get("cover"))
+        name = _proposal_name(customer, number, ver, stamp)
+        old_ids = [d.get("id") for d in (req.get("attach_docs") or []) if d.get("id")]
+        doc, filed = _file_proposal_pdf(company, customer, name, out["path"], did, number, supersede=old_ids)
+        final = {"id": doc["id"], "filename": doc["filename"], "mime": doc["mime"], "size": doc["size"]}
+        if t:   # the deck rides on the quotation card, so the email that sends the quote sends the deck
+            db.execute("update tasks set request = request || jsonb_build_object('attach_docs', "
+                       "coalesce(request->'attach_docs', '[]'::jsonb) || %s::jsonb) where id=%s",
+                       (Json([final]), t["id"]))
+        req.update({"title": name, "file": out["path"], "deck_spec": new, "version": ver,
+                    "quotation_number": number, "attach_docs": [final]})
+    except Exception as _fe:  # noqa: BLE001 — the quotation stands; the deck just keeps its open figures
+        print(f"[proposal] final deck: {type(_fe).__name__}: {_fe}", flush=True)
+    msg = (f"Approved. Quotation {number} issued from this proposal: card #{(t or {}).get('id')}. "
+           f"{rq.get('summary', '')}"
+           + (f" The final deck ({final['filename']}) carries the quotation's figures and is attached to that "
+              "card, so approving the email from it sends both." if final else "")
+           + ((" Left BLANK, no approved price: " + "; ".join(qspec["blanked"]) + ".") if qspec.get("blanked") else "")
+           + ((" Defaults assumed: " + "; ".join(str(a) for a in qspec["assumptions"][:10]) + ".")
+              if qspec.get("assumptions") else ""))
+    store.update_task(task["id"], request=req, status="done", draft=msg)
+    store.log_decision(task["id"], skill["id"], actor, "approve",
+                       snapshot={"quotation": number, "card": (t or {}).get("id"), "deck": final})
+    if did:
+        pipeline.log_deal(int(did), "note", f"Proposal approved on card {task['id']}; quotation {number} issued "
+                                            f"from it (card {(t or {}).get('id')})"
+                                            + (f"; final deck {final['filename']} attached to it." if final else "."))
+    return {"built_quotation": True, "quotation": number, "card": (t or {}).get("id"), "deck": final}
 
 
 def deliver_quotation(company: str, *, preset: str = "ai-production", customer: str = "",

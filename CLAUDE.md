@@ -1605,6 +1605,42 @@ not read the profile at all, and a Chief persona had a cut-down toolset with no 
   (`engine`, the `_URL_RX` check) and the Manager's REAL LINKS list include them, so a review ask carrying the
   review link is never redrafted or flagged as invented.
 
+## Proposal from the deal record, revisable, quotation on approval (15 Sep 2026)
+Owner's target flow: Cortex holds the whole opportunity; Gino asks Talk for a proposal; he revises it by
+talking to the card; approving it issues the quotation. Before this, Talk saw only its own one-line brief (SEF'27's
+brief PDF was never opened: the tender path reads 1,500 chars of the email), feedback on a proposal card only
+rewrote its summary text, Talk could not read a PDF attached to a message, and approving a deck did nothing.
+- DOCUMENTS ON A DEAL: `company_documents.deal_id` + `text` (extracted, `documents.extract_text`: pypdf for PDFs,
+  doctext for office files; a word-per-line PDF is collapsed to prose). `documents.for_deal`, `documents.text_of`
+  (cached on the row). `engine._file_deal_document(co, deal_id, ...)` = library row on the deal + the client's
+  Drive folder (once) + a `document_filed` timeline event (ref-deduped). `_file_inbound_attachments` runs on every
+  inbound route with a deal: `_draft_direct_reply` (incl. the auto-qualified deal), `_track_tender` (rt_key/client
+  now passed through `_flag_skipped_opportunity`), `poll_sales_replies`. Images are never filed (context, not a
+  document). `pipeline.deal_context` lists the deal's documents; `deal_timeline` therefore shows them.
+- TALK READS FILES: `api._image_blocks(urls, names)` now emits PDF document blocks and office-file text blocks
+  (was images only). `_said_text` keeps `_TURN_SAID` correct when a message carries blocks. Files attached in the
+  turn ride into `create_proposal`, `create_quotation` and `save_document`; `save_document(deal_id=)` and
+  `create_proposal(deal_id=)` file them on the deal first (`_file_turn_files_on_deal`). New tool `read_document`.
+- THE DECK IS WRITTEN FROM THE DEAL: `deliver_proposal(deal_id=)` passes `_deal_facts` (timeline, limit 40 + every
+  filed document's text, 40k budget) as `extra_facts`; the writer gets the REAL media-library slugs
+  (`deck.library_slugs`; it asked for 'hero-film' and got no films) and `pick_samples` falls back to the
+  best-rated films when slugs match nothing. Card request carries `proposal_brief, deck_spec, cover, version,
+  customer, label, quotation_number`; the cover jpg is kept under the deck's own name. Verified on deal 123: the
+  deck read 8,746 chars and carried the five-singer cast, two-location cap, 60s cut, influencers as a separate line.
+- REVISE ON THE CARD: `apply_correction` -> `_revise_proposal`: `deck.revise_spec` (Fable, "change exactly what the
+  feedback asks, keep the rest word for word"), `deck.render` (split out of `build`; reuses the cover unless the
+  cover subject changed), next version filed over the last (`_file_proposal_pdf`: library on the deal, client
+  folder, `archive_superseded("<Client> - Proposal")`, `documents.supersede`), same card, `attempts+1`, decision
+  logged, rule inference runs. A failure is notified, never a worker redraft. Talk revises via `correct_task`.
+- APPROVE ISSUES THE QUOTATION: `_execute` -> `_approve_proposal`: the deck's investment rows + `proposal_brief` +
+  deal facts become the prep words for `_prep_quote_spec` (code prices from the rate card; owner-stated figures
+  kept), `deliver_quotation` makes the quotation card on the deal, then the deck is rendered once more with
+  `deck.investment_from_quotation` stamped on its investment page (v+1, "<Client> - Proposal <SEN-...> vN") and
+  appended to the quotation card's `attach_docs`, so the email drafted from that card sends both. A deck built
+  against an existing `quotation_number` just closes on approve. Talk rule added: build a deck/quotation only when
+  asked by name ("draft an opportunity" produced card 679 for White & Co unasked).
+- deck-spec / deck-revise run at 8,000 tokens (4,000 truncated and re-ran at 12,000 on the first SEF'27 build).
+
 ## Phishing guard + one email, one company (15 Sep 2026)
 Heba at Jump (a real July contact) had her mailbox hacked. It bcc'd Sensa and Sky Vision an empty "Re: RFQ#
 Videography Services" with a 1-page PDF (made by Aspose minutes before) whose VIEW RFP DOCUMENT button went to a

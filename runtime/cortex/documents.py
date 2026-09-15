@@ -38,7 +38,57 @@ alter table company_documents add column if not exists drive_md5 text;  -- Drive
 alter table company_documents add column if not exists client text;     -- the client folder it lives in
 alter table company_documents add column if not exists verified_at timestamptz;
 alter table company_documents add column if not exists superseded_by bigint; -- retired: kept, never offered
+alter table company_documents add column if not exists deal_id bigint;      -- a client document ON a deal
+alter table company_documents add column if not exists text text;           -- extracted text, for reading
 """
+
+MAX_TEXT = 40_000    # extracted text kept per document: a 30-page brief, never a data dump
+
+
+def extract_text(mime: str, filename: str, data: bytes) -> str:
+    """Readable text of a document, for Talk and the proposal writer. PDFs through pypdf (the drafter reads
+    PDF bytes natively, but a stored document is read back as text); office files through doctext. '' when
+    unreadable. A PDF whose extractor puts every word on its own line (the SEF'27 brief, 15 Sep 2026) is
+    collapsed to plain sentences so the model reads prose, not a column of words."""
+    from . import doctext
+    mime = (mime or "").lower().split(";")[0]
+    try:
+        if mime == "application/pdf" or (filename or "").lower().endswith(".pdf"):
+            import io
+            from pypdf import PdfReader
+            r = PdfReader(io.BytesIO(data))
+            t = "\n".join((p.extract_text() or "") for p in r.pages[:60])
+            words = len(t.split())
+            if words and t.count("\n") > words * 0.5:
+                t = re.sub(r"\s+", " ", t)
+            else:
+                t = re.sub(r"[ \t]+", " ", t)
+            return t.strip()[:MAX_TEXT]
+        return (doctext.extract(mime, filename, data) or "")[:MAX_TEXT]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def for_deal(deal_id: int) -> list[dict]:
+    """The client documents filed on a deal (brief, clarifications, RFP), newest last; superseded ones out."""
+    ensure_schema()
+    return db.query("select id, kind, filename, mime, size, created_at, client, drive_id, uploaded_by, "
+                    "length(coalesce(text,'')) chars from company_documents where deal_id=%s and "
+                    "superseded_by is null order by created_at", (int(deal_id),))
+
+
+def text_of(doc: dict) -> str:
+    """The document's extracted text, cached on the row the first time it is asked for."""
+    doc = _full(doc)
+    if doc.get("text"):
+        return doc["text"]
+    try:
+        t = extract_text(doc.get("mime") or "", doc.get("filename") or "", read_bytes(doc))
+    except Exception:  # noqa: BLE001
+        return ""
+    if t:
+        db.execute("update company_documents set text=%s where id=%s", (t, doc["id"]))
+    return t
 
 
 def _drive_docs_folder(company_id: int, slug: str) -> str | None:
@@ -155,9 +205,11 @@ def _safe_name(name: str) -> str:
 
 
 def save(company_id: int, slug: str, filename: str, mime: str, data: bytes,
-         kind: str = "document", uploaded_by: str | None = None, push: bool = True) -> dict:
+         kind: str = "document", uploaded_by: str | None = None, push: bool = True,
+         deal_id: int | None = None, text: str | None = None) -> dict:
     """Store the file on disk + register it. A byte-identical re-upload returns the existing row
-    (idempotent — 'checking if it has the trade licence' never creates duplicates)."""
+    (idempotent — 'checking if it has the trade licence' never creates duplicates). `deal_id` files it
+    ON a deal (a brief, a clarification record); a re-upload of a deal-less copy adopts the deal."""
     ensure_schema()
     if not data:
         raise ValueError("empty file")
@@ -166,6 +218,9 @@ def save(company_id: int, slug: str, filename: str, mime: str, data: bytes,
     sha = hashlib.sha256(data).hexdigest()
     dup = db.one("select * from company_documents where company_id=%s and sha256=%s", (company_id, sha))
     if dup:
+        if deal_id and not dup.get("deal_id"):
+            dup = db.execute("update company_documents set deal_id=%s where id=%s returning *",
+                             (int(deal_id), dup["id"]))
         return dup
     d = os.path.join(DOCS_DIR, slug or f"company-{company_id}")
     os.makedirs(d, exist_ok=True)
@@ -174,10 +229,11 @@ def save(company_id: int, slug: str, filename: str, mime: str, data: bytes,
     with open(path, "wb") as f:
         f.write(data)
     row = db.execute(
-        "insert into company_documents (company_id, kind, filename, mime, size, path, sha256, uploaded_by) "
-        "values (%s,%s,%s,%s,%s,%s,%s,%s) returning *",
+        "insert into company_documents (company_id, kind, filename, mime, size, path, sha256, uploaded_by, "
+        "deal_id, text) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *",
         (company_id, (kind or "document").strip().lower(), fn,
-         mime or "application/octet-stream", len(data), path, sha, uploaded_by))
+         mime or "application/octet-stream", len(data), path, sha, uploaded_by,
+         int(deal_id) if deal_id else None, (text or None)))
     if push:
         try:                    # canonical copy -> the company's Drive Documents folder (cache stays local)
             push_to_drive(row)

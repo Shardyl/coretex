@@ -88,6 +88,11 @@ def pick_samples(company_id: int, categories: list[str], limit: int = 3) -> list
             f"where company_id=%s and status='live' and {where} "
             "order by rating desc nulls last, suggested_rating desc nulls last limit %s",
             (company_id, *params, limit))
+    if not cats:                                 # nothing asked for: the owner's best-rated work stands in
+        return db.query(
+            "select youtube_video_id, title, rating, duration, categories from media_assets "
+            "where company_id=%s and status='live' and rating is not null "
+            "order by rating desc, suggested_rating desc nulls last limit %s", (company_id, limit))
     if len(out) < limit and cats:                # widen: ANY of the categories
         have = {r["youtube_video_id"] for r in out}
         anyw = " or ".join(["categories @> %s::jsonb"] * len(cats))
@@ -101,7 +106,17 @@ def pick_samples(company_id: int, categories: list[str], limit: int = 3) -> list
                 out.append(r)
             if len(out) >= limit:
                 break
+    if not out:   # the slugs matched nothing (a writer's guess): the owner's best-rated work rather than none
+        out = pick_samples(company_id, [], limit)
     return out[:limit]
+
+
+def library_slugs(company_id: int, limit: int = 40) -> list[str]:
+    """The category slugs the media library actually uses, most-used first, so the writer picks from the
+    real list (SEF'27 asked for 'hero-film' and 'brand-film', which exist nowhere, and got no films)."""
+    return [r["c"] for r in db.query(
+        "select c, count(*) n from media_assets, jsonb_array_elements_text(categories) c "
+        "where company_id=%s and status='live' group by c order by n desc limit %s", (company_id, limit))]
 
 
 def cover_image(subject: str, palette: str, company_slug: str, out_dir: str = "/tmp") -> str | None:
@@ -643,21 +658,89 @@ def author_spec(company: dict, customer: str, brief: str, quotation: dict | None
         "body under 45 words. No em dashes. Write plainly, no marketing flourish, no superlatives. The "
         "timeline states an ELAPSED span built from parallel tracks, never a serial sum of phases, and names "
         "the client-side variable that holds the date.",
+        "MEDIA LIBRARY CATEGORY SLUGS (samples.categories may use ONLY these): "
+        + ", ".join(library_slugs(company["id"])),
         "SPEC:\n" + _SPEC_SCHEMA,
     ]))
     return provider.think_json(
         system, f"Client: {customer}\n\nBrief:\n{brief}{money}\n\n{extra_facts}",
-        model="claude-fable-5", max_tokens=4000, purpose="deck-spec", company=company.get("slug"))
+        model="claude-fable-5", max_tokens=8000, purpose="deck-spec", company=company.get("slug"))
+
+
+def revise_spec(company: dict, customer: str, spec: dict, feedback: str, quotation: dict | None = None,
+                extra_facts: str = "") -> dict:
+    """The owner's feedback on a built deck, applied to its spec: the model changes what he asked for and
+    keeps everything else word for word (a revision, never a fresh deck). Same hard rules as authoring:
+    no invented price, date, statistic or film. Code renders the result (15 Sep 2026)."""
+    skill = store.get_skill_by_key(company["id"], "sales-quotation") or \
+        store.get_skill_by_key(company["id"], "sales-first-response")
+    rules = worker._rules_block(skill) if skill else ""
+    money = ""
+    if quotation:
+        money = (f"\nQUOTATION FACTS (use these EXACTLY, never alter a figure): total "
+                 f"{quotation.get('currency', 'AED')} {quotation.get('net')} + VAT"
+                 f"{', number ' + quotation['number'] if quotation.get('number') else ''}.")
+    system = "\n\n".join(filter(None, [
+        "You REVISE a proposal deck's JSON spec from the owner's feedback. Return ONLY the complete revised "
+        "JSON spec in the same shape. Change exactly what the feedback asks for and keep every other field "
+        "word for word; if the feedback names a page that does not exist, add it in the schema's shape. "
+        "Keep the cover's image_subject unchanged unless the feedback is about the cover image.",
+        worker._now_line(),
+        worker._company_context(company),
+        rules,
+        "HARD RULES: never invent a price, a date, a statistic or a client name; every figure comes from the "
+        "quotation facts you are given or the owner's own words in the feedback. Never name a sample film: "
+        "you supply media-library CATEGORY SLUGS and captions and the system picks the films. Keep every "
+        "card body under 45 words. No em dashes. Write plainly, no marketing flourish.",
+        "MEDIA LIBRARY CATEGORY SLUGS (samples.categories may use ONLY these): "
+        + ", ".join(library_slugs(company["id"])),
+        "SPEC SHAPE:\n" + _SPEC_SCHEMA,
+    ]))
+    import json as _json
+    user = (f"Client: {customer}\n\nCURRENT SPEC:\n{_json.dumps(spec, ensure_ascii=False)}\n\n"
+            f"OWNER'S FEEDBACK:\n{feedback}{money}\n\n{extra_facts}")
+    return provider.think_json(system, user, model="claude-fable-5", max_tokens=8000,
+                               purpose="deck-revise", company=company.get("slug")) or spec
+
+
+def investment_from_quotation(quotation: dict) -> dict:
+    """The investment page's rows and headline, STAMPED from a real quotation: one row per priced line,
+    the headline the net figure. A line the quotation left blank prints 'To be confirmed'."""
+    cur = quotation.get("currency") or "AED"
+    rows, net = [], 0.0
+    for sec in (quotation.get("sections") or []):
+        for it in sec.get("items", []):
+            unit, qty = it.get("unit"), it.get("qty") or 1
+            amt = None
+            try:
+                amt = float(unit) * float(qty) if unit not in (None, "") else None
+            except (TypeError, ValueError):
+                amt = None
+            if amt is not None:
+                net += amt
+            rows.append({"item": str(sec.get("header") or "").split("·")[-1].strip().title() or "Item",
+                         "detail": str(it.get("desc") or "")[:90],
+                         "amount": f"{cur} {amt:,.0f}" if amt is not None else "To be confirmed"})
+    head = f"{cur} {net:,.0f} + VAT" if net else "To be confirmed"
+    return {"rows": rows[:10], "headline": head, "net": round(net, 2)}
 
 
 def build(company_slug: str, customer: str, brief: str, *, quotation: dict | None = None,
           label: str | None = None, extra_facts: str = "", out_dir: str = "/tmp",
           filename: str = "proposal.pdf") -> dict:
-    """Author + render a house-format proposal deck. Returns {path, pages, films, spec}."""
+    """Author + render a house-format proposal deck. Returns {path, pages, films, spec, cover}."""
     co = store.get_company_by_slug(company_slug)
     if not co:
         raise ValueError(f"unknown company {company_slug}")
     spec = author_spec(co, customer, brief, quotation, extra_facts) or {}
+    return render(co, customer, spec, label=label, out_dir=out_dir, filename=filename)
+
+
+def render(co: dict, customer: str, spec: dict, *, label: str | None = None, out_dir: str = "/tmp",
+           filename: str = "proposal.pdf", cover_path: str | None = None) -> dict:
+    """Render a spec to PDF. `cover_path` reuses an existing hero image (a revision keeps its cover unless
+    the cover subject changed); otherwise one is generated. Returns {path, pages, films, spec, cover}."""
+    company_slug = co.get("slug") or ""
     accent = (spec.get("accent") or _ACCENT_DEFAULT).strip()
     if not re.match(r"^#[0-9A-Fa-f]{6}$", accent):
         accent = _ACCENT_DEFAULT
@@ -666,9 +749,18 @@ def build(company_slug: str, customer: str, brief: str, *, quotation: dict | Non
     d = _Deck(co, customer, accent, _logo(co), lbl)
 
     cv = spec.get("cover") or {}
-    img = cover_image(cv.get("image_subject") or f"the world of {customer}",
-                      cv.get("image_palette") or "deep charcoal with restrained accent light",
-                      company_slug, out_dir)
+    img = cover_path if cover_path and os.path.isfile(cover_path) else None
+    if not img:
+        img = cover_image(cv.get("image_subject") or f"the world of {customer}",
+                          cv.get("image_palette") or "deep charcoal with restrained accent light",
+                          company_slug, out_dir)
+        if img:   # keep the hero under the deck's own name, so the next deck's cover never overwrites it
+            keep = os.path.join(out_dir, re.sub(r"\.pdf$", "", filename) + "-cover.jpg")
+            try:
+                os.replace(img, keep)
+                img = keep
+            except OSError:
+                pass
     d.cover(cv.get("title") or _esc(customer), cv.get("standfirst") or "", img)
 
     for key, fn in (("brief", "cards"), ("approach", "phases")):
@@ -702,7 +794,7 @@ def build(company_slug: str, customer: str, brief: str, *, quotation: dict | Non
     path = os.path.join(out_dir, filename)
     to_pdf(d.html(), path)
     return {"path": path, "pages": len(d.pages), "films": [f["youtube_video_id"] for f in films],
-            "spec": spec, "accent": accent}
+            "spec": spec, "accent": accent, "cover": img}
 
 
 # --------------------------------------------------------------------------- capabilities decks

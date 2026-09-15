@@ -68,14 +68,21 @@ CAPABILITIES: list[tuple[str, str]] = [
      "telling you something (use update_project_plan, passing the note). Correcting a plan card is "
      "actioned, not just reworded: timings he states ('chase in two weeks if we've heard nothing') become "
      "real dated follow-ups on that deal, visible under the project's reminders."),
-    ("Proposal decks — LIVE",
-     "create_proposal builds a branded, house-format PDF proposal deck and lands it in the Inbox: cover with "
-     "a generated hero image for the client's world, the brief as we read it, the approach, sample films "
-     "pulled from the MEDIA LIBRARY by category and rating (never invented, shown as original 16:9 "
-     "thumbnails), a parallel-track timeline, and an investment page priced from the named quotation. Always "
-     "pass quotation_number when a quote exists so the deck cannot contradict it. It files to the client's "
-     "Drive folder and the document library; it never contacts the client - to send it, draft an email and "
-     "attach the document."),
+    ("Proposal decks — LIVE, revisable, quotation on approval",
+     "create_proposal(deal_id=...) builds a branded, house-format PDF proposal deck from the WHOLE deal record "
+     "(the client's brief and documents filed on the deal, every email, meeting notes) and lands it in the "
+     "Inbox: cover with a generated hero image, the brief as we read it, the approach, sample films from the "
+     "MEDIA LIBRARY by category and rating (never invented), a parallel-track timeline, and an investment "
+     "page. Feedback on the card (correct_task) REBUILDS the deck as the next version on the same card, cover "
+     "kept. APPROVING the card issues the matching quotation (lines priced from the rate card by code) and "
+     "re-renders the final deck with the quotation's figures onto the quotation card, so one email sends "
+     "both. Pass quotation_number when a quote already exists so the deck cannot contradict it. Files to the "
+     "client's Drive folder and the library; it never contacts the client."),
+    ("Documents on a deal",
+     "A client's documents (brief, RFP, clarification record) are filed ON THE DEAL: automatically from their "
+     "emails (every route, tenders included), and from Talk with save_document(deal_id=...). deal_timeline "
+     "lists them; read_document reads the text. Files attached in Talk are READ (PDF, Word, Excel, "
+     "PowerPoint, images), so a brief attached to a message can be discussed and filed at once."),
     ("Capability decks — LIVE",
      "create_capabilities_deck builds the CREDENTIALS leave-behind: what we can do, how the studio "
      "works, and named CASE STUDIES proved with our own films. Use it when he wants a capabilities "

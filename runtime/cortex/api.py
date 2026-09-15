@@ -3277,14 +3277,26 @@ SKILL_TOOLS = [
                                                             "said he wants a SECOND, separate email as well"}},
         "required": ["company", "to_name", "subject", "brief"]}},
     {"name": "save_document",
-     "description": "Save the file(s) Rashad attached to THIS message into the company's OFFICIAL document "
-                    "library (the standing store: trade licence, VAT certificate, company profile, signed forms). "
-                    "Once saved, Cortex can attach them to any outgoing email by name. Ask the kind if unclear.",
+     "description": "Save the file(s) Rashad attached to THIS message. With deal_id they are filed ON THAT DEAL "
+                    "(a client's brief, RFP, clarification record: the proposal writer and deal_timeline read "
+                    "them). Without deal_id they go into the company's OFFICIAL document library (the standing "
+                    "store: trade licence, VAT certificate, company profile, signed forms), attachable to any "
+                    "outgoing email by name. Ask the kind if unclear.",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string", "description": "your business slug"},
+        "deal_id": {"type": "integer", "description": "the opportunity this document belongs to (a client's brief "
+                                                      "or clarification); omit for a standing company document"},
         "kind": {"type": "string", "description": "what this document IS: trade-licence | vat-certificate | "
-                                                  "company-profile | signed-form | document"}},
+                                                  "company-profile | signed-form | client-document | document"}},
         "required": ["company"]}},
+    {"name": "read_document",
+     "description": "Read the text of a document in the library or on a deal (a client's brief, an RFP, a "
+                    "clarification record, a filed proposal). deal_timeline lists a deal's documents with their "
+                    "ids; pass the id (or words from the file name).",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug"},
+        "document": {"type": "string", "description": "the library id, or words from the file name"}},
+        "required": ["company", "document"]}},
     {"name": "list_documents",
      "description": "List the company's official document library (standing files Cortex can attach to emails). "
                     "Use this to answer 'do we have the trade licence on file?'.",
@@ -3421,15 +3433,19 @@ SKILL_TOOLS = [
       "required": ["company", "audience", "focus"]}},
     {"name": "create_proposal",
      "description": "Produce a branded, house-format PROPOSAL DECK (a multi-page PDF) and drop it in the Inbox. "
-                    "Use whenever Rashad asks to 'do a proposal', 'put a deck together', or wants a client "
-                    "proposal to accompany a quotation. Give it the CLIENT name and a BRIEF describing what "
-                    "they asked for and the approach; the deck writes itself under the company's skill rules "
-                    "and Cortex stamps the facts: sample films come from the media library by category and "
-                    "rating (never invented), a cover image is generated for the client's world, and prices "
-                    "come from the quotation you name in quotation_number. ALWAYS pass quotation_number when "
-                    "a quote exists, so the deck can never contradict it. It is INTERNAL: it files to the "
-                    "client's Drive folder and the document library and lands as a card for review, it never "
-                    "contacts the client. To send it, draft an email and attach the document.",
+                    "ONLY when Rashad explicitly asks for a proposal or a deck ('do a proposal', 'put a deck "
+                    "together'); an ambiguous 'draft' or 'write something up' is a question to ask, not a deck. "
+                    "ALWAYS pass deal_id: the deck is written from the WHOLE deal record (the client's brief and "
+                    "documents filed on it, every email, meeting notes), not just your brief; files attached to "
+                    "this message are filed on the deal first. Give it the CLIENT name and a BRIEF of what they "
+                    "asked for and the approach; the deck writes itself under the company's skill rules and "
+                    "Cortex stamps the facts: sample films from the media library by category and rating, a "
+                    "generated cover image, prices only from the quotation named in quotation_number (pass it "
+                    "whenever a quote exists). It is INTERNAL: filed to the client's Drive folder and the "
+                    "library, on a card for review; it never contacts the client. REVISE it with correct_task on "
+                    "its card (the deck is rebuilt as the next version, same card). APPROVING the card issues the "
+                    "matching quotation from the deck and the rate card, and the final deck rides on that "
+                    "quotation card; then draft an email from there to send both.",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"},
         "customer": {"type": "string", "description": "the CLIENT name, as it should read on the deck"},
@@ -3670,6 +3686,32 @@ SKILL_TOOLS = [
 ]
 
 
+def _file_turn_files_on_deal(inp: dict) -> list[str]:
+    """The files attached to this Talk turn, filed on the deal named in the tool call (documents only; an
+    image is context for the reply, not a deal document). Returns one label per file filed."""
+    did, files, names = inp.get("deal_id"), inp.get("_images") or [], inp.get("_image_names") or []
+    co = store.get_company_by_slug(inp.get("company") or "")
+    if not (did and files and co):
+        return []
+    out = []
+    for i, url in enumerate(files[:6]):
+        if not isinstance(url, str) or ";base64," not in url:
+            continue
+        head, b64 = url.split(";base64,", 1)
+        mime = (head[5:] or "application/octet-stream").split(";")[0].lower()
+        if mime.startswith("image/"):
+            continue
+        name = (names[i] if i < len(names) else "") or f"document-{i + 1}"
+        try:
+            d = engine._file_deal_document(co, int(did), name, mime, base64.b64decode(b64),
+                                           kind=inp.get("kind") or "client-document", source="attached in Talk")
+            if d:
+                out.append(f"{d['filename']} (#{d['id']})")
+        except Exception as e:  # noqa: BLE001
+            out.append(f"{name}: FAILED ({str(e)[:80]})")
+    return out
+
+
 def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
     u = u if isinstance(u, dict) else {"companies": None}   # default: owner scope (no filter)
     if name == "system_knowledge":
@@ -3820,6 +3862,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                            "projects": [{"title": p["title"], "value": p["value"], "stage": p["stage"]}
                                         for p in proj["projects"][:10]]}, default=str)
     if name == "create_proposal":
+        _filed = _file_turn_files_on_deal(inp)   # a brief attached in this turn joins the deal record first
         try:
             r = engine.deliver_proposal(inp["company"], customer=inp.get("customer", ""),
                                         brief=inp.get("brief", ""),
@@ -3829,9 +3872,30 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             return str(_e)
         films = ", ".join(r["films"]) or "none matched in the media library"
         return (f"Proposal deck built: {r['pages']} pages, '{r['filename']}'. Sample films used: {films}. "
+                + (f"Written from the deal record ({r['read_deal_chars']:,} chars: its documents and timeline). "
+                   if r.get("read_deal_chars") else "No deal record was read (no deal_id): only your brief. ")
+                + (f"Filed on the deal first: {', '.join(_filed)}. " if _filed else "")
                 + (f"Filed to the {r['filed_to']} client folder and the document library. "
                    if r.get("filed_to") else "Filed to the document library. ")
-                + f"It is on card #{r['task_id']} for review; nothing has been sent to the client.")
+                + f"It is on card #{r['task_id']} for review; nothing has been sent to the client. To change "
+                "it, correct_task on that card with the change and the deck is rebuilt; approving the card "
+                "issues the matching quotation.")
+    if name == "read_document":
+        co2 = _talk_company(inp.get("company"), u) if inp.get("company") else None
+        ref = str(inp.get("document") or "").strip()
+        row = None
+        if ref.isdigit():
+            row = documents.get(int(ref), company_id=(co2 or {}).get("id"))
+        elif ref and co2:
+            row = db.one("select * from company_documents where company_id=%s and filename ilike %s and "
+                         "superseded_by is null order by created_at desc limit 1", (co2["id"], f"%{ref}%"))
+        if not row:
+            return f"No document found for '{ref}'. Give its library id (from deal_timeline or list_documents)."
+        if u and _user_cids(u) is not None and row["company_id"] not in _user_cids(u):
+            return "That document belongs to a business outside your access."
+        txt = documents.text_of(row)
+        return (f"#{row['id']} {row['filename']} [{row['kind']}]" + (f" on deal {row['deal_id']}" if row.get("deal_id") else "")
+                + ":\n" + (txt[:12000] if txt else "(no readable text in this file)"))
     if name == "rebrand_deck":
         try:
             r = engine.deliver_rebrand(inp["company"], document=inp.get("document", ""),
@@ -4366,6 +4430,10 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         if not files:
             return ("No file arrived with this message — ask Rashad to attach the document with the "
                     "paperclip and say again what it is.")
+        if inp.get("deal_id"):   # a client's document goes ON THE DEAL, not into the standing library
+            filed = _file_turn_files_on_deal(inp)
+            return (f"Filed on deal {inp['deal_id']}: " + "; ".join(filed) + ". The proposal writer and "
+                    "deal_timeline read it from there.") if filed else "Nothing readable to file on the deal."
         saved = []
         for i, u in enumerate(files[:6]):
             try:
@@ -4457,6 +4525,12 @@ def _shared_behaviour() -> str:
         "unless he dictated the exact rule and named its company and skill himself.",
         "Every voice in Talk has the same tools and there is no hand-off: never say you will pass something to "
         "a manager, a chief or a colleague. Do it yourself.",
+        "A proposal deck or a quotation is built ONLY when he asks for one by name. 'Draft an opportunity', "
+        "'write it up', 'put something in my inbox' are ambiguous: ask whether he wants a proposal deck, a "
+        "quotation or an email before building (a deck costs real money to build and lands as a card).",
+        "When a client's document (brief, RFP, clarification record) arrives in Talk, file it ON THE DEAL with "
+        "save_document(deal_id=...) so every later proposal, quotation and email reads it. Before writing a "
+        "proposal or quotation, open the deal with deal_timeline and read_document its documents.",
     ]
     block = "ALWAYS-ON RULES (true no matter which persona is speaking):\n" + "\n".join(f"- {r}" for r in rules)
     block += "\n\n" + capabilities.manifest()   # live capability registry — always current as features ship
@@ -4537,22 +4611,45 @@ def heads(_: None = Depends(auth)) -> dict:
 _IMG_LIMIT = 10 * 1024 * 1024   # Anthropic per-image hard limit (decoded bytes)
 
 
-def _image_blocks(data_urls: list[str]) -> list[dict]:
-    """Turn data: URLs (data:image/jpeg;base64,...) into Anthropic image content blocks. Skips any image whose
-    decoded size exceeds the model's 10 MB limit — a backstop so an oversized attachment can never 500 the chat
-    (the cockpit downscales on attach, so this should rarely fire)."""
+def _image_blocks(data_urls: list[str], names: list[str] | None = None) -> list[dict]:
+    """Turn the files attached to a Talk message into content blocks the model actually reads: images as
+    image blocks, PDFs as document blocks, office files (Word, Excel, PowerPoint, CSV) as their extracted
+    text. Until 15 Sep 2026 anything but an image was dropped here, so a PDF attached in Talk was invisible
+    (the owner's RFP clarification record). Anything over the model's 10 MB limit is skipped, never a 500."""
+    from . import doctext as _dt
     blocks = []
-    for u in (data_urls or [])[:6]:
+    for i, u in enumerate((data_urls or [])[:6]):
         if not isinstance(u, str) or not u.startswith("data:") or ";base64," not in u:
             continue
         head, b64 = u.split(";base64,", 1)
-        media = head[5:] or "image/jpeg"
-        if not media.startswith("image/"):
-            continue
+        media = (head[5:] or "image/jpeg").split(";")[0].lower()
+        name = (names[i] if names and i < len(names) else "") or ""
         if (len(b64) * 3) // 4 > _IMG_LIMIT:   # decoded-size estimate over the limit -> drop it, don't 400
             continue
-        blocks.append({"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}})
+        if media.startswith("image/"):
+            blocks.append({"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}})
+        elif media == "application/pdf" or name.lower().endswith(".pdf"):
+            blocks.append({"type": "document", "source": {"type": "base64", "media_type": "application/pdf",
+                                                          "data": b64}})
+        elif _dt.kind_for(media, name):
+            try:
+                txt = _dt.extract(media, name, base64.b64decode(b64))
+            except Exception:  # noqa: BLE001
+                txt = ""
+            blocks.append({"type": "text", "text": f"ATTACHED FILE {name or media}:\n"
+                                                    + (txt or "(this file could not be read; say so)")})
     return blocks
+
+
+def _said_text(content) -> str:
+    """The words a person typed, whether the message is a plain string or a list of content blocks (a
+    message with files attached carries its text as a block)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"
+                         and not str(b.get("text", "")).startswith("ATTACHED FILE "))
+    return ""
 
 
 class ChatTurn(BaseModel):
@@ -4584,7 +4681,7 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
     # pinned head wins; otherwise the concierge routes (sticky to `current` unless the subject shifts).
     chosen = pinned if pinned else personas.route(msgs, body.company, (body.current or "").strip())
     # attach any images to the last user turn so Cortex can actually see them (Claude is multimodal).
-    blocks = _image_blocks(body.images or [])
+    blocks = _image_blocks(body.images or [], body.image_names or [])
     if blocks:
         msgs[-1]["content"] = blocks + [{"type": "text", "text": msgs[-1]["content"]}]
     # every voice gets the full toolset: a persona is a tone and a focus, never a limit (14 Sep 2026)
@@ -4598,11 +4695,13 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
     co = _talk_company(body.company, user)
     system += "\n\n" + (_company_knowledge(co) if co else _NO_FOCUS_NOTE)
     def _exec(name: str, inp: dict) -> str:   # carry the turn's attachments through when a tool drafts/creates
-        if name in ("create_task", "draft", "draft_email", "save_document") and body.images:
+        if name in ("create_task", "draft", "draft_email", "save_document", "create_proposal",
+                    "create_quotation") and body.images:
             inp = {**inp, "_images": body.images, "_image_names": body.image_names}
         # the PERSON's own words, never the model's: read by create_quotation's price check and by every
         # card-making tool, which keeps any link he typed as trusted (owner_links)
-        _users = [m["content"] for m in msgs if m["role"] == "user" and isinstance(m["content"], str)]
+        _users = [_said_text(m["content"]) for m in msgs if m["role"] == "user"]
+        _users = [s for s in _users if s]
         _TURN_SAID.set("\n".join(_users))
         _TURN_LINKS.set(tuple(engine._links_in("\n".join(_users[-3:]))))
         if name == "add_rule" and inp.get("scope") == "universal" and (user or {}).get("role") != "owner":

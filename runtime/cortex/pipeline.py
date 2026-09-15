@@ -56,7 +56,18 @@ def deal_context(deal_id: int, limit: int = 12) -> str:
            + (f", value {d['currency']} {d['value']}" if d.get("value") else "") + "):\n")
     if d.get("note"):
         out += f"Note: {d['note']}\n"
-    return out + ("\n".join(lines) if lines else "- (no events logged yet)")
+    out += "\n".join(lines) if lines else "- (no events logged yet)"
+    try:   # the client's documents filed on the deal (brief, RFP, clarifications): read with read_document
+        from . import documents as _docs
+        rows = _docs.for_deal(int(deal_id))
+        if rows:
+            out += "\nDOCUMENTS ON THIS DEAL (read_document <id> for the full text):\n" + "\n".join(
+                f"- #{r['id']} {r['filename']} [{r['kind']}, {r['created_at']:%d %b %Y}"
+                + (f", {r['chars']:,} chars of text" if r.get("chars") else ", no readable text") + "]"
+                for r in rows)
+    except Exception:  # noqa: BLE001
+        pass
+    return out
 
 
 # ---------- commitments (what WE promised in an outbound email) ----------
