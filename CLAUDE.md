@@ -1657,8 +1657,12 @@ the prices, so no quotation goes with it unless the agency confirms a scope. Key
   broadcast/outdoor usage quoted separately).
 - GUIDE QUOTATION: 10 videos + AI VO, reference `GUIDE-AGENCY` (never a SEN number), "Sensa - Agency Guide Quotation
   v1.0" .xlsx/.pdf at the top of the terms folder beside `Sensa - Quotation Template - agency-ai.docx`.
-- STANDARD DECK "Sensa - Agency AI Production Rates v1.0.pdf" (9 pages): library kind **`agency-deck`**, official
-  and a CORE kind (a deal's scope never hides it), Documents on Drive, profile `agency_rates_deck_doc` (doc 472).
+- STANDARD DECK "Sensa - Agency AI Production Rates v1.3.pdf" (9 pages, owner-reviewed three times on 15 Sep): cover
+  on the CFI commercial, what we make (4 pictured formats), CFI full page as "Full AI brand commercials", CGI social
+  films (Zed, Huru, Nameless Ventures), AI influencers (Zayd Adventure, Leo Iconik x2), six brand and product films
+  (MAH Gold, HBMSU, Al Rahba / Mercedes E-Class, Orientica Crown, Red Bull; `CreativeDeck.films_grid`), how it works,
+  rates + add-ons, terms + next steps. Library kind **`agency-deck`**, official and a CORE kind (a deal's scope never
+  hides it), Documents on Drive (older versions in Documents/Archive), profile `agency_rates_deck_doc` (doc 498).
   Every figure read from the rate card by key; its words are the setting `agency_deck_spec:sensa` (edit there, then
   `python -m cortex.agency deck`). A version FOR an agency (`agency_rates_deck(customer=, deal_id=)` or
   `python -m cortex.agency deck "<Agency>"`) is client work, filed on the deal and client folder.
