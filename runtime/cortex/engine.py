@@ -29,7 +29,7 @@ from .schedule import _GST
 from psycopg.types.json import Json
 
 from . import (contentqueue, crm, db, deck, doctext, documents, envelope, gmail, manager, media, meetnotes, policy,
-               newsletter, notifications, pipeline, profile, ppc_report, provider, quotation, reminders,
+               newsletter, notifications, phishing, pipeline, profile, ppc_report, provider, quotation, reminders,
                schedule, seo_report, store, webauthn_auth, whatsapp, worker)
 from .integrations import telegram as tg, wordpress as wp
 
@@ -4490,6 +4490,60 @@ def _release_mail(company_id, ref: str, gid: str) -> None:
                    (company_id, ref, gid or ""))
 
 
+def _carded_by_other_company(co: dict, ref: str, sender: str) -> bool:
+    """ONE EMAIL, ONE COMPANY (15 Sep 2026). _claim_mail is per company, so an email bcc'd to Sensa AND Sky
+    Vision was carded by both: two replies from two businesses to one message (Jump's phishing RFP, cards
+    680 + 681). When another of our companies already holds a reply card for this exact message, this copy
+    stops, unless THIS company has an open deal with the sender and that one does not (then it is ours).
+    Keyed on a CARD, not a claim: a company that looked at the email and decided no reply was needed must
+    never swallow it for the company it was really meant for."""
+    if not ref:
+        return False
+    other = db.one("select company_id from tasks where kind='email_reply' and company_id<>%s and "
+                   "request->>'mail_ref'=%s order by id limit 1", (co["id"], ref))
+    if not other:
+        return False
+
+    def _deal(slug) -> bool:
+        try:
+            return bool(slug and (crm.open_deal_for_email(sender, slug) or crm.open_deal_for_domain(sender, slug)))
+        except Exception:  # noqa: BLE001
+            return False
+    return not (_deal(co.get("slug")) and not _deal((store.get_company(other["company_id"]) or {}).get("slug")))
+
+
+def _phishing(e: dict, rt_key: str | None, client: str | None) -> dict | None:
+    """phishing.check with our own domains excluded; never lets a failed check stop ordinary mail."""
+    try:
+        ours = {phishing.base_domain(a.split("@")[-1]) for a in INBOXES.values() if a and "@" in a}
+        return phishing.check(e, rt_key, client, ours)
+    except Exception as ex:  # noqa: BLE001
+        print(f"[phishing] {type(ex).__name__}: {ex}", flush=True)
+        return None
+
+
+def _flag_phishing(co: dict, e: dict, ph: dict) -> None:
+    """Suspected phishing: no reply, no opportunity, no card. The owner is warned once per email (every
+    mailbox copy coalesces on the Message-Id) and the contact's history says why."""
+    sender = e.get("email") or ""
+    subj = (e.get("subject") or "(no subject)")[:120]
+    why = "; ".join(ph.get("reasons") or [])
+    try:
+        notifications.notify(
+            f"Suspected phishing from {sender}: no reply drafted",
+            f"'{subj}'. {why[:1].upper() + why[1:]}. Don't open the link or sign in anywhere. If this is a real "
+            "contact, their mailbox has probably been hacked: tell them by phone, not by email. If it turns out "
+            "to be genuine, ask Talk to draft the reply.",
+            priority="critical", category="security", company_id=co.get("id"),
+            dedup_key=f"phish:{gmail.mail_ref(e)}")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        crm.log_event(sender, "phishing", f"Suspected phishing ({co.get('name')}): '{subj}'. {why}")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_token",
                days: int = 2, limit: int = 40, commit: bool = True, company: str | None = None,
                address: str | None = None) -> dict:
@@ -4547,6 +4601,21 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
             results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
                             "category": "duplicate", "to_crm": False,
                             "reason": "same email, already handled from another mailbox"})
+            continue
+        if commit and _carded_by_other_company(co, mref, e.get("email") or ""):   # ONE EMAIL, ONE COMPANY
+            seen.add(gid)
+            results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
+                            "category": "duplicate", "to_crm": False,
+                            "reason": "same email, already carded by another of our companies"})
+            continue
+        # PHISHING stops the reply before anything reads the email as a brief (see phishing.py)
+        _ph = _phishing(e, rt_key, company) if commit else None
+        if _ph:
+            seen.add(gid)
+            _flag_phishing(co, e, _ph)
+            results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
+                            "category": "phishing", "to_crm": False,
+                            "reason": "suspected phishing: " + _ph["reasons"][0]})
             continue
         cls = classify_email(co, e)
         # DETERMINISTIC client override: a sender on an ACTIVE deal/project is project correspondence,
@@ -4774,6 +4843,10 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
                   "status in ('new','drafting','awaiting_approval','awaiting_correction') and "
                   "lower(request->'inquiry'->>'email')=lower(%s) limit 1", (co["id"], frm)):
             continue    # an open reply card for this sender already exists (the inbox sweep got there) — never double up
+        _ph = _phishing(m, send_rt, client)   # a hacked lead's mailbox replying on a real thread is the classic lure
+        if _ph:
+            _flag_phishing(co, m, _ph)
+            continue
         c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (frm,))
         nm = ((((c or {}).get("first_name")) or "") + " " + (((c or {}).get("last_name")) or "")).strip()
         name = nm if re.search(r"[A-Za-z]", nm) else frm.split("@")[0]

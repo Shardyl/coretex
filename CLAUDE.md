@@ -1604,3 +1604,26 @@ not read the profile at all, and a Chief persona had a cut-down toolset with no 
 - TRUSTED PROFILE LINKS: `profile.trusted_links(cid)` = review_link + live_site. The invented-link guard
   (`engine`, the `_URL_RX` check) and the Manager's REAL LINKS list include them, so a review ask carrying the
   review link is never redrafted or flagged as invented.
+
+## Phishing guard + one email, one company (15 Sep 2026)
+Heba at Jump (a real July contact) had her mailbox hacked. It bcc'd Sensa and Sky Vision an empty "Re: RFQ#
+Videography Services" with a 1-page PDF (made by Aspose minutes before) whose VIEW RFP DOCUMENT button went to a
+fake Google sign-in (`begone602.nobleoak.com.de`). Cortex read the PDF as a brief and made TWO warm reply cards,
+one per company (680 Sky Vision, 681 Sensa), offering calls. Owner rejected both; contact set not_qualified +
+newsletter_opt_out with a `phishing` history event.
+- `phishing.check(e, rt_key, client, ours)`: a safety invariant (like the invented-link guard), so code, judged
+  only on WHERE links point. Flags (a) an attached PDF of 3 pages or fewer with a view/access/open-a-document
+  phrase (`_CTA`) and a link off the sender's registered domain (`base_domain`; `_MEDIA_HOSTS` exempt), or
+  (b) a body link whose label is a `_CTA` and whose host is off the sender's domain and not a `_SHARE_HOSTS`
+  file-share. Our own domains never count. `gmail._parse_generic` now returns `links` ([href, label]: HTML
+  anchors + the plain part's `LABEL <https://...>`).
+- `engine._phishing` wraps it (a failed check never stops mail). Hooked in `poll_inbox` after the claim and in
+  `poll_sales_replies` (a hacked lead replying on a real thread). A hit: no card, no qualify, no opportunity;
+  `_flag_phishing` sends one CRITICAL security notification per Message-Id (`phish:<mail_ref>`) and logs a
+  `phishing` event on the contact. False positive: ask Talk to draft the reply.
+- Tested on real mail: the Jump email flagged in all 3 mailboxes it reached; 0 of the other 315 emails from 14
+  days across every inbox.
+- ONE EMAIL, ONE COMPANY: `_claim_mail` is per company, so a bcc to two companies' mailboxes carded twice.
+  `_carded_by_other_company(co, ref, sender)` stops a copy when another company already holds an `email_reply`
+  card for the same `mail_ref`, unless this company has an open deal with the sender and that one doesn't. Keyed
+  on a CARD, not a claim, so a company that decided "no reply" never swallows mail meant for another.

@@ -291,6 +291,33 @@ def _html_to_text(s: str) -> str:
     return re.sub(r"\n\s*\n\s*", "\n\n", s).strip()
 
 
+_HREF = re.compile(r"<a\b[^>]*?href\s*=\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a>", re.I | re.S)
+
+
+def _html_part(payload: dict) -> str:
+    if payload.get("mimeType") == "text/html":
+        return _decode(payload.get("body", {}).get("data"))
+    for p in payload.get("parts", []) or []:
+        t = _html_part(p)
+        if t:
+            return t
+    return ""
+
+
+def _links(payload: dict, plain: str) -> list[list[str]]:
+    """Every web link in the email with the words it sits under, as [href, label], for the phishing check
+    (phishing.py): the HTML part's anchors, and the plain part's 'LABEL <https://...>' form."""
+    import html as _h
+    out = []
+    for href, inner in _HREF.findall(_html_part(payload) or ""):
+        if href.lower().startswith(("http://", "https://")):
+            label = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", _h.unescape(inner))).strip()
+            out.append([_h.unescape(href), label[:120]])
+    for label, href in re.findall(r"([^\n<>]{0,80})<(https?://[^>\s]+)>", plain or ""):
+        out.append([href, label.strip()])
+    return out[:40]
+
+
 def _parse_generic(msg: dict) -> dict:
     """Light parse of ANY email (sender, subject, body) — for the inbox classifier, no form assumptions."""
     h = {x["name"].lower(): x["value"] for x in msg.get("payload", {}).get("headers", [])}
@@ -299,6 +326,7 @@ def _parse_generic(msg: dict) -> dict:
     name = ((m.group(1).strip() if m else "") or (frm.split("@")[0] if "@" in frm else frm)).strip()
     email = (m.group(2).strip() if m else frm).strip().strip("<>")
     body = _plain_body(msg.get("payload", {}))
+    links = _links(msg.get("payload", {}), body)
     if _HTML_HINT.search(body or ""):        # HTML-only email -> readable text, never raw markup
         body = _html_to_text(body)
     # machine-generated markers: bulk/no-reply mail must never get a drafted reply
@@ -312,7 +340,8 @@ def _parse_generic(msg: dict) -> dict:
             "thread_id": msg.get("threadId", ""), "msg_id": h.get("message-id", ""),
             "references": h.get("references", ""),
             "to": h.get("to", ""), "cc": h.get("cc", ""),   # recipients decide WHICH company owns the thread
-            "attachments": _walk_attachments(msg.get("payload", {}), [])}
+            "attachments": _walk_attachments(msg.get("payload", {}), []),
+            "links": links}                                  # [href, label] pairs, for phishing.check
 
 
 def list_recent(days: int = 2, limit: int = 30, rt_key: str = "gmail_refresh_token",
