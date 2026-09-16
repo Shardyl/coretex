@@ -1704,6 +1704,19 @@ scripts), on the owner's call "one run with the ability to do revisions" (not a 
 - CLI: `python -m cortex.creative dry <deal_id> "<direction>"` (no card, no quote issued, no filing; output in the job
   dir) and `python -m cortex.creative resume <job> [task_id]`.
 
+## Enquiry qualification: budget, dedup, instant webhook (16 Sep 2026)
+dmg events' website enquiry (Rana Elbadaoui) got a reply card but no opportunity. `qualify_suggest` ran
+`research_json` at max_tokens 900: two web searches plus thinking spent all 900 before a word of the answer was
+written (stop_reason max_tokens, zero text), `_loads` gave {}, and "no verdict" silently meant no opportunity.
+The site also POSTed the form twice (the research ran inside the request, 14s, so the form timed out and
+retried) and the second post made a second card (694 + 695).
+- `qualify_suggest`: research at 3,500 tokens; an empty research result falls back to a plain `think_json`
+  judgement (900); a no-verdict is printed to the journal (`[qualify] no verdict for <email>`).
+- `intake_enquiry`: ONE ENQUIRY, ONE CARD: the same sender with the same message (first 400 chars, whitespace
+  normalised) within an hour returns `duplicate_of` the open card instead of a new one.
+- `/api/intake/enquiry`: answers the site at once and runs `intake_enquiry` on a daemon thread.
+- Re-ran the DMG enquiry through the fixed path: qualified, opportunity created, card 694 linked; 695 cancelled.
+
 ## Phishing guard + one email, one company (15 Sep 2026)
 Heba at Jump (a real July contact) had her mailbox hacked. It bcc'd Sensa and Sky Vision an empty "Re: RFQ#
 Videography Services" with a 1-page PDF (made by Aspose minutes before) whose VIEW RFP DOCUMENT button went to a

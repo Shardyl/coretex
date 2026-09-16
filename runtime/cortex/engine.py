@@ -3208,13 +3208,22 @@ def qualify_suggest(co: dict, inq: dict) -> dict | None:
             out = provider.think_json(system, user, model=model, max_tokens=240,
                                       purpose="qualify", company=co.get("slug"))
         else:                                          # corporate domain -> let it look the company + person up
-            out = provider.research_json(system, user, model=model, max_searches=4, max_tokens=900)
+            # 3,500 tokens, not 900: two web searches plus thinking spent the whole 900 before a word of the
+            # answer was written, so dmg events' enquiry (16 Sep 2026) qualified as NOTHING and no opportunity
+            # was created. A research call that still comes back empty falls to a plain judgement.
+            out = provider.research_json(system, user, model=model, max_searches=4, max_tokens=3500)
+            if not out:
+                print("[qualify] research returned no JSON; judging without search", flush=True)
+                out = provider.think_json(system, user, model=model, max_tokens=900,
+                                          purpose="qualify", company=co.get("slug"))
     except Exception:                                  # noqa: BLE001 -- a failed suggestion must never block intake
         try:
-            out = provider.think_json(system, user, model=model, max_tokens=240)
+            out = provider.think_json(system, user, model=model, max_tokens=900,
+                                      purpose="qualify", company=co.get("slug"))
         except Exception:                              # noqa: BLE001
             return None
     if not isinstance(out, dict) or not out:
+        print(f"[qualify] no verdict for {email}", flush=True)
         return None
     v = (out.get("verdict") or "needs_info").strip().lower()
     if v not in ("qualified", "not_qualified", "needs_info"):
@@ -3317,6 +3326,17 @@ def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
         crm.add_inquiry(inq, slug)                   # genuine -> verified CRM contact (dedup by email)
     except Exception:  # noqa: BLE001
         pass
+    # ONE ENQUIRY, ONE CARD (16 Sep 2026): the website re-posted dmg events' form 11 seconds after the first
+    # request (the research inside the request took 14s and the form timed out), and the second post made a
+    # second card. The same sender with the same message inside an hour is that same enquiry.
+    em = (inq.get("email") or "").strip().lower()
+    norm = re.sub(r"\s+", " ", inq.get("message") or "").strip()[:400].lower()
+    dup = db.one("select id from tasks where company_id=%s and kind='email_reply' and created_at > now()-interval "
+                 "'1 hour' and lower(request->'inquiry'->>'email')=%s and lower(left(regexp_replace("
+                 "coalesce(request->'inquiry'->>'message',''), '\\s+', ' ', 'g'), 400))=%s order by (status in ('new','drafting','awaiting_approval','awaiting_correction')) desc, id desc limit 1",
+                 (co["id"], em, norm))
+    if dup:
+        return {"ok": True, "captured": True, "duplicate_of": dup["id"]}
     sug = None                                       # domain-led qualification suggestion (owner still decides)
     try:
         sug = qualify_suggest(co, inq)

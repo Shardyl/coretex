@@ -2232,8 +2232,18 @@ def intake_enquiry_webhook(body: EnquiryBody, token: str = "", x_token: str = He
     inq = {"name": body.name, "email": body.email, "phone": body.phone,
            "subject": body.subject or "Website enquiry", "message": body.message,
            "company_name": body.company_name or body.company}
-    res = engine.intake_enquiry(cfg["company"], inq, draft=bool(cfg.get("draft", True)))
-    return {"ok": True, "captured": bool(res.get("captured"))}
+    # ANSWER THE SITE AT ONCE, WORK AFTER (16 Sep 2026): triage + qualification (web research) took 14s inside
+    # this request, the contact form timed out and re-posted, and the enquiry got two cards. The site only
+    # needs the 200; the intake runs on its own thread.
+    import threading as _th
+
+    def _run():
+        try:
+            engine.intake_enquiry(cfg["company"], inq, draft=bool(cfg.get("draft", True)))
+        except Exception as ex:  # noqa: BLE001
+            print(f"[intake] {type(ex).__name__}: {ex}", flush=True)
+    _th.Thread(target=_run, daemon=True).start()
+    return {"ok": True, "captured": True}
 
 
 class ContactStageBody(BaseModel):
