@@ -683,8 +683,8 @@ class Job:
                  (cp["make"].get("cards") or [])[:2] or None)
         d.with_bg(bgi(3))
         n += 1
+        films = []
         if deck.our_work_page(co):   # off by the NO OUR WORK PAGE rule (owner, 16 Sep 2026: ChainX card 704)
-            films = []
             for i, f in enumerate(deck.pick_samples(co["id"], (cp.get("samples") or {}).get("categories") or [], 3)):
                 caps = (cp.get("samples") or {}).get("captions") or []
                 films.append({"youtube_video_id": f["youtube_video_id"], "label": f["title"],
