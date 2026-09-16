@@ -28,7 +28,11 @@ Classify each search term:
 - junk: looking for something else - free/DIY tools or apps, a specific software brand, a
   PLACE or free zone (e.g. Dubai Media City, Production City), jobs/careers/salaries,
   courses/tutorials, equipment purchases, news, or an unrelated business.
-When unsure, keep (a wrongly blocked buyer costs more than one junk click)."""
+- junk, ALWAYS (operator rule 2026-09-16): any query phrased as doing it yourself - make /
+  create / generate a video with ai, "ai that makes videos", "which ai...", tool-choice
+  questions. These are self-service searchers, never hires. Do NOT give this class the
+  benefit of the doubt.
+When otherwise unsure, keep (a wrongly blocked buyer costs more than one junk click)."""
 
 
 def _mutate_shared_criteria(cid: str, shared_set: str, terms: list[str]) -> None:
