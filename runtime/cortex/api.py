@@ -4169,7 +4169,8 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                                          sections=sections, title=inp.get("title"),
                                          note=inp.get("note"), contact_email=inp.get("contact_email"),
                                          number=inp.get("number"), deliverables=inp.get("deliverables"),
-                                         fmt=inp.get("fmt") or "both")
+                                         fmt=inp.get("fmt") or "both",
+                                         deal_id=int(inp["deal_id"]) if inp.get("deal_id") else None)
         except ValueError as _e:
             return str(_e)
         if inp.get("deal_id") and t.get("id"):
@@ -4467,7 +4468,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         if inp.get("attach_documents"):        # library documents requested by name -> resolve server-side
             refs = []
             for q in inp["attach_documents"][:6]:
-                hits = documents.find(co["id"], str(q), scope=_dtitle)
+                hits = documents.find(co["id"], str(q), scope=_dtitle, deal_id=int(_did) if _did else None)
                 if hits:
                     d = hits[0]
                     refs.append(documents.card_ref(d))
@@ -4538,7 +4539,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         t2 = store.get_task(int(inp.get("task_id") or 0))
         if not t2 or t2.get("kind") not in ("email_reply", "email_draft"):
             return "that task isn't a pending email card"
-        hits = documents.find(t2["company_id"], inp.get("document") or "")
+        hits = documents.find(t2["company_id"], inp.get("document") or "", deal_id=t2.get("deal_id"))
         if not hits:
             return (f"Nothing in the library matches '{inp.get('document')}'. Tell Rashad it's not on file — "
                     "he can save it via the paperclip.")

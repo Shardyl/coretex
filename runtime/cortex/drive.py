@@ -113,6 +113,13 @@ def ensure_client_folder(client_name: str, parent_id: str, token: str | None = N
         if f["name"].strip().lower() == wl:
             return {"id": f["id"], "name": f["name"], "created": False, "candidates": []}
     near = [f for f in existing if wl in f["name"].lower() or f["name"].strip().lower() in wl]
+    if len(near) == 1:
+        # ONE folder that is the same name plus or minus a trailing word ("ChainX Mining" -> "ChainX Mining
+        # LLC") is that client's folder, not a twin: use it. Before this the near-duplicate guard blocked
+        # every ChainX filing and the quotation and deck went to the library only (16 Sep 2026).
+        fn = near[0]["name"].strip().lower()
+        if fn.startswith(wl + " ") or wl.startswith(fn + " "):
+            return {"id": near[0]["id"], "name": near[0]["name"], "created": False, "candidates": []}
     if near:                                             # near-duplicate: surface, never create a twin
         return {"id": None, "name": want, "created": False,
                 "candidates": [{"id": f["id"], "name": f["name"]} for f in near]}

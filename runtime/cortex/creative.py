@@ -521,7 +521,8 @@ class Job:
             t = engine.deliver_quotation(slug, preset=spec["preset"], customer=customer, sections=spec["sections"],
                                          title=spec.get("title") or None, note=spec.get("note") or None,
                                          contact_email=deal.get("contact_email"), number=number,
-                                         deliverables=spec.get("deliverables") or None)
+                                         deliverables=spec.get("deliverables") or None,
+                                         deal_id=int(self.s["deal_id"]))
             db.execute("update tasks set deal_id=%s where id=%s", (int(self.s["deal_id"]), t["id"]))
             rq = t.get("request") or {}
             q.update({"number": rq.get("number"), "card": t["id"], "summary": rq.get("summary"),

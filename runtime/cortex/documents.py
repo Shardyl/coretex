@@ -266,7 +266,7 @@ def listing(company_id: int, core_only: bool = False) -> list[dict]:
                         "from company_documents where company_id=%s and kind = any(%s) "
                         "and superseded_by is null order by kind, created_at desc",
                         (company_id, list(CORE_KINDS)))
-    return db.query("select id, kind, filename, mime, size, created_at, drive_id, client "
+    return db.query("select id, kind, filename, mime, size, created_at, drive_id, client, deal_id "
                     "from company_documents where company_id=%s and superseded_by is null "
                     "order by kind, created_at desc", (company_id,))
 
@@ -496,7 +496,7 @@ def sync_all(min_gap_minutes: int = 60) -> dict:
     return out
 
 
-def find(company_id: int, query: str, scope: str = "") -> list[dict]:
+def find(company_id: int, query: str, scope: str = "", deal_id: int | None = None) -> list[dict]:
     """Loose match on kind/filename ('trade licence' finds kind trade-licence and 'TradeLicense2026.pdf').
 
     `scope` is a HARD FILTER, not a hint: when a card belongs to a deal, its client/project words are
@@ -522,7 +522,10 @@ def find(company_id: int, query: str, scope: str = "") -> list[dict]:
         def _words(r):
             return set(re.split(r"[^a-z0-9]+", " ".join(
                 (r.get("filename") or "", r.get("kind") or "", r.get("client") or "")).lower()))
-        best = [r for r in best if r["kind"] in CORE_KINDS or any(t in _words(r) for t in stoks)]
+        # a document FILED ON THIS DEAL is this deal's whatever its file name says (the ChainX quotation
+        # was named "quotation-sensa-SEN-2026-0016.pdf", carried no client, and the scoped lookup missed it)
+        best = [r for r in best if r["kind"] in CORE_KINDS or any(t in _words(r) for t in stoks)
+                or (deal_id and r.get("deal_id") == int(deal_id))]
     return best or []
 
 

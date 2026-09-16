@@ -1743,6 +1743,18 @@ render skip the samples page when it is off. Per company: add the rule to anothe
 it off there; remove the rule to bring the page back. ChainX re-rendered as v3 from the saved copy (no model
 calls) and attached to quotation card 705.
 
+## Quotation filed on the deal by name; one near-duplicate client folder is the folder (16 Sep 2026)
+The ChainX cover email (card 707) was drafted "with the quotation attached" but only carried the deck. Chain of
+causes: the client folder is "ChainX Mining LLC", `ensure_client_folder("ChainX Mining")` treated it as a
+near-duplicate and refused to file; with no Drive filing `deliver_quotation` saved the PDF as
+"quotation-sensa-SEN-2026-0016.pdf" with no client and no deal; the deal-scoped `documents.find` (scope =
+deal title words, or the row's client) could not see it. Now: `ensure_client_folder` uses the ONE near match
+when it is the name plus or minus a trailing word; `deliver_quotation(deal_id=)` names the library row
+"<Client> - Quotation <N> vK - date.pdf", tags the client and files it on the deal whatever Drive did (every
+caller passes deal_id: Talk create_quotation, prep cards, proposal approval, the creative run); `documents.find`
+takes `deal_id` and a row on that deal always qualifies (draft_email, attach_document, corrections pass it).
+ChainX docs 503/507/508 re-filed into "ChainX Mining LLC" and renamed; 707 attach refs refreshed.
+
 ## Phishing guard + one email, one company (15 Sep 2026)
 Heba at Jump (a real July contact) had her mailbox hacked. It bcc'd Sensa and Sky Vision an empty "Re: RFQ#
 Videography Services" with a 1-page PDF (made by Aspose minutes before) whose VIEW RFP DOCUMENT button went to a

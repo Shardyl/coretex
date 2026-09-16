@@ -1705,7 +1705,8 @@ def _prep_build_quotation(task: dict, skill: dict, company: dict, text: str) -> 
     t = deliver_quotation(company["slug"], preset=spec["preset"], customer=spec["customer"],
                           total=spec.get("total"), sections=spec.get("sections") or None,
                           title=spec.get("title") or None, note=spec.get("note") or None,
-                          contact_email=spec.get("contact_email"), deliverables=spec.get("deliverables") or None)
+                          contact_email=spec.get("contact_email"), deliverables=spec.get("deliverables") or None,
+                          deal_id=spec.get("deal_id"))
     did = spec.get("deal_id")
     if did and t:
         db.execute("update tasks set deal_id=%s where id=%s", (did, t["id"]))
@@ -2077,7 +2078,8 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
     except Exception:  # noqa: BLE001
         _scope = ""
     for w in (u.get("attach_documents") or [])[:6]:
-        hits = documents.find(task["company_id"], str(w), scope=_scope)
+        hits = documents.find(task["company_id"], str(w), scope=_scope,
+                              deal_id=int(_did) if _did else None)
         if hits:
             d = hits[0]
             refs[d["id"]] = documents.card_ref(d)
@@ -5590,7 +5592,8 @@ def _approve_proposal(task: dict, skill: dict, company: dict, actor: str) -> dic
     t = deliver_quotation(company["slug"], preset=qspec["preset"], customer=qspec["customer"],
                           total=qspec.get("total"), sections=qspec.get("sections") or None,
                           title=qspec.get("title") or None, note=qspec.get("note") or None,
-                          contact_email=qspec.get("contact_email"), deliverables=qspec.get("deliverables") or None)
+                          contact_email=qspec.get("contact_email"), deliverables=qspec.get("deliverables") or None,
+                          deal_id=int(did) if did else None)
     if did and t:
         db.execute("update tasks set deal_id=%s where id=%s", (int(did), t["id"]))
     rq = (t or {}).get("request") or {}
@@ -5642,7 +5645,7 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
                       total: float | None = None, total_inclusive: bool = False, sections: list | None = None,
                       title: str | None = None, note: str | None = None, fmt: str = "both",
                       contact_email: str | None = None, number: str | None = None,
-                      deliverables: list | None = None) -> dict:
+                      deliverables: list | None = None, deal_id: int | None = None) -> dict:
     """Render a quotation and drop it in the Inbox as a downloadable card (kind='quotation'). `fmt` = 'both'
     (default: editable .xlsx + ready-to-send .pdf), 'xlsx', or 'pdf'; both share one quote number. Delivery
     copies stored in R2 under <slug>/quotations/draft/. Prices come from the request (a stated total split by
@@ -5689,19 +5692,30 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
     # today's date and share them both").
     try:
         if pdf_path:
+            # The library row is named, client-tagged and on the deal WHETHER OR NOT Drive filing worked: a
+            # failed Drive step left "quotation-sensa-SEN-2026-0016.pdf" with no client, invisible to the
+            # deal-scoped lookup, so the ChainX cover email went out without its quotation (16 Sep 2026).
+            _reg = db.setting_get(f"quote_versions:{number}") or []
+            _v = int(((_reg[-1] if _reg else {}).get("v") or 1) or 1)
+            _stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            _safe = re.sub(r"[^A-Za-z0-9 -]", "", customer or "")[:60].strip()
+            _name = ((drive_note or {}).get("file_name")
+                     or f"{_safe + ' - ' if _safe else ''}Quotation {number} v{_v} - {_stamp}.pdf")
             with open(pdf_path, "rb") as _fh:
-                _doc = documents.save(co["id"], co.get("slug") or company,
-                                      (drive_note or {}).get("file_name") or os.path.basename(pdf_path),
-                                      "application/pdf", _fh.read(),
-                                      kind="quotation", uploaded_by=f"quotation:{number}", push=False)
+                _doc = documents.save(co["id"], co.get("slug") or company, _name, "application/pdf", _fh.read(),
+                                      kind="quotation", uploaded_by=f"quotation:{number}", push=False,
+                                      deal_id=int(deal_id) if deal_id else None)
+            if _doc:
+                db.execute("update company_documents set client=coalesce(client, %s) where id=%s",
+                           ((drive_note or {}).get("client") or customer or None, _doc["id"]))
             # DRIVE IS THE CANONICAL HOME: point the library row at the file just filed in the client
             # folder, so the box copy is only a cache of it (owner, 31 Aug) - not a second original.
             _fid = (drive_note or {}).get("file_id") or (drive_note or {}).get("id")
             if _doc and _fid:
                 db.execute("update company_documents set drive_id=%s, client=%s, verified_at=now() "
                            "where id=%s", (_fid, (drive_note or {}).get("client") or customer, _doc["id"]))
-    except Exception:  # noqa: BLE001 — the card and the Drive copy still stand
-        pass
+    except Exception as _de:  # noqa: BLE001 — the card and the Drive copy still stand
+        print(f"[quotation] library filing: {type(_de).__name__}: {_de}", flush=True)
     # HIGH-VALUE: the sheet carries numbers and scope only, so the Master Terms go with it as their
     # own document, stamped with this quotation's reference - each document names the other.
     terms_doc = None
