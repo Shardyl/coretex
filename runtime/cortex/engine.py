@@ -1855,6 +1855,11 @@ def apply_correction(task: dict, text: str) -> None:
     # still run the rule inference so the owner gets the add-as-rule offer (universal or local).
     if task["kind"] in ("email_reply", "email_draft", "project_plan"):
         u = _understand_correction(task, text)                     # ONE reading of the owner's words
+        if u.get("no_reply") and _quotes_draft(text, old or ""):
+            # "no need  We will get this over to you shortly." dismissed card 701 as 'no reply needed'
+            # (16 Sep 2026). Words lifted from the draft mean REMOVE THEM, never 'send nothing'.
+            u["no_reply"] = False
+            u["reply_instruction"] = u.get("reply_instruction") or f"Remove this from the draft: {text}"
         if u.get("no_reply"):
             store.update_task(task["id"], status="rejected")
             store.log_decision(task["id"], skill["id"], "owner", "dismiss_no_reply", note=text,
@@ -1954,6 +1959,14 @@ def _stamp_when(phrase: str):
         return None
 
 
+def _quotes_draft(text: str, draft: str) -> bool:
+    """True when the correction contains a run of five or more words that appears in the draft: the
+    owner is pointing at a line, not talking about the card."""
+    norm = lambda s: re.sub(r"[^a-z0-9 ]+", " ", (s or "").lower())  # noqa: E731
+    words, d = norm(text).split(), " " + " ".join(norm(draft).split()) + " "
+    return any(" " + " ".join(words[i:i + 5]) + " " in d for i in range(max(0, len(words) - 4)))
+
+
 def _understand_correction(task: dict, text: str) -> dict:
     """ONE reading of the owner's correction (rebuild Stage 3), replacing four sequential model calls
     that could disagree. The model splits his words into channels; CODE applies every channel
@@ -1964,7 +1977,9 @@ def _understand_correction(task: dict, text: str) -> dict:
         out = provider.think_json(
             worker._now_line() + " You read the OWNER'S spoken feedback on an email draft. It may mix "
             "several channels. Split it FAITHFULLY into JSON: "
-            '{"no_reply": true only if he says NO email should be sent at all (dismiss it), '
+            '{"no_reply": true ONLY if he says no email should be sent at all: \'no reply needed\', \'don\'t '
+            "respond', 'skip this', 'no email'. NOT when 'no need' or 'don't say' is followed by words from "
+            "the draft: that means REMOVE those words, so it is a reply_instruction. "
             '"reply_instruction": "<everything that concerns the email reply content itself>", '
             f'"from": "<first name of a new sender if he asks to change who it is sent from; known team: {roster}>", '
             '"to_add": ["<first names/emails he wants ADDRESSED directly, i.e. on the To line>"], '

@@ -1726,6 +1726,13 @@ timeline>" (`_last_subject`), the brief prefixed "REMINDER ACTION on opportunity
 a `system_note` naming the reminder, and the title "<reminder> (<deal title>)". Talk's `set_reminder` refuses an
 email-kind action without target_type=deal + a numeric target_id. 692 cancelled; 149 re-spawned as card 696.
 
+## A correction that quotes the draft is never "no reply needed" (16 Sep 2026)
+Gino corrected card 701 with "no need  We will get this over to you shortly." (drop that sentence);
+`_understand_correction` read "no need" as no_reply and dismissed the card, so Rana's email went unanswered.
+The prompt now defines no_reply strictly, and `_quotes_draft(text, draft)` (a run of 5+ words from the
+correction found in the draft) forces no_reply off and turns the words into a remove instruction. 701 was
+restored and redrafted with the sentence removed (and the meeting notes, which had landed since).
+
 ## Phishing guard + one email, one company (15 Sep 2026)
 Heba at Jump (a real July contact) had her mailbox hacked. It bcc'd Sensa and Sky Vision an empty "Re: RFQ#
 Videography Services" with a 1-page PDF (made by Aspose minutes before) whose VIEW RFP DOCUMENT button went to a
