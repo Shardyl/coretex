@@ -683,13 +683,14 @@ class Job:
                  (cp["make"].get("cards") or [])[:2] or None)
         d.with_bg(bgi(3))
         n += 1
-        films = []
-        for i, f in enumerate(deck.pick_samples(co["id"], cp["samples"].get("categories") or [], 3)):
-            caps = cp["samples"].get("captions") or []
-            films.append({"youtube_video_id": f["youtube_video_id"], "label": f["title"],
-                          "caption": caps[i] if i < len(caps) else "", "thumb": deck.thumbnail(f["youtube_video_id"], self.dir)})
-        d.samples(f"{n:02d} · Our work", cp["samples"].get("heading") or "Films we have made", "", films)
-        n += 1
+        if deck.our_work_page(co):   # off by the NO OUR WORK PAGE rule (owner, 16 Sep 2026: ChainX card 704)
+            films = []
+            for i, f in enumerate(deck.pick_samples(co["id"], (cp.get("samples") or {}).get("categories") or [], 3)):
+                caps = (cp.get("samples") or {}).get("captions") or []
+                films.append({"youtube_video_id": f["youtube_video_id"], "label": f["title"],
+                              "caption": caps[i] if i < len(caps) else "", "thumb": deck.thumbnail(f["youtube_video_id"], self.dir)})
+            d.samples(f"{n:02d} · Our work", (cp.get("samples") or {}).get("heading") or "Films we have made", "", films)
+            n += 1
         det = (cp.get("investment") or {}).get("details") or {}
         short = lambda t: t if len(t) <= 95 else t[:92].rsplit(" ", 1)[0] + "..."     # noqa: E731
         inv = [{"item": r["item"], "detail": short(str(det.get(r["item"]) or "; ".join(str(x) for x in r["items"]))),

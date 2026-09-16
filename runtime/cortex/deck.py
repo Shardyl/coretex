@@ -111,6 +111,24 @@ def pick_samples(company_id: int, categories: list[str], limit: int = 3) -> list
     return out[:limit]
 
 
+def our_work_page(company: dict) -> bool:
+    """Whether proposal decks carry an 'Our work' sample-films page. OFF when a standing rule on the
+    company's sales-proposal or sales-quotation skill starts 'NO OUR WORK PAGE' (owner, 16 Sep 2026: the
+    auto-picked films are not our best; work is shown through the company profile instead). The rule is
+    the switch, editable in Talk; code only reads it."""
+    try:
+        for key in ("sales-proposal", "sales-quotation"):
+            sk = store.get_skill_by_key(company["id"], key)
+            if not sk:
+                continue
+            uni, loc = store.effective_rules(sk)
+            if any(re.match(r"\s*no our work page\b", str(r), re.I) for r in list(uni) + list(loc)):
+                return False
+    except Exception:  # noqa: BLE001
+        pass
+    return True
+
+
 def library_slugs(company_id: int, limit: int = 40) -> list[str]:
     """The category slugs the media library actually uses, most-used first, so the writer picks from the
     real list (SEF'27 asked for 'hero-film' and 'brand-film', which exist nowhere, and got no films)."""
@@ -906,7 +924,7 @@ def render(co: dict, customer: str, spec: dict, *, label: str | None = None, out
 
     films = []
     sm = spec.get("samples") or {}
-    if sm:
+    if sm and our_work_page(co):
         picked = pick_samples(co["id"], sm.get("categories") or [], 3)
         caps = sm.get("captions") or []
         for i, f in enumerate(picked):

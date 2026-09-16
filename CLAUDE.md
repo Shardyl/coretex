@@ -1733,6 +1733,16 @@ The prompt now defines no_reply strictly, and `_quotes_draft(text, draft)` (a ru
 correction found in the draft) forces no_reply off and turns the words into a remove instruction. 701 was
 restored and redrafted with the sentence removed (and the meeting notes, which had landed since).
 
+## No "Our work" page in proposal decks (owner, 16 Sep 2026)
+On the ChainX creative proposal (card 704) the owner replied "remove page 19, our work": the auto-picked films
+are not our best; work is shown through the company profile instead. The revision re-ran COPY (the writer
+reworded the heading) but the page is laid out by code, so v2 still had it. Now: rule "NO OUR WORK PAGE" on
+Sensa sales-proposal (168) is the switch; `deck.our_work_page(company)` reads it (any effective rule on
+sales-proposal or sales-quotation starting "NO OUR WORK PAGE") and both `deck.render` and the CreativeDeck
+render skip the samples page when it is off. Per company: add the rule to another company's skill to switch
+it off there; remove the rule to bring the page back. ChainX re-rendered as v3 from the saved copy (no model
+calls) and attached to quotation card 705.
+
 ## Phishing guard + one email, one company (15 Sep 2026)
 Heba at Jump (a real July contact) had her mailbox hacked. It bcc'd Sensa and Sky Vision an empty "Re: RFQ#
 Videography Services" with a 1-page PDF (made by Aspose minutes before) whose VIEW RFP DOCUMENT button went to a
