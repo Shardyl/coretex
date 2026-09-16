@@ -1717,6 +1717,15 @@ retried) and the second post made a second card (694 + 695).
 - `/api/intake/enquiry`: answers the site at once and runs `intake_enquiry` on a daemon thread.
 - Re-ran the DMG enquiry through the fixed path: qualified, opportunity created, card 694 linked; 695 cancelled.
 
+## Action reminders carry the deal (16 Sep 2026)
+Reminder 149 "check in on the RFP" (deal 100, ECBD tender) fired as card 692 with only those words: no recipient,
+no timeline, no deal, and the drafter refused. `reminders._with_deal(r, kind, req)` now runs in `_spawn_task`:
+a reminder targeting a deal/project (or an action request carrying deal_id) gets `deal_id`, the deal's primary
+contact as `inquiry` (email kinds only; name from crm_master), `thread_reply` + "Re: <last email subject on the
+timeline>" (`_last_subject`), the brief prefixed "REMINDER ACTION on opportunity #N ..." + `pipeline.deal_context`,
+a `system_note` naming the reminder, and the title "<reminder> (<deal title>)". Talk's `set_reminder` refuses an
+email-kind action without target_type=deal + a numeric target_id. 692 cancelled; 149 re-spawned as card 696.
+
 ## Phishing guard + one email, one company (15 Sep 2026)
 Heba at Jump (a real July contact) had her mailbox hacked. It bcc'd Sensa and Sky Vision an empty "Re: RFQ#
 Videography Services" with a 1-page PDF (made by Aspose minutes before) whose VIEW RFP DOCUMENT button went to a

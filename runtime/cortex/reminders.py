@@ -10,6 +10,7 @@ none | daily | weekly | monthly | weekday (Mon-Fri) | custom (every N days).
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 
 from psycopg.types.json import Json
@@ -176,12 +177,77 @@ def _spawn_task(r: dict, action: dict) -> int | None:
         # a full request on the action wins (e.g. a scheduled email draft carrying recipient + sender
         # mailbox); else the plain brief/title task as before
         req = action.get("request") or {"brief": brief, "title": r["title"]}
+        if isinstance(req, dict):
+            req = _with_deal(r, kind, req)
         contact = ((req.get("inquiry") or {}).get("email") if isinstance(req, dict) else None)
         t = store.create_card(co["id"], sk["id"], kind, req, contact=contact,
                               deal_id=(req.get("deal_id") if isinstance(req, dict) else None))
         return t["id"] if t else None
     except Exception:  # noqa: BLE001
         return None
+
+
+_EMAIL_KINDS = ("email_reply", "email_draft")
+
+
+def _last_subject(deal: dict) -> str:
+    """The subject of the latest email either way on the deal's timeline, so a reminder's email continues
+    that conversation ('Re: ...') instead of opening a new one. '' when the timeline holds no email."""
+    for h in reversed(deal.get("history") or []):
+        ev, text = h.get("event") or "", h.get("text") or ""
+        m = None
+        if ev in ("email_out", "email_out_manual"):
+            m = re.search(r"to \S+@\S+: (.+)$", text)
+        elif ev == "email_in":
+            m = re.search(r"^from \S+@\S+: (.+?)(?: - |$)", text)
+        if m:
+            subj = re.sub(r"^\s*((re|fwd|fw)\s*:\s*)+", "", m.group(1).strip(), flags=re.I).strip()
+            return f"Re: {subj}" if subj else ""
+    return ""
+
+
+def _with_deal(r: dict, kind: str, req: dict) -> dict:
+    """AN ACTION REMINDER ON A DEAL DRAFTS WITH THE DEAL (owner, 16 Sep 2026). Reminder 149 'check in on the
+    RFP' on the ECBD tender fired as card 692 carrying only those four words: no recipient, no timeline, no
+    deal, and the drafter rightly refused. The deal is the reminder's whole context: its primary contact is
+    the recipient of an email kind, the latest email subject threads the reply, the timeline rides the
+    brief, and the card is linked to the deal."""
+    did = req.get("deal_id")
+    if did is None and r.get("target_type") in ("deal", "project"):
+        did = r.get("target_id")
+    try:
+        did = int(did)
+    except (TypeError, ValueError):
+        return req
+    d = db.one("select * from crm_projects where id=%s", (did,))
+    if not d:
+        return req
+    from . import pipeline   # lazy: pipeline imports this module
+    req = dict(req)
+    req["deal_id"] = did
+    email = ""
+    if kind in _EMAIL_KINDS and "@" not in ((req.get("inquiry") or {}).get("email") or ""):
+        contacts = d.get("contacts") or []
+        email = (d.get("contact_email")
+                 or next((c.get("email") for c in contacts if c.get("primary") and c.get("email")), None)
+                 or next((c.get("email") for c in contacts if c.get("email")), None) or "")
+        if email:
+            c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (email,)) or {}
+            name = (" ".join(x for x in (c.get("first_name"), c.get("last_name")) if x).strip()
+                    or next((x.get("name") for x in contacts if (x.get("email") or "").lower() == email.lower()), "")
+                    or "")
+            subj = _last_subject(d)
+            req["inquiry"] = {"name": name, "email": email, "subject": subj or (d.get("title") or r["title"])}
+            if subj:
+                req["thread_reply"] = True
+    what = req.get("brief") or r["title"]
+    req["brief"] = (f"REMINDER ACTION on opportunity #{did} '{d.get('title')}' (stage {d.get('stage')}): {what}."
+                    + (f" Write it to {email} as the next step in this deal, picking up exactly where the "
+                       "timeline leaves off; never re-introduce us or restate what they already know." if email else "")
+                    + "\n\n" + (pipeline.deal_context(did, limit=40) or ""))
+    req["system_note"] = f"From reminder #{r.get('id')} '{r.get('title')}' set on deal {did}."
+    req["title"] = f"{r.get('title')} ({d.get('title')})"[:200]
+    return req
 
 
 def _closed_deal(r: dict) -> bool:

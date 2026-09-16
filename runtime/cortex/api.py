@@ -3693,16 +3693,19 @@ SKILL_TOOLS = [
      "description": "Set a reminder for Rashad. A NUDGE (no action_*) drops an info card in the Inbox at the "
                     "time, pointing at the target. An ACTION reminder (give action_skill + action_brief) spawns "
                     "a task at the time that flows through the normal draft -> approval pipeline. Use for "
-                    "'remind me to...', 'follow up with...', 'in N days draft...'. Put the natural-language time "
-                    "in `when` (it's parsed server-side).",
+                    "'remind me to...', 'follow up with...', 'in N days draft...'. An action about an "
+                    "opportunity ALWAYS carries target_type='deal' + target_id (find it with deal_timeline): the "
+                    "card is then written to that deal's contact with its whole timeline. Put the "
+                    "natural-language time in `when` (it's parsed server-side).",
      "input_schema": {"type": "object", "properties": {
         "title": {"type": "string", "description": "what it says, e.g. 'Follow up with Seb'"},
         "when": {"type": "string", "description": "natural-language time, e.g. 'next Tuesday 10am', 'in 3 days'"},
         "recurrence": {"type": "string", "enum": ["none", "daily", "weekly", "monthly", "weekday", "custom"]},
         "custom_days": {"type": "integer", "description": "for recurrence=custom: every N days"},
         "company": {"type": "string", "description": "your business slug, if it relates to one"},
-        "target_type": {"type": "string", "description": "contact|deal|project|account|task if it's about a record"},
-        "target_id": {"type": "string", "description": "the record id or email"},
+        "target_type": {"type": "string", "description": "contact|deal|project|account|task if it's about a record. "
+                                                         "An ACTION reminder about an opportunity MUST use 'deal'."},
+        "target_id": {"type": "string", "description": "the record id or email (the deal number for target_type=deal)"},
         "action_company": {"type": "string", "description": "ACTION: business slug to draft for"},
         "action_skill": {"type": "string", "description": "ACTION: skill_key the worker uses"},
         "action_kind": {"type": "string", "description": "ACTION: kind (content/email_reply/blog/...)"},
@@ -4245,6 +4248,15 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                           "reminder (drop the action_* fields).")
             action = {"company": aco_slug, "skill": inp["action_skill"],
                       "kind": inp.get("action_kind") or "content", "brief": inp["action_brief"]}
+            # AN ACTION REMINDER ABOUT A DEAL NAMES THE DEAL (owner, 16 Sep 2026): the card it spawns is
+            # written with that deal's contact and timeline. An email-kind action with no deal has no
+            # recipient and fires as an empty card (692), so it is refused here with the way to fix it.
+            _tt = (inp.get("target_type") or "").strip().lower()
+            if action["kind"] in ("email_reply", "email_draft") and not (
+                    _tt in ("deal", "project") and str(inp.get("target_id") or "").isdigit()):
+                return ("Can't set that ACTION reminder without the opportunity it is about: pass "
+                        "target_type='deal' and target_id=<deal number> (use deal_timeline to find it). The "
+                        "card it spawns is written to that deal's contact with its full timeline.")
         r = reminders.create(inp["title"], due, company_id=cid, target_type=inp.get("target_type"),
                              target_id=inp.get("target_id"), recurrence=inp.get("recurrence") or "none",
                              custom_days=inp.get("custom_days"), action=action)
