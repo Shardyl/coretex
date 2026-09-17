@@ -61,6 +61,9 @@ _ONLY_WHEN_NOT_ADDRESSED = re.compile(
     r"not\s+(?:addressed|sent|written)\s+(?:to|for)\s+us|sent\s+generically|undisclosed\s+recipients", re.I)
 
 
+_TENDER_SITUATION = re.compile(r"tender|circular|broadcast|\brfp\b|no named recipient|dear (?:supplier|tenderer|vendor)", re.I)
+
+
 def _addressed_to_us(email: dict, own_domain: str) -> bool:
     """Is one of OUR addresses on the To or Cc line? A fact from the headers, never a judgement."""
     rcpt = f"{email.get('to') or ''} {email.get('cc') or ''}".lower()
@@ -100,6 +103,11 @@ def should_skip(company: dict, email: dict, skill_key: str = "sales-first-respon
         # ever sees it.
         if own_domain and _addressed_to_us(email, own_domain):
             sits = [s for s in sits if not _ONLY_WHEN_NOT_ADDRESSED.search(s)]
+            # AN RFP WRITTEN TO US IS AN ENQUIRY (17 Sep 2026): Emergy's explainer-video RFP came to hello@ with
+            # Marlon's colleagues on cc and was skipped as a "broadcast tender circular" because that rule's
+            # text ("no named recipient") did not match the regex above. With our address on the To or Cc
+            # line, no tender / circular / broadcast situation applies, whatever its wording.
+            sits = [s for s in sits if not _TENDER_SITUATION.search(s)]
         if not sits and not addrs:
             return None
         # deterministic first: the rule named the mailbox that handles these

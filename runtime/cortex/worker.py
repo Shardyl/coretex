@@ -187,7 +187,7 @@ def _identity_block(company: dict, request: dict, author: str | None):
 
 
 _CONTEXT_FIELDS = ("brief", "system_note", "deal_timeline", "contact_notes", "owner_feedback",
-                   "meeting_notes")
+                   "meeting_notes", "owed")
 
 
 def _colleagues_named(company: dict, request: dict, me: str) -> list:
@@ -361,6 +361,9 @@ def draft(skill: dict, company: dict, request: dict,
         # Which timezone to state them in, and how to word the offer, are scheduling rules on the skill.
         user.append(_av + "\nIf you propose a call, offer times ONLY from that list: never invent one. "
                     "If none of them suit the conversation, ask them to suggest a time instead.")
+    _ow = (request.get("owed") or "").strip() if isinstance(request, dict) else ""
+    if _ow:   # promises already made to this person: this email keeps them, never re-promises (17 Sep 2026)
+        user.append(_ow)
     _mn = (request.get("meeting_notes") or "").strip() if isinstance(request, dict) else ""
     if _mn:
         user.append("NOTES FROM OUR LAST MEETING with this contact (distilled from the real meeting notes — "

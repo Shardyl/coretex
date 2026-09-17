@@ -1765,6 +1765,19 @@ timeframe is read from the client's words, Cortex's own pending reminders on tha
 'cortex%'`) that fall before the new date are moved to it (title suffixed with the client's quote), the move is
 logged on the deal, and the notice names any OWNER-set reminders left for him to decide. Reminder 172 moved by hand.
 
+## RFPs addressed to us are enquiries; promises are kept, not repeated (17 Sep 2026)
+Emergy's explainer-video RFP came To hello@ with a named sender and was skipped as a "broadcast tender circular"
+(the rule's wording escaped `_ONLY_WHEN_NOT_ADDRESSED`), so no reply, a manual tender deal and a wrong "no
+contact" notice. Now: `policy._TENDER_SITUATION` drops every tender/circular/broadcast situation when our
+address is on To/Cc; a genuine blast that asks us to confirm receipt/participation (`engine._ACK_ASK`) gets an
+acknowledgement-only card (`_draft_direct_reply(ack_only=True)`); `crm.create_deal(arm=False)` from
+`_track_tender` so a tender deal never raises the no-contact notice.
+Antoni (121): "schedule a call" promised on 14 Sep was re-promised by the chase on the 17th and the due reminder
+only nudged. Now: open commitments to the recipient ride into every email to them as `request.owed` ("keep them in
+this email"); `pipeline.record_send` folds a repeated promise into the open reminder (`_same_commitment`, 60%
+word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
+keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
+
 ## Proposal approval: an unreachable target blocks the quote; re-approval versions the number (17 Sep 2026)
 Rana's deck (card 725) said AED 136,000; the rate-card lines came to 173,100 (27 interview edits at the 5-minute
 rate), the 20% band could not reach the target, and SEN-2026-0017 was issued at 173,100 with the gap buried in

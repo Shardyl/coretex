@@ -1592,7 +1592,7 @@ def open_opportunity_for_account(account_id, company: str | None) -> dict | None
 
 
 def create_deal(company: str, title: str, value=None, currency: str = "AED", stage: str = "Opportunity",
-                account_id=None, owner: str | None = None, second_job: bool = False) -> dict:
+                account_id=None, owner: str | None = None, second_job: bool = False, arm: bool = True) -> dict:
     """A deal belongs to one of YOUR businesses (company) and one CLIENT company (account). Its people are
     that account's contacts (company-mediated — no per-deal contact list). Blocks an active same-name
     duplicate, and (17 Sep 2026) a second open opportunity for the same client account unless the caller
@@ -1617,7 +1617,8 @@ def create_deal(company: str, title: str, value=None, currency: str = "AED", sta
          Json([{"ts": _now(), "event": "deal_created", "text": f"{title} ({stage})"}])))
     if account_id and stage in WON_STAGES:
         flag_clients_for_deal(db.one("select * from crm_projects where id=%s", (row["id"],)))
-    arm_new_deal(row["id"])
+    if arm:   # a tender deal is manual by design and gets its contact a moment later: no chase, no "no contact" notice
+        arm_new_deal(row["id"])
     return db.one("select * from crm_projects where id=%s", (row["id"],))
 
 

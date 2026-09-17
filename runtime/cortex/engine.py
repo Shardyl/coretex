@@ -2394,7 +2394,7 @@ def _track_tender(co: dict, e: dict, what: str, rt_key: str | None = None, clien
                 pass
     if not d:
         try:
-            d = crm.create_deal(slug, title, stage="Opportunity")
+            d = crm.create_deal(slug, title, stage="Opportunity", arm=False)
             fresh = True
         except crm.DuplicateDeal:
             d = db.one("select * from crm_projects where company=%s and lower(title)=lower(%s) limit 1",
@@ -4355,6 +4355,23 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
             manifest.append("thread_history")
     except Exception:  # noqa: BLE001 — context is best-effort, drafting proceeds regardless
         pass
+    try:   # WHAT WE OWE THIS CONTACT rides into every email to them: a chase must keep the promise, not repeat
+        # it (Antoni, deal 121, 17 Sep 2026: "we'll schedule a call" promised on 14 Sep, promised again by the
+        # chase on the 17th, never proposed)
+        _did = task.get("deal_id") or req.get("deal_id")
+        if _did:
+            owed = db.query("select id, title, due_at from reminders where target_type='deal' and target_id=%s and "
+                            "status in ('pending','snoozed') and created_by='cortex-pipeline' and title like %s "
+                            "and lower(title) like %s order by due_at", (str(_did), "Commitment owed to%", f"%{email.lower()}%"))
+            if owed:
+                req["owed"] = ("COMMITMENTS WE ALREADY MADE TO THIS PERSON AND STILL OWE (keep them IN THIS EMAIL where an "
+                               "email can: to schedule a call, propose specific slots from the availability list; to send "
+                               "something, attach it or state exactly when; NEVER promise it again as if new):\n"
+                               + "\n".join("- " + re.sub(r"^Commitment owed to \S+:\s*", "", r["title"]).split(" (deal ")[0]
+                                           + f" (due {r['due_at']:%d %b})" for r in owed))
+                manifest.append("owed")
+    except Exception:  # noqa: BLE001
+        pass
     try:
         mn = meetnotes.latest_for_contact(task["company_id"], email)
         if mn and mn.get("summary"):
@@ -4511,7 +4528,11 @@ def _pause_or_reschedule_followups(co: dict, deals: list, sender: str, body: str
         pass
 
 
-def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, address: str | None) -> None:
+_ACK_ASK = re.compile(r"(confirm|acknowledge)\s+(?:the\s+)?(receipt|your\s+participation|participation|your\s+interest)", re.I)
+
+
+def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, address: str | None,
+                        ack_only: bool = False) -> None:
     """A substantive lead/client/finance email sent DIRECTLY to a monitored mailbox -> draft the reply as an
     approval card, from the mailbox that received it. Skips thin mail (a signature and nothing else). If the
     sender already has an OPEN reply card, the new email SUPERSEDES it: the card is updated with the latest
@@ -4562,6 +4583,11 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
                 "finance": "a finance/billing email"}.get(cls["category"], "an email")
         brief = (f"This is {what} sent directly to {address or 'our'} mailbox. Read it and draft our reply "
                  f"in the company voice, addressing exactly what they said.")
+        if ack_only:
+            brief = ("TENDER ACKNOWLEDGEMENT ONLY: this is a tender invitation that asks us to confirm receipt and "
+                     "participation. Write a short reply that confirms receipt, confirms we will participate and "
+                     "submit by the stated closing date, and asks for any document the invitation says is attached "
+                     "but is not. No pitch, no prices, no proposal content, no call offer.")
         if deal:
             brief += (f" CONTEXT: this sender belongs to the ACTIVE project/deal '{deal['title']}' "
                       f"(stage: {deal['stage']}). Reply as their project contact, consistent with that work; "
@@ -4931,6 +4957,11 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                                 "category": cls["category"], "to_crm": cls.get("to_crm"),
                                 "reason": f"no draft - {_skip['reason']}"})
                 _flag_skipped_opportunity(co, e, _skip["reason"], rt_key=rt_key, client=company)   # in-scope tender -> tracked
+                # A BLAST THAT ASKS US TO CONFIRM RECEIPT OR PARTICIPATION gets that acknowledgement drafted
+                # (DIEZ: "Please confirm receipt of this Invitation and your participation", 16 Sep 2026).
+                # Acknowledge only: no pitch, no prices; the owner decides whether it goes.
+                if _ACK_ASK.search(e.get("body") or ""):
+                    _draft_direct_reply(co, e, cls, rt_key=rt_key, address=address, ack_only=True)
                 seen.add(gid)
                 continue
             card_ok = _draft_direct_reply(co, e, cls, rt_key=rt_key, address=address) is not False

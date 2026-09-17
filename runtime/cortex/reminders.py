@@ -137,7 +137,7 @@ def fire(r: dict) -> dict:
                    (nxt, r["id"]))
     else:                                        # one-off -> done
         db.execute("update reminders set status='fired', snooze_until=null where id=%s", (r["id"],))
-    action = r.get("action")
+    action = r.get("action") or _commitment_action(r)
     note_id, task_id = None, None
     try:
         if action:                               # ACTION reminder -> spawn a normal task
@@ -188,6 +188,31 @@ def _spawn_task(r: dict, action: dict) -> int | None:
 
 
 _EMAIL_KINDS = ("email_reply", "email_draft")
+_COMMITMENT_RX = re.compile(r"^Commitment owed to (\S+@\S+):\s*(.+?)\s*\(deal (\d+)\)", re.I)
+# promises an email cannot keep on its own: the owner acts, the reminder stays a nudge
+_NOT_BY_EMAIL = re.compile(r"\b(attend|on[- ]site|visit|be there|deliver the|shoot|film|record)\b", re.I)
+
+
+def _commitment_action(r: dict) -> dict | None:
+    """A DUE PROMISE BECOMES THE EMAIL THAT KEEPS IT (owner, 17 Sep 2026). "Schedule a Google Meet call"
+    owed to Antoni fell due and Cortex only nudged the owner. A commitment reminder Cortex set from our own
+    email now spawns the email that fulfils it (a call gets real slots proposed; a document gets sent),
+    written with the deal behind it (_with_deal). Promises that need a person on site stay nudges."""
+    if r.get("action") or str(r.get("created_by") or "") != "cortex-pipeline":
+        return None
+    m = _COMMITMENT_RX.match(r.get("title") or "")
+    if not m or _NOT_BY_EMAIL.search(m.group(2)):
+        return None
+    co = store.get_company(r.get("company_id")) if r.get("company_id") else None
+    if not co:
+        return None
+    email, what = m.group(1).strip().lower(), m.group(2).strip()
+    return {"company": co.get("slug"), "skill": "sales-followup", "kind": "email_reply",
+            "brief": (f"KEEP A PROMISE WE MADE: we told {email} we would \"{what}\" and it is now due. Write the email "
+                      "that does exactly that (a call: propose specific slots from the availability list; a document or "
+                      "answer: give it). Do not re-promise it, do not apologise at length, do not add a chase."),
+            "request": {"brief": "", "title": r.get("title"), "deal_id": int(m.group(3)),
+                        "inquiry": {"name": "", "email": email, "subject": ""}, "system_note": f"From commitment reminder #{r.get('id')}."}}
 
 
 def _last_subject(deal: dict) -> str:

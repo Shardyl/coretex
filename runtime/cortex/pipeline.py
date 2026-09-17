@@ -173,8 +173,19 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
     except Exception:  # noqa: BLE001
         pass
     _stage = (db.one("select stage from crm_projects where id=%s", (int(did),)) or {}).get("stage") or ""
+    open_rs = db.query("select id, title from reminders where created_by='cortex-pipeline' and status in "
+                       "('pending','snoozed') and target_type='deal' and target_id=%s and title like %s",
+                       (str(int(did)), "Commitment owed%"))
     for c in extract_commitments(body, stage=_stage):
         due = _commitment_due(c.get("due_hint"))
+        # THE SAME PROMISE MADE AGAIN IS ONE PROMISE (17 Sep 2026): Antoni's "schedule a call" was logged on
+        # 14 Sep and again by the chase on the 17th. A new commitment whose words overlap an open one on the
+        # deal extends that reminder to the new date instead of opening a twin.
+        twin = next((r for r in open_rs if _same_commitment(r["title"], c["text"])), None)
+        if twin:
+            db.execute("update reminders set due_at=%s, snooze_until=null where id=%s", (due, twin["id"]))
+            log_deal(did, "commitment", f"OWED to {to} (repeated, still open): {c['text']} (check-in {due.date().isoformat()})")
+            continue
         log_deal(did, "commitment", f"OWED to {to}: {c['text']} (check-in {due.date().isoformat()})")
         try:
             reminders.create(f"Commitment owed to {to}: {c['text']} (deal {did})", due,
@@ -182,6 +193,20 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
                              created_by="cortex-pipeline")
         except Exception:  # noqa: BLE001
             pass
+
+
+_STOP = {"the", "a", "an", "to", "and", "of", "for", "with", "on", "in", "our", "their", "we", "will", "you", "your", "them"}
+
+
+def _same_commitment(title: str, text: str) -> bool:
+    """Two commitment wordings mean the same promise when most of their meaningful words overlap."""
+    def words(s):
+        s = re.sub(r"^Commitment owed to \S+:\s*", "", s or "").split(" (deal ")[0]
+        return {w for w in re.findall(r"[a-z]{3,}", s.lower()) if w not in _STOP}
+    a, b = words(title), words(text)
+    if not a or not b:
+        return False
+    return len(a & b) / min(len(a), len(b)) >= 0.6
 
 
 # ---------- client deadlines (what THEY stated in an inbound email) ----------
