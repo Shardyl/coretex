@@ -1771,8 +1771,8 @@ def apply_correction(task: dict, text: str) -> None:
                                  company_id=task.get("company_id"), target_type="task", target_id=str(task["id"]))
             return
     if task.get("kind") == "quotation" and not re.search(
-            r"\b(price|prices|priced|total|aed|quotation|quote|line|lines|vat|cost|costs|figure|discount|rate|rates)\b"
-            r"|\d{2,3},?\d{3}", text, re.I):
+            r"\b(price|prices|priced|pricing|total|aed|quotation|quote|vat|cost|costs|figure|discount|budget|"
+            r"cheaper|expensive|per day|day rate)\b|\d{2,3},?\d{3}", text, re.I):
         # DECK FEEDBACK ON THE QUOTATION CARD (17 Sep 2026): once a proposal is approved its deck rides on the
         # quotation card and the proposal card is closed, so "add a line on page four" lands here. Words
         # about the deck revise the deck of the proposal this quotation came from and re-attach it; words
