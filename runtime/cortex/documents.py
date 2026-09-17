@@ -42,7 +42,7 @@ alter table company_documents add column if not exists deal_id bigint;      -- a
 alter table company_documents add column if not exists text text;           -- extracted text, for reading
 """
 
-MAX_TEXT = 40_000    # extracted text kept per document: a 30-page brief, never a data dump
+MAX_TEXT = 60_000    # extracted text kept per document: a 30-page brief or a full meeting write-up, never a data dump
 
 
 def extract_text(mime: str, filename: str, data: bytes) -> str:
@@ -64,6 +64,15 @@ def extract_text(mime: str, filename: str, data: bytes) -> str:
             else:
                 t = re.sub(r"[ \t]+", " ", t)
             return t.strip()[:MAX_TEXT]
+        if mime.startswith("text/") or (filename or "").lower().endswith((".txt", ".md")):
+            # plain text is kept whole up to the cap (doctext trims office files to 15k for the drafter's
+            # prompt; a filed meeting write-up is read back in full)
+            for enc in ("utf-8", "utf-16", "latin-1"):
+                try:
+                    return data.decode(enc).strip()[:MAX_TEXT]
+                except UnicodeDecodeError:
+                    continue
+            return ""
         return (doctext.extract(mime, filename, data) or "")[:MAX_TEXT]
     except Exception:  # noqa: BLE001
         return ""

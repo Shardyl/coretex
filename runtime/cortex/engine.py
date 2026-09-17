@@ -4034,7 +4034,7 @@ def _file_inbound_attachments(co: dict, e: dict, deal_id: int, rt_key: str | Non
     return filed
 
 
-def _deal_facts(co: dict, deal_id: int, budget: int = 40_000) -> str:
+def _deal_facts(co: dict, deal_id: int, budget: int = 60_000) -> str:
     """Everything Cortex holds on a deal, for the proposal writer and the quotation prep: the timeline (the
     client's emails, what we promised, meeting notes) and the full text of every document filed on it."""
     parts = []
@@ -4045,7 +4045,7 @@ def _deal_facts(co: dict, deal_id: int, budget: int = 40_000) -> str:
     for doc in documents.for_deal(int(deal_id)):
         t = documents.text_of(doc)
         if t:
-            parts.append(f"DOCUMENT #{doc['id']} {doc['filename']} (filed {doc['created_at']:%d %b %Y}):\n{t[:14000]}")
+            parts.append(f"DOCUMENT #{doc['id']} {doc['filename']} (filed {doc['created_at']:%d %b %Y}):\n{t[:24000]}")
     return "\n\n".join(p for p in parts if p)[:budget]
 
 
