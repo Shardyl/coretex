@@ -5660,7 +5660,10 @@ def _revise_proposal(task: dict, skill: dict, company: dict, text: str, quote_ca
     summary = _proposal_summary(company, customer, out, filed, qn, version=ver, changed=text)
     # revised from the QUOTATION card: the proposal card keeps its status (approved stays approved) and the
     # new deck replaces the old one on the quotation card, where the email is drafted from
-    keep = task.get("status") if quote_card and task.get("status") == "done" else "awaiting_approval"
+    if quote_card is None and qn:   # a reply on the PROPOSAL card also refreshes the deck on its live quotation card
+        quote_card = db.one("select * from tasks where kind='quotation' and request->>'number'=%s and "
+                            "status='awaiting_approval' order by id desc limit 1", (qn,))
+    keep = "awaiting_approval"
     store.update_task(task["id"], request=req, draft=summary, title=name, status=keep,
                       attempts=(task.get("attempts") or 0) + 1)
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text,
