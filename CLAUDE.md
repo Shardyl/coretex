@@ -1749,6 +1749,16 @@ client. (3) Talk put the named film in the brief text instead of `films`; `creat
 library CLIENT names against the owner's own words this turn (`_TURN_SAID`), so a film he names rides in
 regardless. 725 re-rendered as v2 without a model call.
 
+## Proposal approval: an unreachable target blocks the quote; re-approval versions the number (17 Sep 2026)
+Rana's deck (card 725) said AED 136,000; the rate-card lines came to 173,100 (27 interview edits at the 5-minute
+rate), the 20% band could not reach the target, and SEN-2026-0017 was issued at 173,100 with the gap buried in
+the card text while deck v3 still said "within your stated budget range". Now in `_approve_proposal`: (1) a
+"your figure ..." entry in the prep's blanked list BLOCKS the quotation (card stays open with what it would take);
+(2) a deck whose quotation card was CANCELLED re-issues as the next version under the same number
+(`deliver_quotation(number=)`), a live card just closes; (3) the writer's investment blurb survives only when its
+headline equals the stamped net (within 1%). Owner: rate card gained "Mini interview edit, short sponsor or event
+interview" AED 1,500 per video (batches of short interviews); Sensa `quote_target_flex_pct` 20 -> 25.
+
 ## "Our work" page: words-led proposals yes, creative proposals never; named films lead it (17 Sep 2026)
 Owner's refinement of the 16 Sep switch: `deck.our_work_page(company, creative=False)` returns False for every
 CREATIVE deck (creative.py passes creative=True) and True for words-led decks unless a "NO OUR WORK PAGE" rule is

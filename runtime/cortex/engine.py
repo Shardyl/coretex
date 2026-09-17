@@ -5617,11 +5617,16 @@ def _approve_proposal(task: dict, skill: dict, company: dict, actor: str) -> dic
     req = dict(task.get("request") or {})
     did = task.get("deal_id") or req.get("deal_id")
     customer = req.get("customer") or company["name"]
-    if req.get("quotation_number"):
+    qn_prev = req.get("quotation_number")
+    if qn_prev and db.one("select id from tasks where kind='quotation' and request->>'number'=%s and "
+                          "status in ('awaiting_approval','done') limit 1", (qn_prev,)):
+        # a LIVE quotation card already carries this deck: nothing more to issue
         store.update_task(task["id"], status="done")
         store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"version": req.get("version")})
-        return {"approved": True, "note": f"Quotation {req['quotation_number']} already exists for it. Ask Talk to "
+        return {"approved": True, "note": f"Quotation {qn_prev} already exists for it. Ask Talk to "
                                           "draft the email and attach both."}
+    # (a quotation card for this number that was CANCELLED means a re-approval: the new one is issued as the
+    # next version under the same number, never a fresh number: Rana's SEN-2026-0017, 17 Sep 2026)
     spec = req.get("deck_spec") or {}
     inv = spec.get("investment") or {}
     inv_lines = "\n".join(f"- {r.get('item')}: {r.get('detail')} = {r.get('amount')}" for r in (inv.get("rows") or []))
@@ -5647,11 +5652,19 @@ def _approve_proposal(task: dict, skill: dict, company: dict, actor: str) -> dic
         return {"blocked": True, "error": "the proposal has no investment lines to quote from yet; add them on "
                                           "the card (reply with the lines) and approve again"}
     qspec["customer"] = qspec.get("customer") or customer
+    # A TARGET THE BAND CANNOT REACH STOPS THE QUOTATION (17 Sep 2026): Rana's deck said 136,000, the lines
+    # came to 173,100, and the quote was issued at 173,100 with the gap buried in the card text. Now the
+    # card stays open and says what it would take; nothing is issued until the owner decides.
+    _gap = next((b for b in (qspec.get("blanked") or []) if str(b).lower().startswith("your figure")), None)
+    if _gap:
+        store.update_task(task["id"], status="awaiting_approval")
+        return {"blocked": True, "error": f"Quotation NOT issued: {_gap}. Change the scope or the rates on the "
+                                          "card, adjust the target, or raise the company's band, then approve again."}
     t = deliver_quotation(company["slug"], preset=qspec["preset"], customer=qspec["customer"],
                           total=qspec.get("total"), sections=qspec.get("sections") or None,
                           title=qspec.get("title") or None, note=qspec.get("note") or None,
                           contact_email=qspec.get("contact_email"), deliverables=qspec.get("deliverables") or None,
-                          deal_id=int(did) if did else None)
+                          deal_id=int(did) if did else None, number=qn_prev)
     if did and t:
         db.execute("update tasks set deal_id=%s where id=%s", (int(did), t["id"]))
     rq = (t or {}).get("request") or {}
@@ -5663,7 +5676,12 @@ def _approve_proposal(task: dict, skill: dict, company: dict, actor: str) -> dic
         stamped = deck.investment_from_quotation(qf)
         qf["net"] = stamped["net"]
         new = dict(spec)
+        # the writer's blurb ("within your stated budget range") only survives if its headline figure is
+        # the figure the quotation actually stamped; otherwise it is dropped, never left contradicting
+        _said = re.sub(r"[^\d.]", "", str(inv.get("headline") or "").split("+")[0])
+        _keep_blurb = bool(_said) and abs(float(_said or 0) - float(stamped["net"] or 0)) <= 0.01 * max(1.0, float(stamped["net"] or 1))
         new["investment"] = {**inv, "rows": stamped["rows"], "headline": stamped["headline"],
+                             "blurb": inv.get("blurb") if _keep_blurb else "",
                              "kicker": inv.get("kicker") or "05 - The investment"}
         ver = int(req.get("version") or 1) + 1
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
