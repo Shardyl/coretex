@@ -1755,6 +1755,18 @@ caller passes deal_id: Talk create_quotation, prep cards, proposal approval, the
 takes `deal_id` and a row on that deal always qualifies (draft_email, attach_document, corrections pass it).
 ChainX docs 503/507/508 re-filed into "ChainX Mining LLC" and renamed; 707 attach refs refreshed.
 
+## A named sender sends from their own mailbox (17 Sep 2026)
+Card 711 (Talk draft_email to Maricris Sulit, from=rashad@) went out as "Gino Palmes" over Rashad's signature:
+draft_email set `from_email` but never `mailbox_rt`, the send path fell back to `gmail_send_refresh_token:sensa`
+(Gino's account), and Gmail sends as the account owner whatever the From header says. Every inbox-reply card
+already carried `mailbox_rt` (`gmail_refresh_token:sensa:rashad`), so only Talk-drafted outbound was exposed.
+- `draft_email` resolves `mailbox_rt = _rt_for_sender(co, from_email)` and REFUSES a sender no connected
+  mailbox can send as (lists the senders it can).
+- `_send_email_reply`: no usable `mailbox_rt` + a From address -> `_rt_for_sender` first; if none and the
+  address is not the company send account, the send is BLOCKED (card back to awaiting_approval, reason on
+  the card) rather than sent under another name.
+- The decisions snapshot for 711 says from=rashad@ (the envelope), not what Gmail did.
+
 ## Phishing guard + one email, one company (15 Sep 2026)
 Heba at Jump (a real July contact) had her mailbox hacked. It bcc'd Sensa and Sky Vision an empty "Re: RFQ#
 Videography Services" with a 1-page PDF (made by Aspose minutes before) whose VIEW RFP DOCUMENT button went to a

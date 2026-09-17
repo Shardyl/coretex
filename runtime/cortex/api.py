@@ -4413,7 +4413,16 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         req = {"brief": inp.get("brief", ""), "outbound": True,
                "inquiry": {"name": to_name, "email": to_email, "subject": inp.get("subject", ""), "message": ""}}
         if inp.get("from_email"):
-            req["from_email"] = inp["from_email"]
+            # THE FROM ADDRESS BRINGS ITS MAILBOX (17 Sep 2026): card 711 was written as Rashad, with his
+            # signature, and went out from Gino's mailbox as "Gino Palmes" because only from_email was set
+            # and the send path fell back to the company send account. A sender we cannot send as is refused.
+            _fe = str(inp["from_email"]).strip().lower()
+            _rt = engine._rt_for_sender(co, _fe)
+            if not _rt:
+                _known = ", ".join(sorted({v["email"] for v in engine._company_senders(co["id"]).values()}))
+                return (f"Can't draft this FROM {_fe}: no connected mailbox can send as that address. "
+                        f"Senders Cortex can send as for {co['name']}: {_known or 'none'}. Ask Rashad which.")
+            req["from_email"], req["mailbox_rt"] = _fe, _rt
         if _TURN_LINKS.get():    # links he typed in Talk are real: the invented-link guard keeps them
             req["owner_links"] = list(_TURN_LINKS.get())
         # An outbound email that offers ONE named slot books it the same way a reply does. The reply path

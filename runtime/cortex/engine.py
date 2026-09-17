@@ -703,6 +703,22 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     send_company = _inbox_client_company(slug) if slug else None
     send_rt_key, from_addr = None, env["from"]
     _mrt = (task.get("request") or {}).get("mailbox_rt")
+    if not (_mrt and db.setting_get(_mrt)) and from_addr:
+        # A NAMED SENDER SENDS FROM THEIR OWN MAILBOX (17 Sep 2026). Card 711 carried from=rashad@ and no
+        # mailbox token; the fallback below is the company send account (gino@), and Gmail sends as the
+        # account owner whatever the From header says: Maricris got "Gino Palmes" over Rashad's signature.
+        _own = _rt_for_sender(company, from_addr.split("<")[-1].strip(" <>"))
+        if _own and db.setting_get(_own):
+            _mrt = _own
+        else:
+            _sa = str(db.setting_get(f"gmail_send_account:{slug}") or "").strip('" ').lower()
+            if from_addr.split("<")[-1].strip(" <>").lower() not in ("", _sa):
+                store.update_task(task["id"], status="awaiting_approval")
+                return {"blocked": True,
+                        "error": f"This email is written as {from_addr}, but no connected mailbox can send as "
+                                 f"that address, and sending it from {_sa or 'the company mailbox'} would "
+                                 "put another name on it. Nothing was sent. Change the sender on the card, "
+                                 "or connect that mailbox."}
     if _mrt and db.setting_get(_mrt):          # reply goes out from the mailbox that received the email
         send_rt_key = _mrt
     elif send_company:
