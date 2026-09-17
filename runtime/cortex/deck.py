@@ -182,10 +182,20 @@ def drive_folder_in_text(text: str) -> str | None:
     return m.group(1) if m else None
 
 
-def fetch_drive_photos(folder_id: str, out_dir: str, limit: int = 6, max_side: int = 1400) -> dict:
-    """Photographs from a Drive folder the owner pointed at, spread evenly across the folder so six of
-    twenty-three are not the first six, downsized for the deck. Returns {name, images: [paths], total}.
-    Read with Cortex's own Drive access; a folder it cannot open returns no images and says so."""
+_PHOTO_NAME_RX = re.compile(r"\b([A-Za-z]{2,4}[_-]?\d{4,6})(?:\.jpe?g|\.png)?\b", re.I)
+
+
+def photo_names_in_text(text: str) -> list[str]:
+    """Camera file names the owner typed ('MHP01150, MHT00028'), matched later against the folder."""
+    return [m.group(1).upper() for m in _PHOTO_NAME_RX.finditer(text or "")]
+
+
+def fetch_drive_photos(folder_id: str, out_dir: str, limit: int = 6, max_side: int = 1400,
+                       names: list | None = None) -> dict:
+    """Photographs from a Drive folder the owner pointed at. `names` = the frames he chose, by file name
+    (in his order); otherwise spread evenly across the folder so six of twenty-three are not the first
+    six. Downsized for the deck. Returns {name, images: [paths], total, missing}. Read with Cortex's own
+    Drive access; a folder it cannot open returns no images and says so."""
     import io as _io
     from PIL import Image
     from . import drive
@@ -198,9 +208,18 @@ def fetch_drive_photos(folder_id: str, out_dir: str, limit: int = 6, max_side: i
              if str(f.get("mimeType") or "").startswith("image/")]
     files.sort(key=lambda f: f.get("name") or "")
     if not files:
-        return {"name": name, "images": [], "total": 0}
-    step = max(1, len(files) // limit)
-    picks = files[::step][:limit]
+        return {"name": name, "images": [], "total": 0, "missing": list(names or [])}
+    missing = []
+    if names:
+        by_stem = {re.sub(r"\.[a-z0-9]+$", "", f["name"], flags=re.I).upper(): f for f in files}
+        picks = []
+        for n in names:
+            f = by_stem.get(n.upper())
+            (picks.append(f) if f and f not in picks else missing.append(n))
+        picks = picks[:limit]
+    else:
+        step = max(1, len(files) // limit)
+        picks = files[::step][:limit]
     os.makedirs(out_dir, exist_ok=True)
     paths = []
     for f in picks:
@@ -212,7 +231,7 @@ def fetch_drive_photos(folder_id: str, out_dir: str, limit: int = 6, max_side: i
             paths.append(p)
         except Exception:  # noqa: BLE001
             continue
-    return {"name": name, "images": paths, "total": len(files)}
+    return {"name": name, "images": paths, "total": len(files), "missing": missing}
 
 
 def film_caption(f: dict) -> str:
@@ -721,7 +740,7 @@ class _Deck:
         imgs = [p for p in (images or []) if p and os.path.isfile(p)][:6]
         if not imgs:
             return
-        w, h = 352, 234
+        w, h = 352, 198     # two rows end well above the footer (the logo overlapped the bottom-left frame at 234)
         cells = "".join(
             f'<img src="{_b64(p)}" style="width:{w}px;height:{h}px;object-fit:cover;border-radius:8px;display:block">'
             for p in imgs)

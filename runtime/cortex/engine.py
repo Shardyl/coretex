@@ -5624,9 +5624,16 @@ def _revise_proposal(task: dict, skill: dict, company: dict, text: str, quote_ca
     # FILMS HE NAMES IN THE REPLY reach the Our work page by code (17 Sep 2026: "show China Innovation
     # Center" on card 725 could not work, the writer is barred from naming films). "drop / remove /
     # take out <film>" takes it off; otherwise the named film leads the page.
-    fid = deck.drive_folder_in_text(text)
-    if fid:   # a Drive folder of photographs in his reply becomes a photography page (17 Sep 2026)
-        got = deck.fetch_drive_photos(fid, os.path.join(QUOTES_DIR, f"photos-{task['id']}"))
+    fid = deck.drive_folder_in_text(text) or ((spec.get("photos") or {}).get("folder")
+                                              if deck.photo_names_in_text(text) else None)
+    if fid:   # a Drive folder of photographs in his reply becomes a photography page (17 Sep 2026); frames he
+        # names ("use MHP01150, MHT00028 ...") are taken by file name, in his order
+        got = deck.fetch_drive_photos(fid, os.path.join(QUOTES_DIR, f"photos-{task['id']}"),
+                                      names=deck.photo_names_in_text(text) or None)
+        if got.get("missing"):
+            notifications.notify(f"Card #{task['id']}: photos not found in the folder: " + ", ".join(got["missing"]),
+                                 "Check the file names.", category="approval", company_id=task.get("company_id"),
+                                 target_type="task", target_id=str(task["id"]))
         if got.get("images"):
             new["photos"] = {**(new.get("photos") or {}), "folder": fid, "images": got["images"],
                              "heading": (new.get("photos") or {}).get("heading") or "Event photography",
