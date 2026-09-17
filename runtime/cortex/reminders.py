@@ -251,6 +251,13 @@ def _with_deal(r: dict, kind: str, req: dict) -> dict:
     req = dict(req)
     req["deal_id"] = did
     email = ""
+    inq0 = req.get("inquiry") or {}
+    if "@" in (inq0.get("email") or "") and not (inq0.get("name") or "").strip():
+        # a commitment action names the address only: the person's name comes from the CRM (card 745)
+        c0 = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (inq0["email"],)) or {}
+        nm0 = " ".join(x for x in (c0.get("first_name"), c0.get("last_name")) if x).strip()
+        if nm0:
+            req["inquiry"] = {**inq0, "name": nm0}
     if kind in _EMAIL_KINDS and "@" not in ((req.get("inquiry") or {}).get("email") or ""):
         contacts = d.get("contacts") or []
         email = (d.get("contact_email")

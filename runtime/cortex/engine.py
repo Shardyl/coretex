@@ -2580,8 +2580,15 @@ def _greeting_mismatch(draft: str, req: dict) -> str:
     inq = req.get("inquiry") or {}
     to = [inq.get("email") or ""] + [str(x) for x in (req.get("to_extra") or [])]
     for h in [(inq.get("name") or "").lower()] + [t.split("@")[0].lower() for t in to]:
-        if g in re.split(r"[^a-z]+", h) or (len(g) >= 3 and g in re.sub(r"[^a-z]", "", h)):
+        if g in re.split(r"[^a-z]+", h) or (len(g) >= 3 and g in re.sub(r"[^a-z]+", "", h)):
             return ""
+    try:   # THE RECIPIENT'S OWN CRM NAME counts even when the card carries no name (card 745: "Hello Antonio"
+        # to contact@antonientertainment.com, whose CRM record is Antonio Rosello, was blocked as WRONG PERSON)
+        own = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (inq.get("email") or "",))
+        if own and g in re.split(r"[^a-z]+", f"{own.get('first_name') or ''} {own.get('last_name') or ''}".lower()):
+            return ""
+    except Exception:  # noqa: BLE001
+        pass
     known = any(g in re.split(r"[^a-z]+", str(a).split("@")[0].lower())
                 for a in (req.get("thread_cc") or []) + (req.get("cc_extra") or []))
     try:
