@@ -173,6 +173,48 @@ def playlists(company_id: int, categories: list | None = None) -> list[dict]:
                               "and coalesce(playlist_id,'')<>'' order by title", (company_id,))]
 
 
+_DRIVE_FOLDER_RX = re.compile(r"drive\.google\.com/drive/(?:u/\d+/)?folders/([A-Za-z0-9_-]{10,})")
+
+
+def drive_folder_in_text(text: str) -> str | None:
+    """The first Google Drive FOLDER link in the owner's words, as its id."""
+    m = _DRIVE_FOLDER_RX.search(text or "")
+    return m.group(1) if m else None
+
+
+def fetch_drive_photos(folder_id: str, out_dir: str, limit: int = 6, max_side: int = 1400) -> dict:
+    """Photographs from a Drive folder the owner pointed at, spread evenly across the folder so six of
+    twenty-three are not the first six, downsized for the deck. Returns {name, images: [paths], total}.
+    Read with Cortex's own Drive access; a folder it cannot open returns no images and says so."""
+    import io as _io
+    from PIL import Image
+    from . import drive
+    tok = drive.access_token()
+    import httpx as _hx
+    meta = _hx.get(f"{drive.API}/files/{folder_id}", params={"fields": "id,name", "supportsAllDrives": "true"},
+                   headers={"Authorization": f"Bearer {tok}"}, timeout=30)
+    name = meta.json().get("name") if meta.status_code == 200 else folder_id
+    files = [f for f in drive.list_folder(folder_id, token=tok)
+             if str(f.get("mimeType") or "").startswith("image/")]
+    files.sort(key=lambda f: f.get("name") or "")
+    if not files:
+        return {"name": name, "images": [], "total": 0}
+    step = max(1, len(files) // limit)
+    picks = files[::step][:limit]
+    os.makedirs(out_dir, exist_ok=True)
+    paths = []
+    for f in picks:
+        try:
+            im = Image.open(_io.BytesIO(drive.download(f["id"], token=tok))).convert("RGB")
+            im.thumbnail((max_side, max_side))
+            p = os.path.join(out_dir, f"photo-{f['id'][:10]}.jpg")
+            im.save(p, "JPEG", quality=86)
+            paths.append(p)
+        except Exception:  # noqa: BLE001
+            continue
+    return {"name": name, "images": paths, "total": len(files)}
+
+
 def film_caption(f: dict) -> str:
     """A caption STAMPED from the film's own record (its categories and client), never written blind by the
     deck writer: card 725 captioned a hospital film 'multi-day event coverage' because the writer wrote
@@ -673,6 +715,23 @@ class _Deck:
                f'&rarr;</a> <span style="color:#7A7A84">{_esc(playlist["url"])}</span></p>' if playlist else "")
             + f'</div>{self._foot(section or "Our work")}</div>')
 
+    def photos(self, kicker: str, heading: str, intro: str, images: list, section: str = ""):
+        """A page of REAL photographs the owner pointed at (a Drive folder), six in a 3 x 2 grid at a fixed
+        size so the page never overflows. Owner, 17 Sep 2026: "add some event photography to the proposal"."""
+        imgs = [p for p in (images or []) if p and os.path.isfile(p)][:6]
+        if not imgs:
+            return
+        w, h = 352, 234
+        cells = "".join(
+            f'<img src="{_b64(p)}" style="width:{w}px;height:{h}px;object-fit:cover;border-radius:8px;display:block">'
+            for p in imgs)
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2>{_esc(heading)}</h2>'
+            + (f'<p style="max-width:1060px;margin-bottom:14px">{_esc(intro)}</p>' if intro else "")
+            + f'<div style="display:grid;grid-template-columns:repeat(3,{w}px);gap:16px 24px;margin-top:4px">{cells}</div>'
+            f'</div>{self._foot(section or "Photography")}</div>')
+
     def investment(self, kicker: str, headline: str, blurb: str, rows: list, cards: list | None = None,
                    section: str = ""):
         r = "".join(f'<tr><td>{_esc(x.get("item"))}</td><td>{_esc(x.get("detail"))}</td>'
@@ -973,7 +1032,7 @@ def build(company_slug: str, customer: str, brief: str, *, quotation: dict | Non
 _URL_IN_COPY = re.compile(r"\s*\(?https?://\S+\)?")
 
 
-def _no_urls(x, keep: tuple = ("video_ids",)):
+def _no_urls(x, keep: tuple = ("video_ids", "images", "folder")):
     """Deck COPY never carries a link: the writer put 'https://www.youtube.com/@SensaProductions/playlists', an
     address that does not exist, into the Our work intro when asked to link the playlist (17 Sep 2026). Every
     link on a deck is placed by code from the library or the playlist table; URLs in text are removed."""
@@ -1043,6 +1102,10 @@ def render(co: dict, customer: str, spec: dict, *, label: str | None = None, out
             lead = next((c for c in asked if c in lead_cats), None) or (asked[0] if asked else None)
             d.samples(sm.get("kicker", ""), sm.get("heading", ""), sm.get("intro", ""), films,
                       playlist=playlist_for(co["id"], lead) if lead else None)
+    ph = spec.get("photos") or {}
+    if ph.get("images"):   # real photographs from a folder the owner named (code-placed, never invented)
+        d.photos(ph.get("kicker") or f"{len(d.pages):02d} - Photography", ph.get("heading") or "Our photography",
+                 ph.get("intro") or "", ph["images"])
 
     tl = spec.get("timeline") or {}
     if tl:

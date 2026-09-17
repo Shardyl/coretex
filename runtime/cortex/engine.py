@@ -5624,6 +5624,17 @@ def _revise_proposal(task: dict, skill: dict, company: dict, text: str, quote_ca
     # FILMS HE NAMES IN THE REPLY reach the Our work page by code (17 Sep 2026: "show China Innovation
     # Center" on card 725 could not work, the writer is barred from naming films). "drop / remove /
     # take out <film>" takes it off; otherwise the named film leads the page.
+    fid = deck.drive_folder_in_text(text)
+    if fid:   # a Drive folder of photographs in his reply becomes a photography page (17 Sep 2026)
+        got = deck.fetch_drive_photos(fid, os.path.join(QUOTES_DIR, f"photos-{task['id']}"))
+        if got.get("images"):
+            new["photos"] = {**(new.get("photos") or {}), "folder": fid, "images": got["images"],
+                             "heading": (new.get("photos") or {}).get("heading") or "Event photography",
+                             "intro": (new.get("photos") or {}).get("intro")
+                             or f"A selection of our event photography ({got['total']} frames in the set you can view in full)."}
+            if did:
+                pipeline.log_deal(int(did), "note", f"Photography page added to the proposal from Drive folder "
+                                                    f"'{got.get('name')}' ({len(got['images'])} of {got['total']} photos shown).")
     named = deck.films_in_text(company["id"], text)
     if named:
         sm = dict(new.get("samples") or spec.get("samples") or {})
