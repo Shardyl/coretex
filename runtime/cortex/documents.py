@@ -83,7 +83,19 @@ def text_of(doc: dict) -> str:
     if doc.get("text"):
         return doc["text"]
     try:
-        t = extract_text(doc.get("mime") or "", doc.get("filename") or "", read_bytes(doc))
+        data = read_bytes(doc)
+        t = extract_text(doc.get("mime") or "", doc.get("filename") or "", data)
+        if not t and (doc.get("mime") or "").lower().startswith("application/pdf") and len(data) <= 8_000_000:
+            # A SCANNED / IMAGE PDF has no text layer (Maricris's ADWPJJC brief, 17 Sep 2026): the drafter
+            # reads it natively, but Talk and the proposal writer read the stored text. Transcribe it once
+            # with the model, cached on the row like any other extraction.
+            import base64
+            from . import provider
+            t = provider.think(
+                "Transcribe this document's text faithfully and completely, in reading order, keeping headings, "
+                "lists and tables as plain text. Output only the transcription, nothing else.",
+                "The document is attached.", model=provider.MODEL_FAST, max_tokens=8000, purpose="doc-transcribe",
+                images=["data:application/pdf;base64," + base64.b64encode(data).decode()]).strip()[:MAX_TEXT]
     except Exception:  # noqa: BLE001
         return ""
     if t:
