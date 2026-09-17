@@ -128,16 +128,23 @@ def films_in_text(company_id: int, text: str, limit: int = 3) -> list[str]:
     rows = db.query("select youtube_video_id, title, client, rating from media_assets where company_id=%s "
                     "and status='live' order by rating desc nulls last", (company_id,))
     for r in rows:                                   # an id pasted from the library or a watch link
-        if r["youtube_video_id"] and r["youtube_video_id"] in (text or ""):
+        if r["youtube_video_id"] and r["youtube_video_id"] in (text or "") and r["youtube_video_id"] not in out:
             out.append(r["youtube_video_id"])
-    for r in rows:                                   # the client's name ("China Innovation Center")
+    # ONE FILM PER NAME he said: a client with many films (Dubai Police, 35 of them, all rated high) must not
+    # fill every slot before a lower-rated client he also named is reached (China Innovation Center, rated 4).
+    # The exact title wins for that name; otherwise its best-rated film.
+    seen_names: set = set()
+    for r in rows:
         cl = re.sub(r"\s+", " ", (r.get("client") or "").strip().lower())
-        if len(cl) >= 5 and cl in said and r["youtube_video_id"] not in out:
-            out.append(r["youtube_video_id"])
-    for r in rows:                                   # the film title after the "Client, " prefix
         t = (r.get("title") or "").split(",", 1)[-1].strip().lower()
         if len(t) >= 8 and t in said and r["youtube_video_id"] not in out:
             out.append(r["youtube_video_id"])
+            seen_names.add(cl)
+    for r in rows:
+        cl = re.sub(r"\s+", " ", (r.get("client") or "").strip().lower())
+        if len(cl) >= 5 and cl in said and cl not in seen_names and r["youtube_video_id"] not in out:
+            out.append(r["youtube_video_id"])
+            seen_names.add(cl)
     return out[:limit]
 
 
