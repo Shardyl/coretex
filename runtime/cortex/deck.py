@@ -117,6 +117,30 @@ _CAT_LABELS = {"event-coverage": "event coverage", "interviews": "interviews", "
                "event-promotion": "event promotion", "testimonial": "testimonial", "apps": "app"}
 
 
+def films_in_text(company_id: int, text: str, limit: int = 3) -> list[str]:
+    """YouTube ids of library films the owner NAMES in his own words (a client name, a title, or an id),
+    matched by code against media_assets. This is how a spoken suggestion reaches a deck, on the first
+    request and on every reply: the deck writer itself is barred from naming films (owner, 17 Sep 2026)."""
+    said = re.sub(r"\s+", " ", (text or "").lower())
+    if len(said) < 4:
+        return []
+    out = []
+    rows = db.query("select youtube_video_id, title, client, rating from media_assets where company_id=%s "
+                    "and status='live' order by rating desc nulls last", (company_id,))
+    for r in rows:                                   # an id pasted from the library or a watch link
+        if r["youtube_video_id"] and r["youtube_video_id"] in (text or ""):
+            out.append(r["youtube_video_id"])
+    for r in rows:                                   # the client's name ("China Innovation Center")
+        cl = re.sub(r"\s+", " ", (r.get("client") or "").strip().lower())
+        if len(cl) >= 5 and cl in said and r["youtube_video_id"] not in out:
+            out.append(r["youtube_video_id"])
+    for r in rows:                                   # the film title after the "Client, " prefix
+        t = (r.get("title") or "").split(",", 1)[-1].strip().lower()
+        if len(t) >= 8 and t in said and r["youtube_video_id"] not in out:
+            out.append(r["youtube_video_id"])
+    return out[:limit]
+
+
 def film_caption(f: dict) -> str:
     """A caption STAMPED from the film's own record (its categories and client), never written blind by the
     deck writer: card 725 captioned a hospital film 'multi-day event coverage' because the writer wrote

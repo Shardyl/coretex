@@ -1733,6 +1733,12 @@ The prompt now defines no_reply strictly, and `_quotes_draft(text, draft)` (a ru
 correction found in the draft) forces no_reply off and turns the words into a remove instruction. 701 was
 restored and redrafted with the sentence removed (and the meeting notes, which had landed since).
 
+## Named films reach a deck on every reply (17 Sep 2026)
+`deck.films_in_text(company_id, text)` matches library ids, CLIENT names and titles against the owner's own words.
+Used by `create_proposal` (his words this turn, `_TURN_SAID`) and by `_revise_proposal` (the reply on the card,
+from the cockpit or Talk correct_task): a named film leads `samples.video_ids`; "drop / remove / take out <film>"
+removes it. Talk's shared rules: search media_library first and pass `films`, never say a film can't be included.
+
 ## Sample films: relevance before rating, captions stamped by code (17 Sep 2026)
 Rana's proposal (card 725) asked for "China Innovation Center" and got SEHA, HBMSU and Dubai Police captioned as
 "multi-day event coverage". Three causes, all fixed: (1) `pick_samples` intersected the writer's four slugs, found

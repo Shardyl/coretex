@@ -33,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Json
 from pydantic import BaseModel
 
-from . import (newsletter, anchor_score, capabilities, catalog, config, contentqueue, crm, db, documents, engine, fitness, gmail, knowledge, meetingprep, nurture, pipeline,
+from . import (newsletter, anchor_score, capabilities, catalog, config, contentqueue, crm, db, deck, documents, engine, fitness, gmail, knowledge, meetingprep, nurture, pipeline,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
                skillqa, social, social_comments, social_config, social_connect, social_dm, social_warm, store, webauthn_auth, whatsapp,
                worker)
@@ -3957,15 +3957,9 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         # 2026: "include the China Innovation film" went into the brief text and the page showed the usual
         # three). Code matches library clients and titles against what he typed this turn.
         if _co and len(_ids) < 3:
-            _said = (_TURN_SAID.get() or "").lower()
-            if len(_said) > 10:
-                for _row in db.query("select youtube_video_id, title, client from media_assets where company_id=%s "
-                                     "and status='live' and coalesce(client,'')<>''", (_co["id"],)):
-                    _cl = (_row.get("client") or "").strip().lower()
-                    if len(_cl) >= 5 and _cl in _said and _row["youtube_video_id"] not in _ids:
-                        _ids.append(_row["youtube_video_id"])
-                    if len(_ids) >= 3:
-                        break
+            for _v in deck.films_in_text(_co["id"], _TURN_SAID.get() or ""):
+                if _v not in _ids and len(_ids) < 3:
+                    _ids.append(_v)
         try:
             r = engine.deliver_proposal(inp["company"], customer=inp.get("customer", ""),
                                         brief=inp.get("brief", ""),
@@ -4651,6 +4645,10 @@ def _shared_behaviour() -> str:
         "A proposal deck or a quotation is built ONLY when he asks for one by name. 'Draft an opportunity', "
         "'write it up', 'put something in my inbox' are ambiguous: ask whether he wants a proposal deck, a "
         "quotation or an email before building (a deck costs real money to build and lands as a card).",
+        "THE MEDIA LIBRARY IS YOURS TO USE: when he names a film, a client's film or the kind of work to show, "
+        "search media_library first and pass the matches in `films` on create_proposal, or name them in the "
+        "correct_task feedback on a proposal card; code puts them on the Our work page. Never say a film cannot "
+        "be included without a media_library lookup.",
         "When a client's document (brief, RFP, clarification record) arrives in Talk, file it ON THE DEAL with "
         "save_document(deal_id=...) so every later proposal, quotation and email reads it. Before writing a "
         "proposal or quotation, open the deal with deal_timeline and read_document its documents.",

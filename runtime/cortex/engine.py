@@ -5571,6 +5571,18 @@ def _revise_proposal(task: dict, skill: dict, company: dict, text: str) -> bool:
         if facts:
             facts = "DEAL RECORD (reference only; keep every fact true to it):\n" + facts
     new = deck.revise_spec(company, customer, spec, text, _quotation_facts(qn), facts) or spec
+    # FILMS HE NAMES IN THE REPLY reach the Our work page by code (17 Sep 2026: "show China Innovation
+    # Center" on card 725 could not work, the writer is barred from naming films). "drop / remove /
+    # take out <film>" takes it off; otherwise the named film leads the page.
+    named = deck.films_in_text(company["id"], text)
+    if named:
+        sm = dict(new.get("samples") or spec.get("samples") or {})
+        have = [v for v in (sm.get("video_ids") or (spec.get("samples") or {}).get("video_ids") or []) if v]
+        if re.search(r"\b(drop|remove|take out|take off|without|no longer)\b", text, re.I):
+            sm["video_ids"] = [v for v in have if v not in named]
+        else:
+            sm["video_ids"] = (named + [v for v in have if v not in named])[:3]
+        new["samples"] = sm
     ver = int(req.get("version") or 1) + 1
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     same_cover = ((new.get("cover") or {}).get("image_subject") or "") == ((spec.get("cover") or {}).get("image_subject") or "")
