@@ -1784,6 +1784,15 @@ when the account already has an open Opportunity/Quote unless `second_job=True` 
 stages only) and adds the sender as issuer, creating a tender deal only when there is none. Data: 129 -> 128 and
 131 -> 130 folded (contacts, tender note, closing reminder moved; duplicates Lost with a note; nothing deleted).
 
+## Meeting notes: the brief drives drafts, the full write-up lives on the deal (17 Sep 2026)
+Owner's standard: keep both. `meeting_notes.full_text` holds Gemini's whole write-up (both sweeps);
+`meetnotes._keep_full` also files it on the meeting's deal as a `meeting-notes` document ("Meeting notes - <title> -
+<date>.txt"), so `read_document`, `_deal_facts` (proposals, quotation prep) and the creative run read all of it.
+Email drafts and commitment reminders keep using the 250-word brief (`latest_for_contact`), which keeps the
+per-draft cost small and the invented-detail risk low. A raw TRANSCRIPT needs Meet's "transcribe" switched on for
+the Sensa calendar; it would arrive as a second doc and file the same way. Backfilled for the Rana meeting (rows
+20/21, deal 127).
+
 ## Phishing guard + one email, one company (15 Sep 2026)
 Heba at Jump (a real July contact) had her mailbox hacked. It bcc'd Sensa and Sky Vision an empty "Re: RFQ#
 Videography Services" with a 1-page PDF (made by Aspose minutes before) whose VIEW RFP DOCUMENT button went to a

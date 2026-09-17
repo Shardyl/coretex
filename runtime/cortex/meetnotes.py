@@ -30,7 +30,31 @@ create table if not exists meeting_notes (
   summary text not null default '',
   created_at timestamptz not null default now()
 );
+alter table meeting_notes add column if not exists full_text text;   -- Gemini's whole write-up (17 Sep 2026)
 """
+
+
+def _keep_full(key: str, title: str, text: str, company_id, deal_id, when=None) -> None:
+    """THE FULL NOTES ARE KEPT, NOT ONLY THE BRIEF (owner, 17 Sep 2026). The brief (summary) still drives
+    email drafts and the commitment reminders; the whole write-up is stored on the row and, when the meeting
+    belongs to a deal, filed on that deal as a document so Talk (read_document), the proposal writer and the
+    quotation prep read all of it. Storage costs nothing; reading it is a per-use choice."""
+    try:
+        db.execute("update meeting_notes set full_text=%s where event_id=%s", (text, key))
+    except Exception:  # noqa: BLE001
+        pass
+    if not (deal_id and company_id and text and len(text.strip()) >= 200):
+        return
+    try:
+        from . import engine
+        co = store.get_company(company_id)
+        day = (when.strftime("%Y-%m-%d") if hasattr(when, "strftime") else str(when or "")[:10]) or "undated"
+        safe = re.sub(r"[^A-Za-z0-9 -]", "", title or "Meeting")[:70].strip() or "Meeting"
+        engine._file_deal_document(co, int(deal_id), f"Meeting notes - {safe} - {day}.txt", "text/plain",
+                                   text.encode("utf-8"), kind="meeting-notes", source="Gemini meeting notes",
+                                   ref=f"meetnotes:{key}")
+    except Exception as e:  # noqa: BLE001
+        print(f"[meetnotes] full notes not filed: {type(e).__name__}: {e}", flush=True)
 
 from .identity import NON_CLIENT_DOMAINS as _OWN   # single definition (identity.py)
 
@@ -123,6 +147,7 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
                        "attendees, summary) values (%s,%s,%s,%s,%s,%s,%s,%s) on conflict (event_id) do nothing",
                        (e["id"], note["fileId"], company_id, deal_id, e.get("summary"), starts,
                         json.dumps(ext), summary))
+            _keep_full(e["id"], e.get("summary") or "Meeting", text, company_id, deal_id, starts)
             for em in ext:                        # meeting lands on each external attendee's CRM history
                 try:
                     crm.log_event(em, "meeting_notes", f"Meeting: {e.get('summary')} — notes captured", None)
@@ -392,6 +417,7 @@ def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = 
                     "insert into meeting_notes (event_id, file_id, company_id, deal_id, title, starts_at,"
                     " attendees, summary) values (%s,%s,%s,%s,%s,%s,%s,%s) on conflict (event_id) do nothing",
                     (key, ref["id"], company_id, deal_id, title, start, json.dumps(emails), summary))
+                _keep_full(key, title, body, company_id, deal_id, start)
                 for em in emails:
                     try:
                         crm.log_event(em, "meeting_notes", f"Meeting: {title} — notes captured", None)
