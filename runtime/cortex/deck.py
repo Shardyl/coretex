@@ -117,7 +117,7 @@ _CAT_LABELS = {"event-coverage": "event coverage", "interviews": "interviews", "
                "event-promotion": "event promotion", "testimonial": "testimonial", "apps": "app"}
 
 
-def films_in_text(company_id: int, text: str, limit: int = 3) -> list[str]:
+def films_in_text(company_id: int, text: str, limit: int | None = None) -> list[str]:
     """YouTube ids of library films the owner NAMES in his own words (a client name, a title, or an id),
     matched by code against media_assets. This is how a spoken suggestion reaches a deck, on the first
     request and on every reply: the deck writer itself is barred from naming films (owner, 17 Sep 2026)."""
@@ -125,27 +125,29 @@ def films_in_text(company_id: int, text: str, limit: int = 3) -> list[str]:
     if len(said) < 4:
         return []
     out = []
-    rows = db.query("select youtube_video_id, title, client, rating from media_assets where company_id=%s "
-                    "and status='live' order by rating desc nulls last", (company_id,))
+    rows = db.query("select youtube_video_id, title, client, rating, categories from media_assets where "
+                    "company_id=%s and status='live' order by rating desc nulls last", (company_id,))
+    rows = [r for r in rows if "internal-test" not in [str(c) for c in (r.get("categories") or [])]]
     for r in rows:                                   # an id pasted from the library or a watch link
         if r["youtube_video_id"] and r["youtube_video_id"] in (text or "") and r["youtube_video_id"] not in out:
             out.append(r["youtube_video_id"])
-    # ONE FILM PER NAME he said: a client with many films (Dubai Police, 35 of them, all rated high) must not
-    # fill every slot before a lower-rated client he also named is reached (China Innovation Center, rated 4).
-    # The exact title wins for that name; otherwise its best-rated film.
-    seen_names: set = set()
+    # ONE FILM PER NAME HE SAID, in the order he said them: a client with many films (Dubai Police, 35 of
+    # them, all rated high) must never crowd out a lower-rated client he also named (China Innovation Center,
+    # rated 4). For each named client the exact film wins when he said its title, else its best-rated film.
+    names = {}
     for r in rows:
         cl = re.sub(r"\s+", " ", (r.get("client") or "").strip().lower())
-        t = (r.get("title") or "").split(",", 1)[-1].strip().lower()
-        if len(t) >= 8 and t in said and r["youtube_video_id"] not in out:
-            out.append(r["youtube_video_id"])
-            seen_names.add(cl)
-    for r in rows:
-        cl = re.sub(r"\s+", " ", (r.get("client") or "").strip().lower())
-        if len(cl) >= 5 and cl in said and cl not in seen_names and r["youtube_video_id"] not in out:
-            out.append(r["youtube_video_id"])
-            seen_names.add(cl)
-    return out[:limit]
+        if len(cl) >= 5 and cl in said:
+            names.setdefault(cl, []).append(r)
+    for cl in sorted(names, key=lambda c: said.find(c)):
+        films = names[cl]
+        exact = next((r for r in films if "," in (r.get("title") or "")
+                      and len((r["title"].split(",", 1)[1].strip().lower()).split()) >= 2
+                      and r["title"].split(",", 1)[1].strip().lower() in said), None)
+        pick = exact or films[0]
+        if pick["youtube_video_id"] not in out:
+            out.append(pick["youtube_video_id"])
+    return out if limit is None else out[:limit]
 
 
 def film_caption(f: dict) -> str:
