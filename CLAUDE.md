@@ -1765,6 +1765,14 @@ timeframe is read from the client's words, Cortex's own pending reminders on tha
 'cortex%'`) that fall before the new date are moved to it (title suffixed with the client's quote), the move is
 logged on the deal, and the notice names any OWNER-set reminders left for him to decide. Reminder 172 moved by hand.
 
+## Our own email restarts the chase clock (17 Sep 2026)
+Gino sent Honor (deal 119) a follow-up at 16:19 (card 740, offering Monday 21st) and the auto-chase fired at
+19:11 the same day (card 747, "following up on my note from earlier this week"): a send only re-armed a PAUSED
+clock (`resume_followups`), never moved a running one. `crm.touch_followups(deal_id, not_before=)` now runs from
+`pipeline.record_send` for every outbound on a deal, Cortex-sent or found by the sent sweep: next chase = the
+current step's full gap from now, and never before the day after the latest promise that email made (no chase
+while we owe them the call or the document). 747 cancelled; 119 pushed to Tue 22 Sep 10:00.
+
 ## RFPs addressed to us are enquiries; promises are kept, not repeated (17 Sep 2026)
 Emergy's explainer-video RFP came To hello@ with a named sender and was skipped as a "broadcast tender circular"
 (the rule's wording escaped `_ONLY_WHEN_NOT_ADDRESSED`), so no reply, a manual tender deal and a wrong "no

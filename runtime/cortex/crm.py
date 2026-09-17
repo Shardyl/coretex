@@ -1295,6 +1295,27 @@ def resume_followups(deal_id: int, when: datetime | None = None) -> dict | None:
     return db.one("select * from crm_projects where id=%s", (deal_id,))
 
 
+def touch_followups(deal_id: int, not_before: datetime | None = None) -> dict | None:
+    """OUR OWN EMAIL RESTARTS THE CHASE CLOCK (owner, 17 Sep 2026). Gino sent Honor a follow-up at 16:19 and
+    the auto-chase fired at 19:11 the same day ("following up on my note from earlier this week"), because a
+    send only re-armed a PAUSED clock and never moved a running one. Every outbound to the deal's contact,
+    Cortex-sent or written by hand, now sets the next chase to the current step's full gap from NOW, and never
+    before `not_before` (the day after the last promise the email itself made: no chase while we owe them a
+    call or a document). No-op unless the deal is on auto."""
+    p = db.one("select * from crm_projects where id=%s", (deal_id,))
+    if not p or p.get("automation") != "auto":
+        return None
+    cad = (p.get("cadence") if isinstance(p.get("cadence"), dict) and p["cadence"].get("steps")
+           else get_cadence(p["company"]))
+    when = _schedule_point(cad, p.get("followup_step") or 0)
+    if when is None:
+        return None
+    if not_before is not None and not_before > when:
+        when = _roll_weekend(not_before, bool(cad.get("skip_weekends")))
+    db.execute("update crm_projects set next_followup=%s, updated_at=now() where id=%s", (when, deal_id))
+    return db.one("select * from crm_projects where id=%s", (deal_id,))
+
+
 def advance_followup(deal_id: int) -> dict | None:
     """Engine calls this when an auto opportunity's next_followup is due: returns the action to fire
     ('chase'/'checkin') and arms the NEXT step, or marks the opportunity Lost when the sequence ends."""

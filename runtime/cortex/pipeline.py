@@ -176,8 +176,10 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
     open_rs = db.query("select id, title from reminders where created_by='cortex-pipeline' and status in "
                        "('pending','snoozed') and target_type='deal' and target_id=%s and title like %s",
                        (str(int(did)), "Commitment owed%"))
+    dues = []
     for c in extract_commitments(body, stage=_stage):
         due = _commitment_due(c.get("due_hint"))
+        dues.append(due)
         # THE SAME PROMISE MADE AGAIN IS ONE PROMISE (17 Sep 2026): Antoni's "schedule a call" was logged on
         # 14 Sep and again by the chase on the 17th. A new commitment whose words overlap an open one on the
         # deal extends that reminder to the new date instead of opening a twin.
@@ -193,6 +195,10 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
                              created_by="cortex-pipeline")
         except Exception:  # noqa: BLE001
             pass
+    try:   # this email restarts the chase clock, and no chase lands before the promises it made are due
+        crm.touch_followups(int(did), not_before=(max(dues) + timedelta(days=1)) if dues else None)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 _STOP = {"the", "a", "an", "to", "and", "of", "for", "with", "on", "in", "our", "their", "we", "will", "you", "your", "them"}
