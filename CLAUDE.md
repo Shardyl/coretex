@@ -1767,6 +1767,12 @@ already carried `mailbox_rt` (`gmail_refresh_token:sensa:rashad`), so only Talk-
   the card) rather than sent under another name.
 - The decisions snapshot for 711 says from=rashad@ (the envelope), not what Gmail did.
 
+## Attachments: documents first, signature images ignored (17 Sep 2026)
+Maricris's project brief PDF was the 7th attachment on her reply behind six signature PNGs; `_inbound_att_refs`
+(cap 4) held four logos and `_file_inbound_attachments` (first 6) never reached the PDF, so the brief was neither
+read for card 716 nor filed on deal 128. `_documents_first(atts)` now orders documents before images and drops
+images under 120 KB (signature graphics); both functions use it. The brief was then filed on 128 and 716 redrafted.
+
 ## Phishing guard + one email, one company (15 Sep 2026)
 Heba at Jump (a real July contact) had her mailbox hacked. It bcc'd Sensa and Sky Vision an empty "Re: RFQ#
 Videography Services" with a 1-page PDF (made by Aspose minutes before) whose VIEW RFP DOCUMENT button went to a

@@ -3912,11 +3912,25 @@ def _belongs_to_other_company(e: dict, slug: str) -> bool:
 _READABLE_ATT_MIMES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "application/pdf"}
 
 
+_SIGNATURE_IMAGE_BYTES = 120_000   # a logo or social icon in a signature; a real screenshot is bigger
+
+
+def _documents_first(atts: list) -> list:
+    """Documents before images, signature graphics dropped. Maricris's brief was the SEVENTH attachment
+    behind six signature PNGs, so the 4-file cap held only logos and the PDF was never read or filed
+    (17 Sep 2026)."""
+    def _is_img(a):
+        return (a.get("mime") or "").lower().startswith("image/")
+    docs = [a for a in atts if not _is_img(a)]
+    imgs = [a for a in atts if _is_img(a) and int(a.get("size") or 0) > _SIGNATURE_IMAGE_BYTES]
+    return docs + imgs
+
+
 def _inbound_att_refs(e: dict, rt_key: str | None, client: str | None) -> list[dict]:
     """LIGHT references to the readable attachments on an inbound email (no bytes in the DB — they are
     fetched fresh from Gmail at draft time by _request_for_draft). Caps: 4 files, 8MB each."""
     refs = []
-    for a in (e.get("attachments") or []):
+    for a in _documents_first(e.get("attachments") or []):
         mime, fn = (a.get("mime") or "").lower(), a.get("filename") or ""
         readable = mime in _READABLE_ATT_MIMES or doctext.kind_for(mime, fn)
         if readable and 0 < int(a.get("size") or 0) <= 8_000_000:
@@ -3985,7 +3999,7 @@ def _file_inbound_attachments(co: dict, e: dict, deal_id: int, rt_key: str | Non
     """Every readable document on an inbound email (PDF, Word, Excel, PowerPoint; not images) filed on the
     deal it belongs to. Fetched from the mailbox that holds this copy."""
     filed = []
-    for a in (e.get("attachments") or [])[:6]:
+    for a in _documents_first(e.get("attachments") or [])[:6]:
         mime, fn = (a.get("mime") or "").lower(), a.get("filename") or ""
         if mime.startswith("image/"):
             continue
