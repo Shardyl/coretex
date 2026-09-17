@@ -4083,6 +4083,11 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             cats = ", ".join(r.get("categories") or [])
             out.append(f"- {r['title']} ({mark}, {r.get('duration') or ''}, {cats}): "
                        f"https://www.youtube.com/watch?v={r['youtube_video_id']}")
+        # the category playlists: whole-genre links Rashad can share or put on a deck (17 Sep 2026)
+        _cats = list(inp.get("categories") or []) or sorted({str(c) for r in rows for c in (r.get("categories") or [])})
+        _pls = _deck.playlists(co["id"], _cats[:6])
+        if _pls:
+            out.append("PLAYLISTS: " + "; ".join(f"{p['title']}: {p['url']}" for p in _pls))
         return "Media library matches, best first:\n" + "\n".join(out)
     if name == "rate_film":
         rt = max(1, min(10, int(inp["rating"])))

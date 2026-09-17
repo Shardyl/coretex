@@ -1770,6 +1770,23 @@ def apply_correction(task: dict, text: str) -> None:
                                  f"{type(_ce).__name__}: {str(_ce)[:200]}", category="approval",
                                  company_id=task.get("company_id"), target_type="task", target_id=str(task["id"]))
             return
+    if task.get("kind") == "quotation" and not re.search(
+            r"\b(price|prices|priced|total|aed|quotation|quote|line|lines|vat|cost|costs|figure|discount|rate|rates)\b"
+            r"|\d{2,3},?\d{3}", text, re.I):
+        # DECK FEEDBACK ON THE QUOTATION CARD (17 Sep 2026): once a proposal is approved its deck rides on the
+        # quotation card and the proposal card is closed, so "add a line on page four" lands here. Words
+        # about the deck revise the deck of the proposal this quotation came from and re-attach it; words
+        # about money stay with the quotation.
+        _qn = (task.get("request") or {}).get("number")
+        _p = db.one("select * from tasks where request->>'kind'='proposal' and request->>'quotation_number'=%s "
+                    "order by id desc limit 1", (_qn,)) if _qn else None
+        if _p:
+            try:
+                if _revise_proposal(_p, store.get_skill(_p["skill_id"]) or skill, company, text, quote_card=task):
+                    return
+            except Exception as _pe:  # noqa: BLE001
+                tg.send(f"Card #{task['id']}: couldn't revise the deck ({type(_pe).__name__}: {_pe}).")
+                return
     if (task.get("request") or {}).get("kind") == "proposal":
         # A PROPOSAL CARD REBUILDS ITS DECK from his feedback (15 Sep 2026); a failure is said, never a
         # worker redraft of the summary text in the deck's place.
@@ -4405,6 +4422,13 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
             # categories — 118 films tie at 7/10, so fashion/beauty never surfaced for a beauty client)
             req["media_library"] = "\n".join(
                 f"- {r['title']} [{r['cat']}]: {r['watch_url']}" for r in rows)
+            try:   # the category PLAYLISTS are real links too: a reply may share a whole genre (owner, 17 Sep 2026)
+                pls = deck.playlists(task["company_id"])
+                if pls:
+                    req["media_library"] += "\nPLAYLISTS (share one when they want to see more of a kind):\n" + \
+                        "\n".join(f"- {p['title']} playlist [{p['category']}]: {p['url']}" for p in pls)
+            except Exception:  # noqa: BLE001
+                pass
             manifest.append("media_library")
     except Exception:  # noqa: BLE001
         pass
@@ -5554,7 +5578,7 @@ def _proposal_summary(co: dict, customer: str, out: dict, filed: str | None, quo
                if not quotation_number else "Approve it when you are happy, then ask me to email it."))
 
 
-def _revise_proposal(task: dict, skill: dict, company: dict, text: str) -> bool:
+def _revise_proposal(task: dict, skill: dict, company: dict, text: str, quote_card: dict | None = None) -> bool:
     """His feedback on a proposal card REBUILDS THE DECK (owner, 15 Sep 2026): the spec is revised from his
     words, rendered again as the next version, filed over the last one, and the same card carries it. The
     cover is kept unless the feedback is about the cover. Returns False when the card holds no spec."""
@@ -5597,10 +5621,27 @@ def _revise_proposal(task: dict, skill: dict, company: dict, text: str) -> bool:
                 "attach_docs": [{"id": doc["id"], "filename": doc["filename"], "mime": doc["mime"],
                                  "size": doc["size"]}]})
     summary = _proposal_summary(company, customer, out, filed, qn, version=ver, changed=text)
-    store.update_task(task["id"], request=req, draft=summary, title=name, status="awaiting_approval",
+    # revised from the QUOTATION card: the proposal card keeps its status (approved stays approved) and the
+    # new deck replaces the old one on the quotation card, where the email is drafted from
+    keep = task.get("status") if quote_card and task.get("status") == "done" else "awaiting_approval"
+    store.update_task(task["id"], request=req, draft=summary, title=name, status=keep,
                       attempts=(task.get("attempts") or 0) + 1)
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text,
                        snapshot={"version": ver, "doc": doc["id"]})
+    if quote_card:
+        try:
+            qreq = dict(quote_card.get("request") or {})
+            keep_docs = [a for a in (qreq.get("attach_docs") or []) if "Proposal" not in str(a.get("filename") or "")]
+            qreq["attach_docs"] = keep_docs + [{"id": doc["id"], "filename": doc["filename"], "mime": doc["mime"],
+                                                "size": doc["size"]}]
+            store.update_task(quote_card["id"], request=qreq, status="awaiting_approval",
+                              draft=(quote_card.get("draft") or "").split("\n\nDeck revised")[0]
+                              + f"\n\nDeck revised to v{ver} from your note ({text.strip()[:160]}): {doc['filename']} "
+                                "is attached here in place of the earlier version.")
+            store.log_decision(quote_card["id"], quote_card.get("skill_id"), "owner", "correct", note=text,
+                               snapshot={"deck_version": ver, "doc": doc["id"]})
+        except Exception as _qe:  # noqa: BLE001
+            print(f"[proposal] quote card re-attach: {type(_qe).__name__}: {_qe}", flush=True)
     if did:
         pipeline.log_deal(int(did), "note", f"Proposal revised to v{ver} from the owner's feedback: "
                                             f"{text.strip()[:220]}. Card {task['id']}.")

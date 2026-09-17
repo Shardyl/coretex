@@ -1749,6 +1749,15 @@ client. (3) Talk put the named film in the brief text instead of `films`; `creat
 library CLIENT names against the owner's own words this turn (`_TURN_SAID`), so a film he names rides in
 regardless. 725 re-rendered as v2 without a model call.
 
+## Playlists everywhere; deck feedback on the quotation card (17 Sep 2026)
+`media_playlists` (28 Sensa category playlists on YouTube) now reach every surface: `deck.playlist_for` /
+`deck.playlists`; the Our work page links the lead category's playlist ("See the full Event coverage playlist on
+YouTube", clickable, code-supplied); the drafters' media shelf lists every playlist so a reply can share a genre
+and the invented-link guard accepts it; Talk's `media_library` returns the playlists for the categories searched.
+A reply on a QUOTATION card that is about the deck (no price/total/AED/quote words, no 5-6 digit figure) revises
+the deck of the proposal the quotation came from (`_revise_proposal(..., quote_card=)`): the proposal card keeps its
+approved status, the new version replaces the old on the quotation card. Money words stay with the quotation.
+
 ## Proposal approval: an unreachable target blocks the quote; re-approval versions the number (17 Sep 2026)
 Rana's deck (card 725) said AED 136,000; the rate-card lines came to 173,100 (27 interview edits at the 5-minute
 rate), the 20% band could not reach the target, and SEN-2026-0017 was issued at 173,100 with the gap buried in

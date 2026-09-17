@@ -151,6 +151,28 @@ def films_in_text(company_id: int, text: str, limit: int | None = None) -> list[
     return out if limit is None else out[:limit]
 
 
+def playlist_for(company_id: int, category: str) -> dict | None:
+    """The company's YouTube playlist for a library category ({title, url, category}), from media_playlists."""
+    if not category:
+        return None
+    r = db.one("select title, playlist_id, category from media_playlists where company_id=%s and category=%s",
+               (company_id, str(category).lower()))
+    if not r or not r.get("playlist_id"):
+        return None
+    return {"title": r.get("title") or category, "category": r["category"],
+            "url": f"https://www.youtube.com/playlist?list={r['playlist_id']}"}
+
+
+def playlists(company_id: int, categories: list | None = None) -> list[dict]:
+    """All of a company's category playlists, or those for the given categories, as {title, url, category}."""
+    if categories:
+        return [p for p in (playlist_for(company_id, c) for c in categories) if p]
+    return [{"title": r["title"] or r["category"], "category": r["category"],
+             "url": f"https://www.youtube.com/playlist?list={r['playlist_id']}"}
+            for r in db.query("select title, playlist_id, category from media_playlists where company_id=%s "
+                              "and coalesce(playlist_id,'')<>'' order by title", (company_id,))]
+
+
 def film_caption(f: dict) -> str:
     """A caption STAMPED from the film's own record (its categories and client), never written blind by the
     deck writer: card 725 captioned a hospital film 'multi-day event coverage' because the writer wrote
@@ -623,8 +645,11 @@ class _Deck:
             f'<div style="display:flex;gap:24px;margin-top:20px">{"".join(items)}</div></div>'
             f'{self._foot(section or "Case study")}</div>')
 
-    def samples(self, kicker: str, heading: str, intro: str, films: list, section: str = ""):
-        """Films shown at native 16:9, fixed width so the page never overflows."""
+    def samples(self, kicker: str, heading: str, intro: str, films: list, section: str = "",
+                playlist: dict | None = None):
+        """Films shown at native 16:9, fixed width so the page never overflows. `playlist` = {title, url}: a
+        clickable line to the category's full YouTube playlist (owner, 17 Sep 2026: "we've covered over 50
+        events, link the playlist"); code supplies it from media_playlists, never the writer."""
         n = max(1, len(films))
         w = {1: 566, 2: 470, 3: 352}.get(n, 352)
         h = int(w * 9 / 16)
@@ -642,8 +667,11 @@ class _Deck:
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_esc(heading)}</h2>'
             + (f'<p style="max-width:1060px;margin-bottom:16px">{_esc(intro)}</p>' if intro else "")
-            + f'<div style="display:flex;gap:24px;margin-top:6px">{"".join(items)}</div></div>'
-            f'{self._foot(section or "Our work")}</div>')
+            + f'<div style="display:flex;gap:24px;margin-top:6px">{"".join(items)}</div>'
+            + (f'<p style="margin-top:22px"><a href="{_esc(playlist["url"])}" style="color:{self.accent};'
+               f'text-decoration:none;font-weight:600">See the full {_esc(playlist["title"])} playlist on YouTube '
+               f'&rarr;</a> <span style="color:#7A7A84">{_esc(playlist["url"])}</span></p>' if playlist else "")
+            + f'</div>{self._foot(section or "Our work")}</div>')
 
     def investment(self, kicker: str, headline: str, blurb: str, rows: list, cards: list | None = None,
                    section: str = ""):
@@ -991,7 +1019,13 @@ def render(co: dict, customer: str, spec: dict, *, label: str | None = None, out
             films.append({**f, "thumb": thumbnail(f["youtube_video_id"], out_dir),
                           "label": f["title"], "caption": film_caption(f)})
         if films:
-            d.samples(sm.get("kicker", ""), sm.get("heading", ""), sm.get("intro", ""), films)
+            # the page's lead category: the first asked category the lead film actually carries, else the
+            # first asked; its playlist (if the company keeps one) is linked under the films
+            asked = [str(c).lower() for c in (sm.get("categories") or [])]
+            lead_cats = [str(c).lower() for c in (films[0].get("categories") or [])]
+            lead = next((c for c in asked if c in lead_cats), None) or (asked[0] if asked else None)
+            d.samples(sm.get("kicker", ""), sm.get("heading", ""), sm.get("intro", ""), films,
+                      playlist=playlist_for(co["id"], lead) if lead else None)
 
     tl = spec.get("timeline") or {}
     if tl:
