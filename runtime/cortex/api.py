@@ -3465,6 +3465,10 @@ SKILL_TOOLS = [
         "quotation_number": {"type": "string", "description": "e.g. SEN-2026-0006 - pass it whenever a "
                                                               "quotation exists so prices match exactly"},
         "deal_id": {"type": "integer", "description": "the opportunity this belongs to, if known"},
+        "films": {"type": "array", "items": {"type": "string"},
+                  "description": "up to 3 films Rashad NAMED for the Our work page (titles, client names or YouTube "
+                                 "ids); code resolves them in the library and they lead the page. Omit to pick by "
+                                 "category and rating."},
         "redo": {"type": "boolean", "description": "only after Rashad has been told a proposal ALREADY went "
                                                    "out on this deal and has said he wants a revised one "
                                                    "built anyway"}},
@@ -3937,11 +3941,23 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                 + (f" Filed on the deal first: {', '.join(_filed)}." if _filed else ""))
     if name == "create_proposal":
         _filed = _file_turn_files_on_deal(inp)   # a brief attached in this turn joins the deal record first
+        _co = store.get_company_by_slug(inp.get("company") or "")
+        _ids, _unknown = [], []
+        for _f in (inp.get("films") or [])[:3]:   # films he NAMED, resolved by code against the library
+            _f = str(_f).strip()
+            _row = (_co and db.one("select youtube_video_id from media_assets where company_id=%s and status='live' "
+                                    "and (youtube_video_id=%s or title ilike %s or client ilike %s) "
+                                    "order by rating desc nulls last limit 1",
+                                    (_co["id"], _f, f"%{_f}%", f"%{_f}%"))) or None
+            (_ids.append(_row["youtube_video_id"]) if _row else _unknown.append(_f))
+        if _unknown:
+            return ("Not in the media library: " + ", ".join(_unknown) + ". Nothing was built. Use media_library "
+                    "to find the right title, or drop it, then call create_proposal again.")
         try:
             r = engine.deliver_proposal(inp["company"], customer=inp.get("customer", ""),
                                         brief=inp.get("brief", ""),
                                         quotation_number=inp.get("quotation_number"),
-                                        deal_id=inp.get("deal_id"), redo=bool(inp.get("redo")))
+                                        deal_id=inp.get("deal_id"), redo=bool(inp.get("redo")), films=_ids)
         except ValueError as _e:
             return str(_e)
         films = ", ".join(r["films"]) or "none matched in the media library"

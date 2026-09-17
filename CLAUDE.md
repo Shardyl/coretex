@@ -1733,6 +1733,15 @@ The prompt now defines no_reply strictly, and `_quotes_draft(text, draft)` (a ru
 correction found in the draft) forces no_reply off and turns the words into a remove instruction. 701 was
 restored and redrafted with the sentence removed (and the meeting notes, which had landed since).
 
+## "Our work" page: words-led proposals yes, creative proposals never; named films lead it (17 Sep 2026)
+Owner's refinement of the 16 Sep switch: `deck.our_work_page(company, creative=False)` returns False for every
+CREATIVE deck (creative.py passes creative=True) and True for words-led decks unless a "NO OUR WORK PAGE" rule is
+set. The rule on Sensa sales-proposal (168) now reads "OUR WORK PAGE ..." (informational; code carries the
+creative rule). `create_proposal(films=[...])`: up to 3 titles/clients/YouTube ids the owner NAMES, resolved by
+code against media_assets (an unknown name stops the build and says so), stored as `spec.samples.video_ids`;
+`deck.render` puts them first and fills the rest by category and rating (`films_by_ids` + `pick_samples`).
+First case: Rana Elbadaoui's event coverage, with China Innovation Center (rated 4, never picked by rating).
+
 ## No "Our work" page in proposal decks (owner, 16 Sep 2026)
 On the ChainX creative proposal (card 704) the owner replied "remove page 19, our work": the auto-picked films
 are not our best; work is shown through the company profile instead. The revision re-ran COPY (the writer

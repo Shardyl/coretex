@@ -5403,7 +5403,8 @@ def deliver_capabilities(company: str, *, audience: str = "", focus: str = "",
 
 
 def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quotation_number: str | None = None,
-                     deal_id: int | None = None, label: str | None = None, redo: bool = False) -> dict:
+                     deal_id: int | None = None, label: str | None = None, redo: bool = False,
+                     films: list | None = None) -> dict:
     """Author + render a house-format PROPOSAL deck, file it to the document library and the client's
     Drive folder, and drop it in the Inbox as a card. The deck is INTERNAL until an email card sends it:
     this never contacts the client. Prices, sample films and dates are stamped by code (deck.py)."""
@@ -5443,7 +5444,7 @@ def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quota
                      "THIS brief, in their words where it matters):\n" + facts)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     tag = secrets.token_hex(3)
-    out = deck.build(company, customer, brief, quotation=q, label=label, extra_facts=facts,
+    out = deck.build(company, customer, brief, quotation=q, label=label, extra_facts=facts, films=films,
                      out_dir=QUOTES_DIR, filename=f"proposal-{company}-{stamp}-{tag}.pdf")
     name = _proposal_name(customer, quotation_number, 1, stamp)
     doc, filed = _file_proposal_pdf(co, customer, name, out["path"], deal_id, quotation_number)

@@ -111,11 +111,13 @@ def pick_samples(company_id: int, categories: list[str], limit: int = 3) -> list
     return out[:limit]
 
 
-def our_work_page(company: dict) -> bool:
-    """Whether proposal decks carry an 'Our work' sample-films page. OFF when a standing rule on the
-    company's sales-proposal or sales-quotation skill starts 'NO OUR WORK PAGE' (owner, 16 Sep 2026: the
-    auto-picked films are not our best; work is shown through the company profile instead). The rule is
-    the switch, editable in Talk; code only reads it."""
+def our_work_page(company: dict, creative: bool = False) -> bool:
+    """Whether a proposal deck carries an 'Our work' sample-films page. CREATIVE proposals never do (owner,
+    17 Sep 2026: the company profile shows our work; the deck is the idea). Words-led proposals do, unless a
+    standing rule on the company's sales-proposal or sales-quotation skill starts 'NO OUR WORK PAGE'. The
+    rule is the switch, editable in Talk; code only reads it."""
+    if creative:
+        return False
     try:
         for key in ("sales-proposal", "sales-quotation"):
             sk = store.get_skill_by_key(company["id"], key)
@@ -877,12 +879,15 @@ def investment_from_quotation(quotation: dict) -> dict:
 
 def build(company_slug: str, customer: str, brief: str, *, quotation: dict | None = None,
           label: str | None = None, extra_facts: str = "", out_dir: str = "/tmp",
-          filename: str = "proposal.pdf") -> dict:
-    """Author + render a house-format proposal deck. Returns {path, pages, films, spec, cover}."""
+          filename: str = "proposal.pdf", films: list | None = None) -> dict:
+    """Author + render a house-format proposal deck. `films` = YouTube ids the owner NAMED for the Our work
+    page; they lead it, the rest is filled by category and rating. Returns {path, pages, films, spec, cover}."""
     co = store.get_company_by_slug(company_slug)
     if not co:
         raise ValueError(f"unknown company {company_slug}")
     spec = author_spec(co, customer, brief, quotation, extra_facts) or {}
+    if films:
+        spec.setdefault("samples", {})["video_ids"] = [v for v in films if v]
     return render(co, customer, spec, label=label, out_dir=out_dir, filename=filename)
 
 
@@ -925,7 +930,12 @@ def render(co: dict, customer: str, spec: dict, *, label: str | None = None, out
     films = []
     sm = spec.get("samples") or {}
     if sm and our_work_page(co):
-        picked = pick_samples(co["id"], sm.get("categories") or [], 3)
+        # films the owner NAMED lead the page (China Innovation Center for Rana's event coverage, rated 4 and
+        # never picked by rating alone, 17 Sep 2026); the rest is filled by category and rating
+        picked = films_by_ids(co["id"], sm.get("video_ids") or [])
+        have = {f["youtube_video_id"] for f in picked}
+        picked += [f for f in pick_samples(co["id"], sm.get("categories") or [], 3)
+                   if f["youtube_video_id"] not in have][:max(0, 3 - len(picked))]
         caps = sm.get("captions") or []
         for i, f in enumerate(picked):
             films.append({**f, "thumb": thumbnail(f["youtube_video_id"], out_dir),
