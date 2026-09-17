@@ -1577,10 +1577,26 @@ class DuplicateDeal(ValueError):
     pass
 
 
+OPEN_SALES_STAGES = ("Opportunity", "Quote")
+
+
+def open_opportunity_for_account(account_id, company: str | None) -> dict | None:
+    """The client account's open OPPORTUNITY (Opportunity or Quote stage) for one of our businesses, newest
+    first. One client rarely has two live pitches at once; a second deal for the same account is usually
+    the same job opened twice (Shama 130/131, ADWPJJC 128/129, 17 Sep 2026)."""
+    if not account_id:
+        return None
+    return db.one("select id, title, stage, created_at from crm_projects where account_id=%s and company=%s "
+                  "and stage = any(%s) order by id desc limit 1",
+                  (account_id, _org(company), list(OPEN_SALES_STAGES)))
+
+
 def create_deal(company: str, title: str, value=None, currency: str = "AED", stage: str = "Opportunity",
-                account_id=None, owner: str | None = None) -> dict:
+                account_id=None, owner: str | None = None, second_job: bool = False) -> dict:
     """A deal belongs to one of YOUR businesses (company) and one CLIENT company (account). Its people are
-    that account's contacts (company-mediated — no per-deal contact list). Blocks an active same-name duplicate."""
+    that account's contacts (company-mediated — no per-deal contact list). Blocks an active same-name
+    duplicate, and (17 Sep 2026) a second open opportunity for the same client account unless the caller
+    says it is genuinely a second job (`second_job=True`, after the owner confirms)."""
     org = _require_business(company)
     title = (title or "").strip()
     dup = db.one("select id from crm_projects where company=%s and lower(title)=lower(%s) and stage <> %s limit 1",
@@ -1588,6 +1604,12 @@ def create_deal(company: str, title: str, value=None, currency: str = "AED", sta
     if dup:
         raise DuplicateDeal(f"A deal '{title}' already exists for {org} (deal #{dup['id']}). "
                             "Open that one, or give this a different name.")
+    if account_id and stage in OPEN_SALES_STAGES and not second_job:
+        ex = open_opportunity_for_account(account_id, company)
+        if ex:
+            raise DuplicateDeal(f"This client already has an open opportunity: deal #{ex['id']} '{ex['title']}' "
+                                f"({ex['stage']}, opened {ex['created_at']:%d %b}). Use that one. Only if the owner "
+                                "confirms this is a genuinely SEPARATE job, create it with second_job=true.")
     row = db.execute(
         "insert into crm_projects (company, title, value, currency, stage, owner, account_id, history) "
         "values (%s,%s,%s,%s,%s,%s,%s,%s) returning id",

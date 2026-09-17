@@ -2354,6 +2354,21 @@ def _track_tender(co: dict, e: dict, what: str, rt_key: str | None = None, clien
     d = db.one("select * from crm_projects where company=%s and lower(title)=lower(%s) limit 1", (org, title))
     fresh = False
     if not d:
+        # THE SENDER'S OPEN OPPORTUNITY IS THE DEAL (17 Sep 2026): Pyxis's formal RFQ opened deal 129 next to
+        # 128, which Rashad had opened from Maricris's WhatsApp an hour earlier. A circular from someone who
+        # already has an open opportunity with us lands on that opportunity.
+        try:
+            d = crm.open_deal_for_email(email, slug) or crm.open_deal_for_domain(email, slug)
+        except Exception:  # noqa: BLE001
+            d = None
+        if d and d.get("stage") not in crm.OPEN_SALES_STAGES:
+            d = None
+        if d:
+            try:
+                crm.add_deal_contact(d["id"], email, role="issuer", primary=not d.get("contact_email"))
+            except Exception:  # noqa: BLE001
+                pass
+    if not d:
         try:
             d = crm.create_deal(slug, title, stage="Opportunity")
             fresh = True

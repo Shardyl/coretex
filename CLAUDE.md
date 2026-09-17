@@ -1773,6 +1773,17 @@ Maricris's project brief PDF was the 7th attachment on her reply behind six sign
 read for card 716 nor filed on deal 128. `_documents_first(atts)` now orders documents before images and drops
 images under 120 KB (signature graphics); both functions use it. The brief was then filed on 128 and 716 redrafted.
 
+## One open opportunity per client account (17 Sep 2026)
+Shama Perfumes got deals 130 + 131 (Talk called create_deal twice, 18 s apart, different titles; the only guard
+was an exact-title match). ADWPJJC got 128 (opened from Maricris's WhatsApp via Talk, no contact email) + 129
+(Pyxis's formal RFQ through the tender path, which keyed on the email subject and never looked for the sender's
+open deal). Now: `crm.open_opportunity_for_account(account_id, company)`; `crm.create_deal` raises DuplicateDeal
+when the account already has an open Opportunity/Quote unless `second_job=True` (Talk's create_deal exposes
+`second_job`, to be used only after the owner confirms; the cockpit form passes it, his own hand).
+`_track_tender` attaches a circular to the sender's open opportunity (`open_deal_for_email`/`_domain`, sales
+stages only) and adds the sender as issuer, creating a tender deal only when there is none. Data: 129 -> 128 and
+131 -> 130 folded (contacts, tender note, closing reminder moved; duplicates Lost with a note; nothing deleted).
+
 ## Phishing guard + one email, one company (15 Sep 2026)
 Heba at Jump (a real July contact) had her mailbox hacked. It bcc'd Sensa and Sky Vision an empty "Re: RFQ#
 Videography Services" with a 1-page PDF (made by Aspose minutes before) whose VIEW RFP DOCUMENT button went to a

@@ -1888,7 +1888,8 @@ def crm_create_deal(body: NewDealBody, _: None = Depends(auth)) -> dict:
     if body.stage not in crm.DEAL_STAGES:
         raise HTTPException(status_code=400, detail=f"stage must be one of {crm.DEAL_STAGES}")
     try:
-        return crm.create_deal(body.company, body.title, body.value, body.currency, body.stage, body.account_id)
+        return crm.create_deal(body.company, body.title, body.value, body.currency, body.stage, body.account_id,
+                               second_job=True)   # the cockpit form is the owner's own hand: his call
     except crm.DuplicateDeal as e:
         raise HTTPException(status_code=409, detail=str(e))
     except crm.DealNeedsCompany as e:
@@ -3361,7 +3362,7 @@ SKILL_TOOLS = [
      "input_schema": {"type": "object", "properties": {"first_name": {"type": "string"}, "last_name": {"type": "string"}, "email": {"type": "string"}, "company": {"type": "string", "description": "client company name"}, "business": {"type": "string", "description": "your business slug"}, "phone": {"type": "string"}, "job_title": {"type": "string"}}, "required": ["email"]}},
     {"name": "create_deal",
      "description": "Create a deal. 'business' = which of YOUR businesses (slug). 'company' = the CLIENT ORGANISATION name — a real company, NEVER the deal/project title. The deal links to that organisation (its people come from there). If you don't know the client organisation, OMIT company (the deal is created unlinked) — do NOT pass the deal title as the company, or invent an org. Defaults to the Opportunity stage.",
-     "input_schema": {"type": "object", "properties": {"business": {"type": "string"}, "title": {"type": "string", "description": "the deal/project name"}, "value": {"type": "number"}, "currency": {"type": "string"}, "stage": {"type": "string"}, "company": {"type": "string", "description": "the CLIENT ORGANISATION (real company), distinct from the deal title; omit if unknown"}}, "required": ["business", "title"]}},
+     "input_schema": {"type": "object", "properties": {"business": {"type": "string"}, "title": {"type": "string", "description": "the deal/project name"}, "value": {"type": "number"}, "currency": {"type": "string"}, "stage": {"type": "string"}, "company": {"type": "string", "description": "the CLIENT ORGANISATION (real company), distinct from the deal title; omit if unknown"}, "second_job": {"type": "boolean", "description": "ONLY after Rashad has been told this client already has an open opportunity and has confirmed this is a genuinely separate job"}}, "required": ["business", "title"]}},
     {"name": "schedule_report",
      "description": "Schedule the per-business SEO & traffic report to run on a cadence; it lands in the Inbox. weekday 0=Mon..6=Sun.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string", "description": "your business slug"}, "cadence": {"type": "string", "enum": ["daily", "weekly", "monthly"]}, "weekday": {"type": "integer"}, "hour": {"type": "integer"}}, "required": ["company"]}},
@@ -4105,9 +4106,10 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         stage = inp.get("stage") if inp.get("stage") in crm.DEAL_STAGES else "Opportunity"
         try:
             d = crm.create_deal(inp.get("business", "sensa"), title, value=inp.get("value"),
-                                currency=inp.get("currency", "AED"), stage=stage, account_id=aid)
+                                currency=inp.get("currency", "AED"), stage=stage, account_id=aid,
+                                second_job=bool(inp.get("second_job")))
         except crm.DuplicateDeal as e:
-            return str(e)
+            return str(e) + " Tell Rashad, and ask before creating a second one."
         return (f"created deal '{d['title']}' ({d['stage']}, {d.get('value') or 'no value'} {d['currency']})"
                 + (f" for {comp}" if comp and aid else "") + link_note)
     if name == "schedule_report":
