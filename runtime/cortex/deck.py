@@ -970,10 +970,27 @@ def build(company_slug: str, customer: str, brief: str, *, quotation: dict | Non
     return render(co, customer, spec, label=label, out_dir=out_dir, filename=filename)
 
 
+_URL_IN_COPY = re.compile(r"\s*\(?https?://\S+\)?")
+
+
+def _no_urls(x, keep: tuple = ("video_ids",)):
+    """Deck COPY never carries a link: the writer put 'https://www.youtube.com/@SensaProductions/playlists', an
+    address that does not exist, into the Our work intro when asked to link the playlist (17 Sep 2026). Every
+    link on a deck is placed by code from the library or the playlist table; URLs in text are removed."""
+    if isinstance(x, dict):
+        return {k: (v if k in keep else _no_urls(v, keep)) for k, v in x.items()}
+    if isinstance(x, list):
+        return [_no_urls(v, keep) for v in x]
+    if isinstance(x, str):
+        return re.sub(r"\s{2,}", " ", _URL_IN_COPY.sub("", x)).replace(" :", ":").strip()
+    return x
+
+
 def render(co: dict, customer: str, spec: dict, *, label: str | None = None, out_dir: str = "/tmp",
            filename: str = "proposal.pdf", cover_path: str | None = None) -> dict:
     """Render a spec to PDF. `cover_path` reuses an existing hero image (a revision keeps its cover unless
     the cover subject changed); otherwise one is generated. Returns {path, pages, films, spec, cover}."""
+    spec = _no_urls(spec)
     company_slug = co.get("slug") or ""
     accent = (spec.get("accent") or _ACCENT_DEFAULT).strip()
     if not re.match(r"^#[0-9A-Fa-f]{6}$", accent):
