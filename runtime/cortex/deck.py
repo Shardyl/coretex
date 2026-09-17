@@ -137,7 +137,8 @@ def films_in_text(company_id: int, text: str, limit: int | None = None) -> list[
     names = {}
     for r in rows:
         cl = re.sub(r"\s+", " ", (r.get("client") or "").strip().lower())
-        if len(cl) >= 5 and cl in said:
+        head = " ".join(cl.split()[:2])              # "china innovation" for "China Innovation Center"
+        if len(cl) >= 5 and (cl in said or (len(cl.split()) >= 2 and len(head) >= 10 and head in said)):
             names.setdefault(cl, []).append(r)
     for cl in sorted(names, key=lambda c: said.find(c)):
         films = names[cl]
