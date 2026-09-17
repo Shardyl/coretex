@@ -772,6 +772,13 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
                                  "from": env["from"], "subject": env["subject"], "gmail_id": res.get("id")})
     try:   # pipeline loop: log the send on the deal timeline + track the promises this email makes
         pipeline.record_send(task, env, company)
+        # a proposal card whose deck just went out is finished: close it (it stayed open for revisions)
+        _sent_ids = [int(a.get("id")) for a in ((task.get("request") or {}).get("attach_docs") or []) if a.get("id")]
+        if _sent_ids:
+            db.execute("update tasks set status='done', updated_at=now() where kind='content' and "
+                       "request->>'kind'='proposal' and status='awaiting_approval' and exists (select 1 from "
+                       "jsonb_array_elements(request->'attach_docs') a where (a->>'id')::int = any(%s))",
+                       (_sent_ids,))
     except Exception:  # noqa: BLE001 — timeline bookkeeping must never block the send
         pass
     # pre-qualification chase clock: a reply to a FUNNEL LEAD (came via intake, qual:email exists) that is NOT an
@@ -5748,7 +5755,11 @@ def _approve_proposal(task: dict, skill: dict, company: dict, actor: str) -> dic
            + ((" Left BLANK, no approved price: " + "; ".join(qspec["blanked"]) + ".") if qspec.get("blanked") else "")
            + ((" Defaults assumed: " + "; ".join(str(a) for a in qspec["assumptions"][:10]) + ".")
               if qspec.get("assumptions") else ""))
-    store.update_task(task["id"], request=req, status="done", draft=msg)
+    # THE PROPOSAL CARD STAYS OPEN until the email carrying the deck is sent (owner, 17 Sep 2026: "I want it
+    # on a card so I can request further revisions"). A closed card vanishes from the Inbox; replies on it
+    # keep revising the deck, and approving it again just confirms (the quotation card is live).
+    msg += " This card stays in your Inbox for revisions until the email with the deck is sent."
+    store.update_task(task["id"], request=req, status="awaiting_approval", draft=msg)
     store.log_decision(task["id"], skill["id"], actor, "approve",
                        snapshot={"quotation": number, "card": (t or {}).get("id"), "deck": final})
     if did:
