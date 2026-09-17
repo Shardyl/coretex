@@ -1733,6 +1733,16 @@ The prompt now defines no_reply strictly, and `_quotes_draft(text, draft)` (a ru
 correction found in the draft) forces no_reply off and turns the words into a remove instruction. 701 was
 restored and redrafted with the sentence removed (and the meeting notes, which had landed since).
 
+## Sample films: relevance before rating, captions stamped by code (17 Sep 2026)
+Rana's proposal (card 725) asked for "China Innovation Center" and got SEHA, HBMSU and Dubai Police captioned as
+"multi-day event coverage". Three causes, all fixed: (1) `pick_samples` intersected the writer's four slugs, found
+nothing, then widened to ANY slug ranked by rating alone, so the library's top 8s won every time; films are now
+scored by how many asked categories they carry (first slug weighs most), then rating. (2) Captions were written by
+the deck writer before any film was picked; `deck.film_caption` now stamps them from the film's own categories and
+client. (3) Talk put the named film in the brief text instead of `films`; `create_proposal` now also matches
+library CLIENT names against the owner's own words this turn (`_TURN_SAID`), so a film he names rides in
+regardless. 725 re-rendered as v2 without a model call.
+
 ## "Our work" page: words-led proposals yes, creative proposals never; named films lead it (17 Sep 2026)
 Owner's refinement of the 16 Sep switch: `deck.our_work_page(company, creative=False)` returns False for every
 CREATIVE deck (creative.py passes creative=True) and True for words-led decks unless a "NO OUR WORK PAGE" rule is

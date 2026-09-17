@@ -3953,6 +3953,19 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         if _unknown:
             return ("Not in the media library: " + ", ".join(_unknown) + ". Nothing was built. Use media_library "
                     "to find the right title, or drop it, then call create_proposal again.")
+        # FILMS HE NAMED IN HIS OWN WORDS ride in whether or not the model passed `films` (card 725, 17 Sep
+        # 2026: "include the China Innovation film" went into the brief text and the page showed the usual
+        # three). Code matches library clients and titles against what he typed this turn.
+        if _co and len(_ids) < 3:
+            _said = (_TURN_SAID.get() or "").lower()
+            if len(_said) > 10:
+                for _row in db.query("select youtube_video_id, title, client from media_assets where company_id=%s "
+                                     "and status='live' and coalesce(client,'')<>''", (_co["id"],)):
+                    _cl = (_row.get("client") or "").strip().lower()
+                    if len(_cl) >= 5 and _cl in _said and _row["youtube_video_id"] not in _ids:
+                        _ids.append(_row["youtube_video_id"])
+                    if len(_ids) >= 3:
+                        break
         try:
             r = engine.deliver_proposal(inp["company"], customer=inp.get("customer", ""),
                                         brief=inp.get("brief", ""),

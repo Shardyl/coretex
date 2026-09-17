@@ -79,36 +79,53 @@ def pick_samples(company_id: int, categories: list[str], limit: int = 3) -> list
     highest-rated wins; widen to any of the categories if the intersection is thin. Unrated films rank
     below rated ones — the operator's rating is the quality filter."""
     cats = [c.strip().lower() for c in (categories or []) if c and c.strip()]
-    out: list[dict] = []
-    if cats:
-        where = " and ".join(["categories @> %s::jsonb"] * len(cats))
-        params = [f'["{c}"]' for c in cats]
-        out = db.query(
-            "select youtube_video_id, title, rating, duration, categories from media_assets "
-            f"where company_id=%s and status='live' and {where} "
-            "order by rating desc nulls last, suggested_rating desc nulls last limit %s",
-            (company_id, *params, limit))
     if not cats:                                 # nothing asked for: the owner's best-rated work stands in
         return db.query(
-            "select youtube_video_id, title, rating, duration, categories from media_assets "
+            "select youtube_video_id, title, rating, duration, categories, client from media_assets "
             "where company_id=%s and status='live' and rating is not null "
             "order by rating desc, suggested_rating desc nulls last limit %s", (company_id, limit))
-    if len(out) < limit and cats:                # widen: ANY of the categories
-        have = {r["youtube_video_id"] for r in out}
-        anyw = " or ".join(["categories @> %s::jsonb"] * len(cats))
-        params = [f'["{c}"]' for c in cats]
-        for r in db.query(
-                "select youtube_video_id, title, rating, duration, categories from media_assets "
-                f"where company_id=%s and status='live' and ({anyw}) "
-                "order by rating desc nulls last, suggested_rating desc nulls last limit %s",
-                (company_id, *params, limit * 3)):
-            if r["youtube_video_id"] not in have:
-                out.append(r)
-            if len(out) >= limit:
-                break
+    # RELEVANCE BEFORE RATING (owner, 17 Sep 2026). The old "intersection, then widen to ANY category"
+    # meant a writer asking for event-coverage + interviews + corporate + government-projects got the three
+    # top-rated films in the library (HBMSU, SEHA, Dubai Police) captioned as event coverage, because the
+    # intersection was empty and the widening ranked by rating alone. Films are now scored by how many of
+    # the asked categories they carry, the FIRST categories counting most, then rating; a film that
+    # matches nothing never appears while any film matches something.
+    anyw = " or ".join(["categories @> %s::jsonb"] * len(cats))
+    params = [f'["{c}"]' for c in cats]
+    rows = db.query(
+        "select youtube_video_id, title, rating, duration, categories, client from media_assets "
+        f"where company_id=%s and status='live' and ({anyw})", (company_id, *params))
+    weights = {c: (len(cats) - i) for i, c in enumerate(cats)}        # first category asked = heaviest
+
+    def score(r):
+        have = {str(x).lower() for x in (r.get("categories") or [])}
+        return (sum(weights[c] for c in cats if c in have), r.get("rating") or 0, r.get("suggested_rating") or 0)
+    out = sorted(rows, key=score, reverse=True)
     if not out:   # the slugs matched nothing (a writer's guess): the owner's best-rated work rather than none
         out = pick_samples(company_id, [], limit)
     return out[:limit]
+
+
+_CAT_LABELS = {"event-coverage": "event coverage", "interviews": "interviews", "corporate": "corporate film",
+               "government-projects": "government", "2d-animation": "2D animation", "aerial": "aerial",
+               "products": "product film", "real-estate": "real estate", "f-and-b": "food and drink",
+               "social-cut": "social cut", "bts": "behind the scenes", "ai": "AI production",
+               "commercial": "commercial", "automotive": "automotive", "lifestyle": "lifestyle",
+               "fashion-and-beauty": "fashion and beauty", "healthcare": "healthcare", "showreel": "showreel",
+               "construction": "construction", "technology": "technology", "education": "education",
+               "documentary": "documentary", "music-video": "music video", "presenter": "presenter-led",
+               "event-promotion": "event promotion", "testimonial": "testimonial", "apps": "app"}
+
+
+def film_caption(f: dict) -> str:
+    """A caption STAMPED from the film's own record (its categories and client), never written blind by the
+    deck writer: card 725 captioned a hospital film 'multi-day event coverage' because the writer wrote
+    four captions before any film was picked (17 Sep 2026)."""
+    cats = [str(c).lower() for c in (f.get("categories") or [])
+            if str(c).lower() not in ("version-variant", "internal-test", "dubai-police")]
+    words = [_CAT_LABELS.get(c, c.replace("-", " ")) for c in cats[:3]]
+    what = ", ".join(words).capitalize() if words else "Film"
+    return f"{what} for {f['client']}" if f.get("client") else what
 
 
 def our_work_page(company: dict, creative: bool = False) -> bool:
@@ -936,10 +953,9 @@ def render(co: dict, customer: str, spec: dict, *, label: str | None = None, out
         have = {f["youtube_video_id"] for f in picked}
         picked += [f for f in pick_samples(co["id"], sm.get("categories") or [], 3)
                    if f["youtube_video_id"] not in have][:max(0, 3 - len(picked))]
-        caps = sm.get("captions") or []
-        for i, f in enumerate(picked):
+        for f in picked:
             films.append({**f, "thumb": thumbnail(f["youtube_video_id"], out_dir),
-                          "label": f["title"], "caption": caps[i] if i < len(caps) else ""})
+                          "label": f["title"], "caption": film_caption(f)})
         if films:
             d.samples(sm.get("kicker", ""), sm.get("heading", ""), sm.get("intro", ""), films)
 
