@@ -4475,9 +4475,28 @@ def _pause_or_reschedule_followups(co: dict, deals: list, sender: str, body: str
             if wait:
                 when = datetime.now(timezone.utc) + timedelta(days=wait["wait_days"])
                 crm.resume_followups(d["id"], when)
+                # EVERY CLOCK ON THE DEAL MOVES WITH THE CLIENT'S DATE (owner, 17 Sep 2026): BioScience
+                # postponed to March 2027, the chase moved to April, but "schedule a call to walk through
+                # the proposal" still nudged on Saturday. Cortex's own pending reminders on the deal that fall
+                # before the new date move to it; the owner's own reminders are listed, never touched.
+                moved = db.query(
+                    "update reminders set due_at=%s, snooze_until=null, title = left(title || %s, 400) "
+                    "where target_type='deal' and target_id=%s and status in ('pending','snoozed') "
+                    "and created_by like 'cortex%%' and due_at < %s returning id, title",
+                    (when, f" [moved with the client's timeframe: \"{(wait.get('quote') or '')[:60]}\"]",
+                     str(d["id"]), when))
+                theirs = db.query("select id, title from reminders where target_type='deal' and target_id=%s and "
+                                  "status in ('pending','snoozed') and created_by not like 'cortex%%' and due_at < %s",
+                                  (str(d["id"]), when))
+                if moved:
+                    pipeline.log_deal(d["id"], "note", f"Client timeframe \"{wait.get('quote') or ''}\": chase and "
+                                      f"{len(moved)} pending reminder(s) moved to {when.strftime('%d %b %Y')}: "
+                                      + "; ".join(r["title"][:70] for r in moved), ref=f"moved:{ref}" if ref else "")
                 notifications.notify(
                     f"Follow-up on '{d['title']}' rescheduled to {when.strftime('%d %b %Y')} — they said "
-                    f"“{wait.get('quote') or 'a timeframe'}”. Adjust on the deal if that's wrong.",
+                    f"“{wait.get('quote') or 'a timeframe'}”. Adjust on the deal if that's wrong."
+                    + (f" {len(moved)} pending reminder(s) on the deal moved with it." if moved else "")
+                    + ((" Yours to decide: " + "; ".join(r["title"][:60] for r in theirs)) if theirs else ""),
                     "Follow-up cadence", category="reminder", company_id=co["id"],
                     target_type="deal", target_id=str(d["id"]),
                     # the manual backfill reaches here without the inbox claim: one notice per email even then

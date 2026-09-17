@@ -1758,6 +1758,13 @@ A reply on a QUOTATION card that is about the deck (no price/total/AED/quote wor
 the deck of the proposal the quotation came from (`_revise_proposal(..., quote_card=)`): the proposal card keeps its
 approved status, the new version replaces the old on the quotation card. Money words stay with the quotation.
 
+## A client's stated timeframe moves every clock on the deal (17 Sep 2026)
+BioScience wrote "postponed to March 2027": `_pause_or_reschedule_followups` moved the chase to 19 Apr 2027 but
+the commitment reminder "schedule a call to walk through the proposal" still nudged on Saturday. Now, when a
+timeframe is read from the client's words, Cortex's own pending reminders on that deal (`created_by like
+'cortex%'`) that fall before the new date are moved to it (title suffixed with the client's quote), the move is
+logged on the deal, and the notice names any OWNER-set reminders left for him to decide. Reminder 172 moved by hand.
+
 ## Proposal approval: an unreachable target blocks the quote; re-approval versions the number (17 Sep 2026)
 Rana's deck (card 725) said AED 136,000; the rate-card lines came to 173,100 (27 interview edits at the 5-minute
 rate), the 20% band could not reach the target, and SEN-2026-0017 was issued at 173,100 with the gap buried in
