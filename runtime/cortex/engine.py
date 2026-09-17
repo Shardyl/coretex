@@ -5740,6 +5740,24 @@ def _approve_proposal(task: dict, skill: dict, company: dict, actor: str) -> dic
         return {"blocked": True, "error": "the proposal has no investment lines to quote from yet; add them on "
                                           "the card (reply with the lines) and approve again"}
     qspec["customer"] = qspec.get("customer") or customer
+    # THE OWNER'S STATED TARGET IS APPLIED BY CODE (17 Sep 2026): the prep model priced Rana's lines at 143,000
+    # and never set `total`, so "target AED 136,000" in the brief and his pricing notes went unused. Code
+    # reads the target from his own words and moves the rate-card lines within the band to reach it.
+    if qspec.get("sections") and qspec.get("total") in (None, ""):
+        _notes = " ".join(d["note"] for d in db.query(
+            "select note from decisions where task_id=%s and action='correct' order by id", (task["id"],)) if d.get("note"))
+        _m = re.search(r"target(?:ed)?\s+(?:of\s+)?(?:AED\s*)?([\d,]{5,})", words + " " + _notes, re.I)
+        if _m:
+            from . import ratecard as _rc
+            _tgt = float(_m.group(1).replace(",", ""))
+            _res = _rc.price_lines(company["slug"], qspec["sections"],
+                                   allowed=_stated_numbers(words + " " + _notes) | _rc.rates(company["slug"]),
+                                   target=_tgt, flex_pct=(profile.get(company["id"]) or {}).get("quote_target_flex_pct"))
+            if _res.get("error"):
+                qspec.setdefault("blanked", []).append(f"your figure {_tgt:,.0f}: {_res['error']}")
+            elif _res.get("scaled") is not None:
+                qspec.setdefault("assumptions", []).append(
+                    f"rate-card lines moved {_res['scaled']:+.1f}% to reach the stated target AED {_tgt:,.0f}")
     # A TARGET THE BAND CANNOT REACH STOPS THE QUOTATION (17 Sep 2026): Rana's deck said 136,000, the lines
     # came to 173,100, and the quote was issued at 173,100 with the gap buried in the card text. Now the
     # card stays open and says what it would take; nothing is issued until the owner decides.
