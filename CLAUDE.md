@@ -1812,6 +1812,11 @@ card exactly as Talk's draft_email would: to the deal's primary contact (`crm_pr
 pin), skill email-handling. The normal drafting path adopts the deal's real thread and sender. Blocks (card stays
 open) when: no deal, no contact, both PDFs not found, or an open email to that person already exists. The proposal
 card still closes itself when the email carrying its deck is sent. Nothing sends without the PIN on the email card.
+PROVEN on Special Olympics (770 -> 772 -> email 773, sent 19 Sep) and made the standard flow the same day: a
+creative proposal card (quotation already issued in its run) drafts the email on its FIRST approval through the same
+function and closes on send too; `capabilities.py` tells Talk the flow so it does not draft a twin; `reject` on an
+already done/sent card is a no-op (770 was dismissed a minute after its email went and turned 'rejected').
+NEXT (owner, not yet asked for): issue the quotation in the same run as the words-led proposal for this kind of enquiry.
 
 ## A person asking us for a quote is never a circular, bcc or not (19 Sep 2026)
 Special Olympics UAE (deal 133) wrote "Dear Supplier, please quote for the below" with suppliers on bcc, shoot four

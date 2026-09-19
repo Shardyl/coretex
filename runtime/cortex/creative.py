@@ -797,7 +797,8 @@ class Job:
             parts.append(f"CHECK: the PDF has {dk['pages']} pages for {dk['planned']} planned, a page overflows.")
         parts.append(f"{self.images_used()} images generated on this proposal. Nothing has been sent. Reply on this card "
                      "with any change (the concept, a beat, a frame, the copy, the location or the price) and only "
-                     "the parts it touches are redone. Approve when you are happy, then ask for the email.")
+                     "the parts it touches are redone. Approve when you are happy and I draft the email to the client "
+                     "with the deck and the quotation attached.")
         return "\n\n".join(parts)
 
 

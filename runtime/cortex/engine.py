@@ -784,7 +784,7 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         _sent_ids = [int(a.get("id")) for a in ((task.get("request") or {}).get("attach_docs") or []) if a.get("id")]
         if _sent_ids:
             db.execute("update tasks set status='done', updated_at=now() where kind='content' and "
-                       "request->>'kind'='proposal' and status='awaiting_approval' and exists (select 1 from "
+                       "request->>'kind' in ('proposal','creative_proposal') and status='awaiting_approval' and exists (select 1 from "
                        "jsonb_array_elements(request->'attach_docs') a where (a->>'id')::int = any(%s))",
                        (_sent_ids,))
     except Exception:  # noqa: BLE001 — timeline bookkeeping must never block the send
@@ -1282,10 +1282,11 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         if not rq.get("attach_docs"):
             store.update_task(task["id"], status="awaiting_approval")
             return {"blocked": True, "error": "the creative proposal has not finished building yet"}
+        if rq.get("quotation_number"):   # same last step as a words-led proposal: approval drafts the email
+            return _draft_proposal_email(task, skill, company, actor, rq["quotation_number"])
         store.update_task(task["id"], status="done")
         store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"version": rq.get("version")})
-        return {"approved": True, "note": (f"Approved. Quotation {rq.get('quotation_number')} and the deck are on the "
-                                           "quotation card; ask Talk to draft the email and attach both.")}
+        return {"approved": True, "note": "Approved. Ask Talk to draft the email and attach the deck."}
     if (task.get("request") or {}).get("kind") == "proposal":   # approving a deck issues its quotation
         return _approve_proposal(task, skill, company, actor)
     if task["kind"] in ("newsletter_idea", "newsletter_review", "newsletter_send"):
@@ -1514,6 +1515,11 @@ def _skip(task: dict, skill: dict, company: dict) -> None:
             tg.edit(task["tg_message_id"], f"✗ {note} and deleted.")
         db.execute("delete from settings where key in (%s,%s)", (f"wp:{task['id']}", f"blog_build:{task['id']}"))
         db.execute("delete from tasks where id=%s", (task["id"],))
+        return
+    _now = store.get_task(task["id"]) or {}
+    if _now.get("status") in ("done", "sent"):
+        # DISMISSING A FINISHED CARD CHANGES NOTHING (19 Sep 2026): proposal card 770 had closed itself when its
+        # email went; dismissed a minute later from a stale Inbox it became "rejected" and broke the streak.
         return
     store.update_task(task["id"], status="rejected")
     mt = (task.get("request") or {}).get("meeting") or {}
