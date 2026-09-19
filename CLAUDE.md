@@ -1803,6 +1803,15 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## A person asking us for a quote is never a circular, bcc or not (19 Sep 2026)
+Special Olympics UAE (deal 133) wrote "Dear Supplier, please quote for the below" with suppliers on bcc, shoot four
+days out: our address was not on To/Cc so the 17 Sep fix did not apply, the model matched "mass Dear Supplier
+announcements" and no reply was drafted. Now `policy.asks_us_by_email(email)` (code, before any model): the mail
+ASKS (`_ASKS`: please quote, RFQ/RFP, submit your proposal, scope of work...), has no portal wording (`_VIA_PORTAL`)
+and comes from a named person (not `auto_marker` / `_ROBOT_NAME`) -> every `_TENDER_SITUATION` leaves the list.
+The no-draft prompt also says so. Portal robots (takamol@sfd.gov.ae) still never qualify. Checked on 14 days of
+hello@: 18 hits, all real enquiries.
+
 ## Proposal approval: an unreachable target blocks the quote; re-approval versions the number (17 Sep 2026)
 Rana's deck (card 725) said AED 136,000; the rate-card lines came to 173,100 (27 interview edits at the 5-minute
 rate), the 20% band could not reach the target, and SEN-2026-0017 was issued at 173,100 with the gap buried in
