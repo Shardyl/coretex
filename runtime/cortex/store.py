@@ -214,7 +214,7 @@ def promote_queued(company_id=None, key: str | None = None) -> int:
 _EMAIL_KEYS = {"brief", "inquiry", "triage", "qual_suggest", "thread", "thread_reply", "meeting",
                "from_email", "mailbox_rt", "gmail_id", "deal_id", "followup", "lead_chase", "outbound",
                "attachments", "attachment_names", "attach_docs", "inbound_attachments", "cc_extra",
-               "cc_remove", "system_note", "serialize_key", "context_manifest", "title", "owner_links", "owed", "on_sent_stage", "on_sent_note"}
+               "cc_remove", "system_note", "serialize_key", "context_manifest", "title", "owner_links", "owed", "on_sent_stage", "on_sent_note", "proposal_card"}
 
 
 _NEWSLETTER_KINDS = ("newsletter_idea", "newsletter_review", "newsletter_send")
