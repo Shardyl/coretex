@@ -19,8 +19,11 @@ def _chat_id() -> str:
     return config.require("TELEGRAM_CHAT_ID")
 
 
-def _call(method: str, payload: dict | None = None) -> dict:
-    r = httpx.post(f"{_base()}/{method}", json=payload or {}, timeout=70)
+def _call(method: str, payload: dict | None = None, timeout: float = 12) -> dict:
+    # 12s for a message or an edit: these run INSIDE the owner's approve request, and at 70s a slow Telegram
+    # left the cockpit hanging on the PIN screen after the email had already gone (card 769, 19 Sep 2026).
+    # Only the long poll (get_updates) waits longer, and that runs on the engine's own loop.
+    r = httpx.post(f"{_base()}/{method}", json=payload or {}, timeout=timeout)
     r.raise_for_status()
     data = r.json()
     if not data.get("ok"):
@@ -65,7 +68,7 @@ def get_updates(offset: int | None = None, timeout: int = 25) -> list[dict]:
     if offset is not None:
         payload["offset"] = offset
     try:
-        return _call("getUpdates", payload)
+        return _call("getUpdates", payload, timeout=timeout + 45)
     except Exception as e:   # noqa: BLE001
         print(f"telegram get_updates failed, backing off 5s: {e}")
         time.sleep(5)   # keeps a hard 429 from turning the poll loop into a hammer

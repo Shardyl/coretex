@@ -1444,6 +1444,14 @@ def _approve(task: dict, skill: dict, company: dict, stepped_up: bool = False) -
         return result
     if task["kind"] != "blog_menu":   # a menu pick is a choice, not a Manager-passed draft: no streak
         skill = store.bump_streak(skill["id"])
+    # TELEGRAM IS THE MIRROR, NEVER THE FLOW: the mirror updates below run off the request, so the cockpit
+    # gets its answer the moment the work is done (card 769 hung on the PIN screen after a finished send).
+    threading.Thread(target=_mirror_approval, args=(dict(task), dict(skill), dict(result or {})),
+                     daemon=True).start()
+    return result or {}
+
+
+def _mirror_approval(task: dict, skill: dict, result: dict) -> None:
     if task.get("tg_message_id"):
         if result and result.get("link"):
             tg.edit(task["tg_message_id"],
@@ -1463,7 +1471,6 @@ def _approve(task: dict, skill: dict, company: dict, stepped_up: bool = False) -
                 f"Put it on auto for low-stakes work, or raise the bar for extra confidence?",
                 [[tg.button("Yes, set auto", f"au:{skill['id']}"),
                   tg.button(f"No — raise to {higher}", f"th:{skill['id']}:{higher}")]])
-    return result or {}
 
 
 def _arm_on_done_reminders(task: dict) -> None:

@@ -1770,6 +1770,13 @@ timeframe is read from the client's words, Cortex's own pending reminders on tha
 'cortex%'`) that fall before the new date are moved to it (title suffixed with the client's quote), the move is
 logged on the deal, and the notice names any OWNER-set reminders left for him to decide. Reminder 172 moved by hand.
 
+## Approval answers the cockpit before it mirrors to Telegram (19 Sep 2026)
+Card 769: the owner entered his PIN, the email sent in 4 s and the deal closed, but the cockpit hung until he
+reloaded. After a send `_approve` edited the card's Telegram message INSIDE the request, and `telegram._call` had a
+70 s timeout. Now `_mirror_approval` (the edit + the auto-lane offer) runs on a daemon thread after the result is
+returned, and `_call` defaults to 12 s (the long poll passes its own timeout). No completion line in the access log
+for an approve = a request that never returned; look there first.
+
 ## An email card can close its deal when it sends; Talk can cc named people (19 Sep 2026)
 Pyxis decline (deal 128, card 769): `request.on_sent_stage` (+ `on_sent_note`) moves the deal to that stage in
 `_send_email_reply` only after the send succeeds, so "decline, then close as Lost" is one approval and a blocked
