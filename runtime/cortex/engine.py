@@ -6306,13 +6306,15 @@ def _run_blog_scheduled_task(task: dict, skill: dict | None, company: dict | Non
         result = site.go_live(pid) if (site and pid) else {}
     except Exception as e:  # noqa: BLE001
         # A failed publish must say WHY and reach the Inbox. Snap Rewards 122 + 124 (Jul/Aug 2026) failed with an
-        # empty last_status; the cause was the site's WordPress app password being rejected (401) and nobody saw.
+        # empty last_status; every authenticated call was a 401 and nobody saw. The cause was a renamed WordPress
+        # login (<SLUG>_WP_USER still held the old username), not the app password.
         why = f"{type(e).__name__}: {str(e)[:100]}"
         store.update_task(task["id"], status="failed", last_status=f"publish failed: {why}"[:120])
         name = company["name"] if company else "?"
         notifications.notify(f"Blog did not publish: {info.get('title', '')[:60]}",
                              f"{name}: the scheduled publish failed ({why}). The staged draft is untouched; fix "
-                             "the site connection (a 401 means the WordPress application password is invalid) "
+                             "the site connection (a 401 means WordPress refused the login: check the username in "
+                             "cortex.env still matches the site before replacing the application password) "
                              "and re-run the card from the Calendar.",
                              priority="high", category="approval", company_id=(company or {}).get("id"),
                              target_type="task", target_id=str(task["id"]), dedup_key=f"pubfail:{task['id']}")
