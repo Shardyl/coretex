@@ -5773,15 +5773,33 @@ def _draft_proposal_email(task: dict, skill: dict, company: dict, actor: str, nu
     from . import documents
     req = dict(task.get("request") or {})
     did = task.get("deal_id") or req.get("deal_id")
-    keep = lambda note: (store.update_task(task["id"], status="awaiting_approval"),   # noqa: E731
-                         {"blocked": True, "error": note})[1]
+    def keep(note: str) -> dict:
+        # THE REASON GOES ON THE CARD (19 Sep 2026): card 775 was approved several times and looked unchanged
+        # each time, because the block reason only travelled back as a passing message.
+        base = (task.get("draft") or "").split("\n\nEMAIL NOT DRAFTED:")[0]
+        store.update_task(task["id"], status="awaiting_approval", draft=f"{base}\n\nEMAIL NOT DRAFTED: {note}")
+        return {"blocked": True, "error": note}
     if not did:
         return keep(f"Quotation {number} is issued, but this proposal is not on an opportunity, so I do not "
                     "know who to write to. Ask Talk to draft the email and attach both.")
     deal = db.one("select id, title, contact_email from crm_projects where id=%s", (int(did),)) or {}
     to = (deal.get("contact_email") or "").strip().lower()
     if not to:
-        return keep(f"Opportunity #{did} has no contact to write to. Add one, then approve again.")
+        # the deal has no contact of its own: the client ACCOUNT's one person is who we are dealing with
+        acc = db.one("select account_id from crm_projects where id=%s", (int(did),)) or {}
+        ppl = db.query("select email, first_name, last_name from crm_master where account_id=%s and "
+                       "coalesce(email,'')<>'' order by id limit 6", (acc["account_id"],)) if acc.get("account_id") else []
+        if len(ppl) == 1:
+            to = ppl[0]["email"].strip().lower()
+            crm.add_deal_contact(int(did), to, primary=True)
+        elif ppl:
+            return keep(f"Opportunity #{did} has no contact, and its client account has several people: "
+                        + ", ".join(f"{(p.get('first_name') or '').strip()} {(p.get('last_name') or '').strip()} "
+                                    f"<{p['email']}>" for p in ppl)
+                        + ". Tell Talk which one is the contact on this opportunity, then approve again.")
+        else:
+            return keep(f"Opportunity #{did} has no contact to write to, and nobody is on its client account. "
+                        "Tell Talk the contact's name and email for this opportunity, then approve again.")
     qcard = db.one("select * from tasks where kind='quotation' and request->>'number'=%s and status in "
                    "('awaiting_approval','done') order by id desc limit 1", (number,)) or {}
     # the deck is THIS card's latest; the quotation PDF is whatever else the quotation card carries

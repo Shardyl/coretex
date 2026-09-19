@@ -4117,7 +4117,14 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         c = crm.create_contact(inp.get("first_name", ""), inp.get("last_name", ""), inp["email"],
                                account_id=aid, company=inp.get("business"), phone=inp.get("phone"),
                                job_title=inp.get("job_title"))
-        return f"created contact {c['email']}" + (f" at {inp['company']}" if inp.get("company") else "")
+        # WHICH OPPORTUNITY THEY ARE ON IS A FACT, SO CODE SAYS IT (19 Sep 2026): Talk told the owner Yousif "comes
+        # through as the contact" on deal 134 when the deal's contact list was empty.
+        _on = db.query("select id, title from crm_projects where lower(contact_email)=lower(%s) or exists (select 1 "
+                       "from jsonb_array_elements(coalesce(contacts,'[]'::jsonb)) x where lower(x->>'email')=lower(%s)) "
+                       "order by id desc limit 5", (c["email"], c["email"]))
+        _deals = ("; on opportunity " + ", ".join(f"#{d['id']} '{d['title']}'" for d in _on) if _on else
+                  "; NOT attached to any opportunity (say so, and ask which opportunity they belong on)")
+        return f"created contact {c['email']}" + (f" at {inp['company']}" if inp.get("company") else "") + _deals
     if name == "create_deal":
         comp = (inp.get("company") or "").strip()
         title = (inp.get("title") or "").strip()

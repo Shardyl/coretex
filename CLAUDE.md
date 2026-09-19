@@ -1816,6 +1816,12 @@ PROVEN on Special Olympics (770 -> 772 -> email 773, sent 19 Sep) and made the s
 creative proposal card (quotation already issued in its run) drafts the email on its FIRST approval through the same
 function and closes on send too; `capabilities.py` tells Talk the flow so it does not draft a twin; `reject` on an
 already done/sent card is a no-op (770 was dismissed a minute after its email went and turned 'rejected').
+Cloudlink (card 775, deal 134) stalled the same day: approved several times, nothing happened, because the deal had
+no contact (Talk had created Yousif on the ACCOUNT only and claimed he was on the deal) and the block reason never
+reached the card. Now: `crm._attach_to_contactless_deal` (from `create_contact`) makes a new person the primary
+contact of their account's ONE open opportunity when it has no contact; Talk's create_contact result states which
+opportunity the person is on, or that they are on none; `_draft_proposal_email` falls back to the account's single
+person (several = block and list them); every block is written on the card as "EMAIL NOT DRAFTED: <reason>".
 NEXT (owner, not yet asked for): issue the quotation in the same run as the words-led proposal for this kind of enquiry.
 
 ## A person asking us for a quote is never a circular, bcc or not (19 Sep 2026)

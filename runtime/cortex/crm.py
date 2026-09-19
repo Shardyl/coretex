@@ -1591,7 +1591,27 @@ def create_contact(first_name: str, last_name: str, email: str, account_id=None,
          phone, job_title, stage, "Manual"))
     if _account_has_won(account_id):
         db.execute("update crm_master set is_client=true where lower(email)=lower(%s)", (email,))
+    _attach_to_contactless_deal(account_id, email)
     return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
+
+
+def _attach_to_contactless_deal(account_id, email: str) -> int | None:
+    """A NEW PERSON ON AN ACCOUNT JOINS ITS CONTACTLESS OPPORTUNITY (19 Sep 2026). Talk created Yousif Alalawi on
+    the Cloudlink account and told the owner he "comes through as the contact" on deal 134; the deal's own contact
+    list stayed empty, so the proposal email had nobody to go to and the card stalled silently. When the account
+    has exactly ONE open opportunity and that opportunity has no contact at all, the new person becomes its
+    primary contact. Two open deals, or a deal that already has a contact, are left for the owner to decide."""
+    if not account_id or not email:
+        return None
+    try:
+        rows = db.query("select id, contact_email, contacts from crm_projects where account_id=%s and stage = any(%s)",
+                        (account_id, list(OPEN_SALES_STAGES)))
+        if len(rows) != 1 or (rows[0].get("contact_email") or "").strip() or (rows[0].get("contacts") or []):
+            return None
+        add_deal_contact(int(rows[0]["id"]), email, primary=True)
+        return int(rows[0]["id"])
+    except Exception:  # noqa: BLE001 - creating the contact must never fail on this convenience
+        return None
 
 
 class DuplicateDeal(ValueError):
