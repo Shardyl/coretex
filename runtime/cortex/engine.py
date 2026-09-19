@@ -5653,8 +5653,10 @@ def _proposal_summary(co: dict, customer: str, out: dict, filed: str | None, quo
                ("Sample films: " + str(len(out.get("films") or [])) + " from the media library.\n\n"
                 if out.get("films") else "No sample films were included.\n\n"))
             + "Nothing has been sent. Reply on this card (or tell Talk) with any change and I rebuild the deck. "
-            + ("Approve it and I issue the quotation that matches it, then ask me to email both."
-               if not quotation_number else "Approve it when you are happy, then ask me to email it."))
+            + ("Approve it and I issue the quotation that matches it. Approve it again once the figures are right "
+               "and I draft the email with both attached."
+               if not quotation_number else "Approve it when you are happy and I draft the email with the deck "
+                                            "and the quotation attached."))
 
 
 def _revise_proposal(task: dict, skill: dict, company: dict, text: str, quote_card: dict | None = None) -> bool:
@@ -5750,6 +5752,75 @@ def _revise_proposal(task: dict, skill: dict, company: dict, text: str, quote_ca
     return True
 
 
+_OPEN_CARD = ("new", "drafting", "awaiting_approval", "awaiting_correction", "queued")
+
+
+def _draft_proposal_email(task: dict, skill: dict, company: dict, actor: str, number: str) -> dict:
+    """THE SECOND APPROVAL DRAFTS THE EMAIL (owner, 19 Sep 2026: "why would I have to go into Talk and ask it
+    to draft it if I've approved it?"). First approval of a proposal card issues its quotation and restamps
+    the deck with the real figures; approving the card AGAIN says the figures are right, so the cover email
+    is created here exactly as Talk's draft_email would: an email_draft card to the deal's primary contact,
+    the final deck and the quotation PDF attached, linked to the deal. The normal drafting path then continues
+    the deal's real thread from the mailbox that owns it (_adopt_existing_thread) and writes it under the
+    email-handling rules. Nothing sends until that email card is approved with the PIN; this card stays open
+    for revisions until it does."""
+    from . import documents
+    req = dict(task.get("request") or {})
+    did = task.get("deal_id") or req.get("deal_id")
+    keep = lambda note: (store.update_task(task["id"], status="awaiting_approval"),   # noqa: E731
+                         {"blocked": True, "error": note})[1]
+    if not did:
+        return keep(f"Quotation {number} is issued, but this proposal is not on an opportunity, so I do not "
+                    "know who to write to. Ask Talk to draft the email and attach both.")
+    deal = db.one("select id, title, contact_email from crm_projects where id=%s", (int(did),)) or {}
+    to = (deal.get("contact_email") or "").strip().lower()
+    if not to:
+        return keep(f"Opportunity #{did} has no contact to write to. Add one, then approve again.")
+    qcard = db.one("select * from tasks where kind='quotation' and request->>'number'=%s and status in "
+                   "('awaiting_approval','done') order by id desc limit 1", (number,)) or {}
+    # the deck is THIS card's latest; the quotation PDF is whatever else the quotation card carries
+    ids = [a.get("id") for a in (req.get("attach_docs") or [])[:1]]
+    ids += [a.get("id") for a in ((qcard.get("request") or {}).get("attach_docs") or [])
+            if re.search(r"quotation", a.get("filename") or "", re.I)]
+    refs, seen = [], set()
+    for i in ids:
+        d = documents.get(int(i), company["id"]) if i else None
+        if d and d["id"] not in seen:
+            seen.add(d["id"])
+            refs.append(documents.card_ref(d))
+    if len(refs) < 2:
+        return keep(f"I could not find both PDFs for {number} in the library (found: "
+                    f"{', '.join(r['filename'] for r in refs) or 'none'}), so no email was drafted.")
+    _open = db.one("select id from tasks where company_id=%s and kind in ('email_reply','email_draft') and "
+                   "status = any(%s) and lower(request->'inquiry'->>'email')=%s order by id desc limit 1",
+                   (company["id"], list(_OPEN_CARD), to))
+    if _open:   # one open email per person: never a twin
+        return keep(f"There is already an open email to {to}: card #{_open['id']}. Correct or cancel that card, "
+                    "then approve this one again.")
+    sk = (store.get_skill_by_key(company["id"], "email-handling")
+          or store.get_skill_by_key(company["id"], "general-operations") or skill)
+    name = ""
+    try:
+        name = crm._name_of(to) or ""
+    except Exception:  # noqa: BLE001
+        pass
+    ereq = {"outbound": True, "deal_id": int(did), "proposal_card": task["id"], "attach_docs": refs,
+            "brief": (f"Send our proposal and quotation {number} for \"{deal.get('title') or req.get('customer')}\". "
+                      "Both PDFs are attached to this email: the proposal deck and the quotation. Continue the "
+                      "conversation we already have with them and answer anything they asked that is still open."),
+            "inquiry": {"name": name, "email": to, "subject": "", "message": ""}}
+    t = store.create_task(company["id"], sk["id"], "email_draft", ereq)
+    db.execute("update tasks set deal_id=%s where id=%s", (int(did), t["id"]))
+    msg = (f"Figures confirmed. The email to {name or to} is being drafted as card #{t['id']} with "
+           f"{refs[0]['filename']} and {refs[1]['filename']} attached. Approve that card to send. This card stays "
+           "open for revisions until it goes.")
+    store.update_task(task["id"], status="awaiting_approval", draft=msg)
+    store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"email_card": t["id"], "quotation": number})
+    pipeline.log_deal(int(did), "note", f"Proposal and quotation {number} confirmed on card {task['id']}; "
+                                        f"cover email drafted as card {t['id']}.")
+    return {"approved": True, "email_card": t["id"], "note": msg}
+
+
 def _approve_proposal(task: dict, skill: dict, company: dict, actor: str) -> dict:
     """APPROVING A PROPOSAL ISSUES ITS QUOTATION (owner, 15 Sep 2026). The approved deck's investment page
     and the deal record become the quotation prep; code prices every line from the rate card; the deck is
@@ -5761,11 +5832,9 @@ def _approve_proposal(task: dict, skill: dict, company: dict, actor: str) -> dic
     qn_prev = req.get("quotation_number")
     if qn_prev and db.one("select id from tasks where kind='quotation' and request->>'number'=%s and "
                           "status in ('awaiting_approval','done') limit 1", (qn_prev,)):
-        # a LIVE quotation card already carries this deck: nothing more to issue
-        store.update_task(task["id"], status="done")
-        store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"version": req.get("version")})
-        return {"approved": True, "note": f"Quotation {qn_prev} already exists for it. Ask Talk to "
-                                          "draft the email and attach both."}
+        # a LIVE quotation card already carries this deck: nothing more to issue. The second approval means
+        # "the figures are right": the cover email is drafted with both PDFs (owner, 19 Sep 2026).
+        return _draft_proposal_email(task, skill, company, actor, qn_prev)
     # (a quotation card for this number that was CANCELLED means a re-approval: the new one is issued as the
     # next version under the same number, never a fresh number: Rana's SEN-2026-0017, 17 Sep 2026)
     spec = req.get("deck_spec") or {}
@@ -5868,8 +5937,10 @@ def _approve_proposal(task: dict, skill: dict, company: dict, actor: str) -> dic
               if qspec.get("assumptions") else ""))
     # THE PROPOSAL CARD STAYS OPEN until the email carrying the deck is sent (owner, 17 Sep 2026: "I want it
     # on a card so I can request further revisions"). A closed card vanishes from the Inbox; replies on it
-    # keep revising the deck, and approving it again just confirms (the quotation card is live).
-    msg += " This card stays in your Inbox for revisions until the email with the deck is sent."
+    # keep revising the deck, and approving it again drafts the cover email (_draft_proposal_email).
+    msg += (" Check the figures. Reply here with any change, or APPROVE THIS CARD AGAIN and I draft the email "
+            "to the client with the deck and the quotation attached. This card stays in your Inbox until that "
+            "email is sent.")
     store.update_task(task["id"], request=req, status="awaiting_approval", draft=msg)
     store.log_decision(task["id"], skill["id"], actor, "approve",
                        snapshot={"quotation": number, "card": (t or {}).get("id"), "deck": final})

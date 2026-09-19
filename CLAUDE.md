@@ -1803,6 +1803,16 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## Approving a proposal twice drafts the email (19 Sep 2026)
+Owner: "why would I have to go into Talk and ask it to draft it if I've approved it?" Approval 1 of a proposal
+card issues the quotation and restamps the deck with its figures (unchanged). Approval 2 (a live quotation card
+exists for its number) used to just close the card; now `engine._draft_proposal_email` creates the email_draft
+card exactly as Talk's draft_email would: to the deal's primary contact (`crm_projects.contact_email`), deal-linked,
+`attach_docs` = this card's latest deck + the quotation PDF from the quotation card (`documents.card_ref`, Drive
+pin), skill email-handling. The normal drafting path adopts the deal's real thread and sender. Blocks (card stays
+open) when: no deal, no contact, both PDFs not found, or an open email to that person already exists. The proposal
+card still closes itself when the email carrying its deck is sent. Nothing sends without the PIN on the email card.
+
 ## A person asking us for a quote is never a circular, bcc or not (19 Sep 2026)
 Special Olympics UAE (deal 133) wrote "Dear Supplier, please quote for the below" with suppliers on bcc, shoot four
 days out: our address was not on To/Cc so the 17 Sep fix did not apply, the model matched "mass Dear Supplier
