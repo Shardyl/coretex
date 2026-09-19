@@ -5832,7 +5832,10 @@ def _draft_proposal_email(task: dict, skill: dict, company: dict, actor: str, nu
             "brief": (f"Send our proposal and quotation {number} for \"{deal.get('title') or req.get('customer')}\". "
                       "Both PDFs are attached to this email: the proposal deck and the quotation. Continue the "
                       "conversation we already have with them and answer anything they asked that is still open."),
-            "inquiry": {"name": name, "email": to, "subject": "", "message": ""}}
+            # a first email has no thread to take its subject from (card 779 was drafted with none); an adopted
+            # thread still replaces this with the conversation's own subject
+            "inquiry": {"name": name, "email": to, "message": "",
+                        "subject": f"Proposal and quotation {number}, {deal.get('title') or req.get('customer')}"}}
     t = store.create_task(company["id"], sk["id"], "email_draft", ereq)
     db.execute("update tasks set deal_id=%s where id=%s", (int(did), t["id"]))
     msg = (f"Figures confirmed. The email to {name or to} is being drafted as card #{t['id']} with "
