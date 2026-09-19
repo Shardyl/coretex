@@ -772,6 +772,14 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
                                  "from": env["from"], "subject": env["subject"], "gmail_id": res.get("id")})
     try:   # pipeline loop: log the send on the deal timeline + track the promises this email makes
         pipeline.record_send(task, env, company)
+        # "close it once this goes" (owner, 19 Sep 2026: the Pyxis decline): an email card may carry the stage
+        # its deal moves to WHEN IT IS SENT, so a decline closes the opportunity only if it really went out
+        _oss = ((task.get("request") or {}).get("on_sent_stage") or "").strip()
+        _odid = (task.get("request") or {}).get("deal_id") or task.get("deal_id")
+        if _oss in crm.DEAL_STAGES and _odid:
+            crm.set_project_stage(int(_odid), _oss, actor="owner")
+            pipeline.log_deal(int(_odid), "note", f"Moved to {_oss} on the send of card {task['id']}"
+                              + (f": {(task.get('request') or {}).get('on_sent_note')}" if (task.get("request") or {}).get("on_sent_note") else "."))
         # a proposal card whose deck just went out is finished: close it (it stayed open for revisions)
         _sent_ids = [int(a.get("id")) for a in ((task.get("request") or {}).get("attach_docs") or []) if a.get("id")]
         if _sent_ids:

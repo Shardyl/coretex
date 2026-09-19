@@ -1770,6 +1770,11 @@ timeframe is read from the client's words, Cortex's own pending reminders on tha
 'cortex%'`) that fall before the new date are moved to it (title suffixed with the client's quote), the move is
 logged on the deal, and the notice names any OWNER-set reminders left for him to decide. Reminder 172 moved by hand.
 
+## An email card can close its deal when it sends; Talk can cc named people (19 Sep 2026)
+Pyxis decline (deal 128, card 769): `request.on_sent_stage` (+ `on_sent_note`) moves the deal to that stage in
+`_send_email_reply` only after the send succeeds, so "decline, then close as Lost" is one approval and a blocked
+or unsent email never closes anything. Talk's `draft_email` takes `cc` (emails the owner names) -> `cc_extra`.
+
 ## Our own email restarts the chase clock (17 Sep 2026)
 Gino sent Honor (deal 119) a follow-up at 16:19 (card 740, offering Monday 21st) and the auto-chase fired at
 19:11 the same day (card 747, "following up on my note from earlier this week"): a send only re-armed a PAUSED
