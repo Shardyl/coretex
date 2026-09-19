@@ -3265,6 +3265,8 @@ SKILL_TOOLS = [
         "company": {"type": "string", "description": "your business slug (whose brand/signature/logo to use)"},
         "to_name": {"type": "string", "description": "recipient's name"},
         "to_email": {"type": "string", "description": "recipient's email (resolve via crm_lookup if known)"},
+        "cc": {"type": "array", "items": {"type": "string"},
+               "description": "email addresses Rashad asks to COPY on this email (outside people included); only ones he named"},
         "subject": {"type": "string"},
         "brief": {"type": "string", "description": "what the email should say"},
         "from_email": {"type": "string", "description": "optional: from address (defaults to the company's)"},
@@ -4455,6 +4457,9 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             req["from_email"], req["mailbox_rt"] = _fe, _rt
         if _TURN_LINKS.get():    # links he typed in Talk are real: the invented-link guard keeps them
             req["owner_links"] = list(_TURN_LINKS.get())
+        _cc = [str(x).strip().lower() for x in (inp.get("cc") or []) if "@" in str(x)]
+        if _cc:   # people he asked to copy (19 Sep 2026: the Pyxis decline, copied to their team)
+            req["cc_extra"] = sorted(set(_cc) - {to_email.lower()})
         # An outbound email that offers ONE named slot books it the same way a reply does. The reply path
         # gets there through _maybe_extract_meeting, which only reads email_reply cards, so an outbound
         # draft had no way to carry a real Meet link and would have promised to "send one separately".
