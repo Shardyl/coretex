@@ -1803,6 +1803,13 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## Replies on a website-enquiry thread are read (21 Sep 2026)
+`poll_inbox` queried `-subject:"New enquiry from"` to leave form notifications to `poll_inquiries`. That also
+dropped every client REPLY on such a thread ("Re: New enquiry from Bohdan Bilych": SFORS pausing the hero video,
+never reached deal 101). The query no longer excludes it; only a subject that STARTS with "New enquiry from" (the
+notification itself) is skipped, in code. Same sweep found two literal backspace characters where `` was meant in
+the reminder date-phrase regex ("31 August" never parsed): fixed. Patch scripts: never put `` in a heredoc.
+
 ## Call times only when a call is relevant (21 Sep 2026)
 Owner: "I find myself constantly telling Cortex to stop offering dates for meetings." Cards 832 (Massar, decision on
 hold to October) and 841 (Emergy, only confirming receipt) both proposed times. Three causes, all fixed:

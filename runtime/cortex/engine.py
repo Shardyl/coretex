@@ -2033,8 +2033,8 @@ def _stamp_when(phrase: str):
         return (now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
     if "today" in ph:
         return now.replace(hour=min(now.hour + 2, 20), minute=0, second=0, microsecond=0)
-    m = re.search(r"(\d{1,2})\s*(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|"
-                  r"september|october|november|december)", ph)
+    m = re.search(r"\b(\d{1,2})\s*(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|"
+                  r"september|october|november|december)\b", ph)
     if m:
         months = ["january", "february", "march", "april", "may", "june", "july", "august", "september",
                   "october", "november", "december"]
@@ -4996,7 +4996,10 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
         company = _inbox_client_company(company_slug)   # the OAuth client that minted this inbox's token
     if not co or not db.setting_get(rt_key):
         return {"processed": 0, "results": [], "reason": "no company / inbox not connected"}
-    q = f'in:inbox newer_than:{days}d -subject:"New enquiry from"'
+    # The website-form NOTIFICATION is poll_inquiries' job, but a client's REPLY on that thread is ordinary mail:
+    # the old query dropped every subject containing "New enquiry from", so "Re: New enquiry from Bohdan Bilych"
+    # (SFORS pausing the hero video, 21 Sep 2026) never reached the deal. The notification is skipped in code below.
+    q = f'in:inbox newer_than:{days}d'
     own_domain = INBOXES.get(company_slug, "").split("@")[-1].lower()
     intl = _internal_index()                       # own/burner domains + internal roster + test group
     key = f"inbox_processed:{company_slug}"
@@ -5006,6 +5009,10 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
     for e in emails:
         gid = e.get("gmail_id")
         if not gid or gid in seen:
+            continue
+        if re.match(r"\s*new enquiry from\b", e.get("subject") or "", re.I):   # the form notification itself
+            if commit:
+                seen.add(gid)
             continue
         if _is_internal(e.get("email"), own_domain, intl):   # our own / internal address: never classify or CRM
             if commit:
