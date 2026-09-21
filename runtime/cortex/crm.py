@@ -1025,22 +1025,26 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
         adv = next((x for x in terms if "approval" in (x.get("due") or "").lower()
                     or "advance" in (x.get("due") or "").lower() or "booking" in (x.get("due") or "").lower()),
                    terms[0] if terms else None)
+        try:      # confirming a SIGNED quotation issues the stage-1 pro forma itself: never a twin card
+            from . import proforma as _pf
+            if any(int(x.get("stage") or 0) == 1 for x in _pf.for_deal(did)):
+                adv = None
+        except Exception:  # noqa: BLE001
+            pass
         if adv:
             try:
-                sk = store.get_skill_by_key(cid, "sales-quotation") if cid else None
+                sk = (store.get_skill_by_key(cid, "finance-quote-to-invoice")
+                      or store.get_skill_by_key(cid, "sales-quotation")) if cid else None
                 if sk:
                     store.create_card(cid, sk["id"], "content", {
                         "brief": (f"ISSUE THE ADVANCE INVOICE for '{p['title']}' (deal {did}): "
                                   + _invoice_amount(p, float(adv.get("pct") or 0)) +
                                   ". Due " + (adv.get("due") or "on approval") + " per the signed terms. "
-                                  "Prepare/issue the invoice; marking this card done arms the payment "
-                                  "follow-up clock."),
+                                  "Approving this card issues the pro forma invoice for this stage against "
+                                  "the signed quotation; the payment follow-up clock starts when its email "
+                                  "is sent."),
                         "title": f"Advance invoice: {p['title']}", "deal_id": did, "invoice_pct": adv.get("pct"),
-                        "on_done_reminders": [
-                            {"title": f"Payment follow-up (gentle): advance invoice for '{p['title']}'", "days": 8},
-                            {"title": f"Payment follow-up (firmer, attach statement): '{p['title']}'", "days": 15},
-                            {"title": f"Payment ESCALATION - advance invoice '{p['title']}' still unpaid", "days": 22},
-                        ]}, deal_id=did)
+                        "prep_action": "proforma", "proforma_stage": "first"}, deal_id=did)
             except Exception:  # noqa: BLE001
                 pass
     if new in ("Delivered", "Final Payment"):
@@ -1049,19 +1053,18 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
                    terms[-1] if terms else None)
         if bal and old not in ("Delivered", "Final Payment"):
             try:
-                sk = store.get_skill_by_key(cid, "sales-quotation") if cid else None
+                sk = (store.get_skill_by_key(cid, "finance-quote-to-invoice")
+                      or store.get_skill_by_key(cid, "sales-quotation")) if cid else None
                 if sk:
                     store.create_card(cid, sk["id"], "content", {
                         "brief": (f"ISSUE THE BALANCE INVOICE for '{p['title']}' (deal {did}): "
                                   + _invoice_amount(p, float(bal.get("pct") or 0)) +
                                   ". Due " + (bal.get("due") or "on delivery") + " per the signed terms. "
-                                  "Marking this card done arms the payment follow-up clock."),
+                                  "Approving this card issues the pro forma invoice for the final stage "
+                                  "against the signed quotation; the payment follow-up clock starts when its "
+                                  "email is sent."),
                         "title": f"Balance invoice: {p['title']}", "deal_id": did, "invoice_pct": bal.get("pct"),
-                        "on_done_reminders": [
-                            {"title": f"Payment follow-up (gentle): balance invoice for '{p['title']}'", "days": 8},
-                            {"title": f"Payment follow-up (firmer, attach statement): '{p['title']}'", "days": 15},
-                            {"title": f"Payment ESCALATION - balance invoice '{p['title']}' still unpaid", "days": 22},
-                        ]}, deal_id=did)
+                        "prep_action": "proforma", "proforma_stage": "last"}, deal_id=did)
             except Exception:  # noqa: BLE001
                 pass
         if old not in ("Delivered", "Final Payment"):

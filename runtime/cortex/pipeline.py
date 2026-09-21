@@ -401,22 +401,8 @@ def record_quotation_sent(deal_id: int, task: dict, env: dict, company: dict | N
     num, ver = found
     reg = db.setting_get(f"quote_versions:{num}") or []
     entry = (next((e for e in reg if e.get("v") == ver), None) if ver else None) or reg[-1]
-    spec = entry.get("spec") or {}
-    net = 0.0
-    for s in spec.get("sections") or []:
-        for it in s.get("items") or []:
-            try:
-                if it.get("unit") not in (None, ""):
-                    net += float(it["unit"]) * float(it.get("qty") or 1)
-            except (TypeError, ValueError):
-                continue
-    try:
-        from . import quotation as _q
-        if (_q.presets().get(spec.get("preset")) or {}).get("agency_fee"):
-            net += round(net * 0.15, 2)          # the agency fee is part of the fee, VAT is not
-    except Exception:  # noqa: BLE001
-        pass
-    net = round(net, 2)
+    from . import proforma as _pf
+    net = _pf.net_of(entry)     # ONE sum for a version's value before VAT: the deal value and the pro forma share it
     if net <= 0:
         return None
     cur = "AED"

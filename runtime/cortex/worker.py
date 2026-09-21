@@ -77,6 +77,8 @@ _RELATED_SKILLS_DEFAULT = {
     "sales-first-response": ("email-handling", "sales-scheduling", "lead-qualification", "sales-followup"),
     # project correspondence drafts ON email-handling and also reads the project skills' rules.
     "email-handling": ("sales-scheduling", "prod-revisions", "prod-status-reporting", "prod-pipeline"),
+    # the email that carries a pro forma drafts on its own finance lane and reads the company's email voice
+    "finance-invoice-sending": ("email-handling",),
 }
 
 

@@ -114,6 +114,17 @@ CAPABILITIES: list[tuple[str, str]] = [
      "resolves them from the library, DROPPING any we do not hold rather than substituting. Every "
      "statistic, award and project detail must be passed in as facts - the writer may use nothing "
      "else. It lands in the Inbox and contacts nobody."),
+    ("Signed quotations and pro forma invoices",
+     "When a client emails back a SIGNED quotation, Cortex recognises the PDF, matches it by code to the stored "
+     "version it was issued as, and raises a 'Signed quotation: confirm' card that lists anything to check (an "
+     "older version signed, a different total, handwritten changes, no visible signature). Confirming it books "
+     "the opportunity, records that version's payment stages on it and issues the first PRO FORMA INVOICE: one "
+     "line ('70% down payment against quotation SEN-... for media production'), made out to the client company, "
+     "never a person, every figure from the stored quotation. quotation_signed(company, number) raises the same "
+     "confirm card when he TELLS you it was signed. issue_proforma(company, number, stage=) raises a later stage, "
+     "or replaces an unsent one (billed_to = legal name, address, TRN in his words). Approving a pro forma card "
+     "drafts its email on the invoice-sending lane; that email is owner-only to send, and the payment follow-up "
+     "clock starts when it goes. You never type an amount on any of this."),
     ("The same quotation again: reissue_quotation",
      "reissue_quotation(company, number) issues an EXISTING quotation as its next version, copied exactly by "
      "code from the stored version: same lines, prices and total, today's date. It is the ONLY way to send a "

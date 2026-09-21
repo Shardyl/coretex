@@ -2011,3 +2011,51 @@ v3 at 39,500 (card 808), so the card contradicted its own quotation. Fixed:
   `_stated_numbers`); code applies it; an unreachable target RAISES (nothing issued, the card says why).
   Assumptions that state totals, tiers, discounts or amounts are dropped (`_MONEY_CLAIM`); the summary's
   "Your figure AED X + VAT: reached (Budget tier used ...; lines moved -N%)" line is stamped from the result.
+
+## Signed quotation back -> pro forma invoice (21 Sep 2026)
+Owner's flow: the client signs a quotation and emails it back; Cortex confirms WHICH stored version they signed;
+he confirms; the pro forma for the first payment stage is issued. `runtime/cortex/proforma.py` + the pro forma
+block in `engine.py` (above `_push_quote_to_client_drive`).
+- DETECTION: `_file_inbound_attachments` calls `_check_signed_quotation` for every PDF filed on a deal. Code gates
+  the model call (`proforma.deal_quotations` non-empty, no `quotation-signed:` event on the timeline yet, no open
+  confirm card, `worth_reading`: a scan or a PDF naming a quotation). ONE Haiku pass READS the pages
+  (`read_returned`: is it our quotation, signature / stamp seen, the total printed, handwritten changes).
+  `match_signed` is pure code: number -> the deal's own quotations; version -> the stored version whose gross
+  equals the total on the returned copy, else the last version SENT (`quotation-sent:<n>:v<k>` refs). Flags: an
+  older version signed, a total matching nothing, handwritten changes, no visible signature. The filed copy
+  becomes library kind `signed-quotation`. Photos (jpg) of a signed page are NOT read: use Talk.
+- CONFIRM CARD: kind `content`, `request.kind = 'signed_quotation'`, inserted `awaiting_approval` (never drafted
+  by the worker), button "Confirm signed & issue pro forma". A reply naming a version ("they signed v2") re-matches
+  by code (`_signed_reply`). Approve = `_confirm_signed`: `crm.set_deal_terms` from the version's stages, deal value
+  = that version's net, timeline `quotation_signed` (ref `quotation-signed:<n>:v<k>`, which `_signed_record` reads
+  back), stage-1 pro forma issued, THEN stage -> Booked (kickoff card etc. fire as before). Talk `quotation_signed`
+  raises the same card when he reports a signature by hand; nothing skips the confirmation.
+- THE FIGURES: never from the returned PDF, never from a model. `proforma.net_of(entry)` (now also what
+  `pipeline.record_quotation_sent` uses), stages parsed by code from the payment lines the version PRINTED
+  (`quotation._record_version` keeps them on the registry entry as `payment`, OUTSIDE the spec/sig so no version
+  bump; older entries fall back to the preset's `payment_lines`, else `quotation.DEFAULT_PAYMENT_LINES` 70/30).
+  Lines that do not total 100% block the issue and ask for the split. VAT from profile `vat`.
+- THE DOCUMENT (owner-approved layout, after his Invoice 4300 sample): logo on a black tile, legal entity + TRN +
+  address right, PRO FORMA INVOICE centred, Billed To = the client COMPANY (never a person), one line
+  "70% down payment against quotation SEN-... for media production", Subtotal / VAT / Total / Amount Due, bank
+  details, "not a tax invoice" footer. HTML -> `deck.to_pdf` (weasyprint). No Sky Vision logo (owner: looked bad;
+  only white-on-dark logos are on the profiles). Billed-to detail lives on `crm_accounts.billing`
+  ({name, address[], trn}), set from his words through Talk `issue_proforma(billed_to=[...])`.
+- WORDING + NUMBERING ARE DATA: the `PROFORMA = {...}` line on the company's `finance-quote-to-invoice` craft
+  (prefix, seq, description template, work, stage labels, due_days, footer). Sensa and Sky Vision share
+  `seq: skyvision-entity` (one legal entity, one number run): `PI-YYYY-NNNN`, counter `proforma_seq:<seq>`,
+  atomic upsert. Registry `proformas:<quotation number>`: one row per pro forma (stage, pct, amounts, status
+  issued/sent/void, doc_id, task_id). A stage is never invoiced twice; `replace=` voids an UNSENT one (number
+  never reused, library file renamed VOID, card cancelled) and refuses a sent one.
+- PRO FORMA CARD: `content`, `request.kind = 'proforma'`, PDF on the card, library kind `proforma` on the deal +
+  the client's Drive folder. Approve = `_approve_proforma`: an `email_draft` on `finance-invoice-sending`
+  (`worker._RELATED_SKILLS_DEFAULT` adds email-handling's voice) to the deal's primary contact, the only figures
+  it may state stamped in the brief, `request.money = True`. `engine.is_money(task)` (kind OR that flag) feeds the
+  step-up gate and the cockpit's `owner_only`: a team PIN cannot send it. On SEND `_proforma_sent` marks the
+  registry row `sent` and arms the 8 / 15 / 22 day payment reminders (`on_done_reminders`).
+- STAGE PLAYBOOK: `crm._stage_patterns`' Advance / Balance invoice cards now file on finance-quote-to-invoice,
+  carry `prep_action: 'proforma'` (+ `proforma_stage` first/last) and approving one ISSUES that stage's pro forma
+  (`_prep_build_proforma`); the Advance card is skipped when stage 1 already has a pro forma. Those cards only ever
+  fired when `payment_terms` was set, and it was set on no deal before this build.
+- NOT BUILT: a tax invoice (stays with the accountant), payment received / reconciliation, reading a signed page
+  sent as a photo, the SignWell e-sign route (contracts branch, undeployed).

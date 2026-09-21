@@ -590,6 +590,13 @@ def generate(company: str, preset: str = "ai-production", *, customer: str = "",
 # The quotation STYLE is fixed house design; company DATA comes from the profile.
 # ---------------------------------------------------------------------------
 
+# What a quotation prints when its preset carries no payment lines of its own. proforma.py reads the same
+# constant for versions recorded before the printed lines were kept on the registry entry (21 Sep 2026).
+DEFAULT_PAYMENT_LINES = [
+    "70% down payment to commence the project.",
+    "30% balance due before final delivery, on approval.",
+    "Revisions as per the Revisions & Delivery terms on this quotation."]
+
 # ARGB palette + type (matches make_quote.js)
 _BLACK, _CYAN, _TEAL, _TEALTX = "FF0A0A0A", "FF00DAFF", "FF0E2A30", "FF0A7C8C"
 _INK, _MUTE, _ALT, _ENTER, _WHT = "FF1A1A1A", "FF5F6B70", "FFEEF7F9", "FFFFFDF0", "FFFFFFFF"
@@ -852,10 +859,8 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
         ws[cc].value = lab; fill(ws[cc], _TEAL); ws[cc].font = F(s=10, b=True, c=_WHT)
         ws[cc].alignment = Alignment(indent=1)
     r += 1
-    pay = list(payment_lines or []) or list(m.get("payment") or []) or [
-        "70% down payment to commence the project.",
-        "30% balance due before final delivery, on approval.",
-        "Revisions as per the Revisions & Delivery terms on this quotation."]
+    pay = list(payment_lines or []) or list(m.get("payment") or []) or list(DEFAULT_PAYMENT_LINES)
+    printed_pay = list(pay)      # recorded on the version: the pro forma reads the stages from what was PRINTED
     pay = pay + [f"All prices in {cur}, exclusive of {int(vat_rate*100)}% VAT."]
     bank = hb["bank"]
     for i in range(max(len(pay), len(bank))):
@@ -951,12 +956,13 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, f"quotation-{m['company']}-{m['number']}.xlsx")
     wb.save(path)
-    _record_version(m, preset, customer, sections, contact_email, contact_name=ct.get("name") or "")
+    _record_version(m, preset, customer, sections, contact_email, contact_name=ct.get("name") or "",
+                    payment=printed_pay)
     return _return(m, path)
 
 
 def _record_version(m: dict, preset: str, customer: str, sections: list | None,
-                    contact_email: str | None, contact_name: str = "") -> None:
+                    contact_email: str | None, contact_name: str = "", payment: list | None = None) -> None:
     """Version registry (`quote_versions:<number>` setting): every distinct generated iteration of a
     quote number is recorded with its full spec, so `build_versions_workbook` can rebuild the whole
     history as one tabbed spreadsheet. Regenerating identical content refreshes the last entry's date
@@ -981,6 +987,8 @@ def _record_version(m: dict, preset: str, customer: str, sections: list | None,
             reg[-1]["date"] = today
         else:
             reg.append({"v": len(reg) + 1, "date": today, "sig": sig, "spec": spec})
+        if payment:      # OUTSIDE the spec and its signature, so keeping it never makes a new version
+            reg[-1]["payment"] = list(payment)
         db.setting_set(key, reg)
     except Exception:  # noqa: BLE001 — registry bookkeeping must never break a quote
         pass

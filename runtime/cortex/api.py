@@ -477,8 +477,8 @@ def _enrich_action_card(t: dict) -> dict:
                      "stakes": sk["stakes"], "auto_offer": offer}
     t["title"] = t.get("title") or (t.get("request") or {}).get("title")
     t["skill"] = sk["name"] if sk else t.get("skill")
-    t["approve_label"] = engine.approve_label(t["kind"])   # exact consequence on the Approve button
-    t["owner_only"] = engine.kind_class(t["kind"]) == "money"   # money-class: only the owner's step-up passes
+    t["approve_label"] = engine.approve_label(t["kind"], t.get("request"))   # exact consequence on the Approve button
+    t["owner_only"] = engine.is_money(t)   # money-class (a kind, or one card): only the owner's step-up passes
     t["ts"] = (t.get("updated_at") or t.get("created_at"))
     # NEVER ship the heavy attachment base64 in the list response — just a count (the files stay on the task
     # for the send; fetch them on demand). A single phone screenshot can be ~9MB and chokes the connection.
@@ -3569,6 +3569,37 @@ SKILL_TOOLS = [
                     "the human copy, and they must never drift apart.",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string", "description": "your business slug; defaults to sensa"}}}},
+    {"name": "quotation_signed",
+     "description": "Record that a client has SIGNED a quotation when Rashad or the team says so (signed on paper, "
+                    "confirmed by WhatsApp or in a meeting, or a signed copy Cortex did not pick up). It raises the "
+                    "same 'Signed quotation: confirm' card a detected return does; confirming that card books the "
+                    "opportunity, records the quotation's payment stages on it and issues the first pro forma "
+                    "invoice. You never move the stage or issue the pro forma yourself for a newly signed quotation.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "our business slug, e.g. sensa"},
+        "number": {"type": "string", "description": "the quotation number, e.g. SEN-2026-0019"},
+        "version": {"type": "integer", "description": "the version they signed; omit for the last version sent"},
+        "deal_id": {"type": "integer"}},
+        "required": ["company", "number"]}},
+    {"name": "issue_proforma",
+     "description": "Issue a PRO FORMA INVOICE for one payment stage of a quotation the client has signed: one line, "
+                    "'70% down payment against quotation SEN-... for media production', priced BY CODE from the "
+                    "stored quotation version and the payment stages it printed. You pass no amounts. Use it for a "
+                    "later stage (the shoot-day or final payment), to raise a stage nobody has raised yet, or with "
+                    "`replace` to void an UNSENT pro forma and issue it again (for example billed to a different "
+                    "legal entity). `billed_to` is the client COMPANY as Rashad states it: legal name first, then "
+                    "address lines, then 'TRN <number>'; it is remembered on the client account. A pro forma is "
+                    "never made out to a person. It lands in the Inbox as a card; approving that card drafts the "
+                    "email, which only Rashad can send.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "our business slug, e.g. sensa"},
+        "number": {"type": "string", "description": "the quotation number, e.g. SEN-2026-0019"},
+        "version": {"type": "integer", "description": "the signed version; omit to use the one confirmed on the opportunity"},
+        "stage": {"type": "integer", "description": "1-based payment stage; omit for the first stage not yet invoiced"},
+        "billed_to": {"type": "array", "items": {"type": "string"}},
+        "replace": {"type": "string", "description": "a pro forma number to void and reissue, e.g. PI-2026-0003"},
+        "deal_id": {"type": "integer"}},
+        "required": ["company", "number"]}},
     {"name": "reissue_quotation",
      "description": "Issue an EXISTING quotation again as its next version, copied EXACTLY by code from the stored "
                     "version: same lines, same prices, same total. Use this, never create_quotation, whenever "
@@ -4192,6 +4223,29 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
     if name == "run_report":
         t = engine.deliver_seo_report(inp.get("company", "tabscanner"), days=28)
         return f"generated the report — it's in your Inbox now (task #{t['id']})"
+    if name in ("quotation_signed", "issue_proforma"):
+        _co = _talk_company(inp.get("company"), u)
+        if not _co:
+            return f"unknown business '{inp.get('company')}'"
+        _num = str(inp.get("number") or "").strip().upper()
+        try:
+            if name == "quotation_signed":
+                t = engine.mark_quotation_signed(_co["slug"], _num, version=inp.get("version"),
+                                                 deal_id=inp.get("deal_id"))
+                return (f"raised card #{t['id']}: '{t.get('title')}'. Nothing has changed yet: confirming that card "
+                        "books the opportunity, records the payment stages and issues the first pro forma.")
+            _ver, _did = inp.get("version"), inp.get("deal_id")
+            if not _ver and _did:
+                _sr = engine._signed_record(int(_did))
+                _ver = _sr["v"] if _sr and _sr["number"] == _num else None
+            t = engine.deliver_proforma(_co["slug"], _num, version=_ver, stage=inp.get("stage"), deal_id=_did,
+                                        billed_to=inp.get("billed_to"), replace=inp.get("replace"))
+        except ValueError as _e:
+            return str(_e)
+        _pf = (t.get("request") or {}).get("proforma") or {}
+        return (f"issued pro forma {_pf.get('pi')}: {_pf.get('description')}, {_pf.get('currency')} "
+                f"{float(_pf.get('total') or 0):,.2f} including VAT. It is card #{t['id']} in the Inbox with the PDF "
+                "attached; nothing has been sent. Approving that card drafts the email, which only Rashad can send.")
     if name == "reissue_quotation":
         _co = _talk_company(inp.get("company"), u)
         if not _co:

@@ -97,8 +97,23 @@ APPROVE_ACTION = {
 }
 
 
-def approve_label(kind: str) -> str:
+_REQUEST_KIND_ACTION = {"signed_quotation": "Confirm signed & issue pro forma",
+                        "proforma": "Approve & draft the email"}
+
+
+def approve_label(kind: str, request: dict | None = None) -> str:
+    rk = (request or {}).get("kind")
+    if kind == "content" and rk in _REQUEST_KIND_ACTION:
+        return _REQUEST_KIND_ACTION[rk]
+    if kind == "content" and (request or {}).get("prep_action") == "proforma":
+        return "Approve & issue the pro forma"
     return APPROVE_ACTION.get(kind, "Approve")
+
+
+def is_money(task: dict) -> bool:
+    """Money-class: only the OWNER's own step-up passes. A kind can be money (payment, invoice_send), and so
+    can one card: an email that carries a pro forma invoice is marked `request.money` (21 Sep 2026)."""
+    return kind_class(task.get("kind")) == "money" or bool((task.get("request") or {}).get("money"))
 
 
 def is_auto_eligible(kind: str) -> bool:
@@ -780,6 +795,7 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
             crm.set_project_stage(int(_odid), _oss, actor="owner")
             pipeline.log_deal(int(_odid), "note", f"Moved to {_oss} on the send of card {task['id']}"
                               + (f": {(task.get('request') or {}).get('on_sent_note')}" if (task.get("request") or {}).get("on_sent_note") else "."))
+        _proforma_sent(task)     # a pro forma went out: marked sent, payment follow-up clock armed
         # a proposal card whose deck just went out is finished: close it (it stayed open for revisions)
         _sent_ids = [int(a.get("id")) for a in ((task.get("request") or {}).get("attach_docs") or []) if a.get("id")]
         if _sent_ids:
@@ -1289,6 +1305,13 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         return {"approved": True, "note": "Approved. Ask Talk to draft the email and attach the deck."}
     if (task.get("request") or {}).get("kind") == "proposal":   # approving a deck issues its quotation
         return _approve_proposal(task, skill, company, actor)
+    _rk = (task.get("request") or {}).get("kind")
+    if _rk == "signed_quotation":   # the owner confirms the client signed: Booked, terms recorded, pro forma issued
+        return _confirm_signed(task, skill, company, actor)
+    if _rk == "proforma":           # approving a pro forma drafts the (owner-only) email that carries it
+        return _approve_proforma(task, skill, company, actor)
+    if (task.get("request") or {}).get("prep_action") == "proforma":   # a stage-playbook invoice card does the work
+        return _prep_build_proforma(task, skill, company, actor)
     if task["kind"] in ("newsletter_idea", "newsletter_review", "newsletter_send"):
         # EVERY outward newsletter send (the test send to reviewers, the schedule, the live send) routes
         # through the cockpit confirm — it shows exactly who it reaches + takes the PIN/fingerprint. A plain
@@ -1784,6 +1807,8 @@ def apply_correction(task: dict, text: str) -> None:
         if r.get("blocked"):
             tg.send(f"Card #{task['id']}: {r['error']}")
         return
+    if (task.get("request") or {}).get("kind") == "signed_quotation" and _signed_reply(task, text):
+        return      # "they signed v2": re-matched by code, the card restamped; anything else redrafts as usual
     skill = store.get_skill(task["skill_id"])
     company = store.get_company(task["company_id"])
     if (task.get("request") or {}).get("kind") == "creative_proposal":
@@ -2857,8 +2882,7 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
             return {"ok": False, "blocked": True,
                     "error": f"{_to} has LEFT their company — this would send into a dead mailbox. "
                              "Tell me who it should go to instead and I'll repoint it."}
-    gate = _biometric_gate(task["kind"] in _APPROVE_PUBLIC, stepup_token,
-                           money=(kind_class(task["kind"]) == "money"))
+    gate = _biometric_gate(task["kind"] in _APPROVE_PUBLIC, stepup_token, money=is_money(task))
     if gate:
         return gate
     if run_at:
@@ -4099,6 +4123,11 @@ def _file_inbound_attachments(co: dict, e: dict, deal_id: int, rt_key: str | Non
                                   ref=f"doc:{gmail.mail_ref(e)}:{fn}")
         if doc:
             filed.append(doc)
+            if mime == "application/pdf" or fn.lower().endswith(".pdf"):
+                try:      # a signed quotation coming back raises a confirm card; a failed check never stops mail
+                    _check_signed_quotation(co, deal_id, doc, data, e)
+                except Exception as _se:  # noqa: BLE001
+                    print(f"[proforma] signed check: {type(_se).__name__}: {_se}", flush=True)
     return filed
 
 
@@ -6507,6 +6536,432 @@ def _issue_master_terms_copy(co: dict, customer: str, number: str, mt: dict,
         except Exception:  # noqa: BLE001 — the library copy still stands
             pass
     return doc
+
+
+# ---------- pro forma invoices against a SIGNED quotation (owner, 21 Sep 2026) ----------
+# A client signs a quotation and emails it back. The returned PDF is matched BY CODE to the stored version it
+# was issued as; the owner confirms on a card; the deal is Booked with that version's payment stages; the pro
+# forma for the first stage is issued (proforma.py: every figure from the stored version, the number by code).
+# Approving the pro forma card drafts the email that carries it, on the finance-invoice-sending lane, and that
+# email is MONEY: only the owner's own step-up sends it. Wording and numbering are the PROFORMA = {...} line
+# on the finance-quote-to-invoice craft.
+
+def _pf_money(v, cur: str = "AED") -> str:
+    return f"{cur} {float(v):,.2f}"
+
+
+def _proforma_billed_to(deal_id, customer: str) -> list:
+    """The COMPANY a pro forma is made out to, never a person (owner, 21 Sep 2026): the client account's
+    billing block when one has been recorded (legal name, address lines, TRN), else the account's name."""
+    try:
+        db.execute("alter table crm_accounts add column if not exists billing jsonb")
+        d = db.one("select account_id from crm_projects where id=%s", (int(deal_id),)) if deal_id else None
+        a = db.one("select name, billing from crm_accounts where id=%s", (d["account_id"],)) \
+            if d and d.get("account_id") else None
+        if a:
+            b = a.get("billing") or {}
+            lines = [b.get("name") or customer or a.get("name")] + list(b.get("address") or [])
+            if b.get("trn"):
+                lines.append(f"TRN {b['trn']}")
+            return [x for x in lines if x]
+    except Exception:  # noqa: BLE001
+        pass
+    return [customer] if customer else []
+
+
+def _signed_record(deal_id) -> dict | None:
+    """The quotation this deal's client SIGNED, as confirmed by the owner (a timeline fact)."""
+    d = db.one("select history from crm_projects where id=%s", (int(deal_id),)) or {}
+    for ev in reversed(d.get("history") or []):
+        m = re.match(r"quotation-signed:([A-Z]{2,5}-\d{4}-\d{3,5}):v(\d+)", str(ev.get("ref") or ""))
+        if m and not ev.get("voided"):
+            return {"number": m.group(1), "v": int(m.group(2))}
+    return None
+
+
+def deliver_proforma(company: str, number: str, *, version: int | None = None, stage: int | None = None,
+                     deal_id: int | None = None, billed_to: list | None = None, replace: str | None = None) -> dict:
+    """Issue one pro forma against a stored quotation version and raise it as a card for review. Nothing is
+    sent. `replace` = a pro forma number to VOID first (its number is never reused; the record is kept)."""
+    from . import proforma
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise ValueError(f"unknown company {company}")
+    data = profile.get(co["id"]) or {}
+    if not deal_id:
+        _row = db.one("select deal_id from tasks where kind='quotation' and request->>'number'=%s and "
+                      "deal_id is not null order by id desc limit 1", (number,))
+        deal_id = (_row or {}).get("deal_id")
+    if replace:
+        old = next((p for p in proforma.issued(number) if p.get("pi") == replace), None)
+        if not old:
+            raise ValueError(f"{replace} is not a live pro forma of {number}")
+        if old.get("status") == "sent":
+            raise ValueError(f"{replace} has already been sent to the client, so it is not replaced silently. "
+                             "Decide with the owner how to correct it with the client first.")
+        stage = stage or old.get("stage")
+        version = version or old.get("v")
+        proforma.update_record(number, replace, status="void", voided=datetime.now(timezone.utc).isoformat())
+        if old.get("doc_id"):
+            try:
+                db.execute("update company_documents set filename = 'VOID ' || filename where id=%s and "
+                           "filename not like 'VOID %%'", (int(old["doc_id"]),))
+            except Exception:  # noqa: BLE001
+                pass
+        db.execute("update tasks set status='cancelled', updated_at=now() where kind='content' and "
+                   "request->>'kind'='proforma' and request->'proforma'->>'pi'=%s and status='awaiting_approval'",
+                   (replace,))
+    if billed_to and deal_id:      # his words name the legal entity: kept on the client account for later stages
+        try:
+            db.execute("alter table crm_accounts add column if not exists billing jsonb")
+            acc = db.one("select account_id from crm_projects where id=%s", (int(deal_id),)) or {}
+            if acc.get("account_id"):
+                lines = [str(x).strip() for x in billed_to if str(x).strip()]
+                trn = next((re.sub(r"(?i)^trn[:\s]*", "", x) for x in lines if re.match(r"(?i)^trn\b", x)), "")
+                rest = [x for x in lines if not re.match(r"(?i)^trn\b", x)]
+                db.execute("update crm_accounts set billing=%s where id=%s",
+                           (Json({"name": rest[0] if rest else "", "address": rest[1:], "trn": trn}),
+                            acc["account_id"]))
+        except Exception:  # noqa: BLE001
+            pass
+    entry = proforma.entry_for(number, version)
+    customer = (((entry or {}).get("spec") or {}).get("customer") or "")
+    row = proforma.issue(co, data, number, version=version, stage=stage, deal_id=deal_id,
+                         billed_to=billed_to or _proforma_billed_to(deal_id, customer))
+    safe = re.sub(r"[^A-Za-z0-9 -]", "", customer)[:60].strip()
+    name = f"{safe + ' - ' if safe else ''}Pro forma invoice {row['pi']} - {row['date']}.pdf"
+    with open(row["path"], "rb") as fh:
+        blob = fh.read()
+    doc = documents.save(co["id"], co.get("slug") or company, name, "application/pdf", blob, kind="proforma",
+                         uploaded_by=f"proforma:{row['pi']}", push=False, deal_id=int(deal_id) if deal_id else None)
+    filed = None
+    try:      # client work lives in the client's Drive folder, beside the quotation it is raised against
+        from . import drive as _drive
+        parent = (data.get("clients_drive_folder") or "").strip()
+        client = (customer or "").split(",")[0].strip()
+        if parent and client:
+            tok = _drive.access_token()
+            f = _drive.ensure_client_folder(client, parent, token=tok)
+            if f.get("id"):
+                fid = _drive.upload_to_folder(f["id"], name, "application/pdf", blob, token=tok)
+                db.execute("update company_documents set drive_id=%s, client=%s where id=%s", (fid, f["name"], doc["id"]))
+                filed = f["name"]
+    except Exception as _de:  # noqa: BLE001 - the card and the library copy survive a Drive hiccup
+        print(f"[proforma] drive: {type(_de).__name__}: {_de}", flush=True)
+    proforma.update_record(number, row["pi"], doc_id=doc["id"])
+    cur = row["currency"]
+    draft = (f"PRO FORMA INVOICE {row['pi']} for {customer or 'the client'}\n\n"
+             f"{row['description']}\n"
+             f"Quotation {number} v{row['v']}: {_pf_money(row['net'], cur)} before VAT. "
+             f"Stage {row['stage']} of {row['stages']} ({row['pct']:g}%, {row['due_text'] or 'per the signed terms'}).\n\n"
+             f"Subtotal {_pf_money(row['amount'], cur)}\nVAT {_pf_money(row['vat'], cur)}\n"
+             f"Amount due {_pf_money(row['total'], cur)}\n\n"
+             f"The PDF is attached to this card" + (f" and filed to the {filed} client folder on Drive" if filed else "")
+             + ". Nothing has been sent. Approve it and I draft the email to the client with it attached; that "
+               "email needs your own PIN to send. To change who it is billed to, tell Talk the legal name, "
+               f"address and TRN and ask it to replace {row['pi']}.")
+    skill = store.get_skill_by_key(co["id"], proforma.SKILL_KEY) or store.get_skill_by_key(co["id"], QUOTE_SKILL_KEY)
+    req = {"kind": "proforma", "company": company, "proforma": {k: v for k, v in row.items() if k != "path"},
+           "number": number, "customer": customer, "deal_id": int(deal_id) if deal_id else None,
+           "file": row["path"], "attach_docs": [documents.card_ref(doc)],
+           "title": f"Pro forma invoice {row['pi']}: {customer}"}
+    t = db.execute(
+        "insert into tasks (company_id,skill_id,kind,request,draft,status,origin,title,deal_id) "
+        "values (%s,%s,'content',%s,%s,'awaiting_approval','cortex',%s,%s) returning *",
+        (co["id"], skill["id"] if skill else None, Json(req), draft, req["title"], int(deal_id) if deal_id else None))
+    proforma.update_record(number, row["pi"], task_id=t["id"])
+    if deal_id:
+        pipeline.log_deal(int(deal_id), "proforma_issued",
+                          f"Pro forma {row['pi']} issued: {row['description']}, {_pf_money(row['total'], cur)} "
+                          f"including VAT. Card {t['id']}.", ref=f"proforma:{row['pi']}")
+    return t
+
+
+def _approve_proforma(task: dict, skill: dict, company: dict, actor: str) -> dict:
+    """Approving a pro forma card drafts the email that carries it (the same last step as a proposal), on the
+    finance-invoice-sending lane. The email is MONEY (`request.money`): only the owner's own step-up sends it.
+    The payment follow-up clock arms when that email is SENT, never before."""
+    from . import proforma
+    req = dict(task.get("request") or {})
+    pf = req.get("proforma") or {}
+    did = task.get("deal_id") or req.get("deal_id")
+
+    def keep(note: str) -> dict:
+        base = (task.get("draft") or "").split("\n\nEMAIL NOT DRAFTED:")[0]
+        store.update_task(task["id"], status="awaiting_approval", draft=f"{base}\n\nEMAIL NOT DRAFTED: {note}")
+        return {"blocked": True, "error": note}
+    if not did:
+        return keep("this pro forma is not on an opportunity, so I do not know who to write to. Ask Talk to "
+                    "draft the email and attach it.")
+    deal = db.one("select id, title, contact_email from crm_projects where id=%s", (int(did),)) or {}
+    to = (deal.get("contact_email") or "").strip().lower()
+    if not to:
+        return keep(f"opportunity #{did} has no contact to write to. Tell Talk who the contact is, then approve again.")
+    refs = [a for a in (req.get("attach_docs") or []) if a.get("id")][:1]
+    if not refs:
+        return keep("the pro forma PDF is not in the library, so no email was drafted.")
+    _open = db.one("select id from tasks where company_id=%s and kind in ('email_reply','email_draft') and "
+                   "status = any(%s) and lower(request->'inquiry'->>'email')=%s order by id desc limit 1",
+                   (company["id"], list(_OPEN_CARD), to))
+    if _open:
+        return keep(f"there is already an open email to {to}: card #{_open['id']}. Send, correct or cancel that "
+                    "card, then approve this one again.")
+    sk = (store.get_skill_by_key(company["id"], proforma.SEND_SKILL_KEY)
+          or store.get_skill_by_key(company["id"], "email-handling") or skill)
+    name = ""
+    try:
+        name = crm._name_of(to) or ""
+    except Exception:  # noqa: BLE001
+        pass
+    cur = pf.get("currency") or "AED"
+    title = deal.get("title") or req.get("customer") or ""
+    ereq = {"outbound": True, "deal_id": int(did), "proforma_card": task["id"], "money": True,
+            "proforma": {"pi": pf.get("pi"), "number": pf.get("number")}, "attach_docs": refs,
+            "brief": (f"Send pro forma invoice {pf.get('pi')} for \"{title}\". The PDF is attached to this email. "
+                      f"These are the only figures you may state, exactly as written: {pf.get('description')}; "
+                      f"amount due {_pf_money(pf.get('total') or 0, cur)} including VAT; payment by bank transfer "
+                      "to the account on the pro forma. They signed and returned the quotation: acknowledge it. "
+                      "The INVOICE EMAIL standing rules on this skill govern the rest. Continue the conversation "
+                      "we already have with them."),
+            "inquiry": {"name": name, "email": to, "message": "",
+                        "subject": f"Pro forma invoice {pf.get('pi')}, quotation {pf.get('number')}"},
+            "on_done_reminders": [
+                {"title": f"Payment follow-up (gentle): pro forma {pf.get('pi')} for '{title}'", "days": 8},
+                {"title": f"Payment follow-up (firmer, attach statement): pro forma {pf.get('pi')} '{title}'", "days": 15},
+                {"title": f"Payment ESCALATION: pro forma {pf.get('pi')} '{title}' still unpaid", "days": 22}]}
+    t = store.create_task(company["id"], sk["id"], "email_draft", ereq)
+    db.execute("update tasks set deal_id=%s where id=%s", (int(did), t["id"]))
+    msg = (f"Pro forma {pf.get('pi')} approved. The email to {name or to} is being drafted as card #{t['id']} with "
+           f"{refs[0].get('filename')} attached. That card needs your own PIN to send.")
+    store.update_task(task["id"], status="done", draft=msg)
+    store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"email_card": t["id"], "proforma": pf.get("pi")})
+    pipeline.log_deal(int(did), "note", f"Pro forma {pf.get('pi')} approved on card {task['id']}; "
+                                        f"cover email drafted as card {t['id']}.")
+    return {"approved": True, "email_card": t["id"], "note": msg}
+
+
+def _proforma_sent(task: dict) -> None:
+    """The email carrying a pro forma went out: mark it sent and start the payment follow-up clock."""
+    pf = (task.get("request") or {}).get("proforma") or {}
+    if not pf.get("pi"):
+        return
+    from . import proforma
+    proforma.update_record(pf.get("number") or "", pf["pi"], status="sent",
+                           sent=datetime.now(timezone.utc).isoformat(), email_card=task["id"])
+    _arm_on_done_reminders(task)
+
+
+def _signed_card_text(co: dict, deal: dict, m: dict, seen: dict, data: dict, filename: str, sender: str) -> str:
+    from . import proforma
+    entry, cur = m["entry"], (data.get("currency") or "AED").upper()
+    net = proforma.net_of(entry)
+    try:
+        splits = proforma.splits_of(entry)
+        stages = "; ".join(f"{s['pct']:g}% {s['due']}" for s in splits)
+        first = (f"the pro forma for stage 1 ({splits[0]['pct']:g}% = "
+                 f"{_pf_money(round(net * splits[0]['pct'] / 100, 2), cur)} + VAT) is issued as a card for your review")
+    except ValueError as e:
+        stages, first = f"NOT READABLE: {e}", "no pro forma can be issued until you state the payment split"
+    yes = lambda b: "yes" if b else "no"  # noqa: E731
+    who = ", ".join(x for x in (seen.get("signer_name"), seen.get("signer_position"), seen.get("signed_date")) if x)
+    flags = "\n".join(f"- {f}" for f in m["flags"]) or "- nothing: the returned copy matches what we issued."
+    return (f"SIGNED QUOTATION RECEIVED\n\n"
+            f"{(entry.get('spec') or {}).get('customer') or deal.get('title')} returned quotation {m['number']} "
+            f"({filename}" + (f", from {sender}" if sender else "") + ").\n\n"
+            f"Matched to our stored v{m['v']} ({m['how']}): {_pf_money(net, cur)} + VAT = "
+            f"{_pf_money(proforma.gross_of(entry, data), cur)}.\n"
+            f"Payment stages it printed: {stages}.\n"
+            f"On the returned copy: signature {yes(seen.get('signature_visible'))}, company stamp "
+            f"{yes(seen.get('stamp_visible'))}" + (f", signed by {who}" if who else "") + ".\n\n"
+            f"CHECK BEFORE CONFIRMING\n{flags}\n\n"
+            f"Approve to confirm it is signed: opportunity #{deal.get('id')} moves to Booked, these payment stages "
+            f"are recorded on it, and {first}. Nothing is sent to the client. If they signed a different "
+            "version, reply on this card with it (for example: they signed v2).")
+
+
+def _check_signed_quotation(co: dict, deal_id: int, doc: dict, data_bytes: bytes, e: dict) -> dict | None:
+    """A PDF just arrived on a deal: is it one of our quotations, signed and returned? Code gates the model
+    call (the deal has a quotation, none confirmed signed yet, the PDF is a scan or names a quotation), a
+    Haiku pass READS the pages, code matches the stored version, and a confirm card is raised. Never acts."""
+    from . import proforma
+    if not proforma.deal_quotations(int(deal_id)) or _signed_record(int(deal_id)):
+        return None
+    if db.one("select id from tasks where kind='content' and request->>'kind'='signed_quotation' and deal_id=%s "
+              "and (status = any(%s) or request->'signed'->>'doc_id' = %s) limit 1",
+              (int(deal_id), list(_OPEN_CARD), str(doc["id"]))):
+        return None
+    text = ""
+    try:
+        text = documents.text_of(doc) or ""
+    except Exception:  # noqa: BLE001
+        pass
+    if not proforma.worth_reading(doc.get("filename") or "", text, len(data_bytes or b"")):
+        return None
+    seen = proforma.read_returned(data_bytes, co.get("slug"))
+    if not seen.get("is_quotation") or not (seen.get("signature_visible") or seen.get("stamp_visible")
+                                            or seen.get("acceptance_filled")):
+        return None
+    pdata = profile.get(co["id"]) or {}
+    m = proforma.match_signed(int(deal_id), seen, pdata)
+    if not m:
+        notifications.notify("A signed quotation may have come back, but I could not match it",
+                             f"{doc.get('filename')} on opportunity #{deal_id} reads as a signed quotation "
+                             f"(number seen: {seen.get('quotation_number') or 'none'}) and matches none of this "
+                             "opportunity's quotations. Tell Talk which quotation they signed.",
+                             priority="high", category="approval", company_id=co["id"],
+                             target_type="deal", target_id=str(deal_id), dedup_key=f"signed-unmatched:{doc['id']}")
+        return None
+    db.execute("update company_documents set kind='signed-quotation' where id=%s", (int(doc["id"]),))
+    deal = db.one("select id, title from crm_projects where id=%s", (int(deal_id),)) or {"id": deal_id}
+    return _raise_signed_card(co, deal, m, seen, pdata, doc, e.get("email") or "")
+
+
+def _raise_signed_card(co: dict, deal: dict, m: dict, seen: dict, pdata: dict, doc: dict | None, sender: str) -> dict:
+    from . import proforma
+    skill = store.get_skill_by_key(co["id"], proforma.SKILL_KEY) or store.get_skill_by_key(co["id"], QUOTE_SKILL_KEY)
+    fn = (doc or {}).get("filename") or "reported to Talk, no file read"
+    req = {"kind": "signed_quotation", "company": co.get("slug"), "deal_id": int(deal["id"]),
+           "signed": {"number": m["number"], "v": m["v"], "doc_id": (doc or {}).get("id"), "seen": seen,
+                      "flags": m["flags"], "sender": sender, "filename": fn},
+           "title": f"Signed quotation {m['number']} v{m['v']}: confirm ({deal.get('title') or ''})"[:180]}
+    if doc:
+        req["attach_docs"] = [documents.card_ref(doc)]
+    t = db.execute(
+        "insert into tasks (company_id,skill_id,kind,request,draft,status,origin,title,deal_id) "
+        "values (%s,%s,'content',%s,%s,'awaiting_approval','cortex',%s,%s) returning *",
+        (co["id"], skill["id"] if skill else None, Json(req),
+         _signed_card_text(co, deal, m, seen, pdata, fn, sender), req["title"], int(deal["id"])))
+    pipeline.log_deal(int(deal["id"]), "note", f"A signed copy of quotation {m['number']} came back ({fn}); "
+                                               f"matched to v{m['v']}. Waiting for the owner to confirm on card {t['id']}.",
+                      ref=f"signed-seen:{(doc or {}).get('id') or t['id']}")
+    notifications.notify(f"Signed quotation {m['number']} is back", f"{deal.get('title')}: confirm it on card "
+                         f"#{t['id']} and the pro forma is issued." + (" CHECK: " + "; ".join(m["flags"]) if m["flags"] else ""),
+                         priority="high", category="approval", company_id=co["id"], target_type="task",
+                         target_id=str(t["id"]), dedup_key=f"signed:{deal['id']}:{m['number']}")
+    return t
+
+
+def mark_quotation_signed(company: str, number: str, *, version: int | None = None, deal_id: int | None = None) -> dict:
+    """The owner or the team TELLS Cortex a quotation was signed (on paper, by WhatsApp, in a meeting): the
+    same confirm card as a detected return, so the confirmation step is never skipped."""
+    from . import proforma
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise ValueError(f"unknown company {company}")
+    entry = proforma.entry_for(number, version)
+    if not entry:
+        raise ValueError(f"no stored quotation {number}" + (f" v{version}" if version else ""))
+    if not deal_id:
+        _row = db.one("select deal_id from tasks where kind='quotation' and request->>'number'=%s and "
+                      "deal_id is not null order by id desc limit 1", (number,))
+        deal_id = (_row or {}).get("deal_id")
+    if not deal_id:
+        raise ValueError(f"quotation {number} is not on an opportunity; tell me which opportunity it belongs to")
+    if _signed_record(int(deal_id)):
+        raise ValueError(f"opportunity #{deal_id} already has a confirmed signed quotation: {_signed_record(int(deal_id))}")
+    if version is None:      # the last version actually SENT, when the timeline knows it
+        q = next((x for x in proforma.deal_quotations(int(deal_id)) if x["number"] == number), None)
+        if q and q["sent"]:
+            entry = proforma.entry_for(number, max(q["sent"])) or entry
+    deal = db.one("select id, title from crm_projects where id=%s", (int(deal_id),)) or {"id": deal_id}
+    m = {"number": number, "v": int(entry.get("v") or 1), "how": "as reported to Talk", "entry": entry,
+         "flags": ["no returned copy was read: this was reported by hand, so check the signed copy yourself"]}
+    return _raise_signed_card(co, deal, m, {}, profile.get(co["id"]) or {}, None, "")
+
+
+def _signed_reply(task: dict, text: str) -> bool:
+    """A reply on a signed-quotation card that names a version ('they signed v2') re-matches it by code."""
+    from . import proforma
+    mm = re.search(r"\bv(?:ersion)?\s*(\d{1,2})\b", text or "", re.I)
+    req = dict(task.get("request") or {})
+    sg = dict(req.get("signed") or {})
+    entry = proforma.entry_for(sg.get("number") or "", int(mm.group(1))) if mm else None
+    if not entry:
+        return False
+    co = store.get_company(task["company_id"])
+    pdata = profile.get(co["id"]) or {}
+    deal = db.one("select id, title from crm_projects where id=%s", (int(req["deal_id"]),)) or {"id": req["deal_id"]}
+    m = {"number": sg["number"], "v": int(entry["v"]), "how": "the version you named", "entry": entry,
+         "flags": [f for f in (sg.get("flags") or []) if "signed v" not in f and "matches no stored" not in f]}
+    sg.update(v=m["v"], flags=m["flags"])
+    req["signed"] = sg
+    req["title"] = re.sub(r" v\d+:", f" v{m['v']}:", req.get("title") or "")
+    store.update_task(task["id"], request=req, status="awaiting_approval", title=req["title"],
+                      draft=_signed_card_text(co, deal, m, sg.get("seen") or {}, pdata, sg.get("filename") or "",
+                                              sg.get("sender") or ""))
+    return True
+
+
+def _confirm_signed(task: dict, skill: dict, company: dict, actor: str) -> dict:
+    """The owner confirms the quotation is signed: payment stages onto the deal, the deal's value set from the
+    SIGNED version, the first pro forma issued, then Booked (which starts the project: kickoff card, plan)."""
+    from . import proforma
+    req = dict(task.get("request") or {})
+    sg = req.get("signed") or {}
+    did = int(req.get("deal_id") or task.get("deal_id"))
+    entry = proforma.entry_for(sg.get("number") or "", sg.get("v"))
+
+    def keep(note: str) -> dict:
+        base = (task.get("draft") or "").split("\n\nNOT CONFIRMED:")[0]
+        store.update_task(task["id"], status="awaiting_approval", draft=f"{base}\n\nNOT CONFIRMED: {note}")
+        return {"blocked": True, "error": note}
+    if not entry:
+        return keep(f"quotation {sg.get('number')} v{sg.get('v')} is not in the version registry.")
+    try:
+        splits = proforma.splits_of(entry)
+    except ValueError as e:
+        return keep(f"{e}. Tell Talk the payment split for this job (for example 50/25/25) and confirm again.")
+    crm.set_deal_terms(did, [{"pct": s["pct"], "due": s["due"]} for s in splits])
+    net = proforma.net_of(entry)
+    cur = ((profile.get(company["id"]) or {}).get("currency") or "AED").upper()
+    db.execute("update crm_projects set value=%s, currency=%s, updated_at=now() where id=%s", (net, cur, did))
+    pipeline.log_deal(did, "quotation_signed",
+                      f"Quotation {sg['number']} v{sg['v']} SIGNED by the client, confirmed by {actor}: "
+                      f"{_pf_money(net, cur)} + VAT, " + "; ".join(f"{s['pct']:g}% {s['due']}" for s in splits) + ".",
+                      ref=f"quotation-signed:{sg['number']}:v{sg['v']}")
+    card, note = None, ""
+    try:
+        card = deliver_proforma(company["slug"], sg["number"], version=sg["v"], stage=1, deal_id=did)
+    except ValueError as e:          # already issued for stage 1, or unpriced: the confirmation still stands
+        note = f" No new pro forma: {e}."
+    d = db.one("select stage from crm_projects where id=%s", (did,)) or {}
+    if d.get("stage") in crm.FORECAST_STAGES:
+        crm.set_project_stage(did, "Booked", actor=actor)
+    msg = (f"Confirmed signed: quotation {sg['number']} v{sg['v']}. Opportunity #{did} is Booked with its payment "
+           "stages recorded." + (f" Pro forma card #{card['id']} is in the Inbox." if card else note))
+    store.update_task(task["id"], status="done", draft=msg)
+    store.log_decision(task["id"], skill["id"], actor, "approve",
+                       snapshot={"signed": {"number": sg["number"], "v": sg["v"]}, "proforma_card": (card or {}).get("id")})
+    return {"approved": True, "note": msg, "proforma_card": (card or {}).get("id")}
+
+
+def _prep_build_proforma(task: dict, skill: dict, company: dict, actor: str) -> dict:
+    """An 'Advance invoice' / 'Balance invoice' card from the stage playbook (crm._stage_patterns) is
+    ACTIONABLE: approving it issues the pro forma for that stage against the deal's signed quotation."""
+    from . import proforma
+    req = task.get("request") or {}
+    did = req.get("deal_id") or task.get("deal_id")
+    sr = _signed_record(int(did)) if did else None
+    if not sr:
+        qs = proforma.deal_quotations(int(did)) if did else []
+        if len(qs) == 1 and qs[0]["sent"]:
+            sr = {"number": qs[0]["number"], "v": max(qs[0]["sent"])}
+    if not sr:
+        store.update_task(task["id"], status="awaiting_approval")
+        return {"blocked": True, "error": "no signed quotation is recorded on this opportunity. Tell Talk which "
+                                          "quotation the client signed, then approve this card again."}
+    try:
+        entry = proforma.entry_for(sr["number"], sr["v"])
+        n = len(proforma.splits_of(entry))
+        stage = n if req.get("proforma_stage") == "last" else 1
+        card = deliver_proforma(company["slug"], sr["number"], version=sr["v"], stage=stage, deal_id=int(did))
+    except ValueError as e:
+        store.update_task(task["id"], status="awaiting_approval")
+        return {"blocked": True, "error": str(e)}
+    store.update_task(task["id"], status="done",
+                      draft=(task.get("draft") or "") + f"\n\nIssued as pro forma card #{card['id']}.")
+    store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"proforma_card": card["id"]})
+    return {"approved": True, "proforma_card": card["id"]}
 
 
 def _push_quote_to_client_drive(co: dict, customer: str, number: str, x: dict, pdf_path: str | None) -> dict:
