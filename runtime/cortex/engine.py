@@ -6157,10 +6157,9 @@ def reissue_quotation(company: str, number: str, *, version: int | None = None, 
     try:   # the broken versions' library rows: kept on record, never offered for an email again
         new_ids = [int(a["id"]) for a in ((t or {}).get("request") or {}).get("attach_docs") or [] if a.get("id")]
         if new_ids:
-            co = store.get_company_by_slug(company) or {}
-            olds = []
-            for d in db.query("select id, filename from company_documents where company_id=%s and superseded_by "
-                              "is null and filename ilike %s", (co.get("id"), f"%Quotation {number} v%")):
+            olds = []   # every business's copy: the shared clients folder is synced into more than one library
+            for d in db.query("select id, filename from company_documents where superseded_by is null "
+                              "and filename ilike %s", (f"%Quotation {number} v%",)):
                 m = re.search(r" v(\d+) - ", d["filename"])
                 if m and int(m.group(1)) > int(entry.get("v") or 0) and d["id"] not in new_ids:
                     olds.append(d["id"])
