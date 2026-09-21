@@ -44,6 +44,8 @@ IMAGE_CAP = 40                    # images per run unless the profile sets creat
 UA = {"User-Agent": "SensaCortex/1.0 (hello@sensa.digital)"}
 LICENCES = re.compile(r"^(cc0|cc by(-sa)?( \d\.\d)?|public domain|pd)", re.I)
 _EM = re.compile(r"\s*[—–]\s*")
+# a writer's claim about money ("net total is AED 27,800", "Budget tier", "discount"): code states the figures
+_MONEY_CLAIM = re.compile(r"\b(total|net|AED|budget tier|discount|target|price[sd]? (?:down|at))\b|\d{1,3},\d{3}", re.I)
 
 
 # --------------------------------------------------------------------------- small helpers
@@ -496,8 +498,13 @@ class Job:
             '"components": [{"item": "<rate card [key]>", "qty": <days, people or films>}], "unit": <a price '
             'ONLY if the OWNER stated that exact figure, else null>, "qty": 1}]}], "deliverables": [""], '
             '"exclusions": ["what is NOT included, one short line each"], "note": "the clauses for under the '
-            'totals: exclusions, usage, options", "assumptions": ["each default you chose, for the owner only"]}. '
-            "You never price a line: list its rate-card components and code prices it. Quote in BLOCKS as the "
+            'totals: exclusions, usage, options", "assumptions": ["each default you chose, for the owner only"], '
+            '"target": <the total the OWNER asked for, excluding VAT, ONLY a figure written in his own words, '
+            'else null>}. '
+            "You never price a line: list its rate-card components and code prices it. Never state a total, a "
+            "tier or a discount in the assumptions: code sets every figure and reports it. When the owner gives "
+            "a target, put it in `target` and keep the scope he asked for; code moves the prices to reach it. "
+            "Quote in BLOCKS as the "
             "quotation skill's rules describe. Everything the concept SHOWS that is made in post (a crowd, an "
             "audience, set extensions) must be priced as post work or stated as not included. No em dashes.\n\n"
             + _rules(co, "sales-quotation"),
@@ -509,11 +516,29 @@ class Job:
         if not spec.get("sections"):
             raise RuntimeError("the quotation came back with no lines")
         spec = _clean_text(spec)
-        allowed = engine._stated_numbers(said) | ratecard.rates(slug)
-        res = ratecard.price_lines(slug, spec["sections"], allowed=allowed)
+        stated = engine._stated_numbers(said)
+        allowed = stated | ratecard.rates(slug)
+        # THE OWNER'S NUMBER IS APPLIED BY CODE (21 Sep 2026): Emergy asked for 28,000; the run never passed a
+        # target, the writer claimed 27,800 "at Budget tier" in its assumptions and code issued 39,500. Now the
+        # target is honoured only if it is a figure he wrote, and a target code cannot reach stops the quote.
+        target = spec.pop("target", None)
+        try:
+            target = float(target) if target not in (None, "") else None
+        except (TypeError, ValueError):
+            target = None
+        if target is not None and round(target, 2) not in stated:
+            target = None
+        res = ratecard.price_lines(slug, spec["sections"], allowed=allowed, target=target,
+                                   flex_pct=(profile.get(co["id"]) or {}).get("quote_target_flex_pct"))
+        if target is not None and res.get("error"):
+            raise RuntimeError(f"your figure AED {target:,.0f} was not reached: {res['error']}. Nothing was issued; "
+                               "reply with a different figure or scope")
+        spec["assumptions"] = [a for a in (spec.get("assumptions") or []) if not _MONEY_CLAIM.search(str(a))]
         if spec.get("preset") not in presets:
             spec["preset"] = "shoot-production" if b.get("live_shoot") else "ai-production"
-        q = {"spec": spec, "blanked": res.get("blanked") or [], "missing": res.get("missing") or []}
+        q = {"spec": spec, "blanked": res.get("blanked") or [], "missing": res.get("missing") or [],
+             "target": target, "scaled": res.get("scaled"), "tier": res.get("tier"),
+             "normal_total": res.get("normal_total")}
         if not dry:
             customer = self.s["customer"]
             number = (self.s.get("quote") or {}).get("number") or self._deal_quote_number(customer)
@@ -785,6 +810,14 @@ class Job:
                          "and this deck is attached to it.")
         else:
             parts.append(f"Priced (not issued): AED {net:,.0f} + VAT.")
+        if q.get("target") is not None:         # stamped by code from the pricing result, never by the writer
+            how = []
+            if q.get("tier") == "budget":
+                how.append(f"Budget tier used (Normal tier came to AED {float(q.get('normal_total') or 0):,.0f})")
+            if q.get("scaled"):
+                how.append(f"rate-card lines moved {q['scaled']:+.1f}%")
+            parts.append(f"Your figure AED {q['target']:,.0f} + VAT: reached"
+                         + (" (" + "; ".join(how) + ")" if how else "") + ".")
         if q.get("blanked"):
             parts.append("Left BLANK, no approved price: " + "; ".join(q["blanked"][:6]))
         if q["spec"].get("exclusions"):

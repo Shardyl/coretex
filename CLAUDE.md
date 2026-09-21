@@ -1934,3 +1934,16 @@ newsletter_opt_out with a `phishing` history event.
   `_carded_by_other_company(co, ref, sender)` stops a copy when another company already holds an `email_reply`
   card for the same `mail_ref`, unless this company has an open deal with the sender and that one doesn't. Keyed
   on a CARD, not a claim, so a company that decided "no reply" never swallows mail meant for another.
+
+## The owner's price wins: 40% band, Budget tier by code, figures stamped by code (21 Sep 2026)
+Emergy (card 796, deal 132): he replied "bring it down to 28,000 excluding VAT"; the creative run never passed a
+target to `price_lines`, the writer's assumptions claimed "net total AED 27,800 at Budget tier", and code issued
+v3 at 39,500 (card 808), so the card contradicted its own quotation. Fixed:
+- Sensa `quote_target_flex_pct` 25 -> 40 (owner: deductions only ever happen when HE asks for a lower number).
+- `ratecard.price_lines`: a target below the band on the Normal tier is retried on the BUDGET tier (code picks
+  the tier, only to reach his figure); result carries `tier` + `normal_total`. Every caller gets it (Talk
+  create_quotation, prep cards, proposal approval, creative run).
+- `creative.stage_quote`: the writer returns `target` (a figure from his own words only, checked against
+  `_stated_numbers`); code applies it; an unreachable target RAISES (nothing issued, the card says why).
+  Assumptions that state totals, tiers, discounts or amounts are dropped (`_MONEY_CLAIM`); the summary's
+  "Your figure AED X + VAT: reached (Budget tier used ...; lines moved -N%)" line is stamped from the result.

@@ -69,8 +69,9 @@ def price_lines(slug: str, sections: list, *, allowed: set | None = None, target
     - A line with a typed `unit` keeps it only if the figure is in `allowed` (the owner's own words plus the
       card's rates), else it is blanked. allowed=None skips that check (internal callers only).
     - `target` (ex VAT): the lines priced from the card move together, pro rata, to reach it, but only
-      inside +/- flex_pct (the company's band). Typed and at-cost lines never move. Outside the band, or
-      with any line still blank, nothing moves and `error` says why, so the owner decides the scope.
+      inside +/- flex_pct (the company's band). Typed and at-cost lines never move. A target below the band
+      on the Normal tier is retried on the Budget tier (`tier` in the result says which was used). Outside
+      the band on both, or with any line still blank, nothing moves and `error` says why.
     Mutates `sections` in place. Returns {blanked, missing, scaled, error, lines_total}."""
     idx = index(slug)
     blanked, missing, movable, fixed_total = [], [], [], 0.0
@@ -134,8 +135,21 @@ def price_lines(slug: str, sections: list, *, allowed: set | None = None, target
         return out
     factor = (target - fixed_total) / moved
     if factor <= 0 or abs(factor - 1) * 100 > band + 1e-9:
+        # BELOW THE BAND ON THE NORMAL TIER: try the BUDGET tier before giving up (owner, 21 Sep 2026: the
+        # Emergy target sat 29% under the Normal lines and the writer "chose Budget" in words that code never
+        # read). Code decides the tier, only ever to REACH his stated number, and says so in `tier`.
+        if tier == "normal" and target < moved + fixed_total:
+            import copy as _copy
+            trial = _copy.deepcopy(sections)
+            alt = price_lines(slug, trial, allowed=allowed, target=target, flex_pct=flex_pct, tier="budget")
+            if not alt.get("error"):
+                sections[:] = trial
+                alt["tier"] = "budget"
+                alt["normal_total"] = moved + fixed_total
+                return alt
         out["error"] = (f"the lines come to {moved + fixed_total:,.0f}; reaching {target:,.0f} needs "
-                        f"{(factor - 1) * 100:+.1f}% on the rate-card lines, outside the {band:g}% band. "
+                        f"{(factor - 1) * 100:+.1f}% on the rate-card lines, outside the {band:g}% band"
+                        + (" even at Budget tier" if tier == "budget" else "") + ". "
                         "Drop or add scope, or change the target.")
         return out
     for it in movable:
@@ -148,6 +162,7 @@ def price_lines(slug: str, sections: list, *, allowed: set | None = None, target
         big["unit"] = round(float(big["unit"]) + drift, 2)
     out["scaled"] = round((factor - 1) * 100, 1)
     out["lines_total"] = target
+    out["tier"] = tier
     return out
 
 
