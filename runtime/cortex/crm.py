@@ -654,7 +654,7 @@ def ensure_deal_schema() -> None:
 
 def _name_of(email: str) -> str:
     c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (email,))
-    return (((c.get("first_name") or "") + " " + (c.get("last_name") or "")).strip()) if c else ""
+    return " ".join(((c.get("first_name") or "") + " " + (c.get("last_name") or "")).split()) if c else ""
 
 
 def add_deal_contact(deal_id: int, email: str, role: str = "", primary: bool = False) -> dict | None:
@@ -1591,6 +1591,7 @@ def create_contact(first_name: str, last_name: str, email: str, account_id=None,
          phone, job_title, stage, "Manual"))
     if _account_has_won(account_id):
         db.execute("update crm_master set is_client=true where lower(email)=lower(%s)", (email,))
+    sync_contact_everywhere(email)     # the upsert above may have RENAMED an existing person
     _attach_to_contactless_deal(account_id, email)
     return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
 
@@ -1722,11 +1723,68 @@ def update_contact(email: str, **fields) -> dict | None:
                if k in ("first_name", "last_name", "job_title", "phone", "email") and v is not None}
     if not db.one("select 1 from crm_master where lower(email)=lower(%s)", (email,)):
         return None
+    allowed = {k: (v.strip() if isinstance(v, str) else v) for k, v in allowed.items()}
     if allowed:
         sets = ", ".join(f"{k}=%s" for k in allowed)
         db.execute(f"update crm_master set {sets}, updated_at=now() where lower(email)=lower(%s)",
                    tuple(allowed.values()) + (email,))
+        sync_contact_everywhere(email, allowed.get("email") or email)
     return db.one("select * from crm_master where lower(email)=lower(%s)", (allowed.get("email", email),))
+
+
+_CARD_OPEN = ("new", "drafting", "awaiting_approval", "awaiting_correction", "queued")
+
+
+def sync_contact_everywhere(old_email: str, new_email: str | None = None) -> dict:
+    """ONE PERSON, ONE NAME, EVERYWHERE (owner, 21 Sep 2026). He renamed Yousif Alalawi to Farah Ali on the contact
+    and deal 134 kept showing "Yousif Alalawi": a deal's `contacts` list stores a COPY of the name (and email)
+    taken when the person was attached, and nothing refreshed it. The CRM record is the truth; every copy is
+    rewritten from it here: each deal's contact list and primary email, and the recipient name on cards that
+    are still OPEN (a sent card is history and keeps what was really sent). Fail-soft per step."""
+    old = (old_email or "").strip().lower()
+    new = (new_email or old_email or "").strip().lower()
+    out = {"deals": 0, "cards": 0}
+    if not old or not new:
+        return out
+    name = _name_of(new)
+    try:
+        for p in db.query("select id, contacts, contact_email from crm_projects where lower(contact_email)=%s or "
+                          "exists (select 1 from jsonb_array_elements(coalesce(contacts,'[]'::jsonb)) x "
+                          "where lower(x->>'email')=%s)", (old, old)):
+            lst, changed = [], False
+            for c in (p.get("contacts") or []):
+                if (c.get("email") or "").lower() == old and (c.get("name") != name or old != new):
+                    c, changed = {**c, "name": name, "email": new}, True
+                lst.append(c)
+            ce = p.get("contact_email")
+            if (ce or "").lower() == old and old != new:
+                ce, changed = new, True
+            if changed:
+                db.execute("update crm_projects set contacts=%s::jsonb, contact_email=%s, updated_at=now() where id=%s",
+                           (Json(lst), ce, p["id"]))
+                out["deals"] += 1
+    except Exception as e:  # noqa: BLE001
+        print(f"[crm] sync_contact_everywhere deals: {type(e).__name__}: {e}", flush=True)
+    try:
+        r = db.query("update tasks set request = jsonb_set(jsonb_set(request, '{inquiry,name}', to_jsonb(%s::text)), "
+                     "'{inquiry,email}', to_jsonb(%s::text)), updated_at=now() where status = any(%s) and "
+                     "lower(request->'inquiry'->>'email')=%s and (request->'inquiry'->>'name' is distinct from %s "
+                     "or %s <> %s) returning id", (name, new, list(_CARD_OPEN), old, name, old, new))
+        out["cards"] = len(r or [])
+    except Exception as e:  # noqa: BLE001
+        print(f"[crm] sync_contact_everywhere cards: {type(e).__name__}: {e}", flush=True)
+    return out
+
+
+def resync_all_deal_contacts() -> int:
+    """Backfill: every deal contact whose stored name differs from the CRM record is refreshed from it."""
+    n = 0
+    for r in db.query("select distinct lower(x->>'email') e from crm_projects p, "
+                      "jsonb_array_elements(coalesce(p.contacts,'[]'::jsonb)) x join crm_master m on "
+                      "lower(m.email)=lower(x->>'email') where coalesce(x->>'name','') <> "
+                      "trim(coalesce(m.first_name,'')||' '||coalesce(m.last_name,''))"):
+        n += sync_contact_everywhere(r["e"])["deals"]
+    return n
 
 
 def update_deal(deal_id: int, **fields) -> dict | None:

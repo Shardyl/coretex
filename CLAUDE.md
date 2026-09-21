@@ -1803,6 +1803,14 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## Renaming a contact renames them everywhere (21 Sep 2026)
+Owner renamed Yousif Alalawi to Farah Ali (same email) and deal 134 still showed Yousif: `crm_projects.contacts`
+stores a COPY of name + email taken when the person was attached. There was never a second CRM record. Now
+`crm.sync_contact_everywhere(old_email, new_email)` runs from `update_contact` (cockpit edit, Talk) and from the
+`create_contact` upsert: rewrites the person's name/email in every deal's contact list + `contact_email`, and the
+recipient name/email on OPEN cards only (sent cards are history). Names are trimmed; `_name_of` collapses spaces.
+`crm.resync_all_deal_contacts()` is the backfill (run once 21 Sep: 6 deal contacts refreshed).
+
 ## Approving a proposal twice drafts the email (19 Sep 2026)
 Owner: "why would I have to go into Talk and ask it to draft it if I've approved it?" Approval 1 of a proposal
 card issues the quotation and restamps the deck with its figures (unchanged). Approval 2 (a live quotation card
