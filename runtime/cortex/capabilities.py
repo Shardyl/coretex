@@ -114,6 +114,13 @@ CAPABILITIES: list[tuple[str, str]] = [
      "resolves them from the library, DROPPING any we do not hold rather than substituting. Every "
      "statistic, award and project detail must be passed in as facts - the writer may use nothing "
      "else. It lands in the Inbox and contacts nobody."),
+    ("The same quotation again: reissue_quotation",
+     "reissue_quotation(company, number) issues an EXISTING quotation as its next version, copied exactly by "
+     "code from the stored version: same lines, prices and total, today's date. It is the ONLY way to send a "
+     "quotation again after a contact was renamed or replaced (the contact person prints from the CRM), or "
+     "with a corrected deliverables list (pass the full new list in his words). NEVER rebuild such a "
+     "quotation with create_quotation: typed prices are dropped and a new version of a priced quotation with "
+     "blank lines is refused. Broken versions issued after the good one are withdrawn by the reissue."),
     ("Quotations that match their proposal",
      "create_quotation: call rate_card first (it returns the card with item [keys] AND the house rules "
      "for laying out a quotation). Lines are BLOCKS by default, each naming what it includes, and each "

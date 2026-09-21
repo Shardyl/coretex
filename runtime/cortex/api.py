@@ -3569,6 +3569,22 @@ SKILL_TOOLS = [
                     "the human copy, and they must never drift apart.",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string", "description": "your business slug; defaults to sensa"}}}},
+    {"name": "reissue_quotation",
+     "description": "Issue an EXISTING quotation again as its next version, copied EXACTLY by code from the stored "
+                    "version: same lines, same prices, same total. Use this, never create_quotation, whenever "
+                    "Rashad wants the same quotation again: a contact who was renamed or replaced (the contact "
+                    "person is read from the CRM, so the new name prints by itself), a corrected deliverables "
+                    "list, a fresh date. You pass no prices and no lines. Broken versions issued after the good "
+                    "one are withdrawn automatically. The new quotation lands in the Inbox as a card.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "our business slug, e.g. sensa"},
+        "number": {"type": "string", "description": "the quotation number, e.g. SEN-2026-0019"},
+        "version": {"type": "integer", "description": "which stored version to copy; omit for the last fully priced one"},
+        "contact_email": {"type": "string", "description": "only when the quotation should name a DIFFERENT CRM contact"},
+        "deliverables": {"type": "array", "items": {"type": "string"},
+                         "description": "only when Rashad asked to change the deliverables box: the full new list, in his words"},
+        "deal_id": {"type": "integer"}},
+        "required": ["company", "number"]}},
     {"name": "create_quotation",
      "description": "Produce a branded, house-format QUOTATION (an editable .xlsx spreadsheet plus a ready-to-"
                     "send .pdf by default) and drop it in the Inbox as a downloadable card. Use when Rashad asks "
@@ -3879,8 +3895,16 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         if did:
             rows = db.query("select * from crm_projects where id=%s", (int(did),))
         elif words:
-            rows = db.query("select * from crm_projects where title ilike %s order by id desc limit 6",
-                            (f"%{words}%",))
+            # "Cloudlink" never found "Cloud lInk technologies Website build..." (21 Sep 2026): the search was a
+            # plain title match. Letters and digits only on both sides, and the client ACCOUNT's name, the
+            # contact emails and the contact names count as well as the title.
+            _k = "%" + re.sub(r"[^a-z0-9]", "", words.lower()) + "%"
+            rows = db.query(
+                "select p.* from crm_projects p left join crm_accounts a on a.id=p.account_id where "
+                "regexp_replace(lower(p.title), '[^a-z0-9]', '', 'g') like %s or "
+                "regexp_replace(lower(coalesce(a.name,'')), '[^a-z0-9]', '', 'g') like %s or "
+                "regexp_replace(lower(coalesce(p.contact_email,'')||coalesce(p.contacts::text,'')), '[^a-z0-9]', '', 'g') "
+                "like %s order by (p.stage in ('Lost','Dormant')), p.id desc limit 6", (_k, _k, _k)) if len(_k) > 4 else []
         else:
             return "Give me the deal number or words from its title."
         if not rows:
@@ -4168,6 +4192,26 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
     if name == "run_report":
         t = engine.deliver_seo_report(inp.get("company", "tabscanner"), days=28)
         return f"generated the report — it's in your Inbox now (task #{t['id']})"
+    if name == "reissue_quotation":
+        _co = _talk_company(inp.get("company"), u)
+        if not _co:
+            return f"unknown business '{inp.get('company')}'"
+        _did = inp.get("deal_id")
+        if not _did:   # the deal the earlier versions of this number sit on
+            _row = db.one("select deal_id from tasks where kind='quotation' and request->>'number'=%s and "
+                          "deal_id is not null order by id desc limit 1", (inp.get("number"),))
+            _did = (_row or {}).get("deal_id")
+        try:
+            t = engine.reissue_quotation(_co["slug"], str(inp.get("number") or "").strip(),
+                                         version=inp.get("version"), deliverables=inp.get("deliverables"),
+                                         contact_email=inp.get("contact_email"), deal_id=_did)
+        except ValueError as _e:
+            return str(_e)
+        req = t.get("request") or {}
+        return (f"reissued quotation {req.get('number')} by copying the stored version exactly: task #{t['id']} in "
+                f"the Inbox. {req.get('summary', '')} The PDF is in the library as "
+                f"'{((req.get('attach_docs') or [{}])[0]).get('filename', '')}'"
+                + (f", on opportunity #{_did}." if _did else "."))
     if name == "create_quotation":
         slug = inp.get("company")
         _co = store.get_company_by_slug(slug) if slug else None
@@ -4375,6 +4419,11 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         store.add_rule(sk["id"], inp["rule"])
         return f"added LOCAL rule to {co['slug']}/{sk['skill_key']} (this company only): {inp['rule']}"
     co = store.get_company_by_slug(inp.get("company", ""))
+    if not co and inp.get("task_id"):
+        # A CARD BRINGS ITS COMPANY (21 Sep 2026): attach_document takes a task id and no company, so it died
+        # here with "no company 'None'" and Talk could never add the Cloudlink quotation to card 810.
+        _tk = store.get_task(int(inp["task_id"]))
+        co = store.get_company(_tk["company_id"]) if _tk else None
     if not co:
         known = ", ".join(r["slug"] for r in db.query("select slug from companies"))
         return f"no company '{inp.get('company')}' (known: {known})"

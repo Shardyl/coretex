@@ -5996,6 +5996,18 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
         _who = ((_reg[-1].get("spec") or {}).get("customer") or "").strip() if _reg else ""
         if _who and _who.lower() != (customer or "").strip().lower():
             raise ValueError(f"{number} is {_who}'s quotation; a new version must be for the same client.")
+        # A NEW VERSION OF A PRICED QUOTATION IS NEVER ISSUED WITH BLANK LINES (21 Sep 2026). Talk rebuilt
+        # Cloudlink's SEN-2026-0019 five times with typed prices the guard had blanked: nine of ten lines empty,
+        # AED 5,460 where v1 said 168,000, each one issued, filed to the client's Drive folder and numbered.
+        # Nothing is rendered, filed or numbered here; the caller is told what to do instead.
+        _blank = [str(i.get("desc") or "a line")[:60] for s in (sections or []) for i in (s.get("items") or [])
+                  if i.get("unit") in (None, "")]
+        if _reg and _blank and total in (None, ""):
+            raise ValueError(
+                f"NOT issued: {len(_blank)} line(s) of this new version of {number} have no price "
+                f"({'; '.join(_blank[:4])}). Typed prices are dropped unless they are rate-card rates or figures "
+                "the owner wrote. To send the SAME quotation again (a changed contact name, a corrected "
+                "deliverables list), use reissue_quotation: code copies the stored version exactly.")
     kw = dict(customer=customer, total=total, total_inclusive=total_inclusive, sections=sections,
               title=title, note=note, contact_email=contact_email, number=number,
               deliverables=deliverables, out_dir=QUOTES_DIR)
@@ -6089,6 +6101,73 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
                    "and id <> %s and request->>'number' = %s "
                    "and lower(coalesce(request->>'customer', '')) = lower(%s)",   # never another client's card
                    (t["id"], co["id"], t["id"], number, customer or ""))
+    return t
+
+
+def _version_is_priced(entry: dict) -> bool:
+    items = [i for s in ((entry.get("spec") or {}).get("sections") or []) for i in (s.get("items") or [])]
+    return bool(items) and all(i.get("unit") not in (None, "") for i in items)
+
+
+def reissue_quotation(company: str, number: str, *, version: int | None = None, deliverables: list | None = None,
+                      contact_email: str | None = None, deal_id: int | None = None) -> dict:
+    """THE SAME QUOTATION AGAIN, BY CODE (owner, 21 Sep 2026). Cloudlink's contact was renamed and he asked for
+    the same quotation with the new name: Talk's only tool builds a quotation from scratch, its typed prices
+    were blanked by the price guard, and five broken versions were issued. A reissue copies a STORED version's
+    lines and prices exactly (`quote_versions:<number>`, the last fully priced one unless `version` is given);
+    no model touches a figure. What may change: the contact person (read from the CRM at render time, so a
+    renamed contact prints under the new name; `contact_email` points it at someone else) and the
+    deliverables list (the owner's words). Broken versions issued AFTER the chosen one (any blank line) are
+    WITHDRAWN first: taken off the registry into `quote_versions_withdrawn:<number>` so the reissue takes
+    the next real version, their library rows superseded (kept, never offered again), their Drive files
+    replaced or archived by the normal filing step. Returns the new quotation card."""
+    import copy as _copy
+    key = f"quote_versions:{number}"
+    reg = db.setting_get(key) or []
+    if not reg:
+        raise ValueError(f"No stored versions of {number}: there is nothing to reissue.")
+    if version:
+        entry = next((e for e in reg if int(e.get("v") or 0) == int(version)), None)
+        if not entry or not _version_is_priced(entry):
+            raise ValueError(f"{number} v{version} is not a fully priced version, so it cannot be reissued.")
+    else:
+        entry = next((e for e in reversed(reg) if _version_is_priced(e)), None)
+        if not entry:
+            raise ValueError(f"No fully priced version of {number} is on record.")
+    idx = reg.index(entry)
+    later = reg[idx + 1:]
+    if any(_version_is_priced(e) for e in later):
+        raise ValueError(f"{number} has a later priced version than v{entry.get('v')}; reissue that one, or "
+                         "say which version by number.")
+    if later:   # only broken versions follow: withdraw them
+        gone = (db.setting_get(f"quote_versions_withdrawn:{number}") or []) + [
+            {**e, "withdrawn": datetime.now(timezone.utc).isoformat(), "reason": "issued with blank lines"}
+            for e in later]
+        db.setting_set(f"quote_versions_withdrawn:{number}", gone)
+        db.setting_set(key, reg[:idx + 1])
+    sp = entry.get("spec") or {}
+    t = deliver_quotation(sp.get("company") or company, preset=sp.get("preset") or "ai-production",
+                          customer=sp.get("customer") or "", sections=_copy.deepcopy(sp.get("sections")),
+                          title=sp.get("title"), note=sp.get("note"),
+                          contact_email=contact_email or sp.get("contact_email"), number=number,
+                          deliverables=deliverables or sp.get("deliverables"),
+                          deal_id=int(deal_id) if deal_id else None)
+    if deal_id and t:
+        db.execute("update tasks set deal_id=%s where id=%s", (int(deal_id), t["id"]))
+    try:   # the broken versions' library rows: kept on record, never offered for an email again
+        new_ids = [int(a["id"]) for a in ((t or {}).get("request") or {}).get("attach_docs") or [] if a.get("id")]
+        if new_ids:
+            co = store.get_company_by_slug(company) or {}
+            olds = []
+            for d in db.query("select id, filename from company_documents where company_id=%s and superseded_by "
+                              "is null and filename ilike %s", (co.get("id"), f"%Quotation {number} v%")):
+                m = re.search(r" v(\d+) - ", d["filename"])
+                if m and int(m.group(1)) > int(entry.get("v") or 0) and d["id"] not in new_ids:
+                    olds.append(d["id"])
+            if olds:
+                documents.supersede(olds, new_ids[0])
+    except Exception as _se:  # noqa: BLE001 - the reissued quotation stands
+        print(f"[quotation] reissue supersede: {type(_se).__name__}: {_se}", flush=True)
     return t
 
 

@@ -1803,6 +1803,23 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## The same quotation again is a REISSUE, by code (21 Sep 2026)
+Cloudlink: the contact was renamed (Yousif Alalawi -> Farah Ali) and the owner asked Talk for the same quotation
+with the new name. Talk's only tool was create_quotation: it retyped v1's prices, the price guard blanked them,
+and FIVE versions at AED 5,460 (v1 = 168,000) were issued, numbered and filed to the client's Drive folder. It also
+could not find the deal (title typed 'Cloud lInk') and attach_document died on 'no company'. Fixed:
+- `engine.reissue_quotation(company, number, version=, deliverables=, contact_email=, deal_id=)` + Talk tool
+  `reissue_quotation`: copies the stored version's spec exactly (last fully priced entry of `quote_versions:<n>`),
+  no model near a figure. The contact person prints from the CRM at render time, so a rename needs nothing else.
+  Broken later versions are withdrawn to `quote_versions_withdrawn:<n>`, their library rows superseded; Drive is
+  handled by the normal filing step (same-name upsert + archive_superseded).
+- `deliver_quotation`: a NEW VERSION of a number that has versions is refused (ValueError, nothing rendered or
+  filed) when any line has no price and no total is given.
+- `quotation._record_version` records `contact_name`, so a changed contact is a new version; old tabs in the ALL
+  VERSIONS workbook keep the name they carried.
+- Talk: a tool that passes `task_id` and no company takes the card's company; `deal_timeline` search ignores
+  spaces/case/punctuation and also matches the client account name and the deal's contacts.
+
 ## Deal documents may be up to 40MB (21 Sep 2026)
 Shama's Qabilah creative brief (22.9MB) was refused by the library's 15MB cap, which exists for files we EMAIL.
 `documents.MAX_DEAL_BYTES` = 40MB applies to `kind='client-document'` saved with a `deal_id` (Talk save_document,

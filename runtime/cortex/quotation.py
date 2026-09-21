@@ -951,12 +951,12 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, f"quotation-{m['company']}-{m['number']}.xlsx")
     wb.save(path)
-    _record_version(m, preset, customer, sections, contact_email)
+    _record_version(m, preset, customer, sections, contact_email, contact_name=ct.get("name") or "")
     return _return(m, path)
 
 
 def _record_version(m: dict, preset: str, customer: str, sections: list | None,
-                    contact_email: str | None) -> None:
+                    contact_email: str | None, contact_name: str = "") -> None:
     """Version registry (`quote_versions:<number>` setting): every distinct generated iteration of a
     quote number is recorded with its full spec, so `build_versions_workbook` can rebuild the whole
     history as one tabbed spreadsheet. Regenerating identical content refreshes the last entry's date
@@ -968,9 +968,16 @@ def _record_version(m: dict, preset: str, customer: str, sections: list | None,
         spec = {"company": m["company"], "preset": preset, "customer": customer,
                 "title": m["title"], "note": m["note"], "deliverables": m["deliverables"],
                 "terms": m["terms"], "sections": sections, "contact_email": contact_email}
+        sig_bare = _json.dumps(spec, sort_keys=True, default=str)
+        # THE PRINTED CONTACT PERSON IS PART OF THE DOCUMENT (21 Sep 2026): the name is read from the CRM at
+        # render time, so a quotation reissued after a contact was renamed (Cloudlink: Yousif Alalawi -> Farah
+        # Ali) is a different document and takes the next version. Entries recorded before this carry no
+        # name: they are compared without it, so an identical regeneration never bumps on that alone.
+        spec["contact_name"] = contact_name
         sig = _json.dumps(spec, sort_keys=True, default=str)
+        last_named = bool(reg) and "contact_name" in (reg[-1].get("spec") or {})
         today = datetime.date.today().isoformat()
-        if reg and reg[-1].get("sig") == sig:
+        if reg and reg[-1].get("sig") == (sig if last_named else sig_bare):
             reg[-1]["date"] = today
         else:
             reg.append({"v": len(reg) + 1, "date": today, "sig": sig, "spec": spec})
@@ -996,6 +1003,9 @@ def build_versions_workbook(company: str, number: str, out_dir: str = "/tmp") ->
                       title=sp.get("title"), note=sp.get("note"), terms=sp.get("terms"),
                       deliverables=sp.get("deliverables"), number=number,
                       contact_email=sp.get("contact_email"),
+                      # history stays true: an old tab keeps the contact name that version really carried
+                      contact=({**_contact_for(sp.get("customer") or "", sp.get("contact_email")),
+                                "name": sp["contact_name"]} if sp.get("contact_name") else None),
                       wb=wb, sheet_title=f"v{entry['v']} - {entry['date']}")
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, f"quotation-{company}-{number}-versions.xlsx")
