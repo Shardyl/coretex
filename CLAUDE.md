@@ -1803,6 +1803,12 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## A correction can change the subject line (21 Sep 2026)
+Card 837: "change the subject to media content quotation" went to the body writer and came back unchanged.
+`_understand_correction` now has a `subject` channel; `_apply_understood` sets `inquiry.subject` in code, drops the
+adopted thread and sets `new_thread` (an adopted thread writes its own subject back, and Gmail only chains a
+matching subject). The people in copy stay.
+
 ## The same quotation again is a REISSUE, by code (21 Sep 2026)
 Cloudlink: the contact was renamed (Yousif Alalawi -> Farah Ali) and the owner asked Talk for the same quotation
 with the new name. Talk's only tool was create_quotation: it retyped v1's prices, the price guard blanked them,

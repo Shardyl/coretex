@@ -2045,6 +2045,7 @@ def _understand_correction(task: dict, text: str) -> dict:
             '"reply_instruction": "<everything that concerns the email reply content itself>", '
             f'"from": "<first name of a new sender if he asks to change who it is sent from; known team: {roster}>", '
             '"to_add": ["<first names/emails he wants ADDRESSED directly, i.e. on the To line>"], '
+            '"subject": "<the new SUBJECT LINE, only if he asks to change the subject: his words for it, tidied into a subject, nothing added>", '
             '"cc_add": ["<first names to add on cc>"], '
             '"cc_remove": ["<first names or exact emails to drop from cc>"], '
             '"attach_documents": ["<standing company documents he asks to attach, e.g. trade licence>"], '
@@ -2077,6 +2078,17 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
         req["from_email"], req["mailbox_rt"] = senders[frm]["email"], senders[frm]["rt_key"]
         if req.get("thread"):
             req["thread"] = {**req["thread"], "id": ""}
+        changed = True
+    # HIS SUBJECT IS THE SUBJECT (21 Sep 2026): "change the subject to media content quotation" on card 837 went
+    # to the body writer, who cannot touch a subject line, and the card came back unchanged. A subject he sets
+    # starts its OWN conversation: the adopted thread is dropped (its subject would be written straight back,
+    # and Gmail only chains a message whose subject matches) and is not adopted again; the people in copy stay.
+    subj = re.sub(r"\s+", " ", str(u.get("subject") or "")).strip(" .\"'")
+    if subj and len(subj) <= 160:
+        subj = subj[0].upper() + subj[1:]
+        req["inquiry"] = {**(req.get("inquiry") or {}), "subject": subj}
+        req["new_thread"] = True
+        req.pop("thread", None)
         changed = True
     tos = []
     for c in (u.get("to_add") or []):
