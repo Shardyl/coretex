@@ -2045,7 +2045,7 @@ def _understand_correction(task: dict, text: str) -> dict:
             '"reply_instruction": "<everything that concerns the email reply content itself>", '
             f'"from": "<first name of a new sender if he asks to change who it is sent from; known team: {roster}>", '
             '"to_add": ["<first names/emails he wants ADDRESSED directly, i.e. on the To line>"], '
-            '"subject": "<the new SUBJECT LINE, only if he asks to change the subject: his words for it, tidied into a subject, nothing added>", '
+            '"subject": "<the new SUBJECT LINE, only if he asks to change the subject: his words for it in SENTENCE CASE (only the first word and proper names capitalised), nothing added>", '
             '"cc_add": ["<first names to add on cc>"], '
             '"cc_remove": ["<first names or exact emails to drop from cc>"], '
             '"attach_documents": ["<standing company documents he asks to attach, e.g. trade licence>"], '
