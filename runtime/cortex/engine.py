@@ -5768,8 +5768,10 @@ def _draft_proposal_email(task: dict, skill: dict, company: dict, actor: str, nu
     is created here exactly as Talk's draft_email would: an email_draft card to the deal's primary contact,
     the final deck and the quotation PDF attached, linked to the deal. The normal drafting path then continues
     the deal's real thread from the mailbox that owns it (_adopt_existing_thread) and writes it under the
-    email-handling rules. Nothing sends until that email card is approved with the PIN; this card stays open
-    for revisions until it does."""
+    email-handling rules. Nothing sends until that email card is approved with the PIN. THIS CARD CLOSES the
+    moment the email draft exists (owner, 21 Sep 2026: "once it's approved then no need to have a card, period":
+    card 815 sat in the Inbox with an Approve button after its email 831 was already drafted). A block keeps
+    it open, with the reason on its face."""
     from . import documents
     req = dict(task.get("request") or {})
     did = task.get("deal_id") or req.get("deal_id")
@@ -5839,9 +5841,8 @@ def _draft_proposal_email(task: dict, skill: dict, company: dict, actor: str, nu
     t = store.create_task(company["id"], sk["id"], "email_draft", ereq)
     db.execute("update tasks set deal_id=%s where id=%s", (int(did), t["id"]))
     msg = (f"Figures confirmed. The email to {name or to} is being drafted as card #{t['id']} with "
-           f"{refs[0]['filename']} and {refs[1]['filename']} attached. Approve that card to send. This card stays "
-           "open for revisions until it goes.")
-    store.update_task(task["id"], status="awaiting_approval", draft=msg)
+           f"{refs[0]['filename']} and {refs[1]['filename']} attached. Approve that card to send.")
+    store.update_task(task["id"], status="done", draft=msg)
     store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"email_card": t["id"], "quotation": number})
     pipeline.log_deal(int(did), "note", f"Proposal and quotation {number} confirmed on card {task['id']}; "
                                         f"cover email drafted as card {t['id']}.")
@@ -5966,8 +5967,7 @@ def _approve_proposal(task: dict, skill: dict, company: dict, actor: str) -> dic
     # on a card so I can request further revisions"). A closed card vanishes from the Inbox; replies on it
     # keep revising the deck, and approving it again drafts the cover email (_draft_proposal_email).
     msg += (" Check the figures. Reply here with any change, or APPROVE THIS CARD AGAIN and I draft the email "
-            "to the client with the deck and the quotation attached. This card stays in your Inbox until that "
-            "email is sent.")
+            "to the client with the deck and the quotation attached. This card then closes.")
     store.update_task(task["id"], request=req, status="awaiting_approval", draft=msg)
     store.log_decision(task["id"], skill["id"], actor, "approve",
                        snapshot={"quotation": number, "card": (t or {}).get("id"), "deck": final})

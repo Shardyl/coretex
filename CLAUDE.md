@@ -1835,6 +1835,9 @@ reached the card. Now: `crm._attach_to_contactless_deal` (from `create_contact`)
 contact of their account's ONE open opportunity when it has no contact; Talk's create_contact result states which
 opportunity the person is on, or that they are on none; `_draft_proposal_email` falls back to the account's single
 person (several = block and list them); every block is written on the card as "EMAIL NOT DRAFTED: <reason>".
+21 Sep 2026, owner: "once it's approved then no need to have a card, period" (815 sat in the Inbox with an Approve
+button after its email 831 existed). The proposal card now goes `done` the moment `_draft_proposal_email` creates the
+email card; only a block keeps it open. Deck changes after that: reply on the quotation card or ask Talk.
 NEXT (owner, not yet asked for): issue the quotation in the same run as the words-led proposal for this kind of enquiry.
 
 ## A person asking us for a quote is never a circular, bcc or not (19 Sep 2026)
