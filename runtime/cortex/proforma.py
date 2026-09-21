@@ -133,9 +133,15 @@ def deal_quotations(deal_id: int) -> list[dict]:
         m = re.match(r"quotation-sent:([A-Z]{2,5}-\d{4}-\d{3,5}):v(\d+)", str(ev.get("ref") or ""))
         if m and not ev.get("voided"):
             nums.setdefault(m.group(1), set()).add(int(m.group(2)))
-    for r in db.query("select request->>'number' n from tasks where kind='quotation' and deal_id=%s and "
-                      "status in ('awaiting_approval','done')", (int(deal_id),)):
-        if r.get("n"):
+    # ANY quotation card on the deal ties its number to it, whatever became of the card: Honor's SEN-2026-0012
+    # went out by hand, so its cards were cancelled and the timeline holds no send (21 Sep 2026).
+    # A card only counts when the number still belongs to the client that card was for: 0011 was once issued to
+    # Honor by mistake and is BioScience's, so Honor's cancelled 0011 cards must not offer it here.
+    for r in db.query("select distinct request->>'number' n, lower(coalesce(request->>'customer','')) c from tasks "
+                      "where kind='quotation' and deal_id=%s", (int(deal_id),)):
+        reg = db.setting_get(f"quote_versions:{r.get('n')}") or [] if r.get("n") else []
+        owner = ((reg[-1].get("spec") or {}).get("customer") or "").strip().lower() if reg else ""
+        if reg and (not r.get("c") or not owner or r["c"] == owner):
             nums.setdefault(r["n"], set())
     return [{"number": n, "sent": sorted(v)} for n, v in nums.items() if db.setting_get(f"quote_versions:{n}")]
 
@@ -211,6 +217,9 @@ def match_signed(deal_id: int, seen: dict, data: dict) -> dict | None:
         flags.append(f"they signed v{v}, but v{max(q['sent'])} was the last version sent")
     if q["sent"] and v not in q["sent"]:
         flags.append(f"v{v} is not recorded as sent on this opportunity")
+    if not q["sent"]:
+        flags.append(f"no send of {q['number']} is recorded on this opportunity (it may have gone out by hand), "
+                     f"so check that v{v} is the version they were given")
     if seen.get("handwritten_changes"):
         flags.append("handwritten changes on the signed copy: " + (str(seen.get("changes_note") or "")[:200] or "see the file"))
     if not seen.get("signature_visible"):
