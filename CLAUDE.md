@@ -2059,3 +2059,11 @@ block in `engine.py` (above `_push_quote_to_client_drive`).
   fired when `payment_terms` was set, and it was set on no deal before this build.
 - NOT BUILT: a tax invoice (stays with the accountant), payment received / reconciliation, reading a signed page
   sent as a photo, the SignWell e-sign route (contracts branch, undeployed).
+- WHICH QUOTATIONS ARE A DEAL'S (`proforma.deal_quotations`): `quotation-sent:` refs on the timeline, plus ANY
+  quotation card on the deal whatever its status (Honor's SEN-2026-0012 went out by hand: cards cancelled, no
+  send recorded), provided the number's registry customer still equals that card's customer (Honor's cancelled
+  0011 cards never offer BioScience's number). A match with no recorded send is flagged on the confirm card.
+- TESTED 21 Sep 2026, read-only: all 21 live SEN quotations parse to stages totalling 100% (ai-production,
+  retainer and assignment print the 70/30 default; shoot-production 50/25/25); the reading pass on real
+  SEN-2026-0013 v2: unsigned copy -> no card; a test-signed copy -> signature, stamp, signer, date and total
+  read, matched to v2 with no flags. No pro forma has been issued yet: the first real one is PI-2026-0001.
