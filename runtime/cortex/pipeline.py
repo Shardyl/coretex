@@ -120,7 +120,11 @@ def extract_commitments(draft: str, stage: str = "") -> list[dict]:
             scope_rule +
             "Extract the concrete promises/commitments THIS email makes to its recipient - deliverables or "
             "actions the sender now owes (e.g. 'revised quotation coming', 'will send samples', 'will call "
-            "Tuesday'). Politeness ('happy to help', 'any questions, ask') is NOT a commitment. Return "
+            "Tuesday'). Politeness ('happy to help', 'any questions, ask') is NOT a commitment. AN OFFER IS "
+            "NOT A COMMITMENT: 'we could set up a call', 'happy to walk you through it', 'would Wednesday "
+            "work?', 'let us know a convenient time', 'we remain available for a call' leave the next move "
+            "with THEM, so never extract them. A call or meeting counts only when the email says we WILL do "
+            "it or confirms one both sides agreed. Return "
             '{"commitments":[{"text":"<short restatement>","due_hint":"<ISO date/datetime ONLY if the email '
             "states one; else one of: today | tomorrow | week | days:N | none>\"}]}. Empty list when there "
             "are none. Never invent dates.",

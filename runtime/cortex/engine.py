@@ -4338,6 +4338,57 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
         pass
 
 
+_NO_CALL_TIMES = (
+    "NO CALL TIMES IN THIS EMAIL. They have not asked for a call and nothing new calls for one, so do NOT propose "
+    "a call, a meeting, dates or times, and do not ask them for a convenient time. If it reads naturally, ONE short "
+    "line that we are available for a call whenever they are ready is the most you may say. When they have put "
+    "things on hold or given a date they will come back by, acknowledge it and say we will wait for that date.")
+_ASKS_TO_MEET = re.compile(
+    r"\b(?:call|meeting|meet|zoom|teams|google meet|catch[- ]?up|discuss (?:it|this|further|in person)|"
+    r"speak|talk (?:it )?through|available (?:to|for)|availability|when (?:are|can) (?:you|we)|schedule|"
+    r"walk (?:us|me) through|presentation|present (?:it|this|to))\b", re.I)
+_PUT_ON_HOLD = re.compile(
+    r"\bon hold\b|\bput on hold\b|\bpostpon|\bwe will (?:revert|get back|come back)|\bwill revert\b|"
+    r"\bget back to you\b|\bonce (?:the|our) (?:review|decision|approval)|\bbear with us\b|"
+    r"\binternal (?:review|approval|discussion)s?\b|\bnot (?:at )?this (?:time|stage)\b", re.I)
+
+
+def _call_is_relevant(task: dict, req: dict, email: str) -> str:
+    """WHEN AN EMAIL MAY PROPOSE CALL TIMES, decided on facts (owner, 21 Sep 2026: "the only next meeting should
+    be when it is relevant to have a meeting"). Returns the reason, or "" when it may not:
+      owner     - his brief or a correction on this card asks for a call or meeting
+      accepted  - a call we already AGREED with this person is still to be arranged (a meeting commitment)
+      asked     - their own message asks to meet, talk or be walked through something
+      first     - our first email to this person: the first hello proposes the call
+    A client who has put things on hold never gets times, even in a first reply."""
+    inq = req.get("inquiry") or {}
+    theirs = " ".join(str(inq.get(k) or "") for k in ("message", "subject"))
+    theirs = re.split(r"\n\s*(?:From:|On .{5,80} wrote:|-----Original)", theirs)[0]     # their words, not our quoted mail
+    words = " ".join([str(req.get("brief") or "")] + [d["note"] for d in db.query(
+        "select note from decisions where task_id=%s and action='correct' and coalesce(note,'')<>'' order by id",
+        (task.get("id") or 0,))])
+    if re.search(r"\b(?:call|meeting|meet|slots?|times?)\b", words, re.I) and not re.search(
+            r"\b(?:no|not|don'?t|do not|never|without|stop|remove|drop)\b[^.]{0,40}\b(?:call|meeting|meet|slots?|times?)\b",
+            words, re.I):
+        return "owner"
+    if _PUT_ON_HOLD.search(theirs):
+        return ""
+    did = task.get("deal_id") or req.get("deal_id")
+    if did and db.one("select 1 from reminders where target_type='deal' and target_id=%s and status in "
+                      "('pending','snoozed') and title like %s and lower(title) like %s limit 1",
+                      (str(did), "Meeting commitment%", f"%{(email or '').lower()}%")):
+        return "accepted"
+    if _ASKS_TO_MEET.search(theirs):
+        return "asked"
+    sent = db.one("select 1 from tasks where company_id=%s and kind in ('email_reply','email_draft') and "
+                  "status in ('done','sent') and lower(request->'inquiry'->>'email')=lower(%s) and id<>%s limit 1",
+                  (task.get("company_id"), email or "", task.get("id") or 0))
+    if not sent and did:
+        sent = db.one("select 1 from crm_projects where id=%s and (history @> %s::jsonb or history @> %s::jsonb)",
+                      (int(did), Json([{"event": "email_out"}]), Json([{"event": "email_out_manual"}])))
+    return "" if sent else "first"
+
+
 def _draft_context_for_reply(task: dict, req: dict) -> dict:
     """THE CONTEXT ASSEMBLER (rebuild Stage 1). Every email the system drafts — inbound replies,
     Talk-composed outbound, follow-ups, post-meeting, chases, reminder-spawned — passes through here at
@@ -4405,7 +4456,7 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
                             "and lower(title) like %s order by due_at", (str(_did), "Commitment owed to%", f"%{email.lower()}%"))
             if owed:
                 req["owed"] = ("COMMITMENTS WE ALREADY MADE TO THIS PERSON AND STILL OWE (keep them IN THIS EMAIL where an "
-                               "email can: to schedule a call, propose specific slots from the availability list; to send "
+                               "email can: a call we AGREED to arrange is proposed from the availability list when one is given; to send "
                                "something, attach it or state exactly when; NEVER promise it again as if new):\n"
                                + "\n".join("- " + re.sub(r"^Commitment owed to \S+:\s*", "", r["title"]).split(" (deal ")[0]
                                            + f" (due {r['due_at']:%d %b})" for r in owed))
@@ -4466,12 +4517,22 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
         pass
     try:   # REAL AVAILABILITY: what we can actually offer, in the recipient's timezone. Code computes
         # it from the merged calendars; the drafter may only pick from this list (owner, 31 Aug 2026).
+        # ONLY WHEN A CALL IS RELEVANT (owner, 21 Sep 2026): the slot list rode into EVERY email, so every reply
+        # offered times: to Massar, who had just put the decision on hold until October (card 832), and to Emergy,
+        # who had only confirmed receipt (card 841). His corrections never landed because the list was always
+        # there to be used. The facts decide whether the list is given at all (_call_is_relevant); without
+        # it the writer is told plainly that this email proposes no times.
         from . import calendar as _gcal
-        _tz = (req.get("client_tz") or "").strip() or _tz_for_email(email)
-        _av = _gcal.availability_block(tz=_tz)
-        if _av:
-            req["availability"] = _av
-            manifest.append("availability")
+        _why = _call_is_relevant(task, req, email)
+        if _why:
+            _tz = (req.get("client_tz") or "").strip() or _tz_for_email(email)
+            _av = _gcal.availability_block(tz=_tz)
+            if _av:
+                req["availability"] = _av
+                manifest.append(f"availability({_why})")
+        else:
+            req["availability"] = _NO_CALL_TIMES
+            manifest.append("no_call_times")
     except Exception:  # noqa: BLE001
         pass
     try:   # the media library — REAL portfolio links, so 'share sample work' can never be invented

@@ -1803,6 +1803,21 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## Call times only when a call is relevant (21 Sep 2026)
+Owner: "I find myself constantly telling Cortex to stop offering dates for meetings." Cards 832 (Massar, decision on
+hold to October) and 841 (Emergy, only confirming receipt) both proposed times. Three causes, all fixed:
+- RULES (Sensa, live DB): the two sales-first-response rules "goal of every reply is to get them on a call" and
+  "keep pushing for the call across follow-ups" are REPLACED by one MEETINGS rule (times once, in the first
+  response; after that only when they ask, when there is something new to present, or a decision meeting is the
+  next step; on hold = no times, at most one 'available whenever you are ready' line). Same rule added to
+  sales-followup and email-handling.
+- CODE `engine._call_is_relevant(task, req, email)` gates the slot list in `_draft_context_for_reply`: given only
+  for owner (his brief/correction asks), accepted (open 'Meeting commitment'), asked (their words, `_ASKS_TO_MEET`),
+  first (no earlier email to this person). `_PUT_ON_HOLD` in their words = never. Otherwise the writer gets
+  `_NO_CALL_TIMES` instead of the list; manifest shows `availability(<why>)` or `no_call_times`.
+- CODE `pipeline.extract_commitments`: an OFFER of a call is not a commitment (it was logged as 'Commitment owed:
+  arrange a call' and the owed shelf then forced the offer back into every email).
+
 ## A revised deck replaces the old one on its waiting email (21 Sep 2026)
 Shama (deal 130): email 831 was drafted with deck v3 + quotation v3, then the client confirmed the delivery date.
 `engine.refresh_proposal_email(proposal_task_id)` runs at the end of BOTH revision paths (`creative.revise`,
