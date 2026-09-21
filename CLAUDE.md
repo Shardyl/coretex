@@ -1815,6 +1815,9 @@ hold to October) and 841 (Emergy, only confirming receipt) both proposed times. 
   for owner (his brief/correction asks), accepted (open 'Meeting commitment'), asked (their words, `_ASKS_TO_MEET`),
   first (no earlier email to this person). `_PUT_ON_HOLD` in their words = never. Otherwise the writer gets
   `_NO_CALL_TIMES` instead of the list; manifest shows `availability(<why>)` or `no_call_times`.
+- The gate reads ONLY the owner's own words (corrections incl. the one being applied via `_CORRECTION_NOW`; `brief`
+  only on an email he composed: a reply card's brief is system text full of the word 'call'), and `_ASKS_TO_MEET`
+  needs a REQUEST ('could we schedule a call'), never a mention ('as discussed on the call').
 - CODE `pipeline.extract_commitments`: an OFFER of a call is not a commitment (it was logged as 'Commitment owed:
   arrange a call' and the owed shelf then forced the offer back into every email).
 
