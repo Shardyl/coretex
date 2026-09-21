@@ -1934,7 +1934,11 @@ def apply_correction(task: dict, text: str) -> None:
         task, text = _apply_understood(task, u, text)              # every channel applied deterministically
         if task["kind"] != "project_plan":
             task = _prebook_meeting(task) or task   # a stamped meeting -> real Meet link for the drafter
-    dreq = _request_for_draft(task)
+    _CORRECTION_NOW.set(text or "")     # his words on THIS redraft, not logged yet: the call-times gate reads them
+    try:
+        dreq = _request_for_draft(task)
+    finally:
+        _CORRECTION_NOW.set("")
     new = worker.draft(skill, company, dreq, correction=text, prev_draft=old)
     new = _ensure_clean_email(skill, company, dreq, new, prev=old)
     _mm = _identity_mismatch(new, (dreq.get("from_email") or ""), company)
@@ -4338,15 +4342,21 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
         pass
 
 
+import contextvars as _cv
+_CORRECTION_NOW: "_cv.ContextVar[str]" = _cv.ContextVar("correction_now", default="")
+
 _NO_CALL_TIMES = (
     "NO CALL TIMES IN THIS EMAIL. They have not asked for a call and nothing new calls for one, so do NOT propose "
     "a call, a meeting, dates or times, and do not ask them for a convenient time. If it reads naturally, ONE short "
     "line that we are available for a call whenever they are ready is the most you may say. When they have put "
     "things on hold or given a date they will come back by, acknowledge it and say we will wait for that date.")
+# a REQUEST to meet, not a mention of one ("as discussed on the call", "thank you for the meeting" ask for nothing)
 _ASKS_TO_MEET = re.compile(
-    r"\b(?:call|meeting|meet|zoom|teams|google meet|catch[- ]?up|discuss (?:it|this|further|in person)|"
-    r"speak|talk (?:it )?through|available (?:to|for)|availability|when (?:are|can) (?:you|we)|schedule|"
-    r"walk (?:us|me) through|presentation|present (?:it|this|to))\b", re.I)
+    r"\b(?:can|could|shall|should|may|let'?s|let us|would like|want|wish|like|love|happy|keen|free|available|"
+    r"arrange|schedule|organi[sz]e|set ?up|book|fix|have|join|propose|suggest|request)\b(?:\W+\w+){0,5}?\W+"
+    r"(?:call|meeting|meet|zoom|teams|google meet|chat|catch[- ]?up|discussion|presentation|session)\b|"
+    r"\bwalk (?:us|me|the team) through\b|\bpresent (?:it|this|the \w+) to\b|\byour availability\b|"
+    r"\bwhen (?:are|can|could) (?:you|we)\b|\bwhat time(?:s)? (?:works?|suits?)\b", re.I)
 _PUT_ON_HOLD = re.compile(
     r"\bon hold\b|\bput on hold\b|\bpostpon|\bwe will (?:revert|get back|come back)|\bwill revert\b|"
     r"\bget back to you\b|\bonce (?:the|our) (?:review|decision|approval)|\bbear with us\b|"
@@ -4364,7 +4374,11 @@ def _call_is_relevant(task: dict, req: dict, email: str) -> str:
     inq = req.get("inquiry") or {}
     theirs = " ".join(str(inq.get(k) or "") for k in ("message", "subject"))
     theirs = re.split(r"\n\s*(?:From:|On .{5,80} wrote:|-----Original)", theirs)[0]     # their words, not our quoted mail
-    words = " ".join([str(req.get("brief") or "")] + [d["note"] for d in db.query(
+    # HIS words only: a reply card's `brief` is system text (it carries the deal timeline, where "call" always
+    # appears); only an email he composed himself (Talk, outbound, not a chase or a proposal cover) has his brief
+    _own_brief = req.get("outbound") and not req.get("followup") and not req.get("proposal_card")
+    words = " ".join([str(req.get("brief") or "") if _own_brief else "", _CORRECTION_NOW.get()]
+                     + [d["note"] for d in db.query(
         "select note from decisions where task_id=%s and action='correct' and coalesce(note,'')<>'' order by id",
         (task.get("id") or 0,))])
     if re.search(r"\b(?:call|meeting|meet|slots?|times?)\b", words, re.I) and not re.search(
