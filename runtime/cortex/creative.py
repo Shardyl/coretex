@@ -1001,6 +1001,11 @@ def revise(task: dict, text: str) -> bool:
                               status="awaiting_approval", attempts=(task.get("attempts") or 0) + 1)
             store.log_decision(task["id"], task["skill_id"], "owner", "correct", note=text,
                                snapshot={"version": job.s["deck"]["version"], "plan": plan})
+            try:   # an email already waiting with the old deck and quotation takes the new ones
+                from . import engine as _eng
+                _eng.refresh_proposal_email(task["id"])
+            except Exception as _re:  # noqa: BLE001 - the revision stands
+                job.log(f"email refresh: {type(_re).__name__}: {_re}")
         except Exception as e:  # noqa: BLE001
             job.log(f"REVISION FAILED: {type(e).__name__}: {e}")
             store.update_task(task["id"], status="awaiting_approval",

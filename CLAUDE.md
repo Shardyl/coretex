@@ -1803,6 +1803,13 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## A revised deck replaces the old one on its waiting email (21 Sep 2026)
+Shama (deal 130): email 831 was drafted with deck v3 + quotation v3, then the client confirmed the delivery date.
+`engine.refresh_proposal_email(proposal_task_id)` runs at the end of BOTH revision paths (`creative.revise`,
+`_revise_proposal`): the open email card made from that proposal (`request.proposal_card`) gets the latest deck and
+the live quotation PDF in place of every older file carrying that quotation number, its wording is reconciled, and
+the proposal card closes again. A reply on a CLOSED proposal card still revises it (it reopens for the run).
+
 ## A correction can change the subject line (21 Sep 2026)
 Card 837: "change the subject to media content quotation" went to the body writer and came back unchanged.
 `_understand_correction` now has a `subject` channel; `_apply_understood` sets `inquiry.subject` in code, drops the

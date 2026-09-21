@@ -5748,6 +5748,10 @@ def _revise_proposal(task: dict, skill: dict, company: dict, text: str, quote_ca
                       attempts=(task.get("attempts") or 0) + 1)
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text,
                        snapshot={"version": ver, "doc": doc["id"]})
+    try:   # an email already waiting with the old deck takes the new one
+        refresh_proposal_email(task["id"])
+    except Exception as _re:  # noqa: BLE001 - the revision stands
+        print(f"[proposal] email refresh: {type(_re).__name__}: {_re}", flush=True)
     if quote_card:
         try:
             qreq = dict(quote_card.get("request") or {})
@@ -5771,6 +5775,46 @@ def _revise_proposal(task: dict, skill: dict, company: dict, text: str, quote_ca
 
 
 _OPEN_CARD = ("new", "drafting", "awaiting_approval", "awaiting_correction", "queued")
+
+
+def refresh_proposal_email(proposal_task_id: int) -> int | None:
+    """A REVISED DECK REPLACES THE OLD ONE ON ITS OPEN EMAIL (21 Sep 2026). Shama: the email card (831) was already
+    drafted with deck v3 and quotation v3 when the client confirmed the delivery date; revising the proposal made
+    v4 of both, and the waiting email would still have sent v3. The open email card created from this proposal
+    (`request.proposal_card`) gets the latest deck and the live quotation's PDF in place of the old ones; any
+    other attachment on it stays. The proposal card then closes again: its email already exists. Returns the
+    email card's id, or None when no such email is open."""
+    from . import documents
+    p = store.get_task(int(proposal_task_id)) or {}
+    preq = p.get("request") or {}
+    em = db.one("select * from tasks where kind in ('email_draft','email_reply') and status = any(%s) and "
+                "request->>'proposal_card'=%s order by id desc limit 1", (list(_OPEN_CARD), str(proposal_task_id)))
+    number = preq.get("quotation_number")
+    if not em or not number:
+        return None
+    qcard = db.one("select * from tasks where kind='quotation' and request->>'number'=%s and status in "
+                   "('awaiting_approval','done') order by id desc limit 1", (number,)) or {}
+    ids = [a.get("id") for a in (preq.get("attach_docs") or [])[:1]]
+    ids += [a.get("id") for a in ((qcard.get("request") or {}).get("attach_docs") or [])
+            if re.search(r"quotation", a.get("filename") or "", re.I)]
+    fresh = [documents.card_ref(d) for d in (documents.get(int(i), p.get("company_id")) for i in ids if i) if d]
+    if len(fresh) < 2:
+        return None
+    ereq = dict(em.get("request") or {})
+    other = [a for a in (ereq.get("attach_docs") or [])
+             if number not in str(a.get("filename") or "") and int(a.get("id") or 0) not in {f["id"] for f in fresh}]
+    ereq["attach_docs"] = fresh + other
+    store.update_task(em["id"], request=ereq)
+    reconcile_attachments(em["id"])
+    store.update_task(p["id"], status="done",
+                      draft=(p.get("draft") or "") + f"\n\nThe revised deck and quotation replaced the earlier versions "
+                                                     f"on the waiting email, card #{em['id']}: "
+                                                     + " and ".join(f["filename"] for f in fresh[:2]) + ".")
+    if p.get("deal_id") or preq.get("deal_id"):
+        pipeline.log_deal(int(p.get("deal_id") or preq["deal_id"]), "note",
+                          f"Proposal revised on card {p['id']}; email card {em['id']} now carries "
+                          + " and ".join(f["filename"] for f in fresh[:2]) + ".")
+    return em["id"]
 
 
 def _draft_proposal_email(task: dict, skill: dict, company: dict, actor: str, number: str) -> dict:
