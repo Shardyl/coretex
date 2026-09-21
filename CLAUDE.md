@@ -1803,6 +1803,11 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## Deal documents may be up to 40MB (21 Sep 2026)
+Shama's Qabilah creative brief (22.9MB) was refused by the library's 15MB cap, which exists for files we EMAIL.
+`documents.MAX_DEAL_BYTES` = 40MB applies to `kind='client-document'` saved with a `deal_id` (Talk save_document,
+`_file_deal_document`, inbound attachments in `_file_inbound_attachments`); everything else keeps 15MB.
+
 ## Renaming a contact renames them everywhere (21 Sep 2026)
 Owner renamed Yousif Alalawi to Farah Ali (same email) and deal 134 still showed Yousif: `crm_projects.contacts`
 stores a COPY of name + email taken when the person was attached. There was never a second CRM record. Now

@@ -18,6 +18,9 @@ from . import config, db, store
 
 DOCS_DIR = config.get("CORTEX_DOCUMENTS_DIR") or "/opt/cortex-knowledge/documents"
 MAX_BYTES = 15_000_000
+# A CLIENT'S DOCUMENT FILED ON A DEAL is reference material we read, never something we email out, so the
+# emailable cap does not apply to it (Shama's 22.9MB Qabilah creative brief was refused, 21 Sep 2026).
+MAX_DEAL_BYTES = 40_000_000
 
 _MIGRATE = """
 create table if not exists company_documents (
@@ -234,8 +237,9 @@ def save(company_id: int, slug: str, filename: str, mime: str, data: bytes,
     ensure_schema()
     if not data:
         raise ValueError("empty file")
-    if len(data) > MAX_BYTES:
-        raise ValueError(f"file too large ({len(data)} bytes; max {MAX_BYTES})")
+    _cap = MAX_DEAL_BYTES if (deal_id and kind == "client-document") else MAX_BYTES
+    if len(data) > _cap:
+        raise ValueError(f"file too large ({len(data)} bytes; max {_cap})")
     sha = hashlib.sha256(data).hexdigest()
     dup = db.one("select * from company_documents where company_id=%s and sha256=%s", (company_id, sha))
     if dup:

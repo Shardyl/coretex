@@ -4072,7 +4072,7 @@ def _file_inbound_attachments(co: dict, e: dict, deal_id: int, rt_key: str | Non
             continue
         if not (mime == "application/pdf" or fn.lower().endswith(".pdf") or doctext.kind_for(mime, fn)):
             continue
-        if not 0 < int(a.get("size") or 0) <= documents.MAX_BYTES:
+        if not 0 < int(a.get("size") or 0) <= documents.MAX_DEAL_BYTES:
             continue
         try:
             data = gmail.get_attachment(e.get("gmail_id"), a["att_id"], rt_key or "gmail_refresh_token",
