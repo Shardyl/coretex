@@ -146,19 +146,24 @@ def _strip_money(x, dropped: list):
 
 
 def _label(sec: dict) -> str:
-    """A quotation section header as a readable investment row label. The headers are written ALL CAPS, and
-    .capitalize() used to flatten them to sentence case, which also destroyed the casing of every acronym and
-    brand token in them ("AI production" printed "Ai production", "(GTMx)" printed "(gtmx)"; UAS, 23 Sep 2026).
-    Sentence-case it, then restore each word to the form the section's OWN item descriptions use, so the casing
-    comes from the copy instead of a hardcoded vocabulary."""
+    """A quotation section header as a readable investment row label. The headers are written ALL CAPS, so the
+    label used to go through .capitalize() to make it readable, which also destroyed every acronym and brand
+    token in them: AI PRODUCTION printed "Ai production" and INTERFACE RESTYLE (GTMx) printed "(gtmx)" on the
+    UAS deck (SEN-2026-0026). Word by word: a word the section's OWN item descriptions use is restored to that
+    form, so the casing comes from the copy and not a hardcoded acronym list; a word still shouting and found
+    nowhere is lowercased; a word that is already mixed case (GTMx) is left exactly as written."""
     h = re.sub(r"^[A-Z]\s*·\s*", "", sec.get("header") or "").strip()
-    if not h or re.search(r"[a-z]", h):
-        return h
-    body = " ".join(str(i.get("desc") or "") for i in sec.get("items") or [])
+    if not h or sum(c.isupper() for c in h) <= sum(c.islower() for c in h):
+        return h                                    # already written in sentence case: leave it alone
     forms: dict[str, str] = {}
-    for w in re.findall(r"[A-Za-z][A-Za-z0-9]*", body):
+    for w in re.findall(r"[A-Za-z][A-Za-z0-9]*",
+                        " ".join(str(i.get("desc") or "") for i in sec.get("items") or [])):
         forms.setdefault(w.lower(), w)
-    h = re.sub(r"[A-Za-z][A-Za-z0-9]*", lambda m: forms.get(m.group(0).lower(), m.group(0).lower()), h)
+
+    def one(m: re.Match) -> str:
+        w = m.group(0)
+        return forms.get(w.lower()) or (w.lower() if w.isupper() else w)
+    h = re.sub(r"[A-Za-z][A-Za-z0-9]*", one, h)
     return h[:1].upper() + h[1:]
 
 
