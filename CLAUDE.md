@@ -2074,3 +2074,27 @@ block in `engine.py` (above `_push_quote_to_client_drive`).
   retainer and assignment print the 70/30 default; shoot-production 50/25/25); the reading pass on real
   SEN-2026-0013 v2: unsigned copy -> no card; a test-signed copy -> signature, stamp, signer, date and total
   read, matched to v2 with no flags. No pro forma has been issued yet: the first real one is PI-2026-0001.
+
+## A creative deck carries its voice over (23 Sep 2026)
+Owner, on the RAFED SAKINA deck: "can you add a really nice heartfelt voiceover to it as well". There was nowhere
+for one to live. The script schema had `on_screen_text` and `caption` only, so a revision asking for narration had
+no field to land in and `deck.beat` had no place to show it; writing it into `on_screen_text` would have printed
+the narration as on-screen typography, which is a different thing.
+- `stage_script` beats now carry **`voiceover`**: the words heard over that beat, empty where the beat plays on
+  picture and sound alone. The prompt states that on-screen text and voice over are never the same words, that a
+  beat the owner's direction says is wordless stays empty, and that the narration across all beats must read as one
+  continuous piece at a speakable pace for its timings.
+- `deck.beat(..., vo=)` renders it as its own panel (accent rule, italic, bottom right, clear of `.cap`), never in
+  the `.ost` on-screen slot.
+- `deck.voscript(...)` is a new page, `NN · The voice over`, laid out BY CODE from the script: timecode beside line,
+  a wordless beat shown as "No narration" rather than dropped, because the silence is part of the film. It renders
+  only when at least one beat has narration, and its sub line is code-computed ("Heard over beats 3 to 9. The
+  remaining beats play on picture and sound alone.") unless the copy writer supplies one.
+- `stage_copy` is given each beat's `voiceover` and told it carries the on-screen lines AND the voice over verbatim:
+  only the voice over page's heading, sub and note are the writer's. Copy schema gained `voscript`.
+- `changed_frames` still compares `frame_prompt` only, so adding or rewording narration never regenerates a frame.
+First applied: SEN-2026-0024 v3 (RAFED / SEHA, deal 136, The Weather Inside), narration on the 60 second film and
+none on the 15 second cinema film.
+STILL OPEN on the same deck: the contact sheet's subtitle is stamped in `creative.render` as title plus total
+duration ("The Weather Inside: 75 seconds"), so on a two-film job it reads as one long film and no feedback can
+move it. Same class as the "our work" page: the page is laid out by code, so the fix is code.

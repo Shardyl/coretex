@@ -349,7 +349,9 @@ class Job:
         prev = self.s.get("script") if feedback else None
         refs = (((self.s.get("location") or {}).get("pick") or {}).get("refs") or [])[:8]
         ask = ("Write the SCRIPT for the chosen idea, beat by beat. JSON: {\"beats\": [{\"n\": 1, \"time\": "
-               "\"0:00-0:06\", \"on_screen_text\": \"short line or empty\", \"caption\": \"12-20 words, what we "
+               "\"0:00-0:06\", \"on_screen_text\": \"short line or empty\", \"voiceover\": \"the narration heard "
+               "over this beat, in the reader's own words, or empty where the beat plays on picture and sound "
+               "alone\", \"caption\": \"12-20 words, what we "
                "see\", \"frame_prompt\": \"one style frame: subject, action, setting, time of day, light, lens, "
                "camera position, composition; paste the asset descriptors it uses WORD FOR WORD; under 120 "
                "words\", \"refs\": [numbers of the reference photographs that show this view], \"assets\": "
@@ -358,6 +360,9 @@ class Job:
                "{\"heading\": \"\", \"body\": \"\", \"items\": [{\"label\": \"\", \"prompt\": \"a vertical phone "
                "selfie still of the contributor, place and action\"}]} or null}. "
                f"Between 7 and 11 beats; contiguous timings from 0:00 ending exactly at {dur // 60}:{dur % 60:02d}. "
+               "ON-SCREEN TEXT and VOICEOVER are different things: never put the same words in both, and leave "
+               "voiceover empty on a beat the owner's direction says carries no narration. The voiceover across "
+               "all beats must read as one continuous piece of writing at a speakable pace for its timings. "
                "No legible text, logos or readable screens inside any frame: typography is added in post. "
                "Asymmetric compositions, one clear focal subject, never two people squared off to camera. "
                "No em dashes. Tiles only if the concept has contributors filming themselves (else null).")
@@ -587,7 +592,8 @@ class Job:
         loc = (self.s.get("location") or {}).get("pick") or {}
         prev = self.s.get("copy") if feedback else None
         src = {"brief": self.s["brief"], "concept": self.s["concept"],
-               "beats": [{k: b.get(k) for k in ("n", "time", "on_screen_text", "caption")} for b in self.s["script"]["beats"]],
+               "beats": [{k: b.get(k) for k in ("n", "time", "on_screen_text", "voiceover", "caption")}
+                         for b in self.s["script"]["beats"]],
                "tiles": self.s["script"].get("tiles"),
                "location": {k: v for k, v in loc.items() if k not in ("photos", "refs")},
                "quotation": {"blocks": [{"block": r["item"], "lines": r["items"]} for r in rows],
@@ -597,7 +603,8 @@ class Job:
             "\n\n".join(filter(None, [
                 "You write the CLIENT-FACING copy of a creative proposal deck. The concept, script and quotation "
                 "are decided; you put them into clear, confident words. Code lays out the pages, sets every "
-                "price and carries the on-screen lines verbatim.",
+                "price and carries the on-screen lines and the voice over verbatim: you never rewrite either, and "
+                "the voice over page is laid out from the script itself, so only its heading, sub and note are yours.",
                 worker._now_line(), worker._company_context(co), _rules(co, "sales-proposal"),
                 "RULES: write to the client ('you'); plain and specific; no superlatives; no em dashes. Use ONLY "
                 "facts in the material: no invented figure, date, award or name. Loglines, not paragraphs: every "
@@ -608,6 +615,7 @@ class Job:
                 '"1-2 sentences"}, "brief": {"heading": "", "cards": [{"title": "", "body": ""}], "bullets": [""]}, '
                 '"location": {"heading": "", "sub": "", "body": "50-70 words", "stats": [{"k": "", "v": ""}]}, '
                 '"idea": {"heading": "", "sub": "", "line": "", "stats": [{"k": "", "v": ""}]}, "sheet_note": "", '
+                '"voscript": {"heading": "", "sub": "", "note": ""}, '
                 '"tiles": {"heading": "", "body": "", "note": ""}, "look": {"heading": "", "cols": [{"title": "", '
                 '"stat": "", "body": ""}]}, "deliverables": {"heading": "", "cells": [{"title": "", "body": ""}]}, '
                 '"make": {"heading": "", "phases": [{"when": "", "title": "", "body": ""}], "cards": [{"title": "", '
@@ -640,7 +648,7 @@ class Job:
         co, c = self.co, self.s["concept"]
         cp = {k: (self.s["copy"].get(k) or {}) for k in (           # a section the writer left out renders empty,
               "cover", "brief", "location", "idea", "tiles", "look",  # it never crashes the layout
-              "deliverables", "make", "samples", "investment", "terms", "needs", "close")}
+              "deliverables", "make", "samples", "investment", "terms", "needs", "close", "voscript")}
         cp["sheet_note"] = self.s["copy"].get("sheet_note") or ""
         sc, fr = self.s["script"], self.s["frames"]
         beats = sc["beats"]
@@ -686,11 +694,22 @@ class Job:
         n += 1
         for b in beats:
             d.beat(c.get("title"), b["n"], len(beats), b["time"], b.get("on_screen_text") or "",
-                   b.get("caption") or "", pick(b["n"]), "Storyboard")
+                   b.get("caption") or "", pick(b["n"]), "Storyboard", vo=b.get("voiceover") or "")
         d.sheet(f"{n:02d} · The film at a glance", f"{c.get('title')}: {int(c.get('duration_s') or 60)} seconds",
                 [{"img": pick(b["n"]), "time": b["time"], "text": b.get("on_screen_text") or ""} for b in beats],
                 "Storyboard", cp.get("sheet_note") or "Style frames show the look and the flow; faces are illustrations.")
         n += 1
+        spoken = [b for b in beats if (b.get("voiceover") or "").strip()]
+        if spoken:      # the narration end to end, only when the film actually has one
+            first, last = spoken[0]["n"], spoken[-1]["n"]
+            where = (f"Heard over beat {first}" if first == last else f"Heard over beats {first} to {last}")
+            sub = where + (". The remaining beats play on picture and sound alone."
+                           if len(spoken) < len(beats) else ".")
+            d.voscript(f"{n:02d} · The voice over", cp["voscript"].get("heading") or "The words you hear",
+                       cp["voscript"].get("sub") or sub,
+                       [{"time": b["time"], "line": b.get("voiceover") or ""} for b in beats], "The voice over",
+                       cp["voscript"].get("note") or "Read unhurried, one voice, over the picture.")
+            n += 1
         tiles = [(t, (fr.get(f"t{i + 1}") or {}).get("pick")) for i, t in
                  enumerate(((sc.get("tiles") or {}).get("items") or [])[:8])]
         tiles = [{"img": p, "label": t.get("label")} for t, p in tiles if p]

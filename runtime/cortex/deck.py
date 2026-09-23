@@ -797,6 +797,16 @@ _CREATIVE_CSS = """
 .ost.none { font-size:13px; letter-spacing:2.5px; color:#9A9AA4; font-weight:500; }
 .obar { position:absolute; left:72px; bottom:96px; width:44px; height:3px; background:ACCENT; }
 .cap { position:absolute; left:72px; bottom:58px; right:320px; font-size:14px; color:#C4C4CC; }
+.vo { position:absolute; right:60px; bottom:56px; width:236px; background:rgba(10,10,10,.72); border-left:2px solid ACCENT;
+      padding:10px 14px; border-radius:0 4px 4px 0; }
+.vo .l { font-size:9.5px; letter-spacing:2.2px; color:ACCENT; font-weight:600; text-transform:uppercase; }
+.vo p { font-size:12.5px; line-height:1.4; color:#EDEDF2; font-style:italic; margin:5px 0 0; }
+.vos { margin-top:4px; }
+.vos div { display:flex; gap:20px; padding:9px 0; border-bottom:1px solid #1E1E22; }
+.vos div:last-child { border-bottom:none; }
+.vos .t { flex:0 0 96px; font-size:11px; color:ACCENT; letter-spacing:1.4px; font-weight:600; padding-top:3px; }
+.vos .l { flex:1; font-size:15px; line-height:1.45; color:#EDEDF2; font-style:italic; }
+.vos .l.none { color:#7A7A84; font-style:normal; font-size:12.5px; letter-spacing:1.6px; text-transform:uppercase; }
 .hero h1 { font-size:52px; }
 .hstats { display:flex; gap:34px; margin-top:26px; }
 .hstats div { border-left:2px solid ACCENT; padding-left:12px; }
@@ -848,13 +858,32 @@ class CreativeDeck(_Deck):
             f'<p style="margin-top:16px;font-size:17px;color:#DADAE0">{_esc(line)}</p>'
             f'<div class="hstats">{st}</div></div>{self._foot(section or kicker)}</div>')
 
-    def beat(self, film_label, n, total, time, text, cap, image, section=""):
+    def beat(self, film_label, n, total, time, text, cap, image, section="", vo=""):
+        """`text` is the ON-SCREEN line (typography added in post); `vo` is the NARRATION heard over the beat.
+        They are two different things and are never shown in the same place."""
         o = f'<div class="ost">{_esc(text)}</div>' if text else '<div class="ost none">PICTURE ONLY, NO TEXT</div>'
         img = f'<img class="full" src="{_b64(image)}">' if image else ""
+        v = (f'<div class="vo"><div class="l">Voice over</div><p>{_esc(vo)}</p></div>' if vo else "")
         self.pages.append(
             f'<div class="pg">{img}<div class="fshade"></div><div class="bk">{_esc(film_label)} · Beat {n} of {total}'
-            f'<span>{_esc(time)}</span></div>{o}<div class="obar"></div><div class="cap">{_esc(cap)}</div>'
+            f'<span>{_esc(time)}</span></div>{o}<div class="obar"></div><div class="cap">{_esc(cap)}</div>{v}'
             f'{self._foot(section)}</div>')
+
+    def voscript(self, kicker, heading, sub, rows, section="", note=""):
+        """The narration end to end, timecode beside line, so the client reads the whole voice over in one place.
+        A beat with no narration is shown as such rather than omitted: the silence is part of the film."""
+        r = "".join(f'<div><div class="t">{_esc(x.get("time"))}</div>'
+                    + (f'<div class="l">{_esc(x["line"])}</div>' if x.get("line")
+                       else '<div class="l none">No narration</div>') + "</div>"
+                    for x in (rows or [])[:12])
+        self.pages.append(
+            f'<div class="pg"><div class="pad" style="padding-top:44px"><h3>{_esc(kicker)}</h3>'
+            f'<div class="rule" style="margin-bottom:10px"></div>'
+            f'<h2 style="font-size:23px;margin-bottom:6px">{_esc(heading)}</h2>'
+            + (f'<p class="csnote" style="margin:0 0 8px">{_esc(sub)}</p>' if sub else "")
+            + f'<div class="vos">{r}</div>'
+            + (f'<p class="csnote" style="margin-top:14px">{_esc(note)}</p>' if note else "")
+            + f'</div>{self._foot(section or kicker)}</div>')
 
     def sheet(self, kicker, heading, cells, section="", note=""):
         c = "".join((f'<div><img src="{_b64(x["img"])}">' if x.get("img") else "<div>")
