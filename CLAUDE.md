@@ -1803,6 +1803,13 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## Our-work films: removal in any wording, library is the truth at render (23 Sep 2026)
+Card 868: "I've removed that tag... put another one in there instead" named the Dubai Police delivery-rider film;
+the drop test only knew `remove`, so the named film was pinned to LEAD the page. `_revise_proposal` now reads removal
+intent in any tense (removed/dropped/took out/swap/replace/instead/wrong/mistake...), keeps `samples.dropped` and
+`samples.named` on the spec (`_no_urls` keeps them); `deck.render` evicts a pinned film that no longer carries any of
+the page's categories unless the owner named it, never re-picks a dropped one, and refills from `pick_samples`.
+
 ## Replies on a website-enquiry thread are read (21 Sep 2026)
 `poll_inbox` queried `-subject:"New enquiry from"` to leave form notifications to `poll_inquiries`. That also
 dropped every client REPLY on such a thread ("Re: New enquiry from Bohdan Bilych": SFORS pausing the hero video,

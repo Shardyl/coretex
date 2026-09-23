@@ -5830,10 +5830,16 @@ def _revise_proposal(task: dict, skill: dict, company: dict, text: str, quote_ca
     if named:
         sm = dict(new.get("samples") or spec.get("samples") or {})
         have = [v for v in (sm.get("video_ids") or (spec.get("samples") or {}).get("video_ids") or []) if v]
-        if re.search(r"\b(drop|remove|take out|take off|without|no longer)\b", text, re.I):
+        # REMOVAL INTENT in any tense or wording (card 868, 23 Sep 2026: "I've removed that tag ... put another one
+        # in there instead" named the film and did not match "remove", so the film he wanted OUT was pinned
+        # to LEAD the page). Removed films are remembered on the spec so no refill brings them back.
+        if re.search(r"\b(drop\w*|remov\w*|take[ns]? (?:out|off)|took (?:out|off)|without|no longer|swap\w*|"
+                     r"replac\w*|instead|wrong|mistake|shouldn'?t|should not|don'?t want|not (?:be )?in)\b", text, re.I):
             sm["video_ids"] = [v for v in have if v not in named]
+            sm["dropped"] = sorted(set(sm.get("dropped") or []) | set(named))
         else:
             sm["video_ids"] = (named + [v for v in have if v not in named])[:3]
+            sm["named"] = sorted(set(sm.get("named") or []) | set(named))
         new["samples"] = sm
     ver = int(req.get("version") or 1) + 1
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")

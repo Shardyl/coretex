@@ -1098,7 +1098,7 @@ def build(company_slug: str, customer: str, brief: str, *, quotation: dict | Non
 _URL_IN_COPY = re.compile(r"\s*\(?https?://\S+\)?")
 
 
-def _no_urls(x, keep: tuple = ("video_ids", "images", "folder")):
+def _no_urls(x, keep: tuple = ("video_ids", "images", "folder", "dropped", "named")):
     """Deck COPY never carries a link: the writer put 'https://www.youtube.com/@SensaProductions/playlists', an
     address that does not exist, into the Our work intro when asked to link the playlist (17 Sep 2026). Every
     link on a deck is placed by code from the library or the playlist table; URLs in text are removed."""
@@ -1154,8 +1154,17 @@ def render(co: dict, customer: str, spec: dict, *, label: str | None = None, out
         # films the owner NAMED lead the page (China Innovation Center for Rana's event coverage, rated 4 and
         # never picked by rating alone, 17 Sep 2026); the rest is filled by category and rating
         picked = films_by_ids(co["id"], sm.get("video_ids") or [])
-        have = {f["youtube_video_id"] for f in picked}
-        picked += [f for f in pick_samples(co["id"], sm.get("categories") or [], 3)
+        # THE LIBRARY IS THE TRUTH AT RENDER TIME (23 Sep 2026): a pinned film that no longer carries any of the
+        # page's categories (the owner re-tagged it: Dubai Police's delivery-rider animation was never event
+        # coverage) leaves the page unless he named it himself; films he removed never come back.
+        asked_now = {str(c).lower() for c in (sm.get("categories") or [])}
+        dropped = set(sm.get("dropped") or [])
+        named_now = set(sm.get("named") or [])
+        picked = [f for f in picked if f["youtube_video_id"] not in dropped and (
+            f["youtube_video_id"] in named_now or not asked_now
+            or asked_now & {str(c).lower() for c in (f.get("categories") or [])})]
+        have = {f["youtube_video_id"] for f in picked} | dropped
+        picked += [f for f in pick_samples(co["id"], sm.get("categories") or [], 3 + len(dropped))
                    if f["youtube_video_id"] not in have][:max(0, 3 - len(picked))]
         for f in picked:
             films.append({**f, "thumb": thumbnail(f["youtube_video_id"], out_dir),
