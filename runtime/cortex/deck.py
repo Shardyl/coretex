@@ -897,7 +897,7 @@ class CreativeDeck(_Deck):
                     + (f'<div class="l">{_esc(x["line"])}</div>' if x.get("line")
                        else '<div class="l none">No narration</div>') + "</div>"
                     for x in (rows or [])[:12])
-        sub, note = cut(sub, 150), cut(note, 150)
+        sub, note = cut(sub, 150), cut(note, 240)   # 240 is one full line at this page width; 150 cut the UAS note short
         self.pages.append(
             f'<div class="pg"><div class="pad" style="padding-top:40px"><h3>{_esc(kicker)}</h3>'
             f'<div class="rule" style="margin-bottom:9px"></div>'
