@@ -2623,10 +2623,13 @@ def reconcile_attachments(task_id: int) -> None:
             names = [r.get("filename") for r in ((t.get("request") or {}).get("attach_docs") or [])]
             note = ("(system note, not from the owner) The attachments on this email JUST CHANGED. Files now "
                     "genuinely attached: " + (", ".join(n for n in names if n) or "(none)") + ". Revise ONLY "
-                    "the wording that references sending/attaching documents so it matches — reference "
-                    "attached files as attached, never as coming later; keep every other sentence as it is.")
-            new = worker.draft(skill, company, _request_for_draft(t), correction=note,
-                               prev_draft=t.get("draft"))
+                    "the wording that references sending/attaching documents so it matches: a file that is now "
+                    "attached is mentioned ONCE, in the body, as attached; any sentence offering to send it later or "
+                    "separately is REMOVED, not kept alongside; nothing is added after the closing line. Keep every "
+                    "other sentence as it is.")
+            dreq = _request_for_draft(t)
+            new = _ensure_clean_email(skill, company, dreq,
+                                      worker.draft(skill, company, dreq, correction=note, prev_draft=t.get("draft")))
             store.update_task(task_id, draft=new)
         except Exception:  # noqa: BLE001 — reconcile is a bonus pass; the card stays usable without it
             pass
@@ -2749,7 +2752,40 @@ def _ensure_clean_email(skill: dict, company: dict, dreq: dict, draft: str,
                 "claim: offer to send it, or refer to what was sent before, in your own words."])
     except Exception:  # noqa: BLE001
         pass
-    return _ensure_real_links(skill, company, dreq, draft)
+    return _read_through(company, dreq, _ensure_real_links(skill, company, dreq, draft))
+
+
+def _read_through(company: dict, dreq: dict, draft: str) -> str:
+    """THE FINAL READ, AS A PERSON WOULD (owner, 23 Sep 2026). Card 876 went to the Inbox saying "I would also be
+    glad to send over our company profile", then "Looking forward to hearing from you.", then "Please also see our
+    company profile attached", because every pass edits one thing and none of them reads the whole email again.
+    This pass reads the finished email top to bottom with the real attachment list and fixes ONLY what a careful
+    reader would refuse to send: a sentence contradicting another, the same point made twice, a sentence sitting
+    after the closing line, an offer to send a file that is attached, a claim about a file that is not. Wording
+    and voice are otherwise untouched; on any doubt the draft is returned as it was."""
+    try:
+        if not (draft or "").strip():
+            return draft
+        names = [r.get("filename") for r in (dreq.get("attach_docs") or []) if r.get("filename")]
+        out = provider.think_json(
+            "You are the last reader of an email before it is sent, checking it as a careful colleague would. "
+            "Read it top to bottom. Fix ONLY these faults, minimally, keeping every other word, the voice and the "
+            "structure exactly as written: (1) two sentences that contradict each other; (2) the same point made "
+            "twice; (3) a sentence placed after the closing line ('Looking forward to...', 'Best regards') that "
+            "belongs in the body; (4) an offer to send a file later when that file is attached (say it is attached, "
+            "once, in the body); (5) a file described as attached that is not in the attachment list. Return JSON "
+            '{"ok": true} when nothing needs fixing, else {"ok": false, "issues": ["<one line each>"], "email": '
+            '"<the corrected email body, complete, plain text>"}. Never add new content, offers or pleasantries.',
+            "ATTACHED FILES: " + (", ".join(names) or "(none)") + "\n\nEMAIL:\n" + draft[:6000],
+            model=provider.MODEL_FAST, max_tokens=3000, purpose="email-read-through", company=company.get("slug"))
+        if isinstance(out, dict) and out.get("ok") is False and (out.get("email") or "").strip():
+            fixed = str(out["email"]).strip()
+            if 0.5 < len(fixed) / max(1, len(draft)) < 1.5:     # a fix, not a rewrite
+                print(f"[read-through] fixed: {'; '.join(str(i) for i in (out.get('issues') or [])[:4])}", flush=True)
+                return fixed
+    except Exception:  # noqa: BLE001 - the read-through is a check, never a blocker
+        pass
+    return draft
 
 
 _URL_RX = re.compile(r"https?://[^\s<>\")\]]+")

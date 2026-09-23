@@ -1814,6 +1814,15 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## Every email gets a final read-through (23 Sep 2026)
+Card 876 reached the Inbox with "I would also be glad to send over our company profile", the closing line, then
+"Please also see our company profile attached": each pass edits one thing (the attachment reconcile said "keep every
+other sentence") and nothing re-read the whole. `engine._read_through(company, dreq, draft)` now runs at the end of
+`_ensure_clean_email` (every draft, correction and reconcile path): Sonnet reads the finished email with the real
+attachment list and fixes ONLY contradictions, duplicated points, sentences after the closing line, offers to send
+an attached file, or claims about a file not attached; a rewrite (length off by >50%) is discarded. The reconcile
+note now says: mention a newly attached file once, REMOVE any 'send it separately' sentence, nothing after the close.
+
 ## Rashad's email register (23 Sep 2026)
 His voice profile (`company_profiles.data.voice.people.rashad.profile`, Sensa) was his PUBLIC persona (direct, blunt,
 qualify hard, happy to say no) and it drove forceful client emails (card 876: 'two days is tight', 'let's lock in').
