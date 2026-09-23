@@ -1803,6 +1803,14 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## The client agrees a slot, not us (23 Sep 2026)
+Owner, on card 876: "the client hasn't confirmed it yet, why are you booking?" and "let's lock in... is very rude."
+`engine._client_agreed_slot(task, req, dt)` gates `_maybe_extract_meeting`: a meeting is stamped and pre-booked only
+when the CLIENT's own message names that day and clock time (they proposed or accepted it) or the owner said
+"book it" / "they confirmed" on the card (`_OWNER_BOOKS`, read from corrections incl. the live one). A time we
+propose is a question: UNIVERSAL rule "PROPOSING A TIME IS A QUESTION" on sales-first-response, sales-followup and
+email-handling (ask if it suits, offer to fit theirs, no link until they accept, never 'lock in' / 'I confirm').
+
 ## A slot confirmed by a correction is booked at once (23 Sep 2026)
 "Arrange the call for 3pm tomorrow" on card 876 stamped `request.meeting` after the redraft but nothing was booked
 (only the first-draft path pre-booked), so the body promised "we will send over the Google Meet link" with no link.

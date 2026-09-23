@@ -1951,7 +1951,11 @@ def apply_correction(task: dict, text: str) -> None:
     # from the PREVIOUS pass so a stale flag never scares the owner off his own corrected draft
     task = store.update_task(task["id"], draft=new, status="awaiting_approval", manager=None,
                              attempts=task["attempts"] + 1)
-    _maybe_extract_meeting(task, new)
+    _CORRECTION_NOW.set(text or "")
+    try:
+        _maybe_extract_meeting(task, new)
+    finally:
+        _CORRECTION_NOW.set("")
     # A SLOT CONFIRMED BY A CORRECTION IS BOOKED NOW, like a first draft's (23 Sep 2026): "arrange the call for
     # 3pm tomorrow" on card 876 stamped the meeting but nothing was booked, so the redraft promised "we will
     # send over the Google Meet link" with no link and no event. Same pattern as the first-draft path above:
@@ -2517,6 +2521,35 @@ def _maybe_no_reply(task: dict, draft: str, skill: dict) -> bool:
         return False
 
 
+_OWNER_BOOKS = re.compile(r"\b(book(?:ed)? it|book (?:the|a) (?:call|meeting|slot)|they (?:have )?(?:confirmed|agreed|accepted)|"
+                          r"(?:client|he|she) confirmed|confirmed (?:by|with) (?:the client|them)|it'?s confirmed)\b", re.I)
+
+
+def _client_agreed_slot(task: dict, req: dict, dt: datetime) -> bool:
+    """Did the CLIENT name this slot (their message carries that day, or that clock time), or did the owner
+    say on this card that it is booked / confirmed by them? Their words, not the draft's, decide."""
+    try:
+        theirs = str((req.get("inquiry") or {}).get("message") or "")
+        theirs = re.split(r"\n\s*(?:From:|On .{5,80} wrote:|-----Original)", theirs)[0]
+        local = dt.astimezone(_GST)
+        day_words = {local.strftime("%A").lower(), local.strftime("%-d %B").lower(), local.strftime("%d %B").lower(),
+                     local.strftime("%B %-d").lower()}
+        if local.date() == (datetime.now(_GST) + timedelta(days=1)).date():
+            day_words.add("tomorrow")
+        hour12 = local.strftime("%-I").lower()
+        clock = {local.strftime("%H:%M"), f"{hour12}{local.strftime('%p').lower()}", f"{hour12} {local.strftime('%p').lower()}",
+                 f"{hour12}:{local.strftime('%M')}{local.strftime('%p').lower()}", f"{hour12}:{local.strftime('%M')} {local.strftime('%p').lower()}"}
+        low = " ".join(theirs.lower().split())
+        if any(w in low for w in day_words) and any(c in low for c in clock):
+            return True
+        notes = " ".join(d["note"] for d in db.query(
+            "select note from decisions where task_id=%s and action='correct' and coalesce(note,'')<>'' order by id desc limit 3",
+            (task.get("id") or 0,)) if d.get("note")) + " " + _CORRECTION_NOW.get()
+        return bool(_OWNER_BOOKS.search(notes))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _maybe_extract_meeting(task: dict, draft: str) -> None:
     """When a reply draft CONFIRMS one specific meeting slot with the client, stamp request.meeting so
     the approval that sends the email ALSO books the calendar event + Google Meet (link appended to the
@@ -2553,6 +2586,12 @@ def _maybe_extract_meeting(task: dict, draft: str) -> None:
                 dt = datetime.fromisoformat(s + "+04:00")
         if dt < datetime.now(timezone.utc) or dt > datetime.now(timezone.utc) + timedelta(days=180):
             return                                     # implausible stamp -> no booking, never a wrong one
+        # THE CLIENT AGREES A SLOT, NOT US (owner, 23 Sep 2026: "the client hasn't confirmed it yet, why are you
+        # booking?"). A time WE propose is a question, however the draft words it. A slot is booked only when the
+        # client's own message names that day and time (they proposed it, or accepted ours), or the owner said
+        # "book it" / "they confirmed" on this card. Otherwise nothing is stamped and nothing is booked.
+        if not _client_agreed_slot(task, req, dt):
+            return
         # the SAME slot with the SAME contact may already be booked from an earlier card — reuse that
         # event and its Meet link instead of double-booking (Sunwoo got two invites, 2026-08-27)
         prior = db.one("select request->'meeting' m from tasks where company_id=%s and "
