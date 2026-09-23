@@ -1706,6 +1706,17 @@ scripts), on the owner's call "one run with the ability to do revisions" (not a 
   are illustrations, post-made crowds stated) and sales-quotation "EXCLUSIONS" (additional NOC fees, influencer costs,
   post-made crowds; permits as their own line).
 - `deck.phases()` now shows 5 steps (was 4): SEF'27 v4's fifth step, post and delivery, was silently dropped.
+- TEXT CLAMPS + ROW LABELS (23 Sep 2026, UAS deck SEN-2026-0026). Three defects found by reading the rendered
+  PDF, all fixed in code: (1) `creative._label()` replaces `.capitalize()` on the investment row label. The
+  quotation headers are ALL CAPS, so capitalize() was there to make them readable, but it also flattened every
+  acronym: "AI PRODUCTION" printed "Ai production", "(GTMx)" printed "(gtmx)". It now works word by word, and a
+  word the section's OWN item descriptions use is restored to THAT form, so the casing comes from the copy, not
+  a hardcoded list. (2) the terms page's "Not included" card took `"; ".join(exc)[:260]`, a raw character slice
+  that ended mid-word ("not included and pric"); it now takes WHOLE exclusions inside the budget. (3) `deck`'s
+  `voscript` footnote clamp was a raw slice at 150 chars and ended the note mid-sentence although the line was
+  two thirds across the page; it clamps on a word boundary with an ellipsis, at 240 (one full line at that
+  width). LESSON: every clamp in the deck cuts on a boundary, never a character count, and READ the rendered PDF
+  before it goes out.
 - CLI: `python -m cortex.creative dry <deal_id> "<direction>"` (no card, no quote issued, no filing; output in the job
   dir) and `python -m cortex.creative resume <job> [task_id]`.
 
