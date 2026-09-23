@@ -888,7 +888,11 @@ class CreativeDeck(_Deck):
         A beat with no narration is shown as such rather than omitted: the silence is part of the film.
         `sub` and `note` are FOOTNOTES and are clamped: a writer who echoes the direction back at length spilled
         this page onto a second one (SEN-2026-0024 v3), which breaks the page count and the footer numbering."""
-        cut = lambda s, n: (s or "").strip()[:n].rstrip(" ,;:") if s else ""   # noqa: E731
+        def cut(s, n):            # clamp on a WORD boundary: a raw slice cut mid-word (UAS, 23 Sep 2026)
+            s = (s or "").strip()
+            if len(s) <= n:
+                return s
+            return s[:n].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."
         r = "".join(f'<div><div class="t">{_esc(x.get("time"))}</div>'
                     + (f'<div class="l">{_esc(x["line"])}</div>' if x.get("line")
                        else '<div class="l none">No narration</div>') + "</div>"

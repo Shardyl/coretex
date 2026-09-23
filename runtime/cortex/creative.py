@@ -577,7 +577,8 @@ class Job:
                 sections = (reg[-1].get("spec") or {}).get("sections") or sections
         rows, net = [], 0.0
         for s in sections:
-            h = re.sub(r"^[A-Z]\s*·\s*", "", s.get("header") or "").strip().capitalize()
+            h = re.sub(r"^[A-Z]\s*·\s*", "", s.get("header") or "").strip()
+            h = h[:1].upper() + h[1:]   # first letter only: .capitalize() flattened "AI" and "GTMx"
             amt = sum(float(i.get("unit") or 0) * float(i.get("qty") or 1) for i in s.get("items") or [])
             blank = any(i.get("unit") in (None, "") for i in s.get("items") or [])
             net += amt
@@ -753,7 +754,12 @@ class Job:
         tcards = [x for x in (cp["terms"].get("cards") or [])
                   if not re.search(r"includ|exclu", str(x.get("title", "")), re.I)][:2]
         if exc:     # what is not included comes from the QUOTATION, by code
-            tcards.append({"title": "Not included", "body": "; ".join(exc)[:260]})
+            _exc, _n = [], 0
+            for _x in exc:            # WHOLE exclusions only: a char slice cut one mid-word (UAS, 23 Sep 2026)
+                if _n + len(_x) + 2 > 260:
+                    break
+                _exc.append(_x); _n += len(_x) + 2
+            tcards.append({"title": "Not included", "body": "; ".join(_exc or exc[:1])})
         d.cards(f"{n:02d} · Terms at a glance", cp["terms"].get("heading") or "Usage, payment and exclusions",
                 tcards[:3], None)
         d.with_bg(bgi(0))
