@@ -1803,6 +1803,12 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## A slot confirmed by a correction is booked at once (23 Sep 2026)
+"Arrange the call for 3pm tomorrow" on card 876 stamped `request.meeting` after the redraft but nothing was booked
+(only the first-draft path pre-booked), so the body promised "we will send over the Google Meet link" with no link.
+`apply_correction` now mirrors the first-draft path: `_maybe_extract_meeting` -> `_prebook_meeting` -> redraft once
+with the real link when the body lacks it. The guest is still only invited on approval.
+
 ## Positive, ready, never a push-back (23 Sep 2026)
 Card 876 (UAS brief, proposal due in two days) told the client "two days is tight", offered an outline first, and
 made their script a condition. Owner: "we don't put negative vibes out to a client's inquiry." Fixed as a UNIVERSAL

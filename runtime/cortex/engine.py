@@ -1952,6 +1952,19 @@ def apply_correction(task: dict, text: str) -> None:
     task = store.update_task(task["id"], draft=new, status="awaiting_approval", manager=None,
                              attempts=task["attempts"] + 1)
     _maybe_extract_meeting(task, new)
+    # A SLOT CONFIRMED BY A CORRECTION IS BOOKED NOW, like a first draft's (23 Sep 2026): "arrange the call for
+    # 3pm tomorrow" on card 876 stamped the meeting but nothing was booked, so the redraft promised "we will
+    # send over the Google Meet link" with no link and no event. Same pattern as the first-draft path above:
+    # book, and if the real link is not in the body, redraft once with it in front of the writer.
+    if task.get("kind") in EMAIL_RENDER_KINDS:
+        _booked = _prebook_meeting(store.get_task(task["id"]))
+        _link = (((_booked or {}).get("request") or {}).get("meeting") or {}).get("meet") or ""
+        if _link and _link not in (new or ""):
+            task = _booked
+            _dreq = _request_for_draft(task)
+            new = _ensure_clean_email(skill, company, _dreq,
+                                      worker.draft(skill, company, _dreq, correction=text, prev_draft=new))
+            task = store.update_task(task["id"], draft=new)
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text, snapshot={"old": old, "new": new})
     msg2 = tg.send(_fmt(task, skill, company, None), _approval_buttons(task["id"]))
     store.update_task(task["id"], tg_message_id=msg2["message_id"])
