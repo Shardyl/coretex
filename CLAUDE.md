@@ -2093,6 +2093,9 @@ the narration as on-screen typography, which is a different thing.
 - `stage_copy` is given each beat's `voiceover` and told it carries the on-screen lines AND the voice over verbatim:
   only the voice over page's heading, sub and note are the writer's. Copy schema gained `voscript`.
 - `changed_frames` still compares `frame_prompt` only, so adding or rewording narration never regenerates a frame.
+- The voice over page's `sub` and `note` are FOOTNOTES and are clamped to 150 characters in `deck.voscript`: on v3
+  the copy writer echoed the whole direction back into `note`, the page spilled onto a second one and the planned
+  page count and footer numbering both broke. A footnote slot that a model fills needs a code-side clamp.
 First applied: SEN-2026-0024 v3 (RAFED / SEHA, deal 136, The Weather Inside), narration on the 60 second film and
 none on the 15 second cinema film.
 STILL OPEN on the same deck: the contact sheet's subtitle is stamped in `creative.render` as title plus total

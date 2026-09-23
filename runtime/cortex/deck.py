@@ -801,12 +801,12 @@ _CREATIVE_CSS = """
       padding:10px 14px; border-radius:0 4px 4px 0; }
 .vo .l { font-size:9.5px; letter-spacing:2.2px; color:ACCENT; font-weight:600; text-transform:uppercase; }
 .vo p { font-size:12.5px; line-height:1.4; color:#EDEDF2; font-style:italic; margin:5px 0 0; }
-.vos { margin-top:4px; }
-.vos div { display:flex; gap:20px; padding:9px 0; border-bottom:1px solid #1E1E22; }
+.vos { margin-top:2px; }
+.vos div { display:flex; gap:18px; padding:6px 0; border-bottom:1px solid #1E1E22; }
 .vos div:last-child { border-bottom:none; }
-.vos .t { flex:0 0 96px; font-size:11px; color:ACCENT; letter-spacing:1.4px; font-weight:600; padding-top:3px; }
-.vos .l { flex:1; font-size:15px; line-height:1.45; color:#EDEDF2; font-style:italic; }
-.vos .l.none { color:#7A7A84; font-style:normal; font-size:12.5px; letter-spacing:1.6px; text-transform:uppercase; }
+.vos .t { flex:0 0 92px; font-size:10.5px; color:ACCENT; letter-spacing:1.4px; font-weight:600; padding-top:3px; }
+.vos .l { flex:1; font-size:14px; line-height:1.4; color:#EDEDF2; font-style:italic; }
+.vos .l.none { color:#7A7A84; font-style:normal; font-size:11.5px; letter-spacing:1.6px; text-transform:uppercase; }
 .hero h1 { font-size:52px; }
 .hstats { display:flex; gap:34px; margin-top:26px; }
 .hstats div { border-left:2px solid ACCENT; padding-left:12px; }
@@ -871,18 +871,22 @@ class CreativeDeck(_Deck):
 
     def voscript(self, kicker, heading, sub, rows, section="", note=""):
         """The narration end to end, timecode beside line, so the client reads the whole voice over in one place.
-        A beat with no narration is shown as such rather than omitted: the silence is part of the film."""
+        A beat with no narration is shown as such rather than omitted: the silence is part of the film.
+        `sub` and `note` are FOOTNOTES and are clamped: a writer who echoes the direction back at length spilled
+        this page onto a second one (SEN-2026-0024 v3), which breaks the page count and the footer numbering."""
+        cut = lambda s, n: (s or "").strip()[:n].rstrip(" ,;:") if s else ""   # noqa: E731
         r = "".join(f'<div><div class="t">{_esc(x.get("time"))}</div>'
                     + (f'<div class="l">{_esc(x["line"])}</div>' if x.get("line")
                        else '<div class="l none">No narration</div>') + "</div>"
                     for x in (rows or [])[:12])
+        sub, note = cut(sub, 150), cut(note, 150)
         self.pages.append(
-            f'<div class="pg"><div class="pad" style="padding-top:44px"><h3>{_esc(kicker)}</h3>'
-            f'<div class="rule" style="margin-bottom:10px"></div>'
-            f'<h2 style="font-size:23px;margin-bottom:6px">{_esc(heading)}</h2>'
-            + (f'<p class="csnote" style="margin:0 0 8px">{_esc(sub)}</p>' if sub else "")
+            f'<div class="pg"><div class="pad" style="padding-top:40px"><h3>{_esc(kicker)}</h3>'
+            f'<div class="rule" style="margin-bottom:9px"></div>'
+            f'<h2 style="font-size:23px;margin-bottom:5px">{_esc(heading)}</h2>'
+            + (f'<p class="csnote" style="margin:0 0 6px">{_esc(sub)}</p>' if sub else "")
             + f'<div class="vos">{r}</div>'
-            + (f'<p class="csnote" style="margin-top:14px">{_esc(note)}</p>' if note else "")
+            + (f'<p class="csnote" style="margin-top:12px">{_esc(note)}</p>' if note else "")
             + f'</div>{self._foot(section or kicker)}</div>')
 
     def sheet(self, kicker, heading, cells, section="", note=""):
