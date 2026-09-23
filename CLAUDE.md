@@ -1803,6 +1803,12 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## Call slots: 3-hour notice, one free_slots (23 Sep 2026)
+Card 876 (UAS asked for a call tomorrow) said "nothing free tomorrow" against a near-empty calendar: `calendar.py`
+defined `free_slots` twice, the live one hardcoded an 18-hour minimum notice while the booking profile says 3 hours.
+Now: the shadowed first definition is gone, `MIN_NOTICE_HOURS = 3` (a caller may pass `min_notice_hours`), and the
+dead `engine._booking_slots_brief` (it called the deleted signature and always returned "") is removed.
+
 ## Our-work films: removal in any wording, library is the truth at render (23 Sep 2026)
 Card 868: "I've removed that tag... put another one in there instead" named the Dubai Police delivery-rider film;
 the drop test only knew `remove`, so the named film was pinned to LEAD the page. `_revise_proposal` now reads removal

@@ -55,42 +55,6 @@ def _cal_id(company: str, calendar_id: str) -> str:
     return db.setting_get(f"calendar_id:{company}") or "primary"
 
 
-def free_slots(company: str, *, calendar_id: str = "primary", days: int = 21, work_start: int = 10,
-               work_end: int = 14, slot_min: int = 30, count: int = 3, buffer_min: int = 180,
-               weekdays: tuple = (0, 1, 2, 3), tz: str = "Asia/Dubai",
-               prefer: tuple = ("10:00", "11:30", "13:00")) -> list[datetime]:
-    """Return up to `count` genuinely-open slot start times (tz-aware), ONE per day, spread across business days
-    and varied across the preferred times so it reads naturally without exposing the whole calendar. Defaults to
-    the Sensa booking rules: 10:00-14:00 GST, Mon-Thu (Fridays + weekend excluded), 3-hour lead time. `prefer`
-    rotates the target time per offered slot so they aren't all at the same hour."""
-    tzi = ZoneInfo(tz)
-    calendar_id = _cal_id(company, calendar_id)
-    tok = _token(company)
-    now = datetime.now(tzi)
-    start = now + timedelta(minutes=buffer_min)
-    end = now + timedelta(days=days)
-    busy = _busy(tok, calendar_id, start, end, tz)
-    prefs = [tuple(int(x) for x in p.split(":")) for p in prefer] or [(work_start, 0)]
-    slots: list[datetime] = []
-    day = start.date()
-    while day <= end.date() and len(slots) < count:
-        if day.weekday() in weekdays:
-            ph, pm = prefs[len(slots) % len(prefs)]          # rotate the target time across offered slots
-            target = datetime(day.year, day.month, day.day, ph, pm, tzinfo=tzi)
-            win_end = datetime(day.year, day.month, day.day, work_end, 0, tzinfo=tzi)
-            t = datetime(day.year, day.month, day.day, work_start, 0, tzinfo=tzi)
-            day_free = []
-            while t + timedelta(minutes=slot_min) <= win_end:
-                s_end = t + timedelta(minutes=slot_min)
-                if t >= start and not any(t < be and bs < s_end for bs, be in busy):
-                    day_free.append(t)
-                t = s_end
-            if day_free:                                      # one slot/day: the first free at/after the target
-                slots.append(next((x for x in day_free if x >= target), day_free[0]))
-        day += timedelta(days=1)
-    return slots
-
-
 def format_slots(slots: list[datetime]) -> list[str]:
     """Human-readable slot strings, e.g. 'Tuesday 24 June, 2:00pm'."""
     return [s.strftime("%A %-d %B, %-I:%M%p").replace("AM", "am").replace("PM", "pm") for s in slots]
@@ -170,6 +134,10 @@ SLOT_MINUTES = 30
 # in the minutes before he walks in, so every proposed slot keeps this much clear air on both sides of
 # anything already booked. Bunching still applies - calls cluster, they just stop touching.
 PREP_GAP_MINUTES = 15
+# MINIMUM NOTICE (owner, 23 Sep 2026): the Sensa booking profile says a 3-hour lead is enough; the code said 18,
+# so a reply drafted at 19:17 could offer nothing before 14:00 the next day and UAS's "call tomorrow?" was
+# answered with "nothing free tomorrow" (card 876) against an almost empty calendar.
+MIN_NOTICE_HOURS = 3
 
 
 def _registry() -> list:
@@ -208,7 +176,7 @@ def busy_blocks(start: datetime, end: datetime) -> list:
 
 def free_slots(days: int = 10, minutes: int = 30, tz: str = "Asia/Dubai",
                earliest_hour: int | None = None, latest_hour: int | None = None,
-               skip_weekends: bool = True, min_notice_hours: int = 18, limit: int = 8) -> list:
+               skip_weekends: bool = True, min_notice_hours: int | None = None, limit: int = 8) -> list:
     """Real openings, in the CLIENT's timezone. Skips anything busy on any registered calendar, keeps
     the working window, honours a minimum notice so we never propose 'in an hour', and skips weekends."""
     from zoneinfo import ZoneInfo
@@ -217,7 +185,7 @@ def free_slots(days: int = 10, minutes: int = 30, tz: str = "Asia/Dubai",
     except Exception:  # noqa: BLE001
         zone = ZoneInfo("Asia/Dubai")
     now = datetime.now(timezone.utc)
-    start = now + timedelta(hours=min_notice_hours)
+    start = now + timedelta(hours=MIN_NOTICE_HOURS if min_notice_hours is None else min_notice_hours)
     end = now + timedelta(days=days)
     busy = busy_blocks(start, end)
     lo = WORK_START if earliest_hour is None else earliest_hour

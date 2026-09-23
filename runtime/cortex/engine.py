@@ -251,31 +251,6 @@ def _approval_buttons(task_id: int) -> list[list[dict]]:
 
 # ---------- email replies ----------
 
-def _booking_slots_brief(co: dict | None) -> str:
-    """If the company has a booking calendar configured, fetch a few REAL open slots and return an instruction to
-    offer them when a call is the next step (exact times, never invented). Empty string otherwise (safe no-op for
-    companies without booking set up, so it never changes their drafts)."""
-    if not co:
-        return ""
-    slug = co.get("slug")
-    try:
-        bk = (profile.get(co["id"]) or {}).get("booking")
-        if not bk or not db.setting_get(f"calendar_refresh_token:{slug}"):
-            return ""
-        from . import calendar as _cal
-        slots = _cal.format_slots(_cal.free_slots(slug))
-        if not slots:
-            return ""
-        line = bk.get("email_line") or "or let us know what works for you and we'll do our best to meet it."
-        return ("\n\nIF you propose a call and mention specific times, these are the ONLY real open slots "
-                "(GST) — quote them EXACTLY, never invent, shift or add a time:\n  - " + "\n  - ".join(slots) +
-                f"\nOffer a couple of them naturally in a sentence, then add, in your own words: \"{line}\". "
-                "Everything else about how scheduling is handled (links, tone, alternatives) is governed by "
-                "the standing rules.")
-    except Exception:  # noqa: BLE001 — availability must never break drafting
-        return ""
-
-
 def _notify_new_opportunity(co: dict, opp: dict, how: str) -> None:
     """ONE announcement per new opportunity: an Inbox notification card (+ phone push once a device is
     registered) and a Telegram mirror line. Fail-soft — announcing must never break the pipeline."""
@@ -332,7 +307,7 @@ def _email_brief(inq: dict, co: dict | None = None) -> str:
             f"Their name: {inq.get('name') or 'there'}\n"
             f"Their email: {inq.get('email') or '(unknown)'}\n"
             f"Their message:\n{(inq.get('message') or inq.get('snippet') or '').strip()}"
-            ) + _booking_slots_brief(co)
+            )
 
 
 _EMAIL_RE = r"([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})"
@@ -5248,7 +5223,7 @@ def _reply_followup_brief(inq: dict, co: dict | None = None) -> str:
             f"Their name: {inq.get('name') or 'there'}\n"
             f"Their email: {inq.get('email') or '(unknown)'}\n"
             f"Their latest message:\n{(inq.get('message') or '').strip()}"
-            ) + _booking_slots_brief(co)
+            )
 
 
 def poll_sales_replies(slug: str = "sensa") -> dict:
@@ -5392,7 +5367,7 @@ def _lead_chase_brief(inq: dict, co: dict | None = None) -> str:
             "shape. Plain-text body only.\n\n"
             f"Their name: {inq.get('name') or 'there'}\n"
             f"Their email: {inq.get('email')}"
-            ) + _booking_slots_brief(co)
+            )
 
 
 def _spawn_lead_chase(co: dict, email: str) -> None:
