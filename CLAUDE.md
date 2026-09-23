@@ -1803,6 +1803,12 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## Rashad's email register (23 Sep 2026)
+His voice profile (`company_profiles.data.voice.people.rashad.profile`, Sensa) was his PUBLIC persona (direct, blunt,
+qualify hard, happy to say no) and it drove forceful client emails (card 876: 'two days is tight', 'let's lock in').
+An EMAIL REGISTER paragraph is appended: courteous, warm, asks rather than tells, fits around the client, no comment
+on deadlines, no conditions. Edit it on the profile, never in code.
+
 ## The client agrees a slot, not us (23 Sep 2026)
 Owner, on card 876: "the client hasn't confirmed it yet, why are you booking?" and "let's lock in... is very rude."
 `engine._client_agreed_slot(task, req, dt)` gates `_maybe_extract_meeting`: a meeting is stamped and pre-booked only
