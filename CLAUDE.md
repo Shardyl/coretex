@@ -1803,6 +1803,12 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## Positive, ready, never a push-back (23 Sep 2026)
+Card 876 (UAS brief, proposal due in two days) told the client "two days is tight", offered an outline first, and
+made their script a condition. Owner: "we don't put negative vibes out to a client's inquiry." Fixed as a UNIVERSAL
+rule (every company) on sales-first-response, sales-followup and email-handling: commit plainly to their date, never
+call a deadline/budget tight, never renegotiate the ask, needs are asked as a help and we proceed regardless.
+
 ## Call slots: 3-hour notice, one free_slots (23 Sep 2026)
 Card 876 (UAS asked for a call tomorrow) said "nothing free tomorrow" against a near-empty calendar: `calendar.py`
 defined `free_slots` twice, the live one hardcoded an 18-hour minimum notice while the booking profile says 3 hours.
