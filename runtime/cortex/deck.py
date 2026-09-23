@@ -797,10 +797,13 @@ _CREATIVE_CSS = """
 .ost.none { font-size:13px; letter-spacing:2.5px; color:#9A9AA4; font-weight:500; }
 .obar { position:absolute; left:72px; bottom:96px; width:44px; height:3px; background:ACCENT; }
 .cap { position:absolute; left:72px; bottom:58px; right:320px; font-size:14px; color:#C4C4CC; }
-.vo { position:absolute; right:60px; bottom:56px; width:236px; background:rgba(10,10,10,.72); border-left:2px solid ACCENT;
-      padding:10px 14px; border-radius:0 4px 4px 0; }
-.vo .l { font-size:9.5px; letter-spacing:2.2px; color:ACCENT; font-weight:600; text-transform:uppercase; }
-.vo p { font-size:12.5px; line-height:1.4; color:#EDEDF2; font-style:italic; margin:5px 0 0; }
+.bstack { position:absolute; left:72px; right:150px; bottom:106px; }
+.vol { font-family:Poppins,sans-serif; font-size:31px; font-weight:500; font-style:italic; color:#FFFFFF;
+       line-height:1.3; letter-spacing:-.2px; text-shadow:0 2px 18px rgba(0,0,0,.75); }
+.ostchip { display:inline-block; margin-bottom:14px; background:rgba(10,10,10,.66); border-left:2px solid ACCENT;
+           padding:5px 11px; border-radius:0 3px 3px 0; font-size:12.5px; color:#EDEDF2; }
+.ostchip span { font-size:9px; letter-spacing:2.2px; color:ACCENT; font-weight:600; text-transform:uppercase;
+                margin-right:9px; }
 .vos { margin-top:2px; }
 .vos div { display:flex; gap:18px; padding:6px 0; border-bottom:1px solid #1E1E22; }
 .vos div:last-child { border-bottom:none; }
@@ -860,13 +863,24 @@ class CreativeDeck(_Deck):
 
     def beat(self, film_label, n, total, time, text, cap, image, section="", vo=""):
         """`text` is the ON-SCREEN line (typography added in post); `vo` is the NARRATION heard over the beat.
-        They are two different things and are never shown in the same place."""
-        o = f'<div class="ost">{_esc(text)}</div>' if text else '<div class="ost none">PICTURE ONLY, NO TEXT</div>'
+        Two different things, never shown in the same place.
+
+        THE NARRATION IS THE BIG TYPE (owner, 23 Sep 2026). When a beat is spoken, its line is set large over the
+        picture so the deck reads the way the film plays: you see the frame and hear the words at the same time.
+        The on-screen line then rides above it as a small labelled chip, because it is the film's own typography
+        and not the narration. A beat with no narration keeps the old behaviour, its on-screen line set large,
+        so a deliberately wordless film still reads as one."""
         img = f'<img class="full" src="{_b64(image)}">' if image else ""
-        v = (f'<div class="vo"><div class="l">Voice over</div><p>{_esc(vo)}</p></div>' if vo else "")
+        if vo:
+            o = (f'<div class="ostchip"><span>On screen</span>{_esc(text)}</div>' if text else "")
+            # one absolutely-positioned stack, so the chip sits on top of the narration without guessing its height
+            body = f'<div class="bstack">{o}<div class="vol">{_esc(vo)}</div></div>'
+        else:
+            body = (f'<div class="ost">{_esc(text)}</div>' if text
+                    else '<div class="ost none">PICTURE ONLY, NO TEXT</div>')
         self.pages.append(
             f'<div class="pg">{img}<div class="fshade"></div><div class="bk">{_esc(film_label)} · Beat {n} of {total}'
-            f'<span>{_esc(time)}</span></div>{o}<div class="obar"></div><div class="cap">{_esc(cap)}</div>{v}'
+            f'<span>{_esc(time)}</span></div>{body}<div class="obar"></div><div class="cap">{_esc(cap)}</div>'
             f'{self._foot(section)}</div>')
 
     def voscript(self, kicker, heading, sub, rows, section="", note=""):

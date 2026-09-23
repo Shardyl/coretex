@@ -2098,6 +2098,15 @@ the narration as on-screen typography, which is a different thing.
   page count and footer numbering both broke. A footnote slot that a model fills needs a code-side clamp.
 First applied: SEN-2026-0024 v3 (RAFED / SEHA, deal 136, The Weather Inside), narration on the 60 second film and
 none on the 15 second cinema film.
+- THE NARRATION IS THE BIG TYPE (owner, 23 Sep 2026: "spread the voiceover out in nice text over the frames ... so
+  you can read it and feel it as you go through the deck"). On a SPOKEN beat `deck.beat` sets the narration large
+  over the picture (`.vol`, italic Poppins 31px in a `.bstack` so the chip above it needs no height guess) and the
+  ON-SCREEN line drops to a small labelled chip (`.ostchip`). A beat with NO narration keeps the old layout, its
+  on-screen line in `.ost` at 44px, so a deliberately wordless film still reads as one. The side panel this
+  replaced was too small to read the film from, which was the point of having it.
+- THE STANDARD IS A RULE, NOT ONLY CODE: "VOICE OVER IN A CREATIVE DECK" on Sensa `sales-proposal` (rule 4) states
+  the layout AND when narration is warranted (a services or journey film usually, a short cinema turn usually not,
+  because a narrator crowds a single held moment). Company-scoped; promote to universal on the owner's word.
 STILL OPEN on the same deck: the contact sheet's subtitle is stamped in `creative.render` as title plus total
 duration ("The Weather Inside: 75 seconds"), so on a two-film job it reads as one long film and no feedback can
 move it. Same class as the "our work" page: the page is laid out by code, so the fix is code.
