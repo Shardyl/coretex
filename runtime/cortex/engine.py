@@ -759,12 +759,28 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     try:   # the guest joins the calendar event only AFTER the email genuinely went — never an invite
         # for an unsent mail (a blocked approve once invited Sunwoo to a meeting the email never confirmed)
         mt2 = (task.get("request") or {}).get("meeting")
-        if mt2 and mt2.get("event_id") and not mt2.get("invited"):
+        if mt2 and mt2.get("event_id"):
+            # EVERYONE ON THE EMAIL IS ON THE INVITE (24 Sep 2026): Farheen asked to add Sarah Shaikh to the
+            # meeting invite (card 904); the reply promised it, and only the To recipient was ever added. Every
+            # external address on this email's To and cc lines joins the event (merged, never replacing).
             from . import calendar as gcal
-            gcal.add_attendee(mt2.get("calendar") or (company or {}).get("slug") or "sensa",
-                              mt2["event_id"], env["to"])
-            store.update_task(task["id"], request={**(task.get("request") or {}),
-                                                   "meeting": {**mt2, "invited": True}})
+            from .identity import OWN_COMPANY_DOMAINS
+            _cal = mt2.get("calendar") or (company or {}).get("slug") or "sensa"
+            _guests = [a.lower().strip(".") for a in re.findall(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}",
+                                                                 f"{env.get('to') or ''} {env.get('cc') or ''}")]
+            _guests = list(dict.fromkeys(g for g in _guests if g.split("@")[-1] not in OWN_COMPANY_DOMAINS))
+            _done = {g.lower() for g in (mt2.get("guests") or [])}
+            if mt2.get("invited") and env.get("to"):
+                _done.add(env["to"].lower())
+            _added = []
+            for g in _guests:
+                if g not in _done:
+                    gcal.add_attendee(_cal, mt2["event_id"], g)
+                    _added.append(g)
+            if _added or not mt2.get("invited"):
+                store.update_task(task["id"], request={**(task.get("request") or {}),
+                                                       "meeting": {**mt2, "invited": True,
+                                                                   "guests": sorted(_done | set(_added))}})
     except Exception as ex:  # noqa: BLE001 — the email is already sent; surface the invite failure instead
         notifications.notify(f"Email sent, but adding {env['to']} to the calendar event failed: {ex}. "
                              "Add them by hand on the calendar.", "Meeting invite", category="reminder",

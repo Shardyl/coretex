@@ -1832,6 +1832,11 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## Everyone on the email joins the invite (24 Sep 2026)
+Card 904: Farheen asked to add Sarah Shaikh to the meeting invite; the reply promised it, but the send path only ever
+invited the To recipient. Now, on send, every external address on the email's To and cc lines is merged onto the
+booked event (`gcal.add_attendee`, never replacing), tracked in `meeting.guests`.
+
 ## Meeting stamps: honest, re-judged, never a reason to hold an email (24 Sep 2026)
 Card 899 (SkyVision, Ausra): her "10 AM Friday" was read as agreeing to 10:30 (hour-only clock forms matched any
 minute), the stamp stayed after the redraft became a question, and the send was blocked because SkyVision has no
