@@ -350,6 +350,7 @@ def _email_envelope(task: dict, company: dict) -> dict:
     # thread (client + their consultants + third parties) must never quietly drop half the room.
     cc_list += [str(v).strip() for v in (req.get("thread_cc") or [])
                 if isinstance(v, str) and "@" in v]
+    cc_list += [str(v).strip() for v in (req.get("deal_cc") or []) if isinstance(v, str) and "@" in v]
     cc_list += [e for e in (req.get("cc_extra") or []) if "@" in e]
     try:   # DEAL LOOP: deal contacts marked cc ride EVERY email on that deal (owner: Alia at MAH Gold
         # responds on the development-department address and must be looped into all communications)
@@ -1975,6 +1976,43 @@ def apply_correction(task: dict, text: str) -> None:
     _maybe_propose_rule(task, skill, text, old or "", new or "")
 
 
+def _deal_participants(company_id: int, deal_id, to_email: str) -> list:
+    """EVERYONE ON A DEAL STAYS COPIED (owner, 24 Sep 2026): the external people who have been on ANY message of
+    this deal, ours or theirs (Mounir at UAS was on two replies, then dropped from the Meet-link note because the
+    adopted thread message happened to carry no cc). Sources: the deal's cards (thread participants, added cc,
+    extra To, recipients) and what their sends really carried. Our own addresses and the To recipient are left
+    out; the envelope's never_cc and cc_remove still apply afterwards."""
+    from .identity import OWN_COMPANY_DOMAINS
+    out, seen = [], {(to_email or "").lower()}
+    if not deal_id:
+        try:
+            _co = store.get_company(company_id) or {}
+            ds = crm.active_deals_for_email(to_email, _co.get("slug")) if to_email else []
+            deal_id = ds[0]["id"] if len(ds) == 1 else None
+        except Exception:  # noqa: BLE001
+            deal_id = None
+    if not deal_id:
+        return []
+    blob = []
+    for t in db.query("select id, request from tasks where deal_id=%s and kind in ('email_reply','email_draft') "
+                      "and status <> 'rejected' order by id", (int(deal_id),)):
+        r = t.get("request") or {}
+        blob += list(r.get("thread_cc") or []) + list(r.get("cc_extra") or []) + list(r.get("to_extra") or [])
+        blob.append((r.get("inquiry") or {}).get("email") or "")
+        for d in db.query("select snapshot from decisions where task_id=%s and action='send'", (t["id"],)):
+            sn = d.get("snapshot") or {}
+            blob += [str(sn.get("to") or ""), str(sn.get("cc") or "")]
+    for a in re.findall(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", " ".join(str(x) for x in blob)):
+        al = a.lower().strip(".")
+        if al in seen or al.split("@")[-1] in OWN_COMPANY_DOMAINS:
+            continue
+        if any(k in al for k in ("noreply", "no-reply", "mailer-daemon", "notifications@", "calendar-", "postmaster", "bounce")):
+            continue
+        seen.add(al)
+        out.append(al)
+    return out[:12]
+
+
 def _client_contact_named(name: str, deal_id=None, contact_email: str = "") -> str:
     """The CLIENT-side person the owner just named, resolved to a real address from the CRM.
 
@@ -1984,25 +2022,37 @@ def _client_contact_named(name: str, deal_id=None, contact_email: str = "") -> s
     n = (name or "").strip().lower()
     if not n:
         return ""
+
+    def _hit(full: str, email: str) -> bool:
+        # SPELLING IS FORGIVEN (24 Sep 2026: "Hendrick" for Hendrik-Jan on card 889 resolved nothing): a name
+        # matches when the typed word and a name token share their first five letters, or one contains the other
+        toks = set(re.split(r"[^a-z]+", (full or "").lower())) | set(re.split(r"[^a-z]+", (email or "").lower().split("@")[0]))
+        q = re.sub(r"[^a-z]", "", n.split()[0]) if n.split() else n
+        return any(t and (t == q or t.startswith(q) or q.startswith(t) or (len(q) >= 5 and t[:5] == q[:5])) for t in toks)
+
     try:
         if deal_id:      # people already listed on the deal
             d = db.one("select contacts, account_id from crm_projects where id=%s", (int(deal_id),)) or {}
             for c in (d.get("contacts") or []):
-                em, nm = (c.get("email") or ""), (c.get("name") or "")
-                if em and (n in nm.lower() or n in em.lower().split("@")[0].replace(".", " ")):
-                    return em
+                if c.get("email") and _hit(c.get("name") or "", c["email"]):
+                    return c["email"]
             if d.get("account_id"):
                 for r in db.query("select first_name, last_name, email from crm_master where "
                                   "account_id=%s and coalesce(email,'')<>''", (d["account_id"],)):
-                    full = ((r.get("first_name") or "") + " " + (r.get("last_name") or "")).lower()
-                    if n in full or n in (r["email"] or "").lower().split("@")[0].replace(".", " "):
+                    if _hit((r.get("first_name") or "") + " " + (r.get("last_name") or ""), r["email"]):
+                        return r["email"]
+        if contact_email:    # the recipient's own client account, whether or not the card carries a deal
+            acc = db.one("select account_id from crm_master where lower(email)=lower(%s)", (contact_email.strip(),)) or {}
+            if acc.get("account_id"):
+                for r in db.query("select first_name, last_name, email from crm_master where account_id=%s and "
+                                  "coalesce(email,'')<>''", (acc["account_id"],)):
+                    if _hit((r.get("first_name") or "") + " " + (r.get("last_name") or ""), r["email"]):
                         return r["email"]
         dom = (contact_email or "").split("@")[-1].lower()      # a colleague on the same domain
         if dom:
             for r in db.query("select first_name, last_name, email from crm_master where "
                               "lower(email) like %s", ("%@" + dom,)):
-                full = ((r.get("first_name") or "") + " " + (r.get("last_name") or "")).lower()
-                if n in full or n in (r["email"] or "").lower().split("@")[0].replace(".", " "):
+                if _hit((r.get("first_name") or "") + " " + (r.get("last_name") or ""), r["email"]):
                     return r["email"]
     except Exception:  # noqa: BLE001
         return ""
@@ -4668,6 +4718,16 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
         if notes:
             req["owner_feedback"] = "\n".join("- " + n["note"][:250] for n in notes)
             manifest.append("owner_feedback")
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # EVERYONE ON THE DEAL STAYS COPIED: the deal's whole cast rides every email on it (24 Sep 2026)
+        _dcc = _deal_participants(task["company_id"], task.get("deal_id") or req.get("deal_id"), email)
+        if _dcc:
+            req["deal_cc"] = _dcc
+            manifest.append(f"deal_cc({len(_dcc)})")
+            if task.get("id"):
+                db.execute("update tasks set request = request || %s::jsonb where id=%s",
+                           (json.dumps({"deal_cc": _dcc}), task["id"]))
     except Exception:  # noqa: BLE001
         pass
     try:   # REAL AVAILABILITY: what we can actually offer, in the recipient's timezone. Code computes

@@ -1814,6 +1814,15 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## Everyone on a deal stays copied (24 Sep 2026)
+Card 891 (UAS Meet link) dropped Mounir because the adopted thread message carried no cc; card 889 (ABN AMRO) could
+not resolve "Hendrick" (Hendrik-Jan, card had no deal). Now `engine._deal_participants(company_id, deal_id, to)`
+collects every external address from the deal's email cards (thread_cc, cc_extra, to_extra, recipients) and their
+real send envelopes; stamped as `request.deal_cc` in `_draft_context_for_reply` (falls back to the recipient's one open
+deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `_client_contact_named` forgives
+spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
+"EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
+
 ## A time the client proposes is accepted and booked (24 Sep 2026)
 Card 890: Gheis wrote "Would 4:00 PM today work instead?"; the reply said "whenever suits you", and after "accept
 the 4pm meeting, send a link, confirm" it said "we will send a Google Meet link" with nothing booked (the owner-words
