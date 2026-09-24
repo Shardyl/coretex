@@ -1832,6 +1832,15 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## No duplicate replies: a firing promise reads the thread; a send re-judges pending drafts (24 Sep 2026)
+Card 898: commitment reminder 248 (send updated proposals) fired after Shehryar had written they were already in, and
+spawned an email repeating reply 895. Card 904: drafted from Farheen's message while our own answer (902) was still
+unsent; 902 went, 904 stayed. Now `reminders._commitment_action` asks Haiku, from the newest thread messages, whether
+the promise is already kept or overtaken; yes -> reminder done, `commitment_done` on the deal, no card, no nudge
+(`{noop: True}` handled in `fire`). And `engine._rejudge_pending_replies` runs off-thread after every send: each open
+reply card to that recipient made before the send is judged against the sent body; full -> cancelled with
+`cancelled_reason` + a 'superseded' decision; part -> `apply_correction` trims it to what is left; none -> untouched.
+
 ## Opportunity context from feedback (24 Sep 2026)
 Owner: facts he drops while correcting a draft should stay with the deal, not become rules. `_understand_correction`
 has a `deal_context` channel (facts: roles, dates, budget signals, preferences, agreements; never a rule or wording);

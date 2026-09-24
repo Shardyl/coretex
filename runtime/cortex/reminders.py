@@ -138,6 +138,9 @@ def fire(r: dict) -> dict:
     else:                                        # one-off -> done
         db.execute("update reminders set status='fired', snooze_until=null where id=%s", (r["id"],))
     action = r.get("action") or _commitment_action(r)
+    if isinstance(action, dict) and action.get("noop"):     # closed on the facts: no card, no nudge
+        db.execute("update reminders set last_notification_id=null, last_task_id=null where id=%s", (r["id"],))
+        return {"reminder_id": r["id"], "notification_id": None, "task_id": None, "noop": True}
     note_id, task_id = None, None
     try:
         if action:                               # ACTION reminder -> spawn a normal task
@@ -207,6 +210,34 @@ def _commitment_action(r: dict) -> dict | None:
     if not co:
         return None
     email, what = m.group(1).strip().lower(), m.group(2).strip()
+    # A PROMISE ALREADY KEPT, OR OVERTAKEN, SPAWNS NOTHING (owner, 24 Sep 2026): reminder 248 fired "send the
+    # updated proposals" after Shehryar had written that they went in the day before, and card 898 repeated a
+    # reply that had already been sent. The thread since the promise decides: kept by us or made moot by them ->
+    # the reminder closes with a note on the deal and no email is drafted.
+    try:
+        from . import engine as _eng, pipeline as _pl, provider as _pv
+        msgs = _eng._deal_thread_msgs(co, email, limit=6)
+        since = r.get("created_at")
+        recent = []
+        for x in msgs or []:
+            d = x.get("dt") or x.get("date")
+            recent.append(f"[{x.get('date') or ''} | from {x.get('email') or x.get('from') or ''}] "
+                          + re.sub(r"\s+", " ", x.get("body") or x.get("snippet") or "")[:900])
+        if recent:
+            out = _pv.think_json(
+                "We promised a client something in an email. Below are the newest messages on that thread, either way. "
+                "Decide: has the promise ALREADY been kept by us (the thing was sent, arranged or answered), or has it "
+                "been OVERTAKEN by the client (they did it themselves, cancelled it, or moved on so it no longer "
+                'applies)? Return {"kept_or_moot": true|false, "why": "<one line>"}. Be conservative: unclear = false.',
+                f"PROMISE: {what}\n\nNEWEST MESSAGES:\n" + "\n---\n".join(recent),
+                model=_pv.MODEL_ROUTER, purpose="commitment-still-due", company=co.get("slug"))
+            if isinstance(out, dict) and out.get("kept_or_moot"):
+                db.execute("update reminders set status='done' where id=%s", (r["id"],))
+                _pl.log_deal(int(m.group(3)), "commitment_done",
+                             f"{r.get('title')} : closed when due, already kept or overtaken ({out.get('why') or ''})")
+                return {"noop": True}
+    except Exception:  # noqa: BLE001 - on any doubt the promise is kept the normal way
+        pass
     return {"company": co.get("slug"), "skill": "sales-followup", "kind": "email_reply",
             "brief": (f"KEEP A PROMISE WE MADE: we told {email} we would \"{what}\" and it is now due. Write the email "
                       "that does exactly that (a call: propose specific slots from the availability list; a document or "

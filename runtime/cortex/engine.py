@@ -791,6 +791,8 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
                                  "from": env["from"], "subject": env["subject"], "gmail_id": res.get("id")})
     try:   # pipeline loop: log the send on the deal timeline + track the promises this email makes
         pipeline.record_send(task, env, company)
+        threading.Thread(target=_rejudge_pending_replies, args=(dict(task), dict(env), dict(company or {})),
+                         daemon=True).start()
         # "close it once this goes" (owner, 19 Sep 2026: the Pyxis decline): an email card may carry the stage
         # its deal moves to WHEN IT IS SENT, so a decline closes the opportunity only if it really went out
         _oss = ((task.get("request") or {}).get("on_sent_stage") or "").strip()
@@ -4006,6 +4008,55 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
                              f"{opp['id']}') and the chase is drafted on the next cycle.",
                              priority="high", category="reminder", company_id=co["id"], target_type="deal",
                              target_id=str(opp["id"]), dedup_key=f"no-contact:{opp['id']}")
+
+
+def _rejudge_pending_replies(task: dict, env: dict, company: dict) -> None:
+    """A SEND RE-JUDGES THE DRAFTS STILL WAITING FOR THAT PERSON (owner, 24 Sep 2026). Cards 904 and 898 sat in the
+    Inbox repeating what a later-sent email had already said: each was drafted from an older trigger and nothing
+    looked at it again once the newer email went. Every open reply card to the same recipient, made before this
+    send, is checked against what just went out: fully covered -> cancelled with the reason on it; partly covered
+    -> corrected to what is left; not covered -> untouched. Off-thread; fail-soft."""
+    try:
+        to = (env.get("to") or "").split(",")[0].strip().lower()
+        if not to or task.get("kind") not in EMAIL_RENDER_KINDS:
+            return
+        sent = (task.get("draft") or "").strip()
+        if not sent:
+            return
+        for t in db.query("select * from tasks where company_id=%s and kind in ('email_reply','email_draft') and id<>%s "
+                          "and status in ('new','drafting','awaiting_approval','awaiting_correction') and "
+                          "lower(request->'inquiry'->>'email')=%s and created_at < now() order by id",
+                          (task.get("company_id"), task.get("id"), to)):
+            req = t.get("request") or {}
+            trigger = (req.get("inquiry") or {}).get("message") or req.get("brief") or req.get("system_note") or ""
+            out = provider.think_json(
+                "We have just SENT an email to a person. A DRAFT reply to the same person, made earlier from an older "
+                "message or reminder, is still waiting. Decide whether the email we sent already covers what that draft "
+                "was for. Return {\"covered\": \"full\" | \"part\" | \"none\", \"remaining\": \"<only for part: what "
+                "the draft should still say, one or two lines>\", \"why\": \"<one line>\"}. Be strict about 'full': "
+                "the same confirmation, answer or document already given; anything genuinely new in the draft's "
+                "trigger that the sent email does not address is 'part' or 'none'.",
+                f"WHAT THE DRAFT WAS FOR (their message or the reminder):\n{str(trigger)[:2500]}\n\nTHE DRAFT:\n"
+                f"{(t.get('draft') or '')[:2500]}\n\nEMAIL JUST SENT:\n{sent[:3000]}",
+                model=provider.MODEL_ROUTER, purpose="rejudge-pending", company=company.get("slug"))
+            if not isinstance(out, dict):
+                continue
+            cov = str(out.get("covered") or "none").lower()
+            if cov == "full":
+                db.execute("update tasks set status='cancelled', updated_at=now(), request = request || %s::jsonb where id=%s "
+                           "and status in ('new','drafting','awaiting_approval','awaiting_correction')",
+                           (json.dumps({"cancelled_reason": f"superseded by card {task.get('id')} sent "
+                                        f"{datetime.now(_GST):%d %b %H:%M}: {out.get('why') or ''}"}), t["id"]))
+                store.log_decision(t["id"], t.get("skill_id"), "cortex", "superseded",
+                                   note=f"covered by card {task.get('id')}: {out.get('why') or ''}")
+                if t.get("deal_id"):
+                    pipeline.log_deal(int(t["deal_id"]), "note", f"Draft {t['id']} cancelled: covered by the email sent "
+                                                                 f"on card {task.get('id')}.")
+            elif cov == "part" and (out.get("remaining") or "").strip() and t.get("status") in ("awaiting_approval", "awaiting_correction"):
+                apply_correction(t, f"We have since sent them an email (card {task.get('id')}) that already covers most of "
+                                    f"this. Rewrite so it only says what is still needed: {out['remaining']}. Short.")
+    except Exception as _e:  # noqa: BLE001
+        print(f"[rejudge] {type(_e).__name__}: {_e}", flush=True)
 
 
 def _contact_from_deal_evidence(co: dict, opp: dict) -> str:
