@@ -3839,6 +3839,20 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
                         (opp["account_id"],))
         if len(rows) == 1:
             email = rows[0]["email"]
+    if not email:
+        # A DEAL WITH NO CONTACT STILL KNOWS WHO IT WROTE TO (owner, 24 Sep 2026: "I'd rather there just be drafts
+        # to follow up than a notification"). Deal 125 (Asif Khan) was opened from Talk with no contact and no
+        # account, yet its own cover email had gone to asifkhan2030800@gmail.com; every due chase became a
+        # "Follow-up due" notice and nothing was drafted. The deal's own sent email is the evidence: that person
+        # becomes its primary contact and the chase is drafted to them.
+        email = _contact_from_deal_evidence(co, opp)
+        if email:
+            try:
+                crm.add_deal_contact(int(opp["id"]), email, primary=True)
+                pipeline.log_deal(int(opp["id"]), "note", f"Contact {email} attached from the deal's own correspondence "
+                                                        "so the follow-up could be drafted.")
+            except Exception:  # noqa: BLE001
+                pass
     if email and db.one("select id from tasks where company_id=%s and kind='email_reply' and "
                         "status in ('new','drafting','awaiting_approval','awaiting_correction','sending') "
                         "and lower(request->'inquiry'->>'email')=lower(%s) limit 1", (co["id"], email)):
@@ -3922,8 +3936,32 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
         if t:
             db.execute("update tasks set deal_id=%s where id=%s", (opp["id"], t["id"]))
     else:
-        notifications.notify(f"Follow-up due ({label}) — {opp['title']}", "Opportunity follow-up",
-                             category="reminder", company_id=co["id"], target_type="deal", target_id=str(opp["id"]))
+        # nobody to write to: say WHY, so the owner can fix the deal, instead of a bare "follow-up due"
+        notifications.notify(f"No {label} drafted: '{opp['title']}' has no contact",
+                             "Add the contact on this opportunity (Talk: 'add <name> <email> as the contact on deal "
+                             f"{opp['id']}') and the chase is drafted on the next cycle.",
+                             priority="high", category="reminder", company_id=co["id"], target_type="deal",
+                             target_id=str(opp["id"]), dedup_key=f"no-contact:{opp['id']}")
+
+
+def _contact_from_deal_evidence(co: dict, opp: dict) -> str:
+    """The external person this deal's OWN emails went to or came from: the newest email card on the deal, then
+    the timeline's email_out / email_in lines. Our own addresses never count. Empty when there is no evidence."""
+    from .identity import OWN_COMPANY_DOMAINS
+    try:
+        for t in db.query("select request from tasks where deal_id=%s and kind in ('email_reply','email_draft') and "
+                          "status in ('done','sent','awaiting_approval') order by id desc limit 5", (int(opp["id"]),)):
+            em = (((t.get("request") or {}).get("inquiry") or {}).get("email") or "").strip().lower()
+            if em and "@" in em and em.split("@")[-1] not in OWN_COMPANY_DOMAINS:
+                return em
+        for ev in reversed(opp.get("history") or []):
+            if str(ev.get("event") or "").startswith("email_"):
+                m = re.search(r"(?:to|from)\s+([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})", str(ev.get("text") or ""))
+                if m and m.group(1).lower().split("@")[-1] not in OWN_COMPANY_DOMAINS:
+                    return m.group(1).lower()
+    except Exception:  # noqa: BLE001
+        return ""
+    return ""
 
 
 def _parse_waitlist_email(e: dict) -> dict:
