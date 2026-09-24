@@ -313,6 +313,10 @@ def _email_brief(inq: dict, co: dict | None = None) -> str:
 _EMAIL_RE = r"([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})"
 
 
+class _NoBooking(Exception):
+    """Send-time signal: the email goes without a calendar booking (no calendar for this company)."""
+
+
 def _email_envelope(task: dict, company: dict) -> dict:
     """Who the approved reply goes to / from / cc / bcc — resolved from the inquiry, the company profile,
     AND any CC/BCC the owner set as a standing rule on the skill."""
@@ -647,26 +651,34 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         _slug = (company or {}).get("slug") or ""
         cal_co = mt.get("calendar") or _slug
         if not db.setting_get(f"calendar_refresh_token:{cal_co}"):
-            # same guard at SEND: never book one brand's client onto another brand's calendar
-            store.update_task(task["id"], status="awaiting_approval")
-            return {"blocked": True,
-                    "error": f"{(company or {}).get('name')} has no calendar connected — the email "
-                             "promises a meeting we cannot book. Nothing was sent. Connect a calendar "
-                             "for this company, or tell me which calendar to use."}
+            # NO CALENDAR IS NOT A REASON TO HOLD AN EMAIL (owner, 24 Sep 2026: "I'm not even going to use the
+            # calendar, I was going to give her a call"). SkyVision has none; card 899 was blocked at send. The
+            # email goes; the owner is told the slot is in his hands; never another brand's calendar.
+            notifications.notify(f"{(company or {}).get('name')}: meeting on card #{task['id']} not booked",
+                                 f"No calendar is connected for {(company or {}).get('name')}, so the slot in this "
+                                 "email is not on any calendar. Put it in your diary yourself, or connect a calendar.",
+                                 priority="high", category="reminder", company_id=task.get("company_id"),
+                                 target_type="task", target_id=str(task["id"]))
+            mt = None
         try:
+            if not mt:
+                raise _NoBooking()
             ev = gcal.create_event(cal_co, start=datetime.fromisoformat(mt["start"]),
                                    minutes=int(mt.get("minutes") or 30),
                                    summary=mt.get("summary") or "Call",
                                    description=f"Booked via Cortex approval (task #{task['id']}).", meet=True)
+        except _NoBooking:
+            pass
         except Exception as ex:  # noqa: BLE001 — never send an email promising a meeting we failed to book
             store.update_task(task["id"], status="awaiting_approval")
             return {"blocked": True, "error": f"Couldn't book the calendar/Meet: {ex}. Nothing was sent — approve again to retry."}
-        mt = {**mt, "event_id": ev.get("id"), "meet": ev.get("meet") or "", "calendar": cal_co}
-        task = dict(task)
-        task["request"] = {**(task.get("request") or {}), "meeting": mt}
-        if mt.get("meet") and mt["meet"] not in (task.get("draft") or ""):
-            task["draft"] = (task.get("draft") or "").rstrip() + f"\n\nGoogle Meet: {mt['meet']}"
-        store.update_task(task["id"], request=task["request"], draft=task["draft"])
+        if mt:
+            mt = {**mt, "event_id": ev.get("id"), "meet": ev.get("meet") or "", "calendar": cal_co}
+            task = dict(task)
+            task["request"] = {**(task.get("request") or {}), "meeting": mt}
+            if mt.get("meet") and mt["meet"] not in (task.get("draft") or ""):
+                task["draft"] = (task.get("draft") or "").rstrip() + f"\n\nGoogle Meet: {mt['meet']}"
+            store.update_task(task["id"], request=task["request"], draft=task["draft"])
     c = compose_reply_html(task, company, for_preview=False)
     req = task.get("request") or {}
     files = list(req.get("attachments") or [])            # outbound drafts carry real file attachments
@@ -2634,9 +2646,10 @@ def _client_agreed_slot(task: dict, req: dict, dt: datetime) -> bool:
             day_words.add("tomorrow")
         if local.date() == datetime.now(_GST).date():
             day_words |= {"today", "tonight", "this afternoon", "this morning", "this evening"}
-        hour12 = local.strftime("%-I").lower()
-        clock = {local.strftime("%H:%M"), f"{hour12}{local.strftime('%p').lower()}", f"{hour12} {local.strftime('%p').lower()}",
-                 f"{hour12}:{local.strftime('%M')}{local.strftime('%p').lower()}", f"{hour12}:{local.strftime('%M')} {local.strftime('%p').lower()}"}
+        hour12, ap = local.strftime("%-I").lower(), local.strftime("%p").lower()
+        clock = {local.strftime("%H:%M"), f"{hour12}:{local.strftime('%M')}{ap}", f"{hour12}:{local.strftime('%M')} {ap}"}
+        if local.minute == 0:     # "10am" vouches for 10:00 only (card 899: her "10 AM" was read as agreeing to 10:30)
+            clock |= {f"{hour12}{ap}", f"{hour12} {ap}"}
         low = " ".join(theirs.lower().split())
         if any(w in low for w in day_words) and any(c in low for c in clock):
             return True
@@ -2654,7 +2667,12 @@ def _maybe_extract_meeting(task: dict, draft: str) -> None:
     email at send). Haiku only reads what the draft states; code stamps and validates the datetime."""
     try:
         req = dict(task.get("request") or {})
-        if task.get("kind") != "email_reply" or req.get("meeting") or not _TIME_HINT.search(draft or ""):
+        if task.get("kind") != "email_reply" or (req.get("meeting") or {}).get("event_id"):
+            return
+        if not _TIME_HINT.search(draft or ""):
+            if req.get("meeting"):      # an earlier version confirmed a slot; this one names no time: unstamp
+                req.pop("meeting", None)
+                store.update_task(task["id"], request=req)
             return
         out = provider.think_json(
             worker._now_line() + " Does this email CONFIRM a specific meeting day and time with the "
@@ -2669,6 +2687,9 @@ def _maybe_extract_meeting(task: dict, draft: str) -> None:
             company=(store.get_company(task["company_id"]) or {}).get("slug"))
         if not (isinstance(out, dict) and out.get("confirmed")
                 and (out.get("start_local") or out.get("start_iso"))):
+            if req.get("meeting"):      # the redraft only asks ("would 10:30 work?"): the old stamp goes
+                req.pop("meeting", None)
+                store.update_task(task["id"], request=req)
             return
         s = str(out.get("start_local") or out.get("start_iso"))
         # CODE converts the timezone (never the model): '11am Amsterdam' is 13:00 in Dubai, and a

@@ -1832,6 +1832,13 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## Meeting stamps: honest, re-judged, never a reason to hold an email (24 Sep 2026)
+Card 899 (SkyVision, Ausra): her "10 AM Friday" was read as agreeing to 10:30 (hour-only clock forms matched any
+minute), the stamp stayed after the redraft became a question, and the send was blocked because SkyVision has no
+calendar. Now `_client_agreed_slot` matches "10am" only for an on-the-hour slot; `_maybe_extract_meeting` re-judges
+an unbooked stamp on every redraft and clears it when the draft only asks; at send, a company with no calendar
+sends anyway and the owner gets a high-priority notice that the slot is not on any calendar (`_NoBooking`).
+
 ## A time the client proposes is accepted and booked (24 Sep 2026)
 Card 890: Gheis wrote "Would 4:00 PM today work instead?"; the reply said "whenever suits you", and after "accept
 the 4pm meeting, send a link, confirm" it said "we will send a Google Meet link" with nothing booked (the owner-words
