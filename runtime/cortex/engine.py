@@ -2151,6 +2151,10 @@ def _understand_correction(task: dict, text: str) -> dict:
             '"detach_documents": ["<attached documents he asks to REMOVE from the email, by name>"], '
             '"reminders": [{"title": "<self-contained>", "when_phrase": "<his EXACT time words verbatim, '
             "e.g. 'Monday morning', 'tomorrow', '31 August' - never resolve it yourself\"}], "
+            '"deal_context": ["<a FACT about this opportunity worth keeping for every future email on it: who decides '
+            "and their roles, dates and deadlines, budget signals, what they liked or rejected, what was agreed on a "
+            "call. Self-contained, one sentence each. NEVER a rule about how we write (that is a rule, offered "
+            'separately), never wording for this email>"], '
             '"prep": [{"title": "<short imperative>", "brief": "<internal work to prepare, incl. stated '
             'deadline>"}]} '
             "prep is ONLY for work outside this email (build a document, research something). Changes to "
@@ -2277,6 +2281,25 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
                 created.append(f"reminder '{r.get('title')}' on {d:%a %d %b}")
         except Exception:  # noqa: BLE001
             continue
+    # OPPORTUNITY CONTEXT FROM HIS FEEDBACK (owner, 24 Sep 2026): facts he drops while correcting a draft ("Sarah is
+    # the brand director", "budget is capped at 40k") are not rules and were lost once the redraft was done. They
+    # are filed on the deal's timeline as [context] entries, which ride into every later draft on that deal.
+    _ctx = [str(x).strip() for x in (u.get("deal_context") or []) if str(x).strip()][:4]
+    if _ctx:
+        _cdid = req.get("deal_id") or task.get("deal_id")
+        _cem = (req.get("inquiry") or {}).get("email") or ""
+        if not _cdid and _cem:
+            try:
+                _ds = crm.active_deals_for_email(_cem, (store.get_company(task["company_id"]) or {}).get("slug"))
+                _cdid = _ds[0]["id"] if len(_ds) == 1 else None
+            except Exception:  # noqa: BLE001
+                _cdid = None
+        if _cdid:
+            for _c in _ctx:
+                pipeline.log_deal(int(_cdid), "context", f"{_c} (owner, card #{task.get('id')})")
+                created.append(f"noted on the opportunity: {_c}")
+        else:
+            created.append("NOT noted (no opportunity on this card): " + "; ".join(_ctx))
     for p_ in (u.get("prep") or [])[:3]:
         try:
             sk = store.get_skill_by_key(task["company_id"], "sales-quotation") \

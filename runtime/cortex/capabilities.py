@@ -125,6 +125,12 @@ CAPABILITIES: list[tuple[str, str]] = [
      "or replaces an unsent one (billed_to = legal name, address, TRN in his words). Approving a pro forma card "
      "drafts its email on the invoice-sending lane; that email is owner-only to send, and the payment follow-up "
      "clock starts when it goes. You never type an amount on any of this."),
+    ("Opportunity context: note_opportunity",
+     "A fact about a specific deal (who decides, roles, dates, budget signals, preferences, what was agreed) is kept "
+     "with note_opportunity(deal_id or search, note): it goes on the deal's timeline as a context entry and rides "
+     "into every future email on that deal. It is NOT a rule: rules (add_rule) say how we write for a company or "
+     "everywhere; context is about one client. When Rashad corrects a draft, facts in his words are filed this way "
+     "automatically and the card says 'noted on the opportunity'."),
     ("The same quotation again: reissue_quotation",
      "reissue_quotation(company, number) issues an EXISTING quotation as its next version, copied exactly by "
      "code from the stored version: same lines, prices and total, today's date. It is the ONLY way to send a "

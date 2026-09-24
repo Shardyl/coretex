@@ -1832,6 +1832,14 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## Opportunity context from feedback (24 Sep 2026)
+Owner: facts he drops while correcting a draft should stay with the deal, not become rules. `_understand_correction`
+has a `deal_context` channel (facts: roles, dates, budget signals, preferences, agreements; never a rule or wording);
+`_apply_understood` files each on the deal's timeline as a `[context]` event (deal from the card, else the
+recipient's one open deal; none = 'NOT noted' on the card). `pipeline.deal_context` lists every context entry in
+full above the recent timeline, so it rides into every draft on that deal. Talk: `note_opportunity(deal_id|search,
+note)`. The card shows 'noted on the opportunity: ...' under 'From your corrections'.
+
 ## Everyone on the email joins the invite (24 Sep 2026)
 Card 904: Farheen asked to add Sarah Shaikh to the meeting invite; the reply promised it, but the send path only ever
 invited the To recipient. Now, on send, every external address on the email's To and cc lines is merged onto the

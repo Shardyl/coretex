@@ -3600,6 +3600,16 @@ SKILL_TOOLS = [
         "replace": {"type": "string", "description": "a pro forma number to void and reissue, e.g. PI-2026-0003"},
         "deal_id": {"type": "integer"}},
         "required": ["company", "number"]}},
+    {"name": "note_opportunity",
+     "description": "Keep a FACT on an opportunity so every future email on it knows it: who decides and their roles, "
+                    "dates, budget signals, preferences, what was agreed. Use when Rashad says 'note on the X deal that "
+                    "...', 'remember that ...' about a client, or drops such a fact in passing. Not for rules about how "
+                    "we write (add_rule) and not for reminders. Filed on the deal's timeline as a context entry.",
+     "input_schema": {"type": "object", "properties": {
+        "deal_id": {"type": "integer"},
+        "search": {"type": "string", "description": "words from the deal title or the client name, when no deal_id"},
+        "note": {"type": "string", "description": "the fact, one or two sentences, in Rashad's words"}},
+        "required": ["note"]}},
     {"name": "reissue_quotation",
      "description": "Issue an EXISTING quotation again as its next version, copied EXACTLY by code from the stored "
                     "version: same lines, same prices, same total. Use this, never create_quotation, whenever "
@@ -4246,6 +4256,30 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         return (f"issued pro forma {_pf.get('pi')}: {_pf.get('description')}, {_pf.get('currency')} "
                 f"{float(_pf.get('total') or 0):,.2f} including VAT. It is card #{t['id']} in the Inbox with the PDF "
                 "attached; nothing has been sent. Approving that card drafts the email, which only Rashad can send.")
+    if name == "note_opportunity":
+        from . import pipeline as _pl
+        note = str(inp.get("note") or "").strip()
+        if not note:
+            return "nothing to note"
+        did = inp.get("deal_id")
+        if not did and (inp.get("search") or "").strip():
+            _k = "%" + re.sub(r"[^a-z0-9]", "", str(inp["search"]).lower()) + "%"
+            rows = db.query("select p.id, p.title from crm_projects p left join crm_accounts a on a.id=p.account_id where "
+                            "regexp_replace(lower(p.title), '[^a-z0-9]', '', 'g') like %s or "
+                            "regexp_replace(lower(coalesce(a.name,'')), '[^a-z0-9]', '', 'g') like %s "
+                            "order by (p.stage in ('Lost','Dormant')), p.id desc limit 4", (_k, _k)) if len(_k) > 4 else []
+            if len(rows) == 1:
+                did = rows[0]["id"]
+            elif rows:
+                return "Several opportunities match, which one? " + json.dumps(
+                    [{"deal_id": r["id"], "title": r["title"]} for r in rows])
+        if not did:
+            return "I could not find that opportunity. Give me the deal number or words from its title."
+        d = db.one("select id, title from crm_projects where id=%s", (int(did),))
+        if not d:
+            return f"no opportunity #{did}"
+        _pl.log_deal(int(did), "context", f"{note} (owner, via Talk)")
+        return f"Noted on opportunity #{d['id']} '{d['title']}': {note}. Every future email on it will carry this."
     if name == "reissue_quotation":
         _co = _talk_company(inp.get("company"), u)
         if not _co:

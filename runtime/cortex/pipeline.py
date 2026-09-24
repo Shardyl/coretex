@@ -56,6 +56,10 @@ def deal_context(deal_id: int, limit: int = 12) -> str:
            + (f", value {d['currency']} {d['value']}" if d.get("value") else "") + "):\n")
     if d.get("note"):
         out += f"Note: {d['note']}\n"
+    ctx = [h for h in hist if h.get("event") == "context"]
+    if ctx:   # the owner's own notes on this opportunity: every one, however old (they are facts, not events)
+        out += "CONTEXT ON THIS OPPORTUNITY (the owner's notes; treat as fact in every email):\n" + "\n".join(
+            f"- {h.get('ts', '')[:10]} {h.get('text', '')}" for h in ctx[-20:]) + "\n"
     out += "\n".join(lines) if lines else "- (no events logged yet)"
     try:   # the client's documents filed on the deal (brief, RFP, clarifications): read with read_document
         from . import documents as _docs
