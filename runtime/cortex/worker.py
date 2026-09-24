@@ -358,6 +358,14 @@ def draft(skill: dict, company: dict, request: dict,
     if _ol:
         user.append("LINKS THE OWNER OR TEAM GAVE YOU for this card (real: copy them exactly as written, and "
                     "use one wherever their instruction or the brief calls for it): " + ", ".join(_ol[:10]))
+    _cs = request.get("client_slot") if isinstance(request, dict) else None
+    if _cs:
+        user.append((f"THE CLIENT PROPOSED A TIME: {_cs.get('label')}. It is FREE on our calendar: accept it plainly "
+                     "and confirm it as agreed (the meeting link is provided to you when it is booked; if you have "
+                     "no link yet, say the invitation follows, never that we will 'send a link later').")
+                    if _cs.get("free") else
+                    (f"THE CLIENT PROPOSED A TIME: {_cs.get('label')}. We are NOT free then: say so courteously and "
+                     "offer the nearest free times from the availability list instead."))
     _av = (request.get("availability") or "").strip() if isinstance(request, dict) else ""
     if _av.startswith("NO CALL TIMES"):   # the facts say this email proposes no call (engine._call_is_relevant)
         user.append(_av)

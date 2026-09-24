@@ -1814,6 +1814,16 @@ this email"); `pipeline.record_send` folds a repeated promise into the open remi
 word overlap) instead of a twin; a due commitment reminder (`reminders._commitment_action`) spawns the email that
 keeps it (sales-followup, deal-aware via `_with_deal`) unless it needs a person on site (`_NOT_BY_EMAIL`).
 
+## A time the client proposes is accepted and booked (24 Sep 2026)
+Card 890: Gheis wrote "Would 4:00 PM today work instead?"; the reply said "whenever suits you", and after "accept
+the 4pm meeting, send a link, confirm" it said "we will send a Google Meet link" with nothing booked (the owner-words
+test only knew 'book it / they confirmed'; 'today' was not a day word). Now: `engine._client_proposed_slot` runs in
+`_draft_context_for_reply` BEFORE drafting (Haiku reads THEIR words, code checks `calendar.busy_blocks`); free -> 
+`request.meeting` stamped and the writer told to accept and confirm (the booking + link follow via `_prebook_meeting`);
+busy -> the writer says so and offers the nearest free times. `_OWNER_BOOKS` = accept/confirm/agree/book on the card
+(not inside an 'ask whether...' phrase); 'today/tonight/this afternoon' count as day words; `_ASKS_TO_MEET` knows
+'would X work' and 'instead'.
+
 ## Every email gets a final read-through (23 Sep 2026)
 Card 876 reached the Inbox with "I would also be glad to send over our company profile", the closing line, then
 "Please also see our company profile attached": each pass edits one thing (the attachment reconcile said "keep every

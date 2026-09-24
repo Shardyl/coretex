@@ -2521,8 +2521,54 @@ def _maybe_no_reply(task: dict, draft: str, skill: dict) -> bool:
         return False
 
 
-_OWNER_BOOKS = re.compile(r"\b(book(?:ed)? it|book (?:the|a) (?:call|meeting|slot)|they (?:have )?(?:confirmed|agreed|accepted)|"
-                          r"(?:client|he|she) confirmed|confirmed (?:by|with) (?:the client|them)|it'?s confirmed)\b", re.I)
+_OWNER_BOOKS = re.compile(r"\b(?:book|accept|confirm|agree|lock)\w*\b(?![^.?!]{0,30}\?)", re.I)
+_OWNER_ASKS = re.compile(r"\b(?:ask|whether|if|propose|suggest|offer)\b[^.?!]{0,40}\b(?:book|accept|confirm|agree)\w*", re.I)
+
+
+def _client_proposed_slot(task: dict, req: dict, email: str) -> dict | None:
+    """THE CLIENT NAMED A TIME: read it from THEIR words (Haiku reads, code stamps and checks the calendar). Free ->
+    `request.meeting` is stamped now, so the draft accepts it and the booking and Meet link follow through the
+    normal path. Busy -> the writer is told so and offers the nearest free times instead. Card 890 (24 Sep 2026):
+    Gheis wrote "Would 4:00 PM today work instead?" and the reply said "whenever suits you", twice."""
+    try:
+        if task.get("kind") != "email_reply" or (req.get("meeting") or {}).get("event_id"):
+            return None
+        theirs = str((req.get("inquiry") or {}).get("message") or "")
+        theirs = re.split(r"\n\s*(?:From:|On .{5,80} wrote:|-----Original)", theirs)[0]
+        if not _TIME_HINT.search(theirs):
+            return None
+        out = provider.think_json(
+            worker._now_line() + " Does the SENDER of this message propose or accept ONE specific day and clock time "
+            "for a call or meeting with us? Report the time EXACTLY AS WRITTEN and its timezone; never convert. "
+            'Return JSON {"proposed": true|false, "start_local": "YYYY-MM-DDTHH:MM", "tz": "<IANA zone, Asia/Dubai '
+            'if none stated>", "minutes": 30, "summary": "<short meeting title naming the sender>"}. '
+            "proposed:false when they only ask for our availability or give a range.",
+            theirs[:2000], model=provider.MODEL_ROUTER, purpose="client-slot",
+            company=(store.get_company(task["company_id"]) or {}).get("slug"))
+        if not (isinstance(out, dict) and out.get("proposed") and out.get("start_local")):
+            return None
+        from zoneinfo import ZoneInfo
+        try:
+            dt = datetime.fromisoformat(str(out["start_local"])).replace(tzinfo=ZoneInfo(str(out.get("tz") or "Asia/Dubai")))
+        except Exception:  # noqa: BLE001
+            dt = datetime.fromisoformat(str(out["start_local"]) + "+04:00")
+        if not (datetime.now(timezone.utc) < dt < datetime.now(timezone.utc) + timedelta(days=180)):
+            return None
+        from . import calendar as _gcal
+        mins = int(out.get("minutes") or 30)
+        busy = _gcal.busy_blocks(dt - timedelta(minutes=_gcal.PREP_GAP_MINUTES),
+                                 dt + timedelta(minutes=mins + _gcal.PREP_GAP_MINUTES))
+        free = not busy
+        slot = {"start": dt.isoformat(), "minutes": mins, "free": free,
+                "label": dt.astimezone(_GST).strftime("%A %-d %B, %H:%M") + " (Dubai)"}
+        if free:
+            req["meeting"] = {"start": dt.isoformat(), "minutes": mins,
+                              "summary": str(out.get("summary") or "Call")[:80]}
+            store.update_task(task["id"], request={**(store.get_task(task["id"]) or {}).get("request", {}),
+                                                   "meeting": req["meeting"]})
+        return slot
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _client_agreed_slot(task: dict, req: dict, dt: datetime) -> bool:
@@ -2536,6 +2582,8 @@ def _client_agreed_slot(task: dict, req: dict, dt: datetime) -> bool:
                      local.strftime("%B %-d").lower()}
         if local.date() == (datetime.now(_GST) + timedelta(days=1)).date():
             day_words.add("tomorrow")
+        if local.date() == datetime.now(_GST).date():
+            day_words |= {"today", "tonight", "this afternoon", "this morning", "this evening"}
         hour12 = local.strftime("%-I").lower()
         clock = {local.strftime("%H:%M"), f"{hour12}{local.strftime('%p').lower()}", f"{hour12} {local.strftime('%p').lower()}",
                  f"{hour12}:{local.strftime('%M')}{local.strftime('%p').lower()}", f"{hour12}:{local.strftime('%M')} {local.strftime('%p').lower()}"}
@@ -2545,7 +2593,7 @@ def _client_agreed_slot(task: dict, req: dict, dt: datetime) -> bool:
         notes = " ".join(d["note"] for d in db.query(
             "select note from decisions where task_id=%s and action='correct' and coalesce(note,'')<>'' order by id desc limit 3",
             (task.get("id") or 0,)) if d.get("note")) + " " + _CORRECTION_NOW.get()
-        return bool(_OWNER_BOOKS.search(notes))
+        return bool(_OWNER_BOOKS.search(_OWNER_ASKS.sub("", notes)))
     except Exception:  # noqa: BLE001
         return False
 
@@ -4448,7 +4496,8 @@ _ASKS_TO_MEET = re.compile(
     r"arrange|schedule|organi[sz]e|set ?up|book|fix|have|join|propose|suggest|request)\b(?:\W+\w+){0,5}?\W+"
     r"(?:call|meeting|meet|zoom|teams|google meet|chat|catch[- ]?up|discussion|presentation|session)\b|"
     r"\bwalk (?:us|me|the team) through\b|\bpresent (?:it|this|the \w+) to\b|\byour availability\b|"
-    r"\bwhen (?:are|can|could) (?:you|we)\b|\bwhat time(?:s)? (?:works?|suits?)\b", re.I)
+    r"\bwhen (?:are|can|could) (?:you|we)\b|\bwhat time(?:s)? (?:works?|suits?)\b|"
+    r"\bwould\b[^.?!]{0,60}\b(?:work|suit)\b|\b(?:slot|time)\b[^.?!]{0,40}\binstead\b", re.I)
 _PUT_ON_HOLD = re.compile(
     r"\bon hold\b|\bput on hold\b|\bpostpon|\bwe will (?:revert|get back|come back)|\bwill revert\b|"
     r"\bget back to you\b|\bonce (?:the|our) (?:review|decision|approval)|\bbear with us\b|"
@@ -4629,6 +4678,10 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
         # there to be used. The facts decide whether the list is given at all (_call_is_relevant); without
         # it the writer is told plainly that this email proposes no times.
         from . import calendar as _gcal
+        _cs = _client_proposed_slot(task, req, email)
+        if _cs:
+            req["client_slot"] = _cs
+            manifest.append("client_slot(free)" if _cs.get("free") else "client_slot(busy)")
         _why = _call_is_relevant(task, req, email)
         if _why:
             _tz = (req.get("client_tz") or "").strip() or _tz_for_email(email)
