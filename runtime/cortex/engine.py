@@ -3959,6 +3959,20 @@ def _contact_from_deal_evidence(co: dict, opp: dict) -> str:
                 m = re.search(r"(?:to|from)\s+([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})", str(ev.get("text") or ""))
                 if m and m.group(1).lower().split("@")[-1] not in OWN_COMPANY_DOMAINS:
                     return m.group(1).lower()
+        # the deal is NAMED after its person ("Asif Khan - product video"): the one CRM contact of that name, or the
+        # one email card to a person of that name in this company (card 678 carried no deal id)
+        title = str(opp.get("title") or "")
+        rows = db.query("select email from crm_master where coalesce(email,'')<>'' and organisation ilike %s and "
+                        "length(trim(coalesce(first_name,'')||' '||coalesce(last_name,''))) > 4 and "
+                        "position(lower(trim(coalesce(first_name,'')||' '||coalesce(last_name,''))) in lower(%s)) > 0",
+                        (f"%{co.get('name') or ''}%", title))
+        if len(rows) == 1:
+            return rows[0]["email"].strip().lower()
+        rows = db.query("select distinct lower(request->'inquiry'->>'email') e from tasks where company_id=%s and "
+                        "kind in ('email_reply','email_draft') and coalesce(request->'inquiry'->>'name','')<>'' and "
+                        "position(lower(request->'inquiry'->>'name') in lower(%s)) > 0", (co["id"], title))
+        if len(rows) == 1 and rows[0]["e"] and rows[0]["e"].split("@")[-1] not in OWN_COMPANY_DOMAINS:
+            return rows[0]["e"]
     except Exception:  # noqa: BLE001
         return ""
     return ""
