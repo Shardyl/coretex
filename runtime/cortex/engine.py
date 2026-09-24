@@ -3857,6 +3857,10 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
                         "status in ('new','drafting','awaiting_approval','awaiting_correction','sending') "
                         "and lower(request->'inquiry'->>'email')=lower(%s) limit 1", (co["id"], email)):
         return   # an email card for this contact is already in flight — never stack chases (audit F10)
+    if email and db.one("select 1 from decisions d join tasks t on t.id=d.task_id where t.company_id=%s and "
+                        "d.action='send' and lower(t.request->'inquiry'->>'email')=lower(%s) and "
+                        "d.created_at > now() - interval '3 days' limit 1", (co["id"], email)):
+        return   # something went to them within three days: a chase on top of it is a nag (card 907, 24 Sep 2026)
     skill = store.get_skill_by_key(co["id"], "sales-first-response")
     label = {"checkin": "check-in", "revive": "revival"}.get(action, "follow-up")
     if email and skill:

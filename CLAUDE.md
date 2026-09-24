@@ -1820,6 +1820,8 @@ and drafted nothing, although its own cover email had gone to asifkhan2030800@gm
 now resolves a missing contact from `_contact_from_deal_evidence` (the deal's own email cards, then the timeline's
 email_out/email_in lines), attaches them as primary and drafts the chase. Only a deal with no evidence at all gets a
 notice, and it says why and what to do (high priority, deduped per deal).
+Guard added the same day: no chase to a contact who received any Cortex-sent email in the last 3 days (a manual re-run
+drafted card 907 hours after chase 894 had gone).
 
 ## Everyone on a deal stays copied (24 Sep 2026)
 Card 891 (UAS Meet link) dropped Mounir because the adopted thread message carried no cc; card 889 (ABN AMRO) could
