@@ -373,6 +373,11 @@ def draft(skill: dict, company: dict, request: dict,
         # Which timezone to state them in, and how to word the offer, are scheduling rules on the skill.
         user.append(_av + "\nIf you propose a call, offer times ONLY from that list: never invent one. "
                     "If none of them suit the conversation, ask them to suggest a time instead.")
+    _we = (request.get("waiting_email") or "").strip() if isinstance(request, dict) else ""
+    if _we:
+        user.append("AN EMAIL TO THIS PERSON IS ALREADY WAITING IN THE INBOX, UNSENT (below). Their new message may make "
+                    "some or all of it unnecessary. Fold into THIS reply only what still applies, in your own words; never "
+                    "repeat it, never refer to it as sent:\n" + _we)
     _ow = (request.get("owed") or "").strip() if isinstance(request, dict) else ""
     if _ow:   # promises already made to this person: this email keeps them, never re-promises (17 Sep 2026)
         user.append(_ow)

@@ -963,6 +963,10 @@ def _run_task(task: dict) -> None:
     if _maybe_no_reply(task, draft, skill):   # the drafter judged that NO reply should go out
         return
     _maybe_extract_meeting(task, draft)   # a confirmed slot in the draft -> calendar+Meet booked on approval
+    if any(str(m).startswith("waiting_email") for m in ((task.get("request") or {}).get("context_manifest") or [])):
+        _to = ((task.get("request") or {}).get("inquiry") or {}).get("email") or ""
+        threading.Thread(target=_rejudge_pending_replies, args=(dict(task), {"to": _to}, dict(company or {})),
+                         daemon=True).start()
     # BOOK IT NOW, NOT AT SEND. Extraction alone only stamps the slot; booking used to happen at send,
     # by which point the body was already written and the drafter had no link to offer - so it wrote
     # "I will send the link separately" and the send tacked a bare Meet URL on the end (card 422,
@@ -4823,6 +4827,18 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
             manifest.append("thread_history")
     except Exception:  # noqa: BLE001 — context is best-effort, drafting proceeds regardless
         pass
+    try:   # AN EMAIL ALREADY WAITING FOR THEM (held from the clock, or a draft not yet sent): this reply absorbs what
+        # still applies and never repeats it; the writer is told which card it is (25 Sep 2026)
+        _w = db.query("select id, draft, request->>'card_problem' why from tasks where company_id=%s and id<>%s and "
+                      "kind in ('email_reply','email_draft','followup') and status in ('awaiting_approval','awaiting_correction') "
+                      "and lower(request->'inquiry'->>'email')=lower(%s) and coalesce(draft,'')<>'' order by id desc limit 2",
+                      (task["company_id"], task.get("id") or 0, email))
+        if _w:
+            req["waiting_email"] = "\n---\n".join(
+                f"[card #{x['id']}{' | ' + x['why'] if x.get('why') else ''}]\n{(x['draft'] or '')[:1500]}" for x in _w)
+            manifest.append(f"waiting_email({','.join(str(x['id']) for x in _w)})")
+    except Exception:  # noqa: BLE001
+        pass
     try:   # WHAT WE OWE THIS CONTACT rides into every email to them: a chase must keep the promise, not repeat
         # it (Antoni, deal 121, 17 Sep 2026: "we'll schedule a call" promised on 14 Sep, promised again by the
         # chase on the 17th, never proposed)
@@ -4957,6 +4973,33 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
     return req
 
 
+def _hold_scheduled_emails(company_id: int, sender: str, deal_ids: list, why: str) -> list:
+    """AN INBOUND PULLS OUR SCHEDULED EMAIL OFF THE CLOCK (owner, 25 Sep 2026). A scheduled email used to fire as
+    written even when the person had just written to us, and the new reply repeated it. Every email card scheduled
+    to that person, or on one of their deals, comes back to the Inbox as awaiting_approval with the reason on its
+    face; the reply to their message is then drafted with the held email in view. Returns the held card ids."""
+    held = []
+    try:
+        rows = db.query("select id, title from tasks where company_id=%s and status='scheduled' and schedule_kind='once' "
+                        "and kind in ('email_reply','email_draft','followup') and (lower(request->'inquiry'->>'email')=%s "
+                        "or deal_id = any(%s))", (company_id, (sender or "").lower(), [int(d) for d in (deal_ids or [])]))
+        for r in rows:
+            db.execute("update tasks set status='awaiting_approval', schedule_kind=null, run_at=null, updated_at=now(), "
+                       "request = (request - 'approved_send') || %s::jsonb where id=%s and status='scheduled'",
+                       (json.dumps({"card_problem": f"Held, not sent: {why}. Send, redraft or dismiss it."}), r["id"]))
+            store.log_decision(r["id"], None, "cortex", "held", note=why)
+            held.append(r["id"])
+        if held:
+            notifications.notify(f"Scheduled email held: {why}",
+                                 "Card" + ("s " if len(held) > 1 else " ") + ", ".join(f"#{i}" for i in held)
+                                 + " came off the clock and are back in your Inbox.",
+                                 priority="high", category="approval", company_id=company_id,
+                                 target_type="task", target_id=str(held[0]))
+    except Exception as _e:  # noqa: BLE001
+        print(f"[hold] {type(_e).__name__}: {_e}", flush=True)
+    return held
+
+
 def _pause_or_reschedule_followups(co: dict, deals: list, sender: str, body: str, ref: str = "") -> None:
     """The contact wrote to us -> every armed auto-chase clock on their deals pauses (the ball is now in
     OUR court; it re-arms when our reply sends). If their email STATES a timeframe ('give us a couple of
@@ -5059,6 +5102,8 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
             return
         deal = deals[0] if len(deals) == 1 else None   # attach a deal_id only when it is unambiguous
         _pause_or_reschedule_followups(co, deals, sender, body, ref=gmail.mail_ref(e))
+        _hold_scheduled_emails(co["id"], sender, [d["id"] for d in (deals or [])],
+                               f"{sender} wrote to us at {datetime.now(_GST):%H:%M} ({(e.get('subject') or '')[:60]})")
         # PROJECT correspondence (deal already in delivery) drafts on the company's general email-handling
         # skill (+ its related project skills' rules), not the sales lane — that is where project-management
         # behaviour gets trained. Opportunity-stage and no-deal mail stays on sales-first-response.

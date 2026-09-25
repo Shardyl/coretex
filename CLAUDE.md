@@ -1832,6 +1832,14 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## An inbound holds our scheduled email (25 Sep 2026)
+A scheduled email fired as written even when the person had just written to us. Now `engine._hold_scheduled_emails`
+(called from the direct-email poll beside `_pause_or_reschedule_followups`) pulls every email card scheduled to that
+sender, or on one of their deals, back to awaiting_approval with `card_problem` 'Held, not sent: ...' (decision
+'held', high-priority notice). The reply to their message is drafted with the held draft on a `waiting_email` shelf
+(worker: fold in only what still applies), and once written, `_rejudge_pending_replies` judges the held draft against
+it: covered -> cancelled, partly -> trimmed, else it stays for the owner.
+
 ## ONE proposal flow: approve the proposal, approve the quotation, the email follows (25 Sep 2026)
 Owner: same process for creative and words-led proposals. Read the proposal, revise by reply, APPROVE it (words-led:
 this issues the quotation and restamps the deck; creative: the quotation already exists). The quotation card carries
