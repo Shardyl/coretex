@@ -1994,7 +1994,7 @@ function quotationCard(t,co){
     <div class="body">${esc(t.draft||r.summary||'')}</div>${blanks}
     <div class="row" style="margin:4px 0 9px">${r.xlsx_file?`<button class="btn go" onclick="openQuotation(${t.id},'xlsx')">${ic('file',16)} Open spreadsheet</button>`:''}${r.file?`<button class="btn${r.xlsx_file?'':' go'}" onclick="openQuotation(${t.id},'pdf')">${ic('file',16)} Open PDF</button>`:''}</div>
     <div class="row">
-      <button class="btn" onclick="act(${t.id},'approve')">${ic('check',16)} Mark as seen</button>
+      <button class="btn${r.proposal_card?' go':''}" onclick="act(${t.id},'approve')">${ic('check',16)} ${r.proposal_card?'Approve quotation':'Mark as seen'}</button>
       <button class="btn bad" onclick="act(${t.id},'skip')">Dismiss</button>
     </div></div>`;
 }

@@ -86,8 +86,9 @@ CAPABILITIES: list[tuple[str, str]] = [
      "stated, a new version when the deal already has a quote number), and lays out the visual deck (a "
      "full-page frame per beat, contact sheet, investment read from the quote), filed on the deal and attached "
      "to the quotation card. Takes 10 to 15 minutes; the card returns when ready. Replies on the card revise "
-     "only what they touch (location, concept, beats, frames, price, copy) as the next version. APPROVING "
-     "the card drafts the email to the deal's contact with the deck and the quotation attached. Use "
+     "only what they touch (location, concept, beats, frames, price, copy) as the next version. The flow is the "
+     "same as a words-led proposal: approve the proposal card, then approve the quotation card, and the email "
+     "with both attached is drafted. Use "
      "create_proposal instead for a words-led proposal where the client already has the idea."),
     ("Proposal decks — LIVE, revisable, quotation on approval",
      "create_proposal(deal_id=...) builds a branded, house-format PDF proposal deck from the WHOLE deal record "
@@ -96,10 +97,10 @@ CAPABILITIES: list[tuple[str, str]] = [
      "MEDIA LIBRARY by category and rating (never invented), a parallel-track timeline, and an investment "
      "page. Feedback on the card (correct_task) REBUILDS the deck as the next version on the same card, cover "
      "kept. APPROVING the card issues the matching quotation (lines priced from the rate card by code) and "
-     "re-renders the final deck with the quotation's figures. APPROVING THE SAME CARD AGAIN (figures "
-     "confirmed) drafts the email to the deal's contact on the existing thread with the deck and the "
-     "quotation attached; it lands in the Inbox and sends only on his PIN, so never draft that email "
-     "separately unless he asks. Pass quotation_number when a quote already exists so the deck cannot contradict it. Files to the "
+     "re-renders the final deck with the quotation's figures, and the quotation card comes up for approval. "
+     "When BOTH the proposal card and the quotation card are approved (either order) the email to the deal's "
+     "contact is drafted on the existing thread with the deck and the quotation attached; it lands in the "
+     "Inbox and sends only on his PIN, so never draft that email separately unless he asks. Pass quotation_number when a quote already exists so the deck cannot contradict it. Files to the "
      "client's Drive folder and the library; it never contacts the client."),
     ("Documents on a deal",
      "A client's documents (brief, RFP, clarification record) are filed ON THE DEAL: automatically from their "

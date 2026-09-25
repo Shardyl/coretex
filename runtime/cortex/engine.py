@@ -1299,15 +1299,20 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         store.update_task(task["id"], status="awaiting_approval")   # never silently closed
         return {"blocked": True, "error": f"Couldn't build the quotation ({err}). The card is still open: "
                                           "answer its questions on the card and it builds from those."}
+    # ONE FLOW FOR EVERY PROPOSAL (owner, 25 Sep 2026): read the proposal, revise it by reply, APPROVE it; the
+    # quotation comes up as its own card, check it, APPROVE it; the email with both attached is drafted once both
+    # are approved, in either order. No second approval on the proposal card, no "mark as seen".
+    if task.get("kind") == "quotation":
+        return _approve_quotation_card(task, skill, company, actor)
     if (task.get("request") or {}).get("kind") == "creative_proposal":   # its quotation was issued in the run
         rq = task.get("request") or {}
         if not rq.get("attach_docs"):
             store.update_task(task["id"], status="awaiting_approval")
             return {"blocked": True, "error": "the creative proposal has not finished building yet"}
-        if rq.get("quotation_number"):   # same last step as a words-led proposal: approval drafts the email
-            return _draft_proposal_email(task, skill, company, actor, rq["quotation_number"])
-        store.update_task(task["id"], status="done")
         store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"version": rq.get("version")})
+        if rq.get("quotation_number"):
+            return _proposal_approved(task, skill, company, actor, rq["quotation_number"])
+        store.update_task(task["id"], status="done", request={**rq, "approved": True})
         return {"approved": True, "note": "Approved. Ask Talk to draft the email and attach the deck."}
     if (task.get("request") or {}).get("kind") == "proposal":   # approving a deck issues its quotation
         return _approve_proposal(task, skill, company, actor)
@@ -6125,10 +6130,8 @@ def _proposal_summary(co: dict, customer: str, out: dict, filed: str | None, quo
                ("Sample films: " + str(len(out.get("films") or [])) + " from the media library.\n\n"
                 if out.get("films") else "No sample films were included.\n\n"))
             + "Nothing has been sent. Reply on this card (or tell Talk) with any change and I rebuild the deck. "
-            + ("Approve it and I issue the quotation that matches it. Approve it again once the figures are right "
-               "and I draft the email with both attached."
-               if not quotation_number else "Approve it when you are happy and I draft the email with the deck "
-                                            "and the quotation attached."))
+            + "Approve it when you are happy: the quotation then comes up as its own card for you to check and "
+              "approve, and the email to the client with both attached is drafted once both are approved.")
 
 
 def _revise_proposal(task: dict, skill: dict, company: dict, text: str, quote_card: dict | None = None) -> bool:
@@ -6277,6 +6280,54 @@ def refresh_proposal_email(proposal_task_id: int) -> int | None:
     return em["id"]
 
 
+def _quotation_card_for(number: str) -> dict | None:
+    return db.one("select * from tasks where kind='quotation' and request->>'number'=%s and status in "
+                  "('awaiting_approval','done') order by id desc limit 1", (number,))
+
+
+def _proposal_approved(task: dict, skill: dict, company: dict, actor: str, number: str) -> dict:
+    """The proposal is approved. The quotation card for its number is the other half of the gate: already
+    approved -> the email is drafted now; not yet -> it is (re)opened for approval and the proposal closes."""
+    req = dict(task.get("request") or {})
+    req["approved"] = True
+    store.update_task(task["id"], request=req, status="done")
+    q = _quotation_card_for(number)
+    if not q:
+        return {"approved": True, "note": f"Proposal approved, but no quotation card exists for {number}. Ask Talk to "
+                                          "issue it, then approve that card and the email follows."}
+    db.execute("update tasks set request = request || %s::jsonb where id=%s",
+               (json.dumps({"proposal_card": task["id"]}), q["id"]))
+    if (q.get("request") or {}).get("approved"):
+        return _draft_proposal_email(task, skill, company, actor, number)
+    if q.get("status") != "awaiting_approval":
+        db.execute("update tasks set status='awaiting_approval', updated_at=now() where id=%s", (q["id"],))
+    return {"approved": True, "note": f"Proposal approved. Now check quotation {number} on card #{q['id']} and "
+                                      "approve it; the email with both attached follows."}
+
+
+def _approve_quotation_card(task: dict, skill: dict, company: dict, actor: str) -> dict:
+    """Approving a quotation card. Issued from a proposal: the other half of the gate (the proposal already
+    approved -> the email is drafted now; else the proposal is what to approve next). A stand-alone quotation
+    (Talk, a prep card) simply closes as before."""
+    rq = dict(task.get("request") or {})
+    rq["approved"] = True
+    store.update_task(task["id"], request=rq, status="done")
+    store.log_decision(task["id"], skill["id"] if skill else None, actor, "approve",
+                       snapshot={"quotation": rq.get("number")})
+    pid = rq.get("proposal_card")
+    if not pid:
+        return {"approved": True, "note": f"Quotation {rq.get('number') or ''} approved."}
+    p = store.get_task(int(pid))
+    if not p:
+        return {"approved": True, "note": "Quotation approved."}
+    if (p.get("request") or {}).get("approved"):
+        return _draft_proposal_email(p, store.get_skill(p["skill_id"]) or skill, company, actor, rq.get("number"))
+    if p.get("status") != "awaiting_approval":
+        db.execute("update tasks set status='awaiting_approval', updated_at=now() where id=%s", (p["id"],))
+    return {"approved": True, "note": f"Quotation approved. Now approve the proposal on card #{p['id']} and the "
+                                      "email with both attached follows."}
+
+
 def _draft_proposal_email(task: dict, skill: dict, company: dict, actor: str, number: str) -> dict:
     """THE SECOND APPROVAL DRAFTS THE EMAIL (owner, 19 Sep 2026: "why would I have to go into Talk and ask it
     to draft it if I've approved it?"). First approval of a proposal card issues its quotation and restamps
@@ -6296,6 +6347,9 @@ def _draft_proposal_email(task: dict, skill: dict, company: dict, actor: str, nu
         # each time, because the block reason only travelled back as a passing message.
         base = (task.get("draft") or "").split("\n\nEMAIL NOT DRAFTED:")[0]
         store.update_task(task["id"], status="awaiting_approval", draft=f"{base}\n\nEMAIL NOT DRAFTED: {note}")
+        notifications.notify(f"Email not drafted for proposal card #{task['id']}", note, priority="high",
+                             category="approval", company_id=task.get("company_id"), target_type="task",
+                             target_id=str(task["id"]))
         return {"blocked": True, "error": note}
     if not did:
         return keep(f"Quotation {number} is issued, but this proposal is not on an opportunity, so I do not "
@@ -6376,9 +6430,10 @@ def _approve_proposal(task: dict, skill: dict, company: dict, actor: str) -> dic
     qn_prev = req.get("quotation_number")
     if qn_prev and db.one("select id from tasks where kind='quotation' and request->>'number'=%s and "
                           "status in ('awaiting_approval','done') limit 1", (qn_prev,)):
-        # a LIVE quotation card already carries this deck: nothing more to issue. The second approval means
-        # "the figures are right": the cover email is drafted with both PDFs (owner, 19 Sep 2026).
-        return _draft_proposal_email(task, skill, company, actor, qn_prev)
+        # a LIVE quotation card already carries this deck: nothing more to issue; the proposal is approved and
+        # the quotation card is the next (or the last) approval
+        store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"version": req.get("version")})
+        return _proposal_approved(task, skill, company, actor, qn_prev)
     # (a quotation card for this number that was CANCELLED means a re-approval: the new one is issued as the
     # next version under the same number, never a fresh number: Rana's SEN-2026-0017, 17 Sep 2026)
     spec = req.get("deck_spec") or {}
@@ -6479,12 +6534,14 @@ def _approve_proposal(task: dict, skill: dict, company: dict, actor: str) -> dic
            + ((" Left BLANK, no approved price: " + "; ".join(qspec["blanked"]) + ".") if qspec.get("blanked") else "")
            + ((" Defaults assumed: " + "; ".join(str(a) for a in qspec["assumptions"][:10]) + ".")
               if qspec.get("assumptions") else ""))
-    # THE PROPOSAL CARD STAYS OPEN until the email carrying the deck is sent (owner, 17 Sep 2026: "I want it
-    # on a card so I can request further revisions"). A closed card vanishes from the Inbox; replies on it
-    # keep revising the deck, and approving it again drafts the cover email (_draft_proposal_email).
-    msg += (" Check the figures. Reply here with any change, or APPROVE THIS CARD AGAIN and I draft the email "
-            "to the client with the deck and the quotation attached. This card then closes.")
-    store.update_task(task["id"], request=req, status="awaiting_approval", draft=msg)
+    msg += (f" Now check the quotation on card #{(t or {}).get('id')} and approve it; the email to the client "
+            "with the deck and the quotation attached is drafted as soon as it is approved. Reply on the quotation "
+            "card to change figures or the deck.")
+    req["approved"] = True
+    store.update_task(task["id"], request=req, status="done", draft=msg)
+    if t:
+        db.execute("update tasks set request = request || %s::jsonb where id=%s",
+                   (json.dumps({"proposal_card": task["id"]}), t["id"]))
     store.log_decision(task["id"], skill["id"], actor, "approve",
                        snapshot={"quotation": number, "card": (t or {}).get("id"), "deck": final})
     if did:

@@ -910,8 +910,8 @@ class Job:
             parts.append(f"CHECK: the PDF has {dk['pages']} pages for {dk['planned']} planned, a page overflows.")
         parts.append(f"{self.images_used()} images generated on this proposal. Nothing has been sent. Reply on this card "
                      "with any change (the concept, a beat, a frame, the copy, the location or the price) and only "
-                     "the parts it touches are redone. Approve when you are happy and I draft the email to the client "
-                     "with the deck and the quotation attached.")
+                     "the parts it touches are redone. Approve when you are happy: the quotation then comes up as its own "
+                     "card to check and approve, and the email with both attached follows.")
         return "\n\n".join(parts)
 
 
@@ -1018,6 +1018,9 @@ def run_task(jid: str, task_id: int | None, dry: bool = False, start_at: str | N
                     "attach_docs": [job.s["filed"]["doc"]] if job.s.get("filed") else []})
         store.update_task(task["id"], request=req, draft=job.summary(), title=job.s["deck"]["name"],
                           status="awaiting_approval")
+        if (job.s.get("quote") or {}).get("card"):   # the quotation card is the other half of the approval gate
+            db.execute("update tasks set request = request || %s::jsonb where id=%s",
+                       (json.dumps({"proposal_card": task["id"]}), int(job.s["quote"]["card"])))
         notifications.notify(f"Creative proposal ready: {job.s['customer']}",
                              f"{job.s['deck']['pages']} pages, card #{task['id']}.", category="approval",
                              company_id=task.get("company_id"), target_type="task", target_id=str(task["id"]))
@@ -1081,6 +1084,9 @@ def revise(task: dict, text: str) -> bool:
                               status="awaiting_approval", attempts=(task.get("attempts") or 0) + 1)
             store.log_decision(task["id"], task["skill_id"], "owner", "correct", note=text,
                                snapshot={"version": job.s["deck"]["version"], "plan": plan})
+            if (job.s.get("quote") or {}).get("card"):
+                db.execute("update tasks set request = request || %s::jsonb where id=%s",
+                           (json.dumps({"proposal_card": task["id"]}), int(job.s["quote"]["card"])))
             try:   # an email already waiting with the old deck and quotation takes the new ones
                 from . import engine as _eng
                 _eng.refresh_proposal_email(task["id"])

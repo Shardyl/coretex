@@ -1832,6 +1832,15 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## ONE proposal flow: approve the proposal, approve the quotation, the email follows (25 Sep 2026)
+Owner: same process for creative and words-led proposals. Read the proposal, revise by reply, APPROVE it (words-led:
+this issues the quotation and restamps the deck; creative: the quotation already exists). The quotation card carries
+`request.proposal_card` and shows 'Approve quotation' (`web quotationCard`); APPROVE it. `engine._proposal_approved`
+and `_approve_quotation_card` are the two halves of the gate (`request.approved` on each card): when both are approved,
+in either order, `_draft_proposal_email` creates the email card with deck + quotation attached. No second approval on
+the proposal card any more; a stand-alone quotation card (Talk/prep) still just closes. A block on the email step
+now also raises a high-priority notification (both cards may already be closed).
+
 ## No duplicate replies: a firing promise reads the thread; a send re-judges pending drafts (24 Sep 2026)
 Card 898: commitment reminder 248 (send updated proposals) fired after Shehryar had written they were already in, and
 spawned an email repeating reply 895. Card 904: drafted from Farheen's message while our own answer (902) was still
