@@ -167,6 +167,29 @@ def _label(sec: dict) -> str:
     return h[:1].upper() + h[1:]
 
 
+def _person_in_beat(beat: dict, people: list) -> dict | None:
+    """The real, named person a beat features, when the client gave us photographs of them. Matched on any
+    part of the name appearing in the beat's own text, so "Al-Husary" finds "Mohammed Al-Husary"."""
+    hay = " ".join(str(beat.get(k) or "") for k in ("on_screen_text", "caption", "frame_prompt", "voiceover")).lower()
+    for p in people:
+        parts = [w for w in re.split(r"[\s,]+", str(p.get("name") or "")) if len(w) > 2]
+        if any(w.lower() in hay for w in parts):
+            return p
+    return None
+
+
+def _likeness_prefix(person: dict) -> str:
+    """Hold a REAL person's face. The opposite instruction to the architecture references: there we want new
+    people, here we want exactly this one. `look` is the client's own description of them, when we have it."""
+    look = (person.get("look") or "").strip()
+    return ("The attached photographs are of ONE SPECIFIC REAL PERSON, supplied by their own company for this "
+            f"film: {person['name']}. Reproduce THEIR face accurately and recognisably, the same person, the same "
+            "bone structure, the same hair and the same build"
+            + (f": {look}" if look else "")
+            + ". Do NOT substitute a different person and do NOT generalise the face. Hold the likeness exactly "
+              "and change only the setting, the light and the camera. ")
+
+
 def _rules(company: dict, *keys: str) -> str:
     out = []
     for k in keys:
@@ -429,15 +452,26 @@ class Job:
         use_ref = ("Use the attached reference photographs ONLY for the architecture, materials and setting of the "
                    "real place so it is recognisable; make a completely new photograph with new people, new light "
                    "and a new camera position. ")
+        # A REAL NAMED PERSON WE HAVE PHOTOGRAPHS OF IS NEVER A GENERIC FACE (owner, 25 Sep 2026). The UAS deck
+        # put an AI stranger under "Mohammed Al-Husary, Founder and Executive President" while the client's own
+        # photographs of him sat in the brief. When the client supplies pictures of someone who appears in the
+        # film, that beat is generated FROM those pictures and the likeness is held; only the setting, the light
+        # and the camera change. The architecture prefix above says the opposite, so it must never reach them.
+        people = [p for p in (self.s.get("people_refs") or []) if p.get("name") and p.get("refs")]
         frames = self.s.setdefault("frames", {})
         todo = only if only is not None else [b["n"] for b in sc["beats"]]
         jobs = []
         for b in sc["beats"]:
             if b["n"] not in todo:
                 continue
-            rp = [refs[i - 1] for i in (b.get("refs") or []) if isinstance(i, int) and 0 < i <= len(refs)][:3]
+            who = _person_in_beat(b, people)
+            if who:
+                rp, pre = who["refs"][:3], _likeness_prefix(who)
+            else:
+                rp = [refs[i - 1] for i in (b.get("refs") or []) if isinstance(i, int) and 0 < i <= len(refs)][:3]
+                pre = use_ref if rp else ""
             for v in "ab":
-                jobs.append((f"b{b['n']}_{v}", b["frame_prompt"] + look + bans, rp, "16:9", use_ref if rp else ""))
+                jobs.append((f"b{b['n']}_{v}", b["frame_prompt"] + look + bans, rp, "16:9", pre))
         if only is None:
             for i, t in enumerate(((sc.get("tiles") or {}).get("items") or [])[:8]):
                 jobs.append((f"t{i + 1}", "Vertical still from a phone selfie video, front camera, handheld, natural "
