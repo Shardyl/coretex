@@ -3616,7 +3616,12 @@ SKILL_TOOLS = [
                     "Rashad wants the same quotation again: a contact who was renamed or replaced (the contact "
                     "person is read from the CRM, so the new name prints by itself), a corrected deliverables "
                     "list, a fresh date. You pass no prices and no lines. Broken versions issued after the good "
-                    "one are withdrawn automatically. The new quotation lands in the Inbox as a card.",
+                    "one are withdrawn automatically. The new quotation lands in the Inbox as a card. "
+                    "ALSO the tool for 'the same quotation PLUS a change': add a block to an issued quotation "
+                    "(`add_sections`, lines with rate-card `components`, code prices them; a figure only if Rashad "
+                    "wrote it) and/or take a percentage off the whole (`discount_pct`, only a percentage Rashad "
+                    "stated; code computes and prints the discount line). Every stored line still copies exactly. "
+                    "A filmed block means preset 'shoot-production'.",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string", "description": "our business slug, e.g. sensa"},
         "number": {"type": "string", "description": "the quotation number, e.g. SEN-2026-0019"},
@@ -3624,6 +3629,23 @@ SKILL_TOOLS = [
         "contact_email": {"type": "string", "description": "only when the quotation should name a DIFFERENT CRM contact"},
         "deliverables": {"type": "array", "items": {"type": "string"},
                          "description": "only when Rashad asked to change the deliverables box: the full new list, in his words"},
+        "add_sections": {"type": "array", "description": "NEW blocks to add after the stored ones (lettered on by "
+                         "code). Each line: desc + rate-card components; code prices it. Nothing is issued if a "
+                         "line cannot be priced.",
+                         "items": {"type": "object", "properties": {
+                             "header": {"type": "string", "description": "block name, e.g. HALF-DAY SHOOT"},
+                             "items": {"type": "array", "items": {"type": "object", "properties": {
+                                 "desc": {"type": "string"},
+                                 "components": {"type": "array", "items": {"type": "object", "properties": {
+                                     "item": {"type": "string", "description": "the rate-card [key]"},
+                                     "qty": {"type": "number"}}, "required": ["item"]}},
+                                 "unit": {"type": "number", "description": "ONLY a figure Rashad wrote"},
+                                 "qty": {"type": "number"}}, "required": ["desc"]}}},
+                             "required": ["header", "items"]}},
+        "discount_pct": {"type": "number", "description": "a percentage off the whole quotation, ONLY one Rashad stated"},
+        "preset": {"type": "string", "description": "only to change the terms, e.g. 'shoot-production' once a shoot is added"},
+        "title": {"type": "string", "description": "only when the scope changed the document title"},
+        "note": {"type": "string", "description": "only to replace the line under the totals"},
         "deal_id": {"type": "integer"}},
         "required": ["company", "number"]}},
     {"name": "create_quotation",
@@ -3685,6 +3707,8 @@ SKILL_TOOLS = [
                          "description": "the DELIVERABLES bullets; omit to use the preset's"},
         "contact_email": {"type": "string", "description": "who the quotation is addressed to; "
                           "otherwise filled from the CRM"},
+        "discount_pct": {"type": "number", "description": "a percentage off the whole quotation, ONLY one "
+                         "Rashad stated; code computes and prints the discount line"},
         "deal_id": {"type": "integer", "description": "the opportunity this quotation belongs to"}},
         "required": ["company"]}},
     {"name": "list_scheduled",
@@ -4289,10 +4313,17 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             _row = db.one("select deal_id from tasks where kind='quotation' and request->>'number'=%s and "
                           "deal_id is not null order by id desc limit 1", (inp.get("number"),))
             _did = (_row or {}).get("deal_id")
+        _said_txt = _TURN_SAID.get() or ""
+        _disc = inp.get("discount_pct")
+        if _disc not in (None, "") and round(float(_disc), 2) not in engine._stated_numbers(_said_txt):
+            return f"NOT issued: a {_disc}% discount is not a figure you gave. Say the percentage and I will apply it."
         try:
             t = engine.reissue_quotation(_co["slug"], str(inp.get("number") or "").strip(),
                                          version=inp.get("version"), deliverables=inp.get("deliverables"),
-                                         contact_email=inp.get("contact_email"), deal_id=_did)
+                                         contact_email=inp.get("contact_email"), deal_id=_did,
+                                         add_sections=inp.get("add_sections"), discount_pct=_disc,
+                                         preset=inp.get("preset"), title=inp.get("title"), note=inp.get("note"),
+                                         said=_said_txt)
         except ValueError as _e:
             return str(_e)
         req = t.get("request") or {}
@@ -4341,7 +4372,10 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                                          note=inp.get("note"), contact_email=inp.get("contact_email"),
                                          number=inp.get("number"), deliverables=inp.get("deliverables"),
                                          fmt=inp.get("fmt") or "both",
-                                         deal_id=int(inp["deal_id"]) if inp.get("deal_id") else None)
+                                         deal_id=int(inp["deal_id"]) if inp.get("deal_id") else None,
+                                         discount_pct=(inp.get("discount_pct") if inp.get("discount_pct") not in
+                                                       (None, "") and round(float(inp["discount_pct"]), 2)
+                                                       in _said else None))
         except ValueError as _e:
             return str(_e)
         if inp.get("deal_id") and t.get("id"):

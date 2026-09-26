@@ -1720,6 +1720,7 @@ def _prep_quote_spec(task: dict, company: dict, text: str) -> dict:
         'figure, else null>, "qty": <number he stated, else 1>}]}], '
         '"deliverables": ["<short bullet>"], "note": "<one line for under the totals, or empty>", '
         '"total": <one overall figure ONLY if he gave a total instead of line prices, else null>, '
+        '"discount_pct": <a percentage off the whole ONLY if he stated one, else null>, '
         '"assumptions": ["<each default you chose that he did not state himself: for the OWNER only, it is '
         'never printed on the client document>"]}. '
         "RULES: you never price a line: list its rate-card components and code prices it; a figure he stated "
@@ -1757,6 +1758,8 @@ def _prep_quote_spec(task: dict, company: dict, text: str) -> dict:
             q = it.get("qty")
             if q not in (None, "", 1) and not ok(q):
                 it["qty"] = 1
+    if spec.get("discount_pct") not in (None, "") and not ok(spec["discount_pct"]):
+        spec["discount_pct"] = None         # only a percentage he wrote is ever applied
     if spec.get("total") not in (None, "") and not ok(spec["total"]):
         blanked.append("the overall total")
         spec["total"] = None
@@ -1788,7 +1791,7 @@ def _prep_build_quotation(task: dict, skill: dict, company: dict, text: str) -> 
                           total=spec.get("total"), sections=spec.get("sections") or None,
                           title=spec.get("title") or None, note=spec.get("note") or None,
                           contact_email=spec.get("contact_email"), deliverables=spec.get("deliverables") or None,
-                          deal_id=spec.get("deal_id"))
+                          deal_id=spec.get("deal_id"), discount_pct=spec.get("discount_pct"))
     did = spec.get("deal_id")
     if did and t:
         db.execute("update tasks set deal_id=%s where id=%s", (did, t["id"]))
@@ -6600,7 +6603,8 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
                       total: float | None = None, total_inclusive: bool = False, sections: list | None = None,
                       title: str | None = None, note: str | None = None, fmt: str = "both",
                       contact_email: str | None = None, number: str | None = None,
-                      deliverables: list | None = None, deal_id: int | None = None) -> dict:
+                      deliverables: list | None = None, deal_id: int | None = None,
+                      discount_pct: float | None = None) -> dict:
     """Render a quotation and drop it in the Inbox as a downloadable card (kind='quotation'). `fmt` = 'both'
     (default: editable .xlsx + ready-to-send .pdf), 'xlsx', or 'pdf'; both share one quote number. Delivery
     copies stored in R2 under <slug>/quotations/draft/. Prices come from the request (a stated total split by
@@ -6628,7 +6632,7 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
                 "deliverables list), use reissue_quotation: code copies the stored version exactly.")
     kw = dict(customer=customer, total=total, total_inclusive=total_inclusive, sections=sections,
               title=title, note=note, contact_email=contact_email, number=number,
-              deliverables=deliverables, out_dir=QUOTES_DIR)
+              deliverables=deliverables, out_dir=QUOTES_DIR, discount_pct=discount_pct)
     want_pdf = fmt in ("both", "pdf")
     want_xlsx = fmt in ("both", "xlsx")
     # The house-format .xlsx is the single source of truth; the PDF is that same sheet converted by
@@ -6728,7 +6732,10 @@ def _version_is_priced(entry: dict) -> bool:
 
 
 def reissue_quotation(company: str, number: str, *, version: int | None = None, deliverables: list | None = None,
-                      contact_email: str | None = None, deal_id: int | None = None) -> dict:
+                      contact_email: str | None = None, deal_id: int | None = None,
+                      add_sections: list | None = None, discount_pct: float | None = None,
+                      preset: str | None = None, title: str | None = None, note: str | None = None,
+                      said: str = "") -> dict:
     """THE SAME QUOTATION AGAIN, BY CODE (owner, 21 Sep 2026). Cloudlink's contact was renamed and he asked for
     the same quotation with the new name: Talk's only tool builds a quotation from scratch, its typed prices
     were blanked by the price guard, and five broken versions were issued. A reissue copies a STORED version's
@@ -6738,7 +6745,15 @@ def reissue_quotation(company: str, number: str, *, version: int | None = None, 
     deliverables list (the owner's words). Broken versions issued AFTER the chosen one (any blank line) are
     WITHDRAWN first: taken off the registry into `quote_versions_withdrawn:<number>` so the reissue takes
     the next real version, their library rows superseded (kept, never offered again), their Drive files
-    replaced or archived by the normal filing step. Returns the new quotation card."""
+    replaced or archived by the normal filing step. Returns the new quotation card.
+
+    THE SAME QUOTATION PLUS A CHANGE (owner, 26 Sep 2026: UAS SEN-2026-0026 v5 added a half-day shoot to the
+    issued AI film and took 10% off the whole). Every stored line still copies exactly; on top of it:
+    `add_sections` = new blocks whose lines carry rate-card `components` (priced here by `price_lines`) or a
+    `unit` the owner wrote (`said` = his words); a block that cannot be fully priced stops the reissue, nothing
+    is issued with a blank line. Headers are lettered on from the stored blocks. `discount_pct` = his
+    percentage, computed and printed by quotation.py as its own line. `preset`, `title` and `note` replace the
+    stored ones only when given (a filmed block moves the job onto the shoot terms)."""
     import copy as _copy
     key = f"quote_versions:{number}"
     reg = db.setting_get(key) or []
@@ -6764,12 +6779,31 @@ def reissue_quotation(company: str, number: str, *, version: int | None = None, 
         db.setting_set(f"quote_versions_withdrawn:{number}", gone)
         db.setting_set(key, reg[:idx + 1])
     sp = entry.get("spec") or {}
-    t = deliver_quotation(sp.get("company") or company, preset=sp.get("preset") or "ai-production",
-                          customer=sp.get("customer") or "", sections=_copy.deepcopy(sp.get("sections")),
-                          title=sp.get("title"), note=sp.get("note"),
+    sections = _copy.deepcopy(sp.get("sections") or [])
+    if add_sections:
+        from . import quotation as _q, ratecard as _rc
+        slug = sp.get("company") or company
+        add = _copy.deepcopy(add_sections)
+        res = _rc.price_lines(slug, add, allowed=_stated_numbers(said) | _rc.rates(slug))
+        blank = [str(i.get("desc") or "a line")[:60] for x in add for i in (x.get("items") or [])
+                 if i.get("unit") in (None, "")]
+        if res.get("blanked") or blank:
+            raise ValueError(f"NOT issued: the added block has no price for {'; '.join((res.get('blanked') or blank)[:4])}"
+                             + (f" (not on the rate card: {', '.join(res['missing'][:4])})" if res.get("missing") else "")
+                             + ". Use rate-card keys, or a figure the owner wrote.")
+        keep = [x for x in sections if not any(_q.is_discount(i) for i in (x.get("items") or []))]
+        disc = [x for x in sections if x not in keep]
+        for x in add:       # lettered on from the stored blocks: 'I ·  HALF-DAY SHOOT'
+            h = re.sub(r"^\s*[A-Z]\s*·\s*", "", str(x.get("header") or "ADDITIONAL")).strip().upper()
+            x["header"] = f"{chr(ord('A') + len(keep))} ·  {h}"
+            keep.append(x)
+        sections = keep + disc
+    t = deliver_quotation(sp.get("company") or company, preset=preset or sp.get("preset") or "ai-production",
+                          customer=sp.get("customer") or "", sections=sections,
+                          title=title or sp.get("title"), note=note if note is not None else sp.get("note"),
                           contact_email=contact_email or sp.get("contact_email"), number=number,
                           deliverables=deliverables or sp.get("deliverables"),
-                          deal_id=int(deal_id) if deal_id else None)
+                          deal_id=int(deal_id) if deal_id else None, discount_pct=discount_pct)
     if deal_id and t:
         db.execute("update tasks set deal_id=%s where id=%s", (int(deal_id), t["id"]))
     try:   # the broken versions' library rows: kept on record, never offered for an email again

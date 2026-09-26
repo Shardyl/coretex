@@ -2243,3 +2243,29 @@ none on the 15 second cinema film.
 STILL OPEN on the same deck: the contact sheet's subtitle is stamped in `creative.render` as title plus total
 duration ("The Weather Inside: 75 seconds"), so on a two-film job it reads as one long film and no feedback can
 move it. Same class as the "our work" page: the page is laid out by code, so the fix is code.
+
+## Discounts, "same quotation plus a change", and the start gate (26 Sep 2026)
+UAS (deal 138) confirmed the AI film, then asked for a half-day shoot (founder message + reference capture) and
+price flexibility, under a USD 10,000 ceiling. Owner: add the half-day shoot, no filming permits (a private
+shoot needs none), then 10% off the whole quotation.
+- DISCOUNT, BY CODE: `quotation._resolve(discount_pct=)` (threaded through `generate`, `generate_xlsx`,
+  `deliver_quotation`) computes the amount from the priced lines and appends it as its OWN negative line in a
+  `DISCOUNT` block (item carries `discount_pct`). Every reader of the stored version sums unit x qty, so the pro
+  forma (`proforma.net_of`), the creative deck's investment page (`quote_rows`) and the deal value all net it
+  with no discount logic of their own. A reissue that copies a discounted version carries the line as is; a
+  new percentage replaces it, recomputed from the undiscounted lines. ONLY A PERCENTAGE THE OWNER WROTE:
+  Talk guards it against `_TURN_SAID`, the prep card against `_stated_numbers` of his words.
+- `reissue_quotation(..., add_sections=, discount_pct=, preset=, title=, note=, said=)`: the stored lines copy
+  exactly; added blocks are priced by `ratecard.price_lines` (components, or a figure in `said`), lettered on
+  from the stored blocks, placed before the discount; any blank line refuses the reissue. Talk's
+  `reissue_quotation` tool exposes all of it (capabilities line updated).
+- START GATE is a RULE (owner, 26 Sep 2026), company-scope on Sensa sales-quotation, sales-proposal,
+  sales-first-response, email-handling, finance-quote-to-invoice, prod-pipeline, prod-packaging: no work starts
+  before a SIGNED quotation and the DEPOSIT; in a rush a bank transfer confirmation starts the storyboard, but
+  nothing (storyboard, frame, cut, any content) is DELIVERED until the deposit has CLEARED. Every production
+  timeline starts on that day. Cortex has no deposit ledger yet, so this is enforced by the rule and the
+  approval card, not by code.
+- PRODUCTION TIMELINE PAGE: prototyped for UAS as a scratch job (`/opt/coretex/creative/_draft-138-v6-timeline/tl.py`,
+  not repo code): a working-day template (storyboard v1, one round of notes, v2, sign-off, half-day shoot,
+  first cut, two rounds, final) dated by code from the start day, rendered as a Gantt page before Investment.
+  Pending owner feedback before it becomes a `CreativeDeck` method + per-proposal-type templates on sales-proposal.

@@ -138,7 +138,10 @@ CAPABILITIES: list[tuple[str, str]] = [
      "quotation again after a contact was renamed or replaced (the contact person prints from the CRM), or "
      "with a corrected deliverables list (pass the full new list in his words). NEVER rebuild such a "
      "quotation with create_quotation: typed prices are dropped and a new version of a priced quotation with "
-     "blank lines is refused. Broken versions issued after the good one are withdrawn by the reissue."),
+     "blank lines is refused. Broken versions issued after the good one are withdrawn by the reissue. "
+     "The same quotation PLUS a change: add_sections (a new block, rate-card components, priced by code) and/or "
+     "discount_pct (a percentage Rashad stated, printed as its own line by code); create_quotation takes "
+     "discount_pct too."),
     ("Quotations that match their proposal",
      "create_quotation: call rate_card first (it returns the card with item [keys] AND the house rules "
      "for laying out a quotation). Lines are BLOCKS by default, each naming what it includes, and each "

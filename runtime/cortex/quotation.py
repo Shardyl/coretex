@@ -295,12 +295,25 @@ def master_terms_ref(data: dict, net: float) -> dict | None:
             "label": base.replace(" - ", " ")}
 
 
+DISCOUNT_HEADER = "DISCOUNT"
+
+
+def is_discount(it: dict) -> bool:
+    return isinstance(it, dict) and it.get("discount_pct") not in (None, "")
+
+
 def _resolve(company: str, preset: str, *, customer: str, sections, total, total_inclusive, title, note,
-             agency_fee, terms, deliverables, number=None) -> dict:
+             agency_fee, terms, deliverables, number=None, discount_pct=None) -> dict:
     """Resolve house data + preset + priced line items into one model dict, stamping every figure in code.
 
     Pricing modes: `total` given -> "fair rates" split by per-item weight; `sections` with unit/qty ->
     explicit lines; neither -> blank skeleton. `total_inclusive` treats the stated figure as VAT-inclusive.
+
+    `discount_pct` (the owner's own percentage, 26 Sep 2026): CODE computes the amount from the priced lines
+    and prints it as its own negative line in a DISCOUNT block, so every reader of the stored version (the
+    pro forma, the deck's investment page, the deal value) nets it without knowing discounts exist. A
+    reissue that copies a discounted version carries the line as it stands; passing a new percentage
+    replaces it, recomputed from the undiscounted lines.
     """
     company = (company or "").lower()
     co = store.get_company_by_slug(company)
@@ -341,6 +354,9 @@ def _resolve(company: str, preset: str, *, customer: str, sections, total, total
         if note == pset.get("note"):
             note = "Fees shown are a breakdown of the agreed project total; VAT calculates on top."
     else:
+        if discount_pct not in (None, ""):      # a new percentage replaces any discount line already carried
+            sections[:] = [x for x in ([{**sec, "items": [i for i in sec.get("items", []) if not is_discount(i)]}
+                                        for sec in sections]) if x.get("items")]
         subtotal = 0.0
         for s in sections:
             for it in s.get("items", []):
@@ -352,6 +368,15 @@ def _resolve(company: str, preset: str, *, customer: str, sections, total, total
                 else:
                     it["_amount"] = float(unit) * float(qty)
                     subtotal += it["_amount"]
+        if discount_pct not in (None, "") and float(discount_pct) > 0:
+            pct = float(discount_pct)
+            if pct >= 100:
+                raise ValueError(f"a discount of {pct:g}% is not a discount")
+            off = round(subtotal * pct / 100, 2)
+            sections.append({"header": DISCOUNT_HEADER, "items": [
+                {"desc": f"Less {pct:g}% discount on the full quotation", "unit": -off, "qty": 1,
+                 "_amount": -off, "discount_pct": pct}]})
+            subtotal = round(subtotal - off, 2)
         fee = round(subtotal * 0.15, 2) if agency_fee else 0.0
     if not explicit_terms:
         _mt = master_terms_ref(data, subtotal)
@@ -393,13 +418,14 @@ def _return(m: dict, path: str) -> dict:
 def generate(company: str, preset: str = "ai-production", *, customer: str = "", sections: list | None = None,
              total: float | None = None, total_inclusive: bool = False, title: str | None = None,
              note: str | None = None, agency_fee: bool | None = None, terms: dict | None = None,
-             deliverables: list | None = None, number: str | None = None, out_dir: str = "/tmp") -> dict:
+             deliverables: list | None = None, number: str | None = None, out_dir: str = "/tmp",
+             discount_pct: float | None = None) -> dict:
     """Build the house-format quotation PDF for `company`. See `_resolve` for the pricing modes.
     Returns {path, number, title, summary, company, customer, total, currency, blanks, stated, preset}.
     """
     m = _resolve(company, preset, customer=customer, sections=sections, total=total,
                  total_inclusive=total_inclusive, title=title, note=note, agency_fee=agency_fee,
-                 terms=terms, deliverables=deliverables, number=number)
+                 terms=terms, deliverables=deliverables, number=number, discount_pct=discount_pct)
     company, co, data, title, note = m["company"], m["co"], m["data"], m["title"], m["note"]
     agency_fee, terms, deliverables = m["agency_fee"], m["terms"], m["deliverables"]
     cur, vat_rate, sections = m["cur"], m["vat_rate"], m["sections"]
@@ -669,7 +695,7 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
                   title: str | None = None, note: str | None = None, agency_fee: bool | None = None,
                   terms: dict | None = None, deliverables: list | None = None, number: str | None = None,
                   contact: dict | None = None, contact_email: str | None = None,
-                  payment_lines: list | None = None,
+                  payment_lines: list | None = None, discount_pct: float | None = None,
                   out_dir: str = "/tmp", wb=None, sheet_title: str | None = None) -> dict:
     """Build the quotation as the Sensa house-format .xlsx (single sheet, brand band, optional Deliverables
     block, line-item table with =IF(D="",...) auto-totals, payment + bank, acceptance, then Terms directly
@@ -689,7 +715,7 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
             raise ValueError(f"{number} is {_who}'s quotation; it cannot carry one for {customer}.")
     m = _resolve(company, preset, customer=customer, sections=sections, total=total,
                  total_inclusive=total_inclusive, title=title, note=note, agency_fee=agency_fee,
-                 terms=terms, deliverables=deliverables, number=number)
+                 terms=terms, deliverables=deliverables, number=number, discount_pct=discount_pct)
     hb = _house_bits(m)
     cur, vat_rate = m["cur"], m["vat_rate"]
     fee_on = m["agency_fee"]
