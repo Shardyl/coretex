@@ -6793,9 +6793,9 @@ def reissue_quotation(company: str, number: str, *, version: int | None = None, 
                              + ". Use rate-card keys, or a figure the owner wrote.")
         keep = [x for x in sections if not any(_q.is_discount(i) for i in (x.get("items") or []))]
         disc = [x for x in sections if x not in keep]
-        for x in add:       # lettered on from the stored blocks: 'I ·  HALF-DAY SHOOT'
+        for x in add:       # lettered on from the stored blocks: 'I · HALF-DAY SHOOT'
             h = re.sub(r"^\s*[A-Z]\s*·\s*", "", str(x.get("header") or "ADDITIONAL")).strip().upper()
-            x["header"] = f"{chr(ord('A') + len(keep))} ·  {h}"
+            x["header"] = f"{chr(ord('A') + len(keep))} · {h}"
             keep.append(x)
         sections = keep + disc
     t = deliver_quotation(sp.get("company") or company, preset=preset or sp.get("preset") or "ai-production",
