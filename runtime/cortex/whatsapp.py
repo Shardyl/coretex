@@ -345,10 +345,14 @@ def alert_owner(task_id: int) -> bool:
         send_buttons(to, body, buttons)
         return True
     except Exception as e:  # noqa: BLE001
+        # Out of the 24h window Meta refuses free-form text, so fall back to the approved template. Its two
+        # variables are the company and who wrote in; the draft itself cannot ride in a template, so the
+        # template is a doorbell: his reply reopens the window and the real buttoned alert follows.
         tmpl = db.setting_get("wa_alert_template")
         if tmpl:
             try:
-                send_template(to, tmpl, [str(task_id)])
+                send_template(to, tmpl, [co.get("name") or "Cortex",
+                                         str(req.get("recipient") or req.get("phone") or "a new number")])
                 return True
             except Exception:  # noqa: BLE001
                 pass
