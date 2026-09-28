@@ -1832,6 +1832,13 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## In-perpetuity terms variants (28 Sep 2026)
+Owner: keep a separate in-perpetuity version of the standard terms. `settings.quotation_presets` now also holds
+`shoot-production-perpetuity` and `ai-production-perpetuity` (`variant_of` = the base): same terms plus a usage clause
+granting a worldwide licence in perpetuity in all media (incl. material of the client's own staff and the AI-produced
+material), and the music clause aligned. First use: UAS SEN-2026-0026 v7 (v6 was retired: its quotation NOTE still
+said 'usage rights (standard): 12 months, GCC'; the note must be edited too). Standard presets unchanged.
+
 ## A price change re-stamps the pricing page only; prep cards never mint a new number (28 Sep 2026)
 MBK Marine: a 15% discount asked through Talk started a NEW creative run (new frames, a quotation re-priced at the rate
 card, SEN-2026-0028 v4 at 67,830) and an approved-as-is prep card built SEN-2026-0029. Now: `engine.restamp_proposal_price

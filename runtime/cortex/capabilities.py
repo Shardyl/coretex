@@ -126,6 +126,12 @@ CAPABILITIES: list[tuple[str, str]] = [
      "or replaces an unsent one (billed_to = legal name, address, TRN in his words). Approving a pro forma card "
      "drafts its email on the invoice-sending lane; that email is owner-only to send, and the payment follow-up "
      "clock starts when it goes. You never type an amount on any of this."),
+    ("In-perpetuity usage terms",
+     "Two term sets grant WORLDWIDE, IN-PERPETUITY usage in all media: presets shoot-production-perpetuity and "
+     "ai-production-perpetuity (identical to the standard ones except the usage clause). When Rashad agrees perpetual "
+     "rights, reissue the quotation with reissue_quotation(preset=...-perpetuity), and replace any '12 months / GCC' "
+     "usage sentence in the quotation note via note=, so the document never contradicts itself. The standard presets "
+     "stay the default."),
     ("Price changes on a proposal: re-stamp, never rebuild",
      "A discount, a new total or a removed line on a proposal is a QUOTATION change: issue it with reissue_quotation "
      "(discount_pct) or create_quotation on the proposal's number, and code re-stamps ONLY the deck's pricing page from "
