@@ -1639,8 +1639,9 @@ async function renderInbox(v){
   ib.outerHTML = shown.map(it=> it.card==='info'? infoCard(it) : actionCard(it)).join('');
   hydrateAttachments();   // fill in attachment thumbnails / filenames on the cards
   // surface any standing rule a correction inferred but that wasn't decided yet — persistent, not poll-dependent
-  shown.forEach(it=>{ if(it.card!=='info' && it.proposed_rule) proposeRule(it.id, it.proposed_rule, it.rule_skill, it.rule_company); });
-  renderPendingRules(new Set(shown.map(it=>it.id)));   // every un-decided proposal -> a taught rule can never be lost
+  const inSlot=new Set();
+  shown.forEach(it=>{ if(it.card!=='info' && it.proposed_rule && proposeRule(it.id, it.proposed_rule, it.rule_skill, it.rule_company)!==false) inSlot.add(it.id); });
+  renderPendingRules(inSlot);   // every un-decided proposal not shown on its own card -> the banner; never lost
 }
 async function renderPendingRules(skipIds){
   const el=document.getElementById('pendingRules'); if(!el || demo) return;
@@ -2286,7 +2287,7 @@ async function sendCorr(id){
   const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;
   try{ const r=await api(`/api/tasks/${id}/correct`,{method:'POST',body:JSON.stringify({text})});
     if(card) card.style.opacity=1;
-    if(r&&r.proposed_rule){ toast('Redrafted — one quick thing'); proposeRule(id,r.proposed_rule,r.skill_name,r.company); }
+    if(r&&r.proposed_rule){ toast('Redrafted — one quick thing'); if(proposeRule(id,r.proposed_rule,r.skill_name,r.company)===false) renderPendingRules(); }
     else { toast('Redrafted ✓'); render(); pollRule(id,0); }   // rule offer (if any) lands shortly, off the critical path
   }
   catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
@@ -2297,13 +2298,13 @@ function pollRule(id, tries){
   setTimeout(async()=>{
     let got=false;
     try{ const r=await api(`/api/tasks/${id}/pending-rule`);
-      if(r&&r.proposed_rule){ got=true; proposeRule(id,r.proposed_rule,r.skill_name,r.company); }
+      if(r&&r.proposed_rule){ got=true; if(proposeRule(id,r.proposed_rule,r.skill_name,r.company)===false) renderPendingRules(); }
     }catch(e){}
     if(!got) pollRule(id,tries+1);   // keep polling through transient errors; the rule lands a few seconds later
   }, 2500);
 }
 function proposeRule(id, rule, skillName, co){
-  const p=document.getElementById('cp'+id); if(!p){ render(); return; }
+  const p=document.getElementById('cp'+id); if(!p){ return false; }   // no slot on this card: the banner shows it
   p.style.display='block';
   p.innerHTML=`<div class="meta" style="margin:1px 0 7px">${ic('check',13)} I read that as a standing rule for ${esc(skillName||'this skill')}. Where should it live?</div>
     <div style="background:var(--bg2,#0e1620);border:1px solid #2563EB66;border-radius:11px;padding:10px 12px;font-size:14px;color:var(--fg,#dfe7ef);margin-bottom:10px">${esc(rule)}</div>
