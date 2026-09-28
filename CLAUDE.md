@@ -1832,6 +1832,16 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## A price change re-stamps the pricing page only; prep cards never mint a new number (28 Sep 2026)
+MBK Marine: a 15% discount asked through Talk started a NEW creative run (new frames, a quotation re-priced at the rate
+card, SEN-2026-0028 v4 at 67,830) and an approved-as-is prep card built SEN-2026-0029. Now: `engine.restamp_proposal_price
+(deal_id, number, quote_card)` runs whenever Talk's reissue_quotation / create_quotation or a prep build issues a
+quotation on a deal whose proposal carries that number: creative decks -> `creative.adopt_quotation` (copy + render +
+file from the live registry version, no concept/script/frames/quote stage); words-led -> re-render with
+`deck.investment_from_quotation`. The proposal card returns for approval. Talk `create_creative_proposal` refuses a
+second run on a deal that has one unless `fresh=true`. A quotation prep card closes itself when a quotation was issued on
+its deal after it was made, and `_prep_build_quotation` versions the deal's number (`_deal_quote_number`).
+
 ## A chase is gated on the thread; a contact's reply finds its deal by thread (28 Sep 2026)
 Card 964 asked MAH Gold how the final video was looking, two weeks after Mai signed it off. Two causes: MAH Gold has
 four open deals, so her reply (filed only when `len(deals)==1`) went on none; and the follow-up clock drafts a

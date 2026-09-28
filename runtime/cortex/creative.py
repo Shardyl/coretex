@@ -957,6 +957,42 @@ def _next_version(customer: str, number: str | None, deal_id: int) -> int:
     return (max(vs) if vs else (1 if names else 0)) + 1
 
 
+def adopt_quotation(task_id: int, number: str, quote_card: int | None = None) -> dict | None:
+    """A PRICE CHANGE ONLY RE-STAMPS THE PRICING (owner, 28 Sep 2026: a 15% discount on MBK Marine started a brand-new
+    run, new storyboard frames and a re-priced quotation, "I'm paying for credits on that"). The deck's investment page
+    is read back from the LIVE version of its quotation number; the copy is refreshed for wording that mentions the
+    investment; no concept, script, frames or quotation stage runs. Filed as the next deck version on the same card."""
+    t = store.get_task(int(task_id))
+    if not t or not (t.get("request") or {}).get("job"):
+        return None
+    job = Job(t["request"]["job"])
+    reg = db.setting_get(f"quote_versions:{number}") or []
+    if not reg:
+        return None
+    live = reg[-1]
+    qc = quote_card or (db.one("select id from tasks where kind='quotation' and request->>'number'=%s and status in "
+                               "('awaiting_approval','done') order by id desc limit 1", (number,)) or {}).get("id")
+    qrow = store.get_task(int(qc)) if qc else None
+    job.s["quote"] = {**(job.s.get("quote") or {}), "spec": live.get("spec") or {}, "number": number, "card": qc,
+                      "version": int(live.get("v") or 1), "summary": ((qrow or {}).get("request") or {}).get("summary"),
+                      "blanked": [], "missing": [], "target": None, "scaled": None}
+    job.stage_copy(feedback=f"The quotation is now {number} v{live.get('v')}. Keep every page as it is; only wording "
+                            "that refers to the investment may change.")
+    job.stage_render(int(job.s["deck"]["version"]) + 1)
+    job.stage_file(t)
+    job.save()
+    r = dict(t["request"])
+    r.update({"title": job.s["deck"]["name"], "file": job.s["deck"]["path"], "version": job.s["deck"]["version"],
+              "quotation_number": number, "attach_docs": [job.s["filed"]["doc"]]})
+    r.pop("approved", None)      # a re-priced deck is approved again, in the normal flow
+    store.update_task(t["id"], request=r, title=job.s["deck"]["name"], status="awaiting_approval",
+                      draft=job.summary(changed=f"Pricing page updated to quotation {number} v{live.get('v')}."))
+    if qc:
+        db.execute("update tasks set request = request || %s::jsonb where id=%s",
+                   (json.dumps({"proposal_card": t["id"]}), int(qc)))
+    return {"deck": job.s["deck"]["name"], "card": t["id"]}
+
+
 def start(company_slug: str, deal_id: int, *, direction: str = "", said: str = "", dry: bool = False,
           background: bool = True) -> dict:
     """Talk's entry point: a review card (status drafting) and the run on its own thread."""

@@ -126,6 +126,11 @@ CAPABILITIES: list[tuple[str, str]] = [
      "or replaces an unsent one (billed_to = legal name, address, TRN in his words). Approving a pro forma card "
      "drafts its email on the invoice-sending lane; that email is owner-only to send, and the payment follow-up "
      "clock starts when it goes. You never type an amount on any of this."),
+    ("Price changes on a proposal: re-stamp, never rebuild",
+     "A discount, a new total or a removed line on a proposal is a QUOTATION change: issue it with reissue_quotation "
+     "(discount_pct) or create_quotation on the proposal's number, and code re-stamps ONLY the deck's pricing page from "
+     "the new version (no new images, concept or copy), returning the proposal card for approval. Never run "
+     "create_creative_proposal or create_proposal again for a price change: it rebuilds everything and costs credits."),
     ("Opportunity context: note_opportunity",
      "A fact about a specific deal (who decides, roles, dates, budget signals, preferences, what was agreed) is kept "
      "with note_opportunity(deal_id or search, note): it goes on the deal's timeline as a context entry and rides "

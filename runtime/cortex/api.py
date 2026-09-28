@@ -3500,7 +3500,9 @@ SKILL_TOOLS = [
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"},
         "deal_id": {"type": "integer", "description": "the opportunity it is for"},
-        "direction": {"type": "string", "description": "Rashad's direction, in his words"}},
+        "direction": {"type": "string", "description": "Rashad's direction, in his words"},
+        "fresh": {"type": "boolean", "description": "true ONLY when Rashad explicitly asks for a brand-new concept on a "
+                                                    "deal that already has a creative proposal"}},
       "required": ["company", "deal_id"]}},
     {"name": "rate_card",
      "description": "Read a company's RATE CARD: the owner-approved per-unit prices every quotation is built "
@@ -4021,6 +4023,15 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
     if name == "create_creative_proposal":
         _filed = _file_turn_files_on_deal(inp)   # a brief attached in this turn joins the deal record first
         from . import creative
+        _ex = db.one("select id, request->>'quotation_number' q from tasks where deal_id=%s and request->>'kind'="
+                     "'creative_proposal' and status not in ('rejected','cancelled') order by id desc limit 1",
+                     (int(inp["deal_id"]),))
+        if _ex and not inp.get("fresh"):
+            return (f"This deal already has a creative proposal: card #{_ex['id']}. A NEW run makes new images and costs "
+                    "credits, so do not start one. A PRICE change (a discount, a new total, a removed line): issue the "
+                    f"quotation with reissue_quotation or create_quotation on {_ex.get('q') or 'its number'} and the deck's "
+                    "pricing page is re-stamped automatically. Any other change: correct_task on that card revises only "
+                    "the parts it touches. Only if Rashad explicitly asks for a brand-new concept, call again with fresh=true.")
         try:
             r = creative.start(inp.get("company") or "sensa", int(inp["deal_id"]),
                                direction=inp.get("direction", ""), said=_TURN_SAID.get())
@@ -4327,10 +4338,13 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         except ValueError as _e:
             return str(_e)
         req = t.get("request") or {}
+        _rp = engine.restamp_proposal_price(_did, req.get("number"), t.get("id"))
         return (f"reissued quotation {req.get('number')} by copying the stored version exactly: task #{t['id']} in "
                 f"the Inbox. {req.get('summary', '')} The PDF is in the library as "
                 f"'{((req.get('attach_docs') or [{}])[0]).get('filename', '')}'"
-                + (f", on opportunity #{_did}." if _did else "."))
+                + (f", on opportunity #{_did}." if _did else ".")
+                + (f" The proposal on card #{_rp} is having ONLY its pricing page re-stamped with these figures (no new "
+                   "images or copy): tell Rashad it will be back in his Inbox shortly. Do NOT start a new proposal." if _rp else ""))
     if name == "create_quotation":
         slug = inp.get("company")
         _co = store.get_company_by_slug(slug) if slug else None
@@ -4388,6 +4402,10 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                 _notes.append("left BLANK, no approved price: " + "; ".join(_priced["blanked"][:8])
                               + (f" (not on the rate card: {', '.join(sorted(set(_priced['missing'])))})"
                                  if _priced.get("missing") else ""))
+        _rp = engine.restamp_proposal_price(inp.get("deal_id"), req.get("number"), t.get("id")) if inp.get("deal_id") else None
+        if _rp:
+            _notes.append(f"the proposal on card #{_rp} is having only its pricing page re-stamped with these figures; do NOT "
+                          "start a new proposal")
         return (f"created quotation {req.get('number')} — it's in your Inbox now to download (task #{t['id']}). "
                 f"{req.get('summary', '')}"
                 + (" Both documents are on the card." if req.get("master_terms") else "")

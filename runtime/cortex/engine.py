@@ -1291,6 +1291,18 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
     # standing rules define them; ANSWERED, the correction path builds it from his words. Either way the
     # result is a quotation card for him to review: nothing is sent.
     if _is_quotation_prep(task):
+        # OVERTAKEN PREP CLOSES ITSELF (28 Sep 2026): prep card 951 (a discounted revision for MBK Marine) was approved
+        # after Talk had already issued that revision, and built SEN-2026-0029 from its defaults under a NEW number.
+        _did0 = (task.get("request") or {}).get("deal_id") or task.get("deal_id")
+        _since = db.one("select id, request->>'number' n from tasks where kind='quotation' and deal_id=%s and "
+                        "created_at > %s and status not in ('rejected','cancelled') order by id desc limit 1",
+                        (_did0, task.get("created_at"))) if _did0 else None
+        if _since:
+            store.update_task(task["id"], status="done",
+                              draft=(task.get("draft") or "") + f"\n\nAlready handled: quotation {_since['n']} was issued "
+                                                               f"on card #{_since['id']} after this card was made.")
+            return {"approved": True, "note": f"Already handled: quotation {_since['n']} (card #{_since['id']}) was issued "
+                                              "since this prep card was made, so nothing new was built."}
         text = ("APPROVED AS-IS: the owner approved this prep card without answering its questions. Build the "
                 "quotation from the card's own defaults, exactly as the quotation skill's standing rules "
                 "define them.\n\nTHE PREP CARD HE APPROVED:\n" + (task.get("draft") or ""))
@@ -1791,8 +1803,11 @@ def _prep_build_quotation(task: dict, skill: dict, company: dict, text: str) -> 
                           total=spec.get("total"), sections=spec.get("sections") or None,
                           title=spec.get("title") or None, note=spec.get("note") or None,
                           contact_email=spec.get("contact_email"), deliverables=spec.get("deliverables") or None,
-                          deal_id=spec.get("deal_id"), discount_pct=spec.get("discount_pct"))
+                          deal_id=spec.get("deal_id"), discount_pct=spec.get("discount_pct"),
+                          number=_deal_quote_number(spec.get("deal_id"), spec.get("customer")))
     did = spec.get("deal_id")
+    if did and t:   # the proposal on that number re-stamps its pricing page (no other page rebuilt)
+        restamp_proposal_price(did, ((t.get("request") or {}).get("number")), t.get("id"))
     if did and t:
         db.execute("update tasks set deal_id=%s where id=%s", (did, t["id"]))
     rq = (t or {}).get("request") or {}
@@ -6161,6 +6176,73 @@ def deliver_proposal(company: str, *, customer: str = "", brief: str = "", quota
     return {"path": out["path"], "pages": out["pages"], "films": out["films"], "doc_id": doc["id"],
             "filed_to": filed, "task_id": (t or {}).get("id"), "filename": name,
             "read_deal_chars": len(facts)}
+
+
+def _deal_quote_number(deal_id, customer: str | None) -> str | None:
+    """The deal's live quotation number (same client): a new quotation on the deal is its next VERSION, never a new
+    number (MBK Marine got SEN-2026-0029 beside SEN-2026-0028 on 28 Sep 2026)."""
+    if not deal_id:
+        return None
+    r = db.one("select request->>'number' n, request->>'customer' c from tasks where kind='quotation' and deal_id=%s and "
+               "request->>'number' is not null and status not in ('rejected','cancelled') order by id desc limit 1",
+               (int(deal_id),))
+    return r["n"] if r and (r.get("c") or "").strip().lower() == (customer or "").strip().lower() else None
+
+
+def restamp_proposal_price(deal_id, number: str, quote_card: int | None = None) -> int | None:
+    """The proposal on this deal that carries `number` gets its pricing page re-stamped from the live version, off
+    the request path. Creative decks: creative.adopt_quotation (no new images). Words-led decks: the spec is
+    re-rendered with deck.investment_from_quotation. Returns the proposal card id, or None."""
+    if not deal_id or not number:
+        return None
+    p = db.one("select * from tasks where deal_id=%s and request->>'kind' in ('creative_proposal','proposal') and "
+               "request->>'quotation_number'=%s and status not in ('rejected','cancelled') order by id desc limit 1",
+               (int(deal_id), number))
+    if not p:
+        return None
+
+    def _go():
+        try:
+            if (p.get("request") or {}).get("kind") == "creative_proposal":
+                from . import creative
+                creative.adopt_quotation(p["id"], number, quote_card)
+                return
+            co = store.get_company(p["company_id"]) or {}
+            req = dict(p.get("request") or {})
+            spec = dict(req.get("deck_spec") or {})
+            qf = _quotation_facts(number)
+            if not (spec and qf):
+                return
+            stamped = deck.investment_from_quotation(qf)
+            spec["investment"] = {**(spec.get("investment") or {}), "rows": stamped["rows"], "headline": stamped["headline"],
+                                  "blurb": ""}
+            ver = int(req.get("version") or 1) + 1
+            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            out = deck.render(co, req.get("customer") or co.get("name"), spec, label=req.get("label"), out_dir=QUOTES_DIR,
+                              filename=f"proposal-{co.get('slug')}-{stamp}-{secrets.token_hex(3)}-v{ver}.pdf",
+                              cover_path=req.get("cover"))
+            name = _proposal_name(req.get("customer") or co.get("name"), number, ver, stamp)
+            old_ids = [d.get("id") for d in (req.get("attach_docs") or []) if d.get("id")]
+            doc, _filed = _file_proposal_pdf(co, req.get("customer") or co.get("name"), name, out["path"], deal_id,
+                                             number, supersede=old_ids)
+            req.update({"deck_spec": spec, "version": ver, "title": name, "file": out["path"],
+                        "attach_docs": [{"id": doc["id"], "filename": doc["filename"], "mime": doc["mime"], "size": doc["size"]}]})
+            req.pop("approved", None)
+            store.update_task(p["id"], request=req, title=name, status="awaiting_approval",
+                              draft=(p.get("draft") or "").split("\n\nPricing page updated")[0]
+                              + f"\n\nPricing page updated to quotation {number} ({stamped['headline']}).")
+            if quote_card:
+                db.execute("update tasks set request = request || %s::jsonb where id=%s",
+                           (json.dumps({"proposal_card": p["id"]}), int(quote_card)))
+        except Exception as _e:  # noqa: BLE001
+            print(f"[restamp] {type(_e).__name__}: {_e}", flush=True)
+    threading.Thread(target=_go, daemon=True).start()
+    try:
+        pipeline.log_deal(int(deal_id), "note", f"Quotation {number} changed outside the proposal: pricing page of card "
+                                                f"{p['id']} re-stamped from it (no other page rebuilt).")
+    except Exception:  # noqa: BLE001
+        pass
+    return p["id"]
 
 
 def _quotation_facts(number: str | None) -> dict | None:
