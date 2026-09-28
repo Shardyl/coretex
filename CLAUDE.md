@@ -1832,6 +1832,15 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## A chase is gated on the thread; a contact's reply finds its deal by thread (28 Sep 2026)
+Card 964 asked MAH Gold how the final video was looking, two weeks after Mai signed it off. Two causes: MAH Gold has
+four open deals, so her reply (filed only when `len(deals)==1`) went on none; and the follow-up clock drafts a
+check-in without asking the thread whether one makes sense. Now `_deal_for_thread(e, deals)` files an inbound on the
+deal whose cards carried that Gmail thread (else the one timeline with the same subject); and `_spawn_followup_card`
+runs a Haiku `chase-gate` on the newest messages + `deal_context` before drafting: signed off / already covered / on
+hold / waiting on their date -> no card, a note on the deal, the step not counted; a sign-off on won work also pauses
+the cadence and tells the owner to move it to Final Payment or Completed. When unsure, it drafts as before.
+
 ## An inbound holds our scheduled email (25 Sep 2026)
 A scheduled email fired as written even when the person had just written to us. Now `engine._hold_scheduled_emails`
 (called from the direct-email poll beside `_pause_or_reschedule_followups`) pulls every email card scheduled to that

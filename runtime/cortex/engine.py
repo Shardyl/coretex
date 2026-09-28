@@ -3996,6 +3996,37 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
                 priority="high", category="lead", company_id=co.get("id"), target_type="deal",
                 target_id=opp["id"], dedup_key=f"spoke-last:{opp['id']}:{gmail.mail_ref(last)}")
             return
+        # IS A CHASE WARRANTED AT ALL? (owner, 28 Sep 2026: card 964 asked MAH Gold "how the final video is looking"
+        # two weeks after Mai signed it off.) The clock decides WHEN, the thread decides WHETHER: Haiku reads the
+        # newest messages and the deal's timeline; signed off, already answered, on hold or waiting on a date they
+        # gave means no card. A sign-off on won work stops the cadence and tells the owner the next step.
+        try:
+            _recent = "\n---\n".join(
+                f"[{x.get('date') or ''} | from {x.get('email') or x.get('from') or ''}] "
+                + re.sub(r"\s+", " ", x.get("body") or x.get("snippet") or "")[:900] for x in (msgs or [])[:6])
+            _tl = (pipeline.deal_context(int(opp["id"]), limit=12) or "")[:3000]
+            _g = provider.think_json(
+                f"A scheduled {label} is due on the deal '{opp['title']}' (stage {stage}). Read the newest messages and "
+                "the deal record. Should we send it? No when: the client has SIGNED OFF or approved the final work; our "
+                "last email already covers it; they put it on hold or gave a date they will come back by; they asked us "
+                "for nothing and nothing is outstanding. "
+                'Return {"send": true|false, "signed_off": true|false, "why": "<one line>"}. When unsure, send.',
+                f"NEWEST MESSAGES (newest first):\n{_recent or '(none)'}\n\n{_tl}",
+                model=provider.MODEL_ROUTER, purpose="chase-gate", company=co.get("slug"))
+            if isinstance(_g, dict) and _g.get("send") is False:
+                db.execute("update crm_projects set followup_step=%s where id=%s",
+                           (opp.get("followup_step") or 0, opp["id"]))      # the chase that did not fire is not counted
+                pipeline.log_deal(int(opp["id"]), "note", f"No {label} drafted: {_g.get('why') or 'not warranted'}.")
+                if _g.get("signed_off") and stage in crm.WON_STAGES:
+                    crm.pause_followups(opp["id"])
+                    notifications.notify(
+                        f"{opp['title']}: signed off, check-ins stopped",
+                        f"{_g.get('why') or 'The client signed off the work.'} Move the project to Final Payment if a balance "
+                        "is outstanding, or to Completed.", priority="normal", category="lead", company_id=co.get("id"),
+                        target_type="deal", target_id=str(opp["id"]), dedup_key=f"signed-off:{opp['id']}")
+                return
+        except Exception as _ge:  # noqa: BLE001 - on any doubt the chase is drafted as before
+            print(f"[chase-gate] {type(_ge).__name__}: {_ge}", flush=True)
         thread = _deal_thread_context(co, email, msgs=msgs)
         if thread:
             brief += ("\nRECENT CORRESPONDENCE with them (newest first — reference it, stay consistent "
@@ -4976,6 +5007,33 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
     return req
 
 
+def _deal_for_thread(e: dict, deals: list) -> dict | None:
+    """ONE CONTACT, SEVERAL DEALS: the email belongs to the deal its thread was answered on (24 Sep 2026: Mai at MAH
+    Gold signed off the final video on the 'LBMA final revised' thread, but MAH Gold has four open deals, so the
+    reply was filed on none and the production deal went on sending check-ins). The deal whose own cards carried
+    this Gmail thread wins; else the deal whose timeline carries the same subject; else none."""
+    try:
+        ids = [int(d["id"]) for d in (deals or []) if d.get("id")]
+        if not ids:
+            return None
+        tid = (e.get("thread_id") or "").strip()
+        if tid:
+            r = db.one("select deal_id from tasks where deal_id = any(%s) and request->'thread'->>'id'=%s "
+                       "order by id desc limit 1", (ids, tid))
+            if r and r.get("deal_id"):
+                return next((d for d in deals if int(d["id"]) == int(r["deal_id"])), None)
+        subj = re.sub(r"^(?:(?:re|fwd?|aw)\s*:\s*)+", "", (e.get("subject") or ""), flags=re.I).strip().lower()
+        if len(subj) > 6:
+            hits = [d for d in deals if db.one(
+                "select 1 from crm_projects p, jsonb_array_elements(p.history) ev where p.id=%s and "
+                "ev->>'event' like 'email_%%' and lower(ev->>'text') like %s limit 1", (int(d["id"]), f"%{subj[:80]}%"))]
+            if len(hits) == 1:
+                return hits[0]
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
 def _hold_scheduled_emails(company_id: int, sender: str, deal_ids: list, why: str) -> list:
     """AN INBOUND PULLS OUR SCHEDULED EMAIL OFF THE CLOCK (owner, 25 Sep 2026). A scheduled email used to fire as
     written even when the person had just written to us, and the new reply repeated it. Every email card scheduled
@@ -5103,7 +5161,7 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
             r"customer[-._]?care|billing|statements?)($|[.+_-])", local)
         if robot and not deals:
             return
-        deal = deals[0] if len(deals) == 1 else None   # attach a deal_id only when it is unambiguous
+        deal = deals[0] if len(deals) == 1 else _deal_for_thread(e, deals)   # unambiguous, or by its thread
         _pause_or_reschedule_followups(co, deals, sender, body, ref=gmail.mail_ref(e))
         _hold_scheduled_emails(co["id"], sender, [d["id"] for d in (deals or [])],
                                f"{sender} wrote to us at {datetime.now(_GST):%H:%M} ({(e.get('subject') or '')[:60]})")
