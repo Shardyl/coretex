@@ -733,6 +733,30 @@ Meta retries non-200s and disables webhooks that keep failing.
   number where a name would go, and the real name is learned from the conversation.
 - App must be **published** before Meta delivers production webhooks; unpublished apps get test events only.
 
+**APPROVED FROM WHATSAPP (owner, 28 Sep 2026).** A wa_reply card is pushed to Rashad's own WhatsApp
+(`whatsapp.alert_owner`) with Approve / Edit / Skip buttons. His replies are a CONTROL CHANNEL, never an
+enquiry: `ingest_cloud` checks `is_owner(phone)` (last 9 digits) before anything else, so a button tap or a
+voice note from him is never triaged, CRM-captured or answered.
+- **Edit** accepts typed text OR a voice note (transcribed by `voice.transcribe`, the same Deepgram path as
+  the cockpit mic, factored out of `api.py` so the two cannot drift). It is an INSTRUCTION, not verbatim
+  text: it runs `engine.apply_correction`, which redrafts AND feeds the standing-rule inference, so teaching
+  from the phone is the same act as teaching from the cockpit.
+- **The biometric exemption is ONE KIND WIDE.** `engine.approve_wa_reply` refuses anything that is not a
+  `wa_reply`. Every other outward kind still takes the step-up. Widening it has to be a deliberate edit
+  there, never a side effect of reusing the entry point. WhatsApp's own sender verification is what stands
+  in for the step-up.
+- His number: setting `wa_owner_number` (falls back to `WHATSAPP_OWNER_NUMBER`), so it changes without a
+  deploy. Out-of-window alerts fall back to the template named in setting `wa_alert_template` if one is set;
+  with none, the alert fails soft and the Inbox card remains the record.
+- Spam and other no-reply messages raise the FYI card only — they never interrupt him on WhatsApp.
+
+**BOTH SITES POINT AT THE SAME NUMBER, so the MESSAGE carries the brand (28 Sep 2026).** sensa.digital and
+skyvision.film both link `wa.me/447772480414`. Each theme has a `wp_footer` hook (`sensa_wa_lead_source` /
+`skyvision_wa_lead_source`) that appends a 5-character click reference to every WhatsApp link's pre-filled
+text and beacons the Google Ads click detail to `/api/lp/click`; a link with no pre-filled text gets one
+naming the brand. `lptrack.from_message` decodes it. The hook is guarded to run once per page: the two Sensa
+landing pages' inline copies were REMOVED when it went site-wide, because two copies double-append the ref.
+
 ## LinkedIn outreach engine (harvest + warm-ladder + connect)
 
 Runs on the office boxes (Patchright runners, code scp-synced NOT git-deployed; brain in

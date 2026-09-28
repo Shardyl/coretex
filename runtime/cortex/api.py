@@ -35,7 +35,7 @@ from pydantic import BaseModel
 
 from . import (newsletter, anchor_score, capabilities, catalog, config, contentqueue, crm, db, deck, documents, engine, fitness, gmail, knowledge, meetingprep, nurture, pipeline,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
-               skillqa, social, social_comments, social_config, social_connect, social_dm, social_warm, store, webauthn_auth, whatsapp,
+               skillqa, social, social_comments, social_config, social_connect, social_dm, social_warm, store, voice, webauthn_auth, whatsapp,
                worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
@@ -3095,42 +3095,16 @@ def newsletter_auto_set(body: AutoToggle, _: None = Depends(auth)) -> dict:
 # Brand vocabulary — Deepgram keyterm-boosts these so dictation hears them right, and a backstop normaliser
 # rewrites the common mishearings (e.g. "Sensor Productions" -> "Sensa Productions") on EVERY transcript, so a
 # misheard name never reaches a draft, a Talk turn, or a taught rule.
-_STT_KEYTERMS = ["Sensa", "Sensa Productions", "Sensa Studio", "Tabscanner", "Snap Rewards", "SkyVision",
-                 "FilmSpoke", "Cortex"]
-_BRAND_FIXES = [
-    (re.compile(r"\b[cs]ensor\s+doc\s+digital\b", re.I), "Sensa Digital"),
-    (re.compile(r"\b[cs]ensor\s+productions\b", re.I), "Sensa Productions"),
-    (re.compile(r"\b[cs]ensor\s+studio\b", re.I), "Sensa Studio"),
-    (re.compile(r"\b[cs]ensor[\s.]+digital\b", re.I), "Sensa Digital"),
-    (re.compile(r"\btab\s+scanner\b", re.I), "Tabscanner"),
-    (re.compile(r"\bfilm\s+spoke\b", re.I), "FilmSpoke"),
-]
-
-
-def normalize_brand_names(text: str) -> str:
-    """Fix the common speech-to-text mishearings of the company/product names."""
-    for rx, repl in _BRAND_FIXES:
-        text = rx.sub(repl, text or "")
-    return text
+# Speech-to-text lives in voice.py so the cockpit mic and WhatsApp voice notes cannot drift apart.
+# Aliased here because existing call sites (and the realtime endpoint) still reference these names.
+_STT_KEYTERMS = voice.STT_KEYTERMS
+normalize_brand_names = voice.normalize_brand_names
 
 
 @app.post("/api/voice/stt")
 def stt(audio: UploadFile = File(...), _: None = Depends(auth)) -> dict:
     """Transcribe a recorded audio clip -> text (Deepgram Nova-3): keyterm-boosted + brand-name-normalised."""
-    key = config.require("DEEPGRAM_API_KEY")
-    data = audio.file.read()
-    ct = audio.content_type or "audio/webm"
-    params = [("model", "nova-3"), ("smart_format", "true"), ("punctuate", "true")]
-    params += [("keyterm", k) for k in _STT_KEYTERMS]
-    r = httpx.post("https://api.deepgram.com/v1/listen", params=params,
-                   headers={"Authorization": f"Token {key}", "Content-Type": ct}, content=data, timeout=60)
-    r.raise_for_status()
-    j = r.json()
-    try:
-        text = j["results"]["channels"][0]["alternatives"][0]["transcript"]
-    except (KeyError, IndexError):
-        text = ""
-    return {"text": normalize_brand_names(text)}
+    return {"text": voice.transcribe(audio.file.read(), audio.content_type or "audio/webm")}
 
 
 class Speak(BaseModel):

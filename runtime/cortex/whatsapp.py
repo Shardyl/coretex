@@ -139,6 +139,10 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
         **({"lead_source": src} if src else {})})
     if draft:
         store.update_task(task["id"], draft=draft, status="awaiting_approval")
+        try:      # push it to his own WhatsApp so a chat can be answered at chat speed
+            alert_owner(task["id"])
+        except Exception:  # noqa: BLE001 — the Inbox card is the record; a failed alert never loses it
+            pass
     return "drafted"
 
 
@@ -194,11 +198,26 @@ def ingest_cloud(payload: dict, account: str = "sensa-uk") -> dict:
             names = {c.get("wa_id"): ((c.get("profile") or {}).get("name") or "")
                      for c in (value.get("contacts") or [])}
             for m in value.get("messages") or []:
-                if m.get("type") != "text":       # media/audio/location: capture later, never guess at text
-                    continue
                 phone = _clean_phone(m.get("from") or "")
+                if not phone:
+                    continue
+                # THE OWNER'S OWN MESSAGES ARE CONTROL, NEVER AN ENQUIRY. Checked before anything else so a
+                # button tap or a voice note from him can never be triaged, CRM-captured or replied to.
+                if is_owner(phone):
+                    mid = m.get("id") or ""
+                    if mid and (mid in seen or mid in fresh):   # Meta retries: never act on a tap twice
+                        continue
+                    if mid:
+                        fresh.append(mid)
+                    try:
+                        _owner_control(m, _owner_text(m))
+                    except Exception:  # noqa: BLE001 — a bad control message must not 500 the webhook
+                        pass
+                    continue
+                if m.get("type") != "text":       # media/location from a client: capture later, never guess
+                    continue
                 msg = ((m.get("text") or {}).get("body") or "").strip()
-                if not (phone and msg):
+                if not msg:
                     continue
                 k = _key(account, phone, msg)
                 if k in seen or k in fresh:       # Meta retries on non-200; never draft the same twice
@@ -219,17 +238,47 @@ def ingest_cloud(payload: dict, account: str = "sensa-uk") -> dict:
 def send_text(phone: str, text: str) -> dict:
     """Send a plain text reply via the Cloud API. Only valid inside the 24h customer service window; outside
     it Meta requires a pre-approved template, which we do not have yet and which is a separate build."""
-    from . import db as _db
-    if _db.setting_get("whatsapp_paused") or _db.setting_get("outbound_paused"):
+    return _post({"messaging_product": "whatsapp", "recipient_type": "individual",
+                  "to": phone.lstrip("+"), "type": "text",
+                  "text": {"preview_url": False, "body": text}})
+
+
+def cloud_ready() -> bool:
+    return bool(config.get("WHATSAPP_TOKEN") and config.get("WHATSAPP_PHONE_NUMBER_ID"))
+
+
+# ---- the owner's control channel: read, approve, teach, all from his own WhatsApp ---------------------
+#
+# Rashad approves WhatsApp enquiries FROM WhatsApp, because a back-and-forth chat that waits on someone
+# opening the cockpit is not a chat (his call, 28 Sep 2026). The exemption is deliberately narrow:
+# `wa_reply` ONLY. Every other outward kind still takes the biometric/PIN step-up, so widening this is a
+# decision someone has to make on purpose rather than something that quietly already happened.
+
+def owner_number() -> str:
+    """Where approval alerts go. A setting first, so the number can change without a deploy."""
+    return _clean_phone(db.setting_get("wa_owner_number") or config.get("WHATSAPP_OWNER_NUMBER") or "")
+
+
+def is_owner(phone: str) -> bool:
+    """True when a message came from the owner's own WhatsApp. Compared on the last 9 digits so a
+    +971/00971/0 spelling can never make his own control messages look like a client enquiry."""
+    own = owner_number()
+    if not own:
+        return False
+    a, b = re.sub(r"\D", "", own), re.sub(r"\D", "", phone or "")
+    return bool(a) and len(a) >= 9 and a[-9:] == b[-9:]
+
+
+def _post(payload: dict) -> dict:
+    """One place that talks to the Cloud API, so the pause guard and the error surfacing cannot diverge
+    between a plain reply, a buttoned alert and a template."""
+    if db.setting_get("whatsapp_paused") or db.setting_get("outbound_paused"):
         raise RuntimeError("WhatsApp sending is PAUSED - resume it to send")
     token = config.get("WHATSAPP_TOKEN")
     pnid = config.get("WHATSAPP_PHONE_NUMBER_ID")
     if not (token and pnid):
         raise RuntimeError("WhatsApp Cloud API not configured (WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID)")
-    body = json.dumps({"messaging_product": "whatsapp", "recipient_type": "individual",
-                       "to": phone.lstrip("+"), "type": "text",
-                       "text": {"preview_url": False, "body": text}}).encode()
-    req = urllib.request.Request(f"{GRAPH}/{pnid}/messages", data=body, method="POST",
+    req = urllib.request.Request(f"{GRAPH}/{pnid}/messages", data=json.dumps(payload).encode(), method="POST",
                                  headers={"Authorization": f"Bearer {token}",
                                           "Content-Type": "application/json"})
     try:
@@ -239,8 +288,152 @@ def send_text(phone: str, text: str) -> dict:
         raise RuntimeError(f"WhatsApp send failed ({e.code}): {e.read().decode()[:300]}") from e
 
 
-def cloud_ready() -> bool:
-    return bool(config.get("WHATSAPP_TOKEN") and config.get("WHATSAPP_PHONE_NUMBER_ID"))
+def send_buttons(phone: str, body: str, buttons: list[tuple[str, str]]) -> dict:
+    """An interactive message with up to three reply buttons. Meta caps a button title at 20 characters
+    and the body at 1024, so both are clamped here rather than failing the send."""
+    rows = [{"type": "reply", "reply": {"id": bid[:256], "title": title[:20]}} for bid, title in buttons[:3]]
+    return _post({"messaging_product": "whatsapp", "recipient_type": "individual", "to": phone.lstrip("+"),
+                  "type": "interactive",
+                  "interactive": {"type": "button", "body": {"text": body[:1024]},
+                                  "action": {"buttons": rows}}})
+
+
+def send_template(phone: str, name: str, params: list[str], lang: str = "en") -> dict:
+    """Business-initiated messages outside the 24h window need a pre-approved template. Used only as the
+    fallback when a plain alert is refused for re-engagement."""
+    comps = [{"type": "body", "parameters": [{"type": "text", "text": p[:1024]} for p in params]}] if params else []
+    return _post({"messaging_product": "whatsapp", "to": phone.lstrip("+"), "type": "template",
+                  "template": {"name": name, "language": {"code": lang}, "components": comps}})
+
+
+def download_media(media_id: str) -> tuple[bytes, str]:
+    """Fetch a media object (a voice note) by id. Two calls: the id resolves to a short-lived signed URL,
+    which then needs the SAME bearer token to download."""
+    token = config.require("WHATSAPP_TOKEN")
+    hdr = {"Authorization": f"Bearer {token}"}
+    with urllib.request.urlopen(urllib.request.Request(f"{GRAPH}/{media_id}", headers=hdr), timeout=30) as r:
+        meta = json.loads(r.read().decode())
+    url = meta.get("url")
+    if not url:
+        raise RuntimeError("media has no url")
+    with urllib.request.urlopen(urllib.request.Request(url, headers=hdr), timeout=60) as r:
+        return r.read(), (meta.get("mime_type") or "audio/ogg")
+
+
+def alert_owner(task_id: int) -> bool:
+    """Push a wa_reply card to the owner's WhatsApp with Approve / Edit / Skip. Returns True when sent.
+
+    Fail-soft by design: the Inbox card already exists and is the record, so a failed alert must never
+    lose the enquiry. Out-of-window sends are retried as a template when one is configured."""
+    to = owner_number()
+    if not (to and cloud_ready()):
+        return False
+    t = store.get_task(task_id)
+    if not t or t["kind"] != "wa_reply":
+        return False
+    req = t.get("request") or {}
+    co = store.get_company(t["company_id"]) or {}
+    src = req.get("lead_source") or {}
+    body = (f"{co.get('name') or 'Cortex'} · WhatsApp enquiry\n"
+            f"From: {req.get('recipient') or req.get('phone')}\n"
+            + (f"Source: {src.get('line')}\n" if src.get("line") else "")
+            + f"\nThey said:\n{(req.get('their_message') or '')[:400]}\n"
+            + f"\nDraft reply:\n{(t.get('draft') or '(no draft)')[:500]}")
+    buttons = [(f"wa:ok:{task_id}", "Approve & send"), (f"wa:edit:{task_id}", "Edit"),
+               (f"wa:skip:{task_id}", "Skip")]
+    try:
+        send_buttons(to, body, buttons)
+        return True
+    except Exception as e:  # noqa: BLE001
+        tmpl = db.setting_get("wa_alert_template")
+        if tmpl:
+            try:
+                send_template(to, tmpl, [str(task_id)])
+                return True
+            except Exception:  # noqa: BLE001
+                pass
+        print(f"[whatsapp] owner alert failed for card {task_id}: {str(e)[:200]}", flush=True)
+        return False
+
+
+def _owner_control(msg: dict, text: str) -> str:
+    """Handle one message FROM the owner. Returns a short outcome word for the ingest tally.
+
+    Three shapes: a button tap, a voice note or typed text answering an Edit, and anything else, which is
+    acknowledged rather than silently dropped so he is never left wondering whether it landed."""
+    from . import engine                          # local: engine imports this module
+    inter = msg.get("interactive") or {}
+    btn = (inter.get("button_reply") or {}).get("id") or ""
+    if btn.startswith("wa:"):
+        _, _, rest = btn.partition("wa:")
+        action, _, tid = rest.partition(":")
+        if not tid.isdigit():
+            return "ignored"
+        task_id = int(tid)
+        if action == "ok":
+            r = engine.approve_wa_reply(task_id)
+            ok = bool(r.get("ok"))
+            _tell(f"Sent." if ok else f"Not sent: {r.get('error') or 'blocked'}")
+            return "approved" if ok else "blocked"
+        if action == "skip":
+            engine.skip_task(task_id)
+            _tell("Skipped, nothing sent.")
+            return "skipped"
+        if action == "edit":
+            db.setting_set("wa_edit_pending", {"task_id": task_id})
+            _tell("Tell me what to change, typed or as a voice note.")
+            return "editing"
+        return "ignored"
+    pending = db.setting_get("wa_edit_pending") or {}
+    task_id = pending.get("task_id")
+    if task_id and text.strip():
+        db.setting_set("wa_edit_pending", {})
+        t = store.get_task(int(task_id))
+        if not t:
+            _tell("That card has gone.")
+            return "ignored"
+        try:
+            # The SAME correction path the cockpit uses, so the instruction redrafts the reply AND feeds
+            # the standing-rule inference. Teaching from the phone is the point, not a side effect.
+            engine.apply_correction(t, text.strip())
+        except Exception as e:  # noqa: BLE001
+            _tell(f"Could not apply that: {str(e)[:120]}")
+            return "ignored"
+        alert_owner(int(task_id))
+        return "corrected"
+    if text.strip():
+        _tell("Nothing is waiting on you here. Approve or edit from a card alert, or use the cockpit.")
+    return "ignored"
+
+
+def _owner_text(m: dict) -> str:
+    """The owner's words out of one message: typed text, or a voice note transcribed. A voice note IS the
+    natural way to correct a draft on a phone, so it is a first-class input, not a fallback."""
+    if m.get("type") == "text":
+        return ((m.get("text") or {}).get("body") or "").strip()
+    if m.get("type") in ("audio", "voice"):
+        mid = ((m.get("audio") or m.get("voice")) or {}).get("id")
+        if not mid:
+            return ""
+        try:
+            from . import voice as _voice
+            data, mime = download_media(mid)
+            return _voice.transcribe(data, mime).strip()
+        except Exception as e:  # noqa: BLE001
+            print(f"[whatsapp] voice note not transcribed: {str(e)[:160]}", flush=True)
+            _tell("I could not hear that voice note. Type it instead?")
+            return ""
+    return ""
+
+
+def _tell(text: str) -> None:
+    """A one-line reply to the owner. Never raises: a failed acknowledgement must not undo the action."""
+    try:
+        to = owner_number()
+        if to:
+            send_text(to, text)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # ---- transport 2: the office-box runner (fallback) ----------------------------------------------------

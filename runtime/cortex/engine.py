@@ -3381,6 +3381,29 @@ def email_status() -> dict:
     return {"ok": True, "paused": bool(db.setting_get("email_sending_paused"))}
 
 
+def approve_wa_reply(task_id: int) -> dict:
+    """Approve a WhatsApp reply from WhatsApp itself, without the biometric step-up.
+
+    THE EXEMPTION IS ONE KIND WIDE, ON PURPOSE (owner, 28 Sep 2026). A WhatsApp enquiry is a live
+    back-and-forth: making him open the cockpit and present a fingerprint for every line defeats the
+    channel. Every other outward kind still takes the step-up, and this refuses anything that is not a
+    `wa_reply`, so widening it later has to be a deliberate change here rather than a quiet side effect
+    of reusing this entry point. The sender is verified by WhatsApp itself (`whatsapp.is_owner` against
+    the message's own wa_id), which is what stands in for the step-up.
+    """
+    task, skill, company = _load(task_id)
+    if not task:
+        return {"ok": False, "error": "no such task"}
+    if task["kind"] != "wa_reply":
+        return {"ok": False, "error": "only a WhatsApp reply can be approved from WhatsApp"}
+    if task["status"] not in ("awaiting_approval", "awaiting_correction"):
+        return {"ok": False, "error": f"card is '{task['status']}', not awaiting approval"}
+    result = _approve(task, skill, company)
+    if result and (result.get("blocked") or result.get("needs_confirm")):
+        return {"ok": False, "error": result.get("error") or "blocked"}
+    return {"ok": True, "task": store.get_task(task_id), "result": result}
+
+
 def skip_task(task_id: int) -> dict:
     task, skill, company = _load(task_id)
     if not task:
