@@ -488,7 +488,9 @@ def _enrich_action_card(t: dict) -> dict:
     if atts:
         t["request"] = {**req, "attachments": []}
     pr = db.setting_get(f"rule:{t['id']}")     # a correction inferred a standing rule, not yet decided -> persist it on the card
-    if pr:
+    # only cards that HAVE a rule slot carry it (the action card); quotation/report/brief cards leave it to the
+    # pending-rules banner: an old cockpit re-rendered forever looking for a slot on quotation card 990 (28 Sep 2026)
+    if pr and t.get("kind") not in ("quotation", "report", "seo_report", "ppc_report", "meeting_brief", "blog_menu"):
         _p = pr if isinstance(pr, dict) else {}
         t["proposed_rule"] = _p.get("rule") if _p else pr
         t["rule_skill"] = _p.get("skill_name") or (sk["name"] if sk else None)
