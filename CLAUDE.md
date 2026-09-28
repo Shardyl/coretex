@@ -1832,6 +1832,16 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## A meeting that resumes on the same link: both sessions' notes are combined (28 Sep 2026)
+The Shama call broke off (Sarah absent) and everyone rejoined the same Meet later. Both sweeps filed ONE notes row per
+meeting, so a second Gemini doc/email would have been dropped as a duplicate. Now `meetnotes`: the calendar path reads
+every Gemini doc on the event (one row per doc, `file_id`); the email path records the Google Doc id from the email
+(`_DOC_RX`); `_family` groups a meeting's rows across both paths (key, or same deal + day + title); `_already_have`
+skips copies (same doc id, or >60% shared words); anything new is `_resumed_session`: its own row `<key>#sN`, a brief
+distilled from BOTH sessions (the later one decides), `record_meeting` on the deal with commitments, a context note,
+and the open post-meeting follow-up redrafted from the combined notes (or one drafted if none). Gemini must be
+restarted ('Take notes for me') when the call is rejoined.
+
 ## In-perpetuity terms variants (28 Sep 2026)
 Owner: keep a separate in-perpetuity version of the standard terms. `settings.quotation_presets` now also holds
 `shoot-production-perpetuity` and `ai-production-perpetuity` (`variant_of` = the base): same terms plus a usage clause
