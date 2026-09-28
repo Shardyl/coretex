@@ -955,6 +955,19 @@ def whatsapp_webhook_verify(request: Request) -> Response:
     return Response(content=challenge, media_type="text/plain")
 
 
+@app.post("/api/lp/click")
+async def lp_click(request: Request) -> dict:
+    """PUBLIC: the PPC landing page beacons one click here when the visitor taps its WhatsApp button (lptrack).
+    Sent as text/plain via navigator.sendBeacon, so no CORS preflight; input validated and rate-limited."""
+    from . import lptrack
+    try:
+        raw = (await request.body())[:2000]
+        ok = lptrack.record(json.loads(raw.decode("utf-8") or "{}"), ip=(request.client.host if request.client else ""))
+    except Exception:  # noqa: BLE001
+        ok = False
+    return {"ok": ok}
+
+
 @app.post("/api/whatsapp/webhook")
 async def whatsapp_webhook(request: Request,
                            x_hub_signature_256: str = Header(default="")) -> dict:
@@ -3602,6 +3615,11 @@ SKILL_TOOLS = [
         "replace": {"type": "string", "description": "a pro forma number to void and reissue, e.g. PI-2026-0003"},
         "deal_id": {"type": "integer"}},
         "required": ["company", "number"]}},
+    {"name": "lead_source",
+     "description": "Where a WhatsApp lead came from: give the landing-page reference in their message ('ref D7F3K') "
+                    "and get back the Google Ads keyword, match type, campaign, page and time of the click. Google does "
+                    "not give the exact search phrase per click, only the keyword that matched.",
+     "input_schema": {"type": "object", "properties": {"ref": {"type": "string"}}, "required": ["ref"]}},
     {"name": "note_opportunity",
      "description": "Keep a FACT on an opportunity so every future email on it knows it: who decides and their roles, "
                     "dates, budget signals, preferences, what was agreed. Use when Rashad says 'note on the X deal that "
@@ -4291,6 +4309,10 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         return (f"issued pro forma {_pf.get('pi')}: {_pf.get('description')}, {_pf.get('currency')} "
                 f"{float(_pf.get('total') or 0):,.2f} including VAT. It is card #{t['id']} in the Inbox with the PDF "
                 "attached; nothing has been sent. Approving that card drafts the email, which only Rashad can send.")
+    if name == "lead_source":
+        from . import lptrack
+        row = lptrack.lookup(str(inp.get("ref") or "").replace("ref", "").strip(" ()"))
+        return lptrack.describe(row) if row else "That reference is not on record (the click may be older than the log, or not from our landing page)."
     if name == "note_opportunity":
         from . import pipeline as _pl
         note = str(inp.get("note") or "").strip()

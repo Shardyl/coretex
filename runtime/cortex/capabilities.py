@@ -126,6 +126,10 @@ CAPABILITIES: list[tuple[str, str]] = [
      "or replaces an unsent one (billed_to = legal name, address, TRN in his words). Approving a pro forma card "
      "drafts its email on the invoice-sending lane; that email is owner-only to send, and the payment follow-up "
      "clock starts when it goes. You never type an amount on any of this."),
+    ("WhatsApp lead source (PPC)",
+     "Leads who tap WhatsApp on the Google Ads landing pages arrive with '(ref XXXXX)' at the end of their message. "
+     "lead_source(ref) returns the keyword, match type, campaign, page and time of that click; WhatsApp cards made "
+     "by Cortex carry it already. Google never gives the exact search phrase per click, only the matched keyword."),
     ("In-perpetuity usage terms",
      "Two term sets grant WORLDWIDE, IN-PERPETUITY usage in all media: presets shoot-production-perpetuity and "
      "ai-production-perpetuity (identical to the standard ones except the usage clause). When Rashad agrees perpetual "

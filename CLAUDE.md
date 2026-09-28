@@ -1832,6 +1832,15 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## WhatsApp lead source from the PPC landing pages (28 Sep 2026)
+`lptrack.py`: the Sensa LP templates (page-lp-dubai.php, page-lp-ai-video-production.php) append '(ref XXXXX)' to the
+wa.me pre-fill and, on tap, `navigator.sendBeacon` {ref, kw, mt, cid, agid, gclid, page} to PUBLIC `POST /api/lp/click`
+(text/plain, no preflight; validated, 60/10min per IP; stored in setting `lp_refs`, capped 3000). The keyword etc. come
+from the Google Ads campaigns' final URL suffix `kw={keyword}&mt={matchtype}&cid={campaignid}&agid={adgroupid}`.
+`whatsapp._process_message` decodes the ref: CRM source, a FACT line in the brief (never mention the code), and
+`lead_source` on the wa_reply card. Talk tool `lead_source(ref)`. Google gives the matched keyword per click, never
+the exact search phrase (search terms are aggregate only).
+
 ## A meeting that resumes on the same link: both sessions' notes are combined (28 Sep 2026)
 The Shama call broke off (Sarah absent) and everyone rejoined the same Meet later. Both sweeps filed ONE notes row per
 meeting, so a second Gemini doc/email would have been dropped as a duplicate. Now `meetnotes`: the calendar path reads

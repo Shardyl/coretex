@@ -83,6 +83,12 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
                      phone: str, name: str, msg: str, chat_id: str = "") -> str:
     """Triage one inbound message, capture the contact, draft a reply card. Returns drafted | skipped.
     Shared by BOTH transports so the Cloud API and the runner can never drift apart in behaviour."""
+    src = None
+    try:   # a landing-page reference in the pre-filled text names the ad click behind this lead (lptrack)
+        from . import lptrack
+        src = lptrack.from_message(msg)
+    except Exception:  # noqa: BLE001
+        src = None
     verdict = _classify(name, phone, msg, slug)
     # CRM capture happens for every real human (even ones we don't draft for) so the contact is never lost.
     if verdict.get("category") != "spam":
@@ -91,7 +97,8 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
             # itself, when they introduce themselves. Fill-if-blank, so a later message where they DO say who
             # they are backfills the contact.
             crm.match_or_add_by_phone(
-                phone, verdict.get("name") or name, slug, source="whatsapp",
+                phone, verdict.get("name") or name, slug,
+                source=("whatsapp, PPC landing page: " + src["line"])[:200] if src else "whatsapp",
                 summary=verdict.get("summary") or msg[:200], classification=verdict.get("category"))
         except Exception:  # noqa: BLE001 — a CRM hiccup must not lose the reply
             pass
@@ -119,6 +126,8 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
         + ("FACT: this is a PERSONAL message from someone who knows the owner, not a business lead.\n\n"
            if personal else f"FACT: triaged as a '{verdict.get('category')}' message.\n\n")
         + ("FACT: the sender's name is unknown — only their number.\n\n" if not know_name else "")
+        + (f"FACT: they came from our Google Ads landing page ({src['line']}). The '(ref ...)' in their message is "
+           "our tracking code: never mention it.\n\n" if src else "")
         + f"From: {know_name or phone}\nTheir message: {msg}")
     try:
         draft = worker.draft(skill, co, {"brief": brief}, author=rt.get("author") or "rashad")
@@ -126,7 +135,8 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
         draft = ""
     task = store.create_task(rt["company_id"], skill["id"], "wa_reply", {
         "brief": brief, "channel": "whatsapp", "account": account, "recipient": know_name or phone,
-        "phone": phone, "chat_id": chat_id, "their_message": msg, "triage": verdict})
+        "phone": phone, "chat_id": chat_id, "their_message": msg, "triage": verdict,
+        **({"lead_source": src} if src else {})})
     if draft:
         store.update_task(task["id"], draft=draft, status="awaiting_approval")
     return "drafted"
