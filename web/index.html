@@ -278,6 +278,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 .tabs .tab{padding:9px 3px;font-size:12px}.tabs .tab .e{font-size:16px}
 .banner{background:color-mix(in srgb,var(--warn) 14%,var(--panel));border:1px solid color-mix(in srgb,var(--warn) 40%,var(--line));
   color:var(--ink);border-radius:12px;padding:10px 13px;font-size:12.5px;margin:14px 0}
+.hwhen{margin-left:8px;font-size:11px;font-weight:400;color:var(--mut);white-space:nowrap}.dnum{font-size:11px;color:var(--mut);margin-top:2px;letter-spacing:.02em}
 </style>
 </head>
 <body>
@@ -826,7 +827,7 @@ async function openContact(email,id){
     <div class="dgrid">${fieldRows(c)}</div>
     ${noteBox('c',c.email)}
     ${c.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${linky(c.note)}</div></div>`:''}
-    ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>{const lbl=h.event?(h.event||'').replace(/_/g,' '):(h.anchor?'engaged · '+h.anchor:(h.post?'engaged':'note'));const txt=h.text||h.engagement||'';return `<div class="hitem"><span class="hled" style="background:${h.event==='reply_sent'?'#2ad17e':'#00DAFF'}"></span><div><b>${esc(lbl)}</b><div class="csub">${esc(String(txt).slice(0,160))}</div></div></div>`;}).join('')}</div>`:''}
+    ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>{const lbl=h.event?(h.event||'').replace(/_/g,' '):(h.anchor?'engaged · '+h.anchor:(h.post?'engaged':'note'));const txt=h.text||h.engagement||'';return `<div class="hitem"><span class="hled" style="background:${h.event==='reply_sent'?'#2ad17e':'#00DAFF'}"></span><div><b>${esc(lbl)}</b>${histWhen(h.ts)}<div class="csub">${esc(String(txt).slice(0,160))}</div></div></div>`;}).join('')}</div>`:''}
     </div>`;
   loadContactCompanies(email,c.id);
 }
@@ -1156,7 +1157,7 @@ async function openProject(id){
       <div style="margin-left:auto;display:flex;gap:6px"><button class="iconbtn sm" title="Edit" onclick="openEditDeal(${p.id})">${ic('edit',16)}</button><button class="iconbtn sm" title="Delete" onclick="deleteDeal(${p.id})">${ic('trash',16)}</button></div></div>
     <div class="card">
       <div class="cname" style="font-size:17px">${esc(p.title||'Untitled')}</div>
-      <div class="csub" style="margin-bottom:10px">${esc(p.company||'')}</div>
+      <div class="csub" style="margin-bottom:10px">${esc(p.company||'')} <span class="dnum" style="display:inline">#${p.id}</span></div>
       <div class="row" style="margin-bottom:12px">${stageChip(p.stage)}<span class="chip cy">${money(p.value)} ${esc(p.currency||'')}</span></div>
       ${projStagePicker(p)}
       ${dealPeople(p)}
@@ -1165,7 +1166,7 @@ async function openProject(id){
       ${noteBox('p',p.id)}
       <div class="dgrid">${fld('briefcase',p.owner&&('Owner: '+p.owner))}${fld('file',p.quote_ref&&('Quote ref '+p.quote_ref))}</div>
       ${p.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${linky(p.note)}</div></div>`:''}
-      ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${histText(h.text)}</div></div></div>`).join('')}</div>`:''}
+      ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b>${histWhen(h.ts)}<div class="csub">${histText(h.text)}</div></div></div>`).join('')}</div>`:''}
     </div>`;
 }
 function dealAutomation(p){
@@ -1207,7 +1208,7 @@ function valueHeadline(currencies){
 }
 function byCompany(rows){ const g={}; rows.forEach(r=>{ const k=r.company||'Other'; (g[k]=g[k]||[]).push(r); }); return g; }
 function dealCard(x){
-  return `<div class="card prow" style="cursor:pointer" onclick="openProject(${x.id})"><div style="flex:1;min-width:0"><div class="cname">${esc(x.title||'Untitled')}</div><div class="csub">${esc(x.company||'')}</div></div><div style="text-align:right"><div class="pval">${x.value?dmoney(x.value)+' <span style="font-size:11px;color:var(--mut)">'+esc(x.currency||'AED')+'</span>':'<span style="color:var(--mut)">no value yet</span>'}</div>${stageChip(x.stage)}</div></div>`;
+  return `<div class="card prow" style="cursor:pointer" onclick="openProject(${x.id})"><div style="flex:1;min-width:0"><div class="cname">${esc(x.title||'Untitled')}</div><div class="csub">${esc(x.company||'')}</div><div class="dnum">#${x.id}</div></div><div style="text-align:right"><div class="pval">${x.value?dmoney(x.value)+' <span style="font-size:11px;color:var(--mut)">'+esc(x.currency||'AED')+'</span>':'<span style="color:var(--mut)">no value yet</span>'}</div>${stageChip(x.stage)}</div></div>`;
 }
 async function renderProjects(b,co){
   let d; try{ d=await api('/api/crm/projects?company='+encodeURIComponent(co||'all')); }catch(e){ d={projects:[],groups:{},total_value:0,count:0}; }
@@ -1370,7 +1371,7 @@ async function openAccount(id){
         <div class="row" style="margin-top:8px"><button class="btn go sm" onclick="openNewDeal(${a.id})">${ic('plus',14)} New deal</button></div></div>
       <div class="dsec"><div class="dlbl">Nurture</div>${nurturePanel(a)}</div>
       ${noteBox('a',a.id)}
-      ${(a.history&&a.history.length)?`<div class="dsec"><div class="dlbl">History</div>${a.history.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b><div class="csub">${histText(h.text)}</div></div></div>`).join('')}</div>`:''}
+      ${(a.history&&a.history.length)?`<div class="dsec"><div class="dlbl">History</div>${a.history.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b>${histWhen(h.ts)}<div class="csub">${histText(h.text)}</div></div></div>`).join('')}</div>`:''}
     </div>`;
 }
 async function renameAccount(id,cur){
@@ -1386,6 +1387,7 @@ function cadenceText(t){
   if(t.cadence==='monthly') return `Monthly · ${pad2(t.hour)}:${pad2(t.minute)}`;
   return `Weekly · ${DOW[t.weekday||0]} ${pad2(t.hour)}:${pad2(t.minute)}`;
 }
+function histWhen(ts){ if(!ts) return ''; try{ const d=new Date(ts); if(isNaN(d)) return ''; return `<span class="hwhen">${d.toLocaleString([],{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>`; }catch(e){ return ''; } }
 function whenText(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString([],{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; } }
 function kindLabel(k){ return {blog:'blog post',blog_scheduled:'blog post (queued)',newsletter_idea:'newsletter idea',newsletter_review:'newsletter ready to schedule',newsletter_send:'newsletter due to send',newsletter_scheduled:'newsletter (queued)',email_draft:'email draft',email_reply:'email reply',seo_report:'SEO & Traffic report',report:'report',quotation:'quotation',lead_escalation:'strategic lead — yours to take',meeting_brief:'pre-meeting brief'}[k]||k||'task'; }
 let calLinks={};
