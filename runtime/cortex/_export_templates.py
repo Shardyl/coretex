@@ -53,6 +53,12 @@ def _doc_for(key: str, preset: dict) -> str:
             desc = it.get("desc") if isinstance(it, dict) else str(it)
             w = f"   (weight {it['weight']})" if isinstance(it, dict) and it.get("weight") else ""
             run("   - " + str(desc) + w)
+    run("")
+    run("PAYMENT SCHEDULE (printed on the quotation; pro formas are staged from it)", 12, True, color=TEAL, font="Poppins")
+    for x in preset.get("payment_lines") or quotation.DEFAULT_PAYMENT_LINES:
+        run("- " + str(x))
+    if preset.get("variant_of"):
+        run(f'Variant of "{preset["variant_of"]}": {preset.get("_doc") or ""}', 9.5, italic=True, color=MUT)
     terms = preset.get("terms") or {}
     run("")
     run("TERMS PRINTED ON THE QUOTATION", 12, True, color=TEAL, font="Poppins")

@@ -1856,6 +1856,12 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## 70/30 shoot presets (29 Sep 2026)
+`shoot-production-7030` and `shoot-production-perpetuity-7030` in `settings.quotation_presets` (`variant_of` the base):
+identical shoot terms (cancellation/postponement clause kept) with payment_lines 70% on confirmation / 30% on approval.
+Pro formas stage from the printed schedule. `_export_templates` now prints the payment schedule and the variant note,
+and was re-run so the Drive terms folder matches. Never use ai-production on a filmed job to get 70/30.
+
 ## Feedback on a quotation card: one route, no contradiction, no new images (29 Sep 2026)
 `engine._quote_card_feedback` runs first for any correction on a quotation card. Haiku only classifies (price / scope
 / wording); code acts. PRICE (a stated % or a stated target, the target turned into a discount % by code) ->

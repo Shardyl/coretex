@@ -135,6 +135,12 @@ CAPABILITIES: list[tuple[str, str]] = [
      "note) to correct it, which redrafts AND teaches a standing rule exactly as a cockpit correction does. "
      "Approving sends. The biometric step-up is waived for WhatsApp replies ONLY, by his decision; every other "
      "outward kind still requires it. Tone lives in the social-dm-replies skill, not in code."),
+    ("70/30 payment on shoot quotations",
+     "Shoot quotations normally print 50% on confirmation, 25% on the shoot day, 25% on delivery. Presets "
+     "shoot-production-7030 and shoot-production-perpetuity-7030 print 70% on confirmation and 30% on approval, with the "
+     "same shoot terms (cancellation and postponement clause included); pro formas are staged from the printed schedule. "
+     "Use them when Rashad asks for 70/30 on a filmed job: reissue_quotation(preset=...). Never put the AI production "
+     "preset on a job with a shoot just to get 70/30, and never write a schedule into the note that the terms contradict."),
     ("In-perpetuity usage terms",
      "Two term sets grant WORLDWIDE, IN-PERPETUITY usage in all media: presets shoot-production-perpetuity and "
      "ai-production-perpetuity (identical to the standard ones except the usage clause). When Rashad agrees perpetual "
