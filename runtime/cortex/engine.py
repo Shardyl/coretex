@@ -1856,6 +1856,8 @@ def apply_correction(task: dict, text: str) -> None:
                                  f"{type(_ce).__name__}: {str(_ce)[:200]}", category="approval",
                                  company_id=task.get("company_id"), target_type="task", target_id=str(task["id"]))
             return
+    if task.get("kind") == "quotation" and _quote_card_feedback(task, skill, company, text):
+        return
     if task.get("kind") == "quotation" and not re.search(
             r"\b(price|prices|priced|pricing|total|aed|quotation|quote|vat|cost|costs|figure|discount|budget|"
             r"cheaper|expensive|per day|day rate)\b|\d{2,3},?\d{3}", text, re.I):
@@ -6215,6 +6217,97 @@ def _deal_quote_number(deal_id, customer: str | None) -> str | None:
                "request->>'number' is not null and status not in ('rejected','cancelled') order by id desc limit 1",
                (int(deal_id),))
     return r["n"] if r and (r.get("c") or "").strip().lower() == (customer or "").strip().lower() else None
+
+
+def _quote_card_feedback(task: dict, skill: dict, company: dict, text: str) -> bool:
+    """FEEDBACK ON A QUOTATION CARD NEVER LEAVES THE PROPOSAL CONTRADICTING IT, AND NEVER BUYS NEW IMAGES
+    (owner, 29 Sep 2026). Haiku only CLASSIFIES his words; code does the rest:
+      price  (a discount, a target figure)  -> the quotation is reissued with the discount printed as its own line
+                                               (a target becomes that discount, computed by code), and ONLY the
+                                               proposal's pricing page is re-stamped (restamp_proposal_price)
+      scope  (add or remove deliverables, days, a shoot, a line) -> creative proposal: text-only revision that
+                                               re-issues the quotation for the new scope and rewrites the copy, no
+                                               location/concept/script/frames; words-led: the deck text is revised
+                                               and the live quotation card stands down, so approving the proposal
+                                               issues the matching next version
+      wording (about the deck's words only) -> the proposal's copy is revised, text only
+    Both cards come back for approval. Returns True when handled here."""
+    try:
+        rq = task.get("request") or {}
+        number = rq.get("number")
+        if not number:
+            return False
+        p = (store.get_task(int(rq["proposal_card"])) if rq.get("proposal_card") else None) or db.one(
+            "select * from tasks where request->>'kind' in ('creative_proposal','proposal') and "
+            "request->>'quotation_number'=%s and status not in ('rejected','cancelled') order by id desc limit 1", (number,))
+        c = provider.think_json(
+            "Classify the owner's feedback on a QUOTATION card. JSON {\"type\": \"price\" | \"scope\" | \"wording\", "
+            "\"discount_pct\": <number or null, ONLY if he states a percentage>, \"target_net\": <number or null, ONLY if "
+            "he states a total figure; say whether it is before VAT in target_incl_vat>, \"target_incl_vat\": false}. "
+            "price = the same scope for less (a discount, a target, a round figure); scope = adding or removing "
+            "deliverables, days, a shoot, crew, a line; wording = the words on the documents only.",
+            text[:1500], model=provider.MODEL_ROUTER, purpose="quote-feedback-route", company=company.get("slug")) or {}
+        kind = str(c.get("type") or "").lower()
+        said = _stated_numbers(text)
+        did = task.get("deal_id") or rq.get("deal_id") or (p or {}).get("deal_id")
+
+        def _note(msg: str) -> None:
+            store.update_task(task["id"], status="done",
+                              draft=(task.get("draft") or "").split("\n\nYour change:")[0] + f"\n\nYour change: {text.strip()[:200]}\n{msg}")
+            store.log_decision(task["id"], skill["id"] if skill else None, "owner", "correct", note=text)
+
+        if kind == "price":
+            pct = c.get("discount_pct")
+            if pct in (None, "") and c.get("target_net") not in (None, ""):
+                reg = db.setting_get(f"quote_versions:{number}") or []
+                net = sum(float(i.get("unit") or 0) * float(i.get("qty") or 1)
+                          for s_ in ((reg[-1].get("spec") or {}).get("sections") or []) for i in (s_.get("items") or [])) if reg else 0
+                tgt = float(c["target_net"])
+                if round(tgt, 2) not in said:
+                    return False
+                if c.get("target_incl_vat"):
+                    from . import quotation as _q
+                    tgt = round(tgt / (1 + _q._vat_rate(_q._profile(company["id"]))), 2)
+                if not (0 < tgt < net):
+                    tg.send(f"Card #{task['id']}: AED {tgt:,.0f} is not below the current total, so nothing was changed.")
+                    return True
+                pct = round((1 - tgt / net) * 100, 4)
+                said = said | {pct}
+            if pct in (None, "") or round(float(pct), 4) not in {round(float(x), 4) for x in said}:
+                return False        # no figure of his own: the ordinary path handles it
+            t = reissue_quotation(company["slug"], number, discount_pct=float(pct), deal_id=did, said=text + f" {pct}")
+            _note(f"Reissued as the next version with a {float(pct):g}% discount line: card #{t['id']}. Only the proposal's "
+                  "pricing page is being re-stamped (no new images).")
+            restamp_proposal_price(did, number, t.get("id"))
+            return True
+        if not p:
+            return False
+        pk = (p.get("request") or {}).get("kind")
+        if kind == "scope":
+            if pk == "creative_proposal":
+                from . import creative
+                creative.revise(p, text, force_plan={"quote": True, "copy": True, "note": "quotation amendment: scope"})
+                _note(f"Scope change sent to the proposal on card #{p['id']}: the quotation is re-issued for the new scope "
+                      "and the pages' wording updated, with NO new images. Both come back for approval.")
+                return True
+            _revise_proposal(p, store.get_skill(p["skill_id"]) or skill, company, text, quote_card=None)
+            db.execute("update tasks set status='cancelled', updated_at=now(), request = request || %s::jsonb where id=%s",
+                       (json.dumps({"cancelled_reason": "scope changed: approving the revised proposal issues the next version"}),
+                        task["id"]))
+            pr = dict((store.get_task(p["id"]) or {}).get("request") or {})
+            pr.pop("approved", None)
+            store.update_task(p["id"], request=pr, status="awaiting_approval")
+            return True
+        if kind == "wording":
+            if pk == "creative_proposal":
+                from . import creative
+                creative.revise(p, text, force_plan={"copy": True, "note": "wording only"})
+                _note(f"Wording change sent to the proposal on card #{p['id']} (text only, no new images).")
+                return True
+            return False    # the words-led deck branch below handles it
+    except Exception as _e:  # noqa: BLE001
+        print(f"[quote-feedback] {type(_e).__name__}: {_e}", flush=True)
+    return False
 
 
 def restamp_proposal_price(deal_id, number: str, quote_card: int | None = None) -> int | None:

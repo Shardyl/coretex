@@ -1064,9 +1064,10 @@ def run_task(jid: str, task_id: int | None, dry: bool = False, start_at: str | N
 
 # --------------------------------------------------------------------------- revisions
 
-def revise(task: dict, text: str) -> bool:
+def revise(task: dict, text: str, force_plan: dict | None = None) -> bool:
     """His reply on the card. An unfinished run resumes; a finished one is revised: a planner decides which
-    parts his words touch, only those re-run, and the deck is filed as the next version on the same card."""
+    parts his words touch, only those re-run, and the deck is filed as the next version on the same card.
+    `force_plan` skips the planner (a quotation amendment: {"quote": True, "copy": True}, never new images)."""
     req = task.get("request") or {}
     if not req.get("job"):
         return False
@@ -1077,7 +1078,7 @@ def revise(task: dict, text: str) -> bool:
         store.update_task(task["id"], status="drafting", draft="Resuming the creative proposal from where it stopped.")
         threading.Thread(target=run_task, args=(job.id, task["id"]), daemon=True).start()
         return True
-    plan = provider.think_json(
+    plan = dict(force_plan) if force_plan else provider.think_json(
         "You route an owner's feedback on a creative proposal to the parts that must change. JSON: "
         '{"location": false, "concept": false, "script": false, "regenerate_beats": [beat numbers whose PICTURE '
         'must change], "quote": false, "copy": true, "note": "one line"}. location = pick a different place; '

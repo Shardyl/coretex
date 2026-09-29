@@ -1998,7 +1998,14 @@ function quotationCard(t,co){
     <div class="row" style="margin:4px 0 9px">${r.xlsx_file?`<button class="btn go" onclick="openQuotation(${t.id},'xlsx')">${ic('file',16)} Open spreadsheet</button>`:''}${r.file?`<button class="btn${r.xlsx_file?'':' go'}" onclick="openQuotation(${t.id},'pdf')">${ic('file',16)} Open PDF</button>`:''}</div>
     <div class="row">
       <button class="btn${r.proposal_card?' go':''}" onclick="act(${t.id},'approve')">${ic('check',16)} ${r.proposal_card?'Approve quotation':'Mark as seen'}</button>
+      <button class="btn warn" id="cm${t.id}" onclick="voiceCorrect(${t.id},this)">${ic('mic',16)} Tap to talk</button>
+      <button class="btn" id="ty${t.id}" onclick="typeCorrect(${t.id})">${ic('edit',16)} Type</button>
       <button class="btn bad" onclick="act(${t.id},'skip')">Dismiss</button>
+    </div>
+    <div class="corr" id="cp${t.id}" style="display:none;margin-top:9px">
+      <div class="meta" style="margin:1px 0 6px">${ic('mic',13)} A discount or a target figure changes only the price (and the proposal's pricing page). Adding or removing scope updates the proposal to match, with no new images.</div>
+      <textarea id="corr${t.id}" rows="3" placeholder="Tap to talk above, or type here…" style="width:100%;box-sizing:border-box;background:var(--bg2,#0e1620);color:var(--fg,#dfe7ef);border:1px solid var(--ln,#22303f);border-radius:11px;padding:9px 11px;font:inherit;font-size:14px;resize:vertical"></textarea>
+      <div class="row" style="margin-top:7px"><button class="btn go" onclick="sendCorr(${t.id})">Send correction</button><button class="btn" onclick="closeCorr(${t.id})">Cancel</button></div>
     </div></div>`;
 }
 function socialShiftCard(t,co){

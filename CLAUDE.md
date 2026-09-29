@@ -1856,6 +1856,15 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## Feedback on a quotation card: one route, no contradiction, no new images (29 Sep 2026)
+`engine._quote_card_feedback` runs first for any correction on a quotation card. Haiku only classifies (price / scope
+/ wording); code acts. PRICE (a stated % or a stated target, the target turned into a discount % by code) ->
+`reissue_quotation(discount_pct=)` + `restamp_proposal_price` (pricing page only). SCOPE -> creative:
+`creative.revise(p, text, force_plan={quote, copy})` (new quotation version for the new scope + copy, never location/
+concept/script/frames); words-led: `_revise_proposal` (text) and the live quotation card is CANCELLED so approving the
+revised proposal issues the matching next version. WORDING -> creative copy-only revise / the words-led deck branch.
+Both cards come back for approval. The cockpit quotation card now has Tap to talk / Type.
+
 ## WhatsApp lead source from the PPC landing pages (28 Sep 2026)
 `lptrack.py`: the Sensa LP templates (page-lp-dubai.php, page-lp-ai-video-production.php) append '(ref XXXXX)' to the
 wa.me pre-fill and, on tap, `navigator.sendBeacon` {ref, kw, mt, cid, agid, gclid, page} to PUBLIC `POST /api/lp/click`
