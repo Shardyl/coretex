@@ -194,6 +194,23 @@ def ingest_cloud(payload: dict, account: str = "sensa-uk") -> dict:
     for entry in (payload or {}).get("entry") or []:
         for change in entry.get("changes") or []:
             value = change.get("value") or {}
+            # DELIVERY STATUSES arrive on this same hook. A send that Meta ACCEPTS can still fail on the way
+            # (no WhatsApp on that number, blocked, out of window), and an accepted-then-failed message is
+            # otherwise completely invisible: the API returned a message id and nothing ever contradicted it.
+            for st in value.get("statuses") or []:
+                if st.get("status") == "failed":
+                    errs = "; ".join(
+                        f"{e.get('code')}: {e.get('title') or ''} {(e.get('error_data') or {}).get('details') or ''}"
+                        .strip() for e in (st.get("errors") or [])) or "no reason given"
+                    print(f"[whatsapp] delivery FAILED to {st.get('recipient_id')}: {errs}", flush=True)
+                    try:
+                        from . import notifications
+                        notifications.notify("WhatsApp message failed to deliver",
+                                             f"To {st.get('recipient_id')}: {errs}"[:400],
+                                             priority="high", category="social",
+                                             dedup_key=f"wa_fail:{st.get('recipient_id')}")
+                    except Exception:  # noqa: BLE001
+                        pass
             # the sender's WhatsApp profile name, keyed by wa_id — this is the push name Rashad expected
             names = {c.get("wa_id"): ((c.get("profile") or {}).get("name") or "")
                      for c in (value.get("contacts") or [])}
