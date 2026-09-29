@@ -3398,7 +3398,12 @@ def approve_wa_reply(task_id: int) -> dict:
         return {"ok": False, "error": "only a WhatsApp reply can be approved from WhatsApp"}
     if task["status"] not in ("awaiting_approval", "awaiting_correction"):
         return {"ok": False, "error": f"card is '{task['status']}', not awaiting approval"}
-    result = _approve(task, skill, company)
+    # `stepped_up=True` because THIS function is the step-up. There are two independent gates: the
+    # `_biometric_gate` in approve_task, and `_approve`'s own check that blocks any outward kind. Passing
+    # only the first one leaves the send blocked with "approve in the cockpit", which is exactly the thing
+    # a WhatsApp approval exists to avoid. WhatsApp's own sender verification is what authorises it, and
+    # the `wa_reply` check above is what keeps that narrow.
+    result = _approve(task, skill, company, stepped_up=True)
     if result and (result.get("blocked") or result.get("needs_confirm")):
         return {"ok": False, "error": result.get("error") or "blocked"}
     return {"ok": True, "task": store.get_task(task_id), "result": result}
