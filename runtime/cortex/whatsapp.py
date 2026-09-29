@@ -422,8 +422,20 @@ def _owner_control(msg: dict, text: str) -> str:
             return "ignored"
         alert_owner(int(task_id))
         return "corrected"
+    # HONOUR THE DOORBELL. The out-of-window template tells him to reply so Cortex can send the draft: his
+    # reply is what reopens the 24h window, and this is the half that walks through the door it opened.
+    # Without it the template promises something nothing delivers (his first real reply, 29 Sep 2026).
     if text.strip():
-        _tell("Nothing is waiting on you here. Approve or edit from a card alert, or use the cockpit.")
+        waiting = db.query(
+            "select id from tasks where kind='wa_reply' and status in ('awaiting_approval','awaiting_correction') "
+            "order by id")
+        if waiting:
+            sent = sum(1 for r in waiting if alert_owner(r["id"]))
+            if sent:
+                return "resent"
+            _tell("I could not send the draft through. It is waiting in your Inbox.")
+            return "ignored"
+        _tell("Nothing is waiting for approval right now. I will message you when an enquiry comes in.")
     return "ignored"
 
 
