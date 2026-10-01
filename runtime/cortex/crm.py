@@ -987,6 +987,23 @@ DECISION_CADENCE = {   # quote/proposal sent -> awaiting their decision (day 3 /
     ],
 }
 
+CLOSING_CADENCE = {   # quotation with them AND they have engaged with it: push for the decision (owner, 1 Oct 2026)
+    # "once we've got close to closing a deal, the follow-ups seem to slow down". The decision cadence lengthened
+    # its gaps (3/4/7/14 days) exactly when the client was weighing the quote. Gaps here are WORKING days and
+    # never grow while they are deciding: every 2 for ~2 weeks, then twice a week, then weekly. Any reply from them
+    # restarts it at the top. A company tunes it with `closing_cadence` on its profile.
+    "name": "closing",
+    "skip_weekends": True,
+    "working_days": True,
+    "steps": [
+        {"after_days": 2, "repeat": 5, "action": "chase"},
+        {"after_days": 3, "repeat": 4, "action": "chase"},
+        {"after_days": 5, "repeat": 4, "action": "chase"},
+        {"after_days": 10, "repeat": 2, "action": "checkin"},
+        {"after_days": 90, "repeat": 2, "action": "revive"},
+    ],
+}
+
 RESTART_CADENCE = {   # a PARKED/paused project being restarted: patient, never salesy (owner, 30 Aug -
     # "that's almost like an aggressive sales follow-up, which is wrong"). The client already bought;
     # we are waiting on their readiness, not chasing a decision.
@@ -1252,6 +1269,42 @@ def get_cadence(company_org_label: str | None) -> dict:
     return DEFAULT_CADENCE
 
 
+def get_closing_cadence(company_org_label: str | None) -> dict:
+    """The closing rhythm for a company: its own `closing_cadence` on the profile, else CLOSING_CADENCE."""
+    try:
+        from . import profile, store
+        co = store.get_company_by_slug(_slug_for_org(company_org_label))
+        cad = (profile.get(co["id"]) or {}).get("closing_cadence") if co else None
+        if cad and cad.get("steps"):
+            return {"name": "closing", **cad}
+    except Exception:  # noqa: BLE001
+        pass
+    return CLOSING_CADENCE
+
+
+def enter_closing(deal_id: int) -> bool:
+    """THE CLIENT ENGAGED WITH A QUOTATION WE SENT: the deal moves onto the closing rhythm, from the top. Called
+    on every email they send on a Quote deal that has had a quotation sent, so a reply ('allow us to review',
+    a question on the quote) restarts the short gaps instead of buying a long silence. The clock itself is armed
+    by our answer (record_send -> touch_followups) or by a date they stated; this sets only the rhythm."""
+    p = db.one("select * from crm_projects where id=%s", (int(deal_id),))
+    if not p or p.get("automation") != "auto" or p.get("stage") != "Quote":
+        return False
+    if not db.one("select 1 from crm_projects where id=%s and history @> %s::jsonb",
+                  (int(deal_id), Json([{"event": "quotation_sent"}]))):
+        return False
+    was = (p.get("cadence") or {}).get("name") if isinstance(p.get("cadence"), dict) else None
+    db.execute("update crm_projects set cadence=%s, followup_step=0, updated_at=now() where id=%s",
+               (Json(get_closing_cadence(p["company"])), int(deal_id)))
+    if was != "closing":
+        db.execute("update crm_projects set history = history || %s::jsonb where id=%s",
+                   (Json([{"ts": _now(), "event": "note",
+                           "text": "Closing rhythm on: the client is weighing our quotation, so chases now run every "
+                                   "2 working days, then twice a week, then weekly, restarting whenever they reply."}]),
+                    int(deal_id)))
+    return True
+
+
 def cadence_points(cadence: dict) -> list[dict]:
     """Flatten the cadence steps into individual fire-points, each carrying the gap (after_days) before it."""
     pts: list[dict] = []
@@ -1272,6 +1325,13 @@ def _schedule_point(cadence: dict, idx: int, base: datetime | None = None) -> da
     if idx >= len(pts):
         return None
     base = base or datetime.now(timezone.utc)
+    if cadence.get("working_days"):           # gaps counted in working days (Mon-Fri), not calendar days
+        dt, n = base, int(pts[idx]["after_days"])
+        while n > 0:
+            dt += timedelta(days=1)
+            if dt.weekday() < 5:
+                n -= 1
+        return dt
     return _roll_weekend(base + timedelta(days=pts[idx]["after_days"]), bool(cadence.get("skip_weekends")))
 
 
@@ -1318,7 +1378,8 @@ def resume_followups(deal_id: int, when: datetime | None = None) -> dict | None:
     p = db.one("select * from crm_projects where id=%s", (deal_id,))
     if not p or p.get("automation") != "auto" or p.get("next_followup"):
         return None
-    cad = get_cadence(p["company"])
+    cad = (p.get("cadence") if isinstance(p.get("cadence"), dict) and p["cadence"].get("steps")
+           else get_cadence(p["company"]))
     when = when or _schedule_point(cad, p.get("followup_step") or 0)
     if when is None:
         return None

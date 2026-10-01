@@ -2398,3 +2398,16 @@ shoot needs none), then 10% off the whole quotation.
   flags an unanswered email of theirs. Lost/Completed/Dormant/Nurture are never set to auto.
 - Cockpit: an auto deal with no clock reads "Chase starts when we next email them" (was "arming..."). sw `cortex-v57`.
 - 1 Oct audit (`audit_auto.py`, scratch): every Opportunity/Quote deal switched to auto, logged on each timeline.
+
+## Closing rhythm: chases tighten when a quoted client engages (1 Oct 2026)
+- Owner: "once we've got close to closing a deal, the follow-ups seem to slow down". DECISION_CADENCE lengthened its
+  gaps (3/4/7/14) while the client was weighing the quote.
+- `crm.CLOSING_CADENCE` (name "closing", `working_days`: gaps counted Mon-Fri): every 2 working days x5, then 3 x4,
+  then 5 x4, then 10-day check-ins x2, then revivals. Company override: `closing_cadence` on the profile
+  (`crm.get_closing_cadence`).
+- `crm.enter_closing(deal_id)`: on every inbound email resolved to a Quote deal on auto that has a `quotation_sent`
+  event, the deal's cadence becomes closing at step 0 (engine inbox path, before the pause/reschedule). Our reply arms
+  the clock (`touch_followups`); a date they state still wins. `resume_followups` now honours the per-deal cadence.
+- Chase card brief says CLOSING CHASE; the wording lives in the universal sales-followup rule "CLOSING CHASE".
+  The chase gate is told "reviewing / will get back" is not a reason to hold on a closing deal.
+- Sheraa SEF'27 (123) moved onto it 1 Oct, next chase Fri 2 Oct 09:00.
