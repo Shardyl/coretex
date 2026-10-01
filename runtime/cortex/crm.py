@@ -1286,6 +1286,15 @@ def start_opportunity_followups(deal_id: int) -> dict | None:
     return db.one("select * from crm_projects where id=%s", (deal_id,))
 
 
+def hold_auto(deal_id: int) -> None:
+    """EVERY OPEN DEAL IS ON AUTO (owner, 1 Oct 2026: "there should be nothing on manual anymore"). Where a chase
+    would be wrong right now (they asked US for a proposal, a portal tender, no contact yet) the deal is still
+    'auto' but with no clock: the first email we send arms it (pipeline.record_send -> touch_followups), and the
+    stalled-chase net (engine._rearm_stalled_chases) flags an email of theirs left unanswered."""
+    db.execute("update crm_projects set automation='auto', next_followup=null, updated_at=now() where id=%s "
+               "and stage not in ('Lost','Completed','Dormant','Nurture')", (int(deal_id),))
+
+
 def set_opportunity_automation(deal_id: int, mode: str | None) -> dict | None:
     """'auto' re-arms the cadence; 'manual'/None stop it (manual reminders still work either way)."""
     if mode == "auto":
@@ -1407,7 +1416,7 @@ def qualify_opportunity(email: str, company_slug: str, title: str | None = None)
     db.execute("delete from settings where key like %s", (f"lead_fu:%:{email.lower()}",))  # the lead is now an opportunity
     q = db.setting_get(f"qual:email:{email.lower()}") or {}
     if q.get("ball_in_our_court"):                # they asked US for a proposal/quote -> we owe them: don't auto-chase
-        db.execute("update crm_projects set automation='manual', next_followup=null, updated_at=now() where id=%s", (d["id"],))
+        hold_auto(d["id"])
         try:
             from . import reminders, store
             cidx = (store.get_company_by_slug(company_slug) or {}).get("id")
@@ -1682,8 +1691,10 @@ def create_deal(company: str, title: str, value=None, currency: str = "AED", sta
          Json([{"ts": _now(), "event": "deal_created", "text": f"{title} ({stage})"}])))
     if account_id and stage in WON_STAGES:
         flag_clients_for_deal(db.one("select * from crm_projects where id=%s", (row["id"],)))
-    if arm:   # a tender deal is manual by design and gets its contact a moment later: no chase, no "no contact" notice
+    if arm:   # a tender deal gets its contact a moment later: no chase, no "no contact" notice
         arm_new_deal(row["id"])
+    else:
+        hold_auto(row["id"])
     return db.one("select * from crm_projects where id=%s", (row["id"],))
 
 
@@ -1715,6 +1726,7 @@ def arm_new_deal(deal_id: int) -> None:
                 target_type="deal", target_id=str(deal_id), dedup_key=f"nocontact:{deal_id}")
         except Exception:  # noqa: BLE001
             pass
+        hold_auto(deal_id)
         return
     start_opportunity_followups(deal_id)
 

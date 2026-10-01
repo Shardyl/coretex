@@ -2389,3 +2389,12 @@ shoot needs none), then 10% off the whole quotation.
 - `engine._rearm_stalled_chases` runs before every cadence sweep: an Opportunity/Quote deal on auto with no clock
   and no open card re-arms when our email was the last word; when theirs was, the owner is notified once
   (timeline ref `unanswered:<ts>`).
+
+## Every open deal is on auto (1 Oct 2026)
+- Owner rule: "there should be nothing on manual anymore". Nothing in code sets a new deal to manual now.
+- `crm.hold_auto(deal_id)`: automation='auto' with no clock, used where a chase would be wrong right now (they asked
+  US for a proposal in `qualify_opportunity`, a portal tender, `create_deal(arm=False)`, no contact yet in
+  `arm_new_deal`). The first email we send arms it (`record_send` -> `touch_followups`); the stalled-chase net
+  flags an unanswered email of theirs. Lost/Completed/Dormant/Nurture are never set to auto.
+- Cockpit: an auto deal with no clock reads "Chase starts when we next email them" (was "arming..."). sw `cortex-v57`.
+- 1 Oct audit (`audit_auto.py`, scratch): every Opportunity/Quote deal switched to auto, logged on each timeline.

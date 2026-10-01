@@ -2588,7 +2588,7 @@ def _track_tender(co: dict, e: dict, what: str, rt_key: str | None = None, clien
     if not d:
         return None
     if fresh:
-        crm.set_opportunity_automation(d["id"], "manual")   # a portal tender is never chased by email
+        crm.hold_auto(d["id"])   # a portal tender: auto, but no chase until we have emailed them ourselves
         try:
             crm.add_deal_contact(d["id"], email, role="issuer", primary=True)
         except Exception:  # noqa: BLE001

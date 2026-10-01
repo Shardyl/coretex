@@ -1179,7 +1179,7 @@ function dealAutomation(p){
     <span class="fchip" onclick="cancelDealReminder(${r.id},${p.id})">Cancel</span></div>`).join('') || '<div class="csub">No reminders set.</div>';
   return `<div class="dsec"><div class="dlbl">Follow-up automation</div>
     <div class="row" style="gap:6px;margin:4px 0 6px">${btn('auto','Auto')}${btn('manual','Manual')}${btn('off','Off')}</div>
-    ${mode==='auto'?`<div class="csub" style="margin-bottom:8px">${next?'Next chase: '+esc(next)+' · step '+((p.followup_step||0)+1):'arming…'}</div>`:''}
+    ${mode==='auto'?`<div class="csub" style="margin-bottom:8px">${next?'Next chase: '+esc(next)+' · step '+((p.followup_step||0)+1):'Chase starts when we next email them'}</div>`:''}
     <div class="dlbl" style="margin-top:8px">Reminders</div>${rems}
     <div class="row" style="margin-top:7px"><button class="btn sm" onclick="addDealReminder(${p.id})">${ic('plus',15)} Add reminder</button></div></div>`;
 }
