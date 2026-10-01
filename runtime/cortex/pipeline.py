@@ -164,6 +164,14 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
             _ds = crm.active_deals_for_email(to, (company or {}).get("slug"))
             if len(_ds) == 1:
                 did = _ds[0]["id"]
+            elif len(_ds) > 1:   # several open deals: the thread it was sent on decides (card 909, Sheraa, 24 Sep)
+                from . import engine as _eng
+                _th = req.get("thread") or {}
+                _d = _eng._deal_for_thread({"thread_id": _th.get("id") or "", "subject": subj,
+                                            "references": f"{_th.get('references') or ''} {_th.get('msg_id') or ''}"},
+                                           _ds)
+                did = _d["id"] if _d else None
+            if did:
                 if (task or {}).get("id"):
                     db.execute("update tasks set deal_id=%s where id=%s and deal_id is null", (did, task["id"]))
         except Exception:  # noqa: BLE001

@@ -3849,10 +3849,56 @@ WAITLIST_INTAKE = {
 }
 
 
+_OPEN_CARD = "('new','drafting','queued','awaiting_approval','awaiting_correction','scheduled')"
+
+
+def _rearm_stalled_chases() -> list:
+    """AN AUTO DEAL NEVER SITS PAUSED WITH NOTHING PENDING (1 Oct 2026). Sheraa's SEF'27 deal (123) showed
+    'arming...' for a week: Shahnawaz's 24 Sep reply paused the chase clock, our answer (card 909) went out unlinked
+    because Sheraa has two open deals, so nothing re-armed it and the quotation would never have been chased.
+    Every sales-stage deal on auto with no clock and no open card is settled here: when OUR email is the last word
+    the clock re-arms at its normal gap; when THEIRS is and no reply card exists, the owner is told once."""
+    done = []
+    try:
+        rows = db.query(
+            "select p.id, p.title, p.contact_email, "
+            "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event' like 'email_out%%') lo, "
+            "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='email_in') li "
+            "from crm_projects p where p.automation='auto' and p.next_followup is null "
+            "and p.stage in ('Opportunity','Quote') and not exists (select 1 from tasks t where t.status in "
+            + _OPEN_CARD + " and (t.deal_id=p.id or (coalesce(p.contact_email,'') <> '' and "
+            "lower(t.request->'inquiry'->>'email') = lower(p.contact_email))))")
+        for r in rows:
+            lo, li = r.get("lo"), r.get("li")
+            if not lo and not li:
+                continue                      # no email on record: nothing to chase from
+            if lo and (not li or lo >= li):
+                if crm.resume_followups(int(r["id"])):
+                    pipeline.log_deal(int(r["id"]), "note", "Automatic follow-up re-armed: our email was the last "
+                                      "word and nothing was pending, so the chase clock restarted.")
+                    done.append([r["id"], "rearmed"])
+                continue
+            ref = f"unanswered:{li}"
+            if db.one("select 1 from crm_projects where id=%s and history @> %s::jsonb",
+                      (int(r["id"]), json.dumps([{"ref": ref}]))):
+                continue                      # already told once about this message
+            pipeline.log_deal(int(r["id"]), "note", f"No reply pending to their email of {li[:10]}: the chase stays "
+                              "paused until we answer.", ref=ref)
+            notifications.notify(f"Unanswered: {r['title'][:70]}",
+                                 f"Their email of {li[:10]} has no reply card and the automatic chase is paused "
+                                 "until we answer it.", priority="high", category="approval",
+                                 target_type="deal", target_id=r["id"])
+            done.append([r["id"], "unanswered"])
+    except Exception as _e:  # noqa: BLE001
+        print(f"[rearm] {type(_e).__name__}: {_e}", flush=True)
+    return done
+
+
 def run_opportunity_followups() -> dict:
     """SYSTEM-WIDE: walk every AUTO opportunity whose next follow-up is due. Each fires the cadence's action
     (chase/checkin) as a deal-linked drafted card for approval, then arms the next step; when the sequence is
     exhausted the opportunity is marked Lost. The cadence is per-company config (crm.get_cadence), not code."""
+    _rearm_stalled_chases()
     due = db.query("select * from crm_projects where automation='auto' and next_followup is not null "
                    "and next_followup <= now() order by next_followup limit 50")
     fired = []
@@ -5069,6 +5115,22 @@ def _deal_for_thread(e: dict, deals: list) -> dict | None:
                        "order by id desc limit 1", (ids, tid))
             if r and r.get("deal_id"):
                 return next((d for d in deals if int(d["id"]) == int(r["deal_id"])), None)
+        # THE REFERENCES CHAIN IS GLOBAL (1 Oct 2026): a Gmail thread id belongs to one mailbox, so a reply that
+        # lands in a different mailbox from the one we last answered in never matches by id. Every earlier message
+        # of the conversation is named in its References header: a deal whose cards replied to one of them, or
+        # whose timeline logged one of them coming in, owns the reply.
+        refs = re.findall(r"<([^<>\s]+)>", f"{e.get('references') or ''} {e.get('in_reply_to') or ''}")
+        if refs:
+            r = db.one("select deal_id from tasks where deal_id = any(%s) and request->'thread'->>'msg_id' = any(%s) "
+                       "order by id desc limit 1", (ids, [f"<{x}>" for x in refs]))
+            if r and r.get("deal_id"):
+                return next((d for d in deals if int(d["id"]) == int(r["deal_id"])), None)
+            low = [x.lower() for x in refs]
+            hits = [d for d in deals if db.one(
+                "select 1 from crm_projects p, jsonb_array_elements(p.history) ev where p.id=%s and "
+                "lower(ev->>'ref') = any(%s) limit 1", (int(d["id"]), low))]
+            if len(hits) == 1:
+                return hits[0]
         subj = re.sub(r"^(?:(?:re|fwd?|aw)\s*:\s*)+", "", (e.get("subject") or ""), flags=re.I).strip().lower()
         if len(subj) > 6:
             hits = [d for d in deals if db.one(

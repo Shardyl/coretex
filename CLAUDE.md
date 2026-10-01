@@ -2379,3 +2379,13 @@ shoot needs none), then 10% off the whole quotation.
   `[context]` instead.
 - `engine._rejudge_pending_replies`: a waiting draft that only restates what the sent email said is "full"
   (cancelled), not "part".
+
+## A paused chase never stays paused with nothing pending (1 Oct 2026)
+- CAUSE: Sheraa SEF'27 (deal 123) showed "arming..." for a week. Shahnawaz's 24 Sep reply paused the chase; our
+  answer (card 909) went out unlinked because Sheraa has two open deals, so nothing re-armed the clock.
+- `engine._deal_for_thread` also matches on the References chain (Gmail thread ids are per mailbox): a deal whose
+  cards replied to one of the referenced messages, or whose timeline logged one coming in, owns the email.
+- `pipeline.record_send`: an unlinked card sent to a contact with several open deals resolves its deal by thread.
+- `engine._rearm_stalled_chases` runs before every cadence sweep: an Opportunity/Quote deal on auto with no clock
+  and no open card re-arms when our email was the last word; when theirs was, the owner is notified once
+  (timeline ref `unanswered:<ts>`).
