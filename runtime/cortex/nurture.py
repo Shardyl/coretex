@@ -104,6 +104,7 @@ def _account_state(account_id: int, company_id: int) -> dict:
     notes.sort(key=lambda x: x[0], reverse=True)
     return {"last_contact": last_contact, "lost_at": lost_at,
             "won": any(r.get("stage") in _WON for r in rows),
+            "has_deals": bool(rows),       # no deal rows at all = a past client who predates Cortex (manual enrolment)
             "lost_titles": [r["title"] for r in rows if r.get("stage") == "Lost"],
             "notes": notes[:6]}
 
@@ -265,7 +266,7 @@ def sweep() -> dict:
             t = store.create_card(n["company_id"], sk["id"], "email_reply", {
                 "brief": (f"NURTURE touch for {(acc or {}).get('name')} - "
                           + ("a past client we are keeping warm between projects. "
-                             if st["won"] else
+                             if (st["won"] or not st["has_deals"]) else
                              "a contact we are staying in touch with. We have NOT done paid work for them yet: never "
                              "write as if they are a client or as if we delivered something for them. ")
                           + "The REPEAT-NURTURE standing rules on sales-followup govern this "
