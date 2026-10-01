@@ -1413,6 +1413,12 @@ while a local change is queued — a pull once erased a cardio session seconds a
   `fitness.snapshots` — that is the restore path, do not prune it.
 - localStorage stays the offline cache. The app saves locally FIRST and pushes after, so a gym with
   no signal works exactly as before.
+- **A server-side edit to a row is overwritten on the phone's next open**: sync is push-then-pull and
+  the push upserts every field the phone holds (`notes=excluded.notes` etc.). Only `deleted` sticks
+  (OR'd). So to correct or annotate a row from the box: insert a copy under a NEW uid with the change,
+  then set the old row `deleted=true`; the tombstone drops it on the phone and the copy arrives.
+  Used 1 Oct 2026 (uids `<exercise>|<date>|r2`: squat 27 Sep, shoulder press 16 + 23 Sep, side
+  raises 27 Sep) and to retire a duplicate 28 Sep 4x4 (`id_ou6cxnlg`).
 - **PR conventions are not decoration, do not "simplify" them:** lifting PR = volume load
   (total reps x kg); bodyweight lifts resolve against the weight logged for the SESSION DATE, so a
   weight change never rewrites old records; cardio PR = Pareto frontier of lowest avg HR vs hardest
