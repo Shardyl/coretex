@@ -44,8 +44,18 @@ def ensure_schema() -> None:
 
 
 def _org_name(company_id: int) -> str | None:
-    r = db.one("select name from companies where id=%s", (company_id,))
-    return (r or {}).get("name")
+    """The business label DEALS are stored under (crm_projects.company: 'Sensa', 'Sky Vision'), not the company's
+    display name. This returned companies.name ('Sensa Productions'), which matches no deal, so the live-work guard
+    and the history block silently found nothing: nurture touches went to MAH Gold, HBMSU, Merck and SEHA on
+    29 Sep 2026 while they had live deals (found 1 Oct 2026)."""
+    r = db.one("select slug, name from companies where id=%s", (company_id,))
+    if not r:
+        return None
+    try:
+        from . import crm
+        return crm._org(r.get("slug"))
+    except Exception:  # noqa: BLE001
+        return r.get("name")
 
 
 def has_live_work(account_id: int, company_id: int) -> bool:
