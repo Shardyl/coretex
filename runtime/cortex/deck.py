@@ -431,6 +431,13 @@ class _Deck:
         return (f'<div class="foot" style="right:{right}px">{lg}<span>{_esc(section)}</span>'
                 f'<span>{_esc(self.label)} &middot; {n:02d}</span></div>')
 
+    def with_bg(self, image):
+        """Put a frame BEHIND the page just added, darkened so its words stay readable."""
+        if not image or not self.pages:
+            return
+        bg = f'<img class="bgimg" src="{_b64(image)}"><div class="bgshade"></div>'
+        self.pages[-1] = self.pages[-1].replace('<div class="pg">', '<div class="pg onbg">' + bg, 1)
+
     def cover(self, title: str, standfirst: str, image: str | None,
               section: str = "Proposal"):
         img = (f'<img style="position:absolute;top:0;left:0;width:1280px;height:720px;object-fit:cover" '
@@ -841,13 +848,6 @@ class CreativeDeck(_Deck):
     def __init__(self, *a, compact: bool = False, **k):
         super().__init__(*a, **k)
         self.compact = compact
-
-    def with_bg(self, image):
-        """Put a frame BEHIND the page just added, darkened so its words stay readable."""
-        if not image or not self.pages:
-            return
-        bg = f'<img class="bgimg" src="{_b64(image)}"><div class="bgshade"></div>'
-        self.pages[-1] = self.pages[-1].replace('<div class="pg">', '<div class="pg onbg">' + bg, 1)
 
     def hero(self, kicker, title, sub, line, stats, image, section=""):
         st = "".join(f'<div><div class="pk">{_esc(s.get("k"))}</div><div class="pv">{_esc(s.get("v"))}</div></div>'
