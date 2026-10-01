@@ -1544,6 +1544,11 @@ def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
                          pg.get("rows") or [], pg.get("cards"), pg.get("section", ""))
         else:
             raise ValueError(f"unknown page type '{t}'")
+        # A WORDS-ONLY PAGE CAN CARRY A DARKENED FRAME BEHIND IT (owner, 1 Oct 2026). CreativeDeck already
+        # did this with with_bg(); render_spec had no way to ask for it, so a hand-written deck came out as
+        # pages of type on flat black. Any page may now name a `bg` image.
+        if pg.get("bg"):
+            d.with_bg(pg["bg"])
     return {"path": to_pdf(d.html(), os.path.join(out_dir, filename)), "pages": len(d.pages)}
 
 
