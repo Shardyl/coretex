@@ -106,14 +106,18 @@ def _account_state(account_id: int, company_id: int) -> dict:
     try:   # what was actually said in meetings with them (owner, 1 Oct 2026): the distilled briefs, not the transcripts
         ids = [int(r["id"]) for r in rows]
         _seen: list = []
+        _titles: list = []
         if ids:
             for m in db.query("select title, starts_at, summary from meeting_notes where deal_id = any(%s) and "
                               "coalesce(summary,'') <> '' order by starts_at desc nulls last, id desc limit 8", (ids,)):
                 # one meeting is often on file twice (Gemini's email and the calendar doc): keep the first of each
                 w = set(re.findall(r"[a-z]{4,}", str(m["summary"]).lower()))
-                if any(len(w & k) / max(1, min(len(w), len(k))) > 0.6 for k in _seen):
+                tk = re.sub(r"[^a-z]", "", str(m.get("title") or "").lower())[:40]
+                if any(len(w & k) / max(1, min(len(w), len(k))) > 0.6 for k in _seen) or any(
+                        tk and o and (tk.startswith(o) or o.startswith(tk)) for o in _titles):
                     continue
                 _seen.append(w)
+                _titles.append(tk)
                 meetings.append((m.get("starts_at"), m.get("title") or "Meeting", str(m["summary"])[:1200]))
                 if len(meetings) >= 3:
                     break
