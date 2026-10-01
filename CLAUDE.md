@@ -2366,3 +2366,16 @@ shoot needs none), then 10% off the whole quotation.
   not repo code): a working-day template (storyboard v1, one round of notes, v2, sign-off, half-day shoot,
   first cut, two rounds, final) dated by code from the start day, rendered as a Gantt page before Investment.
   Pending owner feedback before it becomes a `CreativeDeck` method + per-proposal-type templates on sales-proposal.
+
+## A closed deal takes its unsent Cortex cards with it; conditional promises have no date (1 Oct 2026)
+- CAUSE: UAS (deal 138) went Dormant on 30 Sep. `crm._cancel_cortex_reminders` cancelled its reminders, but cards
+  1004 and 1005, already drafted from two of them, stayed in the Inbox.
+- `crm._cancel_cortex_reminders` (called by `set_project_stage` on a move into Lost/Dormant/Completed) now also
+  cancels the deal's unsent email cards that Cortex raised by itself: `request.system_note` starting
+  "From reminder #" / "From commitment reminder", or `request.followup` in followup/checkin/chase. Replies to a
+  client's own email and owner-requested emails are never touched. Logged on the deal timeline.
+- `pipeline._CONDITIONAL`: a commitment that waits on the client ("on receipt of", "once you confirm",
+  "as soon as the deposit", "subject to") gets NO dated reminder in `record_send`; it is logged on the deal as
+  `[context]` instead.
+- `engine._rejudge_pending_replies`: a waiting draft that only restates what the sent email said is "full"
+  (cancelled), not "part".

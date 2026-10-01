@@ -79,6 +79,13 @@ def deal_context(deal_id: int, limit: int = 12) -> str:
 _DUE_DAYS = {"today": 1, "tomorrow": 1, "week": 5, "none": 3}
 
 
+_CONDITIONAL = re.compile(
+    r"\b(?:on|upon|following|after)\s+(?:receipt|receiving|confirmation|approval|sign(?:ature|ing)|payment)\b|"
+    r"\bonce\s+(?:we|you|they|the|it|your|their)\b|\bas soon as\s+(?:we|you|they|the|your|their)\b|"
+    r"\bwhen(?:ever)?\s+(?:you|they|the client|your team)\b|\bsubject to\b|\bif (?:you|they|the client)\b|"
+    r"\b(?:the )?moment\s+(?:the|you|they|we)\b", re.I)
+
+
 def _commitment_due(hint: str) -> datetime:
     """Code computes the reminder date from the extractor's hint. An explicit ISO date is used as
     stated; vague hints map to fixed windows; no hint means a 3-day check-in."""
@@ -186,6 +193,12 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
                        (str(int(did)), "Commitment owed%"))
     dues = []
     for c in extract_commitments(body, stage=_stage):
+        if _CONDITIONAL.search(c.get("text") or ""):
+            # A PROMISE THAT WAITS ON THEM HAS NO DATE (1 Oct 2026): "begin production on receipt of the signed
+            # quotation and deposit" became a reminder due the next day and spawned an email (card 1004) to keep a
+            # promise that only falls due when THEY sign and pay. It is recorded as context, never as a reminder.
+            log_deal(did, "context", f"Conditional on the client (no reminder): {c['text']}")
+            continue
         due = _commitment_due(c.get("due_hint"))
         dues.append(due)
         # THE SAME PROMISE MADE AGAIN IS ONE PROMISE (17 Sep 2026): Antoni's "schedule a call" was logged on

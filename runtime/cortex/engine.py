@@ -4121,7 +4121,9 @@ def _rejudge_pending_replies(task: dict, env: dict, company: dict) -> None:
                 "We have just SENT an email to a person. A DRAFT reply to the same person, made earlier from an older "
                 "message or reminder, is still waiting. Decide whether the email we sent already covers what that draft "
                 "was for. Return {\"covered\": \"full\" | \"part\" | \"none\", \"remaining\": \"<only for part: what "
-                "the draft should still say, one or two lines>\", \"why\": \"<one line>\"}. Be strict about 'full': "
+                "the draft should still say, one or two lines>\", \"why\": \"<one line>\"}. A draft that only RESTATES what the "
+                "sent email already said (we are ready, we are available, take your time, we will start when you "
+                "confirm) is 'full': a second email saying it again is a nag. Be strict about 'full' otherwise: "
                 "the same confirmation, answer or document already given; anything genuinely new in the draft's "
                 "trigger that the sent email does not address is 'part' or 'none'.",
                 f"WHAT THE DRAFT WAS FOR (their message or the reminder):\n{str(trigger)[:2500]}\n\nTHE DRAFT:\n"

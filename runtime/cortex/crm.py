@@ -1157,6 +1157,26 @@ def _cancel_cortex_reminders(p: dict, stage: str) -> list:
                    (Json([{"ts": _now(), "event": "reminders_cancelled",
                            "text": f"Deal moved to {stage}: cancelled {len(rows)} reminder(s) Cortex had set: "
                                    + "; ".join(f"#{r['id']} {r['title'][:90]}" for r in rows)}]), p["id"]))
+    # ...AND THE UNSENT CARDS THOSE REMINDERS AND THE CADENCE ALREADY SPAWNED (1 Oct 2026). UAS (deal 138) went
+    # Dormant on 30 Sep; its reminders were cancelled, but cards 1004 and 1005, drafted the day before from two of
+    # them ("begin production on receipt of the signed quotation"), stayed in the Inbox ready to send. Only cards
+    # Cortex raised by itself are touched: a reply to the client's own email, or an email the owner asked for, stays.
+    try:
+        cards = db.query(
+            "update tasks set status='cancelled', updated_at=now(), request = request || %s::jsonb where deal_id=%s "
+            "and kind in ('email_reply','email_draft','followup') and status in ('new','drafting','queued',"
+            "'awaiting_approval','awaiting_correction') and (request->>'system_note' like 'From reminder #%%' or "
+            "request->>'system_note' like 'From commitment reminder%%' or coalesce(request->>'followup','') in "
+            "('followup','checkin','chase')) returning id",
+            (Json({"cancelled_reason": f"the deal moved to {stage}"}), int(p["id"])))
+        if cards:
+            db.execute("update crm_projects set history = history || %s::jsonb where id=%s",
+                       (Json([{"ts": _now(), "event": "note",
+                               "text": f"Deal moved to {stage}: cancelled {len(cards)} unsent card(s) Cortex had raised "
+                                       "from its reminders or cadence: " + ", ".join(f"#{c['id']}" for c in cards)}]),
+                        p["id"]))
+    except Exception:  # noqa: BLE001 - the stage change stands
+        pass
     return rows
 
 
