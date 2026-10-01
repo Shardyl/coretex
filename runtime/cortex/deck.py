@@ -315,6 +315,13 @@ p,li,td,th { font-size:14.5px; line-height:1.6; color:#C4C4CC; font-weight:300; 
         font-size:10.5px; color:#5A5A62; letter-spacing:1.5px; }
 .logo { height:19px; } .logobig { height:33px; }
 .cols { display:flex; gap:26px; }
+.bgimg { position:absolute; top:0; left:0; width:1280px; height:720px; object-fit:cover; opacity:.85; }
+.bgshade { position:absolute; top:0; left:0; width:1280px; height:720px;
+           background:linear-gradient(to bottom, rgba(10,10,10,.62), rgba(10,10,10,.70) 55%, rgba(10,10,10,.86)); }
+.onbg .pad { position:relative; z-index:2; }
+.onbg .card, .onbg .gcell, .onbg .scol { background:rgba(14,15,18,.80); border-color:rgba(255,255,255,.08); }
+.onbg .phase { background:rgba(14,15,18,.80); border-top:2px solid ACCENT; border-radius:0 0 8px 8px; padding:12px 14px 14px; }
+.onbg table.t { background:rgba(14,15,18,.72); }
 .card { background:#101114; border:1px solid #1C1D22; border-radius:10px; padding:20px 22px; flex:1; }
 .card b { color:#EDEDF2; font-weight:600; display:block; margin-bottom:6px; font-size:15px; }
 .klist li { list-style:none; padding-left:19px; position:relative; margin-bottom:8px; }
@@ -784,13 +791,6 @@ class _Deck:
 # --------------------------------------------------------------------------- creative proposal pages
 
 _CREATIVE_CSS = """
-.bgimg { position:absolute; top:0; left:0; width:1280px; height:720px; object-fit:cover; opacity:.85; }
-.bgshade { position:absolute; top:0; left:0; width:1280px; height:720px;
-           background:linear-gradient(to bottom, rgba(10,10,10,.62), rgba(10,10,10,.70) 55%, rgba(10,10,10,.86)); }
-.onbg .pad { position:relative; z-index:2; }
-.onbg .card, .onbg .gcell, .onbg .scol { background:rgba(14,15,18,.80); border-color:rgba(255,255,255,.08); }
-.onbg .phase { background:rgba(14,15,18,.80); border-top:2px solid ACCENT; border-radius:0 0 8px 8px; padding:12px 14px 14px; }
-.onbg table.t { background:rgba(14,15,18,.72); }
 .full { position:absolute; top:0; left:0; width:1280px; height:720px; object-fit:cover; }
 .fshade { position:absolute; top:0; left:0; width:1280px; height:720px;
           background:linear-gradient(to top, rgba(10,10,10,.92) 6%, rgba(10,10,10,.35) 38%, rgba(10,10,10,0) 62%); }
