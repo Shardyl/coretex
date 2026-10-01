@@ -1865,6 +1865,9 @@ bookkeeping notes excluded, `_SYSTEM_NOTE`); a Haiku `nurture-gate` reads the ne
 (no -> pushed 14-90 days); the brief says 'past client' only when there is won work, lists the owner's notes as
 fact, and states LOST WORK IS CLOSED (never revisit, re-quote or ask if it is still moving). A Lost DEAL is still
 never chased; nurture is the separate relationship programme.
+Same day: `_account_state` also returns `meetings` (the three newest `meeting_notes.summary` briefs on the account's
+deals); the nurture writer gets them as fact and the pre-draft gate reads them. `_org_name` now returns the label deals
+are stored under (`crm._org(slug)`): it returned companies.name, so the live-work guard never matched for Sensa.
 
 ## 70/30 shoot presets (29 Sep 2026)
 `shoot-production-7030` and `shoot-production-perpetuity-7030` in `settings.quotation_presets` (`variant_of` the base):

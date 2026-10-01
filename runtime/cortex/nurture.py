@@ -102,7 +102,16 @@ def _account_state(account_id: int, company_id: int) -> dict:
             if kind in ("note", "context", "conversation") and text and not system:
                 notes.append((when, r["title"], text[:400]))
     notes.sort(key=lambda x: x[0], reverse=True)
-    return {"last_contact": last_contact, "lost_at": lost_at,
+    meetings = []
+    try:   # what was actually said in meetings with them (owner, 1 Oct 2026): the distilled briefs, not the transcripts
+        ids = [int(r["id"]) for r in rows]
+        if ids:
+            for m in db.query("select title, starts_at, summary from meeting_notes where deal_id = any(%s) and "
+                              "coalesce(summary,'') <> '' order by starts_at desc nulls last, id desc limit 3", (ids,)):
+                meetings.append((m.get("starts_at"), m.get("title") or "Meeting", str(m["summary"])[:1200]))
+    except Exception:  # noqa: BLE001
+        meetings = []
+    return {"meetings": meetings, "last_contact": last_contact, "lost_at": lost_at,
             "won": any(r.get("stage") in _WON for r in rows),
             "has_deals": bool(rows),       # no deal rows at all = a past client who predates Cortex (manual enrolment)
             "lost_titles": [r["title"] for r in rows if r.get("stage") == "Lost"],
@@ -249,7 +258,9 @@ def sweep() -> dict:
                     "gave a date they will come back; their last message is waiting for OUR answer. "
                     'Return {"send": true|false, "wait_days": <14-90>, "why": "<one line>"}. When unsure, send.',
                     "TODAY: " + now.strftime("%d %b %Y") + "\nNEWEST EMAILS:\n" + (_recent or "(none)")
-                    + "\n\nOWNER NOTES:\n" + "\n".join(f"- {w:%d %b %Y} {x}" for w, _t, x in st["notes"]),
+                    + "\n\nOWNER NOTES:\n" + "\n".join(f"- {w:%d %b %Y} {x}" for w, _t, x in st["notes"])
+                    + "\n\nMEETINGS:\n" + "\n".join(
+                        f"- {(w.strftime('%d %b %Y') if w else 'undated')} {t}: {x[:400]}" for w, t, x in st["meetings"]),
                     model=_pv.MODEL_ROUTER, purpose="nurture-gate", company=_slug)
                 if isinstance(_g, dict) and _g.get("send") is False:
                     _wd = max(14, min(90, int(_g.get("wait_days") or 30)))
@@ -278,6 +289,11 @@ def sweep() -> dict:
                           + ("\nWHAT WE KNOW (the owner's own notes on their deals, newest first; treat as fact, and "
                              "never say it has been a while if these show recent contact):\n"
                              + "\n".join(f"- {w:%d %b %Y} [{t[:50]}] {x}" for w, t, x in st["notes"]) if st["notes"] else "")
+                          + ("\nMEETINGS WITH THEM (distilled from the real meeting notes, newest first; ground the "
+                             "email in what was actually discussed and agreed, never contradict it, and do not recap "
+                             "the meeting back to them):\n"
+                             + "\n".join(f"- {(w.strftime('%d %b %Y') if w else 'undated')} {t}:\n{x}" for w, t, x in st["meetings"])
+                             if st["meetings"] else "")
                           + (f"\nNOTE ON THE RELATIONSHIP: {n['note']}" if n.get("note") else "")),
                 "inquiry": {"name": name, "email": email, "message": ""},
                 **({"cc_extra": [e for e in (n.get("cc_emails") or []) if "@" in str(e)]}
