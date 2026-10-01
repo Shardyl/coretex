@@ -3849,7 +3849,7 @@ WAITLIST_INTAKE = {
 }
 
 
-_OPEN_CARD = "('new','drafting','queued','awaiting_approval','awaiting_correction','scheduled')"
+_STALL_OPEN = "('new','drafting','queued','awaiting_approval','awaiting_correction','scheduled')"
 
 
 def _rearm_stalled_chases() -> list:
@@ -3866,7 +3866,7 @@ def _rearm_stalled_chases() -> list:
             "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='email_in') li "
             "from crm_projects p where p.automation='auto' and p.next_followup is null "
             "and p.stage in ('Opportunity','Quote') and not exists (select 1 from tasks t where t.status in "
-            + _OPEN_CARD + " and (t.deal_id=p.id or (coalesce(p.contact_email,'') <> '' and "
+            + _STALL_OPEN + " and (t.deal_id=p.id or (coalesce(p.contact_email,'') <> '' and "
             "lower(t.request->'inquiry'->>'email') = lower(p.contact_email))))")
         for r in rows:
             lo, li = r.get("lo"), r.get("li")
