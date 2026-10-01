@@ -10,6 +10,7 @@ stage) or manually (past clients who predate Cortex).
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 
 from . import db, store
@@ -52,6 +53,49 @@ def has_live_work(account_id: int, company_id: int) -> bool:
     return bool(db.one(
         "select id from crm_projects where account_id=%s and company=%s and stage = any(%s) limit 1",
         (account_id, org, list(LIVE_STAGES))))
+
+
+LOST_COOLING_DAYS = 60       # after a deal is marked Lost, the account is left alone this long
+RECENT_CONTACT_DAYS = 21     # a meeting, call note or email this recently means no "it has been a while" touch
+_WON = ("Booked", "Production", "Recurring", "Delivered", "Final Payment", "Close & review", "Nurture", "Completed")
+_CONTACT_EVENTS = ("email_in", "email_out", "email_out_manual", "meeting", "note", "context", "conversation")
+# notes Cortex writes itself are bookkeeping, not contact with the client
+_SYSTEM_NOTE = re.compile(r"(?:Automatic|Proposal|No |Contact |Cancelled|Draft |Quotation|Moved to|Photography|Filed|"
+                          r"Pricing|Scheduled|Reminder|Follow-up|The meeting resumed|Deck|Creative proposal)", re.I)
+
+
+def _account_state(account_id: int, company_id: int) -> dict:
+    """What the account's own deals say right now: when we were last in touch (any email, meeting or owner note on
+    any of its deals), when a deal was last marked Lost, whether we have ever WON work with them, and the recent
+    notes. Card 1020 (Brandgate, 30 Sep 2026) was drafted two days after their deal was marked Lost and the owner
+    had met them in person: nurture resumed the moment the live deal closed and knew none of it."""
+    org = _org_name(company_id)
+    rows = db.query("select id, title, stage, history, note from crm_projects where account_id=%s and company=%s "
+                    "order by updated_at desc limit 8", (account_id, org))
+    last_contact = lost_at = None
+    notes = []
+    for r in rows:
+        for ev in (r.get("history") or []):
+            ts, kind = str(ev.get("ts") or ""), str(ev.get("event") or "")
+            try:
+                when = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                if when.tzinfo is None:
+                    when = when.replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            text = str(ev.get("text") or "")
+            system = kind == "note" and bool(_SYSTEM_NOTE.match(text))
+            if kind in _CONTACT_EVENTS and not system and (last_contact is None or when > last_contact):
+                last_contact = when
+            if kind == "stage_change" and text.strip().endswith("-> Lost") and (lost_at is None or when > lost_at):
+                lost_at = when
+            if kind in ("note", "context", "conversation") and text and not system:
+                notes.append((when, r["title"], text[:400]))
+    notes.sort(key=lambda x: x[0], reverse=True)
+    return {"last_contact": last_contact, "lost_at": lost_at,
+            "won": any(r.get("stage") in _WON for r in rows),
+            "lost_titles": [r["title"] for r in rows if r.get("stage") == "Lost"],
+            "notes": notes[:6]}
 
 
 def enrol(account_id: int, company_id: int, *, contact_email: str | None = None,
@@ -128,6 +172,18 @@ def sweep() -> dict:
                            (n["id"],))
                 held.append(n["id"])
                 continue
+            st = _account_state(n["account_id"], n["company_id"])
+            now = datetime.now(timezone.utc)
+            wait_until = None
+            if st["lost_at"] and now - st["lost_at"] < timedelta(days=LOST_COOLING_DAYS):
+                wait_until = st["lost_at"] + timedelta(days=LOST_COOLING_DAYS)       # a job just lost: leave them be
+            if st["last_contact"] and now - st["last_contact"] < timedelta(days=RECENT_CONTACT_DAYS):
+                _rc = st["last_contact"] + timedelta(days=RECENT_CONTACT_DAYS)        # we were just in touch
+                wait_until = max(wait_until, _rc) if wait_until else _rc
+            if wait_until:
+                db.execute("update nurture_accounts set next_touch=%s where id=%s", (wait_until, n["id"]))
+                held.append(n["id"])
+                continue
             acc = db.one("select name from crm_accounts where id=%s", (n["account_id"],))
             _slug = (store.get_company(n["company_id"]) or {}).get("slug") or ""
             email = ((n.get("contact_email") or "").strip()
@@ -168,15 +224,49 @@ def sweep() -> dict:
                     company_id=n["company_id"])
                 spawned.append(f"whatsapp-nudge:{n['id']}")
                 continue
+            try:   # NURTURE GATE: the thread and the owner's notes decide whether a touch makes sense now
+                from . import engine as _eng, provider as _pv
+                _co = store.get_company(n["company_id"]) or {}
+                _msgs = _eng._deal_thread_msgs(_co, email, limit=4)
+                _recent = "\n---\n".join(
+                    f"[{x.get('date') or ''} | from {x.get('email') or x.get('from') or ''}] "
+                    + re.sub(r"\s+", " ", x.get("body") or x.get("snippet") or "")[:700] for x in (_msgs or [])[:4])
+                _g = _pv.think_json(
+                    "A monthly relationship-nurture email is due for a contact we are not currently working with. Read "
+                    "the newest emails and the owner's notes. Should we send it NOW? No when: we were in touch with them "
+                    "in the last few weeks; they just turned us down or a job was just lost; they asked for space or "
+                    "gave a date they will come back; their last message is waiting for OUR answer. "
+                    'Return {"send": true|false, "wait_days": <14-90>, "why": "<one line>"}. When unsure, send.',
+                    "TODAY: " + now.strftime("%d %b %Y") + "\nNEWEST EMAILS:\n" + (_recent or "(none)")
+                    + "\n\nOWNER NOTES:\n" + "\n".join(f"- {w:%d %b %Y} {x}" for w, _t, x in st["notes"]),
+                    model=_pv.MODEL_ROUTER, purpose="nurture-gate", company=_slug)
+                if isinstance(_g, dict) and _g.get("send") is False:
+                    _wd = max(14, min(90, int(_g.get("wait_days") or 30)))
+                    db.execute("update nurture_accounts set next_touch = now() + (%s || ' days')::interval where id=%s",
+                               (str(_wd), n["id"]))
+                    held.append(n["id"])
+                    continue
+            except Exception:  # noqa: BLE001 - on any doubt the touch is drafted as before
+                pass
             sk = store.get_skill_by_key(n["company_id"], "sales-followup") \
                 or store.get_skill_by_key(n["company_id"], "sales-first-response")
             c = _named(n.get("contact_email")) or _best_contact(n["account_id"], _slug) or {}
             name = " ".join(x for x in (c.get("first_name"), c.get("last_name")) if x) if c.get("email") == email else ""
             t = store.create_card(n["company_id"], sk["id"], "email_reply", {
-                "brief": (f"NURTURE touch for {(acc or {}).get('name')} - a past client we are keeping warm "
-                          "between projects. The REPEAT-NURTURE standing rules on sales-followup govern this "
-                          "email (warm, no pressure, remind of the work, door open for anything coming up).\n"
+                "brief": (f"NURTURE touch for {(acc or {}).get('name')} - "
+                          + ("a past client we are keeping warm between projects. "
+                             if st["won"] else
+                             "a contact we are staying in touch with. We have NOT done paid work for them yet: never "
+                             "write as if they are a client or as if we delivered something for them. ")
+                          + "The REPEAT-NURTURE standing rules on sales-followup govern this "
+                          "email (warm, no pressure, door open for anything coming up).\n"
                           "OUR HISTORY WITH THEM:\n" + _history_block(n["account_id"], n["company_id"])
+                          + ("\nLOST WORK IS CLOSED: " + "; ".join(st["lost_titles"][:3]) + ". Never offer to revisit, "
+                             "re-quote or re-scope a lost job and never ask whether it is still moving; at most one "
+                             "plain acknowledgement, then look forward." if st["lost_titles"] else "")
+                          + ("\nWHAT WE KNOW (the owner's own notes on their deals, newest first; treat as fact, and "
+                             "never say it has been a while if these show recent contact):\n"
+                             + "\n".join(f"- {w:%d %b %Y} [{t[:50]}] {x}" for w, t, x in st["notes"]) if st["notes"] else "")
                           + (f"\nNOTE ON THE RELATIONSHIP: {n['note']}" if n.get("note") else "")),
                 "inquiry": {"name": name, "email": email, "message": ""},
                 **({"cc_extra": [e for e in (n.get("cc_emails") or []) if "@" in str(e)]}

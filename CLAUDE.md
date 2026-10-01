@@ -1856,6 +1856,16 @@ deal) and added to cc by `_email_envelope` (never_cc / cc_remove still apply). `
 spelling (shared first five letters) and also searches the recipient's own client account. UNIVERSAL rule
 "EVERYONE ON A DEAL STAYS COPIED" on the three email skills.
 
+## Nurture knows what just happened (1 Oct 2026)
+Card 1020 (Brandgate) was a nurture touch drafted two days after their deal was marked Lost and the owner had met
+them: nurture resumes the moment an account has no live deal, and its writer only got a one-line history per deal.
+`nurture._account_state` reads the account's deal timelines. The sweep now holds a touch for `LOST_COOLING_DAYS` (60)
+after a deal goes Lost and for `RECENT_CONTACT_DAYS` (21) after any email, meeting or owner note (Cortex's own
+bookkeeping notes excluded, `_SYSTEM_NOTE`); a Haiku `nurture-gate` reads the newest thread + notes before drafting
+(no -> pushed 14-90 days); the brief says 'past client' only when there is won work, lists the owner's notes as
+fact, and states LOST WORK IS CLOSED (never revisit, re-quote or ask if it is still moving). A Lost DEAL is still
+never chased; nurture is the separate relationship programme.
+
 ## 70/30 shoot presets (29 Sep 2026)
 `shoot-production-7030` and `shoot-production-perpetuity-7030` in `settings.quotation_presets` (`variant_of` the base):
 identical shoot terms (cancellation/postponement clause kept) with payment_lines 70% on confirmation / 30% on approval.
