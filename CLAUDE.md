@@ -2411,3 +2411,6 @@ shoot needs none), then 10% off the whole quotation.
 - Chase card brief says CLOSING CHASE; the wording lives in the universal sales-followup rule "CLOSING CHASE".
   The chase gate is told "reviewing / will get back" is not a reason to hold on a closing deal.
 - Sheraa SEF'27 (123) moved onto it 1 Oct, next chase Fri 2 Oct 09:00.
+- 1 Oct: 117, 118, 130, 132, 133, 135, 136, 141 moved onto the closing rhythm. RAFED (136) had its chase pushed to
+  3 Jun 2027 by a vendor-affairs bank-details notice read as a client timeframe; the `followup-wait` prompt now
+  ignores general notices to all suppliers/customers.

@@ -5193,7 +5193,9 @@ def _pause_or_reschedule_followups(co: dict, deals: list, sender: str, body: str
                 "check back (e.g. 'give us two weeks', 'we should be ready next month', 'after the summit "
                 "in October')? Return JSON {\"wait_days\": <integer days from today, conservative>, "
                 "\"quote\": \"<their exact words, under 15 words>\"} — or {\"wait_days\": null} if no "
-                "timeframe is stated. Never guess one that is not in the text.",
+                "timeframe is stated. Never guess one that is not in the text. Only a timeframe about THIS project, "
+                "our proposal or their decision counts: a general notice sent to all suppliers or customers (bank "
+                "details, portal changes, policy or holiday notices) states no timeframe for us.",
                 body[:2000], model=provider.MODEL_ROUTER, purpose="followup-wait", company=co.get("slug"))
             if isinstance(out, dict) and isinstance(out.get("wait_days"), int) and 0 < out["wait_days"] <= 366:
                 wait = out
