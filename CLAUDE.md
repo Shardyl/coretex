@@ -1419,6 +1419,10 @@ while a local change is queued — a pull once erased a cardio session seconds a
   then set the old row `deleted=true`; the tombstone drops it on the phone and the copy arrives.
   Used 1 Oct 2026 (uids `<exercise>|<date>|r2`: squat 27 Sep, shoulder press 16 + 23 Sep, side
   raises 27 Sep) and to retire a duplicate 28 Sep 4x4 (`id_ou6cxnlg`).
+- **Reading the history:** Feb to ~9 Apr 2026 has 1-exercise rows dated the day after a session (Mon
+  chest press, Thu shoulder press/curls): next-day corrections, not extra sessions. Training was ~2
+  sessions/week throughout; count adjacent-day entries as one session. Most Feb-Mar cardio (weekly
+  Monday 4x4) was never logged. Zone 2 distances after 22 Aug 2026 were guesses and were removed.
 - **PR conventions are not decoration, do not "simplify" them:** lifting PR = volume load
   (total reps x kg); bodyweight lifts resolve against the weight logged for the SESSION DATE, so a
   weight change never rewrites old records; cardio PR = Pareto frontier of lowest avg HR vs hardest
