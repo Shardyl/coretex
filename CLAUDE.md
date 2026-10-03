@@ -1338,7 +1338,7 @@ Branding home https://coretex.uk, privacy https://coretex.uk/privacy/ (`web/priv
 domain coretex.uk. Calendar, Gmail and Drive APIs enabled. Connected via
 `/oauth/google/start?purpose=calendar&company=personal` -> `calendar_refresh_token:personal` (calendar +
 drive.readonly); sees every calendar on the account (primary, Rashad's Work Calendar, Family, Tabscanner,
-Sensa Main). Gmail (`purpose=gmail`) and Drive (`purpose=drive`) consents use the same link pattern.
+Sensa Main). Default `calendar_id:personal` = Rashad's Work Calendar (ietg2ucai1ssf01sbukqcuqcs0@group.calendar.google.com). Gmail (`gmail_refresh_token:personal`, gmail.modify) and Drive (`google_refresh_token:personal`, drive.file + drive.readonly) connected the same day; personal is NOT in inbox_registry, so no mail is triaged automatically.
 
 ## Golf tee booking (personal, skill `golf-booking`, 2026-09-13)
 
