@@ -1332,6 +1332,13 @@ issues a refresh token that **expires after 7 days**. Unverified production is f
 one "Google hasn't verified this app" click and carries a 100-new-user cap that is irrelevant for one
 user. Gmail scopes are RESTRICTED, so a Google password change revokes that token; Calendar + Drive
 are only "sensitive" and survive it.
+**BUILT 3 Oct 2026:** Cloud project `cortex-personal-510511` on rashadalsafar@gmail.com, External, **In
+production**, web client "Cortex box" -> `/etc/cortex/google_oauth_client_personal.json` (root:cortex 640).
+Branding home https://coretex.uk, privacy https://coretex.uk/privacy/ (`web/privacy/`, noindex), authorised
+domain coretex.uk. Calendar, Gmail and Drive APIs enabled. Connected via
+`/oauth/google/start?purpose=calendar&company=personal` -> `calendar_refresh_token:personal` (calendar +
+drive.readonly); sees every calendar on the account (primary, Rashad's Work Calendar, Family, Tabscanner,
+Sensa Main). Gmail (`purpose=gmail`) and Drive (`purpose=drive`) consents use the same link pattern.
 
 ## Golf tee booking (personal, skill `golf-booking`, 2026-09-13)
 
