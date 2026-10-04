@@ -1426,6 +1426,20 @@ while a local change is queued — a pull once erased a cardio session seconds a
   then set the old row `deleted=true`; the tombstone drops it on the phone and the copy arrives.
   Used 1 Oct 2026 (uids `<exercise>|<date>|r2`: squat 27 Sep, shoulder press 16 + 23 Sep, side
   raises 27 Sep) and to retire a duplicate 28 Sep 4x4 (`id_ou6cxnlg`).
+- **FOOD + HEALTH CONNECT (4 Oct 2026).** Food tab in the PWA (`web/fitness/food.js`, loaded after the
+  main script; the sw caches it as `food.js?v=N`, so bump the query with APP_VERSION + CACHE). Tables
+  `fitness.foods` (per-100 g values) and `fitness.food_log` (each row stamped with the kcal/protein it
+  worked out at, so editing a food never rewrites history) ride the normal whole-document sync, with
+  tombstones; daily targets live in setting `fitness_targets` (default 2350 kcal / 178 g, edited in the
+  app). Food lookup: `GET /api/fitness/food/search?q=` (USDA FoodData Central, key `USDA_API_KEY` in
+  cortex.env, else the rate-limited DEMO_KEY; plus Open Food Facts **search-a-licious**
+  search.openfoodfacts.org, because the legacy cgi/search.pl returns 503 to server traffic) and
+  `/api/fitness/food/barcode/{code}` (OFF v2). Watch/phone data comes from the **Cortex Health Bridge**
+  Android app (`android/health-bridge/`), which reads Health Connect and POSTs to
+  `/api/fitness/health` -> `fitness.health_daily` / `health_sessions` / `health_weights` (server-owned,
+  never pushed back by the PWA; returned in the state pull as `health`). The bridge authenticates with
+  its OWN token (`api.bridge_token()`, signed under a separate scope, so `auth()` rejects it on every
+  other endpoint); the copy baked into the APK at build time is `/etc/cortex/fitness_bridge_token`.
 - **Reading the history:** Feb to ~9 Apr 2026 has 1-exercise rows dated the day after a session (Mon
   chest press, Thu shoulder press/curls): next-day corrections, not extra sessions. Training was ~2
   sessions/week throughout; count adjacent-day entries as one session. Most Feb-Mar cardio (weekly
