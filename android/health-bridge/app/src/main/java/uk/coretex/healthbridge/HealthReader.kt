@@ -116,7 +116,11 @@ class HealthReader(
             out.put(JSONObject().apply {
                 put("day", d.toString())
                 putN("steps", a?.get(StepsRecord.COUNT_TOTAL))
-                putN("total_kcal", a?.get(TotalCaloriesBurnedRecord.ENERGY_TOTAL)?.inKilocalories)
+                // With no real records, Health Connect still returns a TOTAL made of its default
+                // basal estimate (1,565 kcal on this phone, every day). That is not the owner's data,
+                // so a total is only sent when some app actually contributed records that day.
+                val real = a != null && a.dataOrigins.isNotEmpty()
+                putN("total_kcal", if (real) a?.get(TotalCaloriesBurnedRecord.ENERGY_TOTAL)?.inKilocalories else null)
                 putN("active_kcal", a?.get(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)?.inKilocalories)
                 putN("distance_m", a?.get(DistanceRecord.DISTANCE_TOTAL)?.inMeters)
                 putN("floors", a?.get(FloorsClimbedRecord.FLOORS_CLIMBED_TOTAL))
