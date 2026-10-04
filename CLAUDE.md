@@ -1450,6 +1450,25 @@ while a local change is queued — a pull once erased a cardio session seconds a
   its own smaller skill roster (the uniform-85 roster rule applies within `kind='owned'`), and
   personal CRM contacts must be suppressed from every campaign audience. Do not build it uninvited.
 
+### Health Connect bridge (Android, `android/health-bridge/`, 4 Oct 2026)
+- Kotlin app `uk.coretex.healthbridge` ("Cortex Health Bridge") on Rashad's S24: reads Samsung
+  Health via Android Health Connect (READ only) and POSTs to `POST /api/fitness/health` with
+  `Authorization: Bearer <token>`. Daily totals use HC aggregate APIs per local day (HC dedupes
+  sources); sessions/weights carry HC `metadata.id`/timestamps. Missing data is null, never a default.
+  Hourly WorkManager 7-day sync (needs READ_HEALTH_DATA_IN_BACKGROUND), sync on open, Backfill =
+  2026-01-01..today in monthly chunks (older than 30 days needs READ_HEALTH_DATA_HISTORY).
+- Built ON THE BOX, never on Windows: copy the folder to `/opt/health-bridge-build` (tar over ssh,
+  excluding build/.gradle), then run `./build-on-box.sh` there. Toolchain: JDK 21 at
+  `/usr/lib/jvm/java-21-openjdk-amd64` (system default java stays 25), SDK `/opt/android-sdk`
+  (platforms 35+36, build-tools 35+36; AGP installed its own platform-tools under it, the separate
+  `/opt/platform-tools` used by golf booking is untouched), AGP 8.11.1, Gradle 8.14.3 wrapper.
+- Secrets live only on the box: signing keystore `/etc/cortex/health-bridge.keystore` + passwords in
+  `/etc/cortex/health-bridge.keystore.properties` (root 600; created once, NEVER regenerate or app
+  updates will not install over the old one); token `/etc/cortex/fitness_bridge_token` is baked into
+  BuildConfig at build time (changing the token = rebuild + reinstall). Output:
+  `/opt/health-bridge-build/out/cortex-health-bridge.apk`. Bump versionCode in `app/build.gradle.kts`
+  on every release.
+
 ## Media library
 
 `media_assets` = the rated, categorised library of every published film (UI: coretex.uk/media; API
