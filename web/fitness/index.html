@@ -255,6 +255,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
     <div class="section-tabs">
       <button class="section-tab active" data-section="lifts">Lifting</button>
       <button class="section-tab" data-section="cardio">Cardio</button>
+      <button class="section-tab" data-section="food">Food</button>
       <button class="section-tab" data-section="workouts">Workouts</button>
     </div>
     <div class="subnav" id="subnav"></div>
@@ -459,6 +460,11 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
     </div>
 
     <!-- ═══ WORKOUTS PAGES ═══ -->
+    <!-- ═══ FOOD PAGES (rendered by food.js) ═══ -->
+    <div id="page-food-today" class="page" data-section="food"></div>
+    <div id="page-food-history" class="page" data-section="food"></div>
+    <div id="page-food-foods" class="page" data-section="food"></div>
+
     <div id="page-workouts-lifts" class="page" data-section="workouts">
       <div class="section-label">Lifting plans</div>
       <div id="wkList"></div>
@@ -893,8 +899,14 @@ const CARDIO_SESS_KEY='lifts_cardio_v1';
 const CARDIO_EX_KEY='fitness_cardio_exercises_v1';
 const VO2_KEY='lifts_vo2_v1';
 const BW_KEY='fitness_bodyweight_v1';
+const FOODS_KEY='fitness_foods_v1';
+const FOODLOG_KEY='fitness_foodlog_v1';
+const TARGETS_KEY='fitness_targets_v1';
+const HEALTH_KEY='fitness_health_v1';
 
 let liftSessions=[], liftWorkouts=[], cardioSessions=[], cardioExercises=[], vo2Records=[], bodyweightLog=[];
+// Food + Health Connect. healthData is server-owned (written by the companion app), cached here only.
+let foods=[], foodLog=[], foodTargets={kcal:2350,protein:178}, healthData={days:[],sessions:[],weights:[],lastSync:null};
 
 function loadAll(){
   // Lift sessions
@@ -923,6 +935,10 @@ function loadAll(){
   catch(e){cardioExercises=DEFAULT_CARDIO_EXERCISES.map(t=>JSON.parse(JSON.stringify(t)));}
   try{const d=localStorage.getItem(VO2_KEY);if(d)vo2Records=JSON.parse(d);}catch(e){}
   try{const d=localStorage.getItem(BW_KEY);if(d)bodyweightLog=JSON.parse(d);}catch(e){}
+  try{const d=localStorage.getItem(FOODS_KEY);if(d)foods=JSON.parse(d);}catch(e){}
+  try{const d=localStorage.getItem(FOODLOG_KEY);if(d)foodLog=JSON.parse(d);}catch(e){}
+  try{const d=localStorage.getItem(TARGETS_KEY);if(d)foodTargets=Object.assign(foodTargets,JSON.parse(d));}catch(e){}
+  try{const d=localStorage.getItem(HEALTH_KEY);if(d)healthData=JSON.parse(d);}catch(e){}
   ensureIds();
 }
 
@@ -931,6 +947,10 @@ function saveLiftWorkouts(){try{localStorage.setItem(WK_KEY,JSON.stringify(liftW
 function saveCardio(){try{localStorage.setItem(CARDIO_SESS_KEY,JSON.stringify(cardioSessions));}catch(e){}if(typeof queueSync==='function')queueSync();}
 function saveCardioExercises(){try{localStorage.setItem(CARDIO_EX_KEY,JSON.stringify(cardioExercises));}catch(e){}if(typeof queueSync==='function')queueSync();}
 function saveVO2(){try{localStorage.setItem(VO2_KEY,JSON.stringify(vo2Records));}catch(e){}if(typeof queueSync==='function')queueSync();}
+function saveFoods(){try{localStorage.setItem(FOODS_KEY,JSON.stringify(foods));}catch(e){}if(typeof queueSync==='function')queueSync();}
+function saveFoodLog(){try{localStorage.setItem(FOODLOG_KEY,JSON.stringify(foodLog));}catch(e){}if(typeof queueSync==='function')queueSync();}
+function saveTargets(){try{localStorage.setItem(TARGETS_KEY,JSON.stringify(foodTargets));}catch(e){}if(typeof queueSync==='function')queueSync();}
+function saveHealth(){try{localStorage.setItem(HEALTH_KEY,JSON.stringify(healthData));}catch(e){}}
 function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodyweightLog));}catch(e){}if(typeof queueSync==='function')queueSync();}
 
 // ─── CLOUD SYNC (Cortex box) ──────────────────────────────────────────────────
@@ -942,7 +962,7 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='11';                         // keep in step with CACHE in sw.js
+const APP_VERSION='12';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -974,7 +994,10 @@ function syncDoc(){
     cardioPresets:cardioExercises,
     cardioSessions:cardioSessions,
     bodyweight:bodyweightLog.map(b=>({date:b.date,kg:b.kg,notes:b.notes||null})),
-    vo2:vo2Records
+    vo2:vo2Records,
+    foods:foods,
+    foodLog:foodLog,
+    targets:foodTargets
   };
   // Deletions: anything we pushed before that is no longer here went on purpose. Send it as a
   // tombstone rather than just omitting it, or the next pull would resurrect it.
@@ -984,7 +1007,9 @@ function syncDoc(){
     liftSessions:new Set(liftSessions.map(s=>s.id)),
     cardioSessions:new Set(cardioSessions.map(s=>s.id)),
     plans:new Set(liftWorkouts.map(w=>w.id)),
-    cardioPresets:new Set(cardioExercises.map(e=>e.id))
+    cardioPresets:new Set(cardioExercises.map(e=>e.id)),
+    foods:new Set(foods.map(f=>f.id)),
+    foodLog:new Set(foodLog.map(f=>f.id))
   };
   Object.keys(live).forEach(k=>{
     (sent[k]||[]).forEach(id=>{if(!live[k].has(id))doc[k]=doc[k].concat([{id:id,deleted:true}]);});
@@ -998,7 +1023,9 @@ function rememberSent(){
       liftSessions:liftSessions.map(s=>s.id),
       cardioSessions:cardioSessions.map(s=>s.id),
       plans:liftWorkouts.map(w=>w.id),
-      cardioPresets:cardioExercises.map(e=>e.id)
+      cardioPresets:cardioExercises.map(e=>e.id),
+      foods:foods.map(f=>f.id),
+      foodLog:foodLog.map(f=>f.id)
     }));
   }catch(e){}
 }
@@ -1106,6 +1133,7 @@ function applyServerState(state,force){
     const dropT=a=>(a||[]).filter(r=>!(r&&r.id&&_tomb.has(r.id)));
     liftSessions=dropT(liftSessions);cardioSessions=dropT(cardioSessions);
     liftWorkouts=dropT(liftWorkouts);cardioExercises=dropT(cardioExercises);vo2Records=dropT(vo2Records);
+    foods=dropT(foods);foodLog=dropT(foodLog);
   }
   // The server is authoritative after a successful push, so what comes back includes everything
   // this device just sent plus anything it did not have.
@@ -1116,7 +1144,12 @@ function applyServerState(state,force){
   if(state.cardioPresets&&state.cardioPresets.length)cardioExercises=mergeById(state.cardioPresets,cardioExercises);
   if(state.bodyweight)bodyweightLog=mergeById(state.bodyweight,bodyweightLog,'date').map(b=>Object.assign({id:'bw_'+b.date},b));
   if(state.vo2)vo2Records=mergeById(state.vo2,vo2Records);
+  if(state.foods)foods=mergeById(state.foods,foods);
+  if(state.foodLog)foodLog=mergeById(state.foodLog,foodLog);
+  if(state.targets)foodTargets=Object.assign({},foodTargets,state.targets);
+  if(state.health){healthData=state.health;saveHealth();}
   saveLift();saveLiftWorkouts();saveCardio();saveCardioExercises();saveVO2();saveBodyweight();
+  saveFoods();saveFoodLog();saveTargets();
   rememberSent();
   }finally{_applyingServer=false;}
   redrawAll();
@@ -1126,7 +1159,7 @@ function applyServerState(state,force){
 // have ever been opened.
 function redrawAll(){
   [['renderLiftHistory'],['renderCardioHistory'],['populateWorkoutDropdown'],
-   ['populateCardioExDropdown'],['renderLiftWorkouts'],['renderCardioExercises']].forEach(function(f){
+   ['populateCardioExDropdown'],['renderLiftWorkouts'],['renderCardioExercises'],['renderFoodCurrent']].forEach(function(f){
     try{if(typeof window[f[0]]==='function')window[f[0]]();}catch(e){}
   });
 }
@@ -1308,10 +1341,11 @@ function bestCardioEff(sessions,exDef){
 const SUBNAVS={
   lifts:[{label:'Log',key:'log'},{label:'History',key:'history'},{label:'Reports',key:'reports'},{label:'Progress',key:'progress'}],
   cardio:[{label:'Log',key:'log'},{label:'History',key:'history'},{label:'Reports',key:'reports'},{label:'Progress',key:'progress'}],
+  food:[{label:'Today',key:'today'},{label:'History',key:'history'},{label:'My foods',key:'foods'}],
   workouts:[{label:'Lifting',key:'lifts'},{label:'Cardio',key:'cardio'}]
 };
 let currentSection='lifts';
-let currentSubpage={lifts:'log',cardio:'log',workouts:'lifts'};
+let currentSubpage={lifts:'log',cardio:'log',food:'today',workouts:'lifts'};
 
 function showSection(section){
   currentSection=section;
@@ -1347,6 +1381,7 @@ function showPage(section,sub){
   if(section==='cardio'&&sub==='progress')renderCardioProgress();
   if(section==='workouts'&&sub==='lifts')renderLiftWorkouts();
   if(section==='workouts'&&sub==='cardio')renderCardioTypes();
+  if(section==='food'&&typeof renderFood==='function')renderFood(sub);
 }
 
 // ─── LIFTING LOG ──────────────────────────────────────────────────────────────
@@ -2857,5 +2892,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
+<script src="food.js?v=12"></script>
 </body>
 </html>
