@@ -528,10 +528,10 @@ function renderWeight(){
       <div class="fd-sub">${todays?'Today':'Morning weigh-in'}</div>
       ${todays?`<div class="fd-big">${todays.kg} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kg</span></div>`:''}
       <div style="display:flex;gap:8px;margin-top:10px">
-        <input class="fd-input" type="number" step="0.1" inputmode="decimal" id="wtIn" placeholder="${last?last.kg:'kg'}" value="${todays?todays.kg:''}"/>
-        <button class="fd-btn" style="width:auto;margin:0;padding:0 18px" onclick="foodLogWeight(document.getElementById('wtDay').value,'wtIn')">${todays?'Update':'Save'}</button>
+        <input class="fd-input" type="number" step="0.1" inputmode="decimal" id="fdWtIn" placeholder="${last?last.kg:'kg'}" value="${todays?todays.kg:''}"/>
+        <button class="fd-btn" style="width:auto;margin:0;padding:0 18px" onclick="foodLogWeight(document.getElementById('fdWtDay').value,'fdWtIn')">${todays?'Update':'Save'}</button>
       </div>
-      <input type="date" id="wtDay" value="${today}" max="${today}" class="fd-input" style="margin-top:8px;font-size:14px"/>
+      <input type="date" id="fdWtDay" value="${today}" max="${today}" class="fd-input" style="margin-top:8px;font-size:14px"/>
     </div>
     <div class="card"><div class="fd-row" style="margin-top:0">
       <div class="fd-cell"><div class="v">${a7!=null?r1(a7):'—'}</div><div class="l">7-day avg</div></div>
