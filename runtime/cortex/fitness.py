@@ -141,10 +141,235 @@ def pull() -> dict:
         "select uid from fitness.plans where deleted union all "
         "select uid from fitness.cardio_presets where deleted union all "
         "select uid from fitness.vo2 where deleted")]
+    foods = [{"id": r["uid"], "name": r["name"], "brand": r["brand"], "barcode": r["barcode"],
+              "servingLabel": r["serving_label"], "servingG": _num(r["serving_g"]),
+              "kcal100": _num(r["kcal_100g"]), "protein100": _num(r["protein_100g"]),
+              "carbs100": _num(r["carbs_100g"]), "fat100": _num(r["fat_100g"]),
+              "fibre100": _num(r["fibre_100g"]), "source": r["source"], "sourceId": r["source_id"],
+              "favourite": r["favourite"]}
+             for r in db.query("select * from fitness.foods where not deleted order by name")]
+    food_log = [{"id": r["uid"], "date": r["day"].isoformat(), "meal": r["meal"], "foodId": r["food_uid"],
+                 "name": r["name"], "qtyG": _num(r["qty_g"]), "kcal": _num(r["kcal"]),
+                 "protein": _num(r["protein"]), "carbs": _num(r["carbs"]), "fat": _num(r["fat"]),
+                 "notes": r["notes"]}
+                for r in db.query("select * from fitness.food_log where not deleted order by day, uid")]
+    tombstones += [r["uid"] for r in db.query(
+        "select uid from fitness.foods where deleted union all "
+        "select uid from fitness.food_log where deleted")]
     return {"bodyweight": bw, "plans": plans, "liftSessions": lifts, "cardioPresets": presets,
             "cardioSessions": cardio, "vo2": vo2, "tombstones": tombstones,
+            "foods": foods, "foodLog": food_log, "targets": targets(), "health": health_pull(),
             "counts": {"bodyweight": len(bw), "plans": len(plans), "liftSessions": len(lifts),
-                       "cardioPresets": len(presets), "cardioSessions": len(cardio), "vo2": len(vo2)}}
+                       "cardioPresets": len(presets), "cardioSessions": len(cardio), "vo2": len(vo2),
+                       "foods": len(foods), "foodLog": len(food_log)}}
+
+
+# ---------- targets (daily intake goals; the operator's numbers, edited in the app) ----------
+
+DEFAULT_TARGETS = {"kcal": 2350, "protein": 178}
+
+
+def targets() -> dict:
+    t = db.setting_get("fitness_targets") or {}
+    return {**DEFAULT_TARGETS, **{k: v for k, v in t.items() if v is not None}}
+
+
+def set_targets(t: dict) -> dict:
+    clean = {}
+    for k in ("kcal", "protein", "carbs", "fat"):
+        v = _num((t or {}).get(k))
+        if v is not None and v > 0:
+            clean[k] = round(v)
+    if clean:
+        db.setting_set("fitness_targets", {**(db.setting_get("fitness_targets") or {}), **clean})
+    return targets()
+
+
+# ---------- Health Connect (watch + phone data from the companion app) ----------
+
+
+def health_pull(days: int = 400) -> dict:
+    """What the app shows: daily totals, watch sessions and weigh-ins for the last `days` days."""
+    d = [{"date": r["day"].isoformat(), "steps": r["steps"], "totalKcal": _num(r["total_kcal"]),
+          "activeKcal": _num(r["active_kcal"]), "distanceM": _num(r["distance_m"]),
+          "floors": _num(r["floors"]), "restingHR": _num(r["resting_hr"]), "hrvMs": _num(r["hrv_ms"]),
+          "sleepMin": _num(r["sleep_min"])}
+         for r in db.query("select * from fitness.health_daily where day > current_date - %s order by day",
+                           (days,))]
+    s = [{"id": r["uid"], "date": r["day"].isoformat(), "start": r["start_at"].isoformat(),
+          "end": r["end_at"].isoformat(), "type": r["type"], "typeName": r["type_name"], "title": r["title"],
+          "kcal": _num(r["kcal"]), "avgHR": _num(r["avg_hr"]), "maxHR": _num(r["max_hr"]),
+          "minHR": _num(r["min_hr"]), "distanceM": _num(r["distance_m"]), "steps": _num(r["steps"]),
+          "minutes": round((r["end_at"] - r["start_at"]).total_seconds() / 60, 1), "source": r["source"]}
+         for r in db.query("select * from fitness.health_sessions where day > current_date - %s "
+                           "order by start_at", (days,))]
+    w = [{"at": r["at"].isoformat(), "date": r["at"].date().isoformat(), "kg": _num(r["kg"]),
+          "bodyFatPct": _num(r["body_fat_pct"])}
+         for r in db.query("select * from fitness.health_weights where at > now() - make_interval(days => %s) "
+                           "order by at", (days,))]
+    last = db.one("select max(updated_at) as t from fitness.health_daily")
+    return {"days": d, "sessions": s, "weights": w,
+            "lastSync": last["t"].isoformat() if last and last.get("t") else None}
+
+
+def _ts(v):
+    if not v:
+        return None
+    try:
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def ingest_health(doc: dict) -> dict:
+    """Upsert what the companion read from Health Connect. Values are stored exactly as sent:
+    a null stays null (no data that day), never a guessed zero. Re-sending a window is the normal
+    case (it re-reads the last 7 days every hour), so every write is an idempotent upsert."""
+    dev = (doc.get("device") or "")[:80]
+    n = {"days": 0, "sessions": 0, "weights": 0}
+    for r in doc.get("days") or []:
+        d = _day(r.get("day"))
+        if not d:
+            continue
+        steps = _num(r.get("steps"))
+        db.execute(
+            "insert into fitness.health_daily (day, steps, total_kcal, active_kcal, distance_m, floors, "
+            "resting_hr, hrv_ms, sleep_min, device) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "on conflict (day) do update set steps=excluded.steps, total_kcal=excluded.total_kcal, "
+            "active_kcal=excluded.active_kcal, distance_m=excluded.distance_m, floors=excluded.floors, "
+            "resting_hr=excluded.resting_hr, hrv_ms=excluded.hrv_ms, sleep_min=excluded.sleep_min, "
+            "device=excluded.device, updated_at=now()",
+            (d, int(steps) if steps is not None else None, _num(r.get("total_kcal")),
+             _num(r.get("active_kcal")), _num(r.get("distance_m")), _num(r.get("floors")),
+             _num(r.get("resting_hr")), _num(r.get("hrv_ms")), _num(r.get("sleep_min")), dev))
+        n["days"] += 1
+    for r in doc.get("sessions") or []:
+        st, en = _ts(r.get("start")), _ts(r.get("end"))
+        if not r.get("id") or not st or not en:
+            continue
+        db.execute(
+            "insert into fitness.health_sessions (uid, start_at, end_at, day, type, type_name, title, kcal, "
+            "avg_hr, max_hr, min_hr, distance_m, steps, source) "
+            "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "on conflict (uid) do update set start_at=excluded.start_at, end_at=excluded.end_at, "
+            "day=excluded.day, type=excluded.type, type_name=excluded.type_name, title=excluded.title, "
+            "kcal=excluded.kcal, avg_hr=excluded.avg_hr, max_hr=excluded.max_hr, min_hr=excluded.min_hr, "
+            "distance_m=excluded.distance_m, steps=excluded.steps, source=excluded.source, updated_at=now()",
+            (str(r["id"])[:200], st, en, st.date(), r.get("type"), (r.get("type_name") or "")[:80] or None,
+             (r.get("title") or "")[:200] or None, _num(r.get("kcal")), _num(r.get("avg_hr")),
+             _num(r.get("max_hr")), _num(r.get("min_hr")), _num(r.get("distance_m")), _num(r.get("steps")),
+             (r.get("source") or "")[:120] or None))
+        n["sessions"] += 1
+    for r in doc.get("weights") or []:
+        at, kg = _ts(r.get("time")), _num(r.get("kg"))
+        if not at or not kg:
+            continue
+        db.execute("insert into fitness.health_weights (at, kg, body_fat_pct, source) values (%s,%s,%s,%s) "
+                   "on conflict (at) do update set kg=excluded.kg, body_fat_pct=excluded.body_fat_pct, "
+                   "source=excluded.source, updated_at=now()",
+                   (at, kg, _num(r.get("body_fat_pct")), (r.get("source") or "")[:120] or None))
+        n["weights"] += 1
+    return {"ok": True, "counts": n}
+
+
+# ---------- food lookup (Open Food Facts + USDA FoodData Central) ----------
+# Both are free. OFF is crowd-sourced with barcodes and good UAE/UK packaged coverage; USDA is the
+# reliable source for plain foods (chicken, rice, eggs). Every figure is per 100 g, read from the
+# source; nothing is estimated. Results are cached in-process because the same foods repeat.
+
+_OFF_FIELDS = "code,product_name,brands,nutriments,serving_size,serving_quantity"
+_UA = {"User-Agent": "CortexFitness/1.0 (rashadalsafar@gmail.com)"}
+_food_cache: dict = {}
+
+
+def _off_item(p: dict) -> dict | None:
+    nm = p.get("nutriments") or {}
+    kcal = _num(nm.get("energy-kcal_100g"))
+    if kcal is None and _num(nm.get("energy_100g")) is not None:
+        kcal = round(_num(nm.get("energy_100g")) / 4.184, 1)      # kJ on the label -> kcal
+    name = (p.get("product_name") or "").strip()
+    if not name or kcal is None:
+        return None
+    return {"name": name, "brand": (p.get("brands") or "").split(",")[0].strip() or None,
+            "barcode": p.get("code"), "kcal100": kcal, "protein100": _num(nm.get("proteins_100g")),
+            "carbs100": _num(nm.get("carbohydrates_100g")), "fat100": _num(nm.get("fat_100g")),
+            "fibre100": _num(nm.get("fiber_100g")), "servingLabel": p.get("serving_size"),
+            "servingG": _num(p.get("serving_quantity")), "source": "off", "sourceId": p.get("code")}
+
+
+def _usda_item(f: dict) -> dict | None:
+    by = {}
+    for n in f.get("foodNutrients") or []:
+        num = str(n.get("nutrientNumber") or "")
+        unit = (n.get("unitName") or "").upper()
+        if num == "208" or (num == "" and n.get("nutrientName") == "Energy" and unit == "KCAL"):
+            by["kcal"] = n.get("value")
+        elif num == "203":
+            by["protein"] = n.get("value")
+        elif num == "205":
+            by["carbs"] = n.get("value")
+        elif num == "204":
+            by["fat"] = n.get("value")
+        elif num == "291":
+            by["fibre"] = n.get("value")
+    if by.get("kcal") is None:
+        return None
+    return {"name": (f.get("description") or "").strip().capitalize(), "brand": f.get("brandOwner"),
+            "barcode": f.get("gtinUpc"), "kcal100": _num(by.get("kcal")), "protein100": _num(by.get("protein")),
+            "carbs100": _num(by.get("carbs")), "fat100": _num(by.get("fat")), "fibre100": _num(by.get("fibre")),
+            "servingLabel": None, "servingG": None, "source": "usda", "sourceId": str(f.get("fdcId"))}
+
+
+def food_search(q: str) -> dict:
+    import httpx
+    from . import config
+    q = (q or "").strip()[:80]
+    if len(q) < 2:
+        return {"items": []}
+    key = ("s", q.lower())
+    if key in _food_cache:
+        return _food_cache[key]
+    items, errors = [], []
+    try:
+        r = httpx.get("https://api.nal.usda.gov/fdc/v1/foods/search", timeout=12, params={
+            "api_key": config.get("USDA_API_KEY") or "DEMO_KEY", "query": q, "pageSize": 12,
+            "dataType": "Foundation,SR Legacy,Survey (FNDDS)"})
+        r.raise_for_status()
+        items += [i for i in (_usda_item(f) for f in r.json().get("foods") or []) if i]
+    except Exception as e:  # noqa: BLE001
+        errors.append(f"usda: {e.__class__.__name__}")
+    try:
+        r = httpx.get("https://world.openfoodfacts.org/cgi/search.pl", headers=_UA, timeout=12, params={
+            "search_terms": q, "search_simple": 1, "action": "process", "json": 1, "page_size": 15,
+            "fields": _OFF_FIELDS})
+        r.raise_for_status()
+        items += [i for i in (_off_item(p) for p in r.json().get("products") or []) if i]
+    except Exception as e:  # noqa: BLE001
+        errors.append(f"off: {e.__class__.__name__}")
+    out = {"items": items, "errors": errors}
+    if items:
+        _food_cache[key] = out
+    return out
+
+
+def food_barcode(code: str) -> dict:
+    import httpx
+    code = re.sub(r"\D", "", code or "")[:20]
+    if not code:
+        return {"item": None}
+    key = ("b", code)
+    if key in _food_cache:
+        return _food_cache[key]
+    try:
+        r = httpx.get(f"https://world.openfoodfacts.org/api/v2/product/{code}.json", headers=_UA,
+                      timeout=12, params={"fields": _OFF_FIELDS})
+        p = r.json().get("product") if r.status_code == 200 else None
+    except Exception:  # noqa: BLE001
+        return {"item": None, "error": "lookup failed"}
+    out = {"item": _off_item(p) if p else None}
+    if out["item"]:
+        _food_cache[key] = out
+    return out
 
 
 # ---------- write ----------
@@ -269,6 +494,48 @@ def push(doc: dict, source: str = "app") -> dict:
                    (str(r.get("id") or f"vo2|{d.isoformat()}"), d, val, r.get("method"),
                     r.get("notes")))
         counts["vo2"] += 1
+
+    counts["foods"] = counts["foodLog"] = 0
+    for r in doc.get("foods") or []:
+        if r.get("id") and r.get("deleted") and not r.get("name"):   # bare tombstone from the client
+            db.execute("update fitness.foods set deleted=true, updated_at=now() where uid=%s", (r["id"],))
+            continue
+        if not r.get("id") or not (r.get("name") or "").strip():
+            continue
+        db.execute(
+            "insert into fitness.foods (uid, name, brand, barcode, serving_label, serving_g, kcal_100g, "
+            "protein_100g, carbs_100g, fat_100g, fibre_100g, source, source_id, favourite, deleted) "
+            "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "on conflict (uid) do update set name=excluded.name, brand=excluded.brand, barcode=excluded.barcode, "
+            "serving_label=excluded.serving_label, serving_g=excluded.serving_g, kcal_100g=excluded.kcal_100g, "
+            "protein_100g=excluded.protein_100g, carbs_100g=excluded.carbs_100g, fat_100g=excluded.fat_100g, "
+            "fibre_100g=excluded.fibre_100g, source=excluded.source, source_id=excluded.source_id, "
+            "favourite=excluded.favourite, deleted=foods.deleted or excluded.deleted, updated_at=now()",
+            (r["id"], r["name"].strip(), r.get("brand"), r.get("barcode"), r.get("servingLabel"),
+             _num(r.get("servingG")), _num(r.get("kcal100")), _num(r.get("protein100")),
+             _num(r.get("carbs100")), _num(r.get("fat100")), _num(r.get("fibre100")), r.get("source"),
+             r.get("sourceId"), bool(r.get("favourite")), bool(r.get("deleted"))))
+        counts["foods"] += 1
+    for r in doc.get("foodLog") or []:
+        d = _day(r.get("date"))
+        if not r.get("id") or not d:
+            continue
+        if r.get("deleted") and not r.get("name"):        # bare tombstone from the client
+            db.execute("update fitness.food_log set deleted=true, updated_at=now() where uid=%s", (r["id"],))
+            continue
+        db.execute(
+            "insert into fitness.food_log (uid, day, meal, food_uid, name, qty_g, kcal, protein, carbs, fat, "
+            "notes, deleted) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "on conflict (uid) do update set day=excluded.day, meal=excluded.meal, food_uid=excluded.food_uid, "
+            "name=excluded.name, qty_g=excluded.qty_g, kcal=excluded.kcal, protein=excluded.protein, "
+            "carbs=excluded.carbs, fat=excluded.fat, notes=excluded.notes, "
+            "deleted=food_log.deleted or excluded.deleted, updated_at=now()",
+            (r["id"], d, r.get("meal"), r.get("foodId"), (r.get("name") or "").strip() or "Food",
+             _num(r.get("qtyG")), _num(r.get("kcal")), _num(r.get("protein")), _num(r.get("carbs")),
+             _num(r.get("fat")), r.get("notes"), bool(r.get("deleted"))))
+        counts["foodLog"] += 1
+    if doc.get("targets"):
+        set_targets(doc["targets"])
 
     total = sum(counts.values())
     # The app pushes whenever it regains focus, so most pushes are byte-identical to the last one.

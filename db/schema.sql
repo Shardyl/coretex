@@ -219,6 +219,90 @@ create table if not exists fitness.vo2 (
     updated_at timestamptz not null default now()
 );
 
+-- ---- watch / phone data, pushed by the Health Connect companion app (Cortex Health Bridge) ----
+-- Server-owned: the PWA reads these and never pushes them back, so they are not part of the
+-- whole-document sync. Daily figures are Health Connect AGGREGATES (de-duplicated across sources).
+create table if not exists fitness.health_daily (
+    day         date primary key,
+    steps       int,
+    total_kcal  numeric,
+    active_kcal numeric,
+    distance_m  numeric,
+    floors      numeric,
+    resting_hr  numeric,
+    hrv_ms      numeric,
+    sleep_min   numeric,
+    device      text,
+    updated_at  timestamptz not null default now()
+);
+
+create table if not exists fitness.health_sessions (
+    uid        text primary key,                        -- Health Connect record id
+    start_at   timestamptz not null,
+    end_at     timestamptz not null,
+    day        date not null,                           -- local day the session started
+    type       int,
+    type_name  text,
+    title      text,
+    kcal       numeric,
+    avg_hr     numeric,
+    max_hr     numeric,
+    min_hr     numeric,
+    distance_m numeric,
+    steps      numeric,
+    source     text,                                    -- writing app's package
+    updated_at timestamptz not null default now()
+);
+create index if not exists health_sessions_day_idx on fitness.health_sessions (day);
+
+create table if not exists fitness.health_weights (
+    at           timestamptz primary key,
+    kg           numeric not null,
+    body_fat_pct numeric,
+    source       text,
+    updated_at   timestamptz not null default now()
+);
+
+-- ---- food tracking (owned by the app, part of the whole-document sync like the lifts) ----
+-- Nutrition is stored per 100 g so a portion is always qty_g x value / 100, computed in the app
+-- and stamped on the log row. A food's numbers come from Open Food Facts / USDA or the operator,
+-- never from a model.
+create table if not exists fitness.foods (
+    uid           text primary key,
+    name          text not null,
+    brand         text,
+    barcode       text,
+    serving_label text,                                 -- e.g. '1 scoop', '1 egg'
+    serving_g     numeric,                              -- grams in one serving
+    kcal_100g     numeric,
+    protein_100g  numeric,
+    carbs_100g    numeric,
+    fat_100g      numeric,
+    fibre_100g    numeric,
+    source        text,                                 -- off | usda | manual
+    source_id     text,
+    favourite     boolean not null default false,
+    deleted       boolean not null default false,
+    updated_at    timestamptz not null default now()
+);
+
+create table if not exists fitness.food_log (
+    uid        text primary key,
+    day        date not null,
+    meal       text,                                    -- breakfast | lunch | dinner | snacks
+    food_uid   text,
+    name       text not null,                           -- denormalised, foods get renamed
+    qty_g      numeric,
+    kcal       numeric,
+    protein    numeric,
+    carbs      numeric,
+    fat        numeric,
+    notes      text,
+    deleted    boolean not null default false,
+    updated_at timestamptz not null default now()
+);
+create index if not exists food_log_day_idx on fitness.food_log (day);
+
 -- every client push, verbatim, newest last. Restore path of last resort.
 create table if not exists fitness.snapshots (
     id         bigserial primary key,
@@ -271,7 +355,7 @@ create table if not exists media_assets (
     sort_order         int,                              -- deprecated: replaced by sort_orders
     -- multi-category tagging: a film sits in MANY categories (tags); each category becomes an
     -- unlisted playlist on the future YouTube resync. sort_orders = per-category manual drag
-    -- order at /media ({category: position}) — the playlist's best-to-worst order.
+    -- order at /media ({category: position}) ï¿½ the playlist's best-to-worst order.
     categories         jsonb default '[]',
     sort_orders        jsonb default '{}',
     created_at         timestamptz default now(),

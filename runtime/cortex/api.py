@@ -5470,6 +5470,47 @@ class FitnessDoc(BaseModel):
     cardioPresets: list[dict] | None = None
     cardioSessions: list[dict] | None = None
     vo2: list[dict] | None = None
+    foods: list[dict] | None = None
+    foodLog: list[dict] | None = None
+    targets: dict | None = None
+
+
+# The Health Connect companion (an APK on the owner's phone) gets its OWN token, signed in a
+# separate scope, so it can only write watch data: auth() rejects it everywhere else because its
+# signature is over a different payload. Owner tokens are also accepted here, for testing.
+_BRIDGE_SCOPE = "health-bridge-scope|"
+
+
+def bridge_token(days: int = 3650) -> str:
+    payload = f"bridge.{int(time.time()) + days * 86400}"
+    return f"{payload}.{_sign(_BRIDGE_SCOPE + payload)}"
+
+
+def bridge_auth(authorization: str = Header(default="")) -> None:
+    token = authorization[7:] if authorization.lower().startswith("bearer ") else authorization
+    parts = token.split(".")
+    if len(parts) == 3 and parts[0] == "bridge" and parts[1].isdigit():
+        if hmac.compare_digest(parts[2], _sign(f"{_BRIDGE_SCOPE}bridge.{parts[1]}")) and int(parts[1]) > time.time():
+            return
+    if _token_subject(token) == "owner":
+        return
+    raise HTTPException(status_code=401, detail="not authenticated")
+
+
+@app.post("/api/fitness/health")
+def fitness_health(body: dict, _: None = Depends(bridge_auth)) -> dict:
+    """Health Connect data from the companion app: daily totals, watch sessions, weigh-ins."""
+    return fitness.ingest_health(body or {})
+
+
+@app.get("/api/fitness/food/search")
+def fitness_food_search(q: str = "", _: None = Depends(auth)) -> dict:
+    return fitness.food_search(q)
+
+
+@app.get("/api/fitness/food/barcode/{code}")
+def fitness_food_barcode(code: str, _: None = Depends(auth)) -> dict:
+    return fitness.food_barcode(code)
 
 
 @app.get("/api/fitness/state")
