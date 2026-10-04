@@ -1,11 +1,11 @@
 // Fitness PWA service worker.
 // Bump CACHE on every ship or the phone keeps serving the cached index.html.
-const CACHE = 'fitness-v12';
+const CACHE = 'fitness-v13';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './food.js?v=12',
+  './food.js?v=13',
   'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
 ];
@@ -27,7 +27,9 @@ self.addEventListener('fetch', e => {
   if (url.pathname.startsWith('/api/')) return;
   // App shell is network-first so a deploy lands on the next reload; cache is the offline fallback.
   if (e.request.mode === 'navigate' || url.pathname.endsWith('/index.html')) {
-    e.respondWith(fetch(e.request).then(res => {
+    // cache:'no-cache' revalidates with the server every time. Without it Chrome's HTTP cache
+    // (the server sends Last-Modified and no Cache-Control) kept serving a days-old page.
+    e.respondWith(fetch(e.request.url, {cache: 'no-cache', credentials: 'same-origin'}).then(res => {
       if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
       return res;
     }).catch(() => caches.match(e.request).then(c => c || caches.match('./index.html'))));
