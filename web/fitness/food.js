@@ -106,6 +106,7 @@ window.renderFood=function(sub){
   if(sub==='today')renderToday();
   else if(sub==='history')renderHistory();
   else if(sub==='foods')renderFoodsPage();
+  else if(sub==='weight')renderWeight();
 };
 window.renderFoodCurrent=function(){
   if(typeof currentSection!=='undefined'&&currentSection==='food')window.renderFood(currentSubpage.food);
@@ -152,10 +153,20 @@ function renderToday(){
       <div style="margin-top:6px;font-size:11px;color:var(--ink3)">Carbs ${fmtN(t.carbs)} g &middot; Fat ${fmtN(t.fat)} g</div>
       ${balance}
     </div>
+    ${isToday?weighCard():''}
     ${isFuture?'':healthCard(h,sess)}
     ${MEALS.map(([k,label])=>mealCard(k,label,list.filter(e=>(e.meal||'snacks')===k))).join('')}
     <button class="fd-btn sec" onclick="foodCopyDay()">Copy ${dayLabel(shiftDay(foodDay,-1)).toLowerCase()}'s food to ${dayLabel(foodDay).toLowerCase()}</button>
   `;
+}
+function weighCard(){
+  const t=localDay(new Date()), w=bodyweightLog.find(b=>b.date===t);
+  if(w)return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
+    <div><div class="fd-sub">Weigh-in</div><div style="font-size:18px;font-weight:800">${w.kg} kg</div></div>
+    <button class="btn-sm" onclick="document.querySelector('.subnav-btn[data-sub=weight]').click()">Trend</button></div>`;
+  return `<div class="card" style="padding:12px 16px"><div class="fd-sub" style="margin-bottom:6px">Morning weigh-in</div>
+    <div style="display:flex;gap:8px"><input class="fd-input" type="number" step="0.1" inputmode="decimal" id="wtTodayIn" placeholder="kg"/>
+    <button class="fd-btn" style="width:auto;margin:0;padding:0 18px" onclick="foodLogWeight(null,'wtTodayIn')">Save</button></div></div>`;
 }
 function healthCard(h,sess){
   const sync=healthData.lastSync?new Date(healthData.lastSync).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):null;
@@ -471,6 +482,80 @@ function renderHistory(){
     {type:'line',label:'Target',data:chartRows.map(()=>foodTargets.kcal||null),borderColor:txc,borderDash:[4,4],borderWidth:1,pointRadius:0}
   ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:txc,boxWidth:10,font:{size:11}}}},
     scales:{x:{ticks:{color:txc,font:{size:9},maxRotation:60},grid:{display:false}},y:{ticks:{color:txc,font:{size:10}},grid:{color:gc}}}}});
+}
+
+// ---------- Weight (morning weigh-ins) ----------
+// Uses the app's existing bodyweight log, the same one that scores pull-ups and dips by the weight
+// on each session date, so every weigh-in also keeps those PRs honest. One entry per day.
+let wtChart=null, wtRange=90;
+function weighIns(){
+  const m={};
+  (healthData.weights||[]).forEach(w=>{if(w.kg)m[w.date]={date:w.date,kg:r1(w.kg),src:'watch'};});   // Withings etc via Health Connect
+  bodyweightLog.forEach(b=>{m[b.date]={date:b.date,kg:+b.kg,id:b.id,src:'log'};});                   // your own entries win
+  return Object.values(m).sort((a,b)=>a.date<b.date?-1:1);
+}
+function avgBetween(list,from,to){const v=list.filter(w=>w.date>=from&&w.date<=to).map(w=>w.kg);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;}
+window.foodLogWeight=function(day,inputId){
+  const kg=+document.getElementById(inputId).value;
+  if(!(kg>30&&kg<250)){toast('Enter your weight in kg');return;}
+  const d=day||localDay(new Date());
+  const i=bodyweightLog.findIndex(b=>b.date===d);
+  const row={id:'bw_'+d,date:d,kg:Math.round(kg*10)/10,notes:null};
+  if(i>=0)bodyweightLog[i]=row;else bodyweightLog.push(row);
+  saveBodyweight();
+  if(typeof renderBodyweightCard==='function')renderBodyweightCard();
+  toast('Weight saved');
+  if(currentSubpage.food==='weight')renderWeight();else renderToday();
+};
+window.foodDelWeight=function(d){
+  const i=bodyweightLog.findIndex(b=>b.date===d);if(i<0)return;
+  if(!confirm('Delete the weigh-in for '+fmtDate(d)+'?'))return;
+  bodyweightLog.splice(i,1);saveBodyweight();renderWeight();
+};
+window.foodWtRange=function(n){wtRange=n;renderWeight();};
+function renderWeight(){
+  const el=document.getElementById('page-food-weight');
+  const today=localDay(new Date());
+  const all=weighIns();
+  const last=all.length?all[all.length-1]:null;
+  const todays=all.find(w=>w.date===today);
+  const a7=avgBetween(all,shiftDay(today,-6),today), p7=avgBetween(all,shiftDay(today,-13),shiftDay(today,-7));
+  const a30=avgBetween(all,shiftDay(today,-36),shiftDay(today,-30));
+  const diff=(x,y)=>x!=null&&y!=null?r1(x-y):null;
+  const chip=v=>v==null?'—':`<span class="${v<=0?'fd-pos':'fd-neg'}">${v>0?'+':''}${v} kg</span>`;
+  el.innerHTML=`
+    <div class="card">
+      <div class="fd-sub">${todays?'Today':'Morning weigh-in'}</div>
+      ${todays?`<div class="fd-big">${todays.kg} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kg</span></div>`:''}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input class="fd-input" type="number" step="0.1" inputmode="decimal" id="wtIn" placeholder="${last?last.kg:'kg'}" value="${todays?todays.kg:''}"/>
+        <button class="fd-btn" style="width:auto;margin:0;padding:0 18px" onclick="foodLogWeight(document.getElementById('wtDay').value,'wtIn')">${todays?'Update':'Save'}</button>
+      </div>
+      <input type="date" id="wtDay" value="${today}" max="${today}" class="fd-input" style="margin-top:8px;font-size:14px"/>
+    </div>
+    <div class="card"><div class="fd-row" style="margin-top:0">
+      <div class="fd-cell"><div class="v">${a7!=null?r1(a7):'—'}</div><div class="l">7-day avg</div></div>
+      <div class="fd-cell"><div class="v">${chip(diff(a7,p7))}</div><div class="l">vs last week</div></div>
+      <div class="fd-cell"><div class="v">${chip(diff(a7,a30))}</div><div class="l">vs 30 days ago</div></div>
+    </div><div class="fd-note" style="margin:8px 0 0">Daily weight swings with water and food, so judge progress by the 7-day average.</div></div>
+    <div class="chart-section">
+      <div class="chart-toggle" style="margin-bottom:8px">${[[30,'30d'],[90,'90d'],[365,'1y'],[99999,'All']].map(([n,l])=>`<button class="${wtRange===n?'active':''}" onclick="foodWtRange(${n})">${l}</button>`).join('')}</div>
+      <div style="position:relative;width:100%;height:210px"><canvas id="fdWtChart" role="img" aria-label="Weight trend"></canvas></div>
+    </div>
+    <div class="card" style="padding:8px 12px">
+      ${all.slice().reverse().slice(0,30).map(w=>`<div class="fd-entry" style="cursor:default"><div><div class="n">${w.kg} kg</div><div class="q">${fmtDate(w.date)} ${new Date(w.date+'T12:00:00').getFullYear()!==new Date().getFullYear()?new Date(w.date+'T12:00:00').getFullYear():''}${w.src==='watch'?' &middot; from Health Connect':''}</div></div>
+        ${w.src==='log'?`<button class="hist-del" onclick="foodDelWeight('${w.date}')">&times;</button>`:''}</div>`).join('')||'<div class="fd-note">No weigh-ins yet.</div>'}
+    </div>`;
+  const from=shiftDay(today,-wtRange), pts=all.filter(w=>w.date>=from);
+  const roll=pts.map(w=>{const v=all.filter(x=>x.date<=w.date&&x.date>=shiftDay(w.date,-6)).map(x=>x.kg);return r1(v.reduce((a,b)=>a+b,0)/v.length);});
+  const cs=getComputedStyle(document.documentElement);
+  const teal=cs.getPropertyValue('--teal').trim()||'#1D9E75', txc=cs.getPropertyValue('--ink3').trim()||'#888', gc=cs.getPropertyValue('--border').trim()||'rgba(0,0,0,0.1)';
+  if(wtChart)wtChart.destroy();
+  wtChart=new Chart(document.getElementById('fdWtChart'),{type:'line',data:{labels:pts.map(w=>fmtDate(w.date)),datasets:[
+    {label:'Weigh-in',data:pts.map(w=>w.kg),borderColor:txc,backgroundColor:txc,pointRadius:pts.length>120?0:2.5,borderWidth:1,showLine:false},
+    {label:'7-day average',data:roll,borderColor:teal,backgroundColor:teal,pointRadius:0,borderWidth:2.5,tension:0.3}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:txc,boxWidth:10,font:{size:11}}}},
+    scales:{x:{ticks:{color:txc,font:{size:9},maxRotation:60,autoSkip:true,maxTicksLimit:12},grid:{display:false}},y:{ticks:{color:txc,font:{size:10}},grid:{color:gc}}}}});
 }
 
 // ---------- My foods ----------

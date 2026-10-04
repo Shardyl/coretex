@@ -464,6 +464,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
     <div id="page-food-today" class="page" data-section="food"></div>
     <div id="page-food-history" class="page" data-section="food"></div>
     <div id="page-food-foods" class="page" data-section="food"></div>
+    <div id="page-food-weight" class="page" data-section="food"></div>
 
     <div id="page-workouts-lifts" class="page" data-section="workouts">
       <div class="section-label">Lifting plans</div>
@@ -965,7 +966,7 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='15';                         // keep in step with CACHE in sw.js
+const APP_VERSION='16';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1348,7 +1349,7 @@ function bestCardioEff(sessions,exDef){
 const SUBNAVS={
   lifts:[{label:'Log',key:'log'},{label:'History',key:'history'},{label:'Reports',key:'reports'},{label:'Progress',key:'progress'}],
   cardio:[{label:'Log',key:'log'},{label:'History',key:'history'},{label:'Reports',key:'reports'},{label:'Progress',key:'progress'}],
-  food:[{label:'Today',key:'today'},{label:'History',key:'history'},{label:'My foods',key:'foods'}],
+  food:[{label:'Today',key:'today'},{label:'Weight',key:'weight'},{label:'History',key:'history'},{label:'My foods',key:'foods'}],
   workouts:[{label:'Lifting',key:'lifts'},{label:'Cardio',key:'cardio'}]
 };
 let currentSection='lifts';
@@ -2899,6 +2900,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=15"></script>
+<script src="food.js?v=16"></script>
 </body>
 </html>

@@ -636,3 +636,59 @@ def scan_screenshot(data_url: str) -> dict:
                               max_tokens=400, purpose="fitness_scan", images=[data_url])
     return {k: out.get(k) for k in ("duration", "avgHR", "maxHR", "calories", "distance",
                                     "activityType")}
+
+
+# ---------- MyFitnessPal import (one-off history migration) ----------
+# The owner's browser reads his MyFitnessPal diary pages and POSTs the rows here. Figures are taken
+# exactly as MFP shows them (kcal, carbs, fat, protein per item). Ids are deterministic per date +
+# position, so a re-run updates rather than duplicates.
+
+def _mfp_split(raw: str):
+    raw = (raw or "").replace("Quick Add - Myfitnesspal Premium", "Quick add")
+    name, _, portion = raw.rpartition(", ")
+    if not name:
+        name, portion = raw, ""
+    if " - " in name:
+        brand, _, food = name.partition(" - ")
+        b, f = brand.strip(), food.strip()
+        name = f if (b.lower() in f.lower() or b.lower() in ("generic", "usda")) else f"{f} ({b})"
+    m = re.match(r"^([\d.]+)\s*(g|gram|grams|gr|gm)\b", portion.strip(), re.I)
+    return name.strip(), portion.strip(), (float(m.group(1)) if m else None)
+
+
+def import_mfp_diary(diary: dict) -> dict:
+    n = {"days": 0, "rows": 0, "foods": 0}
+    for day, rows in (diary or {}).items():
+        d = _day(day)
+        if not d or not rows:
+            continue
+        n["days"] += 1
+        for i, row in enumerate(rows):
+            try:
+                meal, raw, kcal, c, f, p = row
+            except (TypeError, ValueError):
+                continue
+            name, portion, grams = _mfp_split(raw)
+            kcal, c, f, p = _num(kcal), _num(c), _num(f), _num(p)
+            fid = None
+            if grams and kcal is not None:
+                fid = "mfp_food_" + re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:60]
+                k = 100.0 / grams
+                made = db.execute(
+                    "insert into fitness.foods (uid, name, kcal_100g, protein_100g, carbs_100g, fat_100g, source) "
+                    "values (%s,%s,%s,%s,%s,%s,'mfp') on conflict (uid) do nothing returning uid",
+                    (fid, name, round(kcal * k, 1), round(p * k, 2) if p is not None else None,
+                     round(c * k, 2) if c is not None else None, round(f * k, 2) if f is not None else None))
+                n["foods"] += 1 if made else 0
+            label = name if grams else (f"{name}, {portion}" if portion else name)
+            db.execute(
+                "insert into fitness.food_log (uid, day, meal, food_uid, name, qty_g, kcal, protein, carbs, fat, notes) "
+                "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'MyFitnessPal import') on conflict (uid) do update set "
+                "meal=excluded.meal, food_uid=excluded.food_uid, name=excluded.name, qty_g=excluded.qty_g, "
+                "kcal=excluded.kcal, protein=excluded.protein, carbs=excluded.carbs, fat=excluded.fat, updated_at=now()",
+                (f"mfp_{d.isoformat()}_{i:02d}", d,
+                 meal if meal in ("breakfast", "lunch", "dinner", "snacks") else "snacks",
+                 fid, label[:200], grams, kcal, p, c, f))
+            n["rows"] += 1
+    return n
+

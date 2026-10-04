@@ -5514,6 +5514,18 @@ def fitness_food_barcode(code: str, _: None = Depends(auth)) -> dict:
     return fitness.food_barcode(code)
 
 
+# One-off MyFitnessPal history import. The owner's own browser (logged into MFP) reads his diary and
+# POSTs it here as text/plain, which needs no CORS preflight from myfitnesspal.com. Auth is a random
+# key in the URL, minted on the box and valid until its expiry (setting fitness_mfp_import_key).
+@app.post("/api/fitness/import/mfp/{key}")
+async def fitness_import_mfp(key: str, request: Request) -> dict:
+    k = db.setting_get("fitness_mfp_import_key") or {}
+    if not k.get("key") or not hmac.compare_digest(key, k["key"]) or float(k.get("exp") or 0) < time.time():
+        raise HTTPException(status_code=401, detail="not authenticated")
+    body = json.loads((await request.body()).decode("utf-8") or "{}")
+    return fitness.import_mfp_diary(body.get("diary") or {})
+
+
 @app.get("/api/fitness/state")
 def fitness_state(_: None = Depends(auth)) -> dict:
     return fitness.pull()
