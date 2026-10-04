@@ -170,7 +170,8 @@ def pull() -> dict:
 
 # ---------- targets (daily intake goals; the operator's numbers, edited in the app) ----------
 
-DEFAULT_TARGETS = {"kcal": 2350, "protein": 178}
+# bmr: Katch-McArdle from his DEXA lean mass (69.6 kg, 6 Apr 2026) = 370 + 21.6 x 69.6. Editable in the app.
+DEFAULT_TARGETS = {"kcal": 2350, "protein": 178, "bmr": 1873}
 
 
 def targets() -> dict:
@@ -180,7 +181,7 @@ def targets() -> dict:
 
 def set_targets(t: dict) -> dict:
     clean = {}
-    for k in ("kcal", "protein", "carbs", "fat"):
+    for k in ("kcal", "protein", "carbs", "fat", "bmr"):
         v = _num((t or {}).get(k))
         if v is not None and v > 0:
             clean[k] = round(v)

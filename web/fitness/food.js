@@ -23,6 +23,7 @@ function dayLabel(day){
   const t=localDay(new Date());
   if(day===t)return'Today';
   if(day===shiftDay(t,-1))return'Yesterday';
+  if(day===shiftDay(t,1))return'Tomorrow';
   return new Date(day+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
 }
 function entriesFor(day){return foodLog.filter(e=>e.date===day);}
@@ -31,6 +32,16 @@ function totals(list){
     carbs:a.carbs+(+e.carbs||0),fat:a.fat+(+e.fat||0)}),{kcal:0,protein:0,carbs:0,fat:0});
 }
 function healthDay(day){return (healthData.days||[]).find(d=>d.date===day)||null;}
+// Burned = BMR (pro rata through today) + the watch's ACTIVE calories. Health Connect's own TOTAL
+// uses a generic body's basal rate, so it is not used. No watch data that day -> no figure.
+function burnedFor(day){
+  const h=healthDay(day), today=localDay(new Date());
+  if(day>today||!h||(h.activeKcal==null&&h.steps==null))return null;
+  const bmr=+foodTargets.bmr||1873;
+  let frac=1;
+  if(day===today){const n=new Date();frac=(n.getHours()*60+n.getMinutes())/1440;}
+  return Math.round(bmr*frac+(+h.activeKcal||0));
+}
 function sessionsOn(day){return (healthData.sessions||[]).filter(s=>s.date===day);}
 function portion(f,g){
   const k=g/100;
@@ -109,7 +120,8 @@ function renderToday(){
   const remain=tgt-t.kcal;
   const h=healthDay(foodDay);
   const isToday=foodDay===localDay(new Date());
-  const burned=h&&h.totalKcal!=null?h.totalKcal:null;
+  const burned=burnedFor(foodDay);
+  const isFuture=foodDay>localDay(new Date());
   const pPct=ptgt?Math.min(100,t.protein/ptgt*100):0;
   const kPct=tgt?Math.min(100,t.kcal/tgt*100):0;
   let balance='';
@@ -122,7 +134,7 @@ function renderToday(){
     <div class="fd-daynav">
       <button onclick="foodShiftDay(-1)" aria-label="Previous day">&lsaquo;</button>
       <div class="fd-day">${dayLabel(foodDay)}</div>
-      <button onclick="foodShiftDay(1)" aria-label="Next day" ${isToday?'disabled style="opacity:0.3"':''}>&rsaquo;</button>
+      <button onclick="foodShiftDay(1)" aria-label="Next day" ${foodDay>=shiftDay(localDay(new Date()),7)?'disabled style="opacity:0.3"':''}>&rsaquo;</button>
     </div>
     <div class="card">
       <div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
@@ -131,7 +143,7 @@ function renderToday(){
       <div class="fd-row">
         <div class="fd-cell" onclick="foodEditTargets()" style="cursor:pointer"><div class="v">${fmtN(tgt)}</div><div class="l">Target</div></div>
         <div class="fd-cell"><div class="v">${fmtN(t.kcal)}</div><div class="l">Eaten</div></div>
-        <div class="fd-cell"><div class="v">${burned!=null?fmtN(burned):'—'}</div><div class="l">Burned${isToday&&burned!=null?' so far':''}</div></div>
+        <div class="fd-cell"><div class="v">${burned!=null?fmtN(burned):'—'}</div><div class="l">${isFuture?'Planned day':'Burned'+(isToday&&burned!=null?' so far':'')}</div></div>
       </div>
       <div style="margin-top:12px;display:flex;justify-content:space-between;font-size:12px;font-weight:700">
         <span>Protein</span><span>${fmtN(t.protein)} / ${fmtN(ptgt)} g</span>
@@ -140,7 +152,7 @@ function renderToday(){
       <div style="margin-top:6px;font-size:11px;color:var(--ink3)">Carbs ${fmtN(t.carbs)} g &middot; Fat ${fmtN(t.fat)} g</div>
       ${balance}
     </div>
-    ${healthCard(h,sess)}
+    ${isFuture?'':healthCard(h,sess)}
     ${MEALS.map(([k,label])=>mealCard(k,label,list.filter(e=>(e.meal||'snacks')===k))).join('')}
     <button class="fd-btn sec" onclick="foodCopyDay()">Copy ${dayLabel(shiftDay(foodDay,-1)).toLowerCase()}'s food to ${dayLabel(foodDay).toLowerCase()}</button>
   `;
@@ -180,17 +192,20 @@ function mealCard(key,label,list){
 }
 window.foodShiftDay=function(n){
   const next=shiftDay(foodDay,n);
-  if(next>localDay(new Date()))return;
+  if(next>shiftDay(localDay(new Date()),7))return;     // plan up to a week ahead
   foodDay=next;renderToday();
 };
 window.foodEditTargets=function(){
   openModal('Daily targets',`
     <div class="form-group"><label class="form-label">Calories (kcal)</label><input type="number" id="fdTgtK" value="${foodTargets.kcal||''}"/></div>
-    <div class="form-group"><label class="form-label">Protein (g)</label><input type="number" id="fdTgtP" value="${foodTargets.protein||''}"/></div>`,
+    <div class="form-group"><label class="form-label">Protein (g)</label><input type="number" id="fdTgtP" value="${foodTargets.protein||''}"/></div>
+    <div class="form-group"><label class="form-label">BMR, resting burn (kcal/day)</label><input type="number" id="fdTgtB" value="${foodTargets.bmr||1873}"/></div>
+    <div class="fd-note">Burned = BMR (counted up to now on today) + active calories from your watch. 1,873 comes from your DEXA lean mass of 69.6 kg; update it after a new scan.</div>`,
   function(){
     const k=+document.getElementById('fdTgtK').value, p=+document.getElementById('fdTgtP').value;
     if(k>0)foodTargets.kcal=Math.round(k);
     if(p>0)foodTargets.protein=Math.round(p);
+    const b=+document.getElementById('fdTgtB').value;if(b>0)foodTargets.bmr=Math.round(b);
     saveTargets();closeModal();renderToday();toast('Targets saved');
   });
 };
@@ -426,7 +441,7 @@ function renderHistory(){
   const today=localDay(new Date());
   const days=[];for(let i=0;i<30;i++)days.push(shiftDay(today,-i));
   const rows=days.map(d=>{const t=totals(entriesFor(d)),h=healthDay(d);
-    return {d,logged:entriesFor(d).length>0,kcal:t.kcal,protein:t.protein,burned:h?h.totalKcal:null,steps:h?h.steps:null};});
+    return {d,logged:entriesFor(d).length>0,kcal:t.kcal,protein:t.protein,burned:burnedFor(d),steps:h?h.steps:null};});
   const avg=(arr,k)=>{const v=arr.filter(r=>r[k]!=null&&(k==='burned'||k==='steps'||r.logged)).map(r=>r[k]);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
   const wk1=rows.slice(1,8), wk2=rows.slice(8,15);   // the last 7 COMPLETE days, and the 7 before
   const weights=(healthData.weights||[]).slice().sort((a,b)=>a.at<b.at?-1:1);

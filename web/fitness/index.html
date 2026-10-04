@@ -907,7 +907,7 @@ const MEALS_KEY='fitness_meals_v1';
 
 let liftSessions=[], liftWorkouts=[], cardioSessions=[], cardioExercises=[], vo2Records=[], bodyweightLog=[];
 // Food + Health Connect. healthData is server-owned (written by the companion app), cached here only.
-let foods=[], foodLog=[], savedMeals=[], foodTargets={kcal:2350,protein:178}, healthData={days:[],sessions:[],weights:[],lastSync:null};
+let foods=[], foodLog=[], savedMeals=[], foodTargets={kcal:2350,protein:178,bmr:1873}, healthData={days:[],sessions:[],weights:[],lastSync:null};
 
 function loadAll(){
   // Lift sessions
@@ -965,7 +965,7 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='14';                         // keep in step with CACHE in sw.js
+const APP_VERSION='15';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -2899,6 +2899,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=14"></script>
+<script src="food.js?v=15"></script>
 </body>
 </html>
