@@ -225,13 +225,17 @@ def ingest_health(doc: dict) -> dict:
     """Upsert what the companion read from Health Connect. Values are stored exactly as sent:
     a null stays null (no data that day), never a guessed zero. Re-sending a window is the normal
     case (it re-reads the last 7 days every hour), so every write is an idempotent upsert."""
-    dev = (doc.get("device") or "")[:80]
+    dev = f"{doc.get('device') or ''} v{doc.get('app_version') or '?'}"[:80]
     n = {"days": 0, "sessions": 0, "weights": 0}
     for r in doc.get("days") or []:
         d = _day(r.get("day"))
         if not d:
             continue
         steps = _num(r.get("steps"))
+        if steps is None and _num(r.get("active_kcal")) is None and _num(r.get("distance_m")) is None:
+            # A total with no movement data behind it is Health Connect's default basal estimate
+            # (1,564.5 kcal on the S24, every day), not a measurement. Never store it as one.
+            r = {**r, "total_kcal": None}
         db.execute(
             "insert into fitness.health_daily (day, steps, total_kcal, active_kcal, distance_m, floors, "
             "resting_hr, hrv_ms, sleep_min, device) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
