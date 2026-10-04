@@ -303,6 +303,18 @@ create table if not exists fitness.food_log (
 );
 create index if not exists food_log_day_idx on fitness.food_log (day);
 
+-- saved meals: a named bundle of items logged together in one tap. Each item carries its own
+-- stamped figures (and its food when it has one), exactly like a log row.
+create table if not exists fitness.meals (
+    uid        text primary key,
+    name       text not null,
+    items      jsonb not null default '[]'::jsonb,      -- [{foodId?, name, qtyG?, kcal, protein, carbs, fat}]
+    source     text,                                    -- app | mfp
+    favourite  boolean not null default false,
+    deleted    boolean not null default false,
+    updated_at timestamptz not null default now()
+);
+
 -- every client push, verbatim, newest last. Restore path of last resort.
 create table if not exists fitness.snapshots (
     id         bigserial primary key,

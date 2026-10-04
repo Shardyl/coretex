@@ -175,6 +175,7 @@ function mealCard(key,label,list){
       <div><div class="n">${esc(e.name)}</div><div class="q">${e.qtyG!=null?fmtN(e.qtyG)+' g':''}${e.protein!=null?(e.qtyG!=null?' &middot; ':'')+r1(e.protein)+' g protein':''}</div></div>
       <div class="k">${fmtN(e.kcal)}</div></div>`).join('')}
     <button class="fd-add" onclick="foodOpenAdd('${key}')">+ Add to ${label.toLowerCase()}</button>
+    ${list.length?`<button class="fd-add" style="border:none;color:var(--ink3);margin-top:2px" onclick="foodSaveAsMeal('${key}')">Save as meal</button>`:''}
   </div>`;
 }
 window.foodShiftDay=function(n){
@@ -201,7 +202,7 @@ window.foodCopyDay=function(){
 };
 
 // ---------- add / edit sheet ----------
-let sheet=null, sheetMeal='breakfast', sheetTab='mine', scanStream=null;
+let sheet=null, sheetMeal='breakfast', sheetTab='meals', scanStream=null;
 function closeSheet(){stopScan();if(sheet){sheet.remove();sheet=null;}}
 function openSheet(title,inner){
   closeSheet();
@@ -215,7 +216,7 @@ window.foodOpenAdd=function(meal){
   const label=(MEALS.find(m=>m[0]===sheetMeal)||[,''])[1];
   openSheet('Add to '+label.toLowerCase(),`
     <div class="fd-tabs">
-      ${[['mine','My foods'],['search','Search'],['scan','Barcode'],['quick','Quick add']].map(([k,l])=>`<button data-t="${k}" class="${k===sheetTab?'on':''}" onclick="foodSheetTab('${k}')">${l}</button>`).join('')}
+      ${[['meals','Meals'],['mine','My foods'],['search','Search'],['scan','Barcode'],['quick','Quick']].map(([k,l])=>`<button data-t="${k}" class="${k===sheetTab?'on':''}" onclick="foodSheetTab('${k}')">${l}</button>`).join('')}
     </div>
     <div class="fd-sheet-b" id="fdSheetBody"></div>`);
   window.foodSheetTab(sheetTab);
@@ -224,7 +225,10 @@ window.foodSheetTab=function(k){
   sheetTab=k;stopScan();
   sheet.querySelectorAll('.fd-tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===k));
   const b=document.getElementById('fdSheetBody');
-  if(k==='mine'){
+  if(k==='meals'){
+    b.innerHTML=`<input class="fd-input" id="fdMealQ" placeholder="Filter saved meals" oninput="foodRenderMeals()"/><div id="fdMealList" style="margin-top:10px"></div>`;
+    window.foodRenderMeals();
+  }else if(k==='mine'){
     b.innerHTML=`<input class="fd-input" id="fdMineQ" placeholder="Filter my foods" oninput="foodRenderMine()"/><div id="fdMineList" style="margin-top:10px"></div>`;
     window.foodRenderMine();
   }else if(k==='search'){
@@ -252,6 +256,39 @@ window.foodSheetTab=function(k){
       </div>
       <button class="fd-btn" onclick="foodSaveQuick()">Add</button>`;
   }
+};
+function mealTotals(m){return totals(m.items||[]);}
+window.foodRenderMeals=function(){
+  const q=(document.getElementById('fdMealQ')?.value||'').toLowerCase();
+  const list=savedMeals.filter(m=>!q||m.name.toLowerCase().includes(q))
+    .sort((a,b)=>(b.favourite?1:0)-(a.favourite?1:0)||a.name.localeCompare(b.name));
+  document.getElementById('fdMealList').innerHTML=list.length?list.map(m=>{const t=mealTotals(m);
+    return `<div class="fd-item" onclick="foodLogMeal('${m.id}')">
+      <div class="n">${m.favourite?'<span style="color:var(--amber)">&#9733;</span> ':''}${esc(m.name)}</div>
+      <div class="m">${fmtN(t.kcal)} kcal &middot; P ${fmtN(t.protein)} &middot; C ${fmtN(t.carbs)} &middot; F ${fmtN(t.fat)} g &middot; ${(m.items||[]).length} item${(m.items||[]).length===1?'':'s'}</div>
+      <div class="m" style="margin-top:3px">${(m.items||[]).map(i=>esc(i.name)).join(', ')}</div></div>`;}).join('')
+    :`<div class="fd-note">${savedMeals.length?'No match.':'No saved meals yet. Log a meal, then tap "Save as meal" under it.'}</div>`;
+};
+window.foodLogMeal=function(id){
+  const m=savedMeals.find(x=>x.id===id);if(!m)return;
+  (m.items||[]).forEach(i=>foodLog.push({id:newId('fl'),date:foodDay,meal:sheetMeal,foodId:i.foodId||null,name:i.name,
+    qtyG:i.qtyG??null,kcal:i.kcal??null,protein:i.protein??null,carbs:i.carbs??null,fat:i.fat??null}));
+  saveFoodLog();closeSheet();renderToday();toast(m.name+' added');
+};
+window.foodSaveAsMeal=function(key){
+  const items=entriesFor(foodDay).filter(e=>(e.meal||'snacks')===key);
+  if(!items.length)return;
+  const label=(MEALS.find(m=>m[0]===key)||[,''])[1];
+  openModal('Save as meal',`<div class="form-group"><label class="form-label">Meal name</label>
+    <input type="text" id="fdMealName" placeholder="e.g. Salmon and cottage cheese" value="${esc(items.length===1?items[0].name:'')}"/></div>
+    <div class="fd-note">${items.length} item${items.length===1?'':'s'} from ${label.toLowerCase()}: ${items.map(i=>esc(i.name)).join(', ')}</div>`,
+  function(){
+    const name=document.getElementById('fdMealName').value.trim();
+    if(!name){toast('Name the meal');return;}
+    savedMeals.push({id:newId('meal'),name,source:'app',favourite:false,
+      items:items.map(e=>({foodId:e.foodId||null,name:e.name,qtyG:e.qtyG??null,kcal:e.kcal??null,protein:e.protein??null,carbs:e.carbs??null,fat:e.fat??null}))});
+    saveMeals();closeModal();toast('Meal saved');
+  });
 };
 window.foodRenderMine=function(){
   const q=(document.getElementById('fdMineQ')?.value||'').toLowerCase();
@@ -432,8 +469,20 @@ function renderFoodsPage(){
       <div onclick="foodEditFood('${f.id}')" style="flex:1"><div class="n">${esc(f.name)}${f.brand?` <span class="fd-chip">${esc(f.brand)}</span>`:''}</div>
       <div class="m">${fmtN(f.kcal100)} kcal &middot; ${r1(f.protein100)??'—'} g P${used[f.id]?' &middot; last eaten '+fmtDate(used[f.id]):''}</div></div>
       <button class="btn-sm" onclick="foodToggleFav('${f.id}')" aria-label="Favourite" style="font-size:16px;color:${f.favourite?'var(--amber)':'var(--ink3)'}">${f.favourite?'&#9733;':'&#9734;'}</button></div>`).join('')}
-    <button class="btn-add" onclick="foodEditFood(null)">+ New food</button>`;
+    <button class="btn-add" onclick="foodEditFood(null)">+ New food</button>
+    <div class="section-label" style="margin-top:18px">Saved meals (${savedMeals.length})</div>
+    ${savedMeals.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(m=>{const t=mealTotals(m);
+      return `<div class="fd-item" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div style="flex:1"><div class="n">${esc(m.name)}</div><div class="m">${fmtN(t.kcal)} kcal &middot; P ${fmtN(t.protein)} g &middot; ${(m.items||[]).map(i=>esc(i.name)).join(', ')}</div></div>
+      <button class="btn-sm" onclick="foodToggleMealFav('${m.id}')" style="font-size:16px;color:${m.favourite?'var(--amber)':'var(--ink3)'}">${m.favourite?'&#9733;':'&#9734;'}</button>
+      <button class="btn-sm" onclick="foodDeleteMeal('${m.id}')">Delete</button></div>`;}).join('')}`;
 }
+window.foodToggleMealFav=function(id){const m=savedMeals.find(x=>x.id===id);if(!m)return;m.favourite=!m.favourite;saveMeals();renderFoodsPage();};
+window.foodDeleteMeal=function(id){
+  const m=savedMeals.find(x=>x.id===id);if(!m)return;
+  if(!confirm('Delete the saved meal "'+m.name+'"? Past log entries are kept.'))return;
+  savedMeals.splice(savedMeals.indexOf(m),1);saveMeals();renderFoodsPage();toast('Meal deleted');
+};
 window.foodToggleFav=function(id){const f=foods.find(x=>x.id===id);if(!f)return;f.favourite=!f.favourite;saveFoods();renderFoodsPage();};
 window.foodEditFood=function(id,preset){
   const f=id?foods.find(x=>x.id===id):Object.assign({name:'',brand:'',barcode:'',servingLabel:'',servingG:null,kcal100:null,protein100:null,carbs100:null,fat100:null},preset||{});

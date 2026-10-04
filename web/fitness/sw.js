@@ -1,11 +1,11 @@
 // Fitness PWA service worker.
 // Bump CACHE on every ship or the phone keeps serving the cached index.html.
-const CACHE = 'fitness-v13';
+const CACHE = 'fitness-v14';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './food.js?v=13',
+  './food.js?v=14',
   'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
 ];

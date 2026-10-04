@@ -5472,6 +5472,7 @@ class FitnessDoc(BaseModel):
     vo2: list[dict] | None = None
     foods: list[dict] | None = None
     foodLog: list[dict] | None = None
+    meals: list[dict] | None = None
     targets: dict | None = None
 
 

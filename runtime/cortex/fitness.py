@@ -153,15 +153,19 @@ def pull() -> dict:
                  "protein": _num(r["protein"]), "carbs": _num(r["carbs"]), "fat": _num(r["fat"]),
                  "notes": r["notes"]}
                 for r in db.query("select * from fitness.food_log where not deleted order by day, uid")]
+    meals = [{"id": r["uid"], "name": r["name"], "items": r["items"] or [], "source": r["source"],
+              "favourite": r["favourite"]}
+             for r in db.query("select * from fitness.meals where not deleted order by name")]
     tombstones += [r["uid"] for r in db.query(
         "select uid from fitness.foods where deleted union all "
-        "select uid from fitness.food_log where deleted")]
+        "select uid from fitness.food_log where deleted union all "
+        "select uid from fitness.meals where deleted")]
     return {"bodyweight": bw, "plans": plans, "liftSessions": lifts, "cardioPresets": presets,
             "cardioSessions": cardio, "vo2": vo2, "tombstones": tombstones,
-            "foods": foods, "foodLog": food_log, "targets": targets(), "health": health_pull(),
+            "foods": foods, "foodLog": food_log, "meals": meals, "targets": targets(), "health": health_pull(),
             "counts": {"bodyweight": len(bw), "plans": len(plans), "liftSessions": len(lifts),
                        "cardioPresets": len(presets), "cardioSessions": len(cardio), "vo2": len(vo2),
-                       "foods": len(foods), "foodLog": len(food_log)}}
+                       "foods": len(foods), "foodLog": len(food_log), "meals": len(meals)}}
 
 
 # ---------- targets (daily intake goals; the operator's numbers, edited in the app) ----------
@@ -540,6 +544,22 @@ def push(doc: dict, source: str = "app") -> dict:
              _num(r.get("qtyG")), _num(r.get("kcal")), _num(r.get("protein")), _num(r.get("carbs")),
              _num(r.get("fat")), r.get("notes"), bool(r.get("deleted"))))
         counts["foodLog"] += 1
+    counts["meals"] = 0
+    for r in doc.get("meals") or []:
+        if not r.get("id"):
+            continue
+        if r.get("deleted") and not r.get("name"):
+            db.execute("update fitness.meals set deleted=true, updated_at=now() where uid=%s", (r["id"],))
+            continue
+        if not (r.get("name") or "").strip():
+            continue
+        db.execute(
+            "insert into fitness.meals (uid, name, items, source, favourite, deleted) values (%s,%s,%s,%s,%s,%s) "
+            "on conflict (uid) do update set name=excluded.name, items=excluded.items, source=excluded.source, "
+            "favourite=excluded.favourite, deleted=meals.deleted or excluded.deleted, updated_at=now()",
+            (r["id"], r["name"].strip(), Json(r.get("items") or []), r.get("source") or "app",
+             bool(r.get("favourite")), bool(r.get("deleted"))))
+        counts["meals"] += 1
     if doc.get("targets"):
         set_targets(doc["targets"])
 
