@@ -290,7 +290,9 @@ def _off_item(p: dict) -> dict | None:
     name = (p.get("product_name") or "").strip()
     if not name or kcal is None:
         return None
-    return {"name": name, "brand": (p.get("brands") or "").split(",")[0].strip() or None,
+    br = p.get("brands")
+    br = (br[0] if br else "") if isinstance(br, list) else (br or "").split(",")[0]
+    return {"name": name, "brand": str(br).strip() or None,
             "barcode": p.get("code"), "kcal100": kcal, "protein100": _num(nm.get("proteins_100g")),
             "carbs100": _num(nm.get("carbohydrates_100g")), "fat100": _num(nm.get("fat_100g")),
             "fibre100": _num(nm.get("fiber_100g")), "servingLabel": p.get("serving_size"),
@@ -339,11 +341,11 @@ def food_search(q: str) -> dict:
     except Exception as e:  # noqa: BLE001
         errors.append(f"usda: {e.__class__.__name__}")
     try:
-        r = httpx.get("https://world.openfoodfacts.org/cgi/search.pl", headers=_UA, timeout=12, params={
-            "search_terms": q, "search_simple": 1, "action": "process", "json": 1, "page_size": 15,
-            "fields": _OFF_FIELDS})
+        # search-a-licious: the legacy cgi/search.pl answers 503 to server traffic
+        r = httpx.get("https://search.openfoodfacts.org/search", headers=_UA, timeout=12, params={
+            "q": q, "page_size": 15, "fields": _OFF_FIELDS})
         r.raise_for_status()
-        items += [i for i in (_off_item(p) for p in r.json().get("products") or []) if i]
+        items += [i for i in (_off_item(p) for p in r.json().get("hits") or []) if i]
     except Exception as e:  # noqa: BLE001
         errors.append(f"off: {e.__class__.__name__}")
     out = {"items": items, "errors": errors}
