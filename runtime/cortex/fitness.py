@@ -153,16 +153,19 @@ def pull() -> dict:
                  "protein": _num(r["protein"]), "carbs": _num(r["carbs"]), "fat": _num(r["fat"]),
                  "notes": r["notes"]}
                 for r in db.query("select * from fitness.food_log where not deleted order by day, uid")]
+    supplements = [{"id": r["uid"], "date": r["day"].isoformat(), "name": r["name"], "grams": _num(r["grams"])}
+                   for r in db.query("select * from fitness.supplements where not deleted order by day")]
     meals = [{"id": r["uid"], "name": r["name"], "items": r["items"] or [], "source": r["source"],
               "favourite": r["favourite"]}
              for r in db.query("select * from fitness.meals where not deleted order by name")]
     tombstones += [r["uid"] for r in db.query(
         "select uid from fitness.foods where deleted union all "
         "select uid from fitness.food_log where deleted union all "
-        "select uid from fitness.meals where deleted")]
+        "select uid from fitness.meals where deleted union all "
+        "select uid from fitness.supplements where deleted")]
     return {"bodyweight": bw, "plans": plans, "liftSessions": lifts, "cardioPresets": presets,
             "cardioSessions": cardio, "vo2": vo2, "tombstones": tombstones,
-            "foods": foods, "foodLog": food_log, "meals": meals, "targets": targets(), "health": health_pull(),
+            "foods": foods, "foodLog": food_log, "meals": meals, "supplements": supplements, "targets": targets(), "health": health_pull(),
             "counts": {"bodyweight": len(bw), "plans": len(plans), "liftSessions": len(lifts),
                        "cardioPresets": len(presets), "cardioSessions": len(cardio), "vo2": len(vo2),
                        "foods": len(foods), "foodLog": len(food_log), "meals": len(meals)}}
@@ -171,7 +174,7 @@ def pull() -> dict:
 # ---------- targets (daily intake goals; the operator's numbers, edited in the app) ----------
 
 # bmr: Katch-McArdle from his DEXA lean mass (69.6 kg, 6 Apr 2026) = 370 + 21.6 x 69.6. Editable in the app.
-DEFAULT_TARGETS = {"kcal": 2350, "protein": 178, "bmr": 1873}
+DEFAULT_TARGETS = {"kcal": 2350, "protein": 178, "bmr": 1873, "creatine": 10}
 
 
 def targets() -> dict:
@@ -181,7 +184,7 @@ def targets() -> dict:
 
 def set_targets(t: dict) -> dict:
     clean = {}
-    for k in ("kcal", "protein", "carbs", "fat", "bmr"):
+    for k in ("kcal", "protein", "carbs", "fat", "bmr", "creatine"):
         v = _num((t or {}).get(k))
         if v is not None and v > 0:
             clean[k] = round(v)
@@ -567,6 +570,21 @@ def push(doc: dict, source: str = "app") -> dict:
             (r["id"], r["name"].strip(), Json(r.get("items") or []), r.get("source") or "app",
              bool(r.get("favourite")), bool(r.get("deleted"))))
         counts["meals"] += 1
+    counts["supplements"] = 0
+    for r in doc.get("supplements") or []:
+        d = _day(r.get("date"))
+        if not r.get("id"):
+            continue
+        if r.get("deleted") and not d:
+            db.execute("update fitness.supplements set deleted=true, updated_at=now() where uid=%s", (r["id"],))
+            continue
+        if not d:
+            continue
+        db.execute("insert into fitness.supplements (uid, day, name, grams, deleted) values (%s,%s,%s,%s,%s) "
+                   "on conflict (uid) do update set day=excluded.day, name=excluded.name, grams=excluded.grams, "
+                   "deleted=supplements.deleted or excluded.deleted, updated_at=now()",
+                   (r["id"], d, (r.get("name") or "creatine")[:40], _num(r.get("grams")), bool(r.get("deleted"))))
+        counts["supplements"] += 1
     if doc.get("targets"):
         set_targets(doc["targets"])
 

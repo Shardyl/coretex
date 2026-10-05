@@ -905,10 +905,11 @@ const FOODLOG_KEY='fitness_foodlog_v1';
 const TARGETS_KEY='fitness_targets_v1';
 const HEALTH_KEY='fitness_health_v1';
 const MEALS_KEY='fitness_meals_v1';
+const SUPP_KEY='fitness_supplements_v1';
 
 let liftSessions=[], liftWorkouts=[], cardioSessions=[], cardioExercises=[], vo2Records=[], bodyweightLog=[];
 // Food + Health Connect. healthData is server-owned (written by the companion app), cached here only.
-let foods=[], foodLog=[], savedMeals=[], foodTargets={kcal:2350,protein:178,bmr:1873}, healthData={days:[],sessions:[],weights:[],lastSync:null};
+let foods=[], foodLog=[], savedMeals=[], supplements=[], foodTargets={kcal:2350,protein:178,bmr:1873,creatine:10}, healthData={days:[],sessions:[],weights:[],lastSync:null};
 
 function loadAll(){
   // Lift sessions
@@ -940,6 +941,7 @@ function loadAll(){
   try{const d=localStorage.getItem(FOODS_KEY);if(d)foods=JSON.parse(d);}catch(e){}
   try{const d=localStorage.getItem(FOODLOG_KEY);if(d)foodLog=JSON.parse(d);}catch(e){}
   try{const d=localStorage.getItem(MEALS_KEY);if(d)savedMeals=JSON.parse(d);}catch(e){}
+  try{const d=localStorage.getItem(SUPP_KEY);if(d)supplements=JSON.parse(d);}catch(e){}
   try{const d=localStorage.getItem(TARGETS_KEY);if(d)foodTargets=Object.assign(foodTargets,JSON.parse(d));}catch(e){}
   try{const d=localStorage.getItem(HEALTH_KEY);if(d)healthData=JSON.parse(d);}catch(e){}
   ensureIds();
@@ -953,6 +955,7 @@ function saveVO2(){try{localStorage.setItem(VO2_KEY,JSON.stringify(vo2Records));
 function saveFoods(){try{localStorage.setItem(FOODS_KEY,JSON.stringify(foods));}catch(e){}if(typeof queueSync==='function')queueSync();}
 function saveFoodLog(){try{localStorage.setItem(FOODLOG_KEY,JSON.stringify(foodLog));}catch(e){}if(typeof queueSync==='function')queueSync();}
 function saveMeals(){try{localStorage.setItem(MEALS_KEY,JSON.stringify(savedMeals));}catch(e){}if(typeof queueSync==='function')queueSync();}
+function saveSupplements(){try{localStorage.setItem(SUPP_KEY,JSON.stringify(supplements));}catch(e){}if(typeof queueSync==='function')queueSync();}
 function saveTargets(){try{localStorage.setItem(TARGETS_KEY,JSON.stringify(foodTargets));}catch(e){}if(typeof queueSync==='function')queueSync();}
 function saveHealth(){try{localStorage.setItem(HEALTH_KEY,JSON.stringify(healthData));}catch(e){}}
 function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodyweightLog));}catch(e){}if(typeof queueSync==='function')queueSync();}
@@ -966,7 +969,7 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='20';                         // keep in step with CACHE in sw.js
+const APP_VERSION='21';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1002,6 +1005,7 @@ function syncDoc(){
     foods:foods,
     foodLog:foodLog,
     meals:savedMeals,
+    supplements:supplements,
     targets:foodTargets
   };
   // Deletions: anything we pushed before that is no longer here went on purpose. Send it as a
@@ -1015,7 +1019,8 @@ function syncDoc(){
     cardioPresets:new Set(cardioExercises.map(e=>e.id)),
     foods:new Set(foods.map(f=>f.id)),
     foodLog:new Set(foodLog.map(f=>f.id)),
-    meals:new Set(savedMeals.map(m=>m.id))
+    meals:new Set(savedMeals.map(m=>m.id)),
+    supplements:new Set(supplements.map(x=>x.id))
   };
   Object.keys(live).forEach(k=>{
     (sent[k]||[]).forEach(id=>{if(!live[k].has(id))doc[k]=doc[k].concat([{id:id,deleted:true}]);});
@@ -1032,7 +1037,8 @@ function rememberSent(){
       cardioPresets:cardioExercises.map(e=>e.id),
       foods:foods.map(f=>f.id),
       foodLog:foodLog.map(f=>f.id),
-      meals:savedMeals.map(m=>m.id)
+      meals:savedMeals.map(m=>m.id),
+      supplements:supplements.map(x=>x.id)
     }));
   }catch(e){}
 }
@@ -1140,7 +1146,7 @@ function applyServerState(state,force){
     const dropT=a=>(a||[]).filter(r=>!(r&&r.id&&_tomb.has(r.id)));
     liftSessions=dropT(liftSessions);cardioSessions=dropT(cardioSessions);
     liftWorkouts=dropT(liftWorkouts);cardioExercises=dropT(cardioExercises);vo2Records=dropT(vo2Records);
-    foods=dropT(foods);foodLog=dropT(foodLog);savedMeals=dropT(savedMeals);
+    foods=dropT(foods);foodLog=dropT(foodLog);savedMeals=dropT(savedMeals);supplements=dropT(supplements);
   }
   // The server is authoritative after a successful push, so what comes back includes everything
   // this device just sent plus anything it did not have.
@@ -1154,10 +1160,11 @@ function applyServerState(state,force){
   if(state.foods)foods=mergeById(state.foods,foods);
   if(state.foodLog)foodLog=mergeById(state.foodLog,foodLog);
   if(state.meals)savedMeals=mergeById(state.meals,savedMeals);
+  if(state.supplements)supplements=mergeById(state.supplements,supplements);
   if(state.targets)foodTargets=Object.assign({},foodTargets,state.targets);
   if(state.health){healthData=state.health;saveHealth();}
   saveLift();saveLiftWorkouts();saveCardio();saveCardioExercises();saveVO2();saveBodyweight();
-  saveFoods();saveFoodLog();saveMeals();saveTargets();
+  saveFoods();saveFoodLog();saveMeals();saveSupplements();saveTargets();
   rememberSent();
   }finally{_applyingServer=false;}
   redrawAll();
@@ -2906,6 +2913,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=20"></script>
+<script src="food.js?v=21"></script>
 </body>
 </html>

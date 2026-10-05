@@ -5473,6 +5473,7 @@ class FitnessDoc(BaseModel):
     foods: list[dict] | None = None
     foodLog: list[dict] | None = None
     meals: list[dict] | None = None
+    supplements: list[dict] | None = None
     targets: dict | None = None
 
 

@@ -155,12 +155,46 @@ function renderToday(){
       <div style="margin-top:6px;font-size:11px;color:var(--ink3)">Carbs ${fmtN(t.carbs)} g &middot; Fat ${fmtN(t.fat)} g</div>
       ${balance}
     </div>
+    ${isFuture?'':creatineCard()}
     ${isToday?weighCard():''}
     ${isFuture?'':healthCard(h,sess)}
     ${MEALS.map(([k,label])=>mealCard(k,label,list.filter(e=>(e.meal||'snacks')===k))).join('')}
     <button class="fd-btn sec" onclick="foodCopyDay()">Copy ${dayLabel(shiftDay(foodDay,-1)).toLowerCase()}'s food to ${dayLabel(foodDay).toLowerCase()}</button>
   `;
 }
+// ---------- creatine (daily dose, default 10 g) ----------
+function creatineOn(day){return supplements.filter(x=>x.date===day&&x.name==='creatine');}
+function creatineStreak(){
+  let n=0,d=localDay(new Date());
+  if(!creatineOn(d).length)d=shiftDay(d,-1);           // today not taken yet doesn't break the streak
+  while(creatineOn(d).length){n++;d=shiftDay(d,-1);}
+  return n;
+}
+function creatineCard(){
+  const taken=creatineOn(foodDay), g=taken.reduce((a,x)=>a+(+x.grams||0),0), dose=+foodTargets.creatine||10;
+  const st=creatineStreak();
+  if(taken.length)return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
+    <div><div class="fd-sub">Creatine</div><div style="font-size:16px;font-weight:800;color:var(--teal)">&#10003; ${r1(g)} g taken</div>
+    <div style="font-size:11px;color:var(--ink3)">${st>1?st+' days in a row':''}</div></div>
+    <button class="btn-sm" onclick="foodCreatineUndo()">Undo</button></div>`;
+  return `<div class="card" style="padding:12px 16px;border:1px solid var(--amber)">
+    <div class="fd-sub" style="margin-bottom:6px;color:var(--amber)">Creatine not taken${foodDay===localDay(new Date())?' yet today':''}</div>
+    <div style="display:flex;gap:8px;align-items:center"><input class="fd-input" type="number" step="0.5" inputmode="decimal" id="fdCreIn" value="${dose}" style="max-width:110px"/>
+    <span style="font-size:13px;color:var(--ink3)">g</span>
+    <button class="fd-btn" style="width:auto;margin:0 0 0 auto;padding:0 18px" onclick="foodCreatineTake()">Taken</button></div>
+    ${st?`<div style="font-size:11px;color:var(--ink3);margin-top:6px">${st}-day streak, keep it going</div>`:''}</div>`;
+}
+window.foodCreatineTake=function(){
+  const g=+document.getElementById('fdCreIn').value;
+  if(!(g>0&&g<=50)){toast('Enter the grams');return;}
+  supplements.push({id:newId('sup'),date:foodDay,name:'creatine',grams:r1(g)});
+  if(g!==+foodTargets.creatine){foodTargets.creatine=r1(g);saveTargets();}   // remember the usual dose
+  saveSupplements();renderToday();toast('Creatine logged');
+};
+window.foodCreatineUndo=function(){
+  const t=creatineOn(foodDay);if(!t.length)return;
+  supplements=supplements.filter(x=>!t.includes(x));saveSupplements();renderToday();
+};
 function weighCard(){
   const t=localDay(new Date()), w=bodyweightLog.find(b=>b.date===t);
   if(w)return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">

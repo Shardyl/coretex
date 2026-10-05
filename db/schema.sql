@@ -306,6 +306,16 @@ create table if not exists fitness.food_log (
 );
 create index if not exists food_log_day_idx on fitness.food_log (day);
 
+-- supplements taken (creatine first): one row per dose. Synced with the app document.
+create table if not exists fitness.supplements (
+    uid        text primary key,
+    day        date not null,
+    name       text not null,                           -- 'creatine'
+    grams      numeric,
+    deleted    boolean not null default false,
+    updated_at timestamptz not null default now()
+);
+
 -- saved meals: a named bundle of items logged together in one tap. Each item carries its own
 -- stamped figures (and its food when it has one), exactly like a log row.
 create table if not exists fitness.meals (
