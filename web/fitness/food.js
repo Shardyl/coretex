@@ -171,11 +171,12 @@ function renderTodayInner(){
         <div><div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
         <div class="fd-big" style="color:${remain>=0?'var(--teal)':'var(--amber)'}">${fmtN(Math.abs(remain))} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kcal</span></div></div>
         ${(()=>{const bp=burnedParts(foodDay);if(!h||isFuture)return '';
-          return `<div style="display:flex;gap:16px;text-align:right">
-            <div><div style="font-size:20px;font-weight:800">${h.steps!=null?fmtN(h.steps):'—'}</div><div class="fd-sub" style="font-size:10px">Steps</div></div>
-            <div><div style="font-size:20px;font-weight:800">${bp?fmtN(bp.move+bp.work):'—'}</div><div class="fd-sub" style="font-size:10px">Active kcal</div></div>
-            ${(()=>{const sl=sleepFor(foodDay);if(!sl)return '';
-              return `<div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:20px;font-weight:800">${sl.score!=null?fmtN(sl.score):durHM(sl.min)}</div><div class="fd-sub" style="font-size:10px">${sl.score!=null?'Sleep score':'Sleep'}</div></div>`;})()}</div>`;})()}
+          return `<div style="display:grid;grid-template-columns:auto auto;gap:6px 16px;text-align:right;white-space:nowrap">
+            <div><div style="font-size:17px;font-weight:800;line-height:1.1">${h.steps!=null?fmtN(h.steps):'—'}</div><div class="fd-sub" style="font-size:10px">Steps</div></div>
+            <div><div style="font-size:17px;font-weight:800;line-height:1.1">${bp?fmtN(bp.move+bp.work):'—'}</div><div class="fd-sub" style="font-size:10px">Active kcal</div></div>
+            ${(()=>{const sl=nightFor(foodDay), hr=nightHR(sl);
+              return `<div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1">${sl&&sl.score!=null?fmtN(sl.score):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep score</div></div>
+              <div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1">${hr!=null?fmtN(hr):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep HR</div></div>`;})()}</div>`;})()}
       </div>
       <div class="fd-bar${t.kcal>tgt?' over':''}"><div style="width:${kPct}%"></div></div>
       <div class="fd-row">
@@ -411,6 +412,9 @@ function sleepFor(day){
     awake:pick(h.sleepAwakeMin), hrMin:pick(h.sleepHRMin), hrAvg:pick(h.sleepHRAvg,e&&e.hr),
     hrv:pick(h.sleepHrvMs,e&&e.hrv), resp:pick(h.sleepResp,e&&e.resp), start:h.sleepStart||null, end:h.sleepEnd||null};
 }
+const NAP_MIN=180;   // a sleep under 3 hours is a nap: listed, but never "last night", an average or a chart point
+function isNap(sl){return !!sl&&sl.min!=null&&sl.min<NAP_MIN;}
+function nightFor(day){const sl=sleepFor(day);return sl&&!isNap(sl)?sl:null;}
 function nightHR(sl){return sl?pick(sl.hrMin,sl.hrAvg):null;}
 window.foodGoRecovery=function(){
   const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Recovery');if(b)b.click();
@@ -419,14 +423,15 @@ let recChart=null;
 function renderRecovery(){
   const el=document.getElementById('page-food-recovery'), today=localDay(new Date());
   const days=[];for(let i=0;i<30;i++)days.push(shiftDay(today,-i));
-  const rows=days.map(d=>{const sl=sleepFor(d), h=healthDay(d);return {d,sl,night:nightHR(sl),day:h?pick(h.dayRestingHR):null};});
+  const rows=days.map(d=>{const any=sleepFor(d), sl=isNap(any)?null:any, h=healthDay(d);
+    return {d,any,sl,nap:isNap(any),night:nightHR(sl),day:h?pick(h.dayRestingHR):null};});
   const last=rows.find(r=>r.sl)||null, sl=last&&last.sl;
   const avg=(k,n)=>{const v=rows.slice(0,n).map(k).filter(x=>x!=null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
   const cell=(v,l)=>`<div class="fd-cell"><div class="v">${v}</div><div class="l">${l}</div></div>`;
   const stage=(m,l,c)=>m?`<div style="flex:${m};background:${c};height:10px" title="${l}"></div>`:'';
   const a7s=avg(r=>r.sl&&r.sl.score,7), a7n=avg(r=>r.night,7), a7d=avg(r=>r.day,7);
   el.innerHTML=`${sl?`<div class="card">
-      <div class="fd-sub">${last.d===today?'Last night':'Night ending '+dayLabel(last.d).toLowerCase()}${sl.start&&sl.end?` &middot; ${tOf(sl.start)} to ${tOf(sl.end)}`:''}</div>
+      <div class="fd-sub">${last.d===today?'Last night':'Latest night, ending '+dayLabel(last.d).toLowerCase()}${sl.start&&sl.end?` &middot; ${tOf(sl.start)} to ${tOf(sl.end)}`:''}</div>
       <div class="fd-row">${cell(sl.score!=null?fmtN(sl.score):'—','Sleep score')}${cell(durHM(sl.min),'Asleep')}${cell(sl.hrv!=null?fmtN(sl.hrv):'—','HRV ms')}</div>
       ${sl.deep!=null||sl.rem!=null?`<div style="display:flex;border-radius:5px;overflow:hidden;margin-top:12px;gap:1px">${stage(sl.deep,'Deep','var(--purple)')}${stage(sl.rem,'REM','var(--blue)')}${stage(sl.light,'Light','var(--teal)')}${stage(sl.awake,'Awake','var(--amber)')}</div>
       <div style="font-size:11px;color:var(--ink3);margin-top:6px">Deep ${durHM(sl.deep)} &middot; REM ${durHM(sl.rem)} &middot; Light ${durHM(sl.light)}${sl.awake!=null?' &middot; Awake '+durHM(sl.awake):''}</div>`:''}
@@ -434,12 +439,12 @@ function renderRecovery(){
     </div>`:`<div class="card"><div class="fd-sub">Sleep</div><div class="fd-note" style="margin:4px 0 0">No sleep data yet. Eight Sleep writes to Health Connect each morning (Bridge 1.3.0 reads it); the score comes from the Eight Sleep connection below.</div></div>`}
     <div class="card"><div class="fd-row" style="margin-top:0">
       ${cell(a7s!=null?fmtN(a7s):'—','Avg score, 7 days')}${cell(a7n!=null?fmtN(a7n):'—','Sleeping HR, 7d')}${cell(a7d!=null?fmtN(a7d):'—','Day resting HR, 7d')}
-    </div><div class="fd-note" style="margin:8px 0 0">Sleeping HR is the lowest 5-minute average overnight (mattress). Day resting HR is the lowest 10-minute average on the watch between 6am and 8pm, away from workouts. Both falling over weeks is the aerobic base coming back.</div></div>
+    </div><div class="fd-note" style="margin:8px 0 0">Sleeping HR is the lowest 5-minute average overnight (mattress); naps under 3 hours are left out of everything but the table. Day resting HR is the lowest 10-minute average on the watch between 6am and 8pm, away from workouts. Both falling over weeks is the aerobic base coming back.</div></div>
     <div class="chart-section"><div class="chart-title" style="margin-bottom:8px">Sleep score and resting heart rate, 30 days</div>
       <div style="position:relative;width:100%;height:220px"><canvas id="fdRecChart" role="img" aria-label="Sleep score and resting heart rate"></canvas></div></div>
     <div class="card" style="padding:8px 12px">
       <div class="fd-hrow h"><div>Night to</div><div>Score</div><div>Asleep</div><div>Sleep HR</div><div>Day HR</div></div>
-      ${rows.map(r=>`<div class="fd-hrow"><div>${dayLabel(r.d).replace('Yesterday','Yest.')}</div><div>${r.sl&&r.sl.score!=null?fmtN(r.sl.score):'—'}</div><div>${r.sl?durHM(r.sl.min):'—'}</div><div>${r.night!=null?fmtN(r.night):'—'}</div><div>${r.day!=null?fmtN(r.day):'—'}</div></div>`).join('')}
+      ${rows.map(r=>{const x=r.any;return `<div class="fd-hrow"${r.nap?' style="color:var(--ink3)"':''}><div>${dayLabel(r.d).replace('Yesterday','Yest.')}</div><div>${r.nap?'nap':(x&&x.score!=null?fmtN(x.score):'—')}</div><div>${x?durHM(x.min):'—'}</div><div>${r.nap?'—':(r.night!=null?fmtN(r.night):'—')}</div><div>${r.day!=null?fmtN(r.day):'—'}</div></div>`;}).join('')}
     </div>
     <div class="card" id="fdEightCard"><div class="fd-sub">Eight Sleep</div><div class="fd-note" style="margin:4px 0">Checking&hellip;</div></div>`;
   eightCard();
