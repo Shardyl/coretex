@@ -4,6 +4,7 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.parcelize")
 }
 
 // Token: injected at build time only, never committed.
@@ -30,10 +31,10 @@ android {
 
     defaultConfig {
         applicationId = "uk.coretex.healthbridge"
-        minSdk = 28
+        minSdk = 29 // Samsung Health Data SDK needs API 29+
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.1.0"
         val escaped = bridgeToken().replace("\\", "\\\\").replace("\"", "\\\"")
         buildConfigField("String", "BRIDGE_TOKEN", "\"$escaped\"")
         buildConfigField("String", "API_URL", "\"https://coretex.uk/api/fitness/health\"")
@@ -78,4 +79,9 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("androidx.health.connect:connect-client:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    // Samsung Health Data SDK 1.1.0. Its licence forbids redistribution: the AAR is NEVER committed.
+    // build-on-box.sh copies it from /opt/samsung-health-sdk/ into app/libs/ at build time.
+    implementation(files("libs/samsung-health-data-api-1.1.0.aar"))
+    implementation("com.google.code.gson:gson:2.11.0")
 }

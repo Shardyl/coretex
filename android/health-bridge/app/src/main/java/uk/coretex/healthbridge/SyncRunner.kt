@@ -51,7 +51,8 @@ object SyncRunner {
 
         val reader = HealthReader(client, granted)
         var lastCounts: JSONObject? = null
-        var sentDays = 0; var sentSessions = 0; var sentWeights = 0
+        var sentDays = 0; var sentSessions = 0; var sentSamsung = 0; var sentWeights = 0
+        var samsungError: String? = null
         for ((i, c) in chunks.withIndex()) {
             progress("Reading ${c.first} to ${c.second} (${i + 1}/${chunks.size})")
             val chunk = try {
@@ -61,6 +62,10 @@ object SyncRunner {
             } catch (e: Exception) {
                 return finish(SyncOutcome(false, "Read failed at ${c.first}: ${e.javaClass.simpleName} ${e.message.orEmpty()}".trim()))
             }
+            // Samsung Health workouts (not shared with Health Connect). Failure never blocks the HC sync.
+            val shd = SamsungReader.read(ctx, c.first, c.second)
+            if (shd.error != null && samsungError == null) samsungError = shd.error
+            for (k in 0 until shd.sessions.length()) chunk.sessions.put(shd.sessions.get(k))
             val body = JSONObject().apply {
                 put("device", Build.MODEL)
                 put("app_version", BuildConfig.VERSION_NAME)
@@ -73,6 +78,7 @@ object SyncRunner {
                 is UploadResult.Ok -> {
                     lastCounts = r.counts
                     sentDays += chunk.days.length(); sentSessions += chunk.sessions.length(); sentWeights += chunk.weights.length()
+                    sentSamsung += shd.sessions.length()
                 }
                 UploadResult.Unauthorized -> return finish(SyncOutcome(false, "Server rejected the token (401)"))
                 is UploadResult.Failed -> return finish(
@@ -82,7 +88,11 @@ object SyncRunner {
         }
         progress("")
         return finish(
-            SyncOutcome(true, "OK: sent $sentDays days, $sentSessions sessions, $sentWeights weights"),
+            SyncOutcome(
+                true,
+                "OK: sent $sentDays days, $sentSessions sessions ($sentSamsung from Samsung), $sentWeights weights" +
+                    (samsungError?.let { "\nSamsung Health: $it" } ?: ""),
+            ),
             lastCounts,
         )
     }

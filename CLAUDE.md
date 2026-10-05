@@ -1482,6 +1482,14 @@ while a local change is queued — a pull once erased a cardio session seconds a
   BuildConfig at build time (changing the token = rebuild + reinstall). Output:
   `/opt/health-bridge-build/out/cortex-health-bridge.apk`. Bump versionCode in `app/build.gradle.kts`
   on every release.
+- Samsung Health Data SDK path (v1.1.0+, 5 Oct 2026): on the S24 Samsung Health shares only
+  steps/distance/active kcal with HC, NOT workouts or heart rate, so `SamsungReader.kt` reads
+  `DataTypes.EXERCISE` (+ `HEART_RATE` fallback) straight from Samsung Health and appends them to
+  `sessions` as `shd:<uid>[:<idx>]`, source `com.sec.android.app.shealth`. AAR lives ONLY on the box at
+  `/opt/samsung-health-sdk/samsung-health-data-api-1.1.0.aar`; its licence forbids redistribution, so
+  NEVER commit it (`app/libs/*.aar` is gitignored; `build-on-box.sh` copies it in). Reads work without
+  Samsung partner approval only while Samsung Health "Developer mode for data read" is ON (Samsung
+  Health > Settings > About, tap version 10x > Developer mode). minSdk 29 (SDK requirement).
 
 ## Media library
 

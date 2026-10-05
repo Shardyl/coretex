@@ -26,6 +26,13 @@ export HB_KEYSTORE_PROPS=$KSP
 export BRIDGE_TOKEN_FILE=/etc/cortex/fitness_bridge_token
 echo "sdk.dir=$ANDROID_HOME" > local.properties
 
+# Samsung Health Data SDK: licence forbids redistribution, so it lives only on the box and is
+# copied in for the build (app/libs/*.aar is gitignored).
+SHD_AAR=/opt/samsung-health-sdk/samsung-health-data-api-1.1.0.aar
+[ -f "$SHD_AAR" ] || { echo "Missing $SHD_AAR" >&2; exit 1; }
+mkdir -p app/libs
+cp "$SHD_AAR" app/libs/
+
 ./gradlew --no-daemon -q clean assembleRelease
 
 mkdir -p out

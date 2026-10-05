@@ -41,6 +41,14 @@
             android:text="Grant permissions" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSamsung"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Connect Samsung Health" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSync"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

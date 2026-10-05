@@ -18,6 +18,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var progress: TextView
     private lateinit var btnGrant: MaterialButton
+    private lateinit var btnSamsung: MaterialButton
     private lateinit var btnSync: MaterialButton
     private lateinit var btnBackfill: MaterialButton
     private var running: Job? = null
@@ -36,10 +37,12 @@ class MainActivity : AppCompatActivity() {
         status = findViewById(R.id.status)
         progress = findViewById(R.id.progress)
         btnGrant = findViewById(R.id.btnGrant)
+        btnSamsung = findViewById(R.id.btnSamsung)
         btnSync = findViewById(R.id.btnSync)
         btnBackfill = findViewById(R.id.btnBackfill)
 
         btnGrant.setOnClickListener { requestPermissions() }
+        btnSamsung.setOnClickListener { connectSamsung() }
         btnSync.setOnClickListener { startSync(SyncMode.SYNC) }
         btnBackfill.setOnClickListener { startSync(SyncMode.BACKFILL) }
 
@@ -69,6 +72,22 @@ class MainActivity : AppCompatActivity() {
         permLauncher.launch(wanted)
     }
 
+    private fun connectSamsung() {
+        if (running?.isActive == true) return
+        running = lifecycleScope.launch {
+            setBusy(true)
+            progress.text = "Connecting to Samsung Health"
+            val msg = try {
+                SamsungReader.connect(this@MainActivity)
+            } catch (e: Throwable) {
+                "Samsung Health: ${SamsungReader.describe(e)}"
+            }
+            Status.note(this@MainActivity, "samsung_note", msg)
+            setBusy(false)
+            refresh()
+        }
+    }
+
     private fun featureAvailable(client: HealthConnectClient, feature: Int): Boolean =
         runCatching {
             client.features.getFeatureStatus(feature) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
@@ -95,6 +114,7 @@ class MainActivity : AppCompatActivity() {
         btnSync.isEnabled = !busy
         btnBackfill.isEnabled = !busy
         btnGrant.isEnabled = !busy
+        btnSamsung.isEnabled = !busy
         if (!busy) progress.text = ""
     }
 
@@ -120,6 +140,12 @@ class MainActivity : AppCompatActivity() {
                 }
                 lines += "History read (older than 30 days): " +
                     if (Perms.HISTORY in granted) "granted" else "not granted"
+            }
+
+            val shd = SamsungReader.status(this@MainActivity)
+            lines += "Samsung Health: " + shd.message
+            if (shd.state != SamsungReader.State.CONNECTED) {
+                Status.prefs(this@MainActivity).getString("samsung_note", null)?.let { lines += "  last attempt: $it" }
             }
             lines += "Token: " + if (SyncRunner.hasToken()) "present" else "no token in this build"
             val p = Status.prefs(this@MainActivity)
