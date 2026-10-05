@@ -257,6 +257,9 @@ function readingsCard(){
       <div><div style="font-size:10px;color:var(--ink3);font-weight:700">KETONES mmol/L</div><input class="fd-input" type="number" step="0.1" inputmode="decimal" id="fdKet"/></div>
       <div><div style="font-size:10px;color:var(--ink3);font-weight:700">GLUCOSE <a href="#" onclick="foodToggleGUnit();return false" style="color:var(--teal)">${u==='mgdl'?'mg/dL':'mmol/L'}</a></div><input class="fd-input" type="number" step="0.1" inputmode="decimal" id="fdGlu"/></div>
     </div>
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+      <span style="font-size:11px;color:var(--ink3);font-weight:700;white-space:nowrap">TAKEN AT</span>
+      <input type="time" id="fdRdT" class="fd-input" value="${foodDay===localDay(new Date())?nowHM():''}" style="max-width:130px"/></div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <select id="fdCtx" class="fd-input" style="font-size:14px">${['pre break-fast','after eating','random'].map(c=>`<option ${c===ctx?'selected':''}>${c}</option>`).join('')}</select>
       <button class="fd-btn" style="width:auto;margin:0;padding:0 18px" onclick="foodSaveReadings()">Save</button></div></div>`;
@@ -265,7 +268,9 @@ window.foodToggleGUnit=function(){try{localStorage.setItem('fitness_glucose_unit
 window.foodSaveReadings=function(){
   const k=document.getElementById('fdKet').value, g=document.getElementById('fdGlu').value, ctx=document.getElementById('fdCtx').value;
   if(k===''&&g===''){toast('Enter a reading');return;}
-  const at=foodDay===localDay(new Date())?new Date().toISOString():atTime(foodDay,'16:30');
+  const tv=document.getElementById('fdRdT').value;
+  if(!tv){toast('Set the time it was taken');return;}
+  const at=atTime(foodDay,tv);
   if(k!==''){const v=+k;if(!(v>=0&&v<15)){toast('Ketones look wrong');return;}readings.push({id:newId('rd'),at,kind:'ketones',value:r1(v),context:ctx});}
   if(g!==''){let v=+g;if(gUnit()==='mgdl')v=v/18;if(!(v>1&&v<35)){toast('Glucose looks wrong');return;}readings.push({id:newId('rd'),at,kind:'glucose',value:Math.round(v*100)/100,context:ctx});}
   saveReadings();renderToday();toast('Reading saved');
