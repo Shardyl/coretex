@@ -307,7 +307,7 @@ window.foodSaveReadings=function(){
     readings.push({id:newId('rd'),at,kind:'glucose',value:Math.round(v*100)/100,context:ctx,notes:note});}
   saveReadings();renderToday();toast('Reading saved');
 };
-window.foodDelReading=function(id){const i=readings.findIndex(x=>x.id===id);if(i<0)return;readings.splice(i,1);saveReadings();renderToday();};
+window.foodDelReading=function(id){const i=readings.findIndex(x=>x.id===id);if(i<0)return;markDeleted('readings',id);readings.splice(i,1);saveReadings();renderToday();};
 
 let fastChart=null;
 function renderFasting(){
@@ -403,7 +403,7 @@ window.foodCreatineTake=function(){
 };
 window.foodCreatineUndo=function(){
   const t=creatineOn(foodDay);if(!t.length)return;
-  supplements=supplements.filter(x=>!t.includes(x));saveSupplements();renderToday();
+  t.forEach(x=>markDeleted('supplements',x.id));supplements=supplements.filter(x=>!t.includes(x));saveSupplements();renderToday();
 };
 function weighCard(){
   const t=localDay(new Date()), w=bodyweightLog.find(b=>b.date===t);
@@ -701,7 +701,7 @@ window.foodEditEntry=function(id){
 };
 window.foodDeleteEntry=function(id){
   const i=foodLog.findIndex(x=>x.id===id);if(i<0)return;
-  foodLog.splice(i,1);saveFoodLog();closeSheet();renderToday();toast('Removed');
+  markDeleted('foodLog',foodLog[i].id);foodLog.splice(i,1);saveFoodLog();closeSheet();renderToday();toast('Removed');
 };
 
 // ---------- History ----------
@@ -908,7 +908,7 @@ window.foodToggleMealFav=function(id){const m=savedMeals.find(x=>x.id===id);if(!
 window.foodDeleteMeal=function(id){
   const m=savedMeals.find(x=>x.id===id);if(!m)return;
   if(!confirm('Delete the saved meal "'+m.name+'"? Past log entries are kept.'))return;
-  savedMeals.splice(savedMeals.indexOf(m),1);saveMeals();renderFoodsPage();toast('Meal deleted');
+  markDeleted('meals',m.id);savedMeals.splice(savedMeals.indexOf(m),1);saveMeals();renderFoodsPage();toast('Meal deleted');
 };
 window.foodToggleFav=function(id){const f=foods.find(x=>x.id===id);if(!f)return;f.favourite=!f.favourite;saveFoods();renderFoodsPage();};
 window.foodEditFood=function(id,preset){
@@ -943,7 +943,7 @@ window.foodEditFood=function(id,preset){
 };
 window.foodDeleteFood=function(id){
   const i=foods.findIndex(x=>x.id===id);if(i<0)return;
-  foods.splice(i,1);saveFoods();closeModal();renderFoodsPage();toast('Deleted (past log entries kept)');
+  markDeleted('foods',foods[i].id);foods.splice(i,1);saveFoods();closeModal();renderFoodsPage();toast('Deleted (past log entries kept)');
 };
 
 // Food is the home screen: init() ran before this file loaded, so draw it now.

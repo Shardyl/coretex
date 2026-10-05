@@ -979,7 +979,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='35';                         // keep in step with CACHE in sw.js
+const APP_VERSION='36';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1005,6 +1005,11 @@ function ensureIds(){
   cardioSessions.forEach(s=>{if(!s.id)s.id=(s.exerciseId||'cs')+'|'+String(s.date).slice(0,10);});
 }
 
+// Deletions the owner made in the UI. Always sent as tombstones (the mass-delete guard below is for rows
+// that vanish WITHOUT a delete, e.g. lost storage or the 120-day trim) and cleared after a successful push.
+const PENDING_DEL_KEY='fitness_pending_deletes_v1';
+function markDeleted(coll,id){if(!id)return;try{const p=JSON.parse(localStorage.getItem(PENDING_DEL_KEY)||'{}');(p[coll]=p[coll]||[]).push(id);localStorage.setItem(PENDING_DEL_KEY,JSON.stringify(p));}catch(e){}}
+window.markDeleted=markDeleted;
 function syncDoc(){
   ensureIds();
   const doc={
@@ -1040,10 +1045,13 @@ function syncDoc(){
   // Deletions are made one at a time in this app. If many ids vanish at once, local storage was lost
   // (5 Oct 2026: a full device dropped its foods + meals and tombstoned all 255 on the server). Never send
   // a mass delete; keep the server's copy and let the next pull restore the device.
+  let pend={};try{pend=JSON.parse(localStorage.getItem(PENDING_DEL_KEY)||'{}');}catch(e){}
   Object.keys(live).forEach(k=>{
-    const gone=(sent[k]||[]).filter(id=>!live[k].has(id));
-    if(gone.length>5){console.warn('sync: '+gone.length+' '+k+' missing locally, NOT deleting on server');return;}
-    gone.forEach(id=>{doc[k]=doc[k].concat([{id:id,deleted:true}]);});
+    const asked=new Set((pend[k]||[]).filter(id=>!live[k].has(id)));
+    const gone=(sent[k]||[]).filter(id=>!live[k].has(id)&&!asked.has(id));
+    const send=[...asked].concat(gone.length>5?[]:gone);
+    if(gone.length>5)console.warn('sync: '+gone.length+' '+k+' missing locally without a delete, NOT deleting on server');
+    send.forEach(id=>{doc[k]=doc[k].concat([{id:id,deleted:true}]);});
   });
   return doc;
 }
@@ -1121,6 +1129,7 @@ async function syncNow(manual){
     }
     const pushed=await syncApi('/api/fitness/state',{method:'POST',body:JSON.stringify(syncDoc())});
     if(pushed===null){_syncing=false;return;}                 // not signed in; state already shown
+    try{localStorage.removeItem(PENDING_DEL_KEY);}catch(e){}
     rememberSent();
     const state=await syncApi('/api/fitness/state');
     if(state)applyServerState(state);
@@ -1623,7 +1632,7 @@ function renderLiftHistory(){
     </div>`;
   }).join('');
 }
-window.delLiftSession=function(idx){if(!confirm('Delete?'))return;liftSessions.splice(idx,1);saveLift();renderLiftHistory();toast('Deleted');};
+window.delLiftSession=function(idx){if(!confirm('Delete?'))return;markDeleted('liftSessions',(liftSessions[idx]||{}).id);liftSessions.splice(idx,1);saveLift();renderLiftHistory();toast('Deleted');};
 
 // ─── EXERCISE DETAIL VIEW ─────────────────────────────────────────────────────
 let _detailChart=null;
@@ -1990,7 +1999,7 @@ function renderCardioHistory(){
     </div>`;
   }).join('');
 }
-window.delCardioSession=function(idx){if(!confirm('Delete?'))return;cardioSessions.splice(idx,1);saveCardio();renderCardioHistory();toast('Deleted');};
+window.delCardioSession=function(idx){if(!confirm('Delete?'))return;markDeleted('cardioSessions',(cardioSessions[idx]||{}).id);cardioSessions.splice(idx,1);saveCardio();renderCardioHistory();toast('Deleted');};
 
 // ─── CARDIO DETAIL VIEW ───────────────────────────────────────────────────────
 let _cardioDetailChart=null;
@@ -2902,6 +2911,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=35"></script>
+<script src="food.js?v=36"></script>
 </body>
 </html>
