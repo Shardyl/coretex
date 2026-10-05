@@ -316,6 +316,27 @@ create table if not exists fitness.supplements (
     updated_at timestamptz not null default now()
 );
 
+-- fasting: one row per day, the time the fast was broken and the time the eating window closed.
+create table if not exists fitness.fast_days (
+    day        date primary key,
+    broke_at   timestamptz,
+    closed_at  timestamptz,
+    updated_at timestamptz not null default now()
+);
+
+-- finger-prick (and later CGM) readings: blood ketones and glucose, in mmol/L (converted on entry).
+create table if not exists fitness.readings (
+    uid        text primary key,
+    at         timestamptz not null,
+    kind       text not null,                           -- ketones | glucose
+    value      numeric not null,                        -- mmol/L
+    context    text,                                    -- pre break-fast | after eating | random
+    notes      text,
+    deleted    boolean not null default false,
+    updated_at timestamptz not null default now()
+);
+create index if not exists readings_at_idx on fitness.readings (at);
+
 -- saved meals: a named bundle of items logged together in one tap. Each item carries its own
 -- stamped figures (and its food when it has one), exactly like a log row.
 create table if not exists fitness.meals (

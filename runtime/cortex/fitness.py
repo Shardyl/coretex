@@ -176,6 +176,12 @@ def pull() -> dict:
                  "protein": _num(r["protein"]), "carbs": _num(r["carbs"]), "fat": _num(r["fat"]),
                  "notes": r["notes"]}
                 for r in db.query("select * from fitness.food_log where not deleted order by day, uid")]
+    fast_days = [{"date": r["day"].isoformat(), "brokeAt": r["broke_at"].isoformat() if r["broke_at"] else None,
+                  "closedAt": r["closed_at"].isoformat() if r["closed_at"] else None}
+                 for r in db.query("select * from fitness.fast_days order by day")]
+    readings = [{"id": r["uid"], "at": r["at"].isoformat(), "kind": r["kind"], "value": _num(r["value"]),
+                 "context": r["context"], "notes": r["notes"]}
+                for r in db.query("select * from fitness.readings where not deleted order by at")]
     supplements = [{"id": r["uid"], "date": r["day"].isoformat(), "name": r["name"], "grams": _num(r["grams"])}
                    for r in db.query("select * from fitness.supplements where not deleted order by day")]
     meals = [{"id": r["uid"], "name": r["name"], "items": r["items"] or [], "source": r["source"],
@@ -185,10 +191,11 @@ def pull() -> dict:
         "select uid from fitness.foods where deleted union all "
         "select uid from fitness.food_log where deleted union all "
         "select uid from fitness.meals where deleted union all "
-        "select uid from fitness.supplements where deleted")]
+        "select uid from fitness.supplements where deleted union all "
+        "select uid from fitness.readings where deleted")]
     return {"bodyweight": bw, "plans": plans, "liftSessions": lifts, "cardioPresets": presets,
             "cardioSessions": cardio, "vo2": vo2, "tombstones": tombstones,
-            "foods": foods, "foodLog": food_log, "meals": meals, "supplements": supplements, "targets": targets(), "health": health_pull(),
+            "foods": foods, "foodLog": food_log, "meals": meals, "supplements": supplements, "fastDays": fast_days, "readings": readings, "targets": targets(), "health": health_pull(),
             "counts": {"bodyweight": len(bw), "plans": len(plans), "liftSessions": len(lifts),
                        "cardioPresets": len(presets), "cardioSessions": len(cardio), "vo2": len(vo2),
                        "foods": len(foods), "foodLog": len(food_log), "meals": len(meals)}}
@@ -593,6 +600,29 @@ def _push_inner(doc: dict, source: str = "app") -> dict:
             (r["id"], r["name"].strip(), Json(r.get("items") or []), r.get("source") or "app",
              bool(r.get("favourite")), bool(r.get("deleted"))))
         counts["meals"] += 1
+    counts["fastDays"] = counts["readings"] = 0
+    for r in doc.get("fastDays") or []:
+        d = _day(r.get("date"))
+        if not d:
+            continue
+        _ex("insert into fitness.fast_days (day, broke_at, closed_at) values (%s,%s,%s) on conflict (day) do update "
+            "set broke_at=excluded.broke_at, closed_at=excluded.closed_at, updated_at=now()",
+            (d, _ts(r.get("brokeAt")), _ts(r.get("closedAt"))))
+        counts["fastDays"] += 1
+    for r in doc.get("readings") or []:
+        if not r.get("id"):
+            continue
+        at = _ts(r.get("at"))
+        if r.get("deleted") and not at:
+            _ex("update fitness.readings set deleted=true, updated_at=now() where uid=%s", (r["id"],))
+            continue
+        if not at or _num(r.get("value")) is None or r.get("kind") not in ("ketones", "glucose"):
+            continue
+        _ex("insert into fitness.readings (uid, at, kind, value, context, notes, deleted) values (%s,%s,%s,%s,%s,%s,%s) "
+            "on conflict (uid) do update set at=excluded.at, kind=excluded.kind, value=excluded.value, "
+            "context=excluded.context, notes=excluded.notes, deleted=readings.deleted or excluded.deleted, updated_at=now()",
+            (r["id"], at, r["kind"], _num(r["value"]), r.get("context"), r.get("notes"), bool(r.get("deleted"))))
+        counts["readings"] += 1
     counts["supplements"] = 0
     for r in doc.get("supplements") or []:
         d = _day(r.get("date"))

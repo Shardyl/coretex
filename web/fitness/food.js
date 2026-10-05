@@ -109,6 +109,7 @@ window.renderFood=function(sub){
   else if(sub==='history')renderHistory();
   else if(sub==='foods')renderFoodsPage();
   else if(sub==='weight')renderWeight();
+  else if(sub==='fasting')renderFasting();
 };
 window.renderFoodCurrent=function(){
   if(typeof currentSection!=='undefined'&&currentSection==='food')window.renderFood(currentSubpage.food);
@@ -155,6 +156,8 @@ function renderToday(){
       <div style="margin-top:6px;font-size:11px;color:var(--ink3)">Carbs ${fmtN(t.carbs)} g &middot; Fat ${fmtN(t.fat)} g</div>
       ${balance}
     </div>
+    ${isFuture?'':fastCard()}
+    ${isFuture?'':readingsCard()}
     ${isFuture?'':creatineCard()}
     ${isToday?weighCard():''}
     ${isFuture?'':healthCard(h,sess)}
@@ -162,6 +165,116 @@ function renderToday(){
     <button class="fd-btn sec" onclick="foodCopyDay()">Copy ${dayLabel(shiftDay(foodDay,-1)).toLowerCase()}'s food to ${dayLabel(foodDay).toLowerCase()}</button>
   `;
 }
+// ---------- fasting (break-fast / close eating window) ----------
+function fastDay(day){return fastDays.find(f=>f.date===day)||null;}
+function hm(ms){if(ms==null||ms<0)return '—';const m=Math.round(ms/60000);return Math.floor(m/60)+'h '+String(m%60).padStart(2,'0')+'m';}
+function tOf(iso){return iso?new Date(iso).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';}
+// The fast that ENDED on `day`: from the previous day's window close to this day's break-fast.
+function fastLength(day){
+  const f=fastDay(day), prev=fastDay(shiftDay(day,-1));
+  if(!f||!f.brokeAt||!prev||!prev.closedAt)return null;
+  return new Date(f.brokeAt)-new Date(prev.closedAt);
+}
+function atTime(day,hhmm){const [h,m]=(hhmm||'').split(':').map(Number);const d=new Date(day+'T00:00:00');d.setHours(h||0,m||0,0,0);return d.toISOString();}
+function nowHM(){const n=new Date();return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');}
+function fastCard(){
+  const f=fastDay(foodDay), prev=fastDay(shiftDay(foodDay,-1)), isToday=foodDay===localDay(new Date());
+  if(!f||!f.brokeAt){
+    const since=prev&&prev.closedAt?new Date(prev.closedAt):null;
+    return `<div class="card" style="padding:12px 16px">
+      <div class="fd-sub">Fasting${since&&isToday?' &middot; since '+tOf(prev.closedAt)+' yesterday':''}</div>
+      ${since&&isToday?`<div class="fd-big" style="font-size:28px">${hm(Date.now()-since)}</div>`:`<div class="fd-note" style="margin:4px 0">${since?'':'Tap &quot;Close eating window&quot; tonight so tomorrow&#39;s fast length is known.'}</div>`}
+      <div style="display:flex;gap:8px;margin-top:8px"><input type="time" id="fdBreakT" class="fd-input" value="${nowHM()}" style="max-width:130px"/>
+      <button class="fd-btn" style="width:auto;margin:0;padding:0 16px" onclick="foodFastSet('brokeAt','fdBreakT')">Break fast</button></div></div>`;
+  }
+  const len=fastLength(foodDay);
+  if(!f.closedAt)return `<div class="card" style="padding:12px 16px">
+    <div class="fd-sub">Fast ${len!=null?'&middot; '+hm(len):''} &middot; broken at ${tOf(f.brokeAt)}</div>
+    <div style="display:flex;gap:8px;margin-top:8px"><input type="time" id="fdCloseT" class="fd-input" value="${nowHM()}" style="max-width:130px"/>
+    <button class="fd-btn sec" style="width:auto;margin:0;padding:0 16px" onclick="foodFastSet('closedAt','fdCloseT')">Close eating window</button>
+    <button class="btn-sm" onclick="foodFastClear('brokeAt')">Undo</button></div></div>`;
+  return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
+    <div><div class="fd-sub">Fast ${len!=null?hm(len):''}</div>
+    <div style="font-size:13px;font-weight:700">Eating window ${tOf(f.brokeAt)} to ${tOf(f.closedAt)} (${hm(new Date(f.closedAt)-new Date(f.brokeAt))})</div></div>
+    <button class="btn-sm" onclick="foodFastClear('closedAt')">Reopen</button></div>`;
+}
+window.foodFastSet=function(field,inputId){
+  const v=document.getElementById(inputId).value;if(!v){toast('Pick a time');return;}
+  let f=fastDay(foodDay);if(!f){f={date:foodDay,brokeAt:null,closedAt:null};fastDays.push(f);}
+  f[field]=atTime(foodDay,v);
+  if(field==='closedAt'&&f.brokeAt&&f.closedAt<f.brokeAt){f.closedAt=atTime(shiftDay(foodDay,1),v);}   // window closed after midnight
+  saveFasts();renderToday();toast(field==='brokeAt'?'Fast broken':'Eating window closed');
+};
+window.foodFastClear=function(field){const f=fastDay(foodDay);if(!f)return;f[field]=null;saveFasts();renderToday();};
+
+// ---------- ketone + glucose readings (stored in mmol/L) ----------
+function gUnit(){try{return localStorage.getItem('fitness_glucose_unit')||'mmol';}catch(e){return 'mmol';}}
+function gShow(mmol){return gUnit()==='mgdl'?Math.round(mmol*18):r1(mmol);}
+function readingsOn(day){return readings.filter(x=>localDay(new Date(x.at))===day).sort((a,b)=>a.at<b.at?-1:1);}
+function gki(list){   // glucose-ketone index from a glucose and ketone reading taken within 30 minutes
+  const k=list.filter(x=>x.kind==='ketones'), g=list.filter(x=>x.kind==='glucose');
+  for(const a of k)for(const b of g)if(Math.abs(new Date(a.at)-new Date(b.at))<=30*60000&&a.value>0)return r1(b.value/a.value);
+  return null;
+}
+function readingsCard(){
+  const list=readingsOn(foodDay), f=fastDay(foodDay), g=gki(list), u=gUnit();
+  const ctx=!f||!f.brokeAt?'pre break-fast':'after eating';
+  return `<div class="card" style="padding:12px 16px">
+    <div class="fd-sub" style="margin-bottom:6px">Ketones and glucose${g!=null?` &middot; GKI ${g}`:''}</div>
+    ${list.map(x=>`<div class="fd-entry" style="cursor:default;padding:5px 0"><div class="n" style="font-size:13px">${x.kind==='ketones'?'Ketones '+r1(x.value)+' mmol/L':'Glucose '+gShow(x.value)+(u==='mgdl'?' mg/dL':' mmol/L')}</div>
+      <div class="q">${tOf(x.at)} &middot; ${esc(x.context||'')} <button class="hist-del" onclick="foodDelReading('${x.id}')">&times;</button></div></div>`).join('')}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
+      <div><div style="font-size:10px;color:var(--ink3);font-weight:700">KETONES mmol/L</div><input class="fd-input" type="number" step="0.1" inputmode="decimal" id="fdKet"/></div>
+      <div><div style="font-size:10px;color:var(--ink3);font-weight:700">GLUCOSE <a href="#" onclick="foodToggleGUnit();return false" style="color:var(--teal)">${u==='mgdl'?'mg/dL':'mmol/L'}</a></div><input class="fd-input" type="number" step="0.1" inputmode="decimal" id="fdGlu"/></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <select id="fdCtx" class="fd-input" style="font-size:14px">${['pre break-fast','after eating','random'].map(c=>`<option ${c===ctx?'selected':''}>${c}</option>`).join('')}</select>
+      <button class="fd-btn" style="width:auto;margin:0;padding:0 18px" onclick="foodSaveReadings()">Save</button></div></div>`;
+}
+window.foodToggleGUnit=function(){try{localStorage.setItem('fitness_glucose_unit',gUnit()==='mgdl'?'mmol':'mgdl');}catch(e){}renderToday();};
+window.foodSaveReadings=function(){
+  const k=document.getElementById('fdKet').value, g=document.getElementById('fdGlu').value, ctx=document.getElementById('fdCtx').value;
+  if(k===''&&g===''){toast('Enter a reading');return;}
+  const at=foodDay===localDay(new Date())?new Date().toISOString():atTime(foodDay,'16:30');
+  if(k!==''){const v=+k;if(!(v>=0&&v<15)){toast('Ketones look wrong');return;}readings.push({id:newId('rd'),at,kind:'ketones',value:r1(v),context:ctx});}
+  if(g!==''){let v=+g;if(gUnit()==='mgdl')v=v/18;if(!(v>1&&v<35)){toast('Glucose looks wrong');return;}readings.push({id:newId('rd'),at,kind:'glucose',value:Math.round(v*100)/100,context:ctx});}
+  saveReadings();renderToday();toast('Reading saved');
+};
+window.foodDelReading=function(id){const i=readings.findIndex(x=>x.id===id);if(i<0)return;readings.splice(i,1);saveReadings();renderToday();};
+
+let fastChart=null;
+function renderFasting(){
+  const el=document.getElementById('page-food-fasting'), today=localDay(new Date());
+  const days=[];for(let i=0;i<30;i++)days.push(shiftDay(today,-i));
+  const rows=days.map(d=>{const L=readingsOn(d), pre=L.filter(x=>x.context==='pre break-fast');
+    const kk=pre.find(x=>x.kind==='ketones')||L.find(x=>x.kind==='ketones'), gg=pre.find(x=>x.kind==='glucose')||L.find(x=>x.kind==='glucose');
+    return {d,len:fastLength(d),f:fastDay(d),k:kk?kk.value:null,g:gg?gg.value:null,gki:gki(pre.length?pre:L)};});
+  const lens=rows.slice(0,7).map(r=>r.len).filter(x=>x!=null);
+  const avg=lens.length?lens.reduce((a,b)=>a+b,0)/lens.length:null;
+  const u=gUnit();
+  el.innerHTML=`<div class="card"><div class="fd-row" style="margin-top:0">
+      <div class="fd-cell"><div class="v">${hm(avg)}</div><div class="l">Avg fast, 7 days</div></div>
+      <div class="fd-cell"><div class="v">${lens.length}</div><div class="l">Fasts logged</div></div>
+      <div class="fd-cell"><div class="v">${hm(rows.map(r=>r.len).filter(x=>x!=null).reduce((a,b)=>Math.max(a,b),0)||null)}</div><div class="l">Longest, 30 days</div></div>
+    </div></div>
+    <div class="chart-section"><div class="chart-title" style="margin-bottom:8px">Fast length and pre break-fast ketones</div>
+      <div style="position:relative;width:100%;height:210px"><canvas id="fdFastChart" role="img" aria-label="Fast length and ketones"></canvas></div></div>
+    <div class="card" style="padding:8px 12px">
+      <div class="fd-hrow h"><div>Day</div><div>Fast</div><div>Ketones</div><div>Glucose</div><div>GKI</div></div>
+      ${rows.map(r=>`<div class="fd-hrow"><div>${dayLabel(r.d).replace('Yesterday','Yest.')}</div><div>${r.len!=null?hm(r.len):'—'}</div><div>${r.k!=null?r1(r.k):'—'}</div><div>${r.g!=null?gShow(r.g):'—'}</div><div>${r.gki??'—'}</div></div>`).join('')}
+    </div>
+    <div class="fd-note">Glucose in ${u==='mgdl'?'mg/dL':'mmol/L'} (tap the unit on Today to switch). GKI = glucose / ketones, both in mmol/L, from readings taken within 30 minutes of each other.</div>`;
+  const cr=rows.slice().reverse(), cs=getComputedStyle(document.documentElement);
+  const teal=cs.getPropertyValue('--teal').trim()||'#1D9E75', purple=cs.getPropertyValue('--purple').trim()||'#534AB7', txc=cs.getPropertyValue('--ink3').trim()||'#888', gc=cs.getPropertyValue('--border').trim()||'rgba(0,0,0,0.1)';
+  if(fastChart)fastChart.destroy();
+  fastChart=new Chart(document.getElementById('fdFastChart'),{type:'bar',data:{labels:cr.map(r=>fmtDate(r.d)),datasets:[
+    {type:'bar',label:'Fast (hours)',data:cr.map(r=>r.len!=null?r1(r.len/3600000):null),backgroundColor:teal+'99',borderRadius:3,yAxisID:'y'},
+    {type:'line',label:'Ketones mmol/L',data:cr.map(r=>r.k),borderColor:purple,backgroundColor:purple,pointRadius:3,spanGaps:true,yAxisID:'y1'}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:txc,boxWidth:10,font:{size:11}}}},
+    scales:{x:{ticks:{color:txc,font:{size:9},maxRotation:60},grid:{display:false}},y:{ticks:{color:txc,font:{size:10}},grid:{color:gc}},
+      y1:{position:'right',ticks:{color:txc,font:{size:10}},grid:{display:false}}}}});
+}
+
 // ---------- creatine (daily dose, default 10 g) ----------
 function creatineOn(day){return supplements.filter(x=>x.date===day&&x.name==='creatine');}
 function creatineStreak(){
