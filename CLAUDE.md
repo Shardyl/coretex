@@ -1440,6 +1440,13 @@ while a local change is queued — a pull once erased a cardio session seconds a
   never pushed back by the PWA; returned in the state pull as `health`). The bridge authenticates with
   its OWN token (`api.bridge_token()`, signed under a separate scope, so `auth()` rejects it on every
   other endpoint); the copy baked into the APK at build time is `/etc/cortex/fitness_bridge_token`.
+- **Watch workouts -> cardio log (5 Oct 2026):** `fitness.reconcile_watch()` runs after every Health Bridge
+  POST (last 10 days) and was run once over all history. Owner rules: under 10 min is not a workout; a
+  hand-logged entry is LINKED (`cardio_sessions.watch` jsonb), never overwritten; unlogged pre-go-live sessions
+  become `w:<uid>` entries on the "... - from watch" presets with settings NOT recorded (never guessed); new ones
+  are pre-filled at JGE from the last session on that preset and tagged unconfirmed until checked in the app; a
+  10-20 min treadmill ending within 15 min of a 4x4 is its warm-up; title "Steam Room" -> preset `id_steam`.
+  `watch` is pushed by the app with `coalesce` so an old client never erases it. Creatine: `fitness.supplements`.
 - **Reading the history:** Feb to ~9 Apr 2026 has 1-exercise rows dated the day after a session (Mon
   chest press, Thu shoulder press/curls): next-day corrections, not extra sessions. Training was ~2
   sessions/week throughout; count adjacent-day entries as one session. Most Feb-Mar cardio (weekly
