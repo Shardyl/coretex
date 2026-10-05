@@ -116,7 +116,8 @@ window.renderFoodCurrent=function(){
 };
 
 // ---------- Today ----------
-function renderToday(){
+function renderToday(){renderTodayInner();try{drawCgm();}catch(e){}}
+function renderTodayInner(){
   const el=document.getElementById('page-food-today');
   const list=entriesFor(foodDay);
   const t=totals(list);
@@ -210,6 +211,14 @@ window.foodFastClear=function(field){const f=fastDay(foodDay);if(!f)return;f[fie
 // ---------- ketone + glucose readings (stored in mmol/L) ----------
 function gUnit(){try{return localStorage.getItem('fitness_glucose_unit')||'mmol';}catch(e){return 'mmol';}}
 function gShow(mmol){return gUnit()==='mgdl'?Math.round(mmol*18):r1(mmol);}
+function cgmOn(day){return (cgmData||[]).filter(x=>localDay(new Date(x.at))===day);}
+function drawCgm(){
+  const el=document.getElementById('fdCgmChart');if(!el)return;
+  const cg=cgmOn(foodDay), cs=getComputedStyle(document.documentElement), c=cs.getPropertyValue('--blue').trim()||'#185FA5', txc=cs.getPropertyValue('--ink3').trim()||'#888';
+  if(window._cgmChart)window._cgmChart.destroy();
+  window._cgmChart=new Chart(el,{type:'line',data:{labels:cg.map(x=>tOf(x.at)),datasets:[{data:cg.map(x=>gShow(x.mmol)),borderColor:c,borderWidth:2,pointRadius:0,tension:0.3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:txc,font:{size:9},maxTicksLimit:6},grid:{display:false}},y:{ticks:{color:txc,font:{size:9},maxTicksLimit:4},grid:{display:false}}}}});
+}
 function readingsOn(day){return readings.filter(x=>localDay(new Date(x.at))===day).sort((a,b)=>a.at<b.at?-1:1);}
 function gki(list){   // glucose-ketone index from a glucose and ketone reading taken within 30 minutes
   const k=list.filter(x=>x.kind==='ketones'), g=list.filter(x=>x.kind==='glucose');
@@ -219,7 +228,13 @@ function gki(list){   // glucose-ketone index from a glucose and ketone reading 
 function readingsCard(){
   const list=readingsOn(foodDay), f=fastDay(foodDay), g=gki(list), u=gUnit();
   const ctx=!f||!f.brokeAt?'pre break-fast':'after eating';
+  const cg=cgmOn(foodDay), last=cg.length?cg[cg.length-1]:null;
   return `<div class="card" style="padding:12px 16px">
+    ${last?`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+      <div class="fd-sub">Libre sensor</div><div style="font-size:12px;color:var(--ink3)">${tOf(last.at)}${foodDay===localDay(new Date())?' &middot; '+Math.round((Date.now()-new Date(last.at))/60000)+' min ago':''}</div></div>
+      <div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px"><div class="fd-big" style="font-size:28px">${gShow(last.mmol)} <span style="font-size:13px;color:var(--ink3)">${u==='mgdl'?'mg/dL':'mmol/L'}</span></div>
+      <div style="font-size:12px;color:var(--ink3)">day ${gShow(Math.min(...cg.map(x=>x.mmol)))}&ndash;${gShow(Math.max(...cg.map(x=>x.mmol)))}, avg ${gShow(cg.reduce((a,x)=>a+x.mmol,0)/cg.length)}</div></div>
+      <div style="position:relative;height:90px;margin-bottom:10px"><canvas id="fdCgmChart" role="img" aria-label="Glucose today"></canvas></div>`:''}
     <div class="fd-sub" style="margin-bottom:6px">Ketones and glucose${g!=null?` &middot; GKI ${g}`:''}</div>
     ${list.map(x=>`<div class="fd-entry" style="cursor:default;padding:5px 0"><div class="n" style="font-size:13px">${x.kind==='ketones'?'Ketones '+r1(x.value)+' mmol/L':'Glucose '+gShow(x.value)+(u==='mgdl'?' mg/dL':' mmol/L')}</div>
       <div class="q">${tOf(x.at)} &middot; ${esc(x.context||'')} <button class="hist-del" onclick="foodDelReading('${x.id}')">&times;</button></div></div>`).join('')}
@@ -263,7 +278,9 @@ function renderFasting(){
       <div class="fd-hrow h"><div>Day</div><div>Fast</div><div>Ketones</div><div>Glucose</div><div>GKI</div></div>
       ${rows.map(r=>`<div class="fd-hrow"><div>${dayLabel(r.d).replace('Yesterday','Yest.')}</div><div>${r.len!=null?hm(r.len):'—'}</div><div>${r.k!=null?r1(r.k):'—'}</div><div>${r.g!=null?gShow(r.g):'—'}</div><div>${r.gki??'—'}</div></div>`).join('')}
     </div>
+    <div class="card" id="fdLibreCard"><div class="fd-sub">FreeStyle Libre</div><div class="fd-note" style="margin:4px 0">Checking&hellip;</div></div>
     <div class="fd-note">Glucose in ${u==='mgdl'?'mg/dL':'mmol/L'} (tap the unit on Today to switch). GKI = glucose / ketones, both in mmol/L, from readings taken within 30 minutes of each other.</div>`;
+  libreCard();
   const cr=rows.slice().reverse(), cs=getComputedStyle(document.documentElement);
   const teal=cs.getPropertyValue('--teal').trim()||'#1D9E75', purple=cs.getPropertyValue('--purple').trim()||'#534AB7', txc=cs.getPropertyValue('--ink3').trim()||'#888', gc=cs.getPropertyValue('--border').trim()||'rgba(0,0,0,0.1)';
   if(fastChart)fastChart.destroy();
@@ -274,6 +291,34 @@ function renderFasting(){
     scales:{x:{ticks:{color:txc,font:{size:9},maxRotation:60},grid:{display:false}},y:{ticks:{color:txc,font:{size:10}},grid:{color:gc}},
       y1:{position:'right',ticks:{color:txc,font:{size:10}},grid:{display:false}}}}});
 }
+
+// ---------- FreeStyle Libre connection (LibreLinkUp follower login, stored server-side only) ----------
+async function libreCard(){
+  const el=document.getElementById('fdLibreCard');if(!el)return;
+  let st=null;try{st=await syncApi('/api/fitness/libre/status');}catch(e){}
+  const form=`<div class="fd-note" style="margin:4px 0 8px">Enter the LibreLinkUp <b>follower</b> login you created for Cortex. It is checked with Abbott, stored on the server, and never shown again.</div>
+    <input class="fd-input" id="lbE" type="email" autocomplete="off" placeholder="Follower email" style="margin-bottom:8px"/>
+    <input class="fd-input" id="lbP" type="password" autocomplete="new-password" placeholder="Follower password"/>
+    <button class="fd-btn" onclick="foodLibreConnect()">Connect Libre</button>`;
+  if(!st||!st.connected){el.innerHTML='<div class="fd-sub">FreeStyle Libre</div>'+form;return;}
+  el.innerHTML=`<div class="fd-sub">FreeStyle Libre &middot; connected</div>
+    <div style="font-size:13px;margin-top:4px">${st.latest?`Latest ${gShow(st.latest.mmol)} at ${tOf(st.latest.at)}`:'No readings yet (the sensor needs 60 minutes to warm up)'}</div>
+    <div class="fd-note" style="margin:4px 0 0">Follower ${esc(st.email||'')} &middot; checked every 5 minutes${st.last_poll?', last '+new Date(st.last_poll*1000).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):''}</div>
+    <details style="margin-top:8px"><summary style="font-size:12px;color:var(--ink3)">Change login</summary>${form}</details>`;
+}
+window.foodLibreConnect=async function(){
+  const e=document.getElementById('lbE').value.trim(), p=document.getElementById('lbP').value;
+  if(!e||!p){toast('Enter email and password');return;}
+  toast('Checking with Abbott…');
+  try{
+    const t=syncToken();
+    const r=await fetch(API_BASE+'/api/fitness/libre/connect',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({email:e,password:p})});
+    const j=await r.json();
+    if(!r.ok){toast(j.detail||'Could not connect');return;}
+    toast(j.points!=null?'Connected: '+j.points+' readings pulled':'Connected');
+    libreCard();if(typeof syncNow==='function')syncNow(false);
+  }catch(err){toast('Could not reach Cortex');}
+};
 
 // ---------- creatine (daily dose, default 10 g) ----------
 function creatineOn(day){return supplements.filter(x=>x.date===day&&x.name==='creatine');}

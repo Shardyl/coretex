@@ -5589,6 +5589,27 @@ def fitness_food_photo(body: MealPhoto, _: None = Depends(auth)) -> dict:
     return fitness.estimate_meal_photo(img, body.note or "")
 
 
+class LibreLogin(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/api/fitness/libre/connect")
+def fitness_libre_connect(body: LibreLogin, _: None = Depends(auth)) -> dict:
+    """The owner types his LibreLinkUp FOLLOWER login into the app; it is verified, stored, never returned."""
+    from . import libre
+    try:
+        return libre.connect(body.email, body.password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/fitness/libre/status")
+def fitness_libre_status(_: None = Depends(auth)) -> dict:
+    from . import libre
+    return libre.status()
+
+
 @app.get("/api/fitness/summary")
 def fitness_summary(_: None = Depends(auth)) -> dict:
     return fitness.summary()

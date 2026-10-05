@@ -195,7 +195,9 @@ def pull() -> dict:
         "select uid from fitness.readings where deleted")]
     return {"bodyweight": bw, "plans": plans, "liftSessions": lifts, "cardioPresets": presets,
             "cardioSessions": cardio, "vo2": vo2, "tombstones": tombstones,
-            "foods": foods, "foodLog": food_log, "meals": meals, "supplements": supplements, "fastDays": fast_days, "readings": readings, "targets": targets(), "health": health_pull(),
+            "foods": foods, "foodLog": food_log, "meals": meals, "supplements": supplements, "fastDays": fast_days, "readings": readings,
+            "cgm": [{"at": r["at"].isoformat(), "mmol": float(r["mmol"])} for r in db.query(
+                "select at, mmol from fitness.cgm where at > now() - interval '3 days' order by at")], "targets": targets(), "health": health_pull(),
             "counts": {"bodyweight": len(bw), "plans": len(plans), "liftSessions": len(lifts),
                        "cardioPresets": len(presets), "cardioSessions": len(cardio), "vo2": len(vo2),
                        "foods": len(foods), "foodLog": len(food_log), "meals": len(meals)}}

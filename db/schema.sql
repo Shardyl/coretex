@@ -337,6 +337,15 @@ create table if not exists fitness.readings (
 );
 create index if not exists readings_at_idx on fitness.readings (at);
 
+-- continuous glucose (FreeStyle Libre via a LibreLinkUp follower, cortex/libre.py). One row per reading,
+-- mmol/L. Server-owned and NOT in the app's sync document (it is ~1,400 rows a week).
+create table if not exists fitness.cgm (
+    at     timestamptz primary key,
+    mmol   numeric not null,
+    trend  int,
+    source text
+);
+
 -- saved meals: a named bundle of items logged together in one tap. Each item carries its own
 -- stamped figures (and its food when it has one), exactly like a log row.
 create table if not exists fitness.meals (

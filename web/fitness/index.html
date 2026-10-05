@@ -909,10 +909,11 @@ const MEALS_KEY='fitness_meals_v1';
 const SUPP_KEY='fitness_supplements_v1';
 const FAST_KEY='fitness_fastdays_v1';
 const READ_KEY='fitness_readings_v1';
+const CGM_KEY='fitness_cgm_v1';
 
 let liftSessions=[], liftWorkouts=[], cardioSessions=[], cardioExercises=[], vo2Records=[], bodyweightLog=[];
 // Food + Health Connect. healthData is server-owned (written by the companion app), cached here only.
-let foods=[], foodLog=[], savedMeals=[], supplements=[], fastDays=[], readings=[], foodTargets={kcal:2350,protein:178,bmr:1873,creatine:10}, healthData={days:[],sessions:[],weights:[],lastSync:null};
+let foods=[], foodLog=[], savedMeals=[], supplements=[], fastDays=[], readings=[], cgmData=[], foodTargets={kcal:2350,protein:178,bmr:1873,creatine:10}, healthData={days:[],sessions:[],weights:[],lastSync:null};
 
 function loadAll(){
   // Lift sessions
@@ -947,6 +948,7 @@ function loadAll(){
   try{const d=localStorage.getItem(SUPP_KEY);if(d)supplements=JSON.parse(d);}catch(e){}
   try{const d=localStorage.getItem(FAST_KEY);if(d)fastDays=JSON.parse(d);}catch(e){}
   try{const d=localStorage.getItem(READ_KEY);if(d)readings=JSON.parse(d);}catch(e){}
+  try{const d=localStorage.getItem(CGM_KEY);if(d)cgmData=JSON.parse(d);}catch(e){}
   try{const d=localStorage.getItem(TARGETS_KEY);if(d)foodTargets=Object.assign(foodTargets,JSON.parse(d));}catch(e){}
   try{const d=localStorage.getItem(HEALTH_KEY);if(d)healthData=JSON.parse(d);}catch(e){}
   ensureIds();
@@ -976,7 +978,7 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='24';                         // keep in step with CACHE in sw.js
+const APP_VERSION='25';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1176,6 +1178,7 @@ function applyServerState(state,force){
   if(state.readings)readings=mergeById(state.readings,readings);
   if(state.targets)foodTargets=Object.assign({},foodTargets,state.targets);
   if(state.health){healthData=state.health;saveHealth();}
+  if(state.cgm){cgmData=state.cgm;try{localStorage.setItem(CGM_KEY,JSON.stringify(cgmData));}catch(e){}}
   saveLift();saveLiftWorkouts();saveCardio();saveCardioExercises();saveVO2();saveBodyweight();
   saveFoods();saveFoodLog();saveMeals();saveSupplements();saveFasts();saveReadings();saveTargets();
   rememberSent();
@@ -2926,6 +2929,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=24"></script>
+<script src="food.js?v=25"></script>
 </body>
 </html>
