@@ -5610,6 +5610,22 @@ def fitness_libre_status(_: None = Depends(auth)) -> dict:
     return libre.status()
 
 
+@app.post("/api/fitness/eightsleep/connect")
+def fitness_eightsleep_connect(body: LibreLogin, _: None = Depends(auth)) -> dict:
+    """The owner types his Eight Sleep login into the app; it is verified, stored, never returned."""
+    from . import eightsleep
+    try:
+        return eightsleep.connect(body.email, body.password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/fitness/eightsleep/status")
+def fitness_eightsleep_status(_: None = Depends(auth)) -> dict:
+    from . import eightsleep
+    return eightsleep.status()
+
+
 @app.get("/api/fitness/summary")
 def fitness_summary(_: None = Depends(auth)) -> dict:
     return fitness.summary()

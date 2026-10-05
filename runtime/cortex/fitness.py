@@ -229,14 +229,38 @@ def set_targets(t: dict) -> dict:
 # ---------- Health Connect (watch + phone data from the companion app) ----------
 
 
+def _wake_day(r: dict) -> str:
+    """The local (Dubai) day the night ENDED, from Eight Sleep's presenceEnd; its own `day` label as fallback.
+    Health Connect sleep is keyed the same way, so 'last night' on a day page means the same night for both."""
+    end = _ts((r.get("raw") or {}).get("presenceEnd"))
+    if end and end.tzinfo:
+        from zoneinfo import ZoneInfo
+        return end.astimezone(ZoneInfo("Asia/Dubai")).date().isoformat()
+    return r["day"].isoformat()
+
+
 def health_pull(days: int = 400) -> dict:
     """What the app shows: daily totals, watch sessions and weigh-ins for the last `days` days."""
     d = [{"date": r["day"].isoformat(), "steps": r["steps"], "totalKcal": _num(r["total_kcal"]),
           "activeKcal": _num(r["active_kcal"]), "distanceM": _num(r["distance_m"]),
           "floors": _num(r["floors"]), "restingHR": _num(r["resting_hr"]), "hrvMs": _num(r["hrv_ms"]),
-          "sleepMin": _num(r["sleep_min"])}
+          "sleepMin": _num(r["sleep_min"]), "sleepDeepMin": _num(r["sleep_deep_min"]),
+          "sleepRemMin": _num(r["sleep_rem_min"]), "sleepLightMin": _num(r["sleep_light_min"]),
+          "sleepAwakeMin": _num(r["sleep_awake_min"]),
+          "sleepStart": r["sleep_start"].isoformat() if r["sleep_start"] else None,
+          "sleepEnd": r["sleep_end"].isoformat() if r["sleep_end"] else None,
+          "sleepHRAvg": _num(r["sleep_hr_avg"]), "sleepHRMin": _num(r["sleep_hr_min"]),
+          "sleepResp": _num(r["sleep_resp_avg"]), "sleepHrvMs": _num(r["sleep_hrv_ms"]),
+          "sleepSource": r["sleep_source"], "dayRestingHR": _num(r["day_resting_hr"])}
          for r in db.query("select * from fitness.health_daily where day > current_date - %s order by day",
                            (days,))]
+    e8 = [{"date": _wake_day(r), "label": r["day"].isoformat(), "score": _num(r["score"]), "fitness": _num(r["fitness"]),
+           "durationMin": round(float(r["duration_s"]) / 60) if r["duration_s"] is not None else None,
+           "deepMin": round(float(r["deep_s"]) / 60) if r["deep_s"] is not None else None,
+           "remMin": round(float(r["rem_s"]) / 60) if r["rem_s"] is not None else None,
+           "lightMin": round(float(r["light_s"]) / 60) if r["light_s"] is not None else None,
+           "hr": _num(r["hr"]), "hrv": _num(r["hrv"]), "resp": _num(r["resp"])}
+          for r in db.query("select * from fitness.sleep_8 where day > current_date - %s order by day", (days,))]
     s = [{"id": r["uid"], "date": r["day"].isoformat(), "start": r["start_at"].isoformat(),
           "end": r["end_at"].isoformat(), "type": r["type"], "typeName": r["type_name"], "title": r["title"],
           "kcal": _num(r["kcal"]), "avgHR": _num(r["avg_hr"]), "maxHR": _num(r["max_hr"]),
@@ -249,7 +273,7 @@ def health_pull(days: int = 400) -> dict:
          for r in db.query("select * from fitness.health_weights where at > now() - make_interval(days => %s) "
                            "order by at", (days,))]
     last = db.one("select max(updated_at) as t from fitness.health_daily")
-    return {"days": d, "sessions": s, "weights": w,
+    return {"days": d, "sessions": s, "weights": w, "eightSleep": e8,
             "lastSync": last["t"].isoformat() if last and last.get("t") else None}
 
 
@@ -260,6 +284,27 @@ def _ts(v):
         return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+_SLEEP_COLS = ("sleep_deep_min", "sleep_rem_min", "sleep_light_min", "sleep_awake_min", "sleep_start", "sleep_end",
+               "sleep_hr_avg", "sleep_hr_min", "sleep_resp_avg", "sleep_hrv_ms", "sleep_source", "day_resting_hr")
+# Sleep columns coalesce: a bridge older than 1.3.0 does not send them and must not blank them.
+_HEALTH_DAILY_UPSERT = (
+    "insert into fitness.health_daily (day, steps, total_kcal, active_kcal, distance_m, floors, resting_hr, hrv_ms, "
+    f"sleep_min, device, {', '.join(_SLEEP_COLS)}) values ({','.join(['%s'] * (10 + len(_SLEEP_COLS)))}) "
+    "on conflict (day) do update set steps=excluded.steps, total_kcal=excluded.total_kcal, "
+    "active_kcal=excluded.active_kcal, distance_m=excluded.distance_m, floors=excluded.floors, "
+    "resting_hr=excluded.resting_hr, hrv_ms=excluded.hrv_ms, sleep_min=excluded.sleep_min, device=excluded.device, "
+    + "".join(f"{c}=coalesce(excluded.{c}, fitness.health_daily.{c}), " for c in _SLEEP_COLS) + "updated_at=now()")
+
+
+def _sleep_vals(r: dict) -> list:
+    """Bridge 1.3.0 sleep detail + daytime resting HR, in the column order of the health_daily upsert."""
+    v = [_num(r.get(k)) for k in ("sleep_deep_min", "sleep_rem_min", "sleep_light_min", "sleep_awake_min")]
+    v += [_ts(r.get("sleep_start")), _ts(r.get("sleep_end"))]
+    v += [_num(r.get(k)) for k in ("sleep_hr_avg", "sleep_hr_min", "sleep_resp_avg", "sleep_hrv_ms")]
+    v += [(r.get("sleep_source") or "")[:120] or None, _num(r.get("day_resting_hr"))]
+    return v
 
 
 def ingest_health(doc: dict) -> dict:
@@ -278,15 +323,11 @@ def ingest_health(doc: dict) -> dict:
             # (1,564.5 kcal on the S24, every day), not a measurement. Never store it as one.
             r = {**r, "total_kcal": None}
         db.execute(
-            "insert into fitness.health_daily (day, steps, total_kcal, active_kcal, distance_m, floors, "
-            "resting_hr, hrv_ms, sleep_min, device) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
-            "on conflict (day) do update set steps=excluded.steps, total_kcal=excluded.total_kcal, "
-            "active_kcal=excluded.active_kcal, distance_m=excluded.distance_m, floors=excluded.floors, "
-            "resting_hr=excluded.resting_hr, hrv_ms=excluded.hrv_ms, sleep_min=excluded.sleep_min, "
-            "device=excluded.device, updated_at=now()",
+            _HEALTH_DAILY_UPSERT,
             (d, int(steps) if steps is not None else None, _num(r.get("total_kcal")),
              _num(r.get("active_kcal")), _num(r.get("distance_m")), _num(r.get("floors")),
-             _num(r.get("resting_hr")), _num(r.get("hrv_ms")), _num(r.get("sleep_min")), dev))
+             _num(r.get("resting_hr")), _num(r.get("hrv_ms")), _num(r.get("sleep_min")), dev,
+             *_sleep_vals(r)))
         n["days"] += 1
     for r in doc.get("sessions") or []:
         st, en = _ts(r.get("start")), _ts(r.get("end"))

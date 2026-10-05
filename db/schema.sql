@@ -239,6 +239,40 @@ create table if not exists fitness.health_daily (
     updated_at  timestamptz not null default now()
 );
 
+-- Bridge 1.3.0: main-sleep detail (Health Connect, Eight Sleep writes it) + daytime resting HR (Samsung
+-- watch, lowest 10-min rolling average 06:00-20:00 outside workouts). Ingest coalesces these, so an
+-- older bridge that does not send them never blanks them.
+alter table fitness.health_daily add column if not exists sleep_deep_min  numeric;
+alter table fitness.health_daily add column if not exists sleep_rem_min   numeric;
+alter table fitness.health_daily add column if not exists sleep_light_min numeric;
+alter table fitness.health_daily add column if not exists sleep_awake_min numeric;
+alter table fitness.health_daily add column if not exists sleep_start     timestamptz;
+alter table fitness.health_daily add column if not exists sleep_end       timestamptz;
+alter table fitness.health_daily add column if not exists sleep_hr_avg    numeric;
+alter table fitness.health_daily add column if not exists sleep_hr_min    numeric;
+alter table fitness.health_daily add column if not exists sleep_resp_avg  numeric;
+alter table fitness.health_daily add column if not exists sleep_hrv_ms    numeric;
+alter table fitness.health_daily add column if not exists sleep_source    text;
+alter table fitness.health_daily add column if not exists day_resting_hr  numeric;
+
+-- Eight Sleep's own nightly figures (cortex/eightsleep.py, unofficial app API). `day` = the morning
+-- the night ended, as Eight Sleep labels it. Durations in seconds as Eight Sleep reports them.
+create table if not exists fitness.sleep_8 (
+    day        date primary key,
+    score      numeric,
+    fitness    numeric,
+    duration_s numeric,
+    light_s    numeric,
+    deep_s     numeric,
+    rem_s      numeric,
+    presence_s numeric,
+    hr         numeric,
+    hrv        numeric,
+    resp       numeric,
+    raw        jsonb,
+    updated_at timestamptz not null default now()
+);
+
 create table if not exists fitness.health_sessions (
     uid        text primary key,                        -- Health Connect record id
     start_at   timestamptz not null,

@@ -133,6 +133,7 @@ window.renderFood=function(sub){
   else if(sub==='foods')renderFoodsPage();
   else if(sub==='weight')renderWeight();
   else if(sub==='fasting')renderFasting();
+  else if(sub==='recovery')renderRecovery();
 };
 window.renderFoodCurrent=function(){
   if(typeof currentSection!=='undefined'&&currentSection==='food')window.renderFood(currentSubpage.food);
@@ -171,7 +172,9 @@ function renderTodayInner(){
         ${(()=>{const bp=burnedParts(foodDay);if(!h||isFuture)return '';
           return `<div style="display:flex;gap:16px;text-align:right">
             <div><div style="font-size:20px;font-weight:800">${h.steps!=null?fmtN(h.steps):'—'}</div><div class="fd-sub" style="font-size:10px">Steps</div></div>
-            <div><div style="font-size:20px;font-weight:800">${bp?fmtN(bp.move+bp.work):'—'}</div><div class="fd-sub" style="font-size:10px">Active kcal</div></div></div>`;})()}
+            <div><div style="font-size:20px;font-weight:800">${bp?fmtN(bp.move+bp.work):'—'}</div><div class="fd-sub" style="font-size:10px">Active kcal</div></div>
+            ${(()=>{const sl=sleepFor(foodDay);if(!sl)return '';
+              return `<div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:20px;font-weight:800">${sl.score!=null?fmtN(sl.score):durHM(sl.min)}</div><div class="fd-sub" style="font-size:10px">${sl.score!=null?'Sleep score':'Sleep'}</div></div>`;})()}</div>`;})()}
       </div>
       <div class="fd-bar${t.kcal>tgt?' over':''}"><div style="width:${kPct}%"></div></div>
       <div class="fd-row">
@@ -394,6 +397,90 @@ window.foodLibreConnect=async function(){
   }catch(err){toast('Could not reach Cortex');}
 };
 
+// ---------- recovery: sleep (Eight Sleep score + Health Connect detail) and resting HR, night vs day ----------
+// A night belongs to the day it ENDED on (the server keys both sources that way).
+function durHM(min){return min==null?'—':Math.floor(min/60)+'h '+String(Math.round(min%60)).padStart(2,'0');}
+function pick(a,b){return a!=null?a:(b!=null?b:null);}
+function sleepFor(day){
+  const e=(healthData.eightSleep||[]).find(x=>x.date===day)||null, h=healthDay(day)||{};
+  const min=pick(e&&e.durationMin,h.sleepMin);
+  if(!e&&min==null)return null;
+  return {score:e?e.score:null, min,
+    deep:pick(e&&e.deepMin,h.sleepDeepMin), rem:pick(e&&e.remMin,h.sleepRemMin), light:pick(e&&e.lightMin,h.sleepLightMin),
+    awake:pick(h.sleepAwakeMin), hrMin:pick(h.sleepHRMin), hrAvg:pick(h.sleepHRAvg,e&&e.hr),
+    hrv:pick(h.sleepHrvMs,e&&e.hrv), resp:pick(h.sleepResp,e&&e.resp), start:h.sleepStart||null, end:h.sleepEnd||null};
+}
+function nightHR(sl){return sl?pick(sl.hrMin,sl.hrAvg):null;}
+window.foodGoRecovery=function(){
+  const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Recovery');if(b)b.click();
+};
+let recChart=null;
+function renderRecovery(){
+  const el=document.getElementById('page-food-recovery'), today=localDay(new Date());
+  const days=[];for(let i=0;i<30;i++)days.push(shiftDay(today,-i));
+  const rows=days.map(d=>{const sl=sleepFor(d), h=healthDay(d);return {d,sl,night:nightHR(sl),day:h?pick(h.dayRestingHR):null};});
+  const last=rows.find(r=>r.sl)||null, sl=last&&last.sl;
+  const avg=(k,n)=>{const v=rows.slice(0,n).map(k).filter(x=>x!=null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
+  const cell=(v,l)=>`<div class="fd-cell"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  const stage=(m,l,c)=>m?`<div style="flex:${m};background:${c};height:10px" title="${l}"></div>`:'';
+  const a7s=avg(r=>r.sl&&r.sl.score,7), a7n=avg(r=>r.night,7), a7d=avg(r=>r.day,7);
+  el.innerHTML=`${sl?`<div class="card">
+      <div class="fd-sub">${last.d===today?'Last night':'Night ending '+dayLabel(last.d).toLowerCase()}${sl.start&&sl.end?` &middot; ${tOf(sl.start)} to ${tOf(sl.end)}`:''}</div>
+      <div class="fd-row">${cell(sl.score!=null?fmtN(sl.score):'—','Sleep score')}${cell(durHM(sl.min),'Asleep')}${cell(sl.hrv!=null?fmtN(sl.hrv):'—','HRV ms')}</div>
+      ${sl.deep!=null||sl.rem!=null?`<div style="display:flex;border-radius:5px;overflow:hidden;margin-top:12px;gap:1px">${stage(sl.deep,'Deep','var(--purple)')}${stage(sl.rem,'REM','var(--blue)')}${stage(sl.light,'Light','var(--teal)')}${stage(sl.awake,'Awake','var(--amber)')}</div>
+      <div style="font-size:11px;color:var(--ink3);margin-top:6px">Deep ${durHM(sl.deep)} &middot; REM ${durHM(sl.rem)} &middot; Light ${durHM(sl.light)}${sl.awake!=null?' &middot; Awake '+durHM(sl.awake):''}</div>`:''}
+      <div class="fd-row">${cell(nightHR(sl)!=null?fmtN(nightHR(sl)):'—',sl.hrMin!=null?'Sleeping HR (low)':'Sleeping HR')}${cell(last.day!=null?fmtN(last.day):'—','Day resting HR')}${cell(sl.resp!=null?r1(sl.resp):'—','Breaths/min')}</div>
+    </div>`:`<div class="card"><div class="fd-sub">Sleep</div><div class="fd-note" style="margin:4px 0 0">No sleep data yet. Eight Sleep writes to Health Connect each morning (Bridge 1.3.0 reads it); the score comes from the Eight Sleep connection below.</div></div>`}
+    <div class="card"><div class="fd-row" style="margin-top:0">
+      ${cell(a7s!=null?fmtN(a7s):'—','Avg score, 7 days')}${cell(a7n!=null?fmtN(a7n):'—','Sleeping HR, 7d')}${cell(a7d!=null?fmtN(a7d):'—','Day resting HR, 7d')}
+    </div><div class="fd-note" style="margin:8px 0 0">Sleeping HR is the lowest 5-minute average overnight (mattress). Day resting HR is the lowest 10-minute average on the watch between 6am and 8pm, away from workouts. Both falling over weeks is the aerobic base coming back.</div></div>
+    <div class="chart-section"><div class="chart-title" style="margin-bottom:8px">Sleep score and resting heart rate, 30 days</div>
+      <div style="position:relative;width:100%;height:220px"><canvas id="fdRecChart" role="img" aria-label="Sleep score and resting heart rate"></canvas></div></div>
+    <div class="card" style="padding:8px 12px">
+      <div class="fd-hrow h"><div>Night to</div><div>Score</div><div>Asleep</div><div>Sleep HR</div><div>Day HR</div></div>
+      ${rows.map(r=>`<div class="fd-hrow"><div>${dayLabel(r.d).replace('Yesterday','Yest.')}</div><div>${r.sl&&r.sl.score!=null?fmtN(r.sl.score):'—'}</div><div>${r.sl?durHM(r.sl.min):'—'}</div><div>${r.night!=null?fmtN(r.night):'—'}</div><div>${r.day!=null?fmtN(r.day):'—'}</div></div>`).join('')}
+    </div>
+    <div class="card" id="fdEightCard"><div class="fd-sub">Eight Sleep</div><div class="fd-note" style="margin:4px 0">Checking&hellip;</div></div>`;
+  eightCard();
+  const cr=rows.slice().reverse(), cs=getComputedStyle(document.documentElement);
+  const teal=cs.getPropertyValue('--teal').trim()||'#1D9E75', purple=cs.getPropertyValue('--purple').trim()||'#534AB7', amber=cs.getPropertyValue('--amber').trim()||'#BA7517', txc=cs.getPropertyValue('--ink3').trim()||'#888', gc=cs.getPropertyValue('--border').trim()||'rgba(0,0,0,0.1)';
+  if(recChart)recChart.destroy();
+  recChart=new Chart(document.getElementById('fdRecChart'),{type:'bar',data:{labels:cr.map(r=>fmtDate(r.d)),datasets:[
+    {type:'bar',label:'Sleep score',data:cr.map(r=>r.sl&&r.sl.score),backgroundColor:teal+'88',borderRadius:3,yAxisID:'y'},
+    {type:'line',label:'Sleeping HR',data:cr.map(r=>r.night),borderColor:purple,backgroundColor:purple,pointRadius:2,spanGaps:true,yAxisID:'y1'},
+    {type:'line',label:'Day resting HR',data:cr.map(r=>r.day),borderColor:amber,backgroundColor:amber,pointRadius:2,spanGaps:true,yAxisID:'y1'}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:txc,boxWidth:10,font:{size:11}}}},
+    scales:{x:{ticks:{color:txc,font:{size:9},maxRotation:60},grid:{display:false}},y:{min:0,max:100,ticks:{color:txc,font:{size:10}},grid:{color:gc}},
+      y1:{position:'right',ticks:{color:txc,font:{size:10}},grid:{display:false}}}}});
+}
+
+// ---------- Eight Sleep connection (his Eight Sleep login, stored server-side only) ----------
+async function eightCard(){
+  const el=document.getElementById('fdEightCard');if(!el)return;
+  let st=null;try{st=await syncApi('/api/fitness/eightsleep/status');}catch(e){}
+  const form=`<div class="fd-note" style="margin:4px 0 8px">Your Eight Sleep app login, used only to read the nightly sleep score (Health Connect has no score). It is checked with Eight Sleep, stored on the server, and never shown again.</div>
+    <input class="fd-input" id="esE" type="email" autocomplete="off" placeholder="Eight Sleep email" style="margin-bottom:8px"/>
+    <input class="fd-input" id="esP" type="password" autocomplete="new-password" placeholder="Eight Sleep password"/>
+    <button class="fd-btn" onclick="foodEightConnect()">Connect Eight Sleep</button>`;
+  if(!st||!st.connected){el.innerHTML='<div class="fd-sub">Eight Sleep</div>'+form;return;}
+  el.innerHTML=`<div class="fd-sub">Eight Sleep &middot; connected</div>
+    <div style="font-size:13px;margin-top:4px">${st.latest?`Latest score ${fmtN(st.latest.score)} (${esc(st.latest.day)})`:'No nights yet'}</div>
+    <div class="fd-note" style="margin:4px 0 0">${esc(st.email||'')}${st.last_poll?' &middot; last checked '+new Date(st.last_poll*1000).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):''}</div>
+    <details style="margin-top:8px"><summary style="font-size:12px;color:var(--ink3)">Change login</summary>${form}</details>`;
+}
+window.foodEightConnect=async function(){
+  const e=document.getElementById('esE').value.trim(), p=document.getElementById('esP').value;
+  if(!e||!p){toast('Enter email and password');return;}
+  toast('Checking with Eight Sleep…');
+  try{
+    const r=await fetch(API_BASE+'/api/fitness/eightsleep/connect',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+syncToken()},body:JSON.stringify({email:e,password:p})});
+    const j=await r.json();
+    if(!r.ok){toast(j.detail||'Could not connect');return;}
+    toast(j.days!=null?'Connected: '+j.days+' nights pulled':'Connected');
+    eightCard();if(typeof syncNow==='function')syncNow(false);
+  }catch(err){toast('Could not reach Cortex');}
+};
+
 // ---------- creatine (daily dose, default 10 g) ----------
 function creatineOn(day){return supplements.filter(x=>x.date===day&&x.name==='creatine');}
 function creatineStreak(){
@@ -443,11 +530,7 @@ function healthCard(h,sess){
       <div class="fd-note" style="margin:0">${sync?'No Health Connect data for this day yet. Last sync '+sync+'.':'Not connected yet. Install Cortex Health Bridge on your phone to pull steps, calories and workouts from Samsung Health.'}</div></div>`;
   }
   const cells=[];
-  if(h){
-    if(h.restingHR!=null)cells.push([fmtN(h.restingHR),'Resting HR']);
-    if(h.sleepMin!=null)cells.push([Math.floor(h.sleepMin/60)+'h '+String(Math.round(h.sleepMin%60)).padStart(2,'0'),'Sleep']);
-    if(h.hrvMs!=null)cells.push([fmtN(h.hrvMs),'HRV ms']);
-  }
+  if(h&&h.dayRestingHR!=null)cells.push([fmtN(h.dayRestingHR),'Day resting HR']);
   if(!cells.length&&!sess.length)return `<div class="card"><div class="fd-sub">Activity${sync?` &middot; synced ${sync}`:''}</div><div class="fd-note" style="margin:4px 0 0">No workouts logged on the watch this day.</div></div>`;
   return `<div class="card"><div class="fd-sub">Activity${sync?` &middot; synced ${sync}`:''}</div>
     ${cells.length?`<div class="fd-row">${cells.map(([v,l])=>`<div class="fd-cell"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('')}</div>`:''}
