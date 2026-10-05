@@ -14,6 +14,7 @@ let histChart=null;
 // ---------- helpers ----------
 function localDay(d){const z=new Date(d.getTime()-d.getTimezoneOffset()*60000);return z.toISOString().slice(0,10);}
 function shiftDay(day,n){const d=new Date(day+'T12:00:00');d.setDate(d.getDate()+n);return localDay(d);}
+function nowAt(){return foodDay===localDay(new Date())?new Date().toISOString():null;}   // eaten-at for food logged on the day
 function newId(p){return p+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function r0(v){return v==null||isNaN(v)?null:Math.round(v);}
 function r1(v){return v==null||isNaN(v)?null:Math.round(v*10)/10;}
@@ -220,6 +221,20 @@ function drawCgm(){
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:txc,font:{size:9},maxTicksLimit:6},grid:{display:false}},y:{ticks:{color:txc,font:{size:9},maxTicksLimit:4},grid:{display:false}}}}});
 }
 function readingsOn(day){return readings.filter(x=>localDay(new Date(x.at))===day).sort((a,b)=>a.at<b.at?-1:1);}
+// What state was he in when the reading was taken? Worked out from the actual times, not from the
+// moment it was saved: before break-fast = fasted (since last night's window close); after = time
+// since the last food with an eaten-at time.
+function readingState(x){
+  const day=localDay(new Date(x.at)), t=new Date(x.at), f=fastDay(day), prev=fastDay(shiftDay(day,-1));
+  const ate=foodLog.filter(e=>e.at&&new Date(e.at)<=t&&localDay(new Date(e.at))===day).sort((a,b)=>a.at<b.at?1:-1)[0];
+  const broke=f&&f.brokeAt?new Date(f.brokeAt):null;
+  if((!broke||t<broke)&&!ate){
+    const since=prev&&prev.closedAt?new Date(prev.closedAt):null;
+    return {fasted:true,label:since?'fasted '+hm(t-since):(x.context==='pre break-fast'?'fasted':(x.context||''))};
+  }
+  if(ate)return {fasted:false,label:hm(t-new Date(ate.at))+' after '+ate.name.split(',')[0].split(' (')[0].toLowerCase()};
+  return {fasted:false,label:hm(t-broke)+' after break-fast'};
+}
 function gki(list){   // glucose-ketone index from a glucose and ketone reading taken within 30 minutes
   const k=list.filter(x=>x.kind==='ketones'), g=list.filter(x=>x.kind==='glucose');
   for(const a of k)for(const b of g)if(Math.abs(new Date(a.at)-new Date(b.at))<=30*60000&&a.value>0)return r1(b.value/a.value);
@@ -237,7 +252,7 @@ function readingsCard(){
       <div style="position:relative;height:90px;margin-bottom:10px"><canvas id="fdCgmChart" role="img" aria-label="Glucose today"></canvas></div>`:''}
     <div class="fd-sub" style="margin-bottom:6px">Ketones and glucose${g!=null?` &middot; GKI ${g}`:''}</div>
     ${list.map(x=>`<div class="fd-entry" style="cursor:default;padding:5px 0"><div class="n" style="font-size:13px">${x.kind==='ketones'?'Ketones '+r1(x.value)+' mmol/L':'Glucose '+gShow(x.value)+(u==='mgdl'?' mg/dL':' mmol/L')}</div>
-      <div class="q">${tOf(x.at)} &middot; ${esc(x.context||'')} <button class="hist-del" onclick="foodDelReading('${x.id}')">&times;</button></div></div>`).join('')}
+      <div class="q">${tOf(x.at)} &middot; ${esc(readingState(x).label)} <button class="hist-del" onclick="foodDelReading('${x.id}')">&times;</button></div></div>`).join('')}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
       <div><div style="font-size:10px;color:var(--ink3);font-weight:700">KETONES mmol/L</div><input class="fd-input" type="number" step="0.1" inputmode="decimal" id="fdKet"/></div>
       <div><div style="font-size:10px;color:var(--ink3);font-weight:700">GLUCOSE <a href="#" onclick="foodToggleGUnit();return false" style="color:var(--teal)">${u==='mgdl'?'mg/dL':'mmol/L'}</a></div><input class="fd-input" type="number" step="0.1" inputmode="decimal" id="fdGlu"/></div>
@@ -261,7 +276,7 @@ let fastChart=null;
 function renderFasting(){
   const el=document.getElementById('page-food-fasting'), today=localDay(new Date());
   const days=[];for(let i=0;i<30;i++)days.push(shiftDay(today,-i));
-  const rows=days.map(d=>{const L=readingsOn(d), pre=L.filter(x=>x.context==='pre break-fast');
+  const rows=days.map(d=>{const L=readingsOn(d), pre=L.filter(x=>readingState(x).fasted);
     const kk=pre.find(x=>x.kind==='ketones')||L.find(x=>x.kind==='ketones'), gg=pre.find(x=>x.kind==='glucose')||L.find(x=>x.kind==='glucose');
     return {d,len:fastLength(d),f:fastDay(d),k:kk?kk.value:null,g:gg?gg.value:null,gki:gki(pre.length?pre:L)};});
   const lens=rows.slice(0,7).map(r=>r.len).filter(x=>x!=null);
@@ -389,7 +404,7 @@ function mealCard(key,label,list){
   return `<div class="fd-meal">
     <div class="fd-meal-h"><b>${label}</b><span>${list.length?fmtN(t.kcal)+' kcal &middot; '+fmtN(t.protein)+' g P':''}</span></div>
     ${list.map(e=>`<div class="fd-entry" onclick="foodEditEntry('${e.id}')">
-      <div><div class="n">${esc(e.name)}</div><div class="q">${e.qtyG!=null?fmtN(e.qtyG)+' g':''}${e.protein!=null?(e.qtyG!=null?' &middot; ':'')+r1(e.protein)+' g protein':''}${e.notes==='photo estimate'?' &middot; <span style="color:var(--amber)">photo estimate</span>':''}</div></div>
+      <div><div class="n">${esc(e.name)}</div><div class="q">${e.at?tOf(e.at)+' &middot; ':''}${e.qtyG!=null?fmtN(e.qtyG)+' g':''}${e.protein!=null?(e.qtyG!=null?' &middot; ':'')+r1(e.protein)+' g protein':''}${e.notes==='photo estimate'?' &middot; <span style="color:var(--amber)">photo estimate</span>':''}</div></div>
       <div class="k">${fmtN(e.kcal)}</div></div>`).join('')}
     <button class="fd-add" onclick="foodOpenAdd('${key}')">+ Add to ${label.toLowerCase()}</button>
     ${list.length?`<button class="fd-add" style="border:none;color:var(--ink3);margin-top:2px" onclick="foodSaveAsMeal('${key}')">Save as meal</button>`:''}
@@ -417,7 +432,7 @@ window.foodEditTargets=function(){
 window.foodCopyDay=function(){
   const src=entriesFor(shiftDay(foodDay,-1));
   if(!src.length){toast('Nothing logged the day before');return;}
-  src.forEach(e=>foodLog.push(Object.assign({},e,{id:newId('fl'),date:foodDay})));
+  src.forEach(e=>foodLog.push(Object.assign({},e,{id:newId('fl'),date:foodDay,at:null})));
   saveFoodLog();renderToday();toast(src.length+' items copied');
 };
 
@@ -497,7 +512,7 @@ window.foodRenderMeals=function(){
 };
 window.foodLogMeal=function(id){
   const m=savedMeals.find(x=>x.id===id);if(!m)return;
-  (m.items||[]).forEach(i=>foodLog.push({id:newId('fl'),date:foodDay,meal:sheetMeal,foodId:i.foodId||null,name:i.name,
+  (m.items||[]).forEach(i=>foodLog.push({id:newId('fl'),date:foodDay,at:nowAt(),meal:sheetMeal,foodId:i.foodId||null,name:i.name,
     qtyG:i.qtyG??null,kcal:i.kcal??null,protein:i.protein??null,carbs:i.carbs??null,fat:i.fat??null}));
   saveFoodLog();closeSheet();renderToday();toast(m.name+' added');
 };
@@ -584,6 +599,7 @@ function portionView(food,entry){
       <div class="m">Per 100 g: ${fmtN(food.kcal100)} kcal &middot; P ${r1(food.protein100)??'—'} &middot; C ${r1(food.carbs100)??'—'} &middot; F ${r1(food.fat100)??'—'}</div></div>
     <div class="form-group"><label class="form-label">Amount (g)</label><input class="fd-input" type="number" id="fdG" value="${r1(grams)}" oninput="foodPortionCalc()"/></div>
     ${sg?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${[0.5,1,1.5,2,3].map(n=>`<button class="btn-sm" onclick="document.getElementById('fdG').value=${r1(sg*n)};foodPortionCalc()">${n} &times; ${esc(food.servingLabel||'serving')}</button>`).join('')}</div>`:''}
+    <div class="form-group"><label class="form-label">Eaten at</label><input type="time" id="fdAtT" class="fd-input" value="${entry&&entry.at?tOf(entry.at):(entry?'':(foodDay===localDay(new Date())?nowHM():''))}"/></div>
     <div class="form-group"><label class="form-label">Meal</label><select id="fdMeal" class="fd-input">${MEALS.map(([k,l])=>`<option value="${k}" ${k===meal?'selected':''}>${l}</option>`).join('')}</select></div>
     <div class="card" id="fdCalc"></div>
     ${saved?'':`<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:6px 0"><input type="checkbox" id="fdKeep" checked/> Save to My foods</label>`}
@@ -602,7 +618,8 @@ function portionView(food,entry){
       foods.push(f);saveFoods();
     }
     const p=portion(f,g);
-    const row={date:entry?entry.date:foodDay,meal:document.getElementById('fdMeal').value,foodId:f.id||null,
+    const tv=document.getElementById('fdAtT').value, dd=entry?entry.date:foodDay;
+    const row={date:dd,at:tv?atTime(dd,tv):null,meal:document.getElementById('fdMeal').value,foodId:f.id||null,
       name:f.name+(f.brand?' ('+f.brand+')':''),qtyG:r1(g),kcal:p.kcal,protein:p.protein,carbs:p.carbs,fat:p.fat};
     if(entry)Object.assign(entry,row);else foodLog.push(Object.assign({id:newId('fl')},row));
     saveFoodLog();closeSheet();renderToday();toast(entry?'Updated':'Added');
@@ -620,7 +637,7 @@ window.foodSaveQuick=function(){
   const k=+document.getElementById('fdQK').value;
   if(!(k>0)){toast('Enter calories');return;}
   const num=id=>{const v=document.getElementById(id).value;return v===''?null:r1(+v);};
-  foodLog.push({id:newId('fl'),date:foodDay,meal:sheetMeal,foodId:null,name,qtyG:null,kcal:r0(k),
+  foodLog.push({id:newId('fl'),date:foodDay,at:nowAt(),meal:sheetMeal,foodId:null,name,qtyG:null,kcal:r0(k),
     protein:num('fdQP'),carbs:num('fdQC'),fat:num('fdQF')});
   saveFoodLog();closeSheet();renderToday();toast('Added');
 };
@@ -633,11 +650,13 @@ window.foodEditEntry=function(id){
     <div class="form-group"><label class="form-label">Name</label><input type="text" id="fdEN" value="${esc(e.name)}"/></div>
     <div class="two-col"><div class="form-group"><label class="form-label">Calories</label><input type="number" id="fdEK" value="${e.kcal??''}"/></div>
     <div class="form-group"><label class="form-label">Protein (g)</label><input type="number" id="fdEP" value="${e.protein??''}"/></div></div>
+    <div class="form-group"><label class="form-label">Eaten at</label><input type="time" id="fdET" value="${e.at?tOf(e.at):''}"/></div>
     <button class="fd-btn ghost" onclick="closeModal();foodDeleteEntry('${e.id}')">Remove from log</button>`,
   function(){
     e.name=document.getElementById('fdEN').value.trim()||e.name;
     const k=document.getElementById('fdEK').value,p=document.getElementById('fdEP').value;
     e.kcal=k===''?null:r0(+k);e.protein=p===''?null:r1(+p);
+    const tv=document.getElementById('fdET').value;e.at=tv?atTime(e.date,tv):null;
     saveFoodLog();closeModal();renderToday();
   });
 };
@@ -790,7 +809,7 @@ window.foodPhotoAdd=function(){
   const v=(k,i)=>{const x=document.getElementById(`fp_${k}_${i}`).value;return x===''?null:+x;};
   items.forEach((it,i)=>{
     if(!document.getElementById('fpK'+i).checked)return;
-    foodLog.push({id:newId('fl'),date:foodDay,meal:sheetMeal,foodId:null,name:it.name,qtyG:v('grams',i),
+    foodLog.push({id:newId('fl'),date:foodDay,at:nowAt(),meal:sheetMeal,foodId:null,name:it.name,qtyG:v('grams',i),
       kcal:r0(v('kcal',i)),protein:r1(v('protein',i)),carbs:r1(v('carbs',i)),fat:r1(v('fat',i)),notes:'photo estimate'});
     n++;
   });

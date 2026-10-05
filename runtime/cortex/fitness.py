@@ -174,7 +174,7 @@ def pull() -> dict:
     food_log = [{"id": r["uid"], "date": r["day"].isoformat(), "meal": r["meal"], "foodId": r["food_uid"],
                  "name": r["name"], "qtyG": _num(r["qty_g"]), "kcal": _num(r["kcal"]),
                  "protein": _num(r["protein"]), "carbs": _num(r["carbs"]), "fat": _num(r["fat"]),
-                 "notes": r["notes"]}
+                 "notes": r["notes"], "at": r["eaten_at"].isoformat() if r.get("eaten_at") else None}
                 for r in db.query("select * from fitness.food_log where not deleted order by day, uid")]
     fast_days = [{"date": r["day"].isoformat(), "brokeAt": r["broke_at"].isoformat() if r["broke_at"] else None,
                   "closedAt": r["closed_at"].isoformat() if r["closed_at"] else None}
@@ -577,14 +577,15 @@ def _push_inner(doc: dict, source: str = "app") -> dict:
             continue
         _ex(
             "insert into fitness.food_log (uid, day, meal, food_uid, name, qty_g, kcal, protein, carbs, fat, "
-            "notes, deleted) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "notes, deleted, eaten_at) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
             "on conflict (uid) do update set day=excluded.day, meal=excluded.meal, food_uid=excluded.food_uid, "
             "name=excluded.name, qty_g=excluded.qty_g, kcal=excluded.kcal, protein=excluded.protein, "
             "carbs=excluded.carbs, fat=excluded.fat, notes=excluded.notes, "
-            "deleted=food_log.deleted or excluded.deleted, updated_at=now()",
+            "deleted=food_log.deleted or excluded.deleted, "
+            "eaten_at=coalesce(excluded.eaten_at, food_log.eaten_at), updated_at=now()",
             (r["id"], d, r.get("meal"), r.get("foodId"), (r.get("name") or "").strip() or "Food",
              _num(r.get("qtyG")), _num(r.get("kcal")), _num(r.get("protein")), _num(r.get("carbs")),
-             _num(r.get("fat")), r.get("notes"), bool(r.get("deleted"))))
+             _num(r.get("fat")), r.get("notes"), bool(r.get("deleted")), _ts(r.get("at"))))
         counts["foodLog"] += 1
     counts["meals"] = 0
     for r in doc.get("meals") or []:

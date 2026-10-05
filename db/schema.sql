@@ -305,6 +305,9 @@ create table if not exists fitness.food_log (
     updated_at timestamptz not null default now()
 );
 create index if not exists food_log_day_idx on fitness.food_log (day);
+-- when it was eaten (stamped when logged on the day, editable). Lets a glucose/ketone reading be read as
+-- 'fasted 22h' or '1h after sardines'. Null for imported history.
+alter table fitness.food_log add column if not exists eaten_at timestamptz;
 
 -- supplements taken (creatine first): one row per dose. Synced with the app document.
 create table if not exists fitness.supplements (
