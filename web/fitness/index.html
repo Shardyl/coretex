@@ -950,20 +950,25 @@ function loadAll(){
   ensureIds();
 }
 
-function saveLift(){try{localStorage.setItem(SESS_KEY,JSON.stringify(liftSessions));}catch(e){}if(typeof queueSync==='function')queueSync();}
-function saveLiftWorkouts(){try{localStorage.setItem(WK_KEY,JSON.stringify(liftWorkouts));}catch(e){}if(typeof queueSync==='function')queueSync();}
-function saveCardio(){try{localStorage.setItem(CARDIO_SESS_KEY,JSON.stringify(cardioSessions));}catch(e){}if(typeof queueSync==='function')queueSync();}
-function saveCardioExercises(){try{localStorage.setItem(CARDIO_EX_KEY,JSON.stringify(cardioExercises));}catch(e){}if(typeof queueSync==='function')queueSync();}
+// Every local save goes through here so a full device is noticed instead of silently dropping data.
+let _storeWarned=false;
+function store(key,val){try{localStorage.setItem(key,JSON.stringify(val));return true;}catch(e){
+  if(!_storeWarned){_storeWarned=true;try{toast('Phone storage is full: your data is safe on Cortex');}catch(x){}}
+  console.warn('local save failed',key,e);return false;}}
+function saveLift(){store(SESS_KEY,liftSessions);if(typeof queueSync==='function')queueSync();}
+function saveLiftWorkouts(){store(WK_KEY,liftWorkouts);if(typeof queueSync==='function')queueSync();}
+function saveCardio(){store(CARDIO_SESS_KEY,cardioSessions);if(typeof queueSync==='function')queueSync();}
+function saveCardioExercises(){store(CARDIO_EX_KEY,cardioExercises);if(typeof queueSync==='function')queueSync();}
 function saveVO2(){try{localStorage.setItem(VO2_KEY,JSON.stringify(vo2Records));}catch(e){}if(typeof queueSync==='function')queueSync();}
-function saveFoods(){try{localStorage.setItem(FOODS_KEY,JSON.stringify(foods));}catch(e){}if(typeof queueSync==='function')queueSync();}
-function saveFoodLog(){try{localStorage.setItem(FOODLOG_KEY,JSON.stringify(foodLog));}catch(e){}if(typeof queueSync==='function')queueSync();}
-function saveMeals(){try{localStorage.setItem(MEALS_KEY,JSON.stringify(savedMeals));}catch(e){}if(typeof queueSync==='function')queueSync();}
-function saveSupplements(){try{localStorage.setItem(SUPP_KEY,JSON.stringify(supplements));}catch(e){}if(typeof queueSync==='function')queueSync();}
-function saveFasts(){try{localStorage.setItem(FAST_KEY,JSON.stringify(fastDays));}catch(e){}if(typeof queueSync==='function')queueSync();}
-function saveReadings(){try{localStorage.setItem(READ_KEY,JSON.stringify(readings));}catch(e){}if(typeof queueSync==='function')queueSync();}
-function saveTargets(){try{localStorage.setItem(TARGETS_KEY,JSON.stringify(foodTargets));}catch(e){}if(typeof queueSync==='function')queueSync();}
-function saveHealth(){try{localStorage.setItem(HEALTH_KEY,JSON.stringify(healthData));}catch(e){}}
-function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodyweightLog));}catch(e){}if(typeof queueSync==='function')queueSync();}
+function saveFoods(){store(FOODS_KEY,foods);if(typeof queueSync==='function')queueSync();}
+function saveFoodLog(){store(FOODLOG_KEY,foodLog);if(typeof queueSync==='function')queueSync();}
+function saveMeals(){store(MEALS_KEY,savedMeals);if(typeof queueSync==='function')queueSync();}
+function saveSupplements(){store(SUPP_KEY,supplements);if(typeof queueSync==='function')queueSync();}
+function saveFasts(){store(FAST_KEY,fastDays);if(typeof queueSync==='function')queueSync();}
+function saveReadings(){store(READ_KEY,readings);if(typeof queueSync==='function')queueSync();}
+function saveTargets(){store(TARGETS_KEY,foodTargets);if(typeof queueSync==='function')queueSync();}
+function saveHealth(){store(HEALTH_KEY,healthData);}
+function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='function')queueSync();}
 
 // ─── CLOUD SYNC (Cortex box) ──────────────────────────────────────────────────
 // The app is served from the same origin as the Cortex API, so it reuses the cockpit's bearer
@@ -974,7 +979,7 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='33';                         // keep in step with CACHE in sw.js
+const APP_VERSION='34';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1032,8 +1037,13 @@ function syncDoc(){
     supplements:new Set(supplements.map(x=>x.id)),
     readings:new Set(readings.map(x=>x.id))
   };
+  // Deletions are made one at a time in this app. If many ids vanish at once, local storage was lost
+  // (5 Oct 2026: a full device dropped its foods + meals and tombstoned all 255 on the server). Never send
+  // a mass delete; keep the server's copy and let the next pull restore the device.
   Object.keys(live).forEach(k=>{
-    (sent[k]||[]).forEach(id=>{if(!live[k].has(id))doc[k]=doc[k].concat([{id:id,deleted:true}]);});
+    const gone=(sent[k]||[]).filter(id=>!live[k].has(id));
+    if(gone.length>5){console.warn('sync: '+gone.length+' '+k+' missing locally, NOT deleting on server');return;}
+    gone.forEach(id=>{doc[k]=doc[k].concat([{id:id,deleted:true}]);});
   });
   return doc;
 }
@@ -1176,8 +1186,9 @@ function applyServerState(state,force){
   if(state.readings)readings=mergeById(state.readings,readings);
   if(state.targets)foodTargets=Object.assign({},foodTargets,state.targets);
   if(state.health){healthData=state.health;saveHealth();}
-  if(state.cgm){cgmData=state.cgm;try{localStorage.setItem(CGM_KEY,JSON.stringify(cgmData));}catch(e){}}
+  if(state.cgm){cgmData=state.cgm;store(CGM_KEY,cgmData);}
   saveLift();saveLiftWorkouts();saveCardio();saveCardioExercises();saveVO2();saveBodyweight();
+  {const cut=new Date(Date.now()-120*86400000).toISOString().slice(0,10);foodLog=foodLog.filter(e=>!e.date||e.date>=cut);}   // full history lives on Cortex
   saveFoods();saveFoodLog();saveMeals();saveSupplements();saveFasts();saveReadings();saveTargets();
   rememberSent();
   }finally{_applyingServer=false;}
@@ -2891,6 +2902,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=33"></script>
+<script src="food.js?v=34"></script>
 </body>
 </html>

@@ -175,7 +175,8 @@ def pull() -> dict:
                  "name": r["name"], "qtyG": _num(r["qty_g"]), "kcal": _num(r["kcal"]),
                  "protein": _num(r["protein"]), "carbs": _num(r["carbs"]), "fat": _num(r["fat"]),
                  "notes": r["notes"], "at": r["eaten_at"].isoformat() if r.get("eaten_at") else None}
-                for r in db.query("select * from fitness.food_log where not deleted order by day, uid")]
+                for r in db.query("select * from fitness.food_log where not deleted and day > current_date - 120 "
+                                  "order by day, uid")]   # older history stays here; the phone keeps 120 days
     fast_days = [{"date": r["day"].isoformat(), "brokeAt": r["broke_at"].isoformat() if r["broke_at"] else None,
                   "closedAt": r["closed_at"].isoformat() if r["closed_at"] else None}
                  for r in db.query("select * from fitness.fast_days order by day")]
@@ -431,6 +432,16 @@ def _lift_uid(row: dict) -> str:
 
 
 def _push_inner(doc: dict, source: str = "app") -> dict:
+    # Safety net (5 Oct 2026): a device that lost its storage tombstoned every food and meal. A real
+    # user never deletes more than a few rows between syncs, so a push carrying more than 20 bare
+    # tombstones for one table has them stripped and the rest of the push applied.
+    for k in ("foods", "foodLog", "meals", "liftSessions", "cardioSessions", "plans", "cardioPresets",
+              "supplements", "readings"):
+        rows = doc.get(k) or []
+        tomb = [r for r in rows if isinstance(r, dict) and r.get("deleted") and len(r) <= 2]
+        if len(tomb) > 20:
+            print(f"[fitness] push: ignored {len(tomb)} tombstones for {k} (mass delete refused)", flush=True)
+            doc = {**doc, k: [r for r in rows if r not in tomb]}
     """Upsert a whole client document. Additive by design: rows absent from the doc are left alone."""
     counts = {k: 0 for k in ("bodyweight", "plans", "liftSessions", "cardioPresets",
                              "cardioSessions", "vo2")}
