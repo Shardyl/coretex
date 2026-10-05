@@ -22,6 +22,29 @@ from psycopg.types.json import Json
 
 from . import db
 
+# One push writes thousands of rows (the food log alone is 4,000+). A fresh connection per statement
+# costs ~11 ms, so a sync took ~60 s and the app gave up at 25 s ("Sync failed", 5 Oct 2026). During a
+# push every statement goes through ONE connection instead.
+import contextvars
+_conn = contextvars.ContextVar("fitness_conn", default=None)
+
+
+def _ex(sql, params=()):
+    c = _conn.get()
+    if c is None:
+        return db.execute(sql, params)
+    cur = c.execute(sql, params)
+    return cur.fetchone() if cur.description else None
+
+
+def _one(sql, params=()):
+    c = _conn.get()
+    if c is None:
+        return db.one(sql, params)
+    rows = c.execute(sql, params).fetchall()
+    return rows[0] if rows else None
+
+
 # ---------- parsing helpers (ports of the app's own maths) ----------
 
 
@@ -398,7 +421,7 @@ def _lift_uid(row: dict) -> str:
     return str(row.get("id") or f"{row.get('exercise', '')}|{str(row.get('date'))[:10]}")
 
 
-def push(doc: dict, source: str = "app") -> dict:
+def _push_inner(doc: dict, source: str = "app") -> dict:
     """Upsert a whole client document. Additive by design: rows absent from the doc are left alone."""
     counts = {k: 0 for k in ("bodyweight", "plans", "liftSessions", "cardioPresets",
                              "cardioSessions", "vo2")}
@@ -408,7 +431,7 @@ def push(doc: dict, source: str = "app") -> dict:
         kg = _num(r.get("kg"))
         if not d or kg is None:
             continue
-        db.execute("insert into fitness.bodyweight (day, kg, notes) values (%s,%s,%s) "
+        _ex("insert into fitness.bodyweight (day, kg, notes) values (%s,%s,%s) "
                    "on conflict (day) do update set kg=excluded.kg, notes=excluded.notes, "
                    "updated_at=now()", (d, kg, r.get("notes")))
         counts["bodyweight"] += 1
@@ -416,7 +439,7 @@ def push(doc: dict, source: str = "app") -> dict:
     for r in doc.get("plans") or doc.get("liftWorkouts") or []:
         if not r.get("id"):
             continue
-        db.execute("insert into fitness.plans (uid, name, exercises, deleted) values (%s,%s,%s,%s) "
+        _ex("insert into fitness.plans (uid, name, exercises, deleted) values (%s,%s,%s,%s) "
                    "on conflict (uid) do update set name=excluded.name, exercises=excluded.exercises, "
                    "deleted=plans.deleted or excluded.deleted, updated_at=now()",
                    (r["id"], r.get("name") or "", Json(r.get("exercises") or []),
@@ -429,7 +452,7 @@ def push(doc: dict, source: str = "app") -> dict:
         if not d or not r.get("exercise"):
             continue
         kg = lift_kg(r.get("weight"), d, bw_log)
-        db.execute(
+        _ex(
             "insert into fitness.lift_sessions (uid, exercise, day, plan_uid, weight, kg, sets, "
             "total_reps, best_set, volume_load, rest, target, next_target, readings, notes, deleted) "
             "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
@@ -453,7 +476,7 @@ def push(doc: dict, source: str = "app") -> dict:
             continue
         fields = r.get("manualFields") or []
         fields_by_preset[r["id"]] = fields
-        db.execute(
+        _ex(
             "insert into fitness.cardio_presets (uid, name, brand, location, machine, machine_note, "
             "is_hiit, target_duration, manual_fields, deleted) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
             "on conflict (uid) do update set name=excluded.name, brand=excluded.brand, "
@@ -475,7 +498,7 @@ def push(doc: dict, source: str = "app") -> dict:
         # alongside the preset that names the labels.
         fields = fields_by_preset.get(r.get("exerciseId"))
         if fields is None:
-            row = db.one("select manual_fields from fitness.cardio_presets where uid=%s",
+            row = _one("select manual_fields from fitness.cardio_presets where uid=%s",
                          (r.get("exerciseId"),))
             fields = (row or {}).get("manual_fields") or []
         dist = None
@@ -485,7 +508,7 @@ def push(doc: dict, source: str = "app") -> dict:
         avg_hr = _num(r.get("avgHR"))
         # m/beat = metres per heartbeat, the aerobic efficiency metric.
         mpb = round(dist * 1000 / (avg_hr * mins), 3) if (dist and avg_hr and mins) else None
-        db.execute(
+        _ex(
             "insert into fitness.cardio_sessions (uid, preset_uid, preset_name, day, duration, "
             "minutes, avg_hr, max_hr, calories, distance_km, m_per_beat, extra, next_target, notes, "
             "deleted, watch) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
@@ -508,7 +531,7 @@ def push(doc: dict, source: str = "app") -> dict:
         val = _num(r.get("value") if r.get("value") is not None else r.get("vo2"))
         if not d or val is None:
             continue
-        db.execute("insert into fitness.vo2 (uid, day, value, method, notes) values (%s,%s,%s,%s,%s) "
+        _ex("insert into fitness.vo2 (uid, day, value, method, notes) values (%s,%s,%s,%s,%s) "
                    "on conflict (uid) do update set day=excluded.day, value=excluded.value, "
                    "method=excluded.method, notes=excluded.notes, updated_at=now()",
                    (str(r.get("id") or f"vo2|{d.isoformat()}"), d, val, r.get("method"),
@@ -518,11 +541,11 @@ def push(doc: dict, source: str = "app") -> dict:
     counts["foods"] = counts["foodLog"] = 0
     for r in doc.get("foods") or []:
         if r.get("id") and r.get("deleted") and not r.get("name"):   # bare tombstone from the client
-            db.execute("update fitness.foods set deleted=true, updated_at=now() where uid=%s", (r["id"],))
+            _ex("update fitness.foods set deleted=true, updated_at=now() where uid=%s", (r["id"],))
             continue
         if not r.get("id") or not (r.get("name") or "").strip():
             continue
-        db.execute(
+        _ex(
             "insert into fitness.foods (uid, name, brand, barcode, serving_label, serving_g, kcal_100g, "
             "protein_100g, carbs_100g, fat_100g, fibre_100g, source, source_id, favourite, deleted) "
             "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
@@ -541,9 +564,9 @@ def push(doc: dict, source: str = "app") -> dict:
         if not r.get("id") or not d:
             continue
         if r.get("deleted") and not r.get("name"):        # bare tombstone from the client
-            db.execute("update fitness.food_log set deleted=true, updated_at=now() where uid=%s", (r["id"],))
+            _ex("update fitness.food_log set deleted=true, updated_at=now() where uid=%s", (r["id"],))
             continue
-        db.execute(
+        _ex(
             "insert into fitness.food_log (uid, day, meal, food_uid, name, qty_g, kcal, protein, carbs, fat, "
             "notes, deleted) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
             "on conflict (uid) do update set day=excluded.day, meal=excluded.meal, food_uid=excluded.food_uid, "
@@ -559,11 +582,11 @@ def push(doc: dict, source: str = "app") -> dict:
         if not r.get("id"):
             continue
         if r.get("deleted") and not r.get("name"):
-            db.execute("update fitness.meals set deleted=true, updated_at=now() where uid=%s", (r["id"],))
+            _ex("update fitness.meals set deleted=true, updated_at=now() where uid=%s", (r["id"],))
             continue
         if not (r.get("name") or "").strip():
             continue
-        db.execute(
+        _ex(
             "insert into fitness.meals (uid, name, items, source, favourite, deleted) values (%s,%s,%s,%s,%s,%s) "
             "on conflict (uid) do update set name=excluded.name, items=excluded.items, source=excluded.source, "
             "favourite=excluded.favourite, deleted=meals.deleted or excluded.deleted, updated_at=now()",
@@ -576,11 +599,11 @@ def push(doc: dict, source: str = "app") -> dict:
         if not r.get("id"):
             continue
         if r.get("deleted") and not d:
-            db.execute("update fitness.supplements set deleted=true, updated_at=now() where uid=%s", (r["id"],))
+            _ex("update fitness.supplements set deleted=true, updated_at=now() where uid=%s", (r["id"],))
             continue
         if not d:
             continue
-        db.execute("insert into fitness.supplements (uid, day, name, grams, deleted) values (%s,%s,%s,%s,%s) "
+        _ex("insert into fitness.supplements (uid, day, name, grams, deleted) values (%s,%s,%s,%s,%s) "
                    "on conflict (uid) do update set day=excluded.day, name=excluded.name, grams=excluded.grams, "
                    "deleted=supplements.deleted or excluded.deleted, updated_at=now()",
                    (r["id"], d, (r.get("name") or "creatine")[:40], _num(r.get("grams")), bool(r.get("deleted"))))
@@ -593,12 +616,22 @@ def push(doc: dict, source: str = "app") -> dict:
     # Storing those would grow the nightly dump for nothing. Only a document that actually differs
     # is worth keeping — and every distinct version is still kept, because this is the restore path.
     digest = hashlib.sha256(json.dumps(doc, sort_keys=True, default=str).encode()).hexdigest()
-    prev = db.one("select doc_hash from fitness.snapshots order by id desc limit 1")
+    prev = _one("select doc_hash from fitness.snapshots order by id desc limit 1")
     if not prev or prev.get("doc_hash") != digest:
-        db.execute("insert into fitness.snapshots (source, rows, doc, doc_hash) values (%s,%s,%s,%s)",
+        _ex("insert into fitness.snapshots (source, rows, doc, doc_hash) values (%s,%s,%s,%s)",
                    (source, total, Json(doc), digest))
     return {"ok": True, "written": counts, "total": total}
 
+
+
+def push(doc: dict, source: str = "app") -> dict:
+    """Upsert a whole client document over ONE connection (see _ex)."""
+    with db.connect() as conn:
+        tok = _conn.set(conn)
+        try:
+            return _push_inner(doc, source)
+        finally:
+            _conn.reset(tok)
 
 def rescore_bodyweight_lifts() -> int:
     """Recompute kg/volume_load for every BW lift after the bodyweight log changes.

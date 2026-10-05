@@ -730,4 +730,6 @@ window.foodDeleteFood=function(id){
   foods.splice(i,1);saveFoods();closeModal();renderFoodsPage();toast('Deleted (past log entries kept)');
 };
 
+// Food is the home screen: init() ran before this file loaded, so draw it now.
+try{if(typeof currentSection!=='undefined'&&currentSection==='food')window.renderFood(currentSubpage.food);}catch(e){}
 })();
