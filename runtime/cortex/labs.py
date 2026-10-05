@@ -40,7 +40,8 @@ def flag(value, low, high) -> str | None:
 
 
 def _uid(taken: str, marker: str) -> str:
-    return f"lab_{taken}_{re.sub(r'[^a-z0-9]+', '_', marker.lower()).strip('_')}"[:120]
+    key = marker.lower().replace("%", " pct")       # "Neutrophils %" must not collide with "Neutrophils"
+    return f"lab_{taken}_{re.sub(r'[^a-z0-9]+', '_', key).strip('_')}"[:120]
 
 
 def _store(taken: str, lab: str, source: str, rows: list) -> int:
