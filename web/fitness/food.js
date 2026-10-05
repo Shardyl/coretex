@@ -42,7 +42,8 @@ function burnedFor(day){
   if(day===today){const n=new Date();frac=(n.getHours()*60+n.getMinutes())/1440;}
   return Math.round(bmr*frac+(+h.activeKcal||0));
 }
-function sessionsOn(day){return (healthData.sessions||[]).filter(s=>s.date===day);}
+// Under 2 minutes is a false start on the watch (Samsung keeps them), not a workout.
+function sessionsOn(day){return (healthData.sessions||[]).filter(s=>s.date===day&&(s.minutes==null||s.minutes>=2));}
 function portion(f,g){
   const k=g/100;
   return {kcal:r0(f.kcal100*k),protein:r1((f.protein100||0)*k),carbs:r1((f.carbs100||0)*k),fat:r1((f.fat100||0)*k)};
