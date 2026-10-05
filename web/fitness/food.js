@@ -234,7 +234,8 @@ window.foodFastClear=function(field){const f=fastDay(foodDay);if(!f)return;f[fie
 setInterval(()=>{const el=document.getElementById('fdFastLive');if(el&&el.offsetParent){const ms=Date.now()-new Date(el.dataset.since);el.textContent=longHM(ms);const n=el.nextElementSibling;if(n)n.textContent=(Math.floor(ms/360000)/10).toFixed(1)+' hours total';}},30000);
 
 // ---------- ketone + glucose readings (stored in mmol/L) ----------
-function gUnit(){try{return localStorage.getItem('fitness_glucose_unit')||'mmol';}catch(e){return 'mmol';}}
+// Display unit. Default mg/dL: his finger-prick meter reads in mg/dL (94). Stored values stay mmol/L.
+function gUnit(){try{return localStorage.getItem('fitness_glucose_unit')||'mgdl';}catch(e){return 'mgdl';}}
 function gShow(mmol){return gUnit()==='mgdl'?Math.round(mmol*18):r1(mmol);}
 function cgmOn(day){return (cgmData||[]).filter(x=>localDay(new Date(x.at))===day);}
 function drawCgm(){
