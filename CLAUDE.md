@@ -1484,6 +1484,9 @@ while a local change is queued — a pull once erased a cardio session seconds a
   `version` header may need raising if login breaks); the owner typed the login into the app's Connect Libre form
   (setting `libre_follower`, never echoed). `cortex-libre.timer` polls every 5 min into `fitness.cgm` (server-owned,
   NOT in the sync doc; the pull returns the last 3 days).
+- **MISSION START = 5 Oct 2026** (owner): the day he went strict, tracking everything, long term. Treat it as
+  the baseline in every report (before vs after). Start 88.9 kg. Goals: sub-15% fat before December
+  (~82 kg at 69.6 kg lean), ultimate 12% (~79 kg). Previous best 16.2%.
 - **Sleep + recovery (5 Oct 2026, app v42, Bridge 1.3.0):** Food > Recovery page + sleep tile on Today's top card.
   Bridge 1.3.0 sends the main sleep session's stages, start/end, overnight HR avg/low (5-min), breathing, HRV,
   source (Eight Sleep mattress writes to Health Connect; he wears NO watch at night) and `day_resting_hr` (Samsung
