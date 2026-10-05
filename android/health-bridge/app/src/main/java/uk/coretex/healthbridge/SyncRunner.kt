@@ -53,6 +53,9 @@ object SyncRunner {
         var lastCounts: JSONObject? = null
         var sentDays = 0; var sentSessions = 0; var sentSamsung = 0; var sentWeights = 0
         var samsungError: String? = null
+        var stepsError: String? = null
+        var stepsPermNeeded = false
+        var samsungStepDays = 0
         for ((i, c) in chunks.withIndex()) {
             progress("Reading ${c.first} to ${c.second} (${i + 1}/${chunks.size})")
             val chunk = try {
@@ -66,6 +69,18 @@ object SyncRunner {
             val shd = SamsungReader.read(ctx, c.first, c.second)
             if (shd.error != null && samsungError == null) samsungError = shd.error
             for (k in 0 until shd.sessions.length()) chunk.sessions.put(shd.sessions.get(k))
+            // Daily steps: Samsung Health's own total overrides Health Connect's (HC gets only partial,
+            // late steps from Samsung). Days Samsung has no value for keep the HC number. Failure = HC steps.
+            val steps = SamsungReader.readDailySteps(ctx, c.first, c.second)
+            if (steps.error != null && stepsError == null) stepsError = steps.error
+            if (steps.permissionNeeded) stepsPermNeeded = true
+            var chunkStepDays = 0
+            for (k in 0 until chunk.days.length()) {
+                val day = chunk.days.getJSONObject(k)
+                val v = runCatching { LocalDate.parse(day.getString("day")) }.getOrNull()?.let { steps.byDay[it] } ?: continue
+                day.put("steps", v)
+                chunkStepDays++
+            }
             val body = JSONObject().apply {
                 put("device", Build.MODEL)
                 put("app_version", BuildConfig.VERSION_NAME)
@@ -79,6 +94,7 @@ object SyncRunner {
                     lastCounts = r.counts
                     sentDays += chunk.days.length(); sentSessions += chunk.sessions.length(); sentWeights += chunk.weights.length()
                     sentSamsung += shd.sessions.length()
+                    samsungStepDays += chunkStepDays
                 }
                 UploadResult.Unauthorized -> return finish(SyncOutcome(false, "Server rejected the token (401)"))
                 is UploadResult.Failed -> return finish(
@@ -90,7 +106,11 @@ object SyncRunner {
         return finish(
             SyncOutcome(
                 true,
-                "OK: sent $sentDays days, $sentSessions sessions ($sentSamsung from Samsung), $sentWeights weights" +
+                "OK: sent $sentDays days (steps from Samsung for $samsungStepDays days), " +
+                    "$sentSessions sessions ($sentSamsung from Samsung), $sentWeights weights" +
+                    (stepsError?.let { "\nSamsung steps failed, Health Connect steps used: $it" } ?: "") +
+                    (if (stepsPermNeeded && stepsError == null)
+                        "\nSamsung Health: steps permission needed, Health Connect steps used" else "") +
                     (samsungError?.let { "\nSamsung Health: $it" } ?: ""),
             ),
             lastCounts,

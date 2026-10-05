@@ -1526,6 +1526,11 @@ while a local change is queued — a pull once erased a cardio session seconds a
   NEVER commit it (`app/libs/*.aar` is gitignored; `build-on-box.sh` copies it in). Reads work without
   Samsung partner approval only while Samsung Health "Developer mode for data read" is ON (Samsung
   Health > Settings > About, tap version 10x > Developer mode). minSdk 29 (SDK requirement).
+- Daily STEPS come from the Samsung SDK since 1.2.0 (`SamsungReader.readDailySteps`: `DataType.StepsType.TOTAL`
+  aggregate, `LocalTimeGroup` DAILY x1, grouped per local day by the SDK) and override HC's `steps` per day; a day
+  Samsung has no value (or 0) for keeps the HC number, a failed read falls back to HC with the error on the result
+  line. WHY: Samsung shares only partial steps with HC (workout steps excluded, written late in batches): watch
+  14,600 vs HC 6,060 on 5 Oct 2026. Needs the STEPS read permission (tap Connect Samsung Health again).
 
 ## Media library
 

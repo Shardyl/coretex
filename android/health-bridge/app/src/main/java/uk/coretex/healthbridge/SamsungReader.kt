@@ -14,6 +14,9 @@ import com.samsung.android.sdk.health.data.permission.Permission
 import com.samsung.android.sdk.health.data.request.DataType
 import com.samsung.android.sdk.health.data.request.DataTypes
 import com.samsung.android.sdk.health.data.request.InstantTimeFilter
+import com.samsung.android.sdk.health.data.request.LocalTimeFilter
+import com.samsung.android.sdk.health.data.request.LocalTimeGroup
+import com.samsung.android.sdk.health.data.request.LocalTimeGroupUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -34,7 +37,8 @@ object SamsungReader {
     const val SOURCE = "com.sec.android.app.shealth"
     private val EXERCISE_READ: Permission = Permission.of(DataTypes.EXERCISE, AccessType.READ)
     private val HR_READ: Permission = Permission.of(DataTypes.HEART_RATE, AccessType.READ)
-    val PERMS: Set<Permission> = setOf(EXERCISE_READ, HR_READ)
+    private val STEPS_READ: Permission = Permission.of(DataTypes.STEPS, AccessType.READ)
+    val PERMS: Set<Permission> = setOf(EXERCISE_READ, HR_READ, STEPS_READ)
 
     private val isoFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssxxx")
 
@@ -43,6 +47,9 @@ object SamsungReader {
     data class Status(val state: State, val message: String, val granted: Set<Permission> = emptySet())
 
     class Read(val sessions: JSONArray, val error: String?)
+
+    /** Samsung Health daily step totals per LOCAL day; [permissionNeeded] = steps not granted. */
+    class StepsRead(val byDay: Map<LocalDate, Long>, val error: String?, val permissionNeeded: Boolean = false)
 
     private fun store(ctx: Context): HealthDataStore = HealthDataService.getStore(ctx.applicationContext)
 
@@ -77,10 +84,14 @@ object SamsungReader {
 
     suspend fun status(ctx: Context): Status = try {
         val granted = withContext(Dispatchers.IO) { store(ctx).getGrantedPermissions(PERMS) }
-        if (EXERCISE_READ in granted) {
-            val hr = if (HR_READ in granted) "" else " (heart rate permission not granted)"
-            Status(State.CONNECTED, "connected$hr", granted)
-        } else Status(State.PERMISSION_NEEDED, "permission needed", granted)
+        when {
+            EXERCISE_READ !in granted -> Status(State.PERMISSION_NEEDED, "permission needed", granted)
+            STEPS_READ !in granted -> Status(State.PERMISSION_NEEDED, "steps permission needed", granted)
+            else -> {
+                val hr = if (HR_READ in granted) "" else " (heart rate permission not granted)"
+                Status(State.CONNECTED, "connected$hr", granted)
+            }
+        }
     } catch (e: Throwable) {
         Status(stateOf(e), describe(e))
     }
@@ -88,10 +99,15 @@ object SamsungReader {
     /** Opens Samsung Health's permission screen, or its own fix-up flow when it is not ready. */
     suspend fun connect(activity: Activity): String = try {
         val granted = store(activity).requestPermissions(PERMS, activity)
+        val missing = buildList {
+            if (EXERCISE_READ !in granted) add("workouts")
+            if (STEPS_READ !in granted) add("steps")
+            if (HR_READ !in granted) add("heart rate")
+        }
         when {
-            EXERCISE_READ in granted && HR_READ in granted -> "Samsung Health connected"
-            EXERCISE_READ in granted -> "Samsung Health connected (workouts only, heart rate not granted)"
-            else -> "Samsung Health permission was not granted"
+            missing.isEmpty() -> "Samsung Health connected"
+            missing.size == 3 -> "Samsung Health permission was not granted"
+            else -> "Samsung Health connected (not granted: ${missing.joinToString(", ")})"
         }
     } catch (e: ResolvablePlatformException) {
         if (e.hasResolution) {
@@ -153,6 +169,46 @@ object SamsungReader {
             }
         } catch (e: Throwable) {
             Read(out, describe(e))
+        }
+    }
+
+    /**
+     * Samsung Health's own daily step totals for each LOCAL day in [from, toInclusive], using the
+     * SDK aggregate `DataType.StepsType.TOTAL` grouped by the SDK per local day
+     * (LocalTimeGroup DAILY x1). This is the number the Samsung Health app shows (it includes
+     * steps taken inside workouts, which Samsung does not share with Health Connect).
+     * Days Samsung returns no value (or 0) for are left out. Never throws.
+     */
+    suspend fun readDailySteps(ctx: Context, from: LocalDate, toInclusive: LocalDate): StepsRead {
+        val out = HashMap<LocalDate, Long>()
+        return try {
+            withContext(Dispatchers.IO) {
+                val st = store(ctx)
+                if (STEPS_READ !in st.getGrantedPermissions(setOf(STEPS_READ)))
+                    return@withContext StepsRead(out, null, permissionNeeded = true)
+                val filter = LocalTimeFilter.of(from.atStartOfDay(), toInclusive.plusDays(1).atStartOfDay())
+                val group = LocalTimeGroup.of(LocalTimeGroupUnit.DAILY, 1)
+                var token: String? = null
+                var guard = 0
+                do {
+                    val b = DataType.StepsType.TOTAL.requestBuilder.setLocalTimeFilterWithGroup(filter, group)
+                    if (token != null) b.setPageToken(token)
+                    val resp = st.aggregateData(b.build())
+                    for (a in resp.dataList) {
+                        val v = a.value ?: continue
+                        if (v <= 0L) continue
+                        val day = (runCatching { a.getStartLocalDateTime() }.getOrNull()?.toLocalDate()
+                            ?: a.startTime?.atZone(ZoneId.systemDefault())?.toLocalDate()) ?: continue
+                        if (day.isBefore(from) || day.isAfter(toInclusive)) continue
+                        out[day] = v
+                    }
+                    val next = resp.pageToken
+                    token = if (next.isNullOrEmpty() || next == token) null else next
+                } while (token != null && ++guard < 50)
+                StepsRead(out, null)
+            }
+        } catch (e: Throwable) {
+            StepsRead(emptyMap(), describe(e))
         }
     }
 
