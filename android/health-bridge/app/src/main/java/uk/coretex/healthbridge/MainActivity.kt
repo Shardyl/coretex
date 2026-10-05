@@ -132,6 +132,8 @@ class MainActivity : AppCompatActivity() {
                 val granted = runCatching { client.permissionController.getGrantedPermissions() }.getOrDefault(emptySet())
                 val n = granted.intersect(Perms.DATA).size
                 lines += "Data permissions: $n of ${Perms.DATA.size} granted"
+                if (Perms.RESPIRATORY !in granted)
+                    lines += "Respiratory rate (sleep detail, new in 1.3.0): not granted, tap Grant permissions"
                 val bgAvail = featureAvailable(client, HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND)
                 lines += "Background read: " + when {
                     Perms.BACKGROUND in granted -> "granted (hourly sync on)"

@@ -12,6 +12,7 @@ import androidx.health.connect.client.records.FloorsClimbedRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.Record
+import androidx.health.connect.client.records.RespiratoryRateRecord
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
@@ -99,6 +100,8 @@ class HealthReader(
 
         // Sleep: total minutes of sessions that ENDED on the day.
         val sleep = HashMap<LocalDate, Double>()
+        // Main (longest) sleep session that ENDED on the day, for the sleep detail fields.
+        val mainSleep = HashMap<LocalDate, SleepSessionRecord>()
         if (has(SleepSessionRecord::class)) {
             val readFrom = startI.minus(Duration.ofDays(2))
             for (r in readAll(SleepSessionRecord::class, TimeRangeFilter.between(readFrom, endI))) {
@@ -106,8 +109,14 @@ class HealthReader(
                 if (endDay < from || endDay > toInclusive) continue
                 val mins = Duration.between(r.startTime, r.endTime).seconds / 60.0
                 sleep[endDay] = (sleep[endDay] ?: 0.0) + mins
+                val cur = mainSleep[endDay]
+                if (cur == null ||
+                    Duration.between(r.startTime, r.endTime) > Duration.between(cur.startTime, cur.endTime)
+                ) mainSleep[endDay] = r
             }
         }
+        val sleepDetail = HashMap<LocalDate, SleepDetail>()
+        for ((day, s) in mainSleep) sleepDetail[day] = sleepDetail(s)
 
         val out = JSONArray()
         var d = from
@@ -127,10 +136,91 @@ class HealthReader(
                 putN("resting_hr", a?.get(RestingHeartRateRecord.BPM_AVG)?.toDouble())
                 putN("hrv_ms", hrv[d]?.takeIf { it.isNotEmpty() }?.average())
                 putN("sleep_min", sleep[d])
+                val sd = sleepDetail[d]
+                putN("sleep_deep_min", sd?.deep)
+                putN("sleep_rem_min", sd?.rem)
+                putN("sleep_light_min", sd?.light)
+                putN("sleep_awake_min", sd?.awake)
+                putN("sleep_start", sd?.start)
+                putN("sleep_end", sd?.end)
+                putN("sleep_hr_avg", sd?.hrAvg)
+                putN("sleep_hr_min", sd?.hrMin)
+                putN("sleep_resp_avg", sd?.respAvg)
+                putN("sleep_hrv_ms", sd?.hrvMs)
+                putN("sleep_source", sd?.source)
+                // Filled from Samsung Health by SyncRunner when the watch has enough daytime data.
+                put("day_resting_hr", JSONObject.NULL)
             })
             d = d.plusDays(1)
         }
         return out
+    }
+
+    // ---------- sleep detail ----------
+
+    private class SleepDetail(
+        val deep: Double?, val rem: Double?, val light: Double?, val awake: Double?,
+        val start: String, val end: String,
+        val hrAvg: Double?, val hrMin: Double?, val respAvg: Double?, val hrvMs: Double?,
+        val source: String,
+    )
+
+    /**
+     * Stage minutes plus overnight heart rate, respiratory rate and HRV for one sleep session.
+     * Vitals are any Health Connect source's records inside the session window; null when absent.
+     */
+    private suspend fun sleepDetail(s: SleepSessionRecord): SleepDetail {
+        var deep: Double? = null; var rem: Double? = null; var light: Double? = null; var awake: Double? = null
+        if (s.stages.isNotEmpty()) {
+            var dp = 0.0; var rm = 0.0; var lt = 0.0; var aw = 0.0
+            for (st in s.stages) {
+                val m = Duration.between(st.startTime, st.endTime).seconds / 60.0
+                if (m <= 0) continue
+                when (st.stage) {
+                    SleepSessionRecord.STAGE_TYPE_DEEP -> dp += m
+                    SleepSessionRecord.STAGE_TYPE_REM -> rm += m
+                    SleepSessionRecord.STAGE_TYPE_LIGHT -> lt += m
+                    SleepSessionRecord.STAGE_TYPE_AWAKE, SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED,
+                    SleepSessionRecord.STAGE_TYPE_OUT_OF_BED -> aw += m
+                }
+            }
+            deep = dp; rem = rm; light = lt; awake = aw
+        }
+        val win = TimeRangeFilter.between(s.startTime, s.endTime)
+        fun inWin(t: Instant) = !t.isBefore(s.startTime) && !t.isAfter(s.endTime)
+
+        var hrAvg: Double? = null
+        var hrMin: Double? = null
+        if (has(HeartRateRecord::class)) {
+            val samples = readAll(HeartRateRecord::class, win)
+                .flatMap { it.samples }
+                .filter { inWin(it.time) && it.beatsPerMinute > 0 }
+                .map { it.time to it.beatsPerMinute.toDouble() }
+                .sortedBy { it.first }
+            if (samples.isNotEmpty()) {
+                hrAvg = samples.map { it.second }.average()
+                // Lowest 5-minute rolling average when samples are dense enough (3+ in a window),
+                // else the lowest single sample.
+                hrMin = lowestRollingAvg(samples, Duration.ofMinutes(5), 3) ?: samples.minOf { it.second }
+            }
+        }
+        val resp = if (has(RespiratoryRateRecord::class))
+            readAll(RespiratoryRateRecord::class, win).filter { inWin(it.time) && it.rate > 0 }.map { it.rate }
+        else emptyList()
+        val hrv = if (has(HeartRateVariabilityRmssdRecord::class))
+            readAll(HeartRateVariabilityRmssdRecord::class, win)
+                .filter { inWin(it.time) && it.heartRateVariabilityMillis > 0 }
+                .map { it.heartRateVariabilityMillis }
+        else emptyList()
+
+        return SleepDetail(
+            deep = deep, rem = rem, light = light, awake = awake,
+            start = iso(s.startTime, s.startZoneOffset), end = iso(s.endTime, s.endZoneOffset),
+            hrAvg = hrAvg, hrMin = hrMin,
+            respAvg = resp.takeIf { it.isNotEmpty() }?.average(),
+            hrvMs = hrv.takeIf { it.isNotEmpty() }?.average(),
+            source = s.metadata.dataOrigin.packageName,
+        )
     }
 
     // ---------- exercise sessions ----------
@@ -231,6 +321,25 @@ class HealthReader(
                 .associate { it.getInt(null) to it.name }
         }
     }
+}
+
+/**
+ * Lowest mean over any window [t, t + width) that starts at a sample and holds at least
+ * [minSamples] samples. [samples] must be sorted by time. Null when no window qualifies.
+ */
+internal fun lowestRollingAvg(samples: List<Pair<Instant, Double>>, width: Duration, minSamples: Int): Double? {
+    var best: Double? = null
+    var j = 0
+    var sum = 0.0
+    for (i in samples.indices) {
+        if (j < i) { j = i; sum = 0.0 }
+        val limit = samples[i].first.plus(width)
+        while (j < samples.size && samples[j].first.isBefore(limit)) { sum += samples[j].second; j++ }
+        val n = j - i
+        if (n >= minSamples) { val avg = sum / n; if (best == null || avg < best) best = avg }
+        if (j > i) sum -= samples[i].second
+    }
+    return best
 }
 
 internal fun JSONObject.putN(key: String, value: Any?): JSONObject = put(key, value ?: JSONObject.NULL)

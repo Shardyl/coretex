@@ -56,6 +56,10 @@ object SyncRunner {
         var stepsError: String? = null
         var stepsPermNeeded = false
         var samsungStepDays = 0
+        var sleepDetailDays = 0
+        var restingDays = 0
+        var restError: String? = null
+        val respMissing = Perms.RESPIRATORY !in granted
         for ((i, c) in chunks.withIndex()) {
             progress("Reading ${c.first} to ${c.second} (${i + 1}/${chunks.size})")
             val chunk = try {
@@ -81,6 +85,18 @@ object SyncRunner {
                 day.put("steps", v)
                 chunkStepDays++
             }
+            // Daytime resting HR from Samsung Health (watch worn by day only). Failure = nulls.
+            val rest = SamsungReader.readDaytimeRestingHr(ctx, c.first, c.second)
+            if (rest.error != null && restError == null) restError = rest.error
+            var chunkRestDays = 0
+            var chunkSleepDays = 0
+            for (k in 0 until chunk.days.length()) {
+                val day = chunk.days.getJSONObject(k)
+                if (!day.isNull("sleep_start")) chunkSleepDays++
+                val v = runCatching { LocalDate.parse(day.getString("day")) }.getOrNull()?.let { rest.byDay[it] } ?: continue
+                day.put("day_resting_hr", v)
+                chunkRestDays++
+            }
             val body = JSONObject().apply {
                 put("device", Build.MODEL)
                 put("app_version", BuildConfig.VERSION_NAME)
@@ -95,6 +111,8 @@ object SyncRunner {
                     sentDays += chunk.days.length(); sentSessions += chunk.sessions.length(); sentWeights += chunk.weights.length()
                     sentSamsung += shd.sessions.length()
                     samsungStepDays += chunkStepDays
+                    sleepDetailDays += chunkSleepDays
+                    restingDays += chunkRestDays
                 }
                 UploadResult.Unauthorized -> return finish(SyncOutcome(false, "Server rejected the token (401)"))
                 is UploadResult.Failed -> return finish(
@@ -107,7 +125,10 @@ object SyncRunner {
             SyncOutcome(
                 true,
                 "OK: sent $sentDays days (steps from Samsung for $samsungStepDays days), " +
-                    "$sentSessions sessions ($sentSamsung from Samsung), $sentWeights weights" +
+                    "$sentSessions sessions ($sentSamsung from Samsung), $sentWeights weights, " +
+                    "sleep detail for $sleepDetailDays days, daytime resting HR for $restingDays days" +
+                    (if (respMissing) "\nRespiratory rate not granted: tap Grant permissions" else "") +
+                    (restError?.let { "\nSamsung daytime resting HR failed: $it" } ?: "") +
                     (stepsError?.let { "\nSamsung steps failed, Health Connect steps used: $it" } ?: "") +
                     (if (stepsPermNeeded && stepsError == null)
                         "\nSamsung Health: steps permission needed, Health Connect steps used" else "") +

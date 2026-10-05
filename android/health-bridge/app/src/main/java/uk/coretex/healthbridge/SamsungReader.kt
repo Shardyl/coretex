@@ -212,6 +212,80 @@ object SamsungReader {
         }
     }
 
+    /** Daytime resting heart rate per LOCAL day; [error] = the SDK read failed. */
+    class RestingRead(val byDay: Map<LocalDate, Double>, val error: String?)
+
+    private val DAY_FROM: java.time.LocalTime = java.time.LocalTime.of(6, 0)
+    private val DAY_TO: java.time.LocalTime = java.time.LocalTime.of(20, 0)
+    private val AFTER_EXERCISE: Duration = Duration.ofMinutes(10)
+    private val REST_WINDOW: Duration = Duration.ofMinutes(10)
+    private const val REST_MIN_SAMPLES = 5
+
+    /**
+     * Daytime resting HR for each LOCAL day in [from, toInclusive] (the watch is worn ~06:00-18:00,
+     * not at night). Samsung HEART_RATE samples between 06:00 and 20:00 local, excluding every
+     * Samsung exercise session plus 10 minutes after it ends; result = the lowest mean over any
+     * 10-minute window holding at least 5 samples. Days without such a window are left out.
+     * Needs HEART_RATE and EXERCISE read (without EXERCISE workouts could not be excluded, so
+     * nothing is computed). Never throws.
+     */
+    suspend fun readDaytimeRestingHr(ctx: Context, from: LocalDate, toInclusive: LocalDate): RestingRead {
+        val zone = ZoneId.systemDefault()
+        val out = HashMap<LocalDate, Double>()
+        return try {
+            withContext(Dispatchers.IO) {
+                val st = store(ctx)
+                val granted = st.getGrantedPermissions(PERMS)
+                if (HR_READ !in granted || EXERCISE_READ !in granted) return@withContext RestingRead(out, null)
+
+                // Exercise windows (+10 min) over the whole range, read once.
+                val rangeStart = from.atStartOfDay(zone).toInstant()
+                val rangeEnd = toInclusive.plusDays(1).atStartOfDay(zone).toInstant()
+                val excluded = ArrayList<Pair<Instant, Instant>>()
+                for (dp in readAll(st, DataTypes.EXERCISE.readDataRequestBuilder,
+                    rangeStart.minus(Duration.ofDays(1)), rangeEnd.plus(Duration.ofDays(1)))) {
+                    val sessions: List<ExerciseSession> =
+                        runCatching { dp.getValue(DataType.ExerciseType.SESSIONS) }.getOrNull().orEmpty()
+                    if (sessions.isEmpty()) {
+                        val s = dp.startTime ?: continue
+                        excluded += s to (dp.endTime ?: s).plus(AFTER_EXERCISE)
+                    }
+                    for (s in sessions) {
+                        val a = s.startTime ?: continue
+                        excluded += a to (s.endTime ?: a).plus(AFTER_EXERCISE)
+                    }
+                }
+                fun isExcluded(t: Instant) = excluded.any { (a, b) -> !t.isBefore(a) && t.isBefore(b) }
+
+                var d = from
+                while (!d.isAfter(toInclusive)) {
+                    val dStart = d.atTime(DAY_FROM).atZone(zone).toInstant()
+                    val dEnd = d.atTime(DAY_TO).atZone(zone).toInstant()
+                    val samples = ArrayList<Pair<Instant, Double>>()
+                    fun take(t: Instant?, bpm: Float?) {
+                        if (t == null || bpm == null || bpm <= 0f) return
+                        if (t.isBefore(dStart) || !t.isBefore(dEnd) || isExcluded(t)) return
+                        samples += t to bpm.toDouble()
+                    }
+                    for (p in readAll(st, DataTypes.HEART_RATE.readDataRequestBuilder, dStart, dEnd)) {
+                        val series = runCatching { p.getValue(DataType.HeartRateType.SERIES_DATA) }.getOrNull().orEmpty()
+                        if (series.isNotEmpty()) {
+                            for (e in series) take(e.startTime, e.heartRate)
+                        } else {
+                            take(p.startTime, runCatching { p.getValue(DataType.HeartRateType.HEART_RATE) }.getOrNull())
+                        }
+                    }
+                    samples.sortBy { it.first }
+                    lowestRollingAvg(samples, REST_WINDOW, REST_MIN_SAMPLES)?.let { out[d] = it }
+                    d = d.plusDays(1)
+                }
+                RestingRead(out, null)
+            }
+        } catch (e: Throwable) {
+            RestingRead(emptyMap(), describe(e))
+        }
+    }
+
     /**
      * (mean, max, min) heart rate for a session. Order: the session's own stats, else the
      * session's exercise log, else Samsung heart-rate samples inside the session window.

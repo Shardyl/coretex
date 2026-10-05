@@ -1539,6 +1539,9 @@ while a local change is queued — a pull once erased a cardio session seconds a
   Samsung has no value (or 0) for keeps the HC number, a failed read falls back to HC with the error on the result
   line. WHY: Samsung shares only partial steps with HC (workout steps excluded, written late in batches): watch
   14,600 vs HC 6,060 on 5 Oct 2026. Needs the STEPS read permission (tap Connect Samsung Health again).
+- 1.3.0 (vc 5, 5 Oct 2026) adds per-day `sleep_deep_min/rem_min/light_min/awake_min`, `sleep_start/end`, `sleep_hr_avg/min`,
+  `sleep_resp_avg`, `sleep_hrv_ms`, `sleep_source` (HC, main = longest session ending that day; Eight Sleep) and `day_resting_hr`
+  (Samsung HR 06:00-20:00 minus workouts+10 min, lowest 10-min mean of 5+ samples); needs READ_RESPIRATORY_RATE (tap Grant permissions).
 
 ## Media library
 

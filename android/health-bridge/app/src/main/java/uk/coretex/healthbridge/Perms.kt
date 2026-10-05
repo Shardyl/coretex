@@ -8,6 +8,7 @@ import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.FloorsClimbedRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.RespiratoryRateRecord
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
@@ -29,7 +30,10 @@ object Perms {
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(WeightRecord::class),
         HealthPermission.getReadPermission(BodyFatRecord::class),
+        HealthPermission.getReadPermission(RespiratoryRateRecord::class),
     )
+    /** Added in 1.3.0 for sleep detail; existing installs must tap Grant permissions again. */
+    val RESPIRATORY: String = HealthPermission.getReadPermission(RespiratoryRateRecord::class)
     const val BACKGROUND = HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND
     const val HISTORY = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
 }
