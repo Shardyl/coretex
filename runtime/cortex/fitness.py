@@ -580,11 +580,13 @@ def _push_inner(doc: dict, source: str = "app") -> dict:
              r.get("sourceId"), bool(r.get("favourite")), bool(r.get("deleted"))))
         counts["foods"] += 1
     for r in doc.get("foodLog") or []:
+        # A tombstone is {id, deleted} with NO date, so it must be handled before the date check.
+        # (Until 5 Oct 2026 it came after, and every food-entry delete was silently dropped.)
+        if r.get("id") and r.get("deleted") and not r.get("name"):
+            _ex("update fitness.food_log set deleted=true, updated_at=now() where uid=%s", (r["id"],))
+            continue
         d = _day(r.get("date"))
         if not r.get("id") or not d:
-            continue
-        if r.get("deleted") and not r.get("name"):        # bare tombstone from the client
-            _ex("update fitness.food_log set deleted=true, updated_at=now() where uid=%s", (r["id"],))
             continue
         _ex(
             "insert into fitness.food_log (uid, day, meal, food_uid, name, qty_g, kcal, protein, carbs, fat, "
