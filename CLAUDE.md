@@ -1488,6 +1488,14 @@ while a local change is queued — a pull once erased a cardio session seconds a
   the baseline in every report (before vs after). Start 88.9 kg. GOAL: 79 kg at 12% fat by 31 Dec 2026;
   milestone sub-15% (~82 kg at 69.6 kg lean). Previous best 16.2%. App v43 mission strip (top of every screen)
   reads setting `fitness_targets.mission`; pep line is code-computed from his logs, never generated.
+- **Bloods + bodyweight lifts (5 Oct 2026, app v45):** Food > Bloods reads server-owned `fitness.lab_results` (one
+  row per marker per test date, flag computed in `cortex/labs.py` from the lab's own range) and `fitness.lab_wishlist`
+  (next-test checklist; an item is done when a later result with the same marker name exists). NO health data in this
+  repo: results load from a one-off import file (`python -m cortex.labs import <file>`, file deleted after) or from the
+  app's "Add a lab report" upload (Opus transcribes, owner ticks rows, only then stored). Marker uid keeps "%" distinct
+  ("Neutrophils %" vs "Neutrophils"). Pull-ups/chin-ups/dips: weight "BW" or "BW+10" (belt) resolves to the 7-DAY
+  AVERAGE of weigh-ins up to the session date (app `bwAt` and server `bodyweight_at` mirror each other); the form
+  turns a stale typed 50-130 number back into BW and shows "BW = x kg".
 - **Sleep + recovery (5 Oct 2026, app v42, Bridge 1.3.0):** Food > Recovery page + sleep tile on Today's top card.
   Bridge 1.3.0 sends the main sleep session's stages, start/end, overnight HR avg/low (5-min), breathing, HRV,
   source (Eight Sleep mattress writes to Health Connect; he wears NO watch at night) and `day_resting_hr` (Samsung
