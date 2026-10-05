@@ -1447,6 +1447,12 @@ while a local change is queued — a pull once erased a cardio session seconds a
   are pre-filled at JGE from the last session on that preset and tagged unconfirmed until checked in the app; a
   10-20 min treadmill ending within 15 min of a 4x4 is its warm-up; title "Steam Room" -> preset `id_steam`.
   `watch` is pushed by the app with `coalesce` so an old client never erases it. Creatine: `fitness.supplements`.
+- **Fasting, readings, CGM (5 Oct 2026):** `fitness.fast_days` (break-fast / window-close times) and
+  `fitness.readings` (finger-prick ketones/glucose, mmol/L) ride the sync doc. FreeStyle Libre CGM: `cortex/libre.py`
+  reads a LibreLinkUp FOLLOWER account (unofficial community API, region redirect to api-<region>.libreview.io,
+  `version` header may need raising if login breaks); the owner typed the login into the app's Connect Libre form
+  (setting `libre_follower`, never echoed). `cortex-libre.timer` polls every 5 min into `fitness.cgm` (server-owned,
+  NOT in the sync doc; the pull returns the last 3 days).
 - **Reading the history:** Feb to ~9 Apr 2026 has 1-exercise rows dated the day after a session (Mon
   chest press, Thu shoulder press/curls): next-day corrections, not extra sessions. Training was ~2
   sessions/week throughout; count adjacent-day entries as one session. Most Feb-Mar cardio (weekly
