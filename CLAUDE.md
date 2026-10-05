@@ -1467,6 +1467,11 @@ while a local change is queued — a pull once erased a cardio session seconds a
   are pre-filled at JGE from the last session on that preset and tagged unconfirmed until checked in the app; a
   10-20 min treadmill ending within 15 min of a 4x4 is its warm-up; title "Steam Room" -> preset `id_steam`.
   `watch` is pushed by the app with `coalesce` so an old client never erases it. Creatine: `fitness.supplements`.
+- **MASS-DELETE INCIDENT (5 Oct 2026):** a device whose localStorage filled up (4,300 imported food rows) lost its
+  foods + meals locally and its next push tombstoned all 242 foods and 13 meals (restored by flipping
+  `deleted`). Now: the app never sends more than 5 tombstones per collection in one push, the server strips
+  any push carrying >20 bare tombstones for a table, saves warn when storage is full, and the phone keeps only
+  the last 120 days of the food log (server pull returns 120 days; full history stays in the DB).
 - **Burned (app, 5 Oct 2026):** BMR pro rata + Health Connect active kcal (on his S24 this is everyday
   movement ONLY, workouts excluded) + Samsung-SDK workout kcal minus the BMR share of each workout's minutes;
   steam room excluded. Lifting history shows that day's watch weights session above the lifts (date match).
