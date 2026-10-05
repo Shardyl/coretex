@@ -5571,6 +5571,22 @@ def fitness_scan(body: FitnessScan, _: None = Depends(auth)) -> dict:
     return fitness.scan_screenshot(img)
 
 
+class MealPhoto(BaseModel):
+    image: str                                   # data: URL
+    note: str | None = None
+
+
+@app.post("/api/fitness/food/photo")
+def fitness_food_photo(body: MealPhoto, _: None = Depends(auth)) -> dict:
+    """Estimate a meal from a photo (Opus). The app shows the items for editing before anything is logged."""
+    img = body.image or ""
+    if not img.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="expected a data:image/... URL")
+    if len(img) > 8_000_000:
+        raise HTTPException(status_code=413, detail="image too large")
+    return fitness.estimate_meal_photo(img, body.note or "")
+
+
 @app.get("/api/fitness/summary")
 def fitness_summary(_: None = Depends(auth)) -> dict:
     return fitness.summary()

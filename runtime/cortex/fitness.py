@@ -859,3 +859,39 @@ def reconcile_watch(since: date | None = None) -> dict:
         n["created_new" if new else "created_history"] += 1
     return n
 
+
+
+# ---------- meal photo -> estimated items (owner-approved Opus, 5 Oct 2026: rare use, accuracy first) ----------
+# This is the ONE place nutrition is estimated rather than read from a label or database, so every item
+# carries the model's confidence and the app tags the log rows "photo estimate". Totals are summed in code.
+MEAL_PHOTO_MODEL = "claude-opus-5-5"
+MEAL_PHOTO_SYSTEM = (
+    "You estimate the nutrition of a meal from a photo for a personal food log. Identify every distinct food "
+    "and drink item visible, estimate each portion in grams from visual cues (plate size, cutlery, hands, "
+    "packaging), and estimate calories, protein, carbs and fat for that portion. Assume typical restaurant "
+    "preparation, including cooking oil, butter and sauces you can see or that the dish normally contains, and "
+    "say so in the item's note. Be realistic, not optimistic: restaurant food is usually heavier than it looks. "
+    "Never refuse; if something is unclear, give your best estimate with low confidence.")
+MEAL_PHOTO_PROMPT = """Return ONLY this JSON:
+{"items":[{"name":"short name","grams":number,"kcal":number,"protein":number,"carbs":number,"fat":number,
+"confidence":"high|medium|low","note":"what you assumed, e.g. cooked in oil, creamy sauce"}],
+"summary":"one line on the meal and the biggest uncertainty"}
+Numbers are for the portion in the photo. Protein/carbs/fat in grams."""
+
+
+def estimate_meal_photo(data_url: str, note: str = "") -> dict:
+    from . import provider
+    user = MEAL_PHOTO_PROMPT + (f"\nThe owner adds: {note.strip()[:300]}" if note and note.strip() else "")
+    out = provider.think_json(MEAL_PHOTO_SYSTEM, user, model=MEAL_PHOTO_MODEL, fast=False, max_tokens=3000,
+                              purpose="fitness_meal_photo", images=[data_url])
+    items = []
+    for it in out.get("items") or []:
+        if not isinstance(it, dict) or not str(it.get("name") or "").strip():
+            continue
+        items.append({"name": str(it["name"]).strip()[:80], "grams": _num(it.get("grams")),
+                      "kcal": _num(it.get("kcal")), "protein": _num(it.get("protein")),
+                      "carbs": _num(it.get("carbs")), "fat": _num(it.get("fat")),
+                      "confidence": (it.get("confidence") or "medium") if it.get("confidence") in ("high", "medium", "low") else "medium",
+                      "note": str(it.get("note") or "")[:200]})
+    tot = {k: round(sum((i[k] or 0) for i in items), 1) for k in ("kcal", "protein", "carbs", "fat")}
+    return {"items": items, "total": tot, "summary": str(out.get("summary") or "")[:300]}

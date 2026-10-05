@@ -231,7 +231,7 @@ function mealCard(key,label,list){
   return `<div class="fd-meal">
     <div class="fd-meal-h"><b>${label}</b><span>${list.length?fmtN(t.kcal)+' kcal &middot; '+fmtN(t.protein)+' g P':''}</span></div>
     ${list.map(e=>`<div class="fd-entry" onclick="foodEditEntry('${e.id}')">
-      <div><div class="n">${esc(e.name)}</div><div class="q">${e.qtyG!=null?fmtN(e.qtyG)+' g':''}${e.protein!=null?(e.qtyG!=null?' &middot; ':'')+r1(e.protein)+' g protein':''}</div></div>
+      <div><div class="n">${esc(e.name)}</div><div class="q">${e.qtyG!=null?fmtN(e.qtyG)+' g':''}${e.protein!=null?(e.qtyG!=null?' &middot; ':'')+r1(e.protein)+' g protein':''}${e.notes==='photo estimate'?' &middot; <span style="color:var(--amber)">photo estimate</span>':''}</div></div>
       <div class="k">${fmtN(e.kcal)}</div></div>`).join('')}
     <button class="fd-add" onclick="foodOpenAdd('${key}')">+ Add to ${label.toLowerCase()}</button>
     ${list.length?`<button class="fd-add" style="border:none;color:var(--ink3);margin-top:2px" onclick="foodSaveAsMeal('${key}')">Save as meal</button>`:''}
@@ -278,7 +278,7 @@ window.foodOpenAdd=function(meal){
   const label=(MEALS.find(m=>m[0]===sheetMeal)||[,''])[1];
   openSheet('Add to '+label.toLowerCase(),`
     <div class="fd-tabs">
-      ${[['meals','Meals'],['mine','My foods'],['search','Search'],['scan','Barcode'],['quick','Quick']].map(([k,l])=>`<button data-t="${k}" class="${k===sheetTab?'on':''}" onclick="foodSheetTab('${k}')">${l}</button>`).join('')}
+      ${[['meals','Meals'],['mine','My foods'],['search','Search'],['photo','Photo'],['scan','Barcode'],['quick','Quick']].map(([k,l])=>`<button data-t="${k}" class="${k===sheetTab?'on':''}" onclick="foodSheetTab('${k}')">${l}</button>`).join('')}
     </div>
     <div class="fd-sheet-b" id="fdSheetBody"></div>`);
   window.foodSheetTab(sheetTab);
@@ -293,6 +293,12 @@ window.foodSheetTab=function(k){
   }else if(k==='mine'){
     b.innerHTML=`<input class="fd-input" id="fdMineQ" placeholder="Filter my foods" oninput="foodRenderMine()"/><div id="fdMineList" style="margin-top:10px"></div>`;
     window.foodRenderMine();
+  }else if(k==='photo'){
+    b.innerHTML=`<div class="fd-note" style="margin-top:0">Take a photo of the meal. Cortex estimates each item; check and adjust before adding. Entries are tagged "photo estimate".</div>
+      <input type="file" accept="image/*" capture="environment" id="fdPhotoIn" style="display:none" onchange="foodPhotoPicked(this)"/>
+      <button class="fd-btn" onclick="document.getElementById('fdPhotoIn').click()">Take or choose a photo</button>
+      <input class="fd-input" id="fdPhotoNote" placeholder="Optional: e.g. ate half the rice, sauce on the side" style="margin-top:10px"/>
+      <div id="fdPhotoOut" style="margin-top:12px"></div>`;
   }else if(k==='search'){
     b.innerHTML=`<div style="display:flex;gap:8px"><input class="fd-input" id="fdSearchQ" placeholder="e.g. chicken breast, greek yogurt" onkeydown="if(event.key==='Enter')foodDoSearch()"/>
       <button class="fd-btn" style="width:auto;margin:0;padding:0 16px" onclick="foodDoSearch()">Search</button></div>
@@ -593,6 +599,46 @@ function renderWeight(){
   ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:txc,boxWidth:10,font:{size:11}}}},
     scales:{x:{ticks:{color:txc,font:{size:9},maxRotation:60,autoSkip:true,maxTicksLimit:12},grid:{display:false}},y:{ticks:{color:txc,font:{size:10}},grid:{color:gc}}}}});
 }
+
+// ---------- meal photo estimate ----------
+function shrinkImage(file,max){return new Promise((res,rej)=>{const img=new Image();img.onload=()=>{
+  const k=Math.min(1,max/Math.max(img.width,img.height)),c=document.createElement('canvas');
+  c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+  res(c.toDataURL('image/jpeg',0.85));};img.onerror=rej;img.src=URL.createObjectURL(file);});}
+window.foodPhotoPicked=async function(inp){
+  const f=inp.files&&inp.files[0];if(!f)return;
+  const out=document.getElementById('fdPhotoOut');
+  out.innerHTML='<div class="fd-note">Analysing the photo&hellip; (about 10-20 seconds)</div>';
+  try{
+    const img=await shrinkImage(f,1600);
+    const r=await syncApi('/api/fitness/food/photo',{method:'POST',body:JSON.stringify({image:img,note:document.getElementById('fdPhotoNote').value||''})});
+    if(!r||!r.items||!r.items.length){out.innerHTML='<div class="fd-note">Could not read any food in that photo. Try another angle, or use Quick add.</div>';return;}
+    window._fdPhoto=r.items;
+    out.innerHTML=`<img src="${img}" style="width:100%;border-radius:var(--radius);margin-bottom:10px"/>
+      ${r.summary?`<div class="fd-note" style="margin-top:0">${esc(r.summary)}</div>`:''}
+      ${r.items.map((it,i)=>`<div class="fd-item" style="cursor:default">
+        <div style="display:flex;justify-content:space-between;gap:8px"><div class="n">${esc(it.name)}</div>
+        <label style="font-size:11px;color:var(--ink3)"><input type="checkbox" id="fpK${i}" checked/> add</label></div>
+        <div class="m">${it.confidence} confidence${it.note?' &middot; '+esc(it.note):''}</div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:6px">
+          ${[['grams','g'],['kcal','kcal'],['protein','P'],['carbs','C'],['fat','F']].map(([k,l])=>`<div><div style="font-size:9px;color:var(--ink3);font-weight:700">${l}</div>
+          <input type="number" step="any" id="fp_${k}_${i}" value="${it[k]??''}" style="width:100%;font-size:13px;padding:4px"/></div>`).join('')}
+        </div></div>`).join('')}
+      <button class="fd-btn" onclick="foodPhotoAdd()">Add to ${(MEALS.find(m=>m[0]===sheetMeal)||[,''])[1].toLowerCase()}</button>`;
+  }catch(e){out.innerHTML='<div class="fd-note">Photo analysis failed. Check your connection and try again.</div>';}
+};
+window.foodPhotoAdd=function(){
+  const items=window._fdPhoto||[];let n=0;
+  const v=(k,i)=>{const x=document.getElementById(`fp_${k}_${i}`).value;return x===''?null:+x;};
+  items.forEach((it,i)=>{
+    if(!document.getElementById('fpK'+i).checked)return;
+    foodLog.push({id:newId('fl'),date:foodDay,meal:sheetMeal,foodId:null,name:it.name,qtyG:v('grams',i),
+      kcal:r0(v('kcal',i)),protein:r1(v('protein',i)),carbs:r1(v('carbs',i)),fat:r1(v('fat',i)),notes:'photo estimate'});
+    n++;
+  });
+  if(!n){toast('Nothing ticked');return;}
+  saveFoodLog();closeSheet();renderToday();toast(n+' item'+(n===1?'':'s')+' added (photo estimate)');
+};
 
 // ---------- watch-created cardio entries: check / edit settings ----------
 // The server creates cardio entries from Samsung watch workouts. New ones are pre-filled from the
