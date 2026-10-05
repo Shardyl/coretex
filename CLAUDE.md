@@ -176,6 +176,26 @@ Payment/Recurring) drafts on `email-handling` (whose `worker._RELATED_SKILLS` ad
 rules), so project-management behaviour is trained there; Opportunity-stage and no-deal mail stays on
 `sales-first-response`.
 
+## Where Cortex files live on Drive (5 Oct 2026)
+
+The owner's rule: shared company files live where the team can see them. Moved 5 Oct 2026; folder ids did not
+change, so every `asset_folder` link and every filed `drive_id` still works.
+
+| What | Where (shared drive / path) |
+|---|---|
+| Sensa brand kit, handovers, official documents | **SENSA SHARED / CORTEX / SENSA CORTEX** (`asset_folder`), final documents in `Documents/` |
+| Sky Vision | **SENSA SHARED / CORTEX / SKY VISION CORTEX** |
+| FilmSpoke | **SENSA SHARED / CORTEX / FILMSPOKE CORTEX** |
+| Client work (proposals, quotations, briefs, deliverables) | **SENSA SHARED / SENSA CLIENTS / <client>** (`clients_drive_folder`) |
+| Terms, quotation templates, rate card | **SENSA SHARED / SENSA TERMS AND CONDITIONS TEMPLATES** (`terms_drive_folder`), old in `OLD` |
+| Tabscanner, Snap Rewards | COMPANY DOCUMENTS SHARED / CORTEX / <COMPANY> CORTEX (not the Sensa team's) |
+| Nightly DB + knowledge backups | COMPANY DOCUMENTS SHARED / CORTEX root (`1oEKRo6...`, private: never move into SENSA SHARED) |
+
+SENSA SHARED / CORTEX = `1ai3ek_67CaGsZNhIHw5WByStVQDyxpF2`. Cortex reaches all of it as rashad@sensa.digital
+(organizer on both drives). Its OAuth scope only lets it move files it created itself, so moving folders it did
+not create is done in the Drive UI. The same map is a universal rule on the `general` and `prod-asset-library`
+skills and a Talk note, so Talk answers "where is X saved" from it.
+
 ## Drive filing: latest at the top, history in Archive (11 Sep 2026)
 
 The owner's rule for every Drive folder Cortex files into:

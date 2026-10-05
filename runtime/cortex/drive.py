@@ -2,7 +2,8 @@
 
 Identity = whoever consented once at /oauth/google/start (rashad@sensa.digital), scope includes
 `drive.readonly`, so the box can read any file/folder that account can see — including each company's
-asset_folder, which lives INSIDE the Cortex Drive folder. This is the canonical way Cortex reads a
+asset_folder, its `<COMPANY> CORTEX` folder (SENSA SHARED / CORTEX for Sensa, Sky Vision and FilmSpoke;
+COMPANY DOCUMENTS SHARED / CORTEX for Tabscanner and Snap Rewards). This is the canonical way Cortex reads a
 company's brand assets. NOTE: this is a DIFFERENT identity from the chat-side Drive connector
 (hello@sensa.digital); always read company assets through here, not the connector.
 """

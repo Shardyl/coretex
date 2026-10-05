@@ -20,7 +20,7 @@ lockstep with `cortex/onboard.py` (the routine that applies the standard).
 
 | Layer | Location | Role | Access |
 |---|---|---|---|
-| **Source / masters** | Google Drive `<COMPANY> CORTEX` folder (id in `company_profiles.data.asset_folder`), under the Cortex Drive root `1oEKRo6aH4r1-HE29Qtds5DxyMlyZATEZ` | Brand kit, logos, source files the operator uploads | Box Drive OAuth `rashad@sensa.digital` (drive.readonly), via `cortex/drive.py` |
+| **Source / masters** | Google Drive `<COMPANY> CORTEX` folder (id in `company_profiles.data.asset_folder`). Sensa, Sky Vision, FilmSpoke: shared drive **SENSA SHARED / CORTEX** (`1ai3ek_67CaGsZNhIHw5WByStVQDyxpF2`, moved 5 Oct 2026 so the team can see them). Tabscanner, Snap Rewards: COMPANY DOCUMENTS SHARED / CORTEX (`1oEKRo6aH4r1-HE29Qtds5DxyMlyZATEZ`, also the nightly-backup root) | Brand kit, logos, source files the operator uploads | Box Drive OAuth `rashad@sensa.digital` (drive.readonly), via `cortex/drive.py` |
 | **Cache** | `company_profiles.data.brand` | Brand kit Cortex distils from the asset folder (colours/fonts/logos/voice) | `cortex/brand.py` |
 | **Delivery / CDN** | Cloudflare R2 bucket **`coretex-media`**, foldered **`<company-slug>/<type>/<status>/<file>`**, served at **`https://media.coretex.uk/...`** | Anything Cortex publishes that needs a public URL (logos, signature logos, newsletter & blog images, social graphics, generated media) | S3 keys `R2_*` in `/etc/cortex/cortex.env`; public via the bound custom domain |
 | **Box static (interim)** | `/opt/cortex/assets/`, served at `coretex.uk/assets/` (FastAPI mount in `api.py`) | Stop-gap public host for signature logos until R2 delivery is live | public, no auth |

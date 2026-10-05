@@ -1,7 +1,7 @@
 """Per-company brand kit.
 
 Source of truth = the company's Drive `asset_folder` (captured by the questionnaire, stored in
-`company_profiles.data.asset_folder`, living inside the Cortex Drive folder and readable via
+`company_profiles.data.asset_folder`, living in that company's `<COMPANY> CORTEX` Drive folder (see CLAUDE.md 'Where Cortex files live on Drive') and readable via
 `cortex.drive`). The STRUCTURED kit (palette / fonts / logos / gradient / voice) is cached in
 `company_profiles.data['brand']` so every builder (newsletter, web page, quotation) reads it without
 hitting Drive on each call. `refresh_files()` re-lists the Drive folder to keep logo/asset ids current.
