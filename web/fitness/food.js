@@ -58,6 +58,7 @@ function portion(f,g){
   const k=g/100;
   return {kcal:r0(f.kcal100*k),protein:r1((f.protein100||0)*k),carbs:r1((f.carbs100||0)*k),fat:r1((f.fat100||0)*k)};
 }
+function lastQty(fid){const e=foodLog.filter(x=>x.foodId===fid&&x.qtyG!=null).sort((a,b)=>((b.at||b.date)>(a.at||a.date)?1:-1))[0];return e?e.qtyG:null;}
 function lastUsed(){const m={};foodLog.forEach(e=>{if(e.foodId&&(!m[e.foodId]||e.date>m[e.foodId]))m[e.foodId]=e.date;});return m;}
 function sessionName(s){
   if(s.title)return s.title;
@@ -473,7 +474,7 @@ window.foodCopyDay=function(){
 };
 
 // ---------- add / edit sheet ----------
-let sheet=null, sheetMeal='breakfast', sheetTab='meals', scanStream=null;
+let sheet=null, sheetMeal='breakfast', sheetTab='mine', scanStream=null;
 function closeSheet(){stopScan();if(sheet){sheet.remove();sheet=null;}}
 function openSheet(title,inner){
   closeSheet();
@@ -487,7 +488,7 @@ window.foodOpenAdd=function(meal){
   const label=(MEALS.find(m=>m[0]===sheetMeal)||[,''])[1];
   openSheet('Add to '+label.toLowerCase(),`
     <div class="fd-tabs">
-      ${[['meals','Meals'],['mine','My foods'],['search','Search'],['photo','Photo'],['scan','Barcode'],['quick','Quick']].map(([k,l])=>`<button data-t="${k}" class="${k===sheetTab?'on':''}" onclick="foodSheetTab('${k}')">${l}</button>`).join('')}
+      ${[['mine','My foods'],['meals','Meals'],['search','Search'],['photo','Photo'],['scan','Barcode'],['quick','Quick']].map(([k,l])=>`<button data-t="${k}" class="${k===sheetTab?'on':''}" onclick="foodSheetTab('${k}')">${l}</button>`).join('')}
     </div>
     <div class="fd-sheet-b" id="fdSheetBody"></div>`);
   window.foodSheetTab(sheetTab);
@@ -575,7 +576,7 @@ window.foodRenderMine=function(){
   const el=document.getElementById('fdMineList');
   el.innerHTML=list.length?list.map(f=>`<div class="fd-item" onclick="foodPickSaved('${f.id}')">
       <div class="n">${f.favourite?'<span style="color:var(--amber)">&#9733;</span> ':''}${esc(f.name)}${f.brand?` <span class="fd-chip">${esc(f.brand)}</span>`:''}</div>
-      <div class="m">${fmtN(f.kcal100)} kcal &middot; ${r1(f.protein100)??'—'} g protein per 100 g${f.servingG?` &middot; ${esc(f.servingLabel||'serving')} = ${fmtN(f.servingG)} g`:''}</div></div>`).join('')
+      <div class="m">${fmtN(f.kcal100)} kcal &middot; ${r1(f.protein100)??'—'} g protein per 100 g${lastQty(f.id)!=null?` &middot; last ${fmtN(lastQty(f.id))} g`:(f.servingG?` &middot; ${esc(f.servingLabel||'serving')} = ${fmtN(f.servingG)} g`:'')}</div></div>`).join('')
     :`<div class="fd-note">${foods.length?'No match.':'Nothing saved yet. Foods you add from Search or Barcode are kept here, so your usual meals are one tap.'}</div>`;
 };
 window.foodDoSearch=async function(){
@@ -627,7 +628,9 @@ function stopScan(){if(scanStream){scanStream.getTracks().forEach(t=>t.stop());s
 function portionView(food,entry){
   stopScan();
   const sg=+food.servingG||0;
-  const grams=entry&&entry.qtyG!=null?entry.qtyG:(sg||100);
+  // New entry: start from the amount he logged LAST time for this food (he usually repeats it).
+  const lastQ=!entry&&food.id?(foodLog.filter(e=>e.foodId===food.id&&e.qtyG!=null).sort((a,b)=>((b.at||b.date)>(a.at||a.date)?1:-1))[0]||{}).qtyG:null;
+  const grams=entry&&entry.qtyG!=null?entry.qtyG:(lastQ!=null?lastQ:(sg||100));
   const saved=!!(food.id&&foods.find(f=>f.id===food.id));
   const meal=entry?entry.meal:sheetMeal;
   const inner=`<div class="fd-sheet-b">
