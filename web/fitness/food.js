@@ -167,6 +167,7 @@ function renderTodayInner(){
       <div class="fd-bar"><div style="width:${pPct}%;background:var(--blue)"></div></div>
       <div style="margin-top:6px;font-size:11px;color:var(--ink3)">Carbs ${fmtN(t.carbs)} g &middot; Fat ${fmtN(t.fat)} g</div>
       ${balance}
+      ${projectToday()}
     </div>
     ${isFuture?'':fastCard()}
     ${isFuture?'':readingsCard()}
@@ -742,6 +743,38 @@ function renderHistory(){
     scales:{x:{ticks:{color:txc,font:{size:9},maxRotation:60},grid:{display:false}},y:{ticks:{color:txc,font:{size:10}},grid:{color:gc}}}}});
 }
 
+// ---------- 5-week weight projection (7,700 kcal per kg of body fat) ----------
+const KCAL_PER_KG=7700, PROJ_DAYS=35;
+function baseWeight(){
+  const all=(typeof weighIns==='function')?weighIns():[], t=localDay(new Date());
+  const v=all.filter(w=>w.date>shiftDay(t,-7)).map(w=>w.kg);
+  if(v.length)return v.reduce((a,b)=>a+b,0)/v.length;
+  return all.length?all[all.length-1].kg:null;
+}
+// A WHOLE day's burn: full BMR (not pro rata) + movement and workouts recorded so far.
+function fullDayBurn(day){
+  const p=burnedParts(day), bmr=+foodTargets.bmr||1873;
+  return p?bmr+p.move+p.work:null;
+}
+function projLine(label,kcalDiffPerDay){
+  const b=baseWeight();if(b==null)return '';
+  const end=b+kcalDiffPerDay*PROJ_DAYS/KCAL_PER_KG, d=end-b;
+  return `<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border);font-size:13px">${label}
+    <b>${r1(end)} kg</b> <span class="${d<=0?'fd-pos':'fd-neg'}">(${d>0?'+':''}${r1(d)} kg)</span></div>`;
+}
+function projectToday(){
+  const t=totals(entriesFor(foodDay));
+  if(!t.kcal||foodDay>localDay(new Date()))return '';
+  const burn=fullDayBurn(foodDay)??(+foodTargets.bmr||1873);
+  return projLine(`If every day were like ${foodDay===localDay(new Date())?'today':'this day'}, in 5 weeks you'd weigh`,t.kcal-burn);
+}
+function projectWeek(){
+  const t=localDay(new Date()), diffs=[];
+  for(let i=1;i<=7;i++){const d=shiftDay(t,-i), e=entriesFor(d), b=fullDayBurn(d);if(e.length&&b!=null)diffs.push(totals(e).kcal-b);}
+  if(diffs.length<3)return `<div class="fd-note" style="margin:8px 0 0">The 5-week projection appears once 3 of the last 7 days have food and watch data.</div>`;
+  return projLine(`At your last ${diffs.length} days' average, in 5 weeks:`,diffs.reduce((a,b)=>a+b,0)/diffs.length);
+}
+
 // ---------- Weight (morning weigh-ins) ----------
 // Uses the app's existing bodyweight log, the same one that scores pull-ups and dips by the weight
 // on each session date, so every weigh-in also keeps those PRs honest. One entry per day.
@@ -795,7 +828,7 @@ function renderWeight(){
       <div class="fd-cell"><div class="v">${a7!=null?r1(a7):'—'}</div><div class="l">7-day avg</div></div>
       <div class="fd-cell"><div class="v">${chip(diff(a7,p7))}</div><div class="l">vs last week</div></div>
       <div class="fd-cell"><div class="v">${chip(diff(a7,a30))}</div><div class="l">vs 30 days ago</div></div>
-    </div><div class="fd-note" style="margin:8px 0 0">Daily weight swings with water and food, so judge progress by the 7-day average.</div></div>
+    </div><div class="fd-note" style="margin:8px 0 0">Daily weight swings with water and food, so judge progress by the 7-day average.</div>${projectWeek()}</div>
     <div class="chart-section">
       <div class="chart-toggle" style="margin-bottom:8px">${[[30,'30d'],[90,'90d'],[365,'1y'],[99999,'All']].map(([n,l])=>`<button class="${wtRange===n?'active':''}" onclick="foodWtRange(${n})">${l}</button>`).join('')}</div>
       <div style="position:relative;width:100%;height:210px"><canvas id="fdWtChart" role="img" aria-label="Weight trend"></canvas></div>
