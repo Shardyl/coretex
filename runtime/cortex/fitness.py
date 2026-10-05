@@ -16,7 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from psycopg.types.json import Json
 
@@ -130,7 +130,7 @@ def pull() -> dict:
     cardio = [{"id": r["uid"], "exerciseId": r["preset_uid"], "exerciseName": r["preset_name"],
                "date": r["day"].isoformat(), "duration": r["duration"], "avgHR": _num(r["avg_hr"]),
                "maxHR": _num(r["max_hr"]), "calories": _num(r["calories"]), "extra": r["extra"],
-               "nextTarget": r["next_target"], "notes": r["notes"]}
+               "nextTarget": r["next_target"], "notes": r["notes"], "watch": r.get("watch")}
               for r in db.query("select * from fitness.cardio_sessions where not deleted order by day")]
     vo2 = [{"id": r["uid"], "date": r["day"].isoformat(), "value": float(r["value"]),
             "method": r["method"], "notes": r["notes"]}
@@ -278,6 +278,10 @@ def ingest_health(doc: dict) -> dict:
                    "source=excluded.source, updated_at=now()",
                    (at, kg, _num(r.get("body_fat_pct")), (r.get("source") or "")[:120] or None))
         n["weights"] += 1
+    try:                                     # new watch workouts -> cardio log entries (best effort)
+        n["cardio"] = reconcile_watch(since=date.today() - timedelta(days=10))
+    except Exception as e:  # noqa: BLE001
+        n["cardio_error"] = str(e)[:200]
     return {"ok": True, "counts": n}
 
 
@@ -481,17 +485,19 @@ def push(doc: dict, source: str = "app") -> dict:
         db.execute(
             "insert into fitness.cardio_sessions (uid, preset_uid, preset_name, day, duration, "
             "minutes, avg_hr, max_hr, calories, distance_km, m_per_beat, extra, next_target, notes, "
-            "deleted) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "deleted, watch) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
             "on conflict (uid) do update set preset_uid=excluded.preset_uid, "
             "preset_name=excluded.preset_name, day=excluded.day, duration=excluded.duration, "
             "minutes=excluded.minutes, avg_hr=excluded.avg_hr, max_hr=excluded.max_hr, "
             "calories=excluded.calories, distance_km=excluded.distance_km, "
             "m_per_beat=excluded.m_per_beat, extra=excluded.extra, next_target=excluded.next_target, "
-            "notes=excluded.notes, deleted=cardio_sessions.deleted or excluded.deleted, updated_at=now()",
+            "notes=excluded.notes, deleted=cardio_sessions.deleted or excluded.deleted, "
+            "watch=coalesce(excluded.watch, cardio_sessions.watch), updated_at=now()",
             (r["id"], r.get("exerciseId"), r.get("exerciseName"), d, r.get("duration"), mins,
              avg_hr, _num(r.get("maxHR")), _num(r.get("calories")), dist, mpb, Json(extra),
              Json(r.get("nextTarget")) if r.get("nextTarget") is not None else None,
-             r.get("notes"), bool(r.get("deleted"))))
+             r.get("notes"), bool(r.get("deleted")),
+             Json(r["watch"]) if isinstance(r.get("watch"), dict) else None))
         counts["cardioSessions"] += 1
 
     for r in doc.get("vo2") or doc.get("vo2Records") or []:
@@ -690,5 +696,148 @@ def import_mfp_diary(diary: dict) -> dict:
                  meal if meal in ("breakfast", "lunch", "dinner", "snacks") else "snacks",
                  fid, label[:200], grams, kcal, p, c, f))
             n["rows"] += 1
+    return n
+
+
+# ---------- watch workouts -> cardio log (Samsung sessions via the Health Bridge) ----------
+# Rules agreed with the owner, 5 Oct 2026:
+#  * a watch session under 10 minutes is not a workout;
+#  * a hand-logged cardio entry on the same day and machine is LINKED to its watch session, never
+#    overwritten (the owner's numbers win);
+#  * an unlogged session from BEFORE go-live becomes a "from watch" entry with duration, heart rate and
+#    calories only, settings NOT recorded (option A: nothing guessed goes into his records);
+#  * an unlogged session from go-live on is pre-filled at JGE with the settings of his LAST session on
+#    that preset and tagged unconfirmed until he checks it in the app;
+#  * a short treadmill run ending just before a 4x4 is that 4x4's warm-up, attached to it;
+#  * a session titled "Steam Room" goes to the Steam Room preset. Walks, outdoor rides and untitled
+#    "other" sessions are left alone.
+
+WATCH_GO_LIVE = date(2026, 10, 5)
+MIN_WORKOUT_MIN = 10
+_PRESETS_WATCH = {
+    "id_w_elliptical": ("Elliptical - from watch", "Elliptical", False),
+    "id_w_treadmill": ("Treadmill - from watch", "Treadmill", False),
+    "id_w_4x4": ("HIIT 4X4 Treadmill - from watch", "Treadmill", True),
+    "id_steam": ("Steam Room", "Steam room", False),
+}
+_JGE = {"z2_30": "id_1kgluk8k", "z2_45": "id_88zxee26", "z2_67": "id_n6yi12xi", "4x4": "id_bv0krd6v"}
+
+
+def _ensure_watch_presets():
+    for uid, (name, machine, hiit) in _PRESETS_WATCH.items():
+        db.execute("insert into fitness.cardio_presets (uid, name, machine, location, is_hiit, manual_fields) "
+                   "values (%s,%s,%s,%s,%s,'[]'::jsonb) on conflict (uid) do nothing",
+                   (uid, name, machine, None if uid != "id_steam" else "JGE", hiit))
+
+
+def _dur(mins: float) -> str:
+    s = int(round(mins * 60))
+    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
+
+
+def _last_settings(preset_uid: str) -> dict:
+    """Settings from the owner's last session on this preset, distance dropped (he does not log it)."""
+    row = db.one("select extra from fitness.cardio_sessions where preset_uid=%s and not deleted "
+                 "and extra::text <> '{}' order by day desc limit 1", (preset_uid,))
+    pre = db.one("select manual_fields from fitness.cardio_presets where uid=%s", (preset_uid,)) or {}
+    fields = pre.get("manual_fields") or []
+    out = {}
+    for k, v in ((row or {}).get("extra") or {}).items():
+        try:
+            label = str(fields[int(k)].get("label", ""))
+        except (ValueError, IndexError, AttributeError):
+            label = ""
+        if not re.search(r"distance", label, re.I):
+            out[k] = v
+    return out
+
+
+def reconcile_watch(since: date | None = None) -> dict:
+    _ensure_watch_presets()
+    linked = {r["u"] for r in db.query(
+        "select watch->>'uid' u from fitness.cardio_sessions where watch is not null union "
+        "select watch->>'warmup_uid' from fitness.cardio_sessions where watch ? 'warmup_uid'") if r["u"]}
+    q = ("select uid, day, start_at, end_at, type_name, title, kcal, avg_hr, max_hr, "
+         "extract(epoch from end_at-start_at)/60 as mins from fitness.health_sessions "
+         "where extract(epoch from end_at-start_at)/60 >= %s")
+    params: list = [MIN_WORKOUT_MIN]
+    if since:
+        q += " and day >= %s"
+        params.append(since)
+    sess = db.query(q + " order by start_at", tuple(params))
+    presets = {p["uid"]: p for p in db.query("select uid, name, machine, is_hiit from fitness.cardio_presets")}
+    n = {"linked": 0, "created_history": 0, "created_new": 0, "warmups": 0, "steam": 0, "skipped": 0}
+
+    # warm-ups: a 10-20 min treadmill session ending within 15 min of a 4x4's start
+    def is_4x4(s):
+        return s["type_name"] == "TREADMILL" and 20 <= float(s["mins"]) <= 45 and (s["max_hr"] or 0) >= 160
+    warm = {}
+    for s in sess:
+        if is_4x4(s):
+            for w in sess:
+                if (w["type_name"] == "TREADMILL" and w["uid"] != s["uid"] and float(w["mins"]) <= 20
+                        and timedelta(0) <= s["start_at"] - w["end_at"] <= timedelta(minutes=15)):
+                    warm[s["uid"]] = w
+                    warm[w["uid"]] = None          # consumed as a warm-up, not its own entry
+
+    for s in sess:
+        if s["uid"] in linked or (s["uid"] in warm and warm[s["uid"]] is None):
+            continue
+        tn, title = s["type_name"], (s["title"] or "")
+        if "steam" in title.lower():
+            kind = "steam"
+        elif tn == "ELLIPTICAL":
+            kind = "elliptical"
+        elif tn == "TREADMILL":
+            kind = "4x4" if is_4x4(s) else "treadmill"
+        else:
+            n["skipped"] += 1
+            continue
+        mins = float(s["mins"])
+        wu = warm.get(s["uid"])
+        watch = {"uid": s["uid"]}
+        if wu:
+            watch.update(warmup_uid=wu["uid"], warmup_min=round(float(wu["mins"]), 1))
+            n["warmups"] += 1
+        # 1. a hand-logged entry that day on the same kind of machine -> link only
+        if kind != "steam":
+            cands = db.query(
+                "select c.uid, c.minutes, c.watch from fitness.cardio_sessions c join fitness.cardio_presets p "
+                "on p.uid=c.preset_uid where c.day=%s and not c.deleted and c.watch is null "
+                "and lower(p.machine)=%s and p.is_hiit=%s and c.uid not like 'w:%%'",
+                (s["day"], "elliptical" if kind == "elliptical" else "treadmill", kind == "4x4"))
+            if cands:
+                best = min(cands, key=lambda c: abs(float(c["minutes"] or 0) - mins))
+                db.execute("update fitness.cardio_sessions set watch=%s, updated_at=now() where uid=%s",
+                           (Json({**watch, "confirmed": True, "settings": "manual"}), best["uid"]))
+                n["linked"] += 1
+                continue
+        # 2. no hand-logged entry -> create one
+        new = s["day"] >= WATCH_GO_LIVE
+        if kind == "steam":
+            preset, extra, conf, how = "id_steam", {}, True, "none"
+            n["steam"] += 1
+        elif new and kind == "elliptical":
+            preset = _JGE["z2_67"] if mins >= 60 else _JGE["z2_45"] if mins >= 40 else _JGE["z2_30"]
+            extra = _last_settings(preset) or {"1": "17", "2": "60"}   # his stated defaults: level 17, 60 rpm
+            conf, how = False, "prefilled"
+        elif new and kind == "4x4":
+            preset, extra, conf, how = _JGE["4x4"], _last_settings(_JGE["4x4"]), False, "prefilled"
+        else:
+            preset = {"elliptical": "id_w_elliptical", "4x4": "id_w_4x4"}.get(kind, "id_w_treadmill")
+            extra, conf, how = {}, not new, "not recorded"
+        watch.update(confirmed=conf, settings=how)
+        db.execute(
+            "insert into fitness.cardio_sessions (uid, preset_uid, preset_name, day, duration, minutes, avg_hr, "
+            "max_hr, calories, extra, notes, watch) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "on conflict (uid) do nothing",
+            ("w:" + s["uid"], preset, presets.get(preset, {}).get("name") or _PRESETS_WATCH.get(preset, ("",))[0],
+             s["day"], _dur(mins), round(mins, 2),
+             round(float(s["avg_hr"])) if s["avg_hr"] is not None else None,
+             round(float(s["max_hr"])) if s["max_hr"] is not None else None,
+             round(float(s["kcal"])) if s["kcal"] is not None else None,
+             Json(extra), "From watch" + ("" if conf or how != "prefilled" else ", check settings"),
+             Json(watch)))
+        n["created_new" if new else "created_history"] += 1
     return n
 

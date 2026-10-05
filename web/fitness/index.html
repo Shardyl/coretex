@@ -966,7 +966,7 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='19';                         // keep in step with CACHE in sw.js
+const APP_VERSION='20';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1977,7 +1977,13 @@ function renderCardioHistory(){
         <div class="hist-ex" style="color:var(--blue)">${r.exerciseName||r.exerciseId}</div>
         <div class="hist-sets">${r.duration||'—'} · ${r.avgHR?r.avgHR+' bpm avg':''} ${r.calories?'· '+r.calories+' kcal':''}</div>
         ${extraStr?`<div class="hist-sets" style="margin-top:2px">${extraStr}</div>`:''}
-        ${r.notes?`<div class="hist-note">${r.notes}</div>`:''}
+        ${r.notes&&!/^From watch/.test(r.notes)?`<div class="hist-note">${r.notes}</div>`:''}
+        ${r.watch?`<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <span class="tag ${r.watch.confirmed?'tag-blue':'tag-amber'}" style="font-size:9px">${r.watch.confirmed?'Watch':'From watch, check settings'}</span>
+          ${r.watch.warmup_min?`<span style="font-size:11px;color:var(--ink3)">+ ${Math.round(r.watch.warmup_min)} min warm-up</span>`:''}
+          ${r.watch.settings==='not recorded'?`<span style="font-size:11px;color:var(--ink3)">settings not recorded</span>`:''}
+          ${!r.watch.confirmed||r.watch.settings!=='manual'?`<button class="btn-sm" onclick="event.stopPropagation();editWatchCardio('${r.id}')">${r.watch.confirmed?'Edit':'Check'}</button>`:''}
+        </div>`:''}
       </div>
       <div>
         <div class="hist-total" style="font-size:14px;color:var(--blue)">${r.maxHR||'—'}<div style="font-size:10px;color:var(--ink3);font-weight:600">max HR</div>${isPR?'<div class="tag tag-amber" style="font-size:9px;margin-top:3px">PR</div>':''}</div>
@@ -2900,6 +2906,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=19"></script>
+<script src="food.js?v=20"></script>
 </body>
 </html>

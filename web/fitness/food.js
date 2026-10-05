@@ -560,6 +560,35 @@ function renderWeight(){
     scales:{x:{ticks:{color:txc,font:{size:9},maxRotation:60,autoSkip:true,maxTicksLimit:12},grid:{display:false}},y:{ticks:{color:txc,font:{size:10}},grid:{color:gc}}}}});
 }
 
+// ---------- watch-created cardio entries: check / edit settings ----------
+// The server creates cardio entries from Samsung watch workouts. New ones are pre-filled from the
+// last session on that preset and wait here for the owner to confirm; history ones carry no settings.
+window.editWatchCardio=function(id){
+  const r=cardioSessions.find(s=>s.id===id);if(!r)return;
+  const opts=cardioExercises.filter(e=>!e.deleted).map(e=>`<option value="${e.id}" ${e.id===r.exerciseId?'selected':''}>${esc(e.name)}</option>`).join('');
+  const fieldsFor=exId=>{
+    const ex=getCardioExDef(exId), f=(ex&&ex.manualFields)||[];
+    return f.map((x,i)=>/distance/i.test(x.label)?'':`<div class="form-group"><label class="form-label">${esc(x.label)}</label>
+      <input type="number" step="any" id="wcF${i}" value="${esc((r.extra||{})[i]??'')}"/></div>`).join('')||'<div class="fd-note">This preset has no settings to fill.</div>';
+  };
+  openModal('Check session',`
+    <div class="fd-note" style="margin-top:0">${fmtDate(r.date)} &middot; ${r.duration||''} &middot; avg ${r.avgHR??'—'} / max ${r.maxHR??'—'} bpm${r.calories?' &middot; '+r.calories+' kcal':''} (from your watch)</div>
+    <div class="form-group"><label class="form-label">Session</label><select id="wcPreset" onchange="document.getElementById('wcFields').innerHTML=window._wcFields(this.value)">${opts}</select></div>
+    <div id="wcFields">${fieldsFor(r.exerciseId)}</div>`,
+  function(){
+    const exId=document.getElementById('wcPreset').value, ex=getCardioExDef(exId);
+    const extra={};
+    ((ex&&ex.manualFields)||[]).forEach((x,i)=>{const el=document.getElementById('wcF'+i);if(el&&el.value!=='')extra[i]=el.value;});
+    r.exerciseId=exId;r.exerciseName=ex?ex.name:r.exerciseName;r.extra=extra;
+    r.watch=Object.assign({},r.watch||{},{confirmed:true,settings:Object.keys(extra).length?'manual':(r.watch&&r.watch.settings)||'not recorded'});
+    if(/^From watch/.test(r.notes||''))r.notes='From watch';
+    saveCardio();closeModal();
+    if(typeof renderCardioHistory==='function')renderCardioHistory();
+    toast('Session saved');
+  });
+  window._wcFields=fieldsFor;
+};
+
 // ---------- My foods ----------
 function renderFoodsPage(){
   const el=document.getElementById('page-food-foods');
