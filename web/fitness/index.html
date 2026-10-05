@@ -238,7 +238,6 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
   </div>
 </div>
 
-<input type="file" id="screenshotInput" accept="image/*" style="display:none"/>
 
 <div class="app">
   <div class="topbar">
@@ -354,12 +353,9 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
     <!-- ═══ CARDIO PAGES ═══ -->
     <div id="page-cardio-log" class="page" data-section="cardio">
       <div class="section-label">New cardio session</div>
-      <div class="upload-zone" id="uploadZone">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style="margin:0 auto;display:block"><rect x="2" y="6" width="28" height="20" rx="4" stroke="var(--blue)" stroke-width="1.5"/><circle cx="10" cy="14" r="2.5" fill="var(--blue)"/><path d="M2 22l8-6 6 5 4-4 10 7" stroke="var(--blue)" stroke-width="1.5" stroke-linejoin="round"/></svg>
-        <div class="upload-zone-text">Scan Samsung Health screenshot</div>
-        <div class="upload-zone-sub">Auto-fills duration, HR &amp; calories</div>
+      <div class="report-card" style="font-size:12px;color:var(--ink2);line-height:1.5;margin-bottom:12px">
+        Workouts you start on your watch appear in <b>History</b> on their own within the hour, pre-filled with your last settings. Tap <b>Check</b> there to confirm or change the session and location. Use this form only for a session without the watch.
       </div>
-      <div class="ai-scanning" id="aiScanning"><div style="font-size:20px;margin-bottom:6px">⟳</div>Reading screenshot...</div>
       <div class="card" id="cardioFormCard">
         <div class="form-group">
           <label class="form-label">Session</label>
@@ -978,7 +974,7 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='28';                         // keep in step with CACHE in sw.js
+const APP_VERSION='29';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1915,50 +1911,6 @@ function getCardioExtra(){
 }
 
 // ─── SCREENSHOT AI EXTRACTION ─────────────────────────────────────────────────
-async function extractFromScreenshot(file){
-  // The screenshot goes to Cortex, which calls Claude with the key held on the box. Nothing to
-  // enter on the phone, nothing to leak from localStorage, and the usage shows up in Cortex.
-  document.getElementById('uploadZone').style.display='none';
-  const scanning=document.getElementById('aiScanning');
-  scanning.style.display='block';
-  scanning.querySelector('div').style.animation='spin 1s linear infinite';
-
-  try{
-    const base64=await fileToBase64(file);
-    const mediaType=file.type||'image/jpeg';
-    const res=await fetch(API_BASE+'/api/fitness/scan',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+syncToken()},
-      body:JSON.stringify({image:'data:'+mediaType+';base64,'+base64})
-    });
-    if(!res.ok){
-      if(res.status===401){setSyncState('auth');toast('Sign in to Cortex to scan screenshots');}
-      else toast('Scan failed ('+res.status+') — type the numbers in');
-      console.error('Screenshot scan failed',res.status);
-      return;
-    }
-    const json=await res.json();
-    // Populate form
-    if(json.duration)document.getElementById('cardioDuration').value=json.duration;
-    if(json.avgHR)document.getElementById('cardioAvgHR').value=json.avgHR;
-    if(json.maxHR)document.getElementById('cardioMaxHR').value=json.maxHR;
-    if(json.calories)document.getElementById('cardioCalories').value=json.calories;
-    // Only try to match activity type if user hasn't already chosen a preset
-    const alreadySelected=document.getElementById('cardioExSelect').value;
-    if(!alreadySelected&&json.activityType){
-      const match=cardioExercises.find(e=>e.machine.toLowerCase().includes(json.activityType.toLowerCase())||json.activityType.toLowerCase().includes(e.machine.toLowerCase().split(' ')[0]));
-      if(match){document.getElementById('cardioExSelect').value=match.id;renderCardioProtocolFields(match.id);renderCardioLastBox(match.id);}
-    }
-    if(json.distance){setTimeout(()=>{const df=document.getElementById('cf_distance');if(df)df.value=json.distance;},150);}
-    toast('Screenshot scanned successfully!');
-  }catch(e){
-    toast('Could not read screenshot — please fill in manually');
-    console.error(e);
-  }finally{
-    scanning.style.display='none';
-    document.getElementById('uploadZone').style.display='';
-  }
-}
 
 function fileToBase64(file){
   return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
@@ -2800,8 +2752,6 @@ function init(){
     renderCardioProtocolFields(id);
     renderCardioLastBox(id);
   });
-  document.getElementById('uploadZone').addEventListener('click',()=>document.getElementById('screenshotInput').click());
-  document.getElementById('screenshotInput').addEventListener('change',e=>{if(e.target.files[0])extractFromScreenshot(e.target.files[0]);e.target.value='';});
 
   document.getElementById('cardioSaveBtn').addEventListener('click',()=>{
     const exId=document.getElementById('cardioExSelect').value;
@@ -2931,6 +2881,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=28"></script>
+<script src="food.js?v=29"></script>
 </body>
 </html>
