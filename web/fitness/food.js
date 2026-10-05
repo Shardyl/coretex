@@ -14,6 +14,19 @@ let histChart=null;
 // ---------- helpers ----------
 function localDay(d){const z=new Date(d.getTime()-d.getTimezoneOffset()*60000);return z.toISOString().slice(0,10);}
 function shiftDay(day,n){const d=new Date(day+'T12:00:00');d.setDate(d.getDate()+n);return localDay(d);}
+// Android's installed-app time box only highlights hh/mm and cannot be edited (5 Oct 2026), so every time
+// in the Food screens is two plain dropdowns writing into a hidden input with the original id.
+function timePick(id,val,allowEmpty){
+  const [h,m]=(val||'').split(':');
+  const opt=(n,sel)=>Array.from({length:n},(_,i)=>String(i).padStart(2,'0')).map(v=>`<option ${v===sel?'selected':''}>${v}</option>`).join('');
+  const upd=`document.getElementById('${id}').value=(document.getElementById('${id}_h').value&&document.getElementById('${id}_m').value)?document.getElementById('${id}_h').value+':'+document.getElementById('${id}_m').value:''`;
+  const blank=allowEmpty?'<option value="">--</option>':'';
+  return `<span style="display:inline-flex;gap:4px;align-items:center">
+    <select id="${id}_h" class="fd-input" style="width:auto;padding:8px 6px" onchange="${upd}">${blank}${opt(24,h)}</select>
+    <span style="font-weight:800">:</span>
+    <select id="${id}_m" class="fd-input" style="width:auto;padding:8px 6px" onchange="${upd}">${blank}${opt(60,m)}</select>
+    <input type="hidden" id="${id}" value="${val||''}"/></span>`;
+}
 function nowAt(){return foodDay===localDay(new Date())?new Date().toISOString():null;}   // eaten-at for food logged on the day
 function newId(p){return p+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function r0(v){return v==null||isNaN(v)?null:Math.round(v);}
@@ -210,13 +223,13 @@ function fastCard(){
       <div class="fd-sub">Fasting${since&&isToday?' &middot; since '+sinceTxt:''}</div>
       ${since&&isToday?`<div class="fd-big" style="font-size:28px" id="fdFastLive" data-since="${since.toISOString()}">${longHM(Date.now()-since)}</div>
         <div style="font-size:12px;color:var(--ink3);margin-top:2px">${(Math.floor((Date.now()-since)/360000)/10).toFixed(1)} hours total</div>`:`<div class="fd-note" style="margin:4px 0">${since?'':'Tap &quot;Close eating window&quot; tonight so tomorrow&#39;s fast length is known.'}</div>`}
-      <div style="display:flex;gap:8px;margin-top:8px"><input type="time" id="fdBreakT" class="fd-input" value="${nowHM()}" style="max-width:130px"/>
+      <div style="display:flex;gap:8px;margin-top:8px">${timePick('fdBreakT',nowHM())}
       <button class="fd-btn" style="width:auto;margin:0;padding:0 16px" onclick="foodFastSet('brokeAt','fdBreakT')">Break fast</button></div></div>`;
   }
   const len=fastLength(foodDay);
   if(!f.closedAt)return `<div class="card" style="padding:12px 16px">
     <div class="fd-sub">Fast ${len!=null?'&middot; '+longHM(len):''} &middot; broken at ${tOf(f.brokeAt)}</div>
-    <div style="display:flex;gap:8px;margin-top:8px"><input type="time" id="fdCloseT" class="fd-input" value="${nowHM()}" style="max-width:130px"/>
+    <div style="display:flex;gap:8px;margin-top:8px">${timePick('fdCloseT',nowHM())}
     <button class="fd-btn sec" style="width:auto;margin:0;padding:0 16px" onclick="foodFastSet('closedAt','fdCloseT')">Close eating window</button>
     <button class="btn-sm" onclick="foodFastClear('brokeAt')">Undo</button></div></div>`;
   return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
@@ -289,7 +302,7 @@ function readingsCard(){
     <input class="fd-input" id="fdRdNote" placeholder="Note (optional), e.g. 2 slices biltong 5 min before" style="margin-top:8px;font-size:14px"/>
     <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
       <span style="font-size:11px;color:var(--ink3);font-weight:700;white-space:nowrap">TAKEN AT</span>
-      <input type="time" id="fdRdT" class="fd-input" value="${foodDay===localDay(new Date())?nowHM():''}" style="max-width:130px"/></div>
+      ${timePick('fdRdT',foodDay===localDay(new Date())?nowHM():'',true)}</div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <select id="fdCtx" class="fd-input" style="font-size:14px">${['pre break-fast','after eating','random'].map(c=>`<option ${c===ctx?'selected':''}>${c}</option>`).join('')}</select>
       <button class="fd-btn" style="width:auto;margin:0;padding:0 18px" onclick="foodSaveReadings()">Save</button></div></div>`;
@@ -641,7 +654,7 @@ function portionView(food,entry){
       <div class="m">Per 100 g: ${fmtN(food.kcal100)} kcal &middot; P ${r1(food.protein100)??'—'} &middot; C ${r1(food.carbs100)??'—'} &middot; F ${r1(food.fat100)??'—'}</div></div>
     <div class="form-group"><label class="form-label">Amount (g)</label><input class="fd-input" type="number" id="fdG" value="${r1(grams)}" oninput="foodPortionCalc()"/></div>
     ${sg?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${[0.5,1,1.5,2,3].map(n=>`<button class="btn-sm" onclick="document.getElementById('fdG').value=${r1(sg*n)};foodPortionCalc()">${n} &times; ${esc(food.servingLabel||'serving')}</button>`).join('')}</div>`:''}
-    <div class="form-group"><label class="form-label">Eaten at</label><input type="time" id="fdAtT" class="fd-input" value="${entry&&entry.at?tOf(entry.at):(entry?'':(foodDay===localDay(new Date())?nowHM():''))}"/></div>
+    <div class="form-group"><label class="form-label">Eaten at</label>${timePick('fdAtT',entry&&entry.at?tOf(entry.at):(entry?'':(foodDay===localDay(new Date())?nowHM():'')),true)}</div>
     <div class="form-group"><label class="form-label">Meal</label><select id="fdMeal" class="fd-input">${MEALS.map(([k,l])=>`<option value="${k}" ${k===meal?'selected':''}>${l}</option>`).join('')}</select></div>
     <div class="card" id="fdCalc"></div>
     ${saved?'':`<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:6px 0"><input type="checkbox" id="fdKeep" checked/> Save to My foods</label>`}
@@ -692,7 +705,7 @@ window.foodEditEntry=function(id){
     <div class="form-group"><label class="form-label">Name</label><input type="text" id="fdEN" value="${esc(e.name)}"/></div>
     <div class="two-col"><div class="form-group"><label class="form-label">Calories</label><input type="number" id="fdEK" value="${e.kcal??''}"/></div>
     <div class="form-group"><label class="form-label">Protein (g)</label><input type="number" id="fdEP" value="${e.protein??''}"/></div></div>
-    <div class="form-group"><label class="form-label">Eaten at</label><input type="time" id="fdET" value="${e.at?tOf(e.at):''}"/></div>
+    <div class="form-group"><label class="form-label">Eaten at</label>${timePick('fdET',e.at?tOf(e.at):'',true)}</div>
     <button class="fd-btn ghost" onclick="closeModal();foodDeleteEntry('${e.id}')">Remove from log</button>`,
   function(){
     e.name=document.getElementById('fdEN').value.trim()||e.name;
