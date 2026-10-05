@@ -227,13 +227,13 @@ function fastCard(){
 window.foodFastSet=function(field,inputId){
   const v=document.getElementById(inputId).value;if(!v){toast('Pick a time');return;}
   let f=fastDay(foodDay);if(!f){f={date:foodDay,brokeAt:null,closedAt:null};fastDays.push(f);}
-  f[field]=atTime(foodDay,v);
+  f[field]=atTime(foodDay,v);if(f.cleared)f.cleared=f.cleared.filter(x=>x!==field);
   if(field==='closedAt'&&f.brokeAt&&f.closedAt<f.brokeAt){f.closedAt=atTime(shiftDay(foodDay,1),v);}   // window closed after midnight
   saveFasts();renderToday();toast(field==='brokeAt'?'Fast broken':'Eating window closed');
 };
 window.foodFastClear=function(field){const f=fastDay(foodDay);if(!f)return;
   if(!confirm(field==='brokeAt'?'Undo the break-fast time? Your fast will show as still running.':'Reopen the eating window?'))return;
-  f[field]=null;saveFasts();renderToday();};
+  f[field]=null;f.cleared=Array.from(new Set([...(f.cleared||[]),field]));saveFasts();renderToday();};
 
 setInterval(()=>{const el=document.getElementById('fdFastLive');if(el&&el.offsetParent){const ms=Date.now()-new Date(el.dataset.since);el.textContent=longHM(ms);const n=el.nextElementSibling;if(n)n.textContent=(Math.floor(ms/360000)/10).toFixed(1)+' hours total';}},30000);
 

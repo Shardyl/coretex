@@ -621,9 +621,14 @@ def _push_inner(doc: dict, source: str = "app") -> dict:
         d = _day(r.get("date"))
         if not d:
             continue
+        # An empty time from a device never wipes a time the server has (a stale or reset phone would
+        # otherwise erase it, 5 Oct 2026); only a deliberate Undo/Reopen, sent as `cleared`, does.
+        clr = set(r.get("cleared") or [])
         _ex("insert into fitness.fast_days (day, broke_at, closed_at) values (%s,%s,%s) on conflict (day) do update "
-            "set broke_at=excluded.broke_at, closed_at=excluded.closed_at, updated_at=now()",
-            (d, _ts(r.get("brokeAt")), _ts(r.get("closedAt"))))
+            "set broke_at=case when %s then excluded.broke_at else coalesce(excluded.broke_at, fast_days.broke_at) end, "
+            "closed_at=case when %s then excluded.closed_at else coalesce(excluded.closed_at, fast_days.closed_at) end, "
+            "updated_at=now()",
+            (d, _ts(r.get("brokeAt")), _ts(r.get("closedAt")), "brokeAt" in clr, "closedAt" in clr))
         counts["fastDays"] += 1
     for r in doc.get("readings") or []:
         if not r.get("id"):
