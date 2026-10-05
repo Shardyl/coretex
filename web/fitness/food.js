@@ -276,11 +276,12 @@ function readingsCard(){
       <div style="position:relative;height:90px;margin-bottom:10px"><canvas id="fdCgmChart" role="img" aria-label="Glucose today"></canvas></div>`:''}
     <div class="fd-sub" style="margin-bottom:6px">Ketones and glucose${g!=null?` &middot; GKI ${g}`:''}</div>
     ${list.map(x=>`<div class="fd-entry" style="cursor:default;padding:5px 0"><div class="n" style="font-size:13px">${x.kind==='ketones'?'Ketones '+r1(x.value)+' mmol/L':'Glucose '+gShow(x.value)+(u==='mgdl'?' mg/dL':' mmol/L')}</div>
-      <div class="q">${tOf(x.at)} &middot; ${esc(readingState(x).label)} <button class="hist-del" onclick="foodDelReading('${x.id}')">&times;</button></div></div>`).join('')}
+      <div class="q">${tOf(x.at)} &middot; ${esc(readingState(x).label)}${x.notes?' &middot; '+esc(x.notes):''} <button class="hist-del" onclick="foodDelReading('${x.id}')">&times;</button></div></div>`).join('')}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
       <div><div style="font-size:10px;color:var(--ink3);font-weight:700">KETONES mmol/L</div><input class="fd-input" type="number" step="0.1" inputmode="decimal" id="fdKet"/></div>
       <div><div style="font-size:10px;color:var(--ink3);font-weight:700">GLUCOSE <a href="#" onclick="foodToggleGUnit();return false" style="color:var(--teal)">${u==='mgdl'?'mg/dL':'mmol/L'}</a></div><input class="fd-input" type="number" step="0.1" inputmode="decimal" id="fdGlu"/></div>
     </div>
+    <input class="fd-input" id="fdRdNote" placeholder="Note (optional), e.g. 2 slices biltong 5 min before" style="margin-top:8px;font-size:14px"/>
     <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
       <span style="font-size:11px;color:var(--ink3);font-weight:700;white-space:nowrap">TAKEN AT</span>
       <input type="time" id="fdRdT" class="fd-input" value="${foodDay===localDay(new Date())?nowHM():''}" style="max-width:130px"/></div>
@@ -295,8 +296,13 @@ window.foodSaveReadings=function(){
   const tv=document.getElementById('fdRdT').value;
   if(!tv){toast('Set the time it was taken');return;}
   const at=atTime(foodDay,tv);
-  if(k!==''){const v=+k;if(!(v>=0&&v<15)){toast('Ketones look wrong');return;}readings.push({id:newId('rd'),at,kind:'ketones',value:r1(v),context:ctx});}
-  if(g!==''){let v=+g;if(gUnit()==='mgdl')v=v/18;if(!(v>1&&v<35)){toast('Glucose looks wrong');return;}readings.push({id:newId('rd'),at,kind:'glucose',value:Math.round(v*100)/100,context:ctx});}
+  if(k!==''){const v=+k;if(!(v>=0&&v<15)){toast('Ketones look wrong');return;}readings.push({id:newId('rd'),at,kind:'ketones',value:r1(v),context:ctx,notes:(document.getElementById('fdRdNote').value||'').trim()||null});}
+  const note=(document.getElementById('fdRdNote').value||'').trim()||null;
+  if(g!==''){let v=+g;
+    // A meter in mg/dL typed into mmol/L mode (94 instead of 5.2): no real reading is over 30 mmol/L, so convert.
+    if(gUnit()==='mgdl'||v>30){if(gUnit()!=='mgdl')toast(v+' looks like mg/dL: saved as '+r1(v/18.0182)+' mmol/L');v=v/18.0182;}
+    if(!(v>1&&v<35)){toast('Glucose looks wrong');return;}
+    readings.push({id:newId('rd'),at,kind:'glucose',value:Math.round(v*100)/100,context:ctx,notes:note});}
   saveReadings();renderToday();toast('Reading saved');
 };
 window.foodDelReading=function(id){const i=readings.findIndex(x=>x.id===id);if(i<0)return;readings.splice(i,1);saveReadings();renderToday();};
