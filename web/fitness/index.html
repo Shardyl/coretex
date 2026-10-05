@@ -978,7 +978,7 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='27';                         // keep in step with CACHE in sw.js
+const APP_VERSION='28';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -993,7 +993,9 @@ const SYNC_SENT_KEY='fitness_sync_sent_v1';    // ids last pushed, so local dele
 const SYNC_AT_KEY='fitness_sync_at';
 let _syncTimer=null,_syncing=false,_syncPending=false,_syncState='idle',_applyingServer=false;
 
-function syncToken(){try{return localStorage.getItem(FIT_KEY_STORE)||localStorage.getItem(SYNC_TOKEN_KEY)||'';}catch(e){return'';}}
+// A real key is a long printable-ASCII token. Anything else (e.g. a link pasted with a '...' in it) cannot
+// go in an HTTP header: fetch throws before sending and the pill said 'Sync failed' (5 Oct 2026).
+function syncToken(){try{const k=localStorage.getItem(FIT_KEY_STORE)||localStorage.getItem(SYNC_TOKEN_KEY)||'';return /^[!-~]{20,}$/.test(k)?k:'';}catch(e){return'';}}
 
 // Every row needs a stable id. Historic rows predate ids, so derive the same key the server does:
 // one exercise on one day is one session.
@@ -2929,6 +2931,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=27"></script>
+<script src="food.js?v=28"></script>
 </body>
 </html>
