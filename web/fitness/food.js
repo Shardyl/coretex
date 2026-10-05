@@ -165,8 +165,14 @@ function renderTodayInner(){
       <button onclick="foodShiftDay(1)" aria-label="Next day" ${foodDay>=shiftDay(localDay(new Date()),7)?'disabled style="opacity:0.3"':''}>&rsaquo;</button>
     </div>
     <div class="card">
-      <div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
-      <div class="fd-big" style="color:${remain>=0?'var(--teal)':'var(--amber)'}">${fmtN(Math.abs(remain))} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kcal</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px">
+        <div><div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
+        <div class="fd-big" style="color:${remain>=0?'var(--teal)':'var(--amber)'}">${fmtN(Math.abs(remain))} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kcal</span></div></div>
+        ${(()=>{const bp=burnedParts(foodDay);if(!h||isFuture)return '';
+          return `<div style="display:flex;gap:16px;text-align:right">
+            <div><div style="font-size:20px;font-weight:800">${h.steps!=null?fmtN(h.steps):'—'}</div><div class="fd-sub" style="font-size:10px">Steps</div></div>
+            <div><div style="font-size:20px;font-weight:800">${bp?fmtN(bp.move+bp.work):'—'}</div><div class="fd-sub" style="font-size:10px">Active kcal</div></div></div>`;})()}
+      </div>
       <div class="fd-bar${t.kcal>tgt?' over':''}"><div style="width:${kPct}%"></div></div>
       <div class="fd-row">
         <div class="fd-cell" onclick="foodEditTargets()" style="cursor:pointer"><div class="v">${fmtN(tgt)}</div><div class="l">Target</div></div>
@@ -433,19 +439,17 @@ function weighCard(){
 function healthCard(h,sess){
   const sync=healthData.lastSync?new Date(healthData.lastSync).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):null;
   if(!h&&!sess.length){
-    return `<div class="card"><div class="fd-sub" style="margin-bottom:4px">Watch</div>
+    return `<div class="card"><div class="fd-sub" style="margin-bottom:4px">Activity</div>
       <div class="fd-note" style="margin:0">${sync?'No Health Connect data for this day yet. Last sync '+sync+'.':'Not connected yet. Install Cortex Health Bridge on your phone to pull steps, calories and workouts from Samsung Health.'}</div></div>`;
   }
   const cells=[];
   if(h){
-    if(h.steps!=null)cells.push([fmtN(h.steps),'Steps']);
-    if(h.activeKcal!=null)cells.push([fmtN(h.activeKcal),'Active kcal']);
     if(h.restingHR!=null)cells.push([fmtN(h.restingHR),'Resting HR']);
     if(h.sleepMin!=null)cells.push([Math.floor(h.sleepMin/60)+'h '+String(Math.round(h.sleepMin%60)).padStart(2,'0'),'Sleep']);
     if(h.hrvMs!=null)cells.push([fmtN(h.hrvMs),'HRV ms']);
-    if(h.distanceM!=null)cells.push([r1(h.distanceM/1000),'km']);
   }
-  return `<div class="card"><div class="fd-sub">Watch${sync?` &middot; synced ${sync}`:''}</div>
+  if(!cells.length&&!sess.length)return `<div class="card"><div class="fd-sub">Activity${sync?` &middot; synced ${sync}`:''}</div><div class="fd-note" style="margin:4px 0 0">No workouts logged on the watch this day.</div></div>`;
+  return `<div class="card"><div class="fd-sub">Activity${sync?` &middot; synced ${sync}`:''}</div>
     ${cells.length?`<div class="fd-row">${cells.map(([v,l])=>`<div class="fd-cell"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('')}</div>`:''}
     ${sess.map(s=>`<div class="fd-entry" style="cursor:default"><div><div class="n">${esc(sessionName(s))}</div>
       <div class="q">${new Date(s.start).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})} &middot; ${fmtN(s.minutes)} min${s.avgHR!=null?` &middot; avg ${fmtN(s.avgHR)} / max ${fmtN(s.maxHR)} bpm`:''}</div></div>
