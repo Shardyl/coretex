@@ -1484,6 +1484,15 @@ while a local change is queued — a pull once erased a cardio session seconds a
   `version` header may need raising if login breaks); the owner typed the login into the app's Connect Libre form
   (setting `libre_follower`, never echoed). `cortex-libre.timer` polls every 5 min into `fitness.cgm` (server-owned,
   NOT in the sync doc; the pull returns the last 3 days).
+- **Sleep + recovery (5 Oct 2026, app v42, Bridge 1.3.0):** Food > Recovery page + sleep tile on Today's top card.
+  Bridge 1.3.0 sends the main sleep session's stages, start/end, overnight HR avg/low (5-min), breathing, HRV,
+  source (Eight Sleep mattress writes to Health Connect; he wears NO watch at night) and `day_resting_hr` (Samsung
+  watch, lowest 10-min avg 06:00-20:00 excluding workouts +10 min). Stored in new `fitness.health_daily` columns,
+  COALESCED on upsert so an older bridge never blanks them. The sleep SCORE is not in Health Connect:
+  `cortex/eightsleep.py` reads Eight Sleep's unofficial app API (pyEight method) with his login typed into the
+  Recovery page's Connect form (setting `eightsleep_login`, never echoed) into `fitness.sleep_8`;
+  `cortex-eightsleep.timer` every 30 min. The app's OAuth client id/secret live in
+  `/etc/cortex/eightsleep_client.json` (kept out of git). A night belongs to the day it ENDED (wake day).
 - **Reading the history:** Feb to ~9 Apr 2026 has 1-exercise rows dated the day after a session (Mon
   chest press, Thu shoulder press/curls): next-day corrections, not extra sessions. Training was ~2
   sessions/week throughout; count adjacent-day entries as one session. Most Feb-Mar cardio (weekly
