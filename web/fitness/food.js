@@ -128,6 +128,7 @@ const st=document.createElement('style');st.textContent=css;document.head.append
 
 // ---------- router ----------
 window.renderFood=function(sub){
+  try{renderMission();}catch(e){}
   if(sub==='today')renderToday();
   else if(sub==='history')renderHistory();
   else if(sub==='foods')renderFoodsPage();
@@ -479,6 +480,81 @@ window.foodEightConnect=async function(){
     toast(j.days!=null?'Connected: '+j.days+' nights pulled':'Connected');
     eightCard();if(typeof syncNow==='function')syncNow(false);
   }catch(err){toast('Could not reach Cortex');}
+};
+
+// ---------- mission strip (top of every screen): goal weight + date, progress bar, one pep line ----------
+// The goal numbers are the owner's (foodTargets.mission, synced). Everything shown is computed from his own
+// logs: 7-day average weight, a straight-line pace from start to goal, logging streaks, real deficits.
+function missionDays(a,b){return Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/86400000);}
+function missionStats(){
+  const m=foodTargets.mission;if(!m||!m.goalKg||!m.startKg||!m.goalDate||!m.startDate)return null;
+  const today=localDay(new Date()), all=weighIns().filter(w=>w.date>=m.startDate);
+  const cur=baseWeight(), total=m.startKg-m.goalKg;
+  const span=missionDays(m.startDate,m.goalDate), day=missionDays(m.startDate,today)+1, left=missionDays(today,m.goalDate);
+  const lost=cur!=null?m.startKg-cur:null;
+  const pct=lost!=null&&total>0?Math.max(0,Math.min(100,lost/total*100)):0;
+  const paceKg=m.startKg-total*Math.min(1,Math.max(0,(day-1)/span));          // where the straight line says today
+  const vsPace=cur!=null?paceKg-cur:null;                                      // + = ahead
+  const fat=m.leanKg&&cur?(1-m.leanKg/cur)*100:null;
+  const low=all.length?Math.min(...all.map(w=>w.kg)):null;
+  const todayW=all.find(w=>w.date===today);
+  let streak=0;for(let d=today;;d=shiftDay(d,-1)){if(d<m.startDate)break;if(entriesFor(d).length)streak++;else if(d!==today)break;}
+  const yd=shiftDay(today,-1), ye=entriesFor(yd), yb=fullDayBurn(yd), yDef=ye.length&&yb!=null?yb-totals(ye).kcal:null;
+  let eta=null;
+  if(lost!=null&&lost>0&&day>=14){const rate=lost/(day-1);eta=shiftDay(today,Math.ceil((cur-m.goalKg)/rate));}
+  return {m,today,cur,total,day,left,lost,pct,paceKg,vsPace,fat,low,todayW,streak,yDef,eta};
+}
+function missionPep(s){
+  const m=s.m;
+  if(s.cur!=null&&s.cur<=m.goalKg)return `Goal reached: ${r1(s.cur)} kg. You did it.`;
+  if(s.todayW&&s.low!=null&&s.todayW.kg<=s.low&&s.todayW.kg<m.startKg)return `New low this morning: ${r1(s.todayW.kg)} kg. Down ${r1(m.startKg-s.todayW.kg)} kg since day one.`;
+  if(m.milestoneKg&&s.cur!=null&&s.cur<=m.milestoneKg)return `Milestone hit: under ${r1(m.milestoneKg)} kg${m.milestoneFat?', sub-'+m.milestoneFat+'%':''}. Now for ${r1(m.goalKg)}.`;
+  if(s.vsPace!=null&&s.day>=7&&s.vsPace>=0.3)return `${r1(s.vsPace)} kg ahead of pace. Keep doing exactly this.`;
+  if(s.yDef!=null&&s.yDef>=500)return `Yesterday: ${fmtN(s.yDef)} kcal deficit, about ${r1(s.yDef/KCAL_PER_KG)} kg of fat gone.`;
+  if(s.streak>=3)return `${s.streak} days logged in a row. This is how the 70s happen.`;
+  if(s.vsPace!=null&&s.day>=7&&s.vsPace<=-0.3)return `${r1(-s.vsPace)} kg behind pace. One tight week closes it.`;
+  if(s.vsPace!=null&&s.day>=7)return `Right on pace. Stay the course.`;
+  return `Day ${s.day}. Log everything, weigh in every morning.`;
+}
+window.renderMission=function(){
+  const el=document.getElementById('missionStrip');if(!el)return;
+  const s=missionStats();
+  if(!s){el.innerHTML=`<button onclick="foodEditMission()" style="width:100%;margin:8px 0 2px;background:none;border:0.5px dashed var(--border2);border-radius:var(--radius);padding:8px;font-size:12px;font-weight:700;color:var(--ink3);cursor:pointer">Set your mission goal</button>`;return;}
+  const m=s.m, span=m.startKg-m.goalKg, pos=kg=>Math.max(0,Math.min(100,(m.startKg-kg)/span*100));
+  const ms=m.milestoneKg?pos(m.milestoneKg):null, pace=pos(s.paceKg);
+  el.innerHTML=`<div onclick="foodEditMission()" style="cursor:pointer;margin:8px 0 2px;padding:9px 11px;border-radius:var(--radius);background:var(--bg,transparent);border:0.5px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+      <div style="font-size:12px;font-weight:800">Mission: ${r1(m.goalKg)} kg${m.goalFat?' &middot; '+m.goalFat+'% fat':''}</div>
+      <div style="font-size:11px;color:var(--ink3);white-space:nowrap">Day ${s.day} &middot; ${s.left>0?s.left+' days left':'deadline'}</div>
+    </div>
+    <div style="position:relative;height:8px;border-radius:4px;background:var(--border);margin:18px 0 4px">
+      <div style="position:absolute;left:0;top:0;bottom:0;width:${s.pct}%;border-radius:4px;background:var(--teal)"></div>
+      ${ms!=null?`<div title="Milestone" style="position:absolute;left:${ms}%;top:-3px;bottom:-3px;width:2px;background:var(--ink2)"></div><div style="position:absolute;left:${ms}%;top:-15px;transform:translateX(-50%);font-size:9px;font-weight:700;color:var(--ink2);white-space:nowrap">${r1(m.milestoneKg)}${m.milestoneFat?' &middot; '+m.milestoneFat+'%':''}</div>`:''}
+      <div title="Pace" style="position:absolute;left:calc(${pace}% - 4px);top:-4px;width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid var(--amber)"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink3)">
+      <span>${r1(m.startKg)}</span>
+      <span>${s.cur!=null?'<b style="color:var(--ink)">'+r1(s.cur)+' kg</b> 7-day avg'+(s.fat!=null?' &middot; ~'+Math.round(s.fat)+'% fat':''):'no weigh-in yet'}</span>
+      <span>${r1(m.goalKg)}</span>
+    </div>
+    <div style="margin-top:6px;font-size:12px;font-weight:700;color:var(--teal)">${esc(missionPep(s))}</div>
+    ${s.eta?`<div style="font-size:10px;color:var(--ink3);margin-top:2px">At your actual rate you reach ${r1(m.goalKg)} kg around ${fmtDate(s.eta)}.</div>`:''}
+  </div>`;
+};
+window.foodEditMission=function(){
+  const m=foodTargets.mission||{};
+  const f=(id,l,v,t)=>`<div class="form-group"><label class="form-label">${l}</label><input type="${t||'number'}" step="0.1" id="${id}" value="${v==null?'':v}"/></div>`;
+  openModal('Mission',`
+    ${f('msGk','Goal weight (kg)',m.goalKg)}${f('msGf','Goal body fat (%)',m.goalFat)}${f('msGd','Goal date',m.goalDate,'date')}
+    ${f('msMk','Milestone weight (kg)',m.milestoneKg)}${f('msMf','Milestone body fat (%)',m.milestoneFat)}
+    ${f('msSk','Start weight (kg)',m.startKg)}${f('msSd','Start date',m.startDate,'date')}${f('msLk','Lean mass from DEXA (kg)',m.leanKg)}
+    <div class="fd-note">Body fat is estimated as 1 minus lean mass over your 7-day average weight, so it holds only while lean mass holds. The amber marker is where a straight line from start to goal says you should be today.</div>`,
+  function(){
+    const v=id=>{const x=document.getElementById(id).value;return x===''?null:x;};
+    foodTargets.mission={goalKg:+v('msGk')||null,goalFat:+v('msGf')||null,goalDate:v('msGd'),milestoneKg:+v('msMk')||null,
+      milestoneFat:+v('msMf')||null,startKg:+v('msSk')||null,startDate:v('msSd'),leanKg:+v('msLk')||null};
+    saveTargets();closeModal();renderMission();toast('Mission saved');
+  });
 };
 
 // ---------- creatine (daily dose, default 10 g) ----------
@@ -1083,4 +1159,5 @@ window.foodDeleteFood=function(id){
 
 // Food is the home screen: init() ran before this file loaded, so draw it now.
 try{if(typeof currentSection!=='undefined'&&currentSection==='food')window.renderFood(currentSubpage.food);}catch(e){}
+try{renderMission();}catch(e){}
 })();

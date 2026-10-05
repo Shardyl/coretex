@@ -221,6 +221,11 @@ def set_targets(t: dict) -> dict:
         v = _num((t or {}).get(k))
         if v is not None and v > 0:
             clean[k] = round(v)
+    m = (t or {}).get("mission")
+    if isinstance(m, dict):                 # the goal strip: numbers + ISO dates, set by the owner in the app
+        mc = {k: _num(m.get(k)) for k in ("goalKg", "goalFat", "milestoneKg", "milestoneFat", "startKg", "leanKg")}
+        mc.update({k: str(m.get(k))[:10] for k in ("goalDate", "startDate") if m.get(k)})
+        clean["mission"] = {k: v for k, v in mc.items() if v is not None}
     if clean:
         db.setting_set("fitness_targets", {**(db.setting_get("fitness_targets") or {}), **clean})
     return targets()
