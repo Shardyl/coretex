@@ -35,14 +35,22 @@ function totals(list){
 function healthDay(day){return (healthData.days||[]).find(d=>d.date===day)||null;}
 // Burned = BMR (pro rata through today) + the watch's ACTIVE calories. Health Connect's own TOTAL
 // uses a generic body's basal rate, so it is not used. No watch data that day -> no figure.
-function burnedFor(day){
+// Burned = BMR (pro rata through today) + everyday movement (Health Connect active kcal, which on his
+// phone EXCLUDES workouts) + watch workouts (Samsung SDK) minus the resting burn inside them, which the
+// BMR already counts. Steam room is left out: heat raises heart rate without real energy cost.
+function burnedParts(day){
   const h=healthDay(day), today=localDay(new Date());
   if(day>today||!h||(h.activeKcal==null&&h.steps==null))return null;
   const bmr=+foodTargets.bmr||1873;
   let frac=1;
   if(day===today){const n=new Date();frac=(n.getHours()*60+n.getMinutes())/1440;}
-  return Math.round(bmr*frac+(+h.activeKcal||0));
+  const work=sessionsOn(day).filter(s=>!/steam/i.test(s.title||'')&&s.kcal!=null)
+    .reduce((a,s)=>a+Math.max(0,s.kcal-bmr*(s.minutes||0)/1440),0);
+  const p={bmr:Math.round(bmr*frac),move:Math.round(+h.activeKcal||0),work:Math.round(work)};
+  p.total=p.bmr+p.move+p.work;
+  return p;
 }
+function burnedFor(day){const p=burnedParts(day);return p?p.total:null;}
 // Owner's rule: anything under 10 minutes is not a workout (watch false starts, short walks). Ignore it.
 const MIN_WORKOUT_MIN=10;
 function sessionsOn(day){return (healthData.sessions||[]).filter(s=>s.date===day&&(s.minutes==null||s.minutes>=MIN_WORKOUT_MIN));}
@@ -151,6 +159,7 @@ function renderTodayInner(){
         <div class="fd-cell"><div class="v">${fmtN(t.kcal)}</div><div class="l">Eaten</div></div>
         <div class="fd-cell"><div class="v">${burned!=null?fmtN(burned):'—'}</div><div class="l">${isFuture?'Planned day':'Burned'+(isToday&&burned!=null?' so far':'')}</div></div>
       </div>
+      ${(()=>{const bp=burnedParts(foodDay);return bp?`<div style="margin-top:8px;font-size:11px;color:var(--ink3);text-align:right">Burned: BMR ${fmtN(bp.bmr)} &middot; Movement ${fmtN(bp.move)} &middot; Workouts ${fmtN(bp.work)}</div>`:'';})()}
       <div style="margin-top:12px;display:flex;justify-content:space-between;font-size:12px;font-weight:700">
         <span>Protein</span><span>${fmtN(t.protein)} / ${fmtN(ptgt)} g</span>
       </div>

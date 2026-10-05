@@ -974,7 +974,7 @@ function saveBodyweight(){try{localStorage.setItem(BW_KEY,JSON.stringify(bodywei
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='29';                         // keep in step with CACHE in sw.js
+const APP_VERSION='30';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1566,6 +1566,15 @@ function populateLiftHistoryFilters(){
   exSel.innerHTML='<option value="all">All exercises</option>'+allEx.map(e=>`<option value="${e}">${e}</option>`).join('');
 }
 
+// The watch's weights workout for a day (Samsung SDK via the Health Bridge), shown above that day's lifts.
+// Matched by date only: the lifting log records exercises, not a start or end time.
+function liftWatchHeader(date){
+  const d=String(date).slice(0,10);
+  const ss=((healthData&&healthData.sessions)||[]).filter(s=>s.date===d&&/WEIGHT|STRENGTH/i.test(s.typeName||'')&&(s.minutes||0)>=10);
+  if(!ss.length)return'';
+  return ss.map(s=>`<div style="margin:10px 0 4px;padding:8px 12px;border-radius:var(--radius);background:var(--blue-light);font-size:12px;color:var(--blue-dark)">
+    <b>Weights session</b> &middot; ${fmtDate(d)} &middot; ${Math.round(s.minutes)} min${s.avgHR!=null?' &middot; avg '+Math.round(s.avgHR)+' / max '+Math.round(s.maxHR)+' bpm':''}${s.kcal!=null?' &middot; '+Math.round(s.kcal)+' kcal':''}</div>`).join('');
+}
 function renderLiftHistory(){
   const wkId=document.getElementById('histWk').value;
   const filterEx=document.getElementById('histEx').value;
@@ -1577,7 +1586,8 @@ function renderLiftHistory(){
   if(q)rows=rows.filter(r=>(r.notes||'').toLowerCase().includes(q)||r.exercise.toLowerCase().includes(q));
   const el=document.getElementById('histList');
   if(!rows.length){el.innerHTML='<div style="text-align:center;padding:3rem;color:var(--ink3)">No sessions found</div>';return;}
-  el.innerHTML=rows.map(r=>{
+  el.innerHTML=rows.map((r,ri)=>{
+    const dayHdr=(ri===0||String(rows[ri-1].date).slice(0,10)!==String(r.date).slice(0,10))?liftWatchHeader(r.date):'';
     const rLoad=liftLoad(r);
     const isPR=!r.isManual&&rLoad!==null&&prMap[r.exercise]!==undefined&&rLoad>=prMap[r.exercise];
     const idx=liftSessions.indexOf(r);
@@ -1588,7 +1598,7 @@ function renderLiftHistory(){
     const manualSummary=isManual&&r.manualData&&exDef?.manualFields
       ?exDef.manualFields.map((f,i)=>r.manualData[i]?`${r.manualData[i]}`:null).filter(Boolean).join(' / ')
       :'';
-    return`<div class="hist-item" onclick="showExDetail('${r.exercise.replace(/'/g,"\\'")}')">
+    return dayHdr+`<div class="hist-item" onclick="showExDetail('${r.exercise.replace(/'/g,"\\'")}')">
       <div><div class="hist-date-main">${d[0]}<br>${d[1]}</div><div class="hist-date-day">${dayStr(r.date)}</div></div>
       <div>
         <div class="hist-ex">${r.exercise}</div>
@@ -2881,6 +2891,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=29"></script>
+<script src="food.js?v=30"></script>
 </body>
 </html>

@@ -1447,6 +1447,9 @@ while a local change is queued — a pull once erased a cardio session seconds a
   are pre-filled at JGE from the last session on that preset and tagged unconfirmed until checked in the app; a
   10-20 min treadmill ending within 15 min of a 4x4 is its warm-up; title "Steam Room" -> preset `id_steam`.
   `watch` is pushed by the app with `coalesce` so an old client never erases it. Creatine: `fitness.supplements`.
+- **Burned (app, 5 Oct 2026):** BMR pro rata + Health Connect active kcal (on his S24 this is everyday
+  movement ONLY, workouts excluded) + Samsung-SDK workout kcal minus the BMR share of each workout's minutes;
+  steam room excluded. Lifting history shows that day's watch weights session above the lifts (date match).
 - **Fasting, readings, CGM (5 Oct 2026):** `fitness.fast_days` (break-fast / window-close times) and
   `fitness.readings` (finger-prick ketones/glucose, mmol/L) ride the sync doc. FreeStyle Libre CGM: `cortex/libre.py`
   reads a LibreLinkUp FOLLOWER account (unofficial community API, region redirect to api-<region>.libreview.io,
