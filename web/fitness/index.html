@@ -278,7 +278,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
         <div id="lastBox" style="display:none"></div>
         <div class="two-col form-group">
           <div><label class="form-label">Date</label><input type="date" id="liftDateIn"/></div>
-          <div><label class="form-label">Weight (kg / BW)</label><input type="text" id="wtIn" placeholder="e.g. 90 or BW"/></div>
+          <div><label class="form-label">Weight (kg / BW)</label><input type="text" id="wtIn" placeholder="e.g. 90, BW or BW+10"/><div id="bwHint" style="display:none;font-size:11px;color:var(--ink3);margin-top:4px"></div></div>
         </div>
         <div id="liftSetsArea">
           <div class="form-group">
@@ -464,6 +464,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
     <div id="page-food-weight" class="page" data-section="food"></div>
     <div id="page-food-fasting" class="page" data-section="food"></div>
     <div id="page-food-recovery" class="page" data-section="food"></div>
+    <div id="page-food-bloods" class="page" data-section="food"></div>
 
     <div id="page-workouts-lifts" class="page" data-section="workouts">
       <div class="section-label">Lifting plans</div>
@@ -907,11 +908,11 @@ const MEALS_KEY='fitness_meals_v1';
 const SUPP_KEY='fitness_supplements_v1';
 const FAST_KEY='fitness_fastdays_v1';
 const READ_KEY='fitness_readings_v1';
-const CGM_KEY='fitness_cgm_v1';
+const CGM_KEY='fitness_cgm_v1', LABS_KEY='fitness_labs_v1';
 
 let liftSessions=[], liftWorkouts=[], cardioSessions=[], cardioExercises=[], vo2Records=[], bodyweightLog=[];
 // Food + Health Connect. healthData is server-owned (written by the companion app), cached here only.
-let foods=[], foodLog=[], savedMeals=[], supplements=[], fastDays=[], readings=[], cgmData=[], foodTargets={kcal:2350,protein:178,bmr:1873,creatine:10}, healthData={days:[],sessions:[],weights:[],lastSync:null};
+let labsData={results:[],wishlist:[]}, foods=[], foodLog=[], savedMeals=[], supplements=[], fastDays=[], readings=[], cgmData=[], foodTargets={kcal:2350,protein:178,bmr:1873,creatine:10}, healthData={days:[],sessions:[],weights:[],lastSync:null};
 
 function loadAll(){
   // Lift sessions
@@ -947,6 +948,7 @@ function loadAll(){
   try{const d=localStorage.getItem(FAST_KEY);if(d)fastDays=JSON.parse(d);}catch(e){}
   try{const d=localStorage.getItem(READ_KEY);if(d)readings=JSON.parse(d);}catch(e){}
   try{const d=localStorage.getItem(CGM_KEY);if(d)cgmData=JSON.parse(d);}catch(e){}
+  try{const d=localStorage.getItem(LABS_KEY);if(d)labsData=JSON.parse(d);}catch(e){}
   try{const d=localStorage.getItem(TARGETS_KEY);if(d)foodTargets=Object.assign(foodTargets,JSON.parse(d));}catch(e){}
   try{const d=localStorage.getItem(HEALTH_KEY);if(d)healthData=JSON.parse(d);}catch(e){}
   ensureIds();
@@ -981,7 +983,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='44';                         // keep in step with CACHE in sw.js
+const APP_VERSION='45';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1198,6 +1200,7 @@ function applyServerState(state,force){
   if(state.targets)foodTargets=Object.assign({},foodTargets,state.targets);
   if(state.health){healthData=state.health;saveHealth();}
   if(state.cgm){cgmData=state.cgm;store(CGM_KEY,cgmData);}
+  if(state.labs){labsData=state.labs;store(LABS_KEY,labsData);}
   saveLift();saveLiftWorkouts();saveCardio();saveCardioExercises();saveVO2();saveBodyweight();
   {const cut=new Date(Date.now()-120*86400000).toISOString().slice(0,10);foodLog=foodLog.filter(e=>!e.date||e.date>=cut);}   // full history lives on Cortex
   saveFoods();saveFoodLog();saveMeals();saveSupplements();saveFasts();saveReadings();saveTargets();
@@ -1228,14 +1231,37 @@ function initSync(){
 // Bodyweight-dependent lifts (pull-ups, dips) are logged as "BW". To score them
 // as volume load we need the bodyweight that applied ON THE DAY of the session,
 // otherwise a 6 kg swing silently rewrites years of history.
+// Since 5 Oct 2026 (owner's call) that is the 7-DAY AVERAGE of weigh-ins up to the session date, so one
+// heavy or light morning does not move the score; with no weigh-in that week, the latest one before it.
 function bwAt(dateStr){
   if(!bodyweightLog.length)return null;
-  const log=[...bodyweightLog].sort((a,b)=>new Date(a.date)-new Date(b.date));
-  const t=new Date(dateStr);
+  const log=[...bodyweightLog].sort((a,b)=>a.date<b.date?-1:1);
+  const d=String(dateStr).slice(0,10), from=new Date(new Date(d+'T12:00:00').getTime()-6*86400000).toISOString().slice(0,10);
+  const wk=log.filter(e=>e.date>=from&&e.date<=d).map(e=>+e.kg);
+  if(wk.length)return Math.round(wk.reduce((a,b)=>a+b,0)/wk.length*10)/10;
   let match=null;
-  for(const e of log){if(new Date(e.date)<=t)match=e;else break;}
-  return(match||log[0]).kg;
+  for(const e of log){if(e.date<=d)match=e;else break;}
+  return +(match||log[0]).kg;
 }
+// Pull-ups, chin-ups and dips are bodyweight lifts: logged as "BW" or "BW+10" (10 kg added on a belt).
+function isBWExercise(name){return /pull.?ups?|chin.?ups?|\bdips?\b/i.test(name||'');}
+// A plain number typed for a bodyweight lift (Aug-Oct 2026 entries like 88/89) becomes BW on the next form.
+function bwFormValue(name,v){
+  const raw=String(v==null?'':v).trim();
+  if(!isBWExercise(name))return raw;
+  if(raw===''||(/^\d+(\.\d+)?$/.test(raw)&&+raw>=50&&+raw<=130))return 'BW';
+  return raw;
+}
+function bwHintText(){
+  const v=(document.getElementById('wtIn')||{}).value||'', ex=(document.getElementById('exSelect')||{}).value||'';
+  const m=/^bw\s*(?:\+\s*([\d.]+))?$/i.exec(v.trim());
+  if(!m||!isBWExercise(ex))return '';
+  const bw=bwAt(new Date().toISOString().slice(0,10));
+  if(bw==null)return 'Log a weigh-in on Food > Today so BW has a number';
+  const add=m[1]?+m[1]:0;
+  return 'BW = '+bw+' kg (7-day avg)'+(add?' + '+add+' = '+(Math.round((bw+add)*10)/10)+' kg':'');
+}
+function updateBwHint(){const h=document.getElementById('bwHint');if(h){const t=bwHintText();h.textContent=t;h.style.display=t?'':'none';}}
 function latestBW(){
   if(!bodyweightLog.length)return null;
   return[...bodyweightLog].sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
@@ -1256,8 +1282,10 @@ function getPRReps(exName){const v=liftSessions.filter(s=>s.exercise===exName).m
 function liftKg(r){
   const raw=(r.weight===undefined||r.weight===null)?'':String(r.weight).trim();
   const n=parseFloat(raw.replace(/[^0-9.]/g,''));
+  const bwm=/^(?:bw|bodyweight)\s*(?:\+\s*([\d.]+))?$/i.exec(raw);
+  if(bwm){const b=bwAt(r.date);return b==null?null:Math.round((b+(bwm[1]?+bwm[1]:0))*10)/10;}   // BW or BW+added
   if(!isNaN(n)&&n>0)return n;                       // numeric weight logged
-  if(/^(bw|bodyweight)$/i.test(raw)||raw===''||raw==='—')return bwAt(r.date); // resolve BW
+  if(raw===''||raw==='—')return bwAt(r.date);
   return null;
 }
 function liftLoad(r){
@@ -1392,7 +1420,7 @@ function bestCardioEff(sessions,exDef){
 const SUBNAVS={
   lifts:[{label:'Log',key:'log'},{label:'History',key:'history'},{label:'Reports',key:'reports'},{label:'Progress',key:'progress'}],
   cardio:[{label:'Log',key:'log'},{label:'History',key:'history'},{label:'Reports',key:'reports'},{label:'Progress',key:'progress'}],
-  food:[{label:'Today',key:'today'},{label:'Weight',key:'weight'},{label:'Fasting',key:'fasting'},{label:'Recovery',key:'recovery'},{label:'History',key:'history'},{label:'My foods',key:'foods'}],
+  food:[{label:'Today',key:'today'},{label:'Weight',key:'weight'},{label:'Fasting',key:'fasting'},{label:'Recovery',key:'recovery'},{label:'Bloods',key:'bloods'},{label:'History',key:'history'},{label:'My foods',key:'foods'}],
   workouts:[{label:'Lifting',key:'lifts'},{label:'Cardio',key:'cardio'}]
 };
 let currentSection='food';
@@ -1533,6 +1561,8 @@ function renderLastBox(){
   if(!last){
     box.style.display='none';clearNtFields();
     document.getElementById('restIn').value=exDef?.rest||'';
+    if(isBWExercise(exName))document.getElementById('wtIn').value='BW';
+    updateBwHint();
     return;
   }
   const isPR=isLoadPR(last);
@@ -1540,7 +1570,7 @@ function renderLastBox(){
   const lastSets=last.sets||[last.set1||0,last.set2||0,last.set3||0];
   if(nt&&nt.sets&&nt.sets.length){
     nt.sets.forEach((v,i)=>{const inp=document.getElementById(`s${i+1}`);if(inp)inp.value=v||'';const wrap=document.getElementById(`s${i+1}wrap`);const lbl=document.getElementById(`s${i+1}label`);if(i===sc-1&&wrap){wrap.classList.add('target-set');if(lbl)lbl.textContent=`Set ${i+1} — target`;document.getElementById('targetHint').style.display='';document.getElementById('targetHint').textContent='Pre-filled from your saved target';}});
-    document.getElementById('wtIn').value=nt.wt||last.weight||'';
+    document.getElementById('wtIn').value=bwFormValue(exName,nt.wt||last.weight||'');
   }else{
     lastSets.forEach((v,i)=>{const inp=document.getElementById(`s${i+1}`);if(inp)inp.value=v||'';});
     const lastS=parseFloat(lastSets[sc-1])||0;
@@ -1552,12 +1582,13 @@ function renderLastBox(){
     const inp=document.getElementById(`s${sc}`);if(inp)inp.value=targetS;
     document.getElementById('targetHint').style.display='';
     document.getElementById('targetHint').textContent='Amber = nudged target from last session';
-    document.getElementById('wtIn').value=last.weight||'';
+    document.getElementById('wtIn').value=bwFormValue(exName,last.weight||'');
   }
   document.getElementById('restIn').value=exDef?.rest||last.rest||'';
   clearNtFields();
   for(let i=1;i<sc;i++){const s=document.getElementById(`s${i}`);const n=document.getElementById(`nt${i}`);if(s&&n)n.value=s.value||'';}
   document.getElementById('ntWt').value=document.getElementById('wtIn').value||last.weight||'';
+  updateBwHint();
   updateLiftTotals();
   const hasSavedTarget=nt&&(nt.sets||nt.wt||nt.note);
   box.style.display='';
@@ -2737,7 +2768,7 @@ function init(){
   buildSetsRow(3,false);buildSetsRow(3,true);
   document.getElementById('wkSelect').addEventListener('change',()=>{populateExerciseDropdown(document.getElementById('wkSelect').value);document.getElementById('exSelect').value='';document.getElementById('lastBox').style.display='none';clearLiftForm();});
   document.getElementById('exSelect').addEventListener('change',()=>{for(let i=1;i<=currentSetCount;i++)delete document.getElementById(`nt${i}`)?.dataset?.manuallyEdited;renderLastBox();});
-  document.getElementById('wtIn').addEventListener('input',()=>{const n=document.getElementById('ntWt');if(!n.dataset.manuallyEdited)n.value=document.getElementById('wtIn').value;});
+  document.getElementById('wtIn').addEventListener('input',()=>{updateBwHint();const n=document.getElementById('ntWt');if(!n.dataset.manuallyEdited)n.value=document.getElementById('wtIn').value;});
   document.getElementById('ntWt').addEventListener('input',()=>{document.getElementById('ntWt').dataset.manuallyEdited='1';});
 
   document.getElementById('liftSaveBtn').addEventListener('click',()=>{
@@ -2913,6 +2944,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=44"></script>
+<script src="food.js?v=45"></script>
 </body>
 </html>

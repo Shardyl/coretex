@@ -135,6 +135,7 @@ window.renderFood=function(sub){
   else if(sub==='weight')renderWeight();
   else if(sub==='fasting')renderFasting();
   else if(sub==='recovery')renderRecovery();
+  else if(sub==='bloods')renderBloods();
 };
 window.renderFoodCurrent=function(){
   if(typeof currentSection!=='undefined'&&currentSection==='food')window.renderFood(currentSubpage.food);
@@ -560,6 +561,103 @@ window.foodEditMission=function(){
       milestoneFat:+v('msMf')||null,startKg:+v('msSk')||null,startDate:v('msSd'),leanKg:+v('msLk')||null};
     saveTargets();closeModal();renderMission();toast('Mission saved');
   });
+};
+
+// ---------- Bloods: lab results by panel, year on year, plus the next-test checklist ----------
+// Server-owned (fitness.lab_results via the pull); values are the lab's own, flags computed on the server.
+const LAB_PANELS=['Metabolic','Lipids','Liver','Kidney','Iron','Vitamins','Minerals','Thyroid','Hormones','Inflammation','Blood count','Screening','Urine','Heavy metals','Body composition','Other'];
+function labVal(r){if(!r)return '—';return r.value!=null?(Math.round(r.value*1000)/1000).toLocaleString():esc(r.text||'—');}
+function labRange(r){
+  if(!r)return '';
+  if(r.low!=null&&r.high!=null)return r.low+'–'+r.high;
+  if(r.high!=null)return '< '+r.high;
+  if(r.low!=null)return '> '+r.low;
+  return esc(r.ref||'');
+}
+let labsOpen=null;
+function renderBloods(){
+  const el=document.getElementById('page-food-bloods');
+  const res=(labsData&&labsData.results)||[], wish=(labsData&&labsData.wishlist)||[];
+  const blood=res.filter(r=>r.panel!=='Body composition');
+  const dates=[...new Set(blood.map(r=>r.date))].sort().slice(-3);
+  const latest=dates[dates.length-1];
+  const flagged=blood.filter(r=>r.date===latest&&r.flag);
+  const byPanel={};
+  blood.forEach(r=>{(byPanel[r.panel]=byPanel[r.panel]||{});(byPanel[r.panel][r.marker]=byPanel[r.panel][r.marker]||{})[r.date]=r;});
+  const due=latest?shiftDay(latest,365):null;
+  const yr=d=>new Date(d+'T12:00:00').toLocaleDateString('en-GB',{month:'short',year:'numeric'});
+  const cell=(r)=>`<div style="text-align:right;${r&&r.flag?'color:var(--amber);font-weight:800':''}">${labVal(r)}${r&&r.flag?(r.flag==='high'?' ↑':' ↓'):''}</div>`;
+  const panels=LAB_PANELS.filter(p=>byPanel[p]).map(p=>{
+    const rows=Object.entries(byPanel[p]);
+    const nFlag=rows.filter(([m,v])=>v[latest]&&v[latest].flag).length;
+    const open=labsOpen===null?nFlag>0:labsOpen===p;
+    return `<div class="card" style="padding:10px 12px">
+      <div onclick="foodLabsToggle('${p}')" style="display:flex;justify-content:space-between;cursor:pointer;align-items:center">
+        <div style="font-size:13px;font-weight:800">${p}</div>
+        <div style="font-size:11px;color:${nFlag?'var(--amber)':'var(--ink3)'};font-weight:700">${nFlag?nFlag+' out of range':rows.length+(rows.length===1?' marker':' markers')+', all in range'}</div></div>
+      ${open?`<div style="display:grid;grid-template-columns:1fr ${dates.map(()=>'56px').join(' ')} 74px;gap:4px 8px;font-size:12px;margin-top:8px;align-items:baseline">
+        <div class="fd-sub" style="font-size:10px">Marker</div>${dates.map(d=>`<div class="fd-sub" style="font-size:10px;text-align:right">${yr(d)}</div>`).join('')}<div class="fd-sub" style="font-size:10px;text-align:right">Range</div>
+        ${rows.map(([m,v])=>{const any=v[latest]||v[dates[dates.length-2]]||Object.values(v)[0];
+          return `<div>${esc(m)}<span style="color:var(--ink3);font-size:10px"> ${esc(any.unit||'')}</span></div>${dates.map(d=>cell(v[d])).join('')}<div style="text-align:right;color:var(--ink3);font-size:10px">${labRange(any)}</div>`;}).join('')}
+      </div>`:''}
+    </div>`;}).join('');
+  const body=res.filter(r=>r.panel==='Body composition'), bdate=body.length?body[body.length-1].date:null;
+  const pr={high:0,medium:1,low:2};
+  const todo=wish.filter(w=>!w.done).sort((a,b)=>(pr[a.priority]??3)-(pr[b.priority]??3));
+  const doneW=wish.filter(w=>w.done);
+  el.innerHTML=`<div class="card"><div class="fd-row" style="margin-top:0">
+      <div class="fd-cell"><div class="v">${latest?yr(latest):'—'}</div><div class="l">Last bloods</div></div>
+      <div class="fd-cell"><div class="v" style="${flagged.length?'color:var(--amber)':''}">${flagged.length}</div><div class="l">Out of range</div></div>
+      <div class="fd-cell"><div class="v">${due?yr(due):'—'}</div><div class="l">Next due</div></div>
+    </div>
+    ${flagged.length?`<div class="fd-note" style="margin:10px 0 0">Out of range last time: ${flagged.map(r=>esc(r.marker)+' '+labVal(r)).join(', ')}. Flags use the lab's own ranges; they are questions for your doctor, not a diagnosis.</div>`:''}
+    </div>
+    ${panels||'<div class="card"><div class="fd-note" style="margin:0">No lab results yet.</div></div>'}
+    ${body.length?`<div class="card" style="padding:10px 12px"><div style="font-size:13px;font-weight:800">Body composition scan &middot; ${yr(bdate)}</div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:4px 8px;font-size:12px;margin-top:8px">
+      ${body.filter(r=>r.date===bdate).map(r=>`<div>${esc(r.marker)}</div><div style="text-align:right">${labVal(r)} <span style="color:var(--ink3);font-size:10px">${esc(r.unit||'')}</span></div>`).join('')}</div>
+      <div class="fd-note" style="margin:8px 0 0">${esc(body[0].lab||'')}. A bioimpedance scale reads differently from DEXA; compare like with like.</div></div>`:''}
+    <div class="card"><div class="fd-sub">Add at the next test &middot; ${todo.length} to go</div>
+      ${['high','medium','low'].map(p=>{const L=todo.filter(w=>w.priority===p);if(!L.length)return '';
+        return `<div style="font-size:11px;font-weight:800;color:${p==='high'?'var(--amber)':'var(--ink3)'};text-transform:uppercase;letter-spacing:0.04em;margin:10px 0 4px">${p} priority</div>`+
+          L.map(w=>`<div style="padding:5px 0;border-bottom:0.5px solid var(--border)"><div style="font-size:13px;font-weight:700">${esc(w.marker)}</div><div style="font-size:11px;color:var(--ink3)">${esc(w.reason||'')}</div></div>`).join('');}).join('')}
+      ${doneW.length?`<div class="fd-note" style="margin:10px 0 0">Done: ${doneW.map(w=>esc(w.marker)).join(', ')}</div>`:''}
+    </div>
+    <div class="card"><div class="fd-sub">Add a lab report</div>
+      <div class="fd-note" style="margin:4px 0 8px">Upload the PDF (or a photo) of a new report. It is read and shown to you to check before anything is saved.</div>
+      <input type="file" id="labFile" accept="application/pdf,image/*" class="fd-input"/>
+      <button class="fd-btn" onclick="foodLabUpload()">Read report</button></div>`;
+}
+window.foodLabsToggle=function(p){labsOpen=labsOpen===p?'':p;renderBloods();};
+let labDraft=null;
+window.foodLabUpload=async function(){
+  const f=(document.getElementById('labFile').files||[])[0];if(!f){toast('Choose a file first');return;}
+  if(f.size>14000000){toast('File too large (max 14 MB)');return;}
+  const data=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});
+  toast('Reading the report… this takes about a minute');
+  try{
+    const r=await fetch(API_BASE+'/api/fitness/labs/extract',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+syncToken()},body:JSON.stringify({file:data})});
+    const j=await r.json();if(!r.ok){toast(j.detail||'Could not read it');return;}
+    labDraft={taken:j.taken,lab:j.lab,source:f.name,rows:j.rows};
+    openSheet('Check the results',`<div class="fd-note" style="margin:0 0 8px">Compare with the report. Untick anything wrong; only ticked rows are saved.</div>
+      <div class="form-group"><label class="form-label">Collection date</label><input class="fd-input" id="labTaken" type="date" value="${esc(j.taken)}"/></div>
+      <div class="fd-note" style="margin:0 0 8px">${esc(j.lab)}</div>
+      ${j.rows.map((x,i)=>`<label style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px">
+        <input type="checkbox" checked data-i="${i}" class="labRow"/><div style="flex:1"><b>${esc(x[1])}</b> <span style="color:var(--ink3)">${esc(x[0])}</span></div>
+        <div style="text-align:right;${x[7]?'color:var(--amber);font-weight:800':''}">${esc(x[2])} ${esc(x[3]||'')}<div style="font-size:10px;color:var(--ink3)">${esc(x[6]||((x[4]!=null?x[4]:'')+'–'+(x[5]!=null?x[5]:'')))}</div></div></label>`).join('')}
+      <button class="fd-btn" onclick="foodLabSave()">Save ${j.rows.length} results</button>`);
+  }catch(e){toast('Could not reach Cortex');}
+};
+window.foodLabSave=async function(){
+  if(!labDraft)return;
+  const keep=[...document.querySelectorAll('.labRow')].filter(c=>c.checked).map(c=>labDraft.rows[+c.dataset.i]);
+  const taken=document.getElementById('labTaken').value;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(taken)){toast('Set the collection date');return;}
+  try{
+    const r=await fetch(API_BASE+'/api/fitness/labs/save',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+syncToken()},body:JSON.stringify({taken,lab:labDraft.lab,source:labDraft.source,rows:keep})});
+    const j=await r.json();if(!r.ok){toast(j.detail||'Could not save');return;}
+    closeSheet();toast('Saved '+j.stored+' results');labDraft=null;if(typeof syncNow==='function')syncNow(false);
+  }catch(e){toast('Could not reach Cortex');}
 };
 
 // ---------- creatine (daily dose, default 10 g) ----------

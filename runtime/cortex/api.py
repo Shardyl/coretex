@@ -5589,6 +5589,38 @@ def fitness_food_photo(body: MealPhoto, _: None = Depends(auth)) -> dict:
     return fitness.estimate_meal_photo(img, body.note or "")
 
 
+class LabUpload(BaseModel):
+    file: str                                   # data:application/pdf or data:image/... URL
+
+
+class LabSave(BaseModel):
+    taken: str
+    lab: str = ""
+    source: str = "app upload"
+    rows: list
+
+
+@app.post("/api/fitness/labs/extract")
+def fitness_labs_extract(body: LabUpload, _: None = Depends(auth)) -> dict:
+    """Transcribe an uploaded lab report (Opus). Nothing is stored: the app shows the rows for the owner to confirm."""
+    f = body.file or ""
+    if not (f.startswith("data:application/pdf") or f.startswith("data:image/")):
+        raise HTTPException(status_code=400, detail="expected a PDF or image data URL")
+    if len(f) > 20_000_000:
+        raise HTTPException(status_code=413, detail="file too large")
+    from . import labs
+    return labs.extract(f)
+
+
+@app.post("/api/fitness/labs/save")
+def fitness_labs_save(body: LabSave, _: None = Depends(auth)) -> dict:
+    from . import labs
+    try:
+        return labs.save(body.taken, body.lab, body.source, body.rows)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="test date must be YYYY-MM-DD")
+
+
 class LibreLogin(BaseModel):
     email: str
     password: str

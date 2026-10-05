@@ -453,3 +453,36 @@ create table if not exists media_assets (
     created_at         timestamptz default now(),
     updated_at         timestamptz default now()
 );
+
+-- lab results (blood panels, body-composition scans), cortex/labs.py. Server-owned, read-only in the app. One row per
+-- marker per test date; value numeric or value_text ("Negative"); flag computed from the lab's own range.
+create table if not exists fitness.lab_results (
+    uid        text primary key,
+    taken      date not null,
+    panel      text not null,
+    marker     text not null,
+    value      numeric,
+    value_text text,
+    unit       text,
+    ref_low    numeric,
+    ref_high   numeric,
+    ref_text   text,
+    flag       text,
+    lab        text,
+    source     text,
+    sort       int,
+    created_at timestamptz not null default now()
+);
+create index if not exists lab_results_marker_idx on fitness.lab_results (marker, taken);
+
+-- tests to add at the next annual check (the owner's quote list); done when a later result with the same marker exists
+create table if not exists fitness.lab_wishlist (
+    uid       text primary key,
+    category  text,
+    marker    text not null,
+    reason    text,
+    priority  text,
+    listed_on date not null,
+    done_on   date,
+    sort      int
+);

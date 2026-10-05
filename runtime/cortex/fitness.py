@@ -90,13 +90,16 @@ def parse_duration_min(v) -> float | None:
 
 
 def bodyweight_at(day: date | None, log: list[dict]) -> float | None:
-    """The bodyweight that applied ON the session date (latest entry at or before it).
-
-    This is the whole point of a dated log: a 6 kg swing must never rewrite historic records.
-    Sessions predating the log fall back to the earliest entry, matching the app.
+    """The bodyweight that applied ON the session date: the 7-day average of weigh-ins up to and including
+    it (owner's call, 5 Oct 2026: one heavy or light morning must not move the score); with no weigh-in that
+    week, the latest entry before it. A 6 kg swing still never rewrites historic records.
+    Sessions predating the log fall back to the earliest entry, matching the app (index.html bwAt).
     """
     if not day or not log:
         return None
+    wk = [float(e["kg"]) for e in log if day - timedelta(days=6) <= e["day"] <= day]
+    if wk:
+        return round(sum(wk) / len(wk), 1)
     match = None
     for e in log:                                   # arrives sorted ascending
         if e["day"] <= day:
@@ -106,13 +109,20 @@ def bodyweight_at(day: date | None, log: list[dict]) -> float | None:
     return float((match or log[0])["kg"])
 
 
+_BW_RE = re.compile(r"^(?:bw|bodyweight)\s*(?:\+\s*([\d.]+))?$", re.I)
+
+
 def lift_kg(weight, day: date | None, bw_log: list[dict]) -> float | None:
-    """Kg on the bar: a logged number, or the dated bodyweight for a 'BW' lift."""
+    """Kg on the bar: a logged number, or the dated bodyweight for a 'BW' / 'BW+10' (belt) lift."""
     raw = "" if weight is None else str(weight).strip()
+    m = _BW_RE.match(raw)
+    if m:
+        bw = bodyweight_at(day, bw_log)
+        return None if bw is None else round(bw + (float(m.group(1)) if m.group(1) else 0), 1)
     n = _num(re.sub(r"[^0-9.]", "", raw))
     if n and n > 0:
         return n
-    if raw.lower() in ("bw", "bodyweight", "", "—"):
+    if raw in ("", "—"):
         return bodyweight_at(day, bw_log)
     return None
 
@@ -198,7 +208,7 @@ def pull() -> dict:
             "cardioSessions": cardio, "vo2": vo2, "tombstones": tombstones,
             "foods": foods, "foodLog": food_log, "meals": meals, "supplements": supplements, "fastDays": fast_days, "readings": readings,
             "cgm": [{"at": r["at"].isoformat(), "mmol": float(r["mmol"])} for r in db.query(
-                "select at, mmol from fitness.cgm where at > now() - interval '3 days' order by at")], "targets": targets(), "health": health_pull(),
+                "select at, mmol from fitness.cgm where at > now() - interval '3 days' order by at")], "targets": targets(), "health": health_pull(), "labs": _labs_pull(),
             "counts": {"bodyweight": len(bw), "plans": len(plans), "liftSessions": len(lifts),
                        "cardioPresets": len(presets), "cardioSessions": len(cardio), "vo2": len(vo2),
                        "foods": len(foods), "foodLog": len(food_log), "meals": len(meals)}}
@@ -208,6 +218,11 @@ def pull() -> dict:
 
 # bmr: Katch-McArdle from his DEXA lean mass (69.6 kg, 6 Apr 2026) = 370 + 21.6 x 69.6. Editable in the app.
 DEFAULT_TARGETS = {"kcal": 2350, "protein": 178, "bmr": 1873, "creatine": 10}
+
+
+def _labs_pull() -> dict:
+    from . import labs
+    return labs.pull()
 
 
 def targets() -> dict:
@@ -741,7 +756,7 @@ def rescore_bodyweight_lifts() -> int:
     n = 0
     for r in rows:
         raw = "" if r["weight"] is None else str(r["weight"]).strip()
-        if _num(re.sub(r"[^0-9.]", "", raw)):
+        if not _BW_RE.match(raw) and _num(re.sub(r"[^0-9.]", "", raw)):
             continue                                # numeric load, nothing to resolve
         kg = lift_kg(r["weight"], r["day"], bw_log)
         db.execute("update fitness.lift_sessions set kg=%s, volume_load=%s, updated_at=now() "
