@@ -180,32 +180,45 @@ function renderTodayInner(){
 function fastDay(day){return fastDays.find(f=>f.date===day)||null;}
 function hm(ms){if(ms==null||ms<0)return '—';const m=Math.round(ms/60000);return Math.floor(m/60)+'h '+String(m%60).padStart(2,'0')+'m';}
 function tOf(iso){return iso?new Date(iso).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';}
-// The fast that ENDED on `day`: from the previous day's window close to this day's break-fast.
-function fastLength(day){
-  const f=fastDay(day), prev=fastDay(shiftDay(day,-1));
-  if(!f||!f.brokeAt||!prev||!prev.closedAt)return null;
-  return new Date(f.brokeAt)-new Date(prev.closedAt);
+// The last eating-window close before time t, from ANY earlier day, so a 2-3 day fast (no break-fast or
+// close on the days in between) is measured from where it really started.
+function lastCloseBefore(t){
+  let best=null;
+  fastDays.forEach(f=>{if(f.closedAt&&new Date(f.closedAt)<t&&(!best||f.closedAt>best))best=f.closedAt;});
+  // ...unless he ate after that close: a later break-fast means the fast was already broken
+  if(best&&fastDays.some(f=>f.brokeAt&&f.brokeAt>best&&new Date(f.brokeAt)<t))return null;
+  return best?new Date(best):null;
 }
+// The fast that ENDED on `day` with its break-fast.
+function fastLength(day){
+  const f=fastDay(day);
+  if(!f||!f.brokeAt)return null;
+  const start=lastCloseBefore(new Date(f.brokeAt));
+  return start?new Date(f.brokeAt)-start:null;
+}
+function longHM(ms){const h=ms/3600000;return h>=24?Math.floor(h/24)+'d '+Math.floor(h%24)+'h '+String(Math.round(ms/60000)%60).padStart(2,'0')+'m':hm(ms);}
 function atTime(day,hhmm){const [h,m]=(hhmm||'').split(':').map(Number);const d=new Date(day+'T00:00:00');d.setHours(h||0,m||0,0,0);return d.toISOString();}
 function nowHM(){const n=new Date();return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');}
 function fastCard(){
   const f=fastDay(foodDay), prev=fastDay(shiftDay(foodDay,-1)), isToday=foodDay===localDay(new Date());
   if(!f||!f.brokeAt){
-    const since=prev&&prev.closedAt?new Date(prev.closedAt):null;
+    const since=isToday?lastCloseBefore(new Date()):(prev&&prev.closedAt?new Date(prev.closedAt):null);
+    const sinceTxt=since?(localDay(since)===shiftDay(localDay(new Date()),-1)?tOf(since.toISOString())+' yesterday':since.toLocaleString('en-GB',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})):'';
     return `<div class="card" style="padding:12px 16px">
-      <div class="fd-sub">Fasting${since&&isToday?' &middot; since '+tOf(prev.closedAt)+' yesterday':''}</div>
-      ${since&&isToday?`<div class="fd-big" style="font-size:28px">${hm(Date.now()-since)}</div>`:`<div class="fd-note" style="margin:4px 0">${since?'':'Tap &quot;Close eating window&quot; tonight so tomorrow&#39;s fast length is known.'}</div>`}
+      <div class="fd-sub">Fasting${since&&isToday?' &middot; since '+sinceTxt:''}</div>
+      ${since&&isToday?`<div class="fd-big" style="font-size:28px" id="fdFastLive" data-since="${since.toISOString()}">${longHM(Date.now()-since)}</div>
+        <div style="font-size:12px;color:var(--ink3);margin-top:2px">${(Math.floor((Date.now()-since)/360000)/10).toFixed(1)} hours total</div>`:`<div class="fd-note" style="margin:4px 0">${since?'':'Tap &quot;Close eating window&quot; tonight so tomorrow&#39;s fast length is known.'}</div>`}
       <div style="display:flex;gap:8px;margin-top:8px"><input type="time" id="fdBreakT" class="fd-input" value="${nowHM()}" style="max-width:130px"/>
       <button class="fd-btn" style="width:auto;margin:0;padding:0 16px" onclick="foodFastSet('brokeAt','fdBreakT')">Break fast</button></div></div>`;
   }
   const len=fastLength(foodDay);
   if(!f.closedAt)return `<div class="card" style="padding:12px 16px">
-    <div class="fd-sub">Fast ${len!=null?'&middot; '+hm(len):''} &middot; broken at ${tOf(f.brokeAt)}</div>
+    <div class="fd-sub">Fast ${len!=null?'&middot; '+longHM(len):''} &middot; broken at ${tOf(f.brokeAt)}</div>
     <div style="display:flex;gap:8px;margin-top:8px"><input type="time" id="fdCloseT" class="fd-input" value="${nowHM()}" style="max-width:130px"/>
     <button class="fd-btn sec" style="width:auto;margin:0;padding:0 16px" onclick="foodFastSet('closedAt','fdCloseT')">Close eating window</button>
     <button class="btn-sm" onclick="foodFastClear('brokeAt')">Undo</button></div></div>`;
   return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
-    <div><div class="fd-sub">Fast ${len!=null?hm(len):''}</div>
+    <div><div class="fd-sub">Fast ${len!=null?longHM(len):''}</div>
     <div style="font-size:13px;font-weight:700">Eating window ${tOf(f.brokeAt)} to ${tOf(f.closedAt)} (${hm(new Date(f.closedAt)-new Date(f.brokeAt))})</div></div>
     <button class="btn-sm" onclick="foodFastClear('closedAt')">Reopen</button></div>`;
 }
@@ -217,6 +230,8 @@ window.foodFastSet=function(field,inputId){
   saveFasts();renderToday();toast(field==='brokeAt'?'Fast broken':'Eating window closed');
 };
 window.foodFastClear=function(field){const f=fastDay(foodDay);if(!f)return;f[field]=null;saveFasts();renderToday();};
+
+setInterval(()=>{const el=document.getElementById('fdFastLive');if(el&&el.offsetParent){const ms=Date.now()-new Date(el.dataset.since);el.textContent=longHM(ms);const n=el.nextElementSibling;if(n)n.textContent=(Math.floor(ms/360000)/10).toFixed(1)+' hours total';}},30000);
 
 // ---------- ketone + glucose readings (stored in mmol/L) ----------
 function gUnit(){try{return localStorage.getItem('fitness_glucose_unit')||'mmol';}catch(e){return 'mmol';}}
@@ -238,8 +253,8 @@ function readingState(x){
   const ate=foodLog.filter(e=>e.at&&new Date(e.at)<=t&&localDay(new Date(e.at))===day).sort((a,b)=>a.at<b.at?1:-1)[0];
   const broke=f&&f.brokeAt?new Date(f.brokeAt):null;
   if((!broke||t<broke)&&!ate){
-    const since=prev&&prev.closedAt?new Date(prev.closedAt):null;
-    return {fasted:true,label:since?'fasted '+hm(t-since):(x.context==='pre break-fast'?'fasted':(x.context||''))};
+    const since=lastCloseBefore(t);
+    return {fasted:true,label:since?'fasted '+longHM(t-since):(x.context==='pre break-fast'?'fasted':(x.context||''))};
   }
   if(ate)return {fasted:false,label:hm(t-new Date(ate.at))+' after '+ate.name.split(',')[0].split(' (')[0].toLowerCase()};
   return {fasted:false,label:hm(t-broke)+' after break-fast'};
