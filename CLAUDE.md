@@ -1472,6 +1472,9 @@ while a local change is queued — a pull once erased a cardio session seconds a
   `deleted`). Now: the app never sends more than 5 tombstones per collection in one push, the server strips
   any push carrying >20 bare tombstones for a table, saves warn when storage is full, and the phone keeps only
   the last 120 days of the food log (server pull returns 120 days; full history stays in the DB).
+  SAME DAY, separate bug: food-log tombstones ({id, deleted}, no date) were checked AFTER the date check in
+  `push`, so every food-entry delete was silently dropped until fixed. Never treat ALL historical tombstones in
+  `fitness.snapshots` as intent: the storage-loss push also sent thousands.
 - **Burned (app, 5 Oct 2026):** BMR pro rata + Health Connect active kcal (on his S24 this is everyday
   movement ONLY, workouts excluded) + Samsung-SDK workout kcal minus the BMR share of each workout's minutes;
   steam room excluded. Lifting history shows that day's watch weights session above the lifts (date match).
