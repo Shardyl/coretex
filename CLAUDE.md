@@ -768,6 +768,28 @@ voice note from him is never triaged, CRM-captured or answered.
 - His number: setting `wa_owner_number` (falls back to `WHATSAPP_OWNER_NUMBER`), so it changes without a
   deploy. Out-of-window alerts fall back to the template named in setting `wa_alert_template` if one is set;
   with none, the alert fails soft and the Inbox card remains the record.
+- **THE TRANSPORT IS CHOSEN, NOT DISCOVERED (6 Oct 2026).** Meta only accepts a free-form message to
+  someone inside 24h of THEIR last message in. For a client that window is the point; for the OWNER it is a
+  trap, because his own number goes quiet for days. The original code tried the buttoned alert and fell back
+  to the template `except Exception` — but Meta **accepts** an out-of-window send (returns a `wamid`) and
+  fails it asynchronously on a status webhook, so the exception never came, the fallback was unreachable and
+  his alerts simply stopped arriving. Now `note_owner_inbound()` stamps setting `wa_owner_last_inbound`
+  every time he writes in, `owner_window_open()` (24h less a 20-min margin) decides template-vs-buttons up
+  front, and a `131047` failed status clears the stamp and re-rings the doorbell via `ring_waiting()`. The
+  `except` fallback stays as a second line of defence. **If you ever add another owner-facing send, decide
+  the transport from `owner_window_open()`; an exception is not a signal here.**
+- **ONE ENQUIRY, ONE CARD (6 Oct 2026).** People type a WhatsApp enquiry the way they talk, so three lines
+  in fifteen seconds became three cards, three drafts and three alerts (cards 1072-1074). A message from a
+  phone that already has an unsent card (`_open_card`, within `BURST_WINDOW_SEC` = 15 min, statuses
+  `_FOLDABLE`) is folded in by `_fold_in`: the messages accumulate in `request.messages`, `their_message`
+  becomes the joined text, and the reply is REDRAFTED against the whole thing. A card in
+  `awaiting_correction` is deliberately NOT foldable — it is mid-edit, and redrafting would throw his
+  instruction away.
+- **Alerts are ARMED, not fired.** Drafting stamps `request.alert_pending` + `alert_due`
+  (now + `ALERT_QUIET_SEC` = 40s); `whatsapp.flush_alerts()`, ticked every 10s from the engine loop, sends
+  once the burst has settled. The pending flag is cleared BEFORE the send, so a half-working send can never
+  leave the loop ringing his phone. One reply from him pulls at most `ALERT_BATCH` = 3 waiting cards
+  through, newest first, and says how many remain.
 - Spam and other no-reply messages raise the FYI card only — they never interrupt him on WhatsApp.
 
 **BOTH SITES POINT AT THE SAME NUMBER, so the MESSAGE carries the brand (28 Sep 2026).** sensa.digital and

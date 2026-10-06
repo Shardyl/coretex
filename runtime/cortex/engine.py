@@ -8170,6 +8170,7 @@ def run(poll_idle: float = 1.0) -> None:
     except Exception as e:  # noqa: BLE001
         tg.send(f"(startup recovery hiccup: {e})")
     last_poll = 0.0
+    last_wa = 0.0
     # WATCHDOG: the loop is single-threaded, so ONE hung network call freezes everything - inbox
     # polling, reminders, sweeps. A calendar urlopen with no timeout stalled it for an hour on
     # 31 Aug 2026 and nothing said so. A heartbeat lets the API surface a stall instead.
@@ -8192,6 +8193,14 @@ def run(poll_idle: float = 1.0) -> None:
         except Exception as e:  # noqa: BLE001
             tg.send(f"(updates hiccup: {e})")
         now = time.time()
+        if now - last_wa >= 10:
+            # WhatsApp alerts deliberately wait for a burst of messages to settle, so they ring once per
+            # enquiry rather than once per line. That needs a tick far faster than the 60s poll below.
+            last_wa = now
+            try:
+                whatsapp.flush_alerts()
+            except Exception:  # noqa: BLE001 - an unsent alert is waiting in the Inbox either way
+                pass
         if now - last_poll >= 60:        # check Gmail for new enquiries + run any due scheduled tasks
             last_poll = now
             _beat("poll_inquiries")

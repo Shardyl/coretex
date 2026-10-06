@@ -26,6 +26,7 @@ import hashlib
 import hmac
 import json
 import re
+import time
 import urllib.error
 import urllib.request
 
@@ -36,6 +37,21 @@ from . import config, crm, db, provider, social_dm, store, worker
 _DEFAULT_ROUTING = {"sensa-uk": {"company_id": 3, "skill_key": "social-dm-replies", "author": "rashad"}}
 
 GRAPH = "https://graph.facebook.com/v23.0"
+
+# People type a WhatsApp enquiry the way they talk: three lines in fifteen seconds. Treated as three
+# messages that is three cards, three drafts and three alerts for one enquiry (cards 1072-1074,
+# 6 Oct 2026). So a follow-up within BURST_WINDOW_SEC joins the open card instead of starting a new one,
+# and the owner's alert waits ALERT_QUIET_SEC after the LAST message so a burst rings his phone once.
+BURST_WINDOW_SEC = 900
+ALERT_QUIET_SEC = 40
+
+# Only a card that is still just a draft absorbs a follow-up. One in 'awaiting_correction' is mid-edit:
+# redrafting it from under him would throw his instruction away, so that starts a fresh card.
+_FOLDABLE = ("new", "drafting", "awaiting_approval")
+
+# How many waiting cards one reply from him pulls through at once. A backlog is a backlog, not a reason
+# to send him eight WhatsApps in a row.
+ALERT_BATCH = 3
 
 
 def routing(account: str) -> dict:
@@ -77,6 +93,63 @@ def _clean_phone(p: str) -> str:
     return ("+" + p.lstrip("+")) if p else ""
 
 
+def _brief(verdict: dict, know_name: str, phone: str, msg: str, src: dict | None) -> str:
+    """The FACTS of this enquiry, as the drafting brief. Channel voice and personal/unknown-number
+    behaviour live in the social-dm-replies skill RULES (worker.draft serves them), never here.
+
+    Shared by the first message and by every follow-up folded in after it, so a burst redrafts against
+    exactly the same framing it would have had if they had typed it all in one go."""
+    personal = verdict.get("category") == "personal"
+    line = (src or {}).get("line")
+    return (
+        "Draft a reply to this WhatsApp message (the skill's standing rules govern the voice and shape). "
+        + ("FACT: this is a PERSONAL message from someone who knows the owner, not a business lead.\n\n"
+           if personal else f"FACT: triaged as a '{verdict.get('category')}' message.\n\n")
+        + ("FACT: the sender's name is unknown, only their number.\n\n" if not know_name else "")
+        + (f"FACT: they came from our Google Ads landing page ({line}). The '(ref ...)' in their message "
+           "is our tracking code: never mention it.\n\n" if line else "")
+        + ("FACT: these are consecutive messages from the same person, moments apart. One enquiry, not "
+           "several: answer the whole thing once.\n\n" if "\n" in msg.strip() else "")
+        + f"From: {know_name or phone}\nTheir message: {msg}")
+
+
+def _open_card(account: str, phone: str) -> dict | None:
+    """The still-unsent card for this person on this number, if a recent one exists."""
+    return db.one(
+        "select * from tasks where kind='wa_reply' and status = any(%s) and request->>'phone' = %s "
+        "and request->>'account' = %s and updated_at > now() - make_interval(secs => %s) "
+        "order by id desc limit 1",
+        (list(_FOLDABLE), phone, account, BURST_WINDOW_SEC))
+
+
+def _arm_alert(req: dict) -> dict:
+    """Mark a card as owing the owner an alert, ALERT_QUIET_SEC from now. Returns the request to save."""
+    req["alert_pending"] = True
+    req["alert_due"] = time.time() + ALERT_QUIET_SEC
+    return req
+
+
+def _fold_in(card: dict, co: dict, skill: dict, rt: dict, msg: str, src: dict | None) -> str:
+    """Add a follow-up message to an open card: redraft against the whole conversation so far and push
+    the alert back, so the burst rings once with the full picture rather than three times in pieces."""
+    req = dict(card.get("request") or {})
+    msgs = [m for m in (req.get("messages") or [req.get("their_message") or ""]) if m] + [msg]
+    joined = "\n".join(msgs)
+    brief = _brief(req.get("triage") or {}, req.get("recipient") or "", req.get("phone") or "", joined,
+                   req.get("lead_source") or src)
+    try:
+        draft = worker.draft(skill, co, {"brief": brief}, author=rt.get("author") or "rashad")
+    except Exception:  # noqa: BLE001 - keep the draft we already had rather than losing the card
+        draft = card.get("draft") or ""
+    req.update({"brief": brief, "their_message": joined, "messages": msgs})
+    if src and not req.get("lead_source"):
+        req["lead_source"] = src
+    store.update_task(card["id"], request=_arm_alert(req),
+                      **({"draft": draft, "status": "awaiting_approval"} if draft else {}))
+    print(f"[whatsapp] folded a follow-up into card {card['id']} ({len(msgs)} messages)", flush=True)
+    return "folded"
+
+
 # ---- the shared brain: one inbound message -> CRM capture + an approval card --------------------------
 
 def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
@@ -116,34 +189,57 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
         except Exception:  # noqa: BLE001 — visibility must never block ingest
             pass
         return "skipped"
-    personal = verdict.get("category") == "personal"
-    # a real name only — never the phone number WhatsApp puts where a name would go
+    # ONE ENQUIRY, ONE CARD. A second message moments after the first is the rest of the same thought,
+    # so it joins the open card and redrafts there instead of opening a rival card with its own draft.
+    open_card = _open_card(account, phone)
+    if open_card:
+        return _fold_in(open_card, co, skill, rt, msg, src)
+    # a real name only - never the phone number WhatsApp puts where a name would go
     know_name = verdict.get("name") or ("" if _clean_phone(name) else name)
-    # channel voice + personal/unknown-number behaviour live in the social-dm-replies skill RULES
-    # (worker.draft serves them) — the brief carries only the FACTS of this message.
-    brief = (
-        "Draft a reply to this WhatsApp message (the skill's standing rules govern the voice and shape). "
-        + ("FACT: this is a PERSONAL message from someone who knows the owner, not a business lead.\n\n"
-           if personal else f"FACT: triaged as a '{verdict.get('category')}' message.\n\n")
-        + ("FACT: the sender's name is unknown — only their number.\n\n" if not know_name else "")
-        + (f"FACT: they came from our Google Ads landing page ({src['line']}). The '(ref ...)' in their message is "
-           "our tracking code: never mention it.\n\n" if src else "")
-        + f"From: {know_name or phone}\nTheir message: {msg}")
+    brief = _brief(verdict, know_name, phone, msg, src)
     try:
         draft = worker.draft(skill, co, {"brief": brief}, author=rt.get("author") or "rashad")
     except Exception:  # noqa: BLE001
         draft = ""
     task = store.create_task(rt["company_id"], skill["id"], "wa_reply", {
         "brief": brief, "channel": "whatsapp", "account": account, "recipient": know_name or phone,
-        "phone": phone, "chat_id": chat_id, "their_message": msg, "triage": verdict,
+        "phone": phone, "chat_id": chat_id, "their_message": msg, "messages": [msg], "triage": verdict,
         **({"lead_source": src} if src else {})})
     if draft:
-        store.update_task(task["id"], draft=draft, status="awaiting_approval")
-        try:      # push it to his own WhatsApp so a chat can be answered at chat speed
-            alert_owner(task["id"])
-        except Exception:  # noqa: BLE001 — the Inbox card is the record; a failed alert never loses it
-            pass
+        # ARMED, not fired: flush_alerts sends it once the burst has settled, so one enquiry rings his
+        # phone once. The Inbox card is live immediately either way.
+        req = _arm_alert(dict(task.get("request") or {}))
+        store.update_task(task["id"], draft=draft, status="awaiting_approval", request=req)
     return "drafted"
+
+
+def flush_alerts() -> dict:
+    """Send the owner's WhatsApp alert for every card whose burst window has gone quiet. Called from the
+    engine loop, which is what gives the fold its settling time.
+
+    The pending flag is cleared BEFORE the send is attempted: a card that cannot be alerted is still
+    waiting in the Inbox, and a send that half-works must never leave the loop ringing his phone."""
+    if not (owner_number() and cloud_ready()):
+        return {"sent": 0}
+    rows = db.query(
+        "select id from tasks where kind='wa_reply' and status='awaiting_approval' "
+        "and (request->>'alert_pending') = 'true' "
+        "and coalesce((request->>'alert_due')::float, 0) <= %s order by id limit 20", (time.time(),))
+    sent = 0
+    for r in rows:
+        t = store.get_task(r["id"])
+        if not t:
+            continue
+        req = dict(t.get("request") or {})
+        req["alert_pending"] = False
+        req["alerted_at"] = time.time()
+        store.update_task(r["id"], request=req)
+        try:
+            if alert_owner(r["id"]):
+                sent += 1
+        except Exception as e:  # noqa: BLE001 - the card is the record; a failed alert never loses it
+            print(f"[whatsapp] alert flush failed for card {r['id']}: {str(e)[:160]}", flush=True)
+    return {"sent": sent}
 
 
 def _lane(account: str):
@@ -211,6 +307,16 @@ def ingest_cloud(payload: dict, account: str = "sensa-uk") -> dict:
                                              dedup_key=f"wa_fail:{st.get('recipient_id')}")
                     except Exception:  # noqa: BLE001
                         pass
+                    codes = {str((e or {}).get("code")) for e in (st.get("errors") or [])}
+                    if "131047" in codes and is_owner(st.get("recipient_id") or ""):
+                        # 131047 = re-engagement required: the window was shut after all, whatever we
+                        # thought. Forget the stamp so later alerts go by template, and ring the doorbell
+                        # now so THIS alert is not just lost.
+                        db.setting_set("wa_owner_last_inbound", {})
+                        try:
+                            ring_waiting()
+                        except Exception:  # noqa: BLE001
+                            pass
             # the sender's WhatsApp profile name, keyed by wa_id — this is the push name Rashad expected
             names = {c.get("wa_id"): ((c.get("profile") or {}).get("name") or "")
                      for c in (value.get("contacts") or [])}
@@ -221,6 +327,7 @@ def ingest_cloud(payload: dict, account: str = "sensa-uk") -> dict:
                 # THE OWNER'S OWN MESSAGES ARE CONTROL, NEVER AN ENQUIRY. Checked before anything else so a
                 # button tap or a voice note from him can never be triaged, CRM-captured or replied to.
                 if is_owner(phone):
+                    note_owner_inbound()      # his message reopens the window alerts have to fit inside
                     mid = m.get("id") or ""
                     if mid and (mid in seen or mid in fresh):   # Meta retries: never act on a tap twice
                         continue
@@ -286,6 +393,60 @@ def is_owner(phone: str) -> bool:
     return bool(a) and len(a) >= 9 and a[-9:] == b[-9:]
 
 
+# Meta only accepts a free-form message to someone inside 24h of THEIR last message to us. For a client
+# that window is the point; for the owner it is a trap, because his own number goes quiet for days and
+# then every alert is silently refused. So we track when he last wrote in and pick the transport from
+# that, rather than trying a send and waiting for an exception that never comes (Meta accepts the send
+# and fails it asynchronously on a status webhook, which is why his alerts just stopped, 6 Oct 2026).
+WINDOW_SEC = 24 * 3600
+WINDOW_MARGIN_SEC = 20 * 60          # never gamble on the last twenty minutes of the window
+
+
+def note_owner_inbound() -> None:
+    """His message to the business number reopens the 24h window. Stamped so alerts know."""
+    try:
+        db.setting_set("wa_owner_last_inbound", {"at": time.time()})
+    except Exception:  # noqa: BLE001 - bookkeeping must never break ingest
+        pass
+
+
+def owner_window_open() -> bool:
+    """True when Meta will still accept a free-form (buttoned) message to the owner."""
+    v = db.setting_get("wa_owner_last_inbound") or {}
+    try:
+        at = float(v.get("at") or 0)
+    except (TypeError, ValueError):
+        at = 0.0
+    return bool(at) and (time.time() - at) < (WINDOW_SEC - WINDOW_MARGIN_SEC)
+
+
+def _doorbell(to: str, co: dict, req: dict) -> bool:
+    """Ring the out-of-window template. A template cannot carry the draft, so it is only a doorbell: his
+    reply reopens the window and _owner_control walks the real buttoned alert through the door."""
+    tmpl = db.setting_get("wa_alert_template")
+    if not (to and tmpl):
+        return False
+    try:
+        send_template(to, tmpl, [co.get("name") or "Cortex",
+                                 str(req.get("recipient") or req.get("phone") or "a new number")])
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"[whatsapp] doorbell template failed: {str(e)[:200]}", flush=True)
+        return False
+
+
+def ring_waiting() -> bool:
+    """Re-ring the doorbell for whatever is still waiting on him. Used when Meta tells us after the fact
+    that a buttoned alert was refused for re-engagement, so the refusal is not the end of it."""
+    to = owner_number()
+    row = db.one("select id from tasks where kind='wa_reply' and status='awaiting_approval' "
+                 "order by id desc limit 1")
+    if not (to and row):
+        return False
+    t = store.get_task(row["id"]) or {}
+    return _doorbell(to, store.get_company(t.get("company_id")) or {}, t.get("request") or {})
+
+
 def _post(payload: dict) -> dict:
     """One place that talks to the Cloud API, so the pause guard and the error surfacing cannot diverge
     between a plain reply, a buttoned alert and a template."""
@@ -340,8 +501,12 @@ def download_media(media_id: str) -> tuple[bytes, str]:
 def alert_owner(task_id: int) -> bool:
     """Push a wa_reply card to the owner's WhatsApp with Approve / Edit / Skip. Returns True when sent.
 
+    TRANSPORT IS CHOSEN, NOT DISCOVERED. Outside the 24h window Meta accepts a free-form send and then
+    fails it on a status webhook, so an exception-based fallback never fires and the alert simply vanishes.
+    We decide from `owner_window_open()` instead, and keep the exception path as a second line of defence.
+
     Fail-soft by design: the Inbox card already exists and is the record, so a failed alert must never
-    lose the enquiry. Out-of-window sends are retried as a template when one is configured."""
+    lose the enquiry."""
     to = owner_number()
     if not (to and cloud_ready()):
         return False
@@ -350,8 +515,13 @@ def alert_owner(task_id: int) -> bool:
         return False
     req = t.get("request") or {}
     co = store.get_company(t["company_id"]) or {}
+    if not owner_window_open():
+        if _doorbell(to, co, req):
+            return True
+        # No template configured, or it was refused: try the buttons anyway. Out of window it will very
+        # likely fail, but staying silent on purpose is worse than a send that might get through.
     src = req.get("lead_source") or {}
-    body = (f"{co.get('name') or 'Cortex'} · WhatsApp enquiry\n"
+    body = (f"{co.get('name') or 'Cortex'} - WhatsApp enquiry\n"
             f"From: {req.get('recipient') or req.get('phone')}\n"
             + (f"Source: {src.get('line')}\n" if src.get("line") else "")
             + f"\nThey said:\n{(req.get('their_message') or '')[:400]}\n"
@@ -362,17 +532,8 @@ def alert_owner(task_id: int) -> bool:
         send_buttons(to, body, buttons)
         return True
     except Exception as e:  # noqa: BLE001
-        # Out of the 24h window Meta refuses free-form text, so fall back to the approved template. Its two
-        # variables are the company and who wrote in; the draft itself cannot ride in a template, so the
-        # template is a doorbell: his reply reopens the window and the real buttoned alert follows.
-        tmpl = db.setting_get("wa_alert_template")
-        if tmpl:
-            try:
-                send_template(to, tmpl, [co.get("name") or "Cortex",
-                                         str(req.get("recipient") or req.get("phone") or "a new number")])
-                return True
-            except Exception:  # noqa: BLE001
-                pass
+        if _doorbell(to, co, req):
+            return True
         print(f"[whatsapp] owner alert failed for card {task_id}: {str(e)[:200]}", flush=True)
         return False
 
@@ -428,10 +589,15 @@ def _owner_control(msg: dict, text: str) -> str:
     if text.strip():
         waiting = db.query(
             "select id from tasks where kind='wa_reply' and status in ('awaiting_approval','awaiting_correction') "
-            "order by id")
+            "order by id desc")
         if waiting:
-            sent = sum(1 for r in waiting if alert_owner(r["id"]))
+            # Newest first and capped: a backlog must not answer his one "hi" with eight messages. The
+            # rest stay in the Inbox and come through as he clears these.
+            batch = waiting[:ALERT_BATCH]
+            sent = sum(1 for r in batch if alert_owner(r["id"]))
             if sent:
+                if len(waiting) > sent:
+                    _tell(f"{len(waiting) - sent} more waiting in your Inbox after these.")
                 return "resent"
             _tell("I could not send the draft through. It is waiting in your Inbox.")
             return "ignored"
