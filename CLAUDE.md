@@ -1567,7 +1567,7 @@ while a local change is queued — a pull once erased a cardio session seconds a
 - **Sleep + recovery (5 Oct 2026, app v42, Bridge 1.3.0):** Food > Recovery page + sleep tile on Today's top card.
   Bridge 1.3.0 sends the main sleep session's stages, start/end, overnight HR avg/low (5-min), breathing, HRV,
   source (Eight Sleep mattress writes to Health Connect; he wears NO watch at night) and `day_resting_hr` (Samsung
-  watch, lowest 10-min avg 06:00-20:00 excluding workouts +10 min). Stored in new `fitness.health_daily` columns,
+  watch, lowest 30-min avg of 3+ samples 06:00-20:00 excluding workouts +10 min, since Bridge 1.3.1; 1.3.0's 10-min/5-sample rule never fired on his sparse watch sampling). Stored in new `fitness.health_daily` columns,
   COALESCED on upsert so an older bridge never blanks them. The sleep SCORE is not in Health Connect:
   `cortex/eightsleep.py` reads Eight Sleep's unofficial app API (pyEight method) with his login typed into the
   Recovery page's Connect form (setting `eightsleep_login`, never echoed) into `fitness.sleep_8`;
@@ -1630,7 +1630,7 @@ while a local change is queued — a pull once erased a cardio session seconds a
   14,600 vs HC 6,060 on 5 Oct 2026. Needs the STEPS read permission (tap Connect Samsung Health again).
 - 1.3.0 (vc 5, 5 Oct 2026) adds per-day `sleep_deep_min/rem_min/light_min/awake_min`, `sleep_start/end`, `sleep_hr_avg/min`,
   `sleep_resp_avg`, `sleep_hrv_ms`, `sleep_source` (HC, main = longest session ending that day; Eight Sleep) and `day_resting_hr`
-  (Samsung HR 06:00-20:00 minus workouts+10 min, lowest 10-min mean of 5+ samples); needs READ_RESPIRATORY_RATE (tap Grant permissions).
+  (Samsung HR 06:00-20:00 minus workouts+10 min, lowest 30-min mean of 3+ samples since 1.3.1, plus `day_hr_samples` / `day_hr_gap_s` diagnostics stored on health_daily); needs READ_RESPIRATORY_RATE (tap Grant permissions).
 
 ## Media library
 
