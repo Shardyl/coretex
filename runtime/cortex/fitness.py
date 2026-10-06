@@ -188,7 +188,9 @@ def pull() -> dict:
                 for r in db.query("select * from fitness.food_log where not deleted and day > current_date - 120 "
                                   "order by day, uid")]   # older history stays here; the phone keeps 120 days
     fast_days = [{"date": r["day"].isoformat(), "brokeAt": r["broke_at"].isoformat() if r["broke_at"] else None,
-                  "closedAt": r["closed_at"].isoformat() if r["closed_at"] else None}
+                  "closedAt": r["closed_at"].isoformat() if r["closed_at"] else None,
+                  "freeDay": bool(r.get("free_day")),
+                  "freeDayAt": r["free_day_at"].isoformat() if r.get("free_day_at") else None}
                  for r in db.query("select * from fitness.fast_days order by day")]
     readings = [{"id": r["uid"], "at": r["at"].isoformat(), "kind": r["kind"], "value": _num(r["value"]),
                  "context": r["context"], "notes": r["notes"]}
@@ -689,11 +691,17 @@ def _push_inner(doc: dict, source: str = "app") -> dict:
         # An empty time from a device never wipes a time the server has (a stale or reset phone would
         # otherwise erase it, 5 Oct 2026); only a deliberate Undo/Reopen, sent as `cleared`, does.
         clr = set(r.get("cleared") or [])
-        _ex("insert into fitness.fast_days (day, broke_at, closed_at) values (%s,%s,%s) on conflict (day) do update "
+        # free day: only a toggle NEWER than the server's (freeDayAt) changes it, so a stale device never undoes it
+        fat = _ts(r.get("freeDayAt"))
+        _ex("insert into fitness.fast_days (day, broke_at, closed_at, free_day, free_day_at) values (%s,%s,%s,%s,%s) "
+            "on conflict (day) do update "
             "set broke_at=case when %s then excluded.broke_at else coalesce(excluded.broke_at, fast_days.broke_at) end, "
             "closed_at=case when %s then excluded.closed_at else coalesce(excluded.closed_at, fast_days.closed_at) end, "
-            "updated_at=now()",
-            (d, _ts(r.get("brokeAt")), _ts(r.get("closedAt")), "brokeAt" in clr, "closedAt" in clr))
+            "free_day=case when excluded.free_day_at is not null and (fast_days.free_day_at is null or "
+            "excluded.free_day_at > fast_days.free_day_at) then excluded.free_day else fast_days.free_day end, "
+            "free_day_at=greatest(excluded.free_day_at, fast_days.free_day_at), updated_at=now()",
+            (d, _ts(r.get("brokeAt")), _ts(r.get("closedAt")), bool(r.get("freeDay")) if fat else None, fat,
+             "brokeAt" in clr, "closedAt" in clr))
         counts["fastDays"] += 1
     for r in doc.get("readings") or []:
         if not r.get("id"):

@@ -187,6 +187,7 @@ function renderTodayInner(){
       <div class="fd-day">${dayLabel(foodDay)}</div>
       <button onclick="foodShiftDay(1)" aria-label="Next day" ${foodDay>=shiftDay(localDay(new Date()),7)?'disabled style="opacity:0.3"':''}>&rsaquo;</button>
     </div>
+    <div style="display:flex;justify-content:center;margin:-4px 0 8px"><button onclick="foodToggleFree()" style="border-radius:999px;padding:4px 14px;font-size:11px;font-weight:800;cursor:pointer;${isFree(foodDay)?'background:var(--amber);color:#fff;border:none':'background:none;color:var(--ink3);border:0.5px solid var(--border2)'}">${isFree(foodDay)?'Free day':'Mark as free day'}</button></div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px">
         <div><div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
@@ -225,6 +226,15 @@ function renderTodayInner(){
 }
 // ---------- fasting (break-fast / close eating window) ----------
 function fastDay(day){return fastDays.find(f=>f.date===day)||null;}
+// Free day (owner's planned "naughty" Fridays): one tap on Today, stored on the day's fast_days row with the time it
+// was set, so the newest change wins on every device. Tagged in History, Weight, Fasting and Recovery (the night after).
+function isFree(day){const f=fastDay(day);return !!(f&&f.freeDay);}
+const FREE_TAG='<span style="font-size:9px;font-weight:800;color:var(--amber);margin-left:4px">FREE</span>';
+window.foodToggleFree=function(){
+  let f=fastDay(foodDay);if(!f){f={date:foodDay,brokeAt:null,closedAt:null};fastDays.push(f);}
+  f.freeDay=!f.freeDay;f.freeDayAt=new Date().toISOString();
+  saveFasts();renderToday();try{renderMission();}catch(e){}toast(f.freeDay?'Marked as a free day':'Free day removed');
+};
 function hm(ms){if(ms==null||ms<0)return '—';const m=Math.round(ms/60000);return Math.floor(m/60)+'h '+String(m%60).padStart(2,'0')+'m';}
 function tOf(iso){return iso?new Date(iso).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';}
 // The last eating-window close before time t, from ANY earlier day, so a 2-3 day fast (no break-fast or
@@ -384,7 +394,7 @@ function renderFasting(){
       <div style="position:relative;width:100%;height:210px"><canvas id="fdFastChart" role="img" aria-label="Fast length and ketones"></canvas></div></div>
     <div class="card" style="padding:8px 12px">
       <div class="fd-hrow h"><div>Day</div><div>Fast</div><div>Ketones</div><div>Glucose</div><div>GKI</div></div>
-      ${rows.map(r=>`<div class="fd-hrow"><div>${dayLabel(r.d).replace('Yesterday','Yest.')}</div><div>${r.len!=null?hm(r.len):'—'}</div><div>${r.k!=null?r1(r.k):'—'}</div><div>${r.g!=null?gShow(r.g):'—'}</div><div>${r.gki??'—'}</div></div>`).join('')}
+      ${rows.map(r=>`<div class="fd-hrow"><div>${dayLabel(r.d).replace('Yesterday','Yest.')}${isFree(r.d)?FREE_TAG:''}</div><div>${r.len!=null?hm(r.len):'—'}</div><div>${r.k!=null?r1(r.k):'—'}</div><div>${r.g!=null?gShow(r.g):'—'}</div><div>${r.gki??'—'}</div></div>`).join('')}
     </div>
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px"><div><div class="fd-sub">Finger-prick entry on Today</div><div class="fd-note" style="margin:2px 0 0">Ketone and glucose strips</div></div>
       <button class="btn-sm" onclick="foodToggleManualReadings()">${manualReadingsOn()?'Hide':'Show'}</button></div>
@@ -475,7 +485,7 @@ function renderRecovery(){
       <div style="position:relative;width:100%;height:220px"><canvas id="fdRecChart" role="img" aria-label="Sleep score and resting heart rate"></canvas></div></div>
     <div class="card" style="padding:8px 12px">
       <div class="fd-hrow h"><div>Night to</div><div>Score</div><div>Asleep</div><div>Sleep HR</div><div>Day HR</div></div>
-      ${rows.map(r=>{const x=r.any;return `<div class="fd-hrow"${r.nap?' style="color:var(--ink3)"':''}><div>${dayLabel(r.d).replace('Yesterday','Yest.')}</div><div>${r.nap?'nap':(x&&x.score!=null?fmtN(x.score):'—')}</div><div>${x?durHM(x.min):'—'}</div><div>${r.nap?'—':(r.night!=null?fmtN(r.night):'—')}</div><div>${r.day!=null?fmtN(r.day):'—'}</div></div>`;}).join('')}
+      ${rows.map(r=>{const x=r.any;return `<div class="fd-hrow"${r.nap?' style="color:var(--ink3)"':''}><div>${dayLabel(r.d).replace('Yesterday','Yest.')}${isFree(shiftDay(r.d,-1))?FREE_TAG:''}</div><div>${r.nap?'nap':(x&&x.score!=null?fmtN(x.score):'—')}</div><div>${x?durHM(x.min):'—'}</div><div>${r.nap?'—':(r.night!=null?fmtN(r.night):'—')}</div><div>${r.day!=null?fmtN(r.day):'—'}</div></div>`;}).join('')}
     </div>
     <div class="card" id="fdEightCard"><div class="fd-sub">Eight Sleep</div><div class="fd-note" style="margin:4px 0">Checking&hellip;</div></div>`;
   eightCard();
@@ -544,6 +554,7 @@ function missionPep(s){
   const m=s.m;
   if(s.cur!=null&&s.cur<=m.goalKg)return `Goal reached: ${r1(s.cur)} kg. You did it.`;
   if(s.todayW&&s.low!=null&&s.todayW.kg<=s.low&&s.todayW.kg<m.startKg)return `New low this morning: ${r1(s.todayW.kg)} kg. Down ${r1(m.startKg-s.todayW.kg)} kg since day one.`;
+  if(isFree(shiftDay(s.today,-1))&&!isFree(s.today))return `Free day yesterday. Back on plan today: the 7-day average absorbs it.`;
   if(m.milestoneKg&&s.cur!=null&&s.cur<=m.milestoneKg)return `Milestone hit: under ${r1(m.milestoneKg)} kg${m.milestoneFat?', sub-'+m.milestoneFat+'%':''}. Now for ${r1(m.goalKg)}.`;
   if(s.vsPace!=null&&s.day>=7&&s.vsPace>=0.3)return `${r1(s.vsPace)} kg ahead of pace. Keep doing exactly this.`;
   if(s.yDef!=null&&s.yDef>=500)return `Yesterday: ${fmtN(s.yDef)} kcal deficit, about ${r1(s.yDef/KCAL_PER_KG)} kg of fat gone.`;
@@ -1038,7 +1049,7 @@ function renderHistory(){
       <div style="position:relative;width:100%;height:210px"><canvas id="fdHistChart" role="img" aria-label="Calories eaten versus burned over 30 days"></canvas></div></div>
     <div class="card" style="padding:8px 12px">
       <div class="fd-hrow h"><div>Day</div><div>Eaten</div><div>Protein</div><div>Burned</div><div>Steps</div></div>
-      ${rows.map(r=>`<div class="fd-hrow"><div>${dayLabel(r.d).replace('Yesterday','Yest.')}</div><div>${r.logged?fmtN(r.kcal):'—'}</div><div>${r.logged?fmtN(r.protein):'—'}</div><div>${fmtN(r.burned)}</div><div>${fmtN(r.steps)}</div></div>`).join('')}
+      ${rows.map(r=>`<div class="fd-hrow"><div>${dayLabel(r.d).replace('Yesterday','Yest.')}${isFree(r.d)?FREE_TAG:''}</div><div>${r.logged?fmtN(r.kcal):'—'}</div><div>${r.logged?fmtN(r.protein):'—'}</div><div>${fmtN(r.burned)}</div><div>${fmtN(r.steps)}</div></div>`).join('')}
     </div>`;
   const chartRows=rows.slice().reverse();
   const cs=getComputedStyle(document.documentElement);
@@ -1144,7 +1155,7 @@ function renderWeight(){
       <div style="position:relative;width:100%;height:210px"><canvas id="fdWtChart" role="img" aria-label="Weight trend"></canvas></div>
     </div>
     <div class="card" style="padding:8px 12px">
-      ${all.slice().reverse().slice(0,30).map(w=>`<div class="fd-entry" style="cursor:default"><div><div class="n">${w.kg} kg</div><div class="q">${fmtDate(w.date)} ${new Date(w.date+'T12:00:00').getFullYear()!==new Date().getFullYear()?new Date(w.date+'T12:00:00').getFullYear():''}${w.src==='watch'?' &middot; from Health Connect':''}</div></div>
+      ${all.slice().reverse().slice(0,30).map(w=>`<div class="fd-entry" style="cursor:default"><div><div class="n">${w.kg} kg</div><div class="q">${fmtDate(w.date)}${isFree(shiftDay(w.date,-1))?' &middot; after a free day':''} ${new Date(w.date+'T12:00:00').getFullYear()!==new Date().getFullYear()?new Date(w.date+'T12:00:00').getFullYear():''}${w.src==='watch'?' &middot; from Health Connect':''}</div></div>
         ${w.src==='log'?`<button class="hist-del" onclick="foodDelWeight('${w.date}')">&times;</button>`:''}</div>`).join('')||'<div class="fd-note">No weigh-ins yet.</div>'}
     </div>`;
   const from=shiftDay(today,-wtRange), pts=all.filter(w=>w.date>=from);

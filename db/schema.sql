@@ -489,3 +489,7 @@ create table if not exists fitness.lab_wishlist (
     done_on   date,
     sort      int
 );
+
+-- free day (owner's planned off-plan days): set from Today; free_day_at = when it was last toggled, newest wins on sync
+alter table fitness.fast_days add column if not exists free_day boolean;
+alter table fitness.fast_days add column if not exists free_day_at timestamptz;
