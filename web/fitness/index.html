@@ -970,7 +970,10 @@ function saveMeals(){store(MEALS_KEY,savedMeals);if(typeof queueSync==='function
 function saveSupplements(){store(SUPP_KEY,supplements);if(typeof queueSync==='function')queueSync();}
 function saveFasts(){store(FAST_KEY,fastDays);if(typeof queueSync==='function')queueSync();}
 function saveReadings(){store(READ_KEY,readings);if(typeof queueSync==='function')queueSync();}
-function saveTargets(){store(TARGETS_KEY,foodTargets);if(typeof queueSync==='function')queueSync();}
+// Targets are pushed ONLY after an edit on this device. Pushing them on every sync let a device opened days
+// later overwrite newer targets with its stale copy (6 Oct 2026: 2,100 kcal / 160 g reset to 2,350 / 178).
+const TARGETS_DIRTY_KEY='fitness_targets_dirty_v1';
+function saveTargets(){store(TARGETS_KEY,foodTargets);if(_applyingServer)return;try{localStorage.setItem(TARGETS_DIRTY_KEY,'1');}catch(e){}if(typeof queueSync==='function')queueSync();}
 function saveHealth(){store(HEALTH_KEY,healthData);}
 function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='function')queueSync();}
 
@@ -983,7 +986,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='47';                         // keep in step with CACHE in sw.js
+const APP_VERSION='48';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1029,7 +1032,7 @@ function syncDoc(){
     supplements:supplements,
     fastDays:fastDays,
     readings:readings,
-    targets:foodTargets
+    targets:(()=>{try{return localStorage.getItem(TARGETS_DIRTY_KEY)?foodTargets:undefined;}catch(e){return undefined;}})()
   };
   // Deletions: anything we pushed before that is no longer here went on purpose. Send it as a
   // tombstone rather than just omitting it, or the next pull would resurrect it.
@@ -1133,7 +1136,7 @@ async function syncNow(manual){
     }
     const pushed=await syncApi('/api/fitness/state',{method:'POST',body:JSON.stringify(syncDoc())});
     if(pushed===null){_syncing=false;return;}                 // not signed in; state already shown
-    try{localStorage.removeItem(PENDING_DEL_KEY);}catch(e){}
+    try{localStorage.removeItem(PENDING_DEL_KEY);localStorage.removeItem(TARGETS_DIRTY_KEY);}catch(e){}
     rememberSent();
     const state=await syncApi('/api/fitness/state');
     if(state)applyServerState(state);
@@ -2944,6 +2947,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=47"></script>
+<script src="food.js?v=48"></script>
 </body>
 </html>
