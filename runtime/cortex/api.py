@@ -468,6 +468,19 @@ def _enrich_action_card(t: dict) -> dict:
                       "html": engine.compose_reply_html(t, co, for_preview=True)["html"],  # rendered, with logo
                       "inquiry": {"name": inq.get("name"), "email": inq.get("email"),
                                   "message": inq.get("message") or inq.get("snippet") or ""}}
+    if (t.get("request") or {}).get("card_problem"):   # written by the engine when a card is held back
+        t["card_problem"] = (t["request"] or {})["card_problem"]
+    if t["kind"] == "wa_reply":
+        # WHAT HE NEEDS TO KNOW BEFORE HE TAPS APPROVE, not two seconds after. Computed per request
+        # rather than stored, because a window closes by the clock: a stored flag is wrong by lunchtime.
+        ph = (t.get("request") or {}).get("phone") or ""
+        left = whatsapp.window_closes_in(ph) if ph else 0.0
+        if not left:
+            t["card_problem"] = ("WhatsApp will not deliver this - over 24 hours since their last "
+                                 "message. They have to write in again before a plain reply can send.")
+        elif left < 3 * 3600:
+            t["card_problem"] = (f"{int(left // 60)} minutes left to reply. After that WhatsApp refuses "
+                                 "a plain message until they write in again.")
     sk = store.get_skill(t["skill_id"])         # the lane's autonomy state for the Inbox UI
     if sk:
         offer = (sk["authority"] == "ask" and sk["trust_streak"] >= sk["auto_threshold"]

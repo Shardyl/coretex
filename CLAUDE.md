@@ -790,6 +790,28 @@ voice note from him is never triaged, CRM-captured or answered.
   once the burst has settled. The pending flag is cleared BEFORE the send, so a half-working send can never
   leave the loop ringing his phone. One reply from him pulls at most `ALERT_BATCH` = 3 waiting cards
   through, newest first, and says how many remain.
+- **THE SAME TRAP ON THE CLIENT SIDE, AND IT CLOSED THE CARD (6 Oct 2026).** Card 1050 (a 2 Oct enquiry
+  approved on the 6th) was marked `done` and delivered NOTHING: `send_text` succeeded, Meta failed it two
+  seconds later with `131047`, and a lead we never answered read as answered. Now the window is tracked
+  PER NUMBER (`note_inbound` on every inbound message -> setting `wa_in:<digits>`, full digits, never the
+  last nine, which collides across countries), `window_open(phone)` is checked in `engine._execute`
+  BEFORE sending (refused as `blocked`, card stays in the Inbox with `request.card_problem` saying why),
+  and `reopen_undelivered` puts a `done`/`sending`/`queued` card back to `awaiting_approval` when a failed
+  status arrives. `last_inbound_at` falls back to the newest card's `created_at`, so cards that predate
+  this bookkeeping are judged on the message that created them rather than assumed dead. No margin on the
+  client send (we would rather try with ten minutes left); the 20-minute margin is the owner's alerts only.
+- **THE CARD SAYS SO BEFORE HE TAPS APPROVE.** `api._enrich_action_card` computes the window live for every
+  `wa_reply` (never stored: a window closes by the clock, so a stored flag is wrong by lunchtime) and sets
+  `card_problem` when it has gone, or "N minutes left to reply" under three hours. It also lifts
+  `request.card_problem` onto the card, which the cockpit renders; before this, every `card_problem` the
+  engine wrote into a request was invisible.
+- **A FAILED SEND MUST NOT READ AS APPROVED.** The wa_reply branch returned a bare `{"ok": False}` on a
+  send failure, but `approve_wa_reply` only treats `blocked`/`needs_confirm` as failure, so it answered
+  "Sent." on a send that failed and bumped the skill's trust streak. Both failure paths now return
+  `blocked`.
+- **STILL MISSING: a client-facing re-engagement template.** `wa_alert_template` (`cortex_enquiry_alert`)
+  is the internal doorbell to the owner's phone, wrong content for a client. Until Meta approves one, a
+  lead who went quiet for more than 24h cannot be reopened on WhatsApp at all.
 - Spam and other no-reply messages raise the FYI card only — they never interrupt him on WhatsApp.
 
 **BOTH SITES POINT AT THE SAME NUMBER, so the MESSAGE carries the brand (28 Sep 2026).** sensa.digital and

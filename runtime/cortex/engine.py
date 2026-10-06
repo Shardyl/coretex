@@ -1381,12 +1381,26 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         text = (task.get("draft") or "").strip()
         if whatsapp.cloud_ready():
             if not (req.get("phone") and text):
-                return {"ok": False, "error": "no phone or empty draft - nothing sent"}
+                return {"blocked": True, "error": "no phone or empty draft - nothing sent"}
+            # THE WINDOW IS CHECKED BEFORE SENDING, NEVER AFTER. Outside 24h of their last message Meta
+            # accepts a free-form reply, returns an id, then fails it on a status webhook - so the old
+            # code marked card 1050 'done' having delivered nothing (6 Oct 2026). Refuse it instead, and
+            # leave the card in the Inbox saying why.
+            if not whatsapp.window_open(req["phone"]):
+                why = ("WhatsApp will not deliver this: more than 24 hours since their last message, so "
+                       "a plain reply is refused. They have to message again, or it needs an approved "
+                       "re-engagement template.")
+                rq = dict(req)
+                rq["card_problem"] = why
+                store.update_task(task["id"], request=rq, last_status=why[:300])
+                return {"blocked": True, "error": why}
             try:
                 whatsapp.send_text(req["phone"], text)
             except Exception as e:  # noqa: BLE001 - a failed send must NOT read as approved+sent
                 store.update_task(task["id"], last_status=str(e)[:300])
-                return {"ok": False, "error": f"WhatsApp send failed: {str(e)[:200]}"}
+                # 'blocked', not just ok:False - approve_wa_reply only treats 'blocked'/'needs_confirm'
+                # as a failure, so a bare ok:False reported a failed send back to him as "Sent."
+                return {"blocked": True, "error": f"WhatsApp send failed: {str(e)[:200]}"}
             store.update_task(task["id"], status="done")
         else:
             store.update_task(task["id"], status="queued")

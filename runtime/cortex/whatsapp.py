@@ -308,13 +308,23 @@ def ingest_cloud(payload: dict, account: str = "sensa-uk") -> dict:
                     except Exception:  # noqa: BLE001
                         pass
                     codes = {str((e or {}).get("code")) for e in (st.get("errors") or [])}
-                    if "131047" in codes and is_owner(st.get("recipient_id") or ""):
-                        # 131047 = re-engagement required: the window was shut after all, whatever we
-                        # thought. Forget the stamp so later alerts go by template, and ring the doorbell
-                        # now so THIS alert is not just lost.
-                        db.setting_set("wa_owner_last_inbound", {})
+                    who = st.get("recipient_id") or ""
+                    if "131047" in codes:
+                        # 131047 = re-engagement required: the window was shut after all, whatever our
+                        # stamp said. Believe Meta.
+                        forget_window(who)
                         try:
-                            ring_waiting()
+                            if is_owner(who):
+                                ring_waiting()        # his alert: ring the doorbell instead
+                            else:
+                                reopen_undelivered(who, errs)   # a client: the card is NOT answered
+                        except Exception:  # noqa: BLE001
+                            pass
+                    elif is_owner(who):
+                        pass                          # any other failure to him: the log + notify is enough
+                    else:
+                        try:
+                            reopen_undelivered(who, errs)
                         except Exception:  # noqa: BLE001
                             pass
             # the sender's WhatsApp profile name, keyed by wa_id — this is the push name Rashad expected
@@ -327,7 +337,7 @@ def ingest_cloud(payload: dict, account: str = "sensa-uk") -> dict:
                 # THE OWNER'S OWN MESSAGES ARE CONTROL, NEVER AN ENQUIRY. Checked before anything else so a
                 # button tap or a voice note from him can never be triaged, CRM-captured or replied to.
                 if is_owner(phone):
-                    note_owner_inbound()      # his message reopens the window alerts have to fit inside
+                    note_inbound(phone)       # his message reopens the window alerts have to fit inside
                     mid = m.get("id") or ""
                     if mid and (mid in seen or mid in fresh):   # Meta retries: never act on a tap twice
                         continue
@@ -343,6 +353,7 @@ def ingest_cloud(payload: dict, account: str = "sensa-uk") -> dict:
                 msg = ((m.get("text") or {}).get("body") or "").strip()
                 if not msg:
                     continue
+                note_inbound(phone)   # their message is what makes a reply sendable for the next 24h
                 k = _key(account, phone, msg)
                 if k in seen or k in fresh:       # Meta retries on non-200; never draft the same twice
                     continue
@@ -393,31 +404,95 @@ def is_owner(phone: str) -> bool:
     return bool(a) and len(a) >= 9 and a[-9:] == b[-9:]
 
 
-# Meta only accepts a free-form message to someone inside 24h of THEIR last message to us. For a client
-# that window is the point; for the owner it is a trap, because his own number goes quiet for days and
-# then every alert is silently refused. So we track when he last wrote in and pick the transport from
-# that, rather than trying a send and waiting for an exception that never comes (Meta accepts the send
-# and fails it asynchronously on a status webhook, which is why his alerts just stopped, 6 Oct 2026).
+# THE 24 HOUR WINDOW IS THE WHOLE GAME ON WHATSAPP. Meta only accepts a free-form message to someone
+# inside 24h of THEIR last message to us. Outside it, Meta ACCEPTS the send (returns a wamid) and fails it
+# asynchronously on a status webhook, so an exception-based check never fires: the owner's alerts silently
+# stopped arriving, and a four-day-old lead's reply was marked 'done' having never been delivered
+# (cards 1050 / 1072, 6 Oct 2026). So the window is TRACKED PER NUMBER and decided BEFORE sending.
 WINDOW_SEC = 24 * 3600
-WINDOW_MARGIN_SEC = 20 * 60          # never gamble on the last twenty minutes of the window
+WINDOW_MARGIN_SEC = 20 * 60          # the OWNER's alerts never gamble on the last twenty minutes
 
 
-def note_owner_inbound() -> None:
-    """His message to the business number reopens the 24h window. Stamped so alerts know."""
+def _digits(phone: str) -> str:
+    return re.sub(r"\D", "", phone or "")
+
+
+def _win_key(phone: str) -> str:
+    """Keyed on the FULL digits, never the last nine: a last-nine key collides across countries (1,384
+    CRM rows share one), and here a collision would read as 'window open' for the wrong person."""
+    return "wa_in:" + _digits(phone)
+
+
+def note_inbound(phone: str) -> None:
+    """Their message to us reopens the window. Stamped for every inbound number, owner included."""
+    if not _digits(phone):
+        return
     try:
-        db.setting_set("wa_owner_last_inbound", {"at": time.time()})
+        db.setting_set(_win_key(phone), {"at": time.time()})
     except Exception:  # noqa: BLE001 - bookkeeping must never break ingest
         pass
 
 
-def owner_window_open() -> bool:
-    """True when Meta will still accept a free-form (buttoned) message to the owner."""
-    v = db.setting_get("wa_owner_last_inbound") or {}
+def forget_window(phone: str) -> None:
+    """Meta says the window was shut after all (131047). Believe Meta, not our stamp."""
+    try:
+        db.setting_set(_win_key(phone), {})
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def last_inbound_at(phone: str) -> float:
+    """When they last messaged us, as an epoch. Falls back to the newest card we raised for that number,
+    so a card that predates this bookkeeping is judged on the message that created it rather than being
+    assumed dead."""
+    v = db.setting_get(_win_key(phone)) or {}
     try:
         at = float(v.get("at") or 0)
     except (TypeError, ValueError):
         at = 0.0
-    return bool(at) and (time.time() - at) < (WINDOW_SEC - WINDOW_MARGIN_SEC)
+    if at:
+        return at
+    row = db.one("select extract(epoch from max(created_at)) as ts from tasks where kind='wa_reply' "
+                 "and regexp_replace(request->>'phone', '[^0-9]', '', 'g') = %s", (_digits(phone),))
+    try:
+        return float((row or {}).get("ts") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def window_open(phone: str, margin: float = 0.0) -> bool:
+    """True when Meta will still accept a free-form message to this number. No margin by default: for a
+    client we would rather try with ten minutes left than refuse a reply he has approved."""
+    at = last_inbound_at(phone)
+    return bool(at) and (time.time() - at) < (WINDOW_SEC - margin)
+
+
+def window_closes_in(phone: str) -> float:
+    """Seconds of window left, 0 when it has gone. For telling him BEFORE he approves, not after."""
+    at = last_inbound_at(phone)
+    return 0.0 if not at else max(0.0, (at + WINDOW_SEC) - time.time())
+
+
+def owner_window_open() -> bool:
+    return window_open(owner_number(), margin=WINDOW_MARGIN_SEC)
+
+
+def reopen_undelivered(recipient: str, errs: str) -> int | None:
+    """A send Meta accepted and then failed must NOT sit on the card as 'done'. The card goes back to the
+    Inbox with the reason on it, because a lead we never actually answered reading as answered is how a
+    lead gets quietly lost (card 1050, 6 Oct 2026)."""
+    row = db.one("select id from tasks where kind='wa_reply' and status in ('done','sending','queued') "
+                 "and regexp_replace(request->>'phone', '[^0-9]', '', 'g') = %s "
+                 "order by id desc limit 1", (_digits(recipient),))
+    if not row:
+        return None
+    t = store.get_task(row["id"]) or {}
+    req = dict(t.get("request") or {})
+    req["card_problem"] = ("Not delivered: " + errs)[:300]
+    store.update_task(row["id"], status="awaiting_approval", request=req,
+                      last_status=("undelivered: " + errs)[:300])
+    print(f"[whatsapp] reopened card {row['id']}: accepted then failed - {errs[:120]}", flush=True)
+    return row["id"]
 
 
 def _doorbell(to: str, co: dict, req: dict) -> bool:
