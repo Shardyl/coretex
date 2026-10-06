@@ -59,6 +59,9 @@ object SyncRunner {
         var sleepDetailDays = 0
         var restingDays = 0
         var restError: String? = null
+        var hrSamples = 0
+        var hrReadable = false
+        val hrGaps = ArrayList<Long>()
         val respMissing = Perms.RESPIRATORY !in granted
         for ((i, c) in chunks.withIndex()) {
             progress("Reading ${c.first} to ${c.second} (${i + 1}/${chunks.size})")
@@ -93,7 +96,10 @@ object SyncRunner {
             for (k in 0 until chunk.days.length()) {
                 val day = chunk.days.getJSONObject(k)
                 if (!day.isNull("sleep_start")) chunkSleepDays++
-                val v = runCatching { LocalDate.parse(day.getString("day")) }.getOrNull()?.let { rest.byDay[it] } ?: continue
+                val date = runCatching { LocalDate.parse(day.getString("day")) }.getOrNull() ?: continue
+                rest.samplesByDay[date]?.let { day.put("day_hr_samples", it) }
+                rest.gapByDay[date]?.let { day.put("day_hr_gap_s", it) }
+                val v = rest.byDay[date] ?: continue
                 day.put("day_resting_hr", v)
                 chunkRestDays++
             }
@@ -113,6 +119,9 @@ object SyncRunner {
                     samsungStepDays += chunkStepDays
                     sleepDetailDays += chunkSleepDays
                     restingDays += chunkRestDays
+                    if (rest.samplesByDay.isNotEmpty()) hrReadable = true
+                    hrSamples += rest.samplesByDay.values.sum()
+                    hrGaps += rest.gaps
                 }
                 UploadResult.Unauthorized -> return finish(SyncOutcome(false, "Server rejected the token (401)"))
                 is UploadResult.Failed -> return finish(
@@ -127,6 +136,8 @@ object SyncRunner {
                 "OK: sent $sentDays days (steps from Samsung for $samsungStepDays days), " +
                     "$sentSessions sessions ($sentSamsung from Samsung), $sentWeights weights, " +
                     "sleep detail for $sleepDetailDays days, daytime resting HR for $restingDays days" +
+                    (if (hrReadable) "\ndaytime HR: $hrSamples samples, median gap " +
+                        (medianOf(hrGaps)?.let { "${it}s" } ?: "n/a") else "") +
                     (if (respMissing) "\nRespiratory rate not granted: tap Grant permissions" else "") +
                     (restError?.let { "\nSamsung daytime resting HR failed: $it" } ?: "") +
                     (stepsError?.let { "\nSamsung steps failed, Health Connect steps used: $it" } ?: "") +

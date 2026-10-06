@@ -212,26 +212,41 @@ object SamsungReader {
         }
     }
 
-    /** Daytime resting heart rate per LOCAL day; [error] = the SDK read failed. */
-    class RestingRead(val byDay: Map<LocalDate, Double>, val error: String?)
+    /**
+     * Daytime resting heart rate per LOCAL day; [error] = the SDK read failed.
+     * [samplesByDay] = eligible daytime HR sample count per day (only when HR was readable),
+     * [gapByDay] = median gap in seconds between consecutive eligible samples (days with 2+ samples),
+     * [gaps] = every consecutive-sample gap (seconds) over the range, for the status line.
+     */
+    class RestingRead(
+        val byDay: Map<LocalDate, Double>,
+        val error: String?,
+        val samplesByDay: Map<LocalDate, Int> = emptyMap(),
+        val gapByDay: Map<LocalDate, Long> = emptyMap(),
+        val gaps: List<Long> = emptyList(),
+    )
 
     private val DAY_FROM: java.time.LocalTime = java.time.LocalTime.of(6, 0)
     private val DAY_TO: java.time.LocalTime = java.time.LocalTime.of(20, 0)
     private val AFTER_EXERCISE: Duration = Duration.ofMinutes(10)
-    private val REST_WINDOW: Duration = Duration.ofMinutes(10)
-    private const val REST_MIN_SAMPLES = 5
+    private val REST_WINDOW: Duration = Duration.ofMinutes(30)
+    private const val REST_MIN_SAMPLES = 3
 
     /**
      * Daytime resting HR for each LOCAL day in [from, toInclusive] (the watch is worn ~06:00-18:00,
      * not at night). Samsung HEART_RATE samples between 06:00 and 20:00 local, excluding every
      * Samsung exercise session plus 10 minutes after it ends; result = the lowest mean over any
-     * 10-minute window holding at least 5 samples. Days without such a window are left out.
+     * 30-minute window holding at least 3 samples. Days without such a window are left out.
+     * (1.3.1: was 10 min / 5 samples, which was null every day as the watch samples sparsely.)
      * Needs HEART_RATE and EXERCISE read (without EXERCISE workouts could not be excluded, so
      * nothing is computed). Never throws.
      */
     suspend fun readDaytimeRestingHr(ctx: Context, from: LocalDate, toInclusive: LocalDate): RestingRead {
         val zone = ZoneId.systemDefault()
         val out = HashMap<LocalDate, Double>()
+        val counts = HashMap<LocalDate, Int>()
+        val medGaps = HashMap<LocalDate, Long>()
+        val allGaps = ArrayList<Long>()
         return try {
             withContext(Dispatchers.IO) {
                 val st = store(ctx)
@@ -277,9 +292,15 @@ object SamsungReader {
                     }
                     samples.sortBy { it.first }
                     lowestRollingAvg(samples, REST_WINDOW, REST_MIN_SAMPLES)?.let { out[d] = it }
+                    counts[d] = samples.size
+                    val dayGaps = (1 until samples.size).map {
+                        Duration.between(samples[it - 1].first, samples[it].first).seconds
+                    }
+                    medianOf(dayGaps)?.let { medGaps[d] = it }
+                    allGaps += dayGaps
                     d = d.plusDays(1)
                 }
-                RestingRead(out, null)
+                RestingRead(out, null, counts, medGaps, allGaps)
             }
         } catch (e: Throwable) {
             RestingRead(emptyMap(), describe(e))

@@ -150,6 +150,8 @@ class HealthReader(
                 putN("sleep_source", sd?.source)
                 // Filled from Samsung Health by SyncRunner when the watch has enough daytime data.
                 put("day_resting_hr", JSONObject.NULL)
+                put("day_hr_samples", JSONObject.NULL)
+                put("day_hr_gap_s", JSONObject.NULL)
             })
             d = d.plusDays(1)
         }
@@ -340,6 +342,14 @@ internal fun lowestRollingAvg(samples: List<Pair<Instant, Double>>, width: Durat
         if (j > i) sum -= samples[i].second
     }
     return best
+}
+
+/** Median of [values] (mean of the two middle values when even, rounded), null when empty. */
+internal fun medianOf(values: List<Long>): Long? {
+    if (values.isEmpty()) return null
+    val v = values.sorted()
+    val m = v.size / 2
+    return if (v.size % 2 == 1) v[m] else Math.round((v[m - 1] + v[m]) / 2.0)
 }
 
 internal fun JSONObject.putN(key: String, value: Any?): JSONObject = put(key, value ?: JSONObject.NULL)
