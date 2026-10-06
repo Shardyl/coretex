@@ -176,7 +176,7 @@ function renderTodayInner(){
             <div><div style="font-size:17px;font-weight:800;line-height:1.1">${h.steps!=null?fmtN(h.steps):'—'}</div><div class="fd-sub" style="font-size:10px">Steps</div></div>
             <div><div style="font-size:17px;font-weight:800;line-height:1.1">${bp?fmtN(bp.move+bp.work):'—'}</div><div class="fd-sub" style="font-size:10px">Active kcal</div></div>
             ${(()=>{const sl=nightFor(foodDay), hr=nightHR(sl);
-              return `<div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1">${sl&&sl.score!=null?fmtN(sl.score):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep score</div></div>
+              return `<div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1">${sl&&sl.score!=null?fmtN(sl.score):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep score</div>${sl&&sl.awake!=null&&sl.awake>=5?`<div style="font-size:9px;color:${sl.awake>=45?'var(--amber)':'var(--ink3)'};font-weight:700">${durHM(sl.awake)} awake</div>`:''}</div>
               <div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1">${hr!=null?fmtN(hr):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep HR</div></div>`;})()}</div>`;})()}
       </div>
       <div class="fd-bar${t.kcal>tgt?' over':''}"><div style="width:${kPct}%"></div></div>
@@ -565,7 +565,7 @@ window.foodEditMission=function(){
 
 // ---------- Bloods: lab results by panel, year on year, plus the next-test checklist ----------
 // Server-owned (fitness.lab_results via the pull); values are the lab's own, flags computed on the server.
-const LAB_PANELS=['Metabolic','Lipids','Liver','Kidney','Iron','Vitamins','Minerals','Thyroid','Hormones','Inflammation','Blood count','Screening','Urine','Heavy metals','Body composition','Other'];
+const LAB_PANELS=['Metabolic','Lipids','Advanced lipids','Liver','Kidney','Iron','Vitamins','Minerals','Thyroid','Hormones','Inflammation','Blood count','Screening','Urine','Heavy metals','Body composition','Other'];
 function labVal(r){if(!r)return '—';return r.value!=null?(Math.round(r.value*1000)/1000).toLocaleString():esc(r.text||'—');}
 function labRange(r){
   if(!r)return '';
