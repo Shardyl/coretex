@@ -1510,6 +1510,7 @@ while a local change is queued — a pull once erased a cardio session seconds a
   the baseline in every report (before vs after). Start 88.9 kg. GOAL: 79 kg at 12% fat by 31 Dec 2026;
   milestone sub-15% (~82 kg at 69.6 kg lean). Previous best 16.2%. App v43 mission strip (top of every screen)
   reads setting `fitness_targets.mission`; pep line is code-computed from his logs, never generated.
+- **Targets sync (6 Oct 2026, app v48):** the doc carries `targets` ONLY after an edit on that device (`fitness_targets_dirty_v1`, cleared after a successful push). Before, every sync pushed targets before pulling, so a device opened days later reset kcal/protein to its stale copy.
 - **Bloods + bodyweight lifts (5 Oct 2026, app v45):** Food > Bloods reads server-owned `fitness.lab_results` (one
   row per marker per test date, flag computed in `cortex/labs.py` from the lab's own range) and `fitness.lab_wishlist`
   (next-test checklist; an item is done when a later result with the same marker name exists). NO health data in this
