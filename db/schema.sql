@@ -254,6 +254,9 @@ alter table fitness.health_daily add column if not exists sleep_resp_avg  numeri
 alter table fitness.health_daily add column if not exists sleep_hrv_ms    numeric;
 alter table fitness.health_daily add column if not exists sleep_source    text;
 alter table fitness.health_daily add column if not exists day_resting_hr  numeric;
+-- Bridge 1.3.1: how densely the watch sampled daytime HR (diagnoses a blank day_resting_hr)
+alter table fitness.health_daily add column if not exists day_hr_samples  int;
+alter table fitness.health_daily add column if not exists day_hr_gap_s    numeric;
 
 -- Eight Sleep's own nightly figures (cortex/eightsleep.py, unofficial app API). `day` = the morning
 -- the night ended, as Eight Sleep labels it. Durations in seconds as Eight Sleep reports them.

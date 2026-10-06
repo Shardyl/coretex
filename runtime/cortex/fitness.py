@@ -271,7 +271,8 @@ def health_pull(days: int = 400) -> dict:
           "sleepEnd": r["sleep_end"].isoformat() if r["sleep_end"] else None,
           "sleepHRAvg": _num(r["sleep_hr_avg"]), "sleepHRMin": _num(r["sleep_hr_min"]),
           "sleepResp": _num(r["sleep_resp_avg"]), "sleepHrvMs": _num(r["sleep_hrv_ms"]),
-          "sleepSource": r["sleep_source"], "dayRestingHR": _num(r["day_resting_hr"])}
+          "sleepSource": r["sleep_source"], "dayRestingHR": _num(r["day_resting_hr"]),
+          "dayHrSamples": r["day_hr_samples"], "dayHrGapS": _num(r["day_hr_gap_s"])}
          for r in db.query("select * from fitness.health_daily where day > current_date - %s order by day",
                            (days,))]
     e8 = [{"date": _wake_day(r), "label": r["day"].isoformat(), "score": _num(r["score"]), "fitness": _num(r["fitness"]),
@@ -307,7 +308,8 @@ def _ts(v):
 
 
 _SLEEP_COLS = ("sleep_deep_min", "sleep_rem_min", "sleep_light_min", "sleep_awake_min", "sleep_start", "sleep_end",
-               "sleep_hr_avg", "sleep_hr_min", "sleep_resp_avg", "sleep_hrv_ms", "sleep_source", "day_resting_hr")
+               "sleep_hr_avg", "sleep_hr_min", "sleep_resp_avg", "sleep_hrv_ms", "sleep_source", "day_resting_hr",
+               "day_hr_samples", "day_hr_gap_s")
 # Sleep columns coalesce: a bridge older than 1.3.0 does not send them and must not blank them.
 _HEALTH_DAILY_UPSERT = (
     "insert into fitness.health_daily (day, steps, total_kcal, active_kcal, distance_m, floors, resting_hr, hrv_ms, "
@@ -324,6 +326,8 @@ def _sleep_vals(r: dict) -> list:
     v += [_ts(r.get("sleep_start")), _ts(r.get("sleep_end"))]
     v += [_num(r.get(k)) for k in ("sleep_hr_avg", "sleep_hr_min", "sleep_resp_avg", "sleep_hrv_ms")]
     v += [(r.get("sleep_source") or "")[:120] or None, _num(r.get("day_resting_hr"))]
+    n = _num(r.get("day_hr_samples"))
+    v += [int(n) if n is not None else None, _num(r.get("day_hr_gap_s"))]
     return v
 
 
