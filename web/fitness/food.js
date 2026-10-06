@@ -27,7 +27,26 @@ function timePick(id,val,allowEmpty){
     <select id="${id}_m" class="fd-input" style="width:auto;padding:8px 6px" onchange="${upd}">${blank}${opt(60,m)}</select>
     <input type="hidden" id="${id}" value="${val||''}"/></span>`;
 }
-function nowAt(){return foodDay===localDay(new Date())?new Date().toISOString():null;}   // eaten-at for food logged on the day
+// Eaten-at for food logged on the day. He fasts until break-fast and often logs dinner hours ahead to plan, so food
+// logged before today's break-fast is PLANNED (no time); settleEatenTimes() stamps it when the fast is broken.
+function nowAt(){
+  if(foodDay!==localDay(new Date()))return null;
+  const f=fastDay(foodDay);
+  return f&&f.brokeAt?new Date().toISOString():null;
+}
+// Every entry on `day` with no time, or a time before that day's break-fast, moves to the break-fast time.
+const EATEN_FIX_FROM='2026-10-04';   // owner: data is accurate from 4 Oct 2026; older days are left as they were
+function settleEatenTimes(day){
+  const f=fastDay(day);if(!f||!f.brokeAt||day<EATEN_FIX_FROM)return false;
+  const b=new Date(f.brokeAt);let n=0;
+  foodLog.forEach(e=>{if(e.date===day&&(!e.at||new Date(e.at)<b)){e.at=f.brokeAt;n++;}});
+  return n>0;
+}
+function settleAllEatenTimes(){
+  let any=false;
+  fastDays.forEach(f=>{if(f.date>=EATEN_FIX_FROM&&settleEatenTimes(f.date))any=true;});
+  if(any)saveFoodLog();
+}
 function newId(p){return p+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function r0(v){return v==null||isNaN(v)?null:Math.round(v);}
 function r1(v){return v==null||isNaN(v)?null:Math.round(v*10)/10;}
@@ -128,6 +147,7 @@ const st=document.createElement('style');st.textContent=css;document.head.append
 
 // ---------- router ----------
 window.renderFood=function(sub){
+  try{settleAllEatenTimes();}catch(e){}
   try{renderMission();}catch(e){}
   if(sub==='today')renderToday();
   else if(sub==='history')renderHistory();
@@ -254,6 +274,7 @@ window.foodFastSet=function(field,inputId){
   let f=fastDay(foodDay);if(!f){f={date:foodDay,brokeAt:null,closedAt:null};fastDays.push(f);}
   f[field]=atTime(foodDay,v);if(f.cleared)f.cleared=f.cleared.filter(x=>x!==field);
   if(field==='closedAt'&&f.brokeAt&&new Date(f.closedAt)<new Date(f.brokeAt)){f.closedAt=atTime(shiftDay(foodDay,1),v);}   // window closed after midnight (compare as dates: server times carry +04:00, local ones Z)
+  if(field==='brokeAt'&&settleEatenTimes(foodDay))saveFoodLog();
   saveFasts();renderToday();toast(field==='brokeAt'?'Fast broken':'Eating window closed');
 };
 window.foodFastClear=function(field){const f=fastDay(foodDay);if(!f)return;
