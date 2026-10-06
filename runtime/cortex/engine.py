@@ -4105,15 +4105,24 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
                 "the deal record. Should we send it? No when: the client has SIGNED OFF or approved the final work; our "
                 "last email already covers it; they put it on hold or gave a date they will come back by; they asked us "
                 "for nothing and nothing is outstanding. "
-                + ("This deal is CLOSING: our quotation is with them. 'We are reviewing', 'we will get back to you' "
-                   "and our own 'we will wait to hear back' are NOT reasons to hold; only a decision, an on-hold or "
-                   "a date they gave are. " if (opp.get("cadence") or {}).get("name") == "closing" else "")
+                + ("This deal is CLOSING: our quotation or proposal is with them and we are waiting for their answer. "
+                   "Waiting for their answer is the REASON for this chase, never a reason to hold it: 'our last email "
+                   "already covers it', 'we are reviewing', 'we will get back to you', 'awaiting their response' and our "
+                   "own 'we will wait to hear back' do NOT hold it. Hold ONLY for: a decision (yes or no), an on-hold, a "
+                   "date they gave that has not passed, or an email from us to them in the last 2 working days. "
+                   if stage == "Quote" or (opp.get("cadence") or {}).get("name") == "closing" else "")
                 + 'Return {"send": true|false, "signed_off": true|false, "why": "<one line>"}. When unsure, send.',
                 f"NEWEST MESSAGES (newest first):\n{_recent or '(none)'}\n\n{_tl}",
                 model=provider.MODEL_ROUTER, purpose="chase-gate", company=co.get("slug"))
             if isinstance(_g, dict) and _g.get("send") is False:
                 db.execute("update crm_projects set followup_step=%s where id=%s",
                            (opp.get("followup_step") or 0, opp["id"]))      # the chase that did not fire is not counted
+                if stage == "Quote" and opp.get("automation") == "auto":
+                    # A HELD CHASE IS RE-CHECKED IN 2 WORKING DAYS (owner, 6 Oct 2026): it used to wait for the next
+                    # full gap (4 to 14 days), so one hold silenced a quoted deal for up to a fortnight.
+                    _rt = crm._schedule_point({"working_days": True, "steps": [{"after_days": 2}]}, 0)
+                    db.execute("update crm_projects set next_followup=%s where id=%s and automation='auto'",
+                               (_rt, opp["id"]))
                 pipeline.log_deal(int(opp["id"]), "note", f"No {label} drafted: {_g.get('why') or 'not warranted'}.")
                 if _g.get("signed_off") and stage in crm.WON_STAGES:
                     crm.pause_followups(opp["id"])

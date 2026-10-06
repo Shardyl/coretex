@@ -2568,3 +2568,13 @@ shoot needs none), then 10% off the whole quotation.
 - 1 Oct: 117, 118, 130, 132, 133, 135, 136, 141 moved onto the closing rhythm. RAFED (136) had its chase pushed to
   3 Jun 2027 by a vendor-affairs bank-details notice read as a client timeframe; the `followup-wait` prompt now
   ignores general notices to all suppliers/customers.
+
+## Quoted deals chase on the closing rhythm from the first day (6 Oct 2026)
+- Owner: chases after a quote "seem a little bit slow". Two causes: the chase gate held 11 due chases in a week as
+  "our last email already covers it / awaiting their response", and each hold waited the next full gap (4-14 days);
+  and DECISION_CADENCE (3/7/14 then fortnightly) ran until the client first replied.
+- `crm.set_project_stage` -> Quote now sets CLOSING_CADENCE (every 2 working days x5, 3 x4, 5 x4...).
+  `crm.enter_closing` no longer needs a `quotation_sent` event: any Quote deal on auto qualifies (proposal or quote).
+- Chase gate on a Quote deal: waiting for their answer is the reason to chase; holds only for a decision, an
+  on-hold, a date they gave that has not passed, or our email to them in the last 2 working days.
+- A held chase on a Quote deal is re-checked in 2 working days (`next_followup`), not after the next full gap.

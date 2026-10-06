@@ -1035,9 +1035,12 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
     terms = ((p.get("payment_terms") or {}).get("splits")) or []
     now = datetime.now(timezone.utc)
     if new == "Quote" and p.get("automation") == "auto":
-        # decision-chase rhythm replaces the generic chase while they weigh the quote
+        # THE CLOSING RHYTHM FROM THE MOMENT THE QUOTE GOES OUT (owner, 6 Oct 2026: "it seems a little bit slow").
+        # DECISION_CADENCE (day 3 / 7 / 14, then fortnightly) ran until the client first replied; now every quoted
+        # deal chases every 2 working days, then twice a week, then weekly. DECISION_CADENCE is kept for reference.
+        _cc = get_closing_cadence(p["company"])
         db.execute("update crm_projects set cadence=%s, followup_step=0, next_followup=%s where id=%s",
-                   (Json(DECISION_CADENCE), _schedule_point(DECISION_CADENCE, 0), did))
+                   (Json(_cc), _schedule_point(_cc, 0), did))
     if new == "Booked":
         adv = next((x for x in terms if "approval" in (x.get("due") or "").lower()
                     or "advance" in (x.get("due") or "").lower() or "booking" in (x.get("due") or "").lower()),
@@ -1289,9 +1292,6 @@ def enter_closing(deal_id: int) -> bool:
     by our answer (record_send -> touch_followups) or by a date they stated; this sets only the rhythm."""
     p = db.one("select * from crm_projects where id=%s", (int(deal_id),))
     if not p or p.get("automation") != "auto" or p.get("stage") != "Quote":
-        return False
-    if not db.one("select 1 from crm_projects where id=%s and history @> %s::jsonb",
-                  (int(deal_id), Json([{"event": "quotation_sent"}]))):
         return False
     was = (p.get("cadence") or {}).get("name") if isinstance(p.get("cadence"), dict) else None
     db.execute("update crm_projects set cadence=%s, followup_step=0, updated_at=now() where id=%s",
