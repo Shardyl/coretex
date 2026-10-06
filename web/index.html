@@ -1868,7 +1868,8 @@ function actionCard(t){
     const isEmail=t.kind==='email_reply'||t.kind==='email_draft';
     const isOutbound=t.kind==='email_draft';
     const kindLabel=t.kind==='blog_menu'?'blog menu — pick the next posts':t.kind==='blog_idea'?'blog idea':t.kind==='blog'?'blog post — review':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to schedule':t.kind==='newsletter_send'?'newsletter due to send':t.kind==='email_draft'?'email draft':t.kind==='lead_escalation'?'strategic lead — yours to take':(isEmail?'email reply':esc(t.kind||'task'));
-    const title=esc(isEmail&&em?((isOutbound?'Email to ':'Reply to ')+(em.inquiry&&em.inquiry.name||em.to||'recipient')):(t.title||(wp&&wp.title)||('Task #'+t.id)));
+    const title=esc(isEmail&&em?((isOutbound?'Email to ':'Reply to ')+(em.inquiry&&em.inquiry.name||em.to||'recipient')):
+      (t.kind==='wa_reply'&&t.wa?('WhatsApp reply to '+(t.wa.who||t.wa.phone)):(t.title||(wp&&wp.title)||('Task #'+t.id))));
     const body=esc(plainText(isEmail&&em&&em.preview?em.preview:(t.body||t.draft||'')));
     return `<div class="card" id="t${t.id}">
       <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${esc(sk)}</span>
@@ -1876,6 +1877,7 @@ function actionCard(t){
       <div class="title">${title}</div>
       ${isEmail&&em?envHeader(em):''}
       ${isEmail&&em&&!isOutbound?emailBlock(em):''}
+      ${t.kind==='wa_reply'?waBlock(t.wa):''}
       ${mgrVerdict(t.manager)}
       ${t.kind==='blog_menu'?menuList(t):''}
       ${t.kind==='blog_menu'?'':isEmail&&em&&em.html
@@ -2121,6 +2123,19 @@ function emailBlock(em){
   return `<div style="margin:8px 0;padding:10px 12px;background:var(--bg2,#0e1620);border:1px solid var(--ln,#22303f);border-radius:11px">
     <div class="meta" style="margin-bottom:5px">${ic('inbox',14)} their first message${q.name?' — '+esc(q.name):''}${q.email?' &lt;'+esc(q.email)+'&gt;':''}</div>
     <div style="font-size:13.5px;color:var(--fg,#dfe7ef);white-space:pre-wrap;max-height:200px;overflow:auto">${esc(q.message||'(no message text provided)')}</div></div>`;
+}
+
+// THE WHATSAPP CONVERSATION, so a reply can be judged against what it answers. A wa_reply card used to
+// render the draft alone, which is not enough to approve anything (owner, 6 Oct 2026).
+function waBlock(w){
+  if(!w) return '';
+  const bubbles=(w.messages||[]).map(m=>`<div style="margin:4px 0;padding:8px 11px;background:var(--bg,#0a111a);border:1px solid var(--ln,#22303f);border-radius:11px 11px 11px 3px;font-size:13.5px;color:var(--fg,#dfe7ef);white-space:pre-wrap">${esc(m)}</div>`).join('');
+  const chips=[w.phone?esc(w.phone):'',w.category?esc(w.category):'',w.source?esc(w.source):''].filter(Boolean)
+    .map(c=>`<span class="chip">${c}</span>`).join('');
+  return `<div style="margin:8px 0;padding:10px 12px;background:var(--bg2,#0e1620);border:1px solid var(--ln,#22303f);border-radius:11px">
+    <div class="meta" style="margin-bottom:6px">${ic('inbox',14)} ${esc(w.who||'them')} said${(w.messages||[]).length>1?` (${w.messages.length} messages)`:''}</div>
+    <div style="max-height:260px;overflow:auto">${bubbles||'<div class="meta">(no message text)</div>'}</div>
+    ${chips?`<div class="meta" style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">${chips}</div>`:''}</div>`;
 }
 
 function mgrVerdict(v){

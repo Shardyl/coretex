@@ -812,6 +812,29 @@ voice note from him is never triaged, CRM-captured or answered.
 - **STILL MISSING: a client-facing re-engagement template.** `wa_alert_template` (`cortex_enquiry_alert`)
   is the internal doorbell to the owner's phone, wrong content for a client. Until Meta approves one, a
   lead who went quiet for more than 24h cannot be reopened on WhatsApp at all.
+- **THE CARD IS THE CONVERSATION, IN BOTH PLACES (owner, 6 Oct 2026: "there's no history in the card...
+  how can I approve anything without that information").** A `wa_reply` had no renderer of its own, so
+  it fell through the generic card, whose body is `title + draft`: the Inbox showed a reply and no sign
+  of what it answered, titled "Task #1096". `api._enrich_action_card` now serves a `wa` block (who, the
+  number, every message in `request.messages`, triage category, PPC source, minutes of window left) and
+  `waBlock` in the cockpit draws them as chat bubbles above the draft, with the card titled
+  "WhatsApp reply to <who>". Bump `sw.js` when touching `web/index.html`.
+- **AN OUT-OF-WINDOW ALERT CAN CARRY THE WHOLE CARD.** The bare doorbell template ("reply and Cortex will
+  send you the draft") carries nothing, and since his own number goes quiet for days that became EVERY
+  alert. A template's quick-reply buttons take a **per-message payload**, so `send_card_template` sends
+  the enquiry, the draft and the same `wa:ok` / `wa:edit` / `wa:skip` ids a buttoned alert uses. Setting
+  `wa_card_template` (`cortex_wa_card`) is preferred over `wa_alert_template`, which stays as the
+  fallback for when no card template is approved.
+  - **A TEMPLATE TAP ARRIVES IN A DIFFERENT SHAPE**: `button.payload`, not `interactive.button_reply.id`.
+    `_owner_control` reads both. Reading only the second is why taps on a template would do nothing.
+  - **A TEMPLATE PARAMETER MAY NOT CONTAIN A NEWLINE**, a tab or more than four consecutive spaces (the
+    template's own body may). `_flat()` folds a draft's paragraphs to one line with "  /  " and clamps it.
+  - **THE WABA ID ONLY EXISTS IN A WEBHOOK.** Template management needs the WhatsApp Business Account id
+    and the Graph API will not give it up from a phone number id or a system-user token (every edge tried
+    6 Oct 2026: `owned_whatsapp_business_accounts` wants business_management, `assigned_whatsapp_business_
+    accounts` returns empty, `debug_token` shows unscoped grants). `entry.id` on any webhook IS it, so
+    `ingest_cloud` stamps setting `wa_waba_id` the first time it sees one. `create_card_template()` /
+    `template_status()` then work from the box; never click it together in Meta's UI.
 - Spam and other no-reply messages raise the FYI card only — they never interrupt him on WhatsApp.
 
 **BOTH SITES POINT AT THE SAME NUMBER, so the MESSAGE carries the brand (28 Sep 2026).** sensa.digital and

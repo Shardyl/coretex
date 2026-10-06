@@ -28,6 +28,7 @@ import json
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from . import config, crm, db, provider, social_dm, store, worker
@@ -288,6 +289,15 @@ def ingest_cloud(payload: dict, account: str = "sensa-uk") -> dict:
     drafted = skipped = 0
     fresh: list[str] = []
     for entry in (payload or {}).get("entry") or []:
+        # A WEBHOOK IS THE ONLY PLACE THE WABA ID SHOWS UP. entry.id IS the WhatsApp Business Account id,
+        # and template management needs it; the Graph API will not hand it over from a phone number id or
+        # a system-user token (tried every edge, 6 Oct 2026). So keep it the moment Meta tells us.
+        if entry.get("id") and not db.setting_get("wa_waba_id"):
+            try:
+                db.setting_set("wa_waba_id", str(entry["id"]))
+                print(f"[whatsapp] learned WABA id {entry['id']}", flush=True)
+            except Exception:  # noqa: BLE001
+                pass
         for change in entry.get("changes") or []:
             value = change.get("value") or {}
             # DELIVERY STATUSES arrive on this same hook. A send that Meta ACCEPTS can still fail on the way
@@ -559,6 +569,32 @@ def send_template(phone: str, name: str, params: list[str], lang: str = "en") ->
                   "template": {"name": name, "language": {"code": lang}, "components": comps}})
 
 
+def _flat(text: str, cap: int = 700) -> str:
+    """Flatten text for a template PARAMETER. Meta rejects a parameter containing a newline, a tab or
+    more than four consecutive spaces, so a draft's paragraphs have to become one line. The template's
+    OWN body may be multi-line; only what we substitute into it may not."""
+    t = re.sub(r"\s*\n+\s*", "  /  ", (text or "").strip())
+    t = re.sub(r"[\t ]{2,}", " ", t.replace("\t", " "))
+    return (t[:cap - 1] + "…") if len(t) > cap else (t or "-")
+
+
+def send_card_template(phone: str, name: str, params: list[str], payloads: list[str],
+                       lang: str = "en") -> dict:
+    """A template that carries the whole approval card AND working buttons.
+
+    THIS IS THE ONLY WAY TO REACH HIM OUTSIDE THE 24H WINDOW WITH SOMETHING HE CAN ACT ON. A template's
+    quick-reply buttons take a PER-MESSAGE payload, so the same wa:ok / wa:edit / wa:skip ids that the
+    in-window buttoned alert uses ride on a template too. Without this, an out-of-window alert can only
+    be a doorbell: it tells him something arrived and he has to message back before he can see it."""
+    comps: list[dict] = [{"type": "body",
+                          "parameters": [{"type": "text", "text": _flat(p)} for p in params]}]
+    for i, payload in enumerate(payloads[:3]):
+        comps.append({"type": "button", "sub_type": "quick_reply", "index": str(i),
+                      "parameters": [{"type": "payload", "payload": payload[:128]}]})
+    return _post({"messaging_product": "whatsapp", "to": phone.lstrip("+"), "type": "template",
+                  "template": {"name": name, "language": {"code": lang}, "components": comps}})
+
+
 def download_media(media_id: str) -> tuple[bytes, str]:
     """Fetch a media object (a voice note) by id. Two calls: the id resolves to a short-lived signed URL,
     which then needs the SAME bearer token to download."""
@@ -590,12 +626,27 @@ def alert_owner(task_id: int) -> bool:
         return False
     req = t.get("request") or {}
     co = store.get_company(t["company_id"]) or {}
+    src = req.get("lead_source") or {}
     if not owner_window_open():
+        # OUT OF WINDOW, BUT STILL ACTIONABLE. A card template carries the enquiry, the draft and the
+        # three buttons; the bare doorbell (which carries nothing) is only the fallback for when no card
+        # template is approved yet.
+        card_tmpl = db.setting_get("wa_card_template")
+        if card_tmpl:
+            try:
+                send_card_template(to, card_tmpl,
+                                   [co.get("name") or "Cortex",
+                                    str(req.get("recipient") or req.get("phone") or "a new number"),
+                                    req.get("their_message") or "",
+                                    t.get("draft") or "(no draft)"],
+                                   [f"wa:ok:{task_id}", f"wa:edit:{task_id}", f"wa:skip:{task_id}"])
+                return True
+            except Exception as e:  # noqa: BLE001
+                print(f"[whatsapp] card template failed for {task_id}: {str(e)[:220]}", flush=True)
         if _doorbell(to, co, req):
             return True
-        # No template configured, or it was refused: try the buttons anyway. Out of window it will very
-        # likely fail, but staying silent on purpose is worse than a send that might get through.
-    src = req.get("lead_source") or {}
+        # Nothing approved to send: try the buttons anyway. Out of window it will very likely fail, but
+        # staying silent on purpose is worse than a send that might get through.
     body = (f"{co.get('name') or 'Cortex'} - WhatsApp enquiry\n"
             f"From: {req.get('recipient') or req.get('phone')}\n"
             + (f"Source: {src.get('line')}\n" if src.get("line") else "")
@@ -613,6 +664,61 @@ def alert_owner(task_id: int) -> bool:
         return False
 
 
+CARD_TEMPLATE_BODY = (
+    "New WhatsApp enquiry for {{1}}.\n\n"
+    "From: {{2}}\n\n"
+    "They said:\n{{3}}\n\n"
+    "Draft reply:\n{{4}}\n\n"
+    "Approve and send it as written, Edit it, or Skip.")
+
+
+def create_card_template(name: str = "cortex_wa_card", lang: str = "en",
+                         category: str = "UTILITY") -> dict:
+    """Submit the owner's card template to Meta for approval, and record its name once accepted.
+
+    Done through the API on purpose: this template is the whole out-of-window approval path, and
+    hand-building it in Meta's UI is where this project has lost the most time. Meta refuses a variable
+    at the very start or end of a body, which is why the text opens with words."""
+    waba = db.setting_get("wa_waba_id")
+    if not waba:
+        raise RuntimeError("no wa_waba_id yet - it is learned from the next inbound webhook")
+    token = config.require("WHATSAPP_TOKEN")
+    body = {"name": name, "language": lang, "category": category, "components": [
+        {"type": "BODY", "text": CARD_TEMPLATE_BODY,
+         "example": {"body_text": [["Sensa Productions", "Samantha",
+                                    "Hey Dear,  /  How are you?",
+                                    "Hey Samantha, I'm good thanks, how are you?"]]}},
+        {"type": "BUTTONS", "buttons": [{"type": "QUICK_REPLY", "text": "Approve & send"},
+                                        {"type": "QUICK_REPLY", "text": "Edit"},
+                                        {"type": "QUICK_REPLY", "text": "Skip"}]}]}
+    req = urllib.request.Request(f"{GRAPH}/{waba}/message_templates",
+                                 data=json.dumps(body).encode(), method="POST",
+                                 headers={"Authorization": f"Bearer {token}",
+                                          "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            out = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"template create failed ({e.code}): {e.read().decode()[:400]}") from e
+    db.setting_set("wa_card_template", name)   # alerts use it as soon as Meta approves it
+    return out
+
+
+def template_status(name: str = "cortex_wa_card") -> dict:
+    """Where Meta has got to with a template. APPROVED is when alerts start carrying the card."""
+    waba = db.setting_get("wa_waba_id")
+    if not waba:
+        return {"error": "no wa_waba_id yet"}
+    token = config.require("WHATSAPP_TOKEN")
+    url = f"{GRAPH}/{waba}/message_templates?name={urllib.parse.quote(name)}"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        rows = json.loads(r.read().decode()).get("data") or []
+    return {"templates": [{"name": t.get("name"), "status": t.get("status"),
+                           "category": t.get("category"), "language": t.get("language")}
+                          for t in rows]}
+
+
 def _owner_control(msg: dict, text: str) -> str:
     """Handle one message FROM the owner. Returns a short outcome word for the ingest tally.
 
@@ -620,7 +726,11 @@ def _owner_control(msg: dict, text: str) -> str:
     acknowledged rather than silently dropped so he is never left wondering whether it landed."""
     from . import engine                          # local: engine imports this module
     inter = msg.get("interactive") or {}
-    btn = (inter.get("button_reply") or {}).get("id") or ""
+    # TWO SHAPES, ONE MEANING. An in-window interactive button comes back as interactive.button_reply.id;
+    # a TEMPLATE quick-reply comes back as type 'button' with button.payload. Reading only the first is
+    # why taps on a card template would do nothing.
+    btn = ((inter.get("button_reply") or {}).get("id")
+           or (msg.get("button") or {}).get("payload") or "")
     if btn.startswith("wa:"):
         _, _, rest = btn.partition("wa:")
         action, _, tid = rest.partition(":")

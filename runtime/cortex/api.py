@@ -471,9 +471,17 @@ def _enrich_action_card(t: dict) -> dict:
     if (t.get("request") or {}).get("card_problem"):   # written by the engine when a card is held back
         t["card_problem"] = (t["request"] or {})["card_problem"]
     if t["kind"] == "wa_reply":
-        # WHAT HE NEEDS TO KNOW BEFORE HE TAPS APPROVE, not two seconds after. Computed per request
-        # rather than stored, because a window closes by the clock: a stored flag is wrong by lunchtime.
-        ph = (t.get("request") or {}).get("phone") or ""
+        # THE CONVERSATION IS THE CARD. A wa_reply used to render through the generic card, whose body is
+        # the draft alone, so the Inbox showed a reply with no sign of what it was answering - unapprovable
+        # (owner, 6 Oct 2026). Everything needed to judge it is assembled here and drawn by `waBlock`.
+        rq = t.get("request") or {}
+        ph = rq.get("phone") or ""
+        msgs = [m for m in (rq.get("messages") or [rq.get("their_message") or ""]) if m]
+        t["wa"] = {"who": rq.get("recipient") or ph, "phone": ph, "messages": msgs,
+                   "category": (rq.get("triage") or {}).get("category") or "",
+                   "summary": (rq.get("triage") or {}).get("summary") or "",
+                   "source": (rq.get("lead_source") or {}).get("line") or "",
+                   "minutes_left": int(whatsapp.window_closes_in(ph) // 60) if ph else 0}
         left = whatsapp.window_closes_in(ph) if ph else 0.0
         if not left:
             t["card_problem"] = ("WhatsApp will not deliver this - over 24 hours since their last "
