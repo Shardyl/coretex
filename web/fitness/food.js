@@ -294,8 +294,14 @@ function gki(list){   // glucose-ketone index from a glucose and ketone reading 
   for(const a of k)for(const b of g)if(Math.abs(new Date(a.at)-new Date(b.at))<=30*60000&&a.value>0)return r1(b.value/a.value);
   return null;
 }
+// Manual finger-prick entry is OFF by default (owner, 6 Oct 2026: no ketone strips for a while, the Libre covers
+// glucose). The Libre block still shows whenever sensor data exists; the switch is on the Fasting page.
+function manualReadingsOn(){try{return localStorage.getItem('fitness_manual_readings')==='1';}catch(e){return false;}}
+window.foodToggleManualReadings=function(){try{localStorage.setItem('fitness_manual_readings',manualReadingsOn()?'0':'1');}catch(e){}renderFasting();toast(manualReadingsOn()?'Finger-prick entry shown on Today':'Finger-prick entry hidden');};
 function readingsCard(){
   const list=readingsOn(foodDay), f=fastDay(foodDay), g=gki(list), u=gUnit();
+  const manual=manualReadingsOn()||list.length>0;
+  if(!manual&&!cgmOn(foodDay).length)return '';
   const ctx=!f||!f.brokeAt?'pre break-fast':'after eating';
   const cg=cgmOn(foodDay), last=cg.length?cg[cg.length-1]:null;
   return `<div class="card" style="padding:12px 16px">
@@ -304,6 +310,7 @@ function readingsCard(){
       <div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px"><div class="fd-big" style="font-size:28px">${gShow(last.mmol)} <span style="font-size:13px;color:var(--ink3)">${u==='mgdl'?'mg/dL':'mmol/L'}</span></div>
       <div style="font-size:12px;color:var(--ink3)">day ${gShow(Math.min(...cg.map(x=>x.mmol)))}&ndash;${gShow(Math.max(...cg.map(x=>x.mmol)))}, avg ${gShow(cg.reduce((a,x)=>a+x.mmol,0)/cg.length)}</div></div>
       <div style="position:relative;height:90px;margin-bottom:10px"><canvas id="fdCgmChart" role="img" aria-label="Glucose today"></canvas></div>`:''}
+    ${!manual?'</div>':''}${!manual?'':`
     <div class="fd-sub" style="margin-bottom:6px">Ketones and glucose${g!=null?` &middot; GKI ${g}`:''}</div>
     ${list.map(x=>`<div class="fd-entry" style="cursor:default;padding:5px 0"><div class="n" style="font-size:13px">${x.kind==='ketones'?'Ketones '+r1(x.value)+' mmol/L':'Glucose '+gShow(x.value)+(u==='mgdl'?' mg/dL':' mmol/L')}</div>
       <div class="q">${tOf(x.at)} &middot; ${esc(readingState(x).label)}${x.notes?' &middot; '+esc(x.notes):''} <button class="hist-del" onclick="foodDelReading('${x.id}')">&times;</button></div></div>`).join('')}
@@ -317,7 +324,7 @@ function readingsCard(){
       ${timePick('fdRdT',foodDay===localDay(new Date())?nowHM():'',true)}</div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <select id="fdCtx" class="fd-input" style="font-size:14px">${['pre break-fast','after eating','random'].map(c=>`<option ${c===ctx?'selected':''}>${c}</option>`).join('')}</select>
-      <button class="fd-btn" style="width:auto;margin:0;padding:0 18px" onclick="foodSaveReadings()">Save</button></div></div>`;
+      <button class="fd-btn" style="width:auto;margin:0;padding:0 18px" onclick="foodSaveReadings()">Save</button></div></div>`}`;
 }
 window.foodToggleGUnit=function(){try{localStorage.setItem('fitness_glucose_unit',gUnit()==='mgdl'?'mmol':'mgdl');}catch(e){}renderToday();};
 window.foodSaveReadings=function(){
@@ -358,6 +365,8 @@ function renderFasting(){
       <div class="fd-hrow h"><div>Day</div><div>Fast</div><div>Ketones</div><div>Glucose</div><div>GKI</div></div>
       ${rows.map(r=>`<div class="fd-hrow"><div>${dayLabel(r.d).replace('Yesterday','Yest.')}</div><div>${r.len!=null?hm(r.len):'—'}</div><div>${r.k!=null?r1(r.k):'—'}</div><div>${r.g!=null?gShow(r.g):'—'}</div><div>${r.gki??'—'}</div></div>`).join('')}
     </div>
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px"><div><div class="fd-sub">Finger-prick entry on Today</div><div class="fd-note" style="margin:2px 0 0">Ketone and glucose strips</div></div>
+      <button class="btn-sm" onclick="foodToggleManualReadings()">${manualReadingsOn()?'Hide':'Show'}</button></div>
     <div class="card" id="fdLibreCard"><div class="fd-sub">FreeStyle Libre</div><div class="fd-note" style="margin:4px 0">Checking&hellip;</div></div>
     <div class="fd-note">Glucose in ${u==='mgdl'?'mg/dL':'mmol/L'} (tap the unit on Today to switch). GKI = glucose / ketones, both in mmol/L, from readings taken within 30 minutes of each other.</div>`;
   libreCard();
