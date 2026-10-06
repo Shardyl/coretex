@@ -211,9 +211,9 @@ function tOf(iso){return iso?new Date(iso).toLocaleTimeString('en-GB',{hour:'2-d
 // close on the days in between) is measured from where it really started.
 function lastCloseBefore(t){
   let best=null;
-  fastDays.forEach(f=>{if(f.closedAt&&new Date(f.closedAt)<t&&(!best||f.closedAt>best))best=f.closedAt;});
+  fastDays.forEach(f=>{if(f.closedAt&&new Date(f.closedAt)<t&&(!best||new Date(f.closedAt)>new Date(best)))best=f.closedAt;});
   // ...unless he ate after that close: a later break-fast means the fast was already broken
-  if(best&&fastDays.some(f=>f.brokeAt&&f.brokeAt>best&&new Date(f.brokeAt)<t))return null;
+  if(best&&fastDays.some(f=>f.brokeAt&&new Date(f.brokeAt)>new Date(best)&&new Date(f.brokeAt)<t))return null;
   return best?new Date(best):null;
 }
 // The fast that ENDED on `day` with its break-fast.
@@ -253,7 +253,7 @@ window.foodFastSet=function(field,inputId){
   const v=document.getElementById(inputId).value;if(!v){toast('Pick a time');return;}
   let f=fastDay(foodDay);if(!f){f={date:foodDay,brokeAt:null,closedAt:null};fastDays.push(f);}
   f[field]=atTime(foodDay,v);if(f.cleared)f.cleared=f.cleared.filter(x=>x!==field);
-  if(field==='closedAt'&&f.brokeAt&&f.closedAt<f.brokeAt){f.closedAt=atTime(shiftDay(foodDay,1),v);}   // window closed after midnight
+  if(field==='closedAt'&&f.brokeAt&&new Date(f.closedAt)<new Date(f.brokeAt)){f.closedAt=atTime(shiftDay(foodDay,1),v);}   // window closed after midnight (compare as dates: server times carry +04:00, local ones Z)
   saveFasts();renderToday();toast(field==='brokeAt'?'Fast broken':'Eating window closed');
 };
 window.foodFastClear=function(field){const f=fastDay(foodDay);if(!f)return;
