@@ -709,7 +709,6 @@ function healthCard(h,sess){
       <div class="fd-note" style="margin:0">${sync?'No Health Connect data for this day yet. Last sync '+sync+'.':'Not connected yet. Install Cortex Health Bridge on your phone to pull steps, calories and workouts from Samsung Health.'}</div></div>`;
   }
   const cells=[];
-  if(h&&h.dayRestingHR!=null)cells.push([fmtN(h.dayRestingHR),'Day resting HR']);
   if(!cells.length&&!sess.length)return `<div class="card"><div class="fd-sub">Activity${sync?` &middot; synced ${sync}`:''}</div><div class="fd-note" style="margin:4px 0 0">No workouts logged on the watch this day.</div></div>`;
   return `<div class="card"><div class="fd-sub">Activity${sync?` &middot; synced ${sync}`:''}</div>
     ${cells.length?`<div class="fd-row">${cells.map(([v,l])=>`<div class="fd-cell"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('')}</div>`:''}
