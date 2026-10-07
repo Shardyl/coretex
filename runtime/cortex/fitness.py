@@ -763,7 +763,7 @@ def _push_inner(doc: dict, source: str = "app") -> dict:
         if r.get("deleted") and not at:
             _ex("update fitness.readings set deleted=true, updated_at=now() where uid=%s", (r["id"],))
             continue
-        if not at or _num(r.get("value")) is None or r.get("kind") not in ("ketones", "glucose"):
+        if not at or _num(r.get("value")) is None or r.get("kind") not in ("ketones", "glucose", "waist"):
             continue
         _ex("insert into fitness.readings (uid, at, kind, value, context, notes, deleted) values (%s,%s,%s,%s,%s,%s,%s) "
             "on conflict (uid) do update set at=excluded.at, kind=excluded.kind, value=excluded.value, "

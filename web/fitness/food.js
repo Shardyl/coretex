@@ -407,7 +407,7 @@ function drawCgm(){
   window._cgmChart=new Chart(el,{type:'line',data:{labels:cg.map(x=>tOf(x.at)),datasets:[{data:cg.map(x=>gShow(x.mmol)),borderColor:c,borderWidth:2,pointRadius:0,tension:0.3}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:txc,font:{size:9},maxTicksLimit:6},grid:{display:false}},y:{ticks:{color:txc,font:{size:9},maxTicksLimit:4},grid:{display:false}}}}});
 }
-function readingsOn(day){return readings.filter(x=>localDay(new Date(x.at))===day).sort((a,b)=>a.at<b.at?-1:1);}
+function readingsOn(day){return readings.filter(x=>(x.kind==='ketones'||x.kind==='glucose')&&localDay(new Date(x.at))===day).sort((a,b)=>a.at<b.at?-1:1);}
 // What state was he in when the reading was taken? Worked out from the actual times, not from the
 // moment it was saved: before break-fast = fasted (since last night's window close); after = time
 // since the last food with an eaten-at time.
@@ -1354,6 +1354,35 @@ window.foodDelWeight=function(d){
   bodyweightLog.splice(i,1);saveBodyweight();renderWeight();
 };
 window.foodWtRange=function(n){wtRange=n;renderWeight();};
+// ---------- waist (weekly, at the navel; owner 8 Oct 2026) ----------
+// Stored as a reading of kind 'waist' (value in cm, at 08:00 on the day), so it syncs with the other readings.
+function waists(){return readings.filter(x=>x.kind==='waist').sort((a,b)=>a.at<b.at?-1:1);}
+function waistCard(){
+  const L=waists(), today=localDay(new Date()), last=L[L.length-1], first=L[0];
+  const lastDay=last?localDay(new Date(last.at)):null, due=!last||lastDay<=shiftDay(today,-7);
+  const d=(a,b)=>{const v=r1(a-b);return `<span class="${v<=0?'fd-pos':'fd-neg'}">${v>0?'+':''}${v} cm</span>`;};
+  return `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline"><div class="fd-sub">Waist at the navel &middot; weekly</div>
+      ${last?`<div style="font-size:11px;color:${due?'var(--amber)':'var(--ink3)'};font-weight:700">${due?'Due':'Next '+fmtDate(shiftDay(lastDay,7))}</div>`:''}</div>
+    ${last?`<div style="display:flex;align-items:baseline;gap:12px;margin-top:4px"><div class="fd-big" style="font-size:28px">${r1(last.value)} <span style="font-size:13px;font-weight:700;color:var(--ink3)">cm</span></div>
+      <div style="font-size:12px;color:var(--ink3)">${L.length>1?d(last.value,L[L.length-2].value)+' vs last &middot; '+d(last.value,first.value)+' since '+fmtDate(localDay(new Date(first.at))):fmtDate(lastDay)}</div></div>`:''}
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <input class="fd-input" type="number" step="0.1" inputmode="decimal" id="fdWaistIn" placeholder="${last?r1(last.value):'cm'}"/>
+      <input type="date" id="fdWaistDay" value="${today}" max="${today}" class="fd-input" style="width:auto;font-size:14px"/>
+      <button class="fd-btn" style="width:auto;margin:0;padding:0 16px" onclick="foodSaveWaist()">Save</button></div>
+    <div class="fd-note" style="margin:6px 0 0">Same conditions each week: morning, after the toilet, tape level at the navel, relaxed breath out.</div>
+    ${L.length>1?`<div style="margin-top:8px">${L.slice().reverse().slice(0,8).map(x=>`<div class="fd-entry" style="cursor:default;padding:5px 0"><div><div class="n" style="font-size:13px">${r1(x.value)} cm</div><div class="q">${fmtDate(localDay(new Date(x.at)))}</div></div><button class="hist-del" onclick="foodDelWaist('${x.id}')">&times;</button></div>`).join('')}</div>`:''}
+  </div>`;
+}
+window.foodSaveWaist=function(){
+  const v=+document.getElementById('fdWaistIn').value, day=document.getElementById('fdWaistDay').value;
+  if(!(v>40&&v<200)){toast('Enter your waist in cm');return;}
+  const at=atTime(day,'08:00');
+  const same=readings.find(x=>x.kind==='waist'&&localDay(new Date(x.at))===day);
+  if(same){same.value=r1(v);same.at=at;}else readings.push({id:newId('rd'),at,kind:'waist',value:r1(v),context:'navel',notes:null});
+  saveReadings();renderWeight();toast('Waist saved');
+};
+window.foodDelWaist=function(id){if(!confirm('Delete this waist measurement?'))return;const i=readings.findIndex(x=>x.id===id);if(i<0)return;markDeleted('readings',id);readings.splice(i,1);saveReadings();renderWeight();};
 function renderWeight(){
   const el=document.getElementById('page-food-weight');
   const today=localDay(new Date());
@@ -1379,6 +1408,7 @@ function renderWeight(){
       <div class="fd-cell"><div class="v">${chip(diff(a7,p7))}</div><div class="l">vs last week</div></div>
       <div class="fd-cell"><div class="v">${chip(diff(a7,a30))}</div><div class="l">vs 30 days ago</div></div>
     </div><div class="fd-note" style="margin:8px 0 0">Daily weight swings with water and food, so judge progress by the 7-day average.</div>${projectWeek()}</div>
+    ${waistCard()}
     <div class="chart-section">
       <div class="chart-toggle" style="margin-bottom:8px">${[[30,'30d'],[90,'90d'],[365,'1y'],[99999,'All']].map(([n,l])=>`<button class="${wtRange===n?'active':''}" onclick="foodWtRange(${n})">${l}</button>`).join('')}</div>
       <div style="position:relative;width:100%;height:210px"><canvas id="fdWtChart" role="img" aria-label="Weight trend"></canvas></div>
