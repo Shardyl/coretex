@@ -171,6 +171,10 @@ const css=`
 .fd-entry .n{font-size:13px;font-weight:600}
 .fd-entry .q{font-size:11px;color:var(--ink3)}
 .fd-entry .k{font-size:13px;font-weight:800;text-align:right;white-space:nowrap}
+.fd-ecg{display:block;width:clamp(110px,34vw,150px);height:56px;margin:-4px 0 4px -4px}
+.fd-ecg path{animation:fdEcg 1.6s ease-in-out infinite}
+@keyframes fdEcg{0%,100%{opacity:.6}12%{opacity:1;filter:drop-shadow(0 0 3px var(--teal))}40%{opacity:.75}}
+@media (prefers-reduced-motion:reduce){.fd-ecg path{animation:none}}
 .fd-actions{display:flex;gap:8px;margin-top:10px}
 .fd-act{flex:1;min-height:46px;border-radius:var(--radius);font-size:14px;font-weight:800;cursor:pointer;background:var(--surface);color:var(--ink);border:0.5px solid var(--border2)}
 .fd-act.main{background:var(--teal);color:#fff;border:none}
@@ -247,7 +251,7 @@ function renderTodayInner(){
 
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px">
-        <div><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;margin-bottom:4px"><path d="M3 12h4.5l1.5 -6l4 12l2 -9l1.5 3h4.5"/></svg><div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
+        <div><svg class="fd-ecg" viewBox="0 0 120 44" preserveAspectRatio="none" fill="none" stroke="var(--teal)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 26h20l5-6l5 6h8l4-20l6 34l5-22l4 8h14l5-7l6 7h34"/></svg><div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
         <div class="fd-big" style="color:${remain>=0?'var(--teal)':remain>=-KCAL_OVER_AMBER?'var(--amber)':'var(--red)'}">${fmtN(Math.abs(remain))} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kcal</span></div></div>
         ${(()=>{const bp=burnedParts(foodDay);if(!h||isFuture)return '';
           const gl=cgmOn(foodDay), gLast=gl.length?gl[gl.length-1]:null;
