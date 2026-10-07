@@ -352,7 +352,8 @@ function kpiPace(day){
   return Math.max(0.1,Math.min(1,(h-6)/14));
 }
 function kpiUp(v,lo,hi,f){if(v==null)return '';f=f||1;return v>=hi*f?'var(--teal)':v>=lo*f?'var(--amber)':'var(--red)';}
-function kpiGlucose(mg){if(mg==null)return '';return mg>140?'var(--red)':mg>=135?'var(--amber)':'var(--teal)';}
+// Glucose (owner, 8 Oct 2026): up to 90 green, 91-130 amber, 131+ red.
+function kpiGlucose(mg){if(mg==null)return '';return mg>=131?'var(--red)':mg>90?'var(--amber)':'var(--teal)';}
 function kpiSleepScore(v){if(v==null)return '';return v>=90?'var(--teal)':v>=70?'var(--amber)':'var(--red)';}
 function kpiSleepHR(v){if(v==null)return '';const r=Math.round(v);return r<=50?'var(--teal)':r<=55?'var(--amber)':'var(--red)';}
 const TREND_ARROW={1:'&darr;',2:'&searr;',3:'&rarr;',4:'&nearr;',5:'&uarr;'};
