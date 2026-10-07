@@ -89,7 +89,7 @@ const EATEN_FIX_FROM='2026-10-04';   // owner: data is accurate from 4 Oct 2026;
 function settleEatenTimes(day){
   const f=fastDay(day);if(!f||!f.brokeAt||day<EATEN_FIX_FROM)return false;
   const b=new Date(f.brokeAt);let n=0;
-  foodLog.forEach(e=>{if(e.date===day&&(!e.at||new Date(e.at)<b)){e.at=f.brokeAt;if(e.meal!=='snacks')e.meal=mealFor(e.at);n++;}});
+  foodLog.forEach(e=>{if(e.date===day&&(!e.at||new Date(e.at)<b)){e.at=f.brokeAt;e.meal=mealFor(e.at);n++;}});
   return n>0;
 }
 function settleAllEatenTimes(){
@@ -174,6 +174,9 @@ const css=`
 .fd-actions{display:flex;gap:8px;margin-top:10px}
 .fd-act{flex:1;min-height:46px;border-radius:var(--radius);font-size:14px;font-weight:800;cursor:pointer;background:var(--surface);color:var(--ink);border:0.5px solid var(--border2)}
 .fd-act.main{background:var(--teal);color:#fff;border:none}
+.fd-act.danger{background:none;color:var(--red);border:1px solid var(--red)}
+.fd-entry.sel{background:var(--teal);background:color-mix(in srgb,var(--teal) 22%,transparent);border-radius:8px;outline:1.5px solid var(--teal)}
+.fd-entry{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .fd-add{width:100%;margin-top:8px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);padding:8px;font-size:12px;font-weight:700;color:var(--teal);cursor:pointer}
 .fd-chip{display:inline-block;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;padding:2px 6px;border-radius:6px;background:var(--surface3);color:var(--ink2);margin-left:6px;vertical-align:middle}
 .fd-sheet{position:fixed;inset:0;background:var(--surface2);z-index:9000;display:flex;flex-direction:column;max-width:520px;margin:0 auto}
@@ -276,8 +279,7 @@ function renderTodayInner(){
     ${isFuture?'':creatineCard()}
     ${isToday?weighCard():''}
     ${isFuture?'':healthCard(h,sess)}
-    ${foodCard(list.filter(e=>(e.meal||'snacks')!=='snacks'))}
-    ${mealCard('snacks','Snacks',list.filter(e=>(e.meal||'snacks')==='snacks'))}
+    ${foodCard(list)}
     <button class="fd-btn sec" onclick="foodCopyDay()">Copy ${dayLabel(shiftDay(foodDay,-1)).toLowerCase()}'s food to ${dayLabel(foodDay).toLowerCase()}</button>
   `;
 }
@@ -858,16 +860,58 @@ function entryRow(e){
       <div><div class="n">${esc(e.name)}</div><div class="q">${e.at?tOf(e.at)+' &middot; ':'planned &middot; '}${unitText(e)}${e.protein!=null?(e.qtyG!=null?' &middot; ':'')+r1(e.protein)+' g protein':''}${e.notes==='photo estimate'?' &middot; <span style="color:var(--amber)">photo estimate</span>':''}</div></div>
       <div class="k">${fmtN(e.kcal)}</div></div>`;
 }
+// One chronological list. Long-press an entry to start selecting; then tap to add/remove more. With a selection the
+// bottom buttons become Delete and Save as meal. (Meal slots and the snack list were removed 8 Oct 2026; the stored
+// `meal` is still derived from the time for older reports.)
+let foodSel=new Set(), foodPressT=null, foodPressFired=false;
 function foodCard(list){
   const t=totals(list);
   const sorted=list.slice().sort((a,b)=>(a.at||'9')<(b.at||'9')?-1:1);
-  const groups=['breakfast','lunch','dinner'].map(k=>[k,sorted.filter(e=>(e.at?mealFor(e.at):(e.meal||'dinner'))===k)]).filter(g=>g[1].length);
+  const sel=foodSel.size>0;
   return `<div class="fd-meal">
-    <div class="fd-meal-h"><b>Food</b><span>${list.length?fmtN(t.kcal)+' kcal &middot; '+fmtN(t.protein)+' g P':''}</span></div>
-    ${groups.map(([k,L])=>`${groups.length>1?`<div style="font-size:10px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:0.05em;margin:8px 0 2px">${mealLabel(k)} &middot; ${fmtN(totals(L).kcal)} kcal</div>`:''}${L.map(entryRow).join('')}`).join('')}
-    <div class="fd-actions"><button class="fd-act main" onclick="foodOpenAdd('food')">+ Add food</button>${list.length?`<button class="fd-act" onclick="foodSaveAsMeal('food')">Save as meal</button>`:''}</div>
+    <div class="fd-meal-h"><b>${sel?foodSel.size+' selected':'Food'}</b><span>${sel?'<a href="#" onclick="foodSelClear();return false" style="color:var(--ink3)">Cancel</a>':(list.length?fmtN(t.kcal)+' kcal &middot; '+fmtN(t.protein)+' g P':'')}</span></div>
+    ${sorted.map(e=>`<div class="fd-entry${foodSel.has(e.id)?' sel':''}" data-id="${e.id}"
+        onpointerdown="foodPressStart('${e.id}')" onpointerup="foodPressEnd()" onpointerleave="foodPressEnd()" onpointercancel="foodPressEnd()" oncontextmenu="return false"
+        onclick="foodEntryTap('${e.id}')">
+      <div><div class="n">${esc(e.name)}</div><div class="q">${e.at?tOf(e.at)+' &middot; ':'planned &middot; '}${unitText(e)}${e.protein!=null?(e.qtyG!=null?' &middot; ':'')+r1(e.protein)+' g protein':''}${e.notes==='photo estimate'?' &middot; <span style="color:var(--amber)">photo estimate</span>':''}</div></div>
+      <div class="k">${fmtN(e.kcal)}</div></div>`).join('')}
+    <div class="fd-actions">${sel
+      ?`<button class="fd-act danger" onclick="foodSelDelete()">Delete ${foodSel.size}</button><button class="fd-act main" onclick="foodSelSaveMeal()">Save as meal</button>`
+      :`<button class="fd-act main" onclick="foodOpenAdd('food')">+ Add food</button><button class="fd-act" onclick="foodOpenMeals()">+ Add a meal</button>`}</div>
+    ${!sel&&list.length?`<div class="fd-note" style="margin:6px 0 0;text-align:center">Press and hold an item to select it</div>`:''}
   </div>`;
 }
+window.foodPressStart=function(id){
+  foodPressFired=false;clearTimeout(foodPressT);
+  foodPressT=setTimeout(()=>{foodPressFired=true;foodSel.add(id);try{navigator.vibrate&&navigator.vibrate(20);}catch(e){}renderToday();},450);
+};
+window.foodPressEnd=function(){clearTimeout(foodPressT);};
+window.foodEntryTap=function(id){
+  if(foodPressFired){foodPressFired=false;return;}            // the long-press already selected it
+  if(foodSel.size){foodSel.has(id)?foodSel.delete(id):foodSel.add(id);renderToday();return;}
+  foodEditEntry(id);
+};
+window.foodSelClear=function(){foodSel.clear();renderToday();};
+window.foodSelDelete=function(){
+  const ids=[...foodSel];if(!ids.length)return;
+  if(!confirm('Delete '+ids.length+' item'+(ids.length===1?'':'s')+' from the log?'))return;
+  ids.forEach(id=>{const i=foodLog.findIndex(x=>x.id===id);if(i>=0){markDeleted('foodLog',id);foodLog.splice(i,1);}});
+  foodSel.clear();saveFoodLog();renderToday();toast('Deleted '+ids.length);
+};
+window.foodSelSaveMeal=function(){
+  const items=foodLog.filter(e=>foodSel.has(e.id));if(!items.length)return;
+  openModal('Save as meal',`<div class="form-group"><label class="form-label">Meal name</label>
+    <input type="text" id="fdMealName" placeholder="e.g. Chicken, mayo and egg baguette" value="${esc(items.length===1?items[0].name:'')}"/></div>
+    <div class="fd-note">${items.length} item${items.length===1?'':'s'}: ${items.map(i=>esc(i.name)).join(', ')}</div>`,
+  function(){
+    const name=document.getElementById('fdMealName').value.trim();
+    if(!name){toast('Name the meal');return;}
+    savedMeals.push({id:newId('meal'),name,source:'app',favourite:false,
+      items:items.map(e=>({foodId:e.foodId||null,name:e.name,qtyG:e.qtyG??null,kcal:e.kcal??null,protein:e.protein??null,carbs:e.carbs??null,fat:e.fat??null,unitLabel:e.unitLabel||null,unitCount:e.unitCount??null}))});
+    saveMeals();closeModal();foodSel.clear();renderToday();toast('Meal saved');
+  });
+};
+window.foodOpenMeals=function(){sheetTab='meals';foodOpenAdd('food');};
 function mealCard(key,label,list){
   const t=totals(list);
   return `<div class="fd-meal">
@@ -881,7 +925,7 @@ function mealCard(key,label,list){
 window.foodShiftDay=function(n){
   const next=shiftDay(foodDay,n);
   if(next>shiftDay(localDay(new Date()),7))return;     // plan up to a week ahead
-  foodDay=next;renderToday();
+  foodDay=next;foodSel.clear();renderToday();
 };
 window.foodEditTargets=function(){
   openModal('Daily targets',`
@@ -916,8 +960,7 @@ function openSheet(title,inner){
 window.foodCloseSheet=closeSheet;
 window.foodOpenAdd=function(meal){
   sheetMeal=meal||'snacks';
-  const label=sheetMeal==='snacks'?'Snacks':'Food';
-  openSheet('Add to '+label.toLowerCase(),`
+  openSheet('Add food',`
     <div class="fd-tabs">
       ${[['mine','My foods'],['meals','Meals'],['search','Search'],['photo','Photo'],['scan','Barcode'],['quick','Quick']].map(([k,l])=>`<button data-t="${k}" class="${k===sheetTab?'on':''}" onclick="foodSheetTab('${k}')">${l}</button>`).join('')}
     </div>
@@ -980,7 +1023,7 @@ window.foodRenderMeals=function(){
 };
 window.foodLogMeal=function(id){
   const m=savedMeals.find(x=>x.id===id);if(!m)return;
-  (m.items||[]).forEach(i=>foodLog.push({id:newId('fl'),date:foodDay,at:nowAt(),meal:mealFor(nowAt(),sheetMeal==='snacks'),foodId:i.foodId||null,name:i.name,
+  (m.items||[]).forEach(i=>foodLog.push({id:newId('fl'),date:foodDay,at:nowAt(),meal:mealFor(nowAt()),foodId:i.foodId||null,name:i.name,
     qtyG:i.qtyG??null,kcal:i.kcal??null,protein:i.protein??null,carbs:i.carbs??null,fat:i.fat??null,
     unitLabel:i.unitLabel||null,unitCount:i.unitCount??null}));
   saveFoodLog();closeSheet();renderToday();toast(m.name+' added');
@@ -1103,7 +1146,7 @@ function portionView(food,entry){
     <div class="form-group"><label class="form-label">Amount (g)</label><input class="fd-input" type="number" id="fdG" value="${r1(grams)}" oninput="document.getElementById('fdUnit').value='g';document.getElementById('fdCnt').value='';document.getElementById('fdCnt').disabled=true;foodPortionCalc()"/></div>
     <button class="btn-sm" style="margin-bottom:10px" onclick="foodAddUnit()">+ Add my own unit (e.g. glass)</button>
     <div class="form-group"><label class="form-label">Eaten at</label>${timePick('fdAtT',entry&&entry.at?tOf(entry.at):(entry?'':(foodDay===localDay(new Date())?nowHM():'')),true)}</div>
-    <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:0 0 10px"><input type="checkbox" id="fdSnack" ${meal==='snacks'?'checked':''}/> Snack</label>
+
     <div class="card" id="fdCalc"></div>
     ${saved?'':`<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:6px 0"><input type="checkbox" id="fdKeep" checked/> Save to My foods</label>`}
     <button class="fd-btn" id="fdAddBtn">${entry?'Save changes':'Add'}</button>
@@ -1125,7 +1168,7 @@ function portionView(food,entry){
     const ul=document.getElementById('fdUnit').value, uc=+document.getElementById('fdCnt').value;
     if(window._fdUnits&&window._fdUnits!==f.units&&f.id){const sf=foods.find(x=>x.id===f.id);if(sf&&JSON.stringify(sf.units||[])!==JSON.stringify(window._fdUnits)){sf.units=window._fdUnits;saveFoods();}}
     const _at=tv?atTime(dd,tv):null;
-    const row={date:dd,at:_at,meal:mealFor(_at,document.getElementById('fdSnack').checked),foodId:f.id||null,
+    const row={date:dd,at:_at,meal:mealFor(_at),foodId:f.id||null,
       name:f.name+(f.brand?' ('+f.brand+')':''),qtyG:r1(g),kcal:p.kcal,protein:p.protein,carbs:p.carbs,fat:p.fat,
       unitLabel:ul!=='g'&&uc>0?ul:null,unitCount:ul!=='g'&&uc>0?uc:null};
     if(entry)Object.assign(entry,row);else foodLog.push(Object.assign({id:newId('fl')},row));
@@ -1162,7 +1205,7 @@ window.foodSaveQuick=function(){
   const k=+document.getElementById('fdQK').value;
   if(!(k>0)){toast('Enter calories');return;}
   const num=id=>{const v=document.getElementById(id).value;return v===''?null:r1(+v);};
-  foodLog.push({id:newId('fl'),date:foodDay,at:nowAt(),meal:mealFor(nowAt(),sheetMeal==='snacks'),foodId:null,name,qtyG:null,kcal:r0(k),
+  foodLog.push({id:newId('fl'),date:foodDay,at:nowAt(),meal:mealFor(nowAt()),foodId:null,name,qtyG:null,kcal:r0(k),
     protein:num('fdQP'),carbs:num('fdQC'),fat:num('fdQF')});
   saveFoodLog();closeSheet();renderToday();toast('Added');
 };
@@ -1181,7 +1224,7 @@ window.foodEditEntry=function(id){
     e.name=document.getElementById('fdEN').value.trim()||e.name;
     const k=document.getElementById('fdEK').value,p=document.getElementById('fdEP').value;
     e.kcal=k===''?null:r0(+k);e.protein=p===''?null:r1(+p);
-    const tv=document.getElementById('fdET').value;e.at=tv?atTime(e.date,tv):null;e.meal=mealFor(e.at,e.meal==='snacks');
+    const tv=document.getElementById('fdET').value;e.at=tv?atTime(e.date,tv):null;e.meal=mealFor(e.at);
     saveFoodLog();closeModal();renderToday();
   });
 };
@@ -1358,7 +1401,7 @@ window.foodPhotoPicked=async function(inp){
           ${[['grams','g'],['kcal','kcal'],['protein','P'],['carbs','C'],['fat','F']].map(([k,l])=>`<div><div style="font-size:9px;color:var(--ink3);font-weight:700">${l}</div>
           <input type="number" step="any" id="fp_${k}_${i}" value="${it[k]??''}" style="width:100%;font-size:13px;padding:4px"/></div>`).join('')}
         </div></div>`).join('')}
-      <button class="fd-btn" onclick="foodPhotoAdd()">Add to ${sheetMeal==='snacks'?'snacks':'food'}</button>`;
+      <button class="fd-btn" onclick="foodPhotoAdd()">Add to log</button>`;
   }catch(e){out.innerHTML='<div class="fd-note">Photo analysis failed. Check your connection and try again.</div>';}
 };
 window.foodPhotoAdd=function(){
@@ -1366,7 +1409,7 @@ window.foodPhotoAdd=function(){
   const v=(k,i)=>{const x=document.getElementById(`fp_${k}_${i}`).value;return x===''?null:+x;};
   items.forEach((it,i)=>{
     if(!document.getElementById('fpK'+i).checked)return;
-    foodLog.push({id:newId('fl'),date:foodDay,at:nowAt(),meal:mealFor(nowAt(),sheetMeal==='snacks'),foodId:null,name:it.name,qtyG:v('grams',i),
+    foodLog.push({id:newId('fl'),date:foodDay,at:nowAt(),meal:mealFor(nowAt()),foodId:null,name:it.name,qtyG:v('grams',i),
       kcal:r0(v('kcal',i)),protein:r1(v('protein',i)),carbs:r1(v('carbs',i)),fat:r1(v('fat',i)),notes:'photo estimate'});
     n++;
   });
