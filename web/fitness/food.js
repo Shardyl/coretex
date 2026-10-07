@@ -16,17 +16,57 @@ function localDay(d){const z=new Date(d.getTime()-d.getTimezoneOffset()*60000);r
 function shiftDay(day,n){const d=new Date(day+'T12:00:00');d.setDate(d.getDate()+n);return localDay(d);}
 // Android's installed-app time box only highlights hh/mm and cannot be edited (5 Oct 2026), so every time
 // in the Food screens is two plain dropdowns writing into a hidden input with the original id.
+// Time field: one button showing HH:MM; tapping it opens a wheel picker (hours | minutes) with quick offsets.
+// The value lives in a hidden input with the given id, so every caller still reads document.getElementById(id).value.
+// (7 Oct 2026: replaced the two dropdowns, which took four taps per edit. The phone's native picker can't be used
+// inside the app's panels, which is why this is custom.)
 function timePick(id,val,allowEmpty){
-  const [h,m]=(val||'').split(':');
-  const opt=(n,sel)=>Array.from({length:n},(_,i)=>String(i).padStart(2,'0')).map(v=>`<option ${v===sel?'selected':''}>${v}</option>`).join('');
-  const upd=`document.getElementById('${id}').value=(document.getElementById('${id}_h').value&&document.getElementById('${id}_m').value)?document.getElementById('${id}_h').value+':'+document.getElementById('${id}_m').value:''`;
-  const blank=allowEmpty?'<option value="">--</option>':'';
-  return `<span style="display:inline-flex;gap:4px;align-items:center">
-    <select id="${id}_h" class="fd-input" style="width:auto;padding:8px 6px" onchange="${upd}">${blank}${opt(24,h)}</select>
-    <span style="font-weight:800">:</span>
-    <select id="${id}_m" class="fd-input" style="width:auto;padding:8px 6px" onchange="${upd}">${blank}${opt(60,m)}</select>
+  return `<span style="display:inline-flex;align-items:center">
+    <button type="button" id="${id}_btn" class="fd-input" style="width:auto;min-width:86px;padding:8px 14px;font-size:17px;font-weight:800;letter-spacing:0.02em;cursor:pointer;text-align:center"
+      onclick="foodTimeWheel('${id}',${allowEmpty?'true':'false'})">${val||'--:--'}</button>
     <input type="hidden" id="${id}" value="${val||''}"/></span>`;
 }
+const TW_ROW=44;
+window.foodTimeWheel=function(id,allowEmpty){
+  const inp=document.getElementById(id);if(!inp)return;
+  const now=new Date(), cur=(inp.value||'').split(':');
+  let h=cur.length===2?+cur[0]:now.getHours(), m=cur.length===2?+cur[1]:now.getMinutes();
+  const col=(n,sel,key)=>`<div class="tw-col" id="tw_${key}" style="min-width:0;height:${TW_ROW*5}px;overflow-y:scroll;scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;flex:1;text-align:center">
+    <div style="height:${TW_ROW*2}px"></div>${Array.from({length:n},(_,i)=>`<div style="height:${TW_ROW}px;line-height:${TW_ROW}px;scroll-snap-align:center;font-size:24px;font-weight:800">${String(i).padStart(2,'0')}</div>`).join('')}<div style="height:${TW_ROW*2}px"></div></div>`;
+  const ov=document.createElement('div');ov.id='twOverlay';
+  ov.style.cssText='position:fixed;inset:0;box-sizing:border-box;overflow:hidden;z-index:10000;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center';
+  ov.innerHTML=`<div style="width:100%;box-sizing:border-box;max-height:90vh;overflow:hidden;max-width:440px;background:var(--surface);border-radius:16px 16px 0 0;padding:14px 16px calc(env(safe-area-inset-bottom,0px) + 16px)" onclick="event.stopPropagation()">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      ${[['Now',0],['−5 min',5],['−15 min',15],['−30 min',30],['−1 h',60]].map(([l,o])=>`<button class="btn-sm" onclick="foodTimeWheelOffset(${o})">${l}</button>`).join('')}
+    </div>
+    <div style="position:relative;display:flex;gap:8px;align-items:center">
+      <div style="position:absolute;left:0;right:0;top:${TW_ROW*2}px;height:${TW_ROW}px;border-top:1px solid var(--border2);border-bottom:1px solid var(--border2);background:var(--border);opacity:0.35;pointer-events:none;border-radius:8px"></div>
+      ${col(24,h,'h')}<div style="font-size:24px;font-weight:800">:</div>${col(60,m,'m')}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      ${allowEmpty?`<button class="fd-btn sec" style="margin:0;flex:1" onclick="foodTimeWheelSet('${id}',true)">Clear</button>`:''}
+      <button class="fd-btn sec" style="margin:0;flex:1" onclick="foodTimeWheelClose()">Cancel</button>
+      <button class="fd-btn" style="margin:0;flex:2" onclick="foodTimeWheelSet('${id}')">Set</button>
+    </div></div>`;
+  ov.onclick=foodTimeWheelClose;
+  document.body.appendChild(ov);
+  document.getElementById('tw_h').scrollTop=h*TW_ROW;
+  document.getElementById('tw_m').scrollTop=m*TW_ROW;
+};
+function twRead(key,max){const el=document.getElementById('tw_'+key);return Math.max(0,Math.min(max,Math.round(el.scrollTop/TW_ROW)));}
+window.foodTimeWheelOffset=function(mins){
+  const d=new Date(Date.now()-mins*60000);
+  document.getElementById('tw_h').scrollTo({top:d.getHours()*TW_ROW,behavior:'smooth'});
+  document.getElementById('tw_m').scrollTo({top:d.getMinutes()*TW_ROW,behavior:'smooth'});
+};
+window.foodTimeWheelClose=function(){const o=document.getElementById('twOverlay');if(o)o.remove();};
+window.foodTimeWheelSet=function(id,clear){
+  const v=clear?'':String(twRead('h',23)).padStart(2,'0')+':'+String(twRead('m',59)).padStart(2,'0');
+  const inp=document.getElementById(id), b=document.getElementById(id+'_btn');
+  if(inp){inp.value=v;inp.dispatchEvent(new Event('change'));}
+  if(b)b.textContent=v||'--:--';
+  foodTimeWheelClose();
+};
 // Eaten-at for food logged on the day. He fasts until break-fast and often logs dinner hours ahead to plan, so food
 // logged before today's break-fast is PLANNED (no time); settleEatenTimes() stamps it when the fast is broken.
 function nowAt(){
