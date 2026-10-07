@@ -554,13 +554,13 @@ def who_is(phone: str, display_name: str = "") -> dict:
     Every field is read, never inferred. An unknown number returns known=False and, ONLY when the display
     name is a distinctive full name, up to three EXACT name matches as possibles - never a first-name
     match, which on 33k contacts is noise, and never presented as the same person."""
-    out: dict = {"known": False, "contact": None, "deals": [], "emailed": None, "name_matches": []}
+    out: dict = {"known": False, "contact": None, "deals": [], "emailed": None, "name_matches": [],
+                 "first_seen": None}
     c = find_by_phone(phone)
     if c:
         acct = db.one("select name from crm_accounts where id=%s", (c["account_id"],)) if c.get("account_id") else None
         name = " ".join(x for x in [(c.get("first_name") or "").strip(),
                                     (c.get("last_name") or "").strip()] if x).strip()
-        out["known"] = True
         out["contact"] = {
             "id": c["id"], "name": name, "email": c.get("email") or "",
             "job_title": c.get("job_title") or "",
@@ -572,15 +572,32 @@ def who_is(phone: str, display_name: str = "") -> dict:
             "where": ", ".join(x for x in [c.get("city") or "", c.get("country") or ""] if x),
             "tags": [t for t in (c.get("tags") or []) if isinstance(t, str)][:6],
             "note": (c.get("note") or "")[:240]}
-        out["deals"] = db.query(
-            "select id, title, stage from crm_projects where lower(coalesce(contact_email,'')) = lower(%s) "
-            "or (account_id is not null and account_id = %s) order by id desc limit 6",
-            (c.get("email") or "", c.get("account_id")))
-        if c.get("email"):
+        # AN EMPTY EMAIL MATCHES EVERY DEAL THAT HAS NONE. WhatsApp contacts are deliberately email-less,
+        # so `lower(coalesce(contact_email,'')) = lower('')` handed every card the same six deals
+        # (caught in testing, 7 Oct 2026). Each clause is only applied when it has something to match.
+        email = (c.get("email") or "").strip()
+        if email or c.get("account_id"):
+            where, args = [], []
+            if email:
+                where.append("lower(coalesce(contact_email,'')) = lower(%s)")
+                args.append(email)
+            if c.get("account_id"):
+                where.append("account_id = %s")
+                args.append(c["account_id"])
+            out["deals"] = db.query(
+                "select id, title, stage from crm_projects where " + " or ".join(where)
+                + " order by id desc limit 6", tuple(args))
+        # "YOU KNOW THEM" HAS TO MEAN MORE THAN "WE FILED THEM FROM THIS VERY MESSAGE". Every WhatsApp
+        # enquiry creates its own contact, so a bare row proves nothing. It counts as known only when
+        # there is substance behind it that this conversation did not put there.
+        out["known"] = bool(email or c.get("account_id") or (c.get("company_name") or "").strip()
+                            or (c.get("note") or "").strip() or out["deals"])
+        out["first_seen"] = c["created_at"].isoformat() if c.get("created_at") else None
+        if email:
             row = db.one("select max(created_at) as ts from tasks where status='done' "
                          "and kind in ('email_reply','email_draft') "
                          "and lower(coalesce(request->'inquiry'->>'email','')) = lower(%s)",
-                         (c["email"],))
+                         (email,))
             ts = (row or {}).get("ts")
             out["emailed"] = ts.isoformat() if ts else None
         return out

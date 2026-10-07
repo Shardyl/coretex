@@ -2152,6 +2152,16 @@ function waWho(wi, phone){
       ${deals?`<div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">${deals}</div>`:''}
       <div class="row" style="margin-top:8px">${c.email?`<button class="btn sm" onclick="openContact('${esc(c.email)}')">${ic('inbox',14)} Open contact</button>`:''}</div></div>`;
   }
+  // A record exists but this conversation is all there is in it: say so plainly rather than greet a
+  // stranger as a known contact.
+  if(wi.contact){
+    const c=wi.contact;
+    const seen=wi.first_seen?esc(new Date(wi.first_seen).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})):'';
+    return `<div style="margin:8px 0;padding:10px 12px;background:var(--bg2,#0e1620);border:1px solid var(--ln,#22303f);border-radius:11px">
+      <div class="meta">${ic('alert',14)} no history on this number${seen?` — first messaged us ${seen}`:''}</div>
+      ${c.lead_source?`<div style="font-size:12.5px;margin-top:4px"><span style="opacity:.6">came from</span> ${esc(c.lead_source)}</div>`:''}
+      <div class="meta" style="margin-top:4px">Filed as a contact, nothing on them beyond this chat.</div></div>`;
+  }
   const maybes=(wi.name_matches||[]).map(m=>`<div style="font-size:12.5px;margin:2px 0">${esc(m.name)}${m.company_name?' · '+esc(m.company_name):''}${m.organisation?' · '+esc(m.organisation):''}${m.email?` <a href="mailto:${esc(m.email)}" style="color:var(--link);text-decoration:underline">${esc(m.email)}</a>`:''}</div>`).join('');
   return `<div style="margin:8px 0;padding:10px 12px;background:var(--bg2,#0e1620);border:1px solid var(--ln,#22303f);border-radius:11px">
     <div class="meta">${ic('alert',14)} not in the CRM on ${esc(phone||'that number')}</div>
