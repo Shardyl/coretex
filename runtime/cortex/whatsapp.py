@@ -704,6 +704,41 @@ def create_card_template(name: str = "cortex_wa_card", lang: str = "en",
     return out
 
 
+# THE ONLY WAY BACK TO A LEAD WHO WENT QUIET. Outside 24h Meta accepts no free-form message to them, so
+# a landing-page enquiry we did not answer in time is unreachable (cards 1050, 1053). This template needs
+# no window; the moment they reply, the window opens and the REAL drafted reply sends normally. It is a
+# nudge on purpose, not the answer: a template whose variable smuggles free-form content is what Meta has
+# been clamping down on, and the conversation should happen in-window where it can be a conversation.
+REENGAGE_BODY = (
+    "Hi {{1}}, thanks for your message to {{2}} about video production. "
+    "We have a reply waiting for you. Tap below and it will come straight through.")
+
+
+def create_reengage_template(name: str = "sensa_enquiry_reply_waiting", lang: str = "en",
+                             category: str = "MARKETING") -> dict:
+    """Submit the client-facing re-engagement template. Meta decides the final category whatever we ask
+    for; MARKETING carries per-user frequency limits, which at this volume do not bite."""
+    waba = db.setting_get("wa_waba_id")
+    if not waba:
+        raise RuntimeError("no wa_waba_id yet - it is learned from the next inbound webhook")
+    token = config.require("WHATSAPP_TOKEN")
+    body = {"name": name, "language": lang, "category": category, "components": [
+        {"type": "BODY", "text": REENGAGE_BODY,
+         "example": {"body_text": [["Rahal", "Sensa Productions"]]}},
+        {"type": "BUTTONS", "buttons": [{"type": "QUICK_REPLY", "text": "Send it over"}]}]}
+    req = urllib.request.Request(f"{GRAPH}/{waba}/message_templates",
+                                 data=json.dumps(body).encode(), method="POST",
+                                 headers={"Authorization": f"Bearer {token}",
+                                          "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            out = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"template create failed ({e.code}): {e.read().decode()[:400]}") from e
+    db.setting_set("wa_reengage_template", name)
+    return out
+
+
 def template_status(name: str = "cortex_wa_card") -> dict:
     """Where Meta has got to with a template. APPROVED is when alerts start carrying the card."""
     waba = db.setting_get("wa_waba_id")
