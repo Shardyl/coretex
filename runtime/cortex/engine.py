@@ -5510,8 +5510,15 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
                     if opp:
                         req["deal_id"] = opp["id"]
                         _notify_new_opportunity(co, opp, "auto-qualified from direct email")
-            except Exception:  # noqa: BLE001 — qualification is best-effort; the reply card must exist regardless
-                pass
+                    elif sug.get("confidence") == "high" and not crm.active_deals_for_email(sender, co.get("slug")):
+                        notifications.notify(
+                            f"Qualified lead, no opportunity: {inq.get('name') or sender}",
+                            f"{sender} qualified with high confidence ({(sug.get('reason') or '')[:160]}) but no "
+                            "opportunity could be created. Open one from the contact or ask Talk.",
+                            priority="high", category="lead", company_id=co.get("id"),
+                            dedup_key=f"qualified-no-opp:{sender.lower()}")
+            except Exception as _qe:  # noqa: BLE001 — qualification is best-effort; the reply card must exist regardless
+                print(f"[qualify] {sender}: {type(_qe).__name__}: {_qe}", flush=True)
         if req.get("deal_id") and atts:   # the client's documents live on the deal, not only on this reply
             try:
                 _file_inbound_attachments(co, e, int(req["deal_id"]), rt_key, _inbox_client_company(co.get("slug")))
@@ -5785,6 +5792,11 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                     _draft_direct_reply(co, e, cls, rt_key=rt_key, address=address, ack_only=True)
                 seen.add(gid)
                 continue
+            # THE CONTACT EXISTS BEFORE THE REPLY IS DRAFTED (7 Oct 2026). `_draft_direct_reply` qualifies a new
+            # lead and `crm.auto_opportunity` needs their crm_master row; the row was written AFTER the draft, so
+            # every brand-new sender qualified "high" got no opportunity, silently (Al Hamra, Liebherr, Accor,
+            # NTUC). Recording first is idempotent with the call below.
+            _record_contact()
             card_ok = _draft_direct_reply(co, e, cls, rt_key=rt_key, address=address) is not False
         if commit:
             _record_contact()

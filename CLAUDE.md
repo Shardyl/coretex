@@ -2668,3 +2668,14 @@ shoot needs none), then 10% off the whole quotation.
 - `_read_through` also removes words describing how the email was written ("framed as optional", "as instructed").
 - The "Sensa Productions" line above the sender's name in a COPIED card is the signature logo's alt text, not a
   duplicated sign-off.
+
+## The contact is recorded before the reply is drafted (7 Oct 2026)
+- CAUSE: Al Hamra's RFP (Kiran Pinto, card 1110) qualified "high" with an AED 60,000 estimate but no opportunity
+  appeared. `poll_inbox` ran `_draft_direct_reply` (which qualifies and calls `crm.auto_opportunity`) BEFORE
+  `_record_contact`, and `auto_opportunity` returns None when the sender has no `crm_master` row, so every
+  brand-new direct-email lead was silently left without an opportunity. Four found: Al Hamra, Liebherr, Accor,
+  NTUC Club (Snap Rewards).
+- `_record_contact()` now runs before the draft (idempotent with the call after). A lead qualified "high" that
+  still gets no opportunity raises a high-priority notification (`qualified-no-opp:<email>`); a qualify error
+  prints `[qualify] <email>: ...` instead of passing silently.
+- Backfilled the four on 7 Oct through `crm.auto_opportunity` (on auto; Al Hamra holds its chase until we send).
