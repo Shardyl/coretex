@@ -485,9 +485,13 @@ def food_search(q: str) -> dict:
         return _food_cache[key]
     items, errors = [], []
     try:
-        r = httpx.get("https://api.nal.usda.gov/fdc/v1/foods/search", timeout=12, params={
-            "api_key": config.get("USDA_API_KEY") or "DEMO_KEY", "query": q, "pageSize": 12,
-            "dataType": "Foundation,SR Legacy,Survey (FNDDS)"})
+        # POST, not GET: USDA's front end randomly 400s the GET form (7 Oct 2026, ~half of requests); one retry
+        for _attempt in range(2):
+            r = httpx.post("https://api.nal.usda.gov/fdc/v1/foods/search", timeout=12,
+                           params={"api_key": config.get("USDA_API_KEY") or "DEMO_KEY"},
+                           json={"query": q, "pageSize": 12, "dataType": ["Foundation", "SR Legacy", "Survey (FNDDS)"]})
+            if r.status_code < 500 and r.status_code != 400:
+                break
         r.raise_for_status()
         items += [i for i in (_usda_item(f) for f in r.json().get("foods") or []) if i]
     except Exception as e:  # noqa: BLE001
