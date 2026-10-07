@@ -209,8 +209,7 @@ def pull() -> dict:
     return {"bodyweight": bw, "plans": plans, "liftSessions": lifts, "cardioPresets": presets,
             "cardioSessions": cardio, "vo2": vo2, "tombstones": tombstones,
             "foods": foods, "foodLog": food_log, "meals": meals, "supplements": supplements, "fastDays": fast_days, "readings": readings,
-            "cgm": [{"at": r["at"].isoformat(), "mmol": float(r["mmol"])} for r in db.query(
-                "select at, mmol from fitness.cgm where at > now() - interval '3 days' order by at")], "targets": targets(), "health": health_pull(), "labs": _labs_pull(),
+            "cgm": cgm_since(None), "targets": targets(), "health": health_pull(), "labs": _labs_pull(),
             "counts": {"bodyweight": len(bw), "plans": len(plans), "liftSessions": len(lifts),
                        "cardioPresets": len(presets), "cardioSessions": len(cardio), "vo2": len(vo2),
                        "foods": len(foods), "foodLog": len(food_log), "meals": len(meals)}}
@@ -220,6 +219,15 @@ def pull() -> dict:
 
 # bmr: Katch-McArdle from his DEXA lean mass (69.6 kg, 6 Apr 2026) = 370 + 21.6 x 69.6. Editable in the app.
 DEFAULT_TARGETS = {"kcal": 2350, "protein": 178, "bmr": 1873, "creatine": 10}
+
+
+def cgm_since(since: str | None) -> list:
+    """CGM points for the app: the last 3 days, or only those after `since` (the app's light 2-minute refresh)."""
+    if since:
+        rows = db.query("select at, mmol, trend from fitness.cgm where at > %s::timestamptz order by at limit 3000", (since,))
+    else:
+        rows = db.query("select at, mmol, trend from fitness.cgm where at > now() - interval '3 days' order by at")
+    return [{"at": r["at"].isoformat(), "mmol": float(r["mmol"]), "trend": r["trend"]} for r in rows]
 
 
 def _labs_pull() -> dict:

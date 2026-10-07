@@ -5657,6 +5657,12 @@ def ns_entries_get(count: int = 1, api_secret: str = Header(default="", alias="a
              "dateString": r["at"].isoformat()} for r in rows]
 
 
+@app.get("/api/fitness/cgm")
+def fitness_cgm(since: str = "", _: None = Depends(auth)) -> list:
+    """Glucose points after `since` (ISO time), for the app's refresh while it is open."""
+    return fitness.cgm_since(since or None)
+
+
 class LabUpload(BaseModel):
     file: str                                   # data:application/pdf or data:image/... URL
 

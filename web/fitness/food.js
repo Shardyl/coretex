@@ -193,9 +193,11 @@ function renderTodayInner(){
         <div><div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
         <div class="fd-big" style="color:${remain>=0?'var(--teal)':'var(--amber)'}">${fmtN(Math.abs(remain))} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kcal</span></div></div>
         ${(()=>{const bp=burnedParts(foodDay);if(!h||isFuture)return '';
-          return `<div style="display:grid;grid-template-columns:auto auto;gap:6px 16px;text-align:right;white-space:nowrap">
+          const gl=cgmOn(foodDay), gLast=gl.length?gl[gl.length-1]:null;
+          return `<div style="display:grid;grid-template-columns:${gLast?'auto auto auto':'auto auto'};gap:6px 14px;text-align:right;white-space:nowrap">
             <div><div style="font-size:17px;font-weight:800;line-height:1.1">${h.steps!=null?fmtN(h.steps):'—'}</div><div class="fd-sub" style="font-size:10px">Steps</div></div>
             <div><div style="font-size:17px;font-weight:800;line-height:1.1">${bp?fmtN(bp.move+bp.work):'—'}</div><div class="fd-sub" style="font-size:10px">Active kcal</div></div>
+            ${gLast?`<div><div style="font-size:17px;font-weight:800;line-height:1.1">${gShow(gLast.mmol)}<span style="font-size:13px;color:var(--ink3)"> ${TREND_ARROW[gLast.trend]||''}</span></div><div class="fd-sub" style="font-size:10px">Glucose ${foodDay===localDay(new Date())?Math.max(0,Math.round((Date.now()-new Date(gLast.at))/60000))+'m':tOf(gLast.at)}</div></div>`:''}
             ${(()=>{const sl=nightFor(foodDay), hr=nightHR(sl);
               return `<div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1">${sl&&sl.score!=null?fmtN(sl.score):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep score</div>${sl&&sl.awake!=null&&sl.awake>=5?`<div style="font-size:9px;color:${sl.awake>=45?'var(--amber)':'var(--ink3)'};font-weight:700">${durHM(sl.awake)} awake</div>`:''}</div>
               <div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1">${hr!=null?fmtN(hr):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep HR</div></div>`;})()}</div>`;})()}
@@ -297,6 +299,19 @@ setInterval(()=>{const el=document.getElementById('fdFastLive');if(el&&el.offset
 // Display unit. Default mg/dL: his finger-prick meter reads in mg/dL (94). Stored values stay mmol/L.
 function gUnit(){try{return localStorage.getItem('fitness_glucose_unit')||'mgdl';}catch(e){return 'mgdl';}}
 function gShow(mmol){return gUnit()==='mgdl'?Math.round(mmol*18):r1(mmol);}
+const TREND_ARROW={1:'&darr;',2:'&searr;',3:'&rarr;',4:'&nearr;',5:'&uarr;'};
+// Light glucose refresh while the app is open: only new points since the last one held, every 2 minutes.
+async function refreshCgm(){
+  if(document.hidden||typeof syncApi!=='function')return;
+  const last=(cgmData||[]).length?cgmData[cgmData.length-1].at:null;
+  let pts=null;try{pts=await syncApi('/api/fitness/cgm'+(last?'?since='+encodeURIComponent(last):''));}catch(e){return;}
+  if(!pts||!pts.length)return;
+  const cut=Date.now()-3*86400000;
+  cgmData=(cgmData||[]).concat(pts).filter(x=>new Date(x.at).getTime()>cut);
+  try{store(CGM_KEY,cgmData);}catch(e){}
+  if(typeof currentSection!=='undefined'&&currentSection==='food'&&currentSubpage.food==='today')renderToday();
+}
+setInterval(refreshCgm,120000);
 function cgmOn(day){return (cgmData||[]).filter(x=>localDay(new Date(x.at))===day);}
 function drawCgm(){
   const el=document.getElementById('fdCgmChart');if(!el)return;
