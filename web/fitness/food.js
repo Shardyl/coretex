@@ -235,12 +235,12 @@ function renderTodayInner(){
         ${(()=>{const bp=burnedParts(foodDay);if(!h||isFuture)return '';
           const gl=cgmOn(foodDay), gLast=gl.length?gl[gl.length-1]:null;
           return `<div style="display:grid;grid-template-columns:${gLast?'auto auto auto':'auto auto'};gap:6px 14px;text-align:right;white-space:nowrap">
-            <div><div style="font-size:17px;font-weight:800;line-height:1.1">${h.steps!=null?fmtN(h.steps):'—'}</div><div class="fd-sub" style="font-size:10px">Steps</div></div>
-            <div><div style="font-size:17px;font-weight:800;line-height:1.1">${bp?fmtN(bp.move+bp.work):'—'}</div><div class="fd-sub" style="font-size:10px">Active kcal</div></div>
-            ${gLast?`<div><div style="font-size:17px;font-weight:800;line-height:1.1">${gShow(gLast.mmol)}<span style="font-size:13px;color:var(--ink3)"> ${TREND_ARROW[gLast.trend]||''}</span></div><div class="fd-sub" style="font-size:10px">Glucose ${foodDay===localDay(new Date())?Math.max(0,Math.round((Date.now()-new Date(gLast.at))/60000))+'m':tOf(gLast.at)}</div></div>`:''}
+            <div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiUp(h.steps,KPI.steps[0],KPI.steps[1],kpiPace(foodDay))}">${h.steps!=null?fmtN(h.steps):'—'}</div><div class="fd-sub" style="font-size:10px">Steps</div></div>
+            <div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${bp?kpiUp(bp.move+bp.work,KPI.active[0],KPI.active[1],kpiPace(foodDay)):''}">${bp?fmtN(bp.move+bp.work):'—'}</div><div class="fd-sub" style="font-size:10px">Active kcal</div></div>
+            ${gLast?`<div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiGlucose(Math.round(gLast.mmol*18.0182))}">${gShow(gLast.mmol)}<span style="font-size:13px;color:var(--ink3)"> ${TREND_ARROW[gLast.trend]||''}</span></div><div class="fd-sub" style="font-size:10px">Glucose ${foodDay===localDay(new Date())?Math.max(0,Math.round((Date.now()-new Date(gLast.at))/60000))+'m':tOf(gLast.at)}</div></div>`:''}
             ${(()=>{const sl=nightFor(foodDay), hr=nightHR(sl);
-              return `<div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1">${sl&&sl.score!=null?fmtN(sl.score):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep score</div>${sl&&sl.awake!=null&&sl.awake>=5?`<div style="font-size:9px;color:${sl.awake>=45?'var(--amber)':'var(--ink3)'};font-weight:700">${durHM(sl.awake)} awake</div>`:''}</div>
-              <div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1">${hr!=null?fmtN(hr):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep HR</div></div>`;})()}</div>`;})()}
+              return `<div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiSleepScore(sl&&sl.score)}">${sl&&sl.score!=null?fmtN(sl.score):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep score</div>${sl&&sl.awake!=null&&sl.awake>=5?`<div style="font-size:9px;color:${sl.awake>=45?'var(--amber)':'var(--ink3)'};font-weight:700">${durHM(sl.awake)} awake</div>`:''}</div>
+              <div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiSleepHR(hr)}">${hr!=null?fmtN(hr):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep HR</div></div>`;})()}</div>`;})()}
       </div>
       <div class="fd-bar${t.kcal>tgt?' over':''}"><div style="width:${kPct}%"></div></div>
       <div class="fd-row">
@@ -340,6 +340,18 @@ setInterval(()=>{const el=document.getElementById('fdFastLive');if(el&&el.offset
 // Display unit. Default mg/dL: his finger-prick meter reads in mg/dL (94). Stored values stay mmol/L.
 function gUnit(){try{return localStorage.getItem('fitness_glucose_unit')||'mgdl';}catch(e){return 'mgdl';}}
 function gShow(mmol){return gUnit()==='mgdl'?Math.round(mmol*18):r1(mmol);}
+// Traffic-light colours for Today's top metrics, owner's thresholds (7 Oct 2026). Steps and active kcal on TODAY are
+// judged against the time of day (active 06:00-20:00) so a normal morning is not red; past days use the full numbers.
+const KPI={steps:[6000,10000],active:[250,400]};
+function kpiPace(day){
+  if(day!==localDay(new Date()))return 1;
+  const n=new Date(), h=n.getHours()+n.getMinutes()/60;
+  return Math.max(0.1,Math.min(1,(h-6)/14));
+}
+function kpiUp(v,lo,hi,f){if(v==null)return '';f=f||1;return v>=hi*f?'var(--teal)':v>=lo*f?'var(--amber)':'var(--red)';}
+function kpiGlucose(mg){if(mg==null)return '';return mg>140?'var(--red)':mg>=135?'var(--amber)':'var(--teal)';}
+function kpiSleepScore(v){if(v==null)return '';return v>=90?'var(--teal)':v>=70?'var(--amber)':'var(--red)';}
+function kpiSleepHR(v){if(v==null)return '';const r=Math.round(v);return r<=50?'var(--teal)':r<=55?'var(--amber)':'var(--red)';}
 const TREND_ARROW={1:'&darr;',2:'&searr;',3:'&rarr;',4:'&nearr;',5:'&uarr;'};
 // Light glucose refresh while the app is open: only new points since the last one held, every 2 minutes.
 async function refreshCgm(){
