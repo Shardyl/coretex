@@ -590,8 +590,10 @@ def who_is(phone: str, display_name: str = "") -> dict:
         # "YOU KNOW THEM" HAS TO MEAN MORE THAN "WE FILED THEM FROM THIS VERY MESSAGE". Every WhatsApp
         # enquiry creates its own contact, so a bare row proves nothing. It counts as known only when
         # there is substance behind it that this conversation did not put there.
+        # The note is NOT evidence: `match_or_add_by_phone` writes the triage summary of this very message
+        # into it, so counting it made every WhatsApp stranger read as a known contact.
         out["known"] = bool(email or c.get("account_id") or (c.get("company_name") or "").strip()
-                            or (c.get("note") or "").strip() or out["deals"])
+                            or out["deals"])
         out["first_seen"] = c["created_at"].isoformat() if c.get("created_at") else None
         if email:
             row = db.one("select max(created_at) as ts from tasks where status='done' "
