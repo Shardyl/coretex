@@ -1575,6 +1575,7 @@ while a local change is queued — a pull once erased a cardio session seconds a
   ("Neutrophils %" vs "Neutrophils"). Pull-ups/chin-ups/dips: weight "BW" or "BW+10" (belt) resolves to the 7-DAY
   AVERAGE of weigh-ins up to the session date (app `bwAt` and server `bodyweight_at` mirror each other); the form
   turns a stale typed 50-130 number back into BW and shows "BW = x kg".
+- **CGM via Juggluco (7 Oct 2026):** his UAE Libre 2 Plus is region-locked out of his UK-registered Abbott app (Play country UK), so the sensor runs in Juggluco (open-source, Play Store), which uploads Nightscout-format entries to `https://coretex.uk/api/ns` (`/api/v1/entries`, header `api-secret` = sha1 of `/etc/cortex/nightscout_secret`; GET read-back also needs it). `libre.ns_ingest` stores them in `fitness.cgm` (source `juggluco`, mg/dL -> mmol/L, direction -> trend 1-5). LibreLinkUp poller stays for a future Abbott-app sensor.
 - **Sleep + recovery (5 Oct 2026, app v42, Bridge 1.3.0):** Food > Recovery page + sleep tile on Today's top card.
   Bridge 1.3.0 sends the main sleep session's stages, start/end, overnight HR avg/low (5-min), breathing, HRV,
   source (Eight Sleep mattress writes to Health Connect; he wears NO watch at night) and `day_resting_hr` (Samsung
