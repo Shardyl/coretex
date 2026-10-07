@@ -171,7 +171,7 @@ const css=`
 .fd-entry .n{font-size:13px;font-weight:600}
 .fd-entry .q{font-size:11px;color:var(--ink3)}
 .fd-entry .k{font-size:13px;font-weight:800;text-align:right;white-space:nowrap}
-.fd-ecg{display:block;width:clamp(110px,34vw,150px);height:56px;margin:-4px 0 4px -4px}
+.fd-ecg{display:block;width:100%;max-width:124px;height:56px;margin:-4px 0 4px -4px}
 .fd-ecg path{animation:fdEcg 1.6s ease-in-out infinite}
 @keyframes fdEcg{0%,100%{opacity:.6}12%{opacity:1;filter:drop-shadow(0 0 3px var(--teal))}40%{opacity:.75}}
 @media (prefers-reduced-motion:reduce){.fd-ecg path{animation:none}}
@@ -251,11 +251,11 @@ function renderTodayInner(){
 
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px">
-        <div><svg class="fd-ecg" viewBox="0 0 120 44" preserveAspectRatio="none" fill="none" stroke="var(--teal)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 26h20l5-6l5 6h8l4-20l6 34l5-22l4 8h14l5-7l6 7h34"/></svg><div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
+        <div style="flex:1 1 0;min-width:0"><svg class="fd-ecg" viewBox="0 0 120 44" preserveAspectRatio="none" fill="none" stroke="var(--teal)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 26h20l5-6l5 6h8l4-20l6 34l5-22l4 8h14l5-7l6 7h34"/></svg><div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
         <div class="fd-big" style="color:${remain>=0?'var(--teal)':remain>=-KCAL_OVER_AMBER?'var(--amber)':'var(--red)'}">${fmtN(Math.abs(remain))} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kcal</span></div></div>
         ${(()=>{const bp=burnedParts(foodDay);if(!h||isFuture)return '';
           const gl=cgmOn(foodDay), gLast=gl.length?gl[gl.length-1]:null;
-          return `<div style="display:grid;grid-template-columns:auto auto auto;gap:6px 14px;text-align:right;white-space:nowrap">
+          return `<div style="flex:0 0 auto;display:grid;grid-template-columns:auto auto auto;gap:6px 12px;text-align:right;white-space:nowrap">
             <div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiUp(h.steps,KPI.steps[0],KPI.steps[1],kpiPace(foodDay))}">${h.steps!=null?fmtN(h.steps):'—'}</div><div class="fd-sub" style="font-size:10px">Steps</div></div>
             <div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${bp?kpiUp(bp.move+bp.work,KPI.active[0],KPI.active[1],kpiPace(foodDay)):''}">${bp?fmtN(bp.move+bp.work):'—'}</div><div class="fd-sub" style="font-size:10px">Active kcal</div></div>
             ${gLast?`<div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiGlucose(Math.round(gLast.mmol*18.0182))}">${gShow(gLast.mmol)}<span style="font-size:13px;color:var(--ink3)"> ${TREND_ARROW[gLast.trend]||''}</span></div><div class="fd-sub" style="font-size:10px">Glucose ${foodDay===localDay(new Date())?Math.max(0,Math.round((Date.now()-new Date(gLast.at))/60000))+'m':tOf(gLast.at)}</div></div>`:''}
