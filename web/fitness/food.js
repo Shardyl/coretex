@@ -171,6 +171,9 @@ const css=`
 .fd-entry .n{font-size:13px;font-weight:600}
 .fd-entry .q{font-size:11px;color:var(--ink3)}
 .fd-entry .k{font-size:13px;font-weight:800;text-align:right;white-space:nowrap}
+.fd-actions{display:flex;gap:8px;margin-top:10px}
+.fd-act{flex:1;min-height:46px;border-radius:var(--radius);font-size:14px;font-weight:800;cursor:pointer;background:var(--surface);color:var(--ink);border:0.5px solid var(--border2)}
+.fd-act.main{background:var(--teal);color:#fff;border:none}
 .fd-add{width:100%;margin-top:8px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);padding:8px;font-size:12px;font-weight:700;color:var(--teal);cursor:pointer}
 .fd-chip{display:inline-block;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;padding:2px 6px;border-radius:6px;background:var(--surface3);color:var(--ink2);margin-left:6px;vertical-align:middle}
 .fd-sheet{position:fixed;inset:0;background:var(--surface2);z-index:9000;display:flex;flex-direction:column;max-width:520px;margin:0 auto}
@@ -862,8 +865,7 @@ function foodCard(list){
   return `<div class="fd-meal">
     <div class="fd-meal-h"><b>Food</b><span>${list.length?fmtN(t.kcal)+' kcal &middot; '+fmtN(t.protein)+' g P':''}</span></div>
     ${groups.map(([k,L])=>`${groups.length>1?`<div style="font-size:10px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:0.05em;margin:8px 0 2px">${mealLabel(k)} &middot; ${fmtN(totals(L).kcal)} kcal</div>`:''}${L.map(entryRow).join('')}`).join('')}
-    <button class="fd-add" onclick="foodOpenAdd('food')">+ Add food</button>
-    ${list.length?`<button class="fd-add" style="border:none;color:var(--ink3);margin-top:2px" onclick="foodSaveAsMeal('food')">Save as meal</button>`:''}
+    <div class="fd-actions"><button class="fd-act main" onclick="foodOpenAdd('food')">+ Add food</button>${list.length?`<button class="fd-act" onclick="foodSaveAsMeal('food')">Save as meal</button>`:''}</div>
   </div>`;
 }
 function mealCard(key,label,list){
@@ -873,8 +875,7 @@ function mealCard(key,label,list){
     ${list.map(e=>`<div class="fd-entry" onclick="foodEditEntry('${e.id}')">
       <div><div class="n">${esc(e.name)}</div><div class="q">${e.at?tOf(e.at)+' &middot; ':''}${unitText(e)}${e.protein!=null?(e.qtyG!=null?' &middot; ':'')+r1(e.protein)+' g protein':''}${e.notes==='photo estimate'?' &middot; <span style="color:var(--amber)">photo estimate</span>':''}</div></div>
       <div class="k">${fmtN(e.kcal)}</div></div>`).join('')}
-    <button class="fd-add" onclick="foodOpenAdd('${key}')">+ Add ${key==='snacks'?'snack':label.toLowerCase()}</button>
-    ${list.length?`<button class="fd-add" style="border:none;color:var(--ink3);margin-top:2px" onclick="foodSaveAsMeal('${key}')">Save as meal</button>`:''}
+    <div class="fd-actions"><button class="fd-act main" onclick="foodOpenAdd('${key}')">+ Add ${key==='snacks'?'snack':label.toLowerCase()}</button>${list.length?`<button class="fd-act" onclick="foodSaveAsMeal('${key}')">Save as meal</button>`:''}</div>
   </div>`;
 }
 window.foodShiftDay=function(n){
