@@ -938,7 +938,7 @@ window.foodRenderMine=function(){
   const el=document.getElementById('fdMineList');
   el.innerHTML=list.length?list.map(f=>`<div class="fd-item" onclick="foodPickSaved('${f.id}')">
       <div class="n">${f.favourite?'<span style="color:var(--amber)">&#9733;</span> ':''}${esc(f.name)}${f.brand?` <span class="fd-chip">${esc(f.brand)}</span>`:''}</div>
-      <div class="m">${fmtN(f.kcal100)} kcal &middot; ${r1(f.protein100)??'—'} g protein per 100 g${lastQty(f.id)!=null?` &middot; last ${fmtN(lastQty(f.id))} g`:(f.servingG?` &middot; ${esc(f.servingLabel||'serving')} = ${fmtN(f.servingG)} g`:'')}</div></div>`).join('')
+      <div class="m">${foodLine(f)}${lastQty(f.id)!=null?` &middot; last ${fmtN(lastQty(f.id))} g`:''}</div></div>`).join('')
     :`<div class="fd-note">${foods.length?'No match.':'Nothing saved yet. Foods you add from Search or Barcode are kept here, so your usual meals are one tap.'}</div>`;
 };
 window.foodDoSearch=async function(){
@@ -949,10 +949,12 @@ window.foodDoSearch=async function(){
   try{
     const r=await syncApi('/api/fitness/food/search?q='+encodeURIComponent(q));
     if(!r){el.innerHTML='<div class="fd-note">Not signed in.</div>';return;}
-    window._fdResults=r.items||[];
+    const _it=(r.items||[]).map((f,i)=>({f,i,u:foodUnits(f).length?0:1}));
+    _it.sort((a,b)=>a.u-b.u||a.i-b.i);                // foods with real portions first, otherwise USDA/OFF order
+    window._fdResults=_it.map(x=>x.f);
     el.innerHTML=_fdResults.length?_fdResults.map((f,i)=>`<div class="fd-item" onclick="foodPickResult(${i})">
         <div class="n">${esc(f.name)}${f.brand?` <span class="fd-chip">${esc(f.brand)}</span>`:''}<span class="fd-chip">${f.source==='usda'?'USDA':'OFF'}</span></div>
-        <div class="m">${fmtN(f.kcal100)} kcal &middot; ${r1(f.protein100)??'—'} g protein per 100 g${f.servingG?` &middot; serving ${fmtN(f.servingG)} g`:''}</div></div>`).join('')
+        <div class="m">${foodLine(f)}</div></div>`).join('')
       :'<div class="fd-note">No results. Try a simpler name, or use Quick add.</div>';
   }catch(e){el.innerHTML='<div class="fd-note">Search failed. Check your connection.</div>';}
 };
@@ -994,6 +996,12 @@ function foodUnits(f){
   const u=(f&&Array.isArray(f.units)?f.units:[]).filter(x=>x&&x.label&&+x.g>0);
   if(!u.length&&f&&+f.servingG>0)u.push({label:f.servingLabel||'serving',g:+f.servingG});
   return u;
+}
+// One line for a food in a list: per its first household unit when it has one, else per 100 g.
+function foodLine(f){
+  const u=foodUnits(f)[0];
+  if(u){const k=u.g/100;return `1 ${esc(u.label)} (${fmtN(u.g)} g): <b>${fmtN((+f.kcal100||0)*k)} kcal</b> &middot; ${f.protein100!=null?r1(f.protein100*k):'—'} g protein`;}
+  return `${fmtN(f.kcal100)} kcal &middot; ${r1(f.protein100)??'—'} g protein per 100 g`;
 }
 function unitText(e){
   if(!e||!e.unitLabel||e.unitCount==null)return e&&e.qtyG!=null?fmtN(e.qtyG)+' g':'';
