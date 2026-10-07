@@ -137,6 +137,45 @@ def status() -> dict:
                                                      "trend": latest["trend"]} if latest else None}
 
 
+# ---------- Juggluco (Nightscout-format uploads) ----------
+# 7 Oct 2026: the owner's UAE Libre 2 Plus is region-locked out of his UK-registered Abbott app, so the sensor runs in
+# Juggluco (open-source, Play Store), which uploads every reading in Nightscout format to /api/ns/api/v1/entries.
+# The shared secret lives in /etc/cortex/nightscout_secret; Juggluco sends sha1(secret) in the `api-secret` header.
+NS_SECRET_FILE = "/etc/cortex/nightscout_secret"
+_NS_TREND = {"DoubleDown": 1, "SingleDown": 1, "FortyFiveDown": 2, "Flat": 3, "FortyFiveUp": 4,
+             "SingleUp": 5, "DoubleUp": 5}
+
+
+def ns_secret_ok(header_value: str | None, token: str | None = None) -> bool:
+    try:
+        secret = open(NS_SECRET_FILE).read().strip()
+    except OSError:
+        return False
+    want = hashlib.sha1(secret.encode()).hexdigest()
+    got = (header_value or "").strip().lower()
+    return bool(secret) and (got in (want, secret.lower()) or (token or "") == secret)
+
+
+def ns_ingest(entries) -> dict:
+    """Store Nightscout `sgv` entries (mg/dL, epoch ms) as fitness.cgm rows in mmol/L."""
+    if isinstance(entries, dict):
+        entries = [entries]
+    n = 0
+    for e in entries or []:
+        if not isinstance(e, dict) or e.get("type", "sgv") != "sgv":
+            continue
+        mg, ms = e.get("sgv"), e.get("date")
+        if mg is None or not ms:
+            continue
+        at = datetime.fromtimestamp(float(ms) / 1000, tz=timezone.utc)
+        db.execute("insert into fitness.cgm (at, mmol, trend, source) values (%s,%s,%s,'juggluco') "
+                   "on conflict (at) do nothing", (at, round(float(mg) / MGDL_PER_MMOL, 2), _NS_TREND.get(e.get("direction"))))
+        n += 1
+    if n:
+        db.setting_set("juggluco_last_upload", {"at": time.time(), "points": n})
+    return {"ok": True, "stored": n}
+
+
 if __name__ == "__main__":
     if sys.argv[1:] == ["poll"]:
         try:

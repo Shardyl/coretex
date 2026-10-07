@@ -5617,6 +5617,37 @@ def fitness_food_photo(body: MealPhoto, _: None = Depends(auth)) -> dict:
     return fitness.estimate_meal_photo(img, body.note or "")
 
 
+# Nightscout-compatible receiver for Juggluco (Libre 2 Plus without Abbott's app). Base URL for Juggluco:
+# https://coretex.uk/api/ns ; it appends /api/v1/... itself.
+@app.get("/api/ns/api/v1/status.json")
+@app.get("/api/ns/api/v1/status")
+def ns_status() -> dict:
+    return {"status": "ok", "name": "Cortex", "version": "15.0.0", "apiEnabled": True,
+            "settings": {"units": "mmol"}, "authorized": None}
+
+
+@app.post("/api/ns/api/v1/entries")
+@app.post("/api/ns/api/v1/entries.json")
+async def ns_entries(request: Request, api_secret: str = Header(default="", alias="api-secret"),
+                     token: str = "") -> dict:
+    from . import libre
+    if not libre.ns_secret_ok(api_secret, token):
+        raise HTTPException(status_code=401, detail="bad api-secret")
+    return libre.ns_ingest(await request.json())
+
+
+@app.get("/api/ns/api/v1/entries.json")
+@app.get("/api/ns/api/v1/entries")
+def ns_entries_get(count: int = 1, api_secret: str = Header(default="", alias="api-secret"), token: str = "") -> list:
+    """Juggluco may read back the latest entry to check the link (same secret as uploads)."""
+    from . import libre
+    if not libre.ns_secret_ok(api_secret, token):
+        raise HTTPException(status_code=401, detail="bad api-secret")
+    rows = db.query("select at, mmol from fitness.cgm order by at desc limit %s", (max(1, min(count, 50)),))
+    return [{"type": "sgv", "sgv": round(float(r["mmol"]) * 18.0182), "date": int(r["at"].timestamp() * 1000),
+             "dateString": r["at"].isoformat()} for r in rows]
+
+
 class LabUpload(BaseModel):
     file: str                                   # data:application/pdf or data:image/... URL
 
