@@ -187,7 +187,7 @@ function renderTodayInner(){
       <div class="fd-day">${dayLabel(foodDay)}</div>
       <button onclick="foodShiftDay(1)" aria-label="Next day" ${foodDay>=shiftDay(localDay(new Date()),7)?'disabled style="opacity:0.3"':''}>&rsaquo;</button>
     </div>
-    <div style="display:flex;justify-content:center;margin:-4px 0 8px"><button onclick="foodToggleFree()" style="border-radius:999px;padding:4px 14px;font-size:11px;font-weight:800;cursor:pointer;${isFree(foodDay)?'background:var(--amber);color:#fff;border:none':'background:none;color:var(--ink3);border:0.5px solid var(--border2)'}">${isFree(foodDay)?'Free day':'Mark as free day'}</button></div>
+
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px">
         <div><div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
@@ -228,7 +228,8 @@ function renderTodayInner(){
 }
 // ---------- fasting (break-fast / close eating window) ----------
 function fastDay(day){return fastDays.find(f=>f.date===day)||null;}
-// Free day (owner's planned "naughty" Fridays): one tap on Today, stored on the day's fast_days row with the time it
+// Free day: the Today button was removed 7 Oct 2026 at the owner's request (the data shows such days anyway);
+// tags still render for any day flagged earlier. Originally: one tap on Today, stored on the day's fast_days row with the time it
 // was set, so the newest change wins on every device. Tagged in History, Weight, Fasting and Recovery (the night after).
 function isFree(day){const f=fastDay(day);return !!(f&&f.freeDay);}
 const FREE_TAG='<span style="font-size:9px;font-weight:800;color:var(--amber);margin-left:4px">FREE</span>';
