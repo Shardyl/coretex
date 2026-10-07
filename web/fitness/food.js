@@ -247,17 +247,18 @@ function renderTodayInner(){
 
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px">
-        <div><div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
+        <div><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;margin-bottom:4px"><path d="M3 12h4.5l1.5 -6l4 12l2 -9l1.5 3h4.5"/></svg><div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
         <div class="fd-big" style="color:${remain>=0?'var(--teal)':remain>=-KCAL_OVER_AMBER?'var(--amber)':'var(--red)'}">${fmtN(Math.abs(remain))} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kcal</span></div></div>
         ${(()=>{const bp=burnedParts(foodDay);if(!h||isFuture)return '';
           const gl=cgmOn(foodDay), gLast=gl.length?gl[gl.length-1]:null;
-          return `<div style="display:grid;grid-template-columns:${gLast?'auto auto auto':'auto auto'};gap:6px 14px;text-align:right;white-space:nowrap">
+          return `<div style="display:grid;grid-template-columns:auto auto auto;gap:6px 14px;text-align:right;white-space:nowrap">
             <div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiUp(h.steps,KPI.steps[0],KPI.steps[1],kpiPace(foodDay))}">${h.steps!=null?fmtN(h.steps):'—'}</div><div class="fd-sub" style="font-size:10px">Steps</div></div>
             <div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${bp?kpiUp(bp.move+bp.work,KPI.active[0],KPI.active[1],kpiPace(foodDay)):''}">${bp?fmtN(bp.move+bp.work):'—'}</div><div class="fd-sub" style="font-size:10px">Active kcal</div></div>
             ${gLast?`<div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiGlucose(Math.round(gLast.mmol*18.0182))}">${gShow(gLast.mmol)}<span style="font-size:13px;color:var(--ink3)"> ${TREND_ARROW[gLast.trend]||''}</span></div><div class="fd-sub" style="font-size:10px">Glucose ${foodDay===localDay(new Date())?Math.max(0,Math.round((Date.now()-new Date(gLast.at))/60000))+'m':tOf(gLast.at)}</div></div>`:''}
             ${(()=>{const sl=nightFor(foodDay), hr=nightHR(sl);
               return `<div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiSleepScore(sl&&sl.score)}">${sl&&sl.score!=null?fmtN(sl.score):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep score</div>${sl&&sl.awake!=null&&sl.awake>=5?`<div style="font-size:9px;color:${sl.awake>=45?'var(--amber)':'var(--ink3)'};font-weight:700">${durHM(sl.awake)} awake</div>`:''}</div>
-              <div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiSleepHR(hr)}">${hr!=null?fmtN(hr):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep HR</div></div>`;})()}</div>`;})()}
+              <div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiSleepHR(hr)}">${hr!=null?fmtN(hr):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep HR</div></div>
+              <div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiHrv(sl&&sl.hrv,foodDay)}">${sl&&sl.hrv!=null?fmtN(sl.hrv):'—'}</div><div class="fd-sub" style="font-size:10px">HRV ms</div></div>`;})()}</div>`;})()}
       </div>
       <div class="fd-bar${t.kcal>tgt+KCAL_OVER_AMBER?' way':t.kcal>tgt?' over':''}"><div style="width:${kPct}%"></div></div>
       <div class="fd-row">
@@ -371,6 +372,12 @@ function kpiUp(v,lo,hi,f){if(v==null)return '';f=f||1;return v>=hi*f?'var(--teal
 // Glucose (owner, 8 Oct 2026): up to 90 green, 91-130 amber, 131+ red.
 function kpiGlucose(mg){if(mg==null)return '';return mg>=131?'var(--red)':mg>90?'var(--amber)':'var(--teal)';}
 function kpiSleepScore(v){if(v==null)return '';return v>=90?'var(--teal)':v>=70?'var(--amber)':'var(--red)';}
+// HRV vs his own 14-night average (full nights only, before this day): at/above green, up to 10% below amber, worse red.
+function hrvBaseline(day){
+  const v=[];for(let i=1;i<=14;i++){const sl=nightFor(shiftDay(day,-i));if(sl&&sl.hrv!=null)v.push(+sl.hrv);}
+  return v.length>=3?v.reduce((a,b)=>a+b,0)/v.length:null;
+}
+function kpiHrv(v,day){if(v==null)return '';const b=hrvBaseline(day);if(b==null)return '';return v>=b?'var(--teal)':v>=b*0.9?'var(--amber)':'var(--red)';}
 function kpiSleepHR(v){if(v==null)return '';const r=Math.round(v);return r<=50?'var(--teal)':r<=55?'var(--amber)':'var(--red)';}
 const TREND_ARROW={1:'&darr;',2:'&searr;',3:'&rarr;',4:'&nearr;',5:'&uarr;'};
 // Light glucose refresh while the app is open: only new points since the last one held, every 2 minutes.
