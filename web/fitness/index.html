@@ -197,8 +197,10 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
 .sets-count-row button{width:36px;height:36px;border-radius:8px;border:0.5px solid var(--border2);background:var(--surface2);font-size:18px;font-weight:700;cursor:pointer;color:var(--ink);flex-shrink:0}
 .sets-count-val{font-size:22px;font-weight:800;color:var(--ink);min-width:32px;text-align:center}
 /* Toast */
-.sync-pill{position:fixed;top:8px;right:10px;z-index:9998;font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(0,0,0,0.06);color:#666;cursor:pointer;user-select:none}
+/* 8 Oct 2026: hidden while sync is healthy; bottom-left when offline/failing/setup, so it never covers a Close button */
+.sync-pill{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);left:10px;z-index:9998;font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(0,0,0,0.06);color:#666;cursor:pointer;user-select:none}
 .sync-pill.syncing{background:rgba(29,158,117,0.15);color:#1D9E75}
+.sync-pill.idle,.sync-pill.syncing{display:none}
 .sync-pill.error{background:rgba(200,40,40,0.12);color:#b02a2a}
 .sync-pill.offline{background:rgba(0,0,0,0.06);color:#8a8a8a}
 .sync-pill.auth{background:rgba(29,158,117,0.15);color:#1D9E75}
@@ -243,7 +245,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
   <div class="topbar">
     <div class="topbar-head">
       <div>
-        <div class="app-name">Fitness</div>
+        <div class="app-name" onclick="syncNow(true)" style="cursor:pointer" title="Tap to sync now">Fitness</div>
         <div class="app-tagline">training tracker</div>
       </div>
       <div style="display:flex;gap:7px;align-items:center">
@@ -986,7 +988,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='66';                         // keep in step with CACHE in sw.js
+const APP_VERSION='67';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -2947,6 +2949,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=66"></script>
+<script src="food.js?v=67"></script>
 </body>
 </html>
