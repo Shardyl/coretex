@@ -50,7 +50,7 @@ body{font-family:-apple-system,system-ui,'Segoe UI',sans-serif;color:var(--ink);
 /* Sub nav */
 .subnav{display:flex;gap:0;overflow-x:auto;scrollbar-width:none;border-bottom:0.5px solid var(--border)}
 .subnav::-webkit-scrollbar{display:none}
-.subnav-btn{flex-shrink:0;background:none;border:none;padding:8px 12px 10px;font-size:11px;font-weight:500;color:var(--ink3);cursor:pointer;border-bottom:2px solid transparent;touch-action:manipulation;white-space:nowrap}
+.subnav-btn{flex-shrink:0;background:none;border:none;padding:10px 13px 11px;font-size:13.5px;font-weight:500;color:var(--ink3);cursor:pointer;border-bottom:2px solid transparent;touch-action:manipulation;white-space:nowrap}
 .subnav-btn.active{color:var(--teal);border-bottom-color:var(--teal);font-weight:700}
 /* Pages */
 .pages{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
@@ -986,7 +986,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='61';                         // keep in step with CACHE in sw.js
+const APP_VERSION='62';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -2947,6 +2947,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=61"></script>
+<script src="food.js?v=62"></script>
 </body>
 </html>

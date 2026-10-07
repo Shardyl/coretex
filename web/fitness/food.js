@@ -625,14 +625,10 @@ function missionPep(s){
   const m=s.m;
   if(s.cur!=null&&s.cur<=m.goalKg)return `Goal reached: ${r1(s.cur)} kg. You did it.`;
   if(s.todayW&&s.low!=null&&s.todayW.kg<=s.low&&s.todayW.kg<m.startKg)return `New low this morning: ${r1(s.todayW.kg)} kg. Down ${r1(m.startKg-s.todayW.kg)} kg since day one.`;
-  if(isFree(shiftDay(s.today,-1))&&!isFree(s.today))return `Free day yesterday. Back on plan today: the 7-day average absorbs it.`;
   if(m.milestoneKg&&s.cur!=null&&s.cur<=m.milestoneKg)return `Milestone hit: under ${r1(m.milestoneKg)} kg${m.milestoneFat?', sub-'+m.milestoneFat+'%':''}. Now for ${r1(m.goalKg)}.`;
   if(s.vsPace!=null&&s.day>=7&&s.vsPace>=0.3)return `${r1(s.vsPace)} kg ahead of pace. Keep doing exactly this.`;
-  if(s.yDef!=null&&s.yDef>=500)return `Yesterday: ${fmtN(s.yDef)} kcal deficit, about ${r1(s.yDef/KCAL_PER_KG)} kg of fat gone.`;
-  if(s.streak>=3)return `${s.streak} days logged in a row. This is how the 70s happen.`;
   if(s.vsPace!=null&&s.day>=7&&s.vsPace<=-0.3)return `${r1(-s.vsPace)} kg behind pace. One tight week closes it.`;
-  if(s.vsPace!=null&&s.day>=7)return `Right on pace. Stay the course.`;
-  return `Day ${s.day}. Log everything, weigh in every morning.`;
+  return '';
 }
 // Weekly checkpoints: every Sunday from the start to the goal date has a target on the straight line from start to goal.
 // A week is judged on the 7-day average up to that Sunday (owner's call: one salty day must not fail a week).
@@ -655,20 +651,21 @@ window.renderMission=function(){
   if(!s){el.innerHTML=`<button onclick="foodEditMission()" style="width:100%;margin:8px 0 2px;background:none;border:0.5px dashed var(--border2);border-radius:var(--radius);padding:8px;font-size:12px;font-weight:700;color:var(--ink3);cursor:pointer">Set your mission goal</button>`;return;}
   const m=s.m;
   const wk=missionWeeks(m), cw=wk.find(w=>w.current)||wk.find(w=>w.state==='future')||null;
-  el.innerHTML=`<div onclick="foodEditMission()" style="cursor:pointer;margin:8px 0 2px;padding:9px 11px;border-radius:var(--radius);background:var(--bg,transparent);border:0.5px solid var(--border)">
+  const pep=missionPep(s), wkTxt=cw&&s.cur!=null?(s.cur<=cw.target?'on target':r1(s.cur-cw.target)+' kg to go'):'';
+  const msg=pep||(s.eta?`On your current trend: ${r1(m.goalKg)} kg around ${fmtDate(s.eta)}.`:'');
+  el.innerHTML=`<div onclick="foodEditMission()" style="cursor:pointer;margin:6px 0 2px;padding:8px 11px;border-radius:var(--radius);background:var(--bg,transparent);border:0.5px solid var(--border)">
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
-      <div style="font-size:12px;font-weight:800">Mission: ${r1(m.goalKg)} kg${m.goalFat?' &middot; '+m.goalFat+'% fat':''}</div>
-      <div style="font-size:11px;color:var(--ink3);white-space:nowrap">Day ${s.day} &middot; ${s.left>0?s.left+' days left':'deadline'}</div>
+      <div style="font-size:12px;font-weight:800">Mission ${r1(m.goalKg)} kg${m.goalFat?' &middot; '+m.goalFat+'%':''}</div>
+      <div style="font-size:12px;white-space:nowrap">${s.cur!=null?'Now <b>'+r1(s.cur)+' kg</b>'+(s.fat!=null?' &middot; ~'+Math.round(s.fat)+'%':''):'No weigh-in yet'}</div>
     </div>
-    <div style="font-size:11px;color:var(--ink3);margin-top:3px">${s.cur!=null?'Now <b style="color:var(--ink)">'+r1(s.cur)+' kg</b> (7-day avg)'+(s.fat!=null?' &middot; ~'+Math.round(s.fat)+'% fat':''):'No weigh-in yet'} &middot; started ${r1(m.startKg)} kg</div>
-    ${cw?`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:8px;font-size:11px">
-      <span><b>This week:</b> ${cw.target} kg by Sun ${fmtDate(cw.date)}</span>
-      <span style="font-weight:800;color:${s.cur!=null&&s.cur<=cw.target?'var(--teal)':'var(--amber)'}">${s.cur==null?'':(s.cur<=cw.target?'on target':r1(s.cur-cw.target)+' kg to go')}</span></div>`:''}
-    <div style="display:flex;gap:4px;margin-top:8px;align-items:center" title="Weekly checkpoints">
+    <div style="display:flex;gap:4px;margin-top:7px;align-items:center" title="Weekly checkpoints">
       ${wk.map(w=>`<div title="Sun ${fmtDate(w.date)}: target ${w.target} kg${w.avg!=null&&w.state!=='future'?', 7-day avg '+w.avg+' kg':''}" style="flex:1;height:8px;border-radius:4px;background:${w.state==='hit'?'var(--teal)':w.state==='close'?'var(--amber)':w.state==='miss'?'var(--red)':'var(--border)'};${w.current?'outline:1.5px solid var(--ink);outline-offset:1px':''}"></div>`).join('')}
+      <div style="font-size:10px;color:var(--ink3);white-space:nowrap;margin-left:4px">${s.left>0?s.left+'d left':'deadline'}</div>
     </div>
-    <div style="margin-top:6px;font-size:12px;font-weight:700;color:var(--teal)">${esc(missionPep(s))}</div>
-    ${s.eta?`<div style="font-size:10px;color:var(--ink3);margin-top:2px">At your actual rate you reach ${r1(m.goalKg)} kg around ${fmtDate(s.eta)}.</div>`:''}
+    ${cw?`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;font-size:11px">
+      <span>This week <b>${cw.target} kg</b> by Sun ${fmtDate(cw.date)}</span>
+      <span style="font-weight:800;color:${s.cur!=null&&s.cur<=cw.target?'var(--teal)':'var(--amber)'}">${wkTxt}</span></div>`:''}
+    ${msg?`<div style="margin-top:4px;font-size:11px;font-weight:700;color:var(--teal)">${esc(msg)}</div>`:''}
   </div>`;
 };
 window.foodEditMission=function(){
