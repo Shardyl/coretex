@@ -339,15 +339,32 @@ def _sweep_mailbox(co: dict, mailbox: str, rt_key: str, client: str | None, own:
         to = (m_to.group(0) if m_to else "").lower()
         if not to or to.split("@")[-1] in own:
             continue                                 # internal mail is not deal correspondence
+        # CORTEX'S OWN SEND SEEN FROM ANOTHER MAILBOX (7 Oct 2026): card 1060 went out from rashad@skyvision.film and
+        # its copy in Rashad's personal Gmail (connected 3 Oct) has a different gmail id there, so it was reported as a
+        # "manual" email. A Cortex send to the same person with the same subject in the last 2 hours is that send.
+        _subj = re.sub(r"^(?:(?:re|fwd?|aw)\s*:\s*)+", "", (m.get("subject") or ""), flags=re.I).strip().lower()
+        if db.one("select 1 from decisions where action='send' and lower(snapshot->>'to') like %s and "
+                  "created_at > now() - interval '2 hours' and regexp_replace(lower(coalesce(snapshot->>'subject','')), "
+                  "'^((re|fwd?|aw) *: *)+', '') = %s limit 1", (f"%{to}%", _subj)):
+            continue
         slug = co.get("slug")
         deals = crm.active_deals_for_email(to, slug)
         deal = deals[0] if deals else crm.open_deal_for_domain(to, slug)
+        dco = co                                     # the company that owns the deal (may differ from the mailbox's)
+        if not deal:
+            # A MAILBOX THAT SPANS COMPANIES (the owner's personal Gmail) finds the deal under whichever company owns
+            # it: Dawn Christine's deal is Sky Vision, and the personal sweep only looked under "Personal".
+            for _c in db.query("select id, slug from companies where slug <> %s order by id", (slug or "",)):
+                _ds = crm.active_deals_for_email(to, _c["slug"])
+                if _ds:
+                    deal, dco = _ds[0], (store.get_company(_c["id"]) or co)
+                    break
         env = {"to": to, "subject": m.get("subject") or "", "from": mailbox}
         if deal:
             # the attachment names travel too, so a quotation sent BY HAND is recognised and valued as well
             record_send({"request": {"attachment_names": [a.get("filename") for a in m.get("attachments") or []
                                                           if a.get("filename")]}},
-                        env, co, manual=True, deal_id=deal["id"], draft=m.get("body") or "",
+                        env, dco, manual=True, deal_id=deal["id"], draft=m.get("body") or "",
                         ref=gmail.mail_ref(m))
             try:
                 crm.resume_followups(int(deal["id"]))   # a human replied — cadence re-arms at its gap

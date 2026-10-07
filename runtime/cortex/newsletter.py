@@ -1099,7 +1099,10 @@ def _sender(company_id: int) -> tuple[str, str, str | None]:
     company = store.get_company(company_id)
     domain = send_domain(company_id)
     prof = _profile(company_id)
-    return domain, f"{company['name']} <news@{domain}>", prof.get("reply_from") or prof.get("inbox_email")
+    # NEWSLETTER REPLIES HAVE THEIR OWN ADDRESS (owner, 7 Oct 2026: Sensa's go to hello@, not to Gino, who is
+    # `reply_from` for 1:1 email). Falls back to the 1:1 sender, then the inbox, as before.
+    return domain, f"{company['name']} <news@{domain}>", (prof.get("newsletter_reply_to") or prof.get("reply_from")
+                                                         or prof.get("inbox_email"))
 
 
 def send_bulk(company_id: int, subject: str, html: str, text: str, recips: list[dict],

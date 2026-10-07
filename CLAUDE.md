@@ -2635,3 +2635,13 @@ shoot needs none), then 10% off the whole quotation.
 - Chase gate on a Quote deal: waiting for their answer is the reason to chase; holds only for a decision, an
   on-hold, a date they gave that has not passed, or our email to them in the last 2 working days.
 - A held chase on a Quote deal is re-checked in 2 working days (`next_followup`), not after the next full gap.
+
+## The sent sweep knows Cortex's own sends in any mailbox; newsletter replies have their own address (7 Oct 2026)
+- CAUSE: card 1060 (Dawn Christine, Sky Vision deal 103) sent from rashad@skyvision.film; its copy in the owner's
+  personal Gmail (connected 3 Oct) has a different gmail id there, so `_sweep_mailbox` called it a "manual" email,
+  and it looked for a deal only under company "Personal", so it raised "Untracked sales email ... NO open opportunity".
+- `pipeline._sweep_mailbox`: a Cortex `send` decision to the same recipient with the same subject (Re:/Fwd: stripped)
+  in the last 2 hours = that send, skipped. No deal under the mailbox's company -> every other company's deals are
+  searched (`active_deals_for_email` per slug); a match is filed under the deal's company (`dco`).
+- Newsletter Reply-To: profile `newsletter_reply_to` (Sensa = hello@sensa.digital, owner 7 Oct 2026) wins over
+  `reply_from` (Gino, the 1:1 sender) in `newsletter._sender`. Editable on the profile (Communications).
