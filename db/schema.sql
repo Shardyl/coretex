@@ -493,3 +493,9 @@ create table if not exists fitness.lab_wishlist (
 -- free day (owner's planned off-plan days): set from Today; free_day_at = when it was last toggled, newest wins on sync
 alter table fitness.fast_days add column if not exists free_day boolean;
 alter table fitness.fast_days add column if not exists free_day_at timestamptz;
+
+-- household units (7 Oct 2026): a food's portions [{label, g}] from USDA/OFF or set by the owner ("glass" = 152 g);
+-- a log row remembers the unit it was entered in, so it reads "2 x egg (100 g)"
+alter table fitness.foods add column if not exists units jsonb;
+alter table fitness.food_log add column if not exists unit_label text;
+alter table fitness.food_log add column if not exists unit_count numeric;

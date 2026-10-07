@@ -179,12 +179,13 @@ def pull() -> dict:
               "kcal100": _num(r["kcal_100g"]), "protein100": _num(r["protein_100g"]),
               "carbs100": _num(r["carbs_100g"]), "fat100": _num(r["fat_100g"]),
               "fibre100": _num(r["fibre_100g"]), "source": r["source"], "sourceId": r["source_id"],
-              "favourite": r["favourite"]}
+              "favourite": r["favourite"], "units": r.get("units") or []}
              for r in db.query("select * from fitness.foods where not deleted order by name")]
     food_log = [{"id": r["uid"], "date": r["day"].isoformat(), "meal": r["meal"], "foodId": r["food_uid"],
                  "name": r["name"], "qtyG": _num(r["qty_g"]), "kcal": _num(r["kcal"]),
                  "protein": _num(r["protein"]), "carbs": _num(r["carbs"]), "fat": _num(r["fat"]),
-                 "notes": r["notes"], "at": r["eaten_at"].isoformat() if r.get("eaten_at") else None}
+                 "notes": r["notes"], "at": r["eaten_at"].isoformat() if r.get("eaten_at") else None,
+                 "unitLabel": r.get("unit_label"), "unitCount": _num(r.get("unit_count"))}
                 for r in db.query("select * from fitness.food_log where not deleted and day > current_date - 120 "
                                   "order by day, uid")]   # older history stays here; the phone keeps 120 days
     fast_days = [{"date": r["day"].isoformat(), "brokeAt": r["broke_at"].isoformat() if r["broke_at"] else None,
@@ -420,7 +421,10 @@ def _off_item(p: dict) -> dict | None:
             "barcode": p.get("code"), "kcal100": kcal, "protein100": _num(nm.get("proteins_100g")),
             "carbs100": _num(nm.get("carbohydrates_100g")), "fat100": _num(nm.get("fat_100g")),
             "fibre100": _num(nm.get("fiber_100g")), "servingLabel": p.get("serving_size"),
-            "servingG": _num(p.get("serving_quantity")), "source": "off", "sourceId": p.get("code")}
+            "servingG": _num(p.get("serving_quantity")),
+            "units": ([{"label": _unit_label(str(p.get("serving_size"))) or "serving", "g": _num(p.get("serving_quantity"))}]
+                      if _num(p.get("serving_quantity")) else []),
+            "source": "off", "sourceId": p.get("code")}
 
 
 def _usda_item(f: dict) -> dict | None:
@@ -443,7 +447,31 @@ def _usda_item(f: dict) -> dict | None:
     return {"name": (f.get("description") or "").strip().capitalize(), "brand": f.get("brandOwner"),
             "barcode": f.get("gtinUpc"), "kcal100": _num(by.get("kcal")), "protein100": _num(by.get("protein")),
             "carbs100": _num(by.get("carbs")), "fat100": _num(by.get("fat")), "fibre100": _num(by.get("fibre")),
-            "servingLabel": None, "servingG": None, "source": "usda", "sourceId": str(f.get("fdcId"))}
+            "servingLabel": None, "servingG": None, "units": _usda_units(f),
+            "source": "usda", "sourceId": str(f.get("fdcId"))}
+
+
+_SKIP_UNIT = re.compile(r"guideline amount|quantity not specified|school container", re.I)
+
+
+def _unit_label(text: str) -> str:
+    """'1 egg' -> 'egg', '1 cup' -> 'cup'; keeps anything that is not a plain '1 x' prefix."""
+    t = re.sub(r"\s+", " ", (text or "").strip())
+    return re.sub(r"^1\s+", "", t)[:40]
+
+
+def _usda_units(f: dict) -> list:
+    out, seen = [], set()
+    for m in f.get("foodMeasures") or []:
+        txt, g = m.get("disseminationText") or "", _num(m.get("gramWeight"))
+        if not txt or not g or g <= 0 or _SKIP_UNIT.search(txt):
+            continue
+        lab = _unit_label(txt)
+        if lab.lower() in seen:
+            continue
+        seen.add(lab.lower())
+        out.append({"label": lab, "g": round(g, 1)})
+    return out[:6]
 
 
 def food_search(q: str) -> dict:
@@ -504,6 +532,16 @@ def food_barcode(code: str) -> dict:
 def _lift_uid(row: dict) -> str:
     """Stable id for rows that predate client ids: one exercise on one day is one session."""
     return str(row.get("id") or f"{row.get('exercise', '')}|{str(row.get('date'))[:10]}")
+
+
+def _units_json(units):
+    """A food's household units [{label, g}] as sent by the app; None (keep the server's) when not sent."""
+    if not isinstance(units, list):
+        return None
+    from psycopg.types.json import Json
+    clean = [{"label": str(u.get("label"))[:40], "g": round(float(u["g"]), 1)} for u in units
+             if isinstance(u, dict) and u.get("label") and _num(u.get("g")) and float(u["g"]) > 0]
+    return Json(clean[:12])
 
 
 def _push_inner(doc: dict, source: str = "app") -> dict:
@@ -642,17 +680,18 @@ def _push_inner(doc: dict, source: str = "app") -> dict:
             continue
         _ex(
             "insert into fitness.foods (uid, name, brand, barcode, serving_label, serving_g, kcal_100g, "
-            "protein_100g, carbs_100g, fat_100g, fibre_100g, source, source_id, favourite, deleted) "
-            "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "protein_100g, carbs_100g, fat_100g, fibre_100g, source, source_id, favourite, deleted, units) "
+            "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
             "on conflict (uid) do update set name=excluded.name, brand=excluded.brand, barcode=excluded.barcode, "
             "serving_label=excluded.serving_label, serving_g=excluded.serving_g, kcal_100g=excluded.kcal_100g, "
             "protein_100g=excluded.protein_100g, carbs_100g=excluded.carbs_100g, fat_100g=excluded.fat_100g, "
             "fibre_100g=excluded.fibre_100g, source=excluded.source, source_id=excluded.source_id, "
-            "favourite=excluded.favourite, deleted=foods.deleted or excluded.deleted, updated_at=now()",
+            "favourite=excluded.favourite, deleted=foods.deleted or excluded.deleted, "
+            "units=coalesce(excluded.units, foods.units), updated_at=now()",
             (r["id"], r["name"].strip(), r.get("brand"), r.get("barcode"), r.get("servingLabel"),
              _num(r.get("servingG")), _num(r.get("kcal100")), _num(r.get("protein100")),
              _num(r.get("carbs100")), _num(r.get("fat100")), _num(r.get("fibre100")), r.get("source"),
-             r.get("sourceId"), bool(r.get("favourite")), bool(r.get("deleted"))))
+             r.get("sourceId"), bool(r.get("favourite")), bool(r.get("deleted")), _units_json(r.get("units"))))
         counts["foods"] += 1
     for r in doc.get("foodLog") or []:
         # A tombstone is {id, deleted} with NO date, so it must be handled before the date check.
@@ -665,15 +704,17 @@ def _push_inner(doc: dict, source: str = "app") -> dict:
             continue
         _ex(
             "insert into fitness.food_log (uid, day, meal, food_uid, name, qty_g, kcal, protein, carbs, fat, "
-            "notes, deleted, eaten_at) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "notes, deleted, eaten_at, unit_label, unit_count) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
             "on conflict (uid) do update set day=excluded.day, meal=excluded.meal, food_uid=excluded.food_uid, "
             "name=excluded.name, qty_g=excluded.qty_g, kcal=excluded.kcal, protein=excluded.protein, "
             "carbs=excluded.carbs, fat=excluded.fat, notes=excluded.notes, "
             "deleted=food_log.deleted or excluded.deleted, "
-            "eaten_at=coalesce(excluded.eaten_at, food_log.eaten_at), updated_at=now()",
+            "eaten_at=coalesce(excluded.eaten_at, food_log.eaten_at), unit_label=excluded.unit_label, "
+            "unit_count=excluded.unit_count, updated_at=now()",
             (r["id"], d, r.get("meal"), r.get("foodId"), (r.get("name") or "").strip() or "Food",
              _num(r.get("qtyG")), _num(r.get("kcal")), _num(r.get("protein")), _num(r.get("carbs")),
-             _num(r.get("fat")), r.get("notes"), bool(r.get("deleted")), _ts(r.get("at"))))
+             _num(r.get("fat")), r.get("notes"), bool(r.get("deleted")), _ts(r.get("at")),
+             (str(r.get("unitLabel"))[:40] if r.get("unitLabel") else None), _num(r.get("unitCount"))))
         counts["foodLog"] += 1
     counts["meals"] = 0
     for r in doc.get("meals") or []:

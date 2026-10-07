@@ -802,7 +802,7 @@ function mealCard(key,label,list){
   return `<div class="fd-meal">
     <div class="fd-meal-h"><b>${label}</b><span>${list.length?fmtN(t.kcal)+' kcal &middot; '+fmtN(t.protein)+' g P':''}</span></div>
     ${list.map(e=>`<div class="fd-entry" onclick="foodEditEntry('${e.id}')">
-      <div><div class="n">${esc(e.name)}</div><div class="q">${e.at?tOf(e.at)+' &middot; ':''}${e.qtyG!=null?fmtN(e.qtyG)+' g':''}${e.protein!=null?(e.qtyG!=null?' &middot; ':'')+r1(e.protein)+' g protein':''}${e.notes==='photo estimate'?' &middot; <span style="color:var(--amber)">photo estimate</span>':''}</div></div>
+      <div><div class="n">${esc(e.name)}</div><div class="q">${e.at?tOf(e.at)+' &middot; ':''}${unitText(e)}${e.protein!=null?(e.qtyG!=null?' &middot; ':'')+r1(e.protein)+' g protein':''}${e.notes==='photo estimate'?' &middot; <span style="color:var(--amber)">photo estimate</span>':''}</div></div>
       <div class="k">${fmtN(e.kcal)}</div></div>`).join('')}
     <button class="fd-add" onclick="foodOpenAdd('${key}')">+ Add to ${label.toLowerCase()}</button>
     ${list.length?`<button class="fd-add" style="border:none;color:var(--ink3);margin-top:2px" onclick="foodSaveAsMeal('${key}')">Save as meal</button>`:''}
@@ -911,7 +911,8 @@ window.foodRenderMeals=function(){
 window.foodLogMeal=function(id){
   const m=savedMeals.find(x=>x.id===id);if(!m)return;
   (m.items||[]).forEach(i=>foodLog.push({id:newId('fl'),date:foodDay,at:nowAt(),meal:sheetMeal,foodId:i.foodId||null,name:i.name,
-    qtyG:i.qtyG??null,kcal:i.kcal??null,protein:i.protein??null,carbs:i.carbs??null,fat:i.fat??null}));
+    qtyG:i.qtyG??null,kcal:i.kcal??null,protein:i.protein??null,carbs:i.carbs??null,fat:i.fat??null,
+    unitLabel:i.unitLabel||null,unitCount:i.unitCount??null}));
   saveFoodLog();closeSheet();renderToday();toast(m.name+' added');
 };
 window.foodSaveAsMeal=function(key){
@@ -925,7 +926,7 @@ window.foodSaveAsMeal=function(key){
     const name=document.getElementById('fdMealName').value.trim();
     if(!name){toast('Name the meal');return;}
     savedMeals.push({id:newId('meal'),name,source:'app',favourite:false,
-      items:items.map(e=>({foodId:e.foodId||null,name:e.name,qtyG:e.qtyG??null,kcal:e.kcal??null,protein:e.protein??null,carbs:e.carbs??null,fat:e.fat??null}))});
+      items:items.map(e=>({foodId:e.foodId||null,name:e.name,qtyG:e.qtyG??null,kcal:e.kcal??null,protein:e.protein??null,carbs:e.carbs??null,fat:e.fat??null,unitLabel:e.unitLabel||null,unitCount:e.unitCount??null}))});
     saveMeals();closeModal();toast('Meal saved');
   });
 };
@@ -986,19 +987,43 @@ async function startScan(){
 function stopScan(){if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;}}
 
 // Portion screen: pick grams (or servings), see the numbers, add. `entry` = existing log row to edit.
+// ---------- household units (7 Oct 2026) ----------
+// A food carries units [{label, g}] (USDA portions such as "egg" = 50 g, the pack serving, or his own: "glass" = 152 g).
+// Entries remember the unit they were logged in so they read "2 x egg (100 g)". Grams stay the source of truth.
+function foodUnits(f){
+  const u=(f&&Array.isArray(f.units)?f.units:[]).filter(x=>x&&x.label&&+x.g>0);
+  if(!u.length&&f&&+f.servingG>0)u.push({label:f.servingLabel||'serving',g:+f.servingG});
+  return u;
+}
+function unitText(e){
+  if(!e||!e.unitLabel||e.unitCount==null)return e&&e.qtyG!=null?fmtN(e.qtyG)+' g':'';
+  const c=+e.unitCount, n=c===0.5?'½':(c%1?r1(c):c);
+  return n+' &times; '+esc(e.unitLabel)+(e.qtyG!=null?' ('+fmtN(e.qtyG)+' g)':'');
+}
 function portionView(food,entry){
   stopScan();
   const sg=+food.servingG||0;
   // New entry: start from the amount he logged LAST time for this food (he usually repeats it).
   const lastQ=!entry&&food.id?(foodLog.filter(e=>e.foodId===food.id&&e.qtyG!=null).sort((a,b)=>((b.at||b.date)>(a.at||a.date)?1:-1))[0]||{}).qtyG:null;
-  const grams=entry&&entry.qtyG!=null?entry.qtyG:(lastQ!=null?lastQ:(sg||100));
+  const lastE=!entry&&food.id?foodLog.filter(e=>e.foodId===food.id&&e.qtyG!=null).sort((a,b)=>((b.at||b.date)>(a.at||a.date)?1:-1))[0]:null;
+  const units=foodUnits(food);
+  const src=entry||lastE;
+  let uLab=src&&src.unitLabel&&units.some(u=>u.label===src.unitLabel)?src.unitLabel:(src&&src.qtyG!=null&&!src.unitLabel?'g':(units[0]?units[0].label:'g'));
+  let uCnt=src&&src.unitLabel===uLab&&src.unitCount!=null?+src.unitCount:1;
+  const grams=entry&&entry.qtyG!=null?entry.qtyG:(uLab!=='g'?units.find(u=>u.label===uLab).g*uCnt:(lastQ!=null?lastQ:(sg||100)));
+  window._fdUnits=units;
   const saved=!!(food.id&&foods.find(f=>f.id===food.id));
   const meal=entry?entry.meal:sheetMeal;
   const inner=`<div class="fd-sheet-b">
     <div class="fd-item" style="cursor:default"><div class="n">${esc(food.name)}${food.brand?` <span class="fd-chip">${esc(food.brand)}</span>`:''}</div>
       <div class="m">Per 100 g: ${fmtN(food.kcal100)} kcal &middot; P ${r1(food.protein100)??'—'} &middot; C ${r1(food.carbs100)??'—'} &middot; F ${r1(food.fat100)??'—'}</div></div>
-    <div class="form-group"><label class="form-label">Amount (g)</label><input class="fd-input" type="number" id="fdG" value="${r1(grams)}" oninput="foodPortionCalc()"/></div>
-    ${sg?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${[0.5,1,1.5,2,3].map(n=>`<button class="btn-sm" onclick="document.getElementById('fdG').value=${r1(sg*n)};foodPortionCalc()">${n} &times; ${esc(food.servingLabel||'serving')}</button>`).join('')}</div>`:''}
+    <div style="display:grid;grid-template-columns:90px 1fr;gap:8px;margin-bottom:6px">
+      <div><label class="form-label">How many</label><input class="fd-input" type="number" step="0.5" inputmode="decimal" id="fdCnt" value="${uLab==='g'?'':uCnt}" oninput="foodUnitCalc()" ${uLab==='g'?'disabled':''}/></div>
+      <div><label class="form-label">Unit</label><select class="fd-input" id="fdUnit" onchange="foodUnitCalc(true)">
+        ${units.map(u=>`<option value="${esc(u.label)}" ${u.label===uLab?'selected':''}>${esc(u.label)} (${fmtN(u.g)} g)</option>`).join('')}
+        <option value="g" ${uLab==='g'?'selected':''}>grams</option></select></div></div>
+    <div class="form-group"><label class="form-label">Amount (g)</label><input class="fd-input" type="number" id="fdG" value="${r1(grams)}" oninput="document.getElementById('fdUnit').value='g';document.getElementById('fdCnt').value='';document.getElementById('fdCnt').disabled=true;foodPortionCalc()"/></div>
+    <button class="btn-sm" style="margin-bottom:10px" onclick="foodAddUnit()">+ Add my own unit (e.g. glass)</button>
     <div class="form-group"><label class="form-label">Eaten at</label>${timePick('fdAtT',entry&&entry.at?tOf(entry.at):(entry?'':(foodDay===localDay(new Date())?nowHM():'')),true)}</div>
     <div class="form-group"><label class="form-label">Meal</label><select id="fdMeal" class="fd-input">${MEALS.map(([k,l])=>`<option value="${k}" ${k===meal?'selected':''}>${l}</option>`).join('')}</select></div>
     <div class="card" id="fdCalc"></div>
@@ -1014,17 +1039,38 @@ function portionView(food,entry){
     if(!(g>0)){toast('Enter an amount');return;}
     let f=food;
     if(!saved&&document.getElementById('fdKeep')?.checked){
-      f=Object.assign({},food,{id:newId('food'),favourite:false});
+      f=Object.assign({},food,{id:newId('food'),favourite:false,units:window._fdUnits||foodUnits(food)});
       foods.push(f);saveFoods();
     }
     const p=portion(f,g);
     const tv=document.getElementById('fdAtT').value, dd=entry?entry.date:foodDay;
+    const ul=document.getElementById('fdUnit').value, uc=+document.getElementById('fdCnt').value;
+    if(window._fdUnits&&window._fdUnits!==f.units&&f.id){const sf=foods.find(x=>x.id===f.id);if(sf&&JSON.stringify(sf.units||[])!==JSON.stringify(window._fdUnits)){sf.units=window._fdUnits;saveFoods();}}
     const row={date:dd,at:tv?atTime(dd,tv):null,meal:document.getElementById('fdMeal').value,foodId:f.id||null,
-      name:f.name+(f.brand?' ('+f.brand+')':''),qtyG:r1(g),kcal:p.kcal,protein:p.protein,carbs:p.carbs,fat:p.fat};
+      name:f.name+(f.brand?' ('+f.brand+')':''),qtyG:r1(g),kcal:p.kcal,protein:p.protein,carbs:p.carbs,fat:p.fat,
+      unitLabel:ul!=='g'&&uc>0?ul:null,unitCount:ul!=='g'&&uc>0?uc:null};
     if(entry)Object.assign(entry,row);else foodLog.push(Object.assign({id:newId('fl')},row));
     saveFoodLog();closeSheet();renderToday();toast(entry?'Updated':'Added');
   };
 }
+window.foodUnitCalc=function(unitChanged){
+  const ul=document.getElementById('fdUnit').value, c=document.getElementById('fdCnt');
+  if(ul==='g'){c.value='';c.disabled=true;foodPortionCalc();return;}
+  c.disabled=false;if(unitChanged&&!(+c.value>0))c.value=1;
+  const u=(window._fdUnits||[]).find(x=>x.label===ul);
+  if(u&&+c.value>0)document.getElementById('fdG').value=r1(u.g*+c.value);
+  foodPortionCalc();
+};
+window.foodAddUnit=function(){
+  const label=(prompt('Unit name, e.g. glass, half glass, slice')||'').trim();if(!label)return;
+  const g=+prompt('How many grams (or ml) is one '+label+'?');if(!(g>0)){toast('Enter the grams');return;}
+  const units=(window._fdUnits||[]).filter(u=>u.label.toLowerCase()!==label.toLowerCase());
+  units.unshift({label:label.slice(0,40),g:r1(g)});window._fdUnits=units;
+  const f=window._fdFood;if(f){f.units=units;const sf=f.id&&foods.find(x=>x.id===f.id);if(sf){sf.units=units;saveFoods();}}
+  const sel=document.getElementById('fdUnit');
+  sel.innerHTML=units.map(u=>`<option value="${esc(u.label)}">${esc(u.label)} (${fmtN(u.g)} g)</option>`).join('')+'<option value="g">grams</option>';
+  sel.value=units[0].label;document.getElementById('fdCnt').value=1;foodUnitCalc();toast('Saved: 1 '+label+' = '+r1(g)+' g');
+};
 window.foodPortionCalc=function(){
   const f=window._fdFood,g=+document.getElementById('fdG').value||0,p=portion(f,g);
   document.getElementById('fdCalc').innerHTML=`<div class="fd-row" style="margin-top:0">
