@@ -846,6 +846,18 @@ voice note from him is never triaged, CRM-captured or answered.
   labelled as possibles, never a first-name match (noise across 33k contacts) and never as the same
   person. `waWho` draws it above the draft: a green "you know them" panel with an Open contact button and
   clickable deal chips, or "not in the CRM on <number>" with the possibles.
+- **REACHING A LEAD WHOSE WINDOW HAS SHUT (7 Oct 2026).** A landing-page enquiry we did not answer inside
+  24h is unreachable by any free-form message, so the reply just sits there (cards 1050, 1053). Template
+  `sensa_enquiry_reply_waiting` (setting `wa_reengage_template`, created by `create_reengage_template()`)
+  needs no window: one quick-reply button, and the moment they tap it the window opens and the REAL
+  drafted reply sends through the normal gate. **Deliberately a nudge, not the answer**: a template whose
+  variable smuggles free-form content is what Meta has been clamping down on, and the conversation should
+  happen in-window where it can be one. **APPROVED, NEVER AUTOMATIC** - it is an outward message to a
+  client, so the card OFFERS it (`whatsapp.nudgeable` -> `wa.can_nudge` -> the Inbox button ->
+  `POST /api/whatsapp/nudge/{task_id}`) and `whatsapp.nudge` refuses spam, an open window, a card with no
+  number, and anything nudged inside `NUDGE_COOLOFF_DAYS` (14). The greeting uses their FIRST name only
+  and only when it is a real name, because WhatsApp puts the number where a name goes and "Hi +971..." is
+  worse than no greeting.
 - Spam and other no-reply messages raise the FYI card only — they never interrupt him on WhatsApp.
 
 **BOTH SITES POINT AT THE SAME NUMBER, so the MESSAGE carries the brand (28 Sep 2026).** sensa.digital and

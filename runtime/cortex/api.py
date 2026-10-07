@@ -477,11 +477,12 @@ def _enrich_action_card(t: dict) -> dict:
         rq = t.get("request") or {}
         ph = rq.get("phone") or ""
         msgs = [m for m in (rq.get("messages") or [rq.get("their_message") or ""]) if m]
-        t["wa"] = {"who": rq.get("recipient") or ph, "phone": ph, "messages": msgs,
+        t["wa"] = {"task_id": t["id"], "who": rq.get("recipient") or ph, "phone": ph, "messages": msgs,
                    "category": (rq.get("triage") or {}).get("category") or "",
                    "summary": (rq.get("triage") or {}).get("summary") or "",
                    "source": (rq.get("lead_source") or {}).get("line") or "",
                    "minutes_left": int(whatsapp.window_closes_in(ph) // 60) if ph else 0}
+        t["wa"]["can_nudge"] = whatsapp.nudgeable(t["id"])
         try:
             # WHO IS THIS, from our own records. WhatsApp hands over a number and a display name and
             # nothing else (no profile photo exists on the Cloud API), so the answer to "do I know them"
@@ -2753,6 +2754,14 @@ def menu_pick(task_id: int, body: MenuPicks, u: dict = Depends(current_user)) ->
     """Blog menu card: the ticked numbers become blog cards (one concept each); the menu closes."""
     _guard_task(u, task_id)
     return engine.menu_pick(task_id, body.picks)
+
+
+@app.post("/api/whatsapp/nudge/{task_id}")
+def whatsapp_nudge(task_id: int, u: dict = Depends(current_user)) -> dict:
+    """Ask a lead whose 24h window has shut to reopen the chat, so the reply on this card can send.
+    His tap, never automatic: it is an outward message to a client."""
+    _guard_task(u, task_id)
+    return whatsapp.nudge(task_id)
 
 
 @app.get("/api/tasks/{task_id}/pending-rule")

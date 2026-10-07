@@ -739,6 +739,63 @@ def create_reengage_template(name: str = "sensa_enquiry_reply_waiting", lang: st
     return out
 
 
+NUDGE_COOLOFF_DAYS = 14
+
+
+def nudge(task_id: int) -> dict:
+    """Ask a lead who went quiet to reopen the chat, so the reply waiting on their card can actually send.
+
+    APPROVED, NEVER AUTOMATIC. This is an outward message to a client, so it goes out on his tap like any
+    other outward card; a stuck card OFFERS the nudge rather than firing it. The draft itself is left
+    exactly as it is: when they reply, the window opens and the real reply sends through the normal gate."""
+    tmpl = db.setting_get("wa_reengage_template")
+    if not tmpl:
+        return {"ok": False, "error": "no re-engagement template approved yet"}
+    t = store.get_task(task_id)
+    if not t or t["kind"] != "wa_reply":
+        return {"ok": False, "error": "not a WhatsApp card"}
+    req = dict(t.get("request") or {})
+    phone = req.get("phone") or ""
+    if not phone:
+        return {"ok": False, "error": "no number on the card"}
+    if (req.get("triage") or {}).get("category") in ("spam",):
+        return {"ok": False, "error": "triaged as spam - never nudged"}
+    if window_open(phone):
+        return {"ok": False, "error": "their window is open - approve the reply instead"}
+    last = req.get("nudged_at")
+    if last and (time.time() - float(last)) < NUDGE_COOLOFF_DAYS * 86400:
+        return {"ok": False, "error": f"already nudged in the last {NUDGE_COOLOFF_DAYS} days"}
+    co = store.get_company(t["company_id"]) or {}
+    # Their FIRST name only, and only when it is a real name: WhatsApp puts the number where a name goes,
+    # and "Hi +971521015355" is worse than no greeting at all.
+    who = (req.get("recipient") or "").strip()
+    first = "" if (not who or _clean_phone(who)) else who.split()[0]
+    try:
+        send_card_template(phone, tmpl, [first or "there", co.get("name") or "Sensa Productions"], [])
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"nudge failed: {str(e)[:200]}"}
+    req["nudged_at"] = time.time()
+    req.pop("card_problem", None)
+    store.update_task(task_id, request=req,
+                      last_status=f"nudged {first or phone} to reopen the chat")
+    print(f"[whatsapp] nudged {phone} to reopen the window for card {task_id}", flush=True)
+    return {"ok": True, "sent_to": first or phone}
+
+
+def nudgeable(task_id: int) -> bool:
+    """Whether the Inbox should offer the nudge on this card. Mirrors `nudge`'s own refusals."""
+    t = store.get_task(task_id)
+    if not (t and t["kind"] == "wa_reply" and db.setting_get("wa_reengage_template")):
+        return False
+    req = t.get("request") or {}
+    if not req.get("phone") or (req.get("triage") or {}).get("category") == "spam":
+        return False
+    if window_open(req["phone"]):
+        return False
+    last = req.get("nudged_at")
+    return not (last and (time.time() - float(last)) < NUDGE_COOLOFF_DAYS * 86400)
+
+
 def template_status(name: str = "cortex_wa_card") -> dict:
     """Where Meta has got to with a template. APPROVED is when alerts start carrying the card."""
     waba = db.setting_get("wa_waba_id")

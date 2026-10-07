@@ -2177,7 +2177,19 @@ function waBlock(w){
     <div class="meta" style="margin-bottom:6px">${ic('inbox',14)} ${esc(w.who||'them')} said${(w.messages||[]).length>1?` (${w.messages.length} messages)`:''}</div>
     <div style="max-height:260px;overflow:auto">${bubbles||'<div class="meta">(no message text)</div>'}</div>
     ${chips?`<div class="meta" style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">${chips}</div>`:''}</div>
-    ${waWho(w.who_is, w.phone)}`;
+    ${waWho(w.who_is, w.phone)}
+    ${w.can_nudge?`<div class="row" style="margin:8px 0"><button class="btn" id="nudge${w.phone}" onclick="waNudge(${w.task_id},this)">${ic('send',16)} Nudge them to reopen the chat</button></div>`:''}`;
+}
+
+// THEIR WINDOW HAS SHUT, so the reply on this card cannot send. One tap asks them to write back, which
+// reopens it; the draft stays exactly as it is and sends through the normal gate when they do.
+async function waNudge(id,btn){
+  if(btn){ btn.disabled=true; btn.textContent='Sending...'; }
+  try{
+    const r=await api('/api/whatsapp/nudge/'+id,{method:'POST'});
+    if(r&&r.ok){ toast('Nudge sent to '+(r.sent_to||'them')); render(); }
+    else { toast(r&&r.error?r.error:'Could not send the nudge'); if(btn){btn.disabled=false;btn.textContent='Nudge them to reopen the chat';} }
+  }catch(e){ toast('Could not send the nudge'); if(btn){btn.disabled=false;btn.textContent='Nudge them to reopen the chat';} }
 }
 
 function mgrVerdict(v){
