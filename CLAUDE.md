@@ -2657,3 +2657,14 @@ shoot needs none), then 10% off the whole quotation.
   searched (`active_deals_for_email` per slug); a match is filed under the deal's company (`dco`).
 - Newsletter Reply-To: profile `newsletter_reply_to` (Sensa = hello@sensa.digital, owner 7 Oct 2026) wins over
   `reply_from` (Gino, the 1:1 sender) in `newsletter._sender`. Editable on the profile (Communications).
+
+## A weekday beside a date is computed, never written by a model (7 Oct 2026)
+- CAUSE: card 1110 (Al Hamra RFP acknowledgement) said the deadline was "Wednesday 12 October 2026"; it is a
+  Monday. The client wrote only "12 October 2026". The Manager flagged it, but a flag does not change the email.
+- `engine._fix_weekdays(text, now)`: every "<weekday> <day> <month> [year]" or "<weekday>, <month> <day>" pair is
+  checked against the calendar and the weekday replaced (full/short form and case kept). No year = the year that
+  puts the date nearest ahead of today (up to 60 days back). Runs at the end of `_ensure_clean_email` (every draft,
+  correction and reconcile path, so the card shows the fix) and in `_clean_email_text` (the send-time backstop).
+- `_read_through` also removes words describing how the email was written ("framed as optional", "as instructed").
+- The "Sensa Productions" line above the sender's name in a COPIED card is the signature logo's alt text, not a
+  duplicated sign-off.

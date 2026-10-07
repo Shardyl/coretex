@@ -22,7 +22,7 @@ import tempfile
 import secrets
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from .schedule import _GST
 
@@ -466,10 +466,62 @@ def _fmt_email(task: dict, skill: dict, company: dict, verdict: dict | None) -> 
     return f"{head}\n\n{line}{their_block}\n\nDRAFTED REPLY:\n{draft}{_verdict_line(verdict)}"
 
 
+_WD = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+_MON = ("january", "february", "march", "april", "may", "june", "july", "august", "september", "october",
+        "november", "december")
+_WD_RX = r"(?P<wd>(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?|sun)(?:day)?\.?)"
+_MON_RX = r"(?P<mon>jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|" \
+          r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?"
+_DATE_FORMS = (
+    re.compile(r"\b" + _WD_RX + r",?\s+(?:the\s+)?(?P<d>\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?" + _MON_RX
+               + r"(?:,?\s+(?P<y>20\d\d))?\b", re.I),
+    re.compile(r"\b" + _WD_RX + r",?\s+" + _MON_RX + r"\s+(?P<d>\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(?P<y>20\d\d))?\b",
+               re.I))
+
+
+def _fix_weekdays(text: str, now: datetime | None = None) -> tuple[str, list[str]]:
+    """A WEEKDAY NEXT TO A DATE IS COMPUTED, NEVER WRITTEN BY A MODEL (owner, 7 Oct 2026). Card 1110 told Al Hamra
+    the RFP closes "Wednesday 12 October 2026"; it is a Monday. The Manager flagged it, but a flag does not change
+    the email. Every "<weekday> <date>" pair is checked against the calendar and the weekday is replaced with the
+    real one. A date with no year takes the year that puts it nearest ahead of today (up to 60 days back).
+    Returns the text and a line per correction."""
+    now = now or datetime.now(_GST)
+    if isinstance(now, datetime):
+        now = now.date()
+    fixes: list[str] = []
+
+    def _one(m):
+        wd_txt, mon_txt = m.group("wd"), m.group("mon")
+        try:
+            mon = next(i for i, n in enumerate(_MON, 1) if n.startswith(mon_txt.lower().rstrip(".")[:3]))
+            d = int(m.group("d"))
+            if m.group("y"):
+                real = date(int(m.group("y")), mon, d)
+            else:
+                cands = [date(now.year + k, mon, d) for k in (-1, 0, 1)]
+                real = next((c for c in cands if (c - now).days >= -60), cands[-1])
+        except (StopIteration, ValueError):
+            return m.group(0)
+        want = _WD[real.weekday()]
+        if want.startswith(wd_txt.lower().rstrip(".")[:3]):
+            return m.group(0)
+        # keep the writer's form: full or short, capitalised or not
+        short = len(wd_txt.rstrip(".")) <= 4
+        new = (want[:3] + ("." if wd_txt.endswith(".") else "")) if short else want
+        new = new.capitalize() if wd_txt[:1].isupper() else new
+        fixes.append(f"{wd_txt} -> {new} ({real.isoformat()})")
+        return new + m.group(0)[len(wd_txt):]
+
+    for rx in _DATE_FORMS:
+        text = rx.sub(_one, text or "")
+    return text, fixes
+
+
 def _clean_email_text(s: str) -> str:
     """Strip markdown so a plain-text email reads neat and professional (no **, #, [](), stray bullets)."""
     s = s or ""
     s = re.sub(r"^\s*Subject\s*:[^\n]*\n+", "", s, flags=re.I)     # a leaked Subject: header never ships in a body
+    s = _fix_weekdays(s)[0]                                         # a weekday beside a date is the real one
     s = s.replace("**", "").replace("__", "")                      # bold markers
     s = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", s)                    # markdown headings
     def _link(m):                                                 # [text](url): drop redundant URL text
@@ -2930,6 +2982,21 @@ def _ensure_clean_email(skill: dict, company: dict, dreq: dict, draft: str,
     appear in a client email. One automatic retry with explicit feedback; the send-layer placeholder
     guard remains the final backstop."""
     try:
+        draft = _ensure_clean_email_inner(skill, company, dreq, draft, prev)
+    finally:
+        pass
+    try:
+        draft, _wfix = _fix_weekdays(draft)
+        if _wfix:
+            print(f"[weekday] corrected: {'; '.join(_wfix)}", flush=True)
+    except Exception:  # noqa: BLE001
+        pass
+    return draft
+
+
+def _ensure_clean_email_inner(skill: dict, company: dict, dreq: dict, draft: str,
+                              prev: str | None = None) -> str:
+    try:
         if draft and _META_LEAK.search(draft):
             draft = worker.draft(skill, company, dreq, prev_draft=prev, manager_feedback=[
                 "Your output contained system/meta text addressed to Cortex or the owner (e.g. 'CORTEX, "
@@ -2976,7 +3043,10 @@ def _read_through(company: dict, dreq: dict, draft: str) -> str:
             "structure exactly as written: (1) two sentences that contradict each other; (2) the same point made "
             "twice; (3) a sentence placed after the closing line ('Looking forward to...', 'Best regards') that "
             "belongs in the body; (4) an offer to send a file later when that file is attached (say it is attached, "
-            "once, in the body); (5) a file described as attached that is not in the attachment list. Return JSON "
+            "once, in the body); (5) a file described as attached that is not in the attachment list; (6) words that "
+            "describe how the email itself is written or what the writer was told, rather than speaking to the "
+            "reader ('framed as optional', 'as instructed', 'without being pushy', 'keeping it brief'): remove "
+            "just those words. Return JSON "
             '{"ok": true} when nothing needs fixing, else {"ok": false, "issues": ["<one line each>"], "email": '
             '"<the corrected email body, complete, plain text>"}. Never add new content, offers or pleasantries.',
             "ATTACHED FILES: " + (", ".join(names) or "(none)") + "\n\nEMAIL:\n" + draft[:6000],
