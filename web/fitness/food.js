@@ -274,7 +274,7 @@ function renderTodayInner(){
       <div style="margin-top:12px;display:flex;justify-content:space-between;font-size:12px;font-weight:700">
         <span>Protein</span><span>${fmtN(t.protein)} / ${fmtN(ptgt)} g</span>
       </div>
-      <div class="fd-bar"><div style="width:${pPct}%;background:var(--blue)"></div></div>
+      <div class="fd-bar"><div style="width:${pPct}%;background:${kpiProtein(t.protein,ptgt)}"></div></div>
       <div style="margin-top:6px;font-size:11px;color:var(--ink3)">Carbs ${fmtN(t.carbs)} g &middot; Fat ${fmtN(t.fat)} g</div>
       ${balance}
       ${projectToday()}
@@ -374,6 +374,9 @@ function kpiPace(day){
 }
 function kpiUp(v,lo,hi,f){if(v==null)return '';f=f||1;return v>=hi*f?'var(--teal)':v>=lo*f?'var(--amber)':'var(--red)';}
 // Glucose (owner, 8 Oct 2026): up to 90 green, 91-130 amber, 131+ red.
+// Protein (owner, 8 Oct 2026): at/over target (160) green, 75% of it (120) up to target amber, below red.
+// Nothing logged yet (still fasting) stays the neutral blue, so the day doesn't open red.
+function kpiProtein(v,tgt){if(!v||!tgt)return 'var(--blue)';return v>=tgt?'var(--teal)':v>=tgt*0.75?'var(--amber)':'var(--red)';}
 function kpiGlucose(mg){if(mg==null)return '';return mg>=131?'var(--red)':mg>90?'var(--amber)':'var(--teal)';}
 function kpiSleepScore(v){if(v==null)return '';return v>=90?'var(--teal)':v>=70?'var(--amber)':'var(--red)';}
 // HRV vs his own 14-night average (full nights only, before this day): at/above green, up to 10% below amber, worse red.
