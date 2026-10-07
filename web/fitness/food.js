@@ -152,6 +152,7 @@ const css=`
 .fd-bar{height:8px;background:var(--surface3);border-radius:4px;overflow:hidden;margin-top:6px}
 .fd-bar>div{height:100%;background:var(--teal);border-radius:4px}
 .fd-bar.over>div{background:var(--amber)}
+.fd-bar.way>div{background:var(--red)}
 .fd-meal{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px;margin-bottom:10px}
 .fd-meal-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
 .fd-meal-h b{font-size:14px}
@@ -231,7 +232,7 @@ function renderTodayInner(){
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px">
         <div><div class="fd-sub">${remain>=0?'Remaining':'Over target'}</div>
-        <div class="fd-big" style="color:${remain>=0?'var(--teal)':'var(--amber)'}">${fmtN(Math.abs(remain))} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kcal</span></div></div>
+        <div class="fd-big" style="color:${remain>=0?'var(--teal)':remain>=-KCAL_OVER_AMBER?'var(--amber)':'var(--red)'}">${fmtN(Math.abs(remain))} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kcal</span></div></div>
         ${(()=>{const bp=burnedParts(foodDay);if(!h||isFuture)return '';
           const gl=cgmOn(foodDay), gLast=gl.length?gl[gl.length-1]:null;
           return `<div style="display:grid;grid-template-columns:${gLast?'auto auto auto':'auto auto'};gap:6px 14px;text-align:right;white-space:nowrap">
@@ -242,7 +243,7 @@ function renderTodayInner(){
               return `<div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiSleepScore(sl&&sl.score)}">${sl&&sl.score!=null?fmtN(sl.score):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep score</div>${sl&&sl.awake!=null&&sl.awake>=5?`<div style="font-size:9px;color:${sl.awake>=45?'var(--amber)':'var(--ink3)'};font-weight:700">${durHM(sl.awake)} awake</div>`:''}</div>
               <div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiSleepHR(hr)}">${hr!=null?fmtN(hr):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep HR</div></div>`;})()}</div>`;})()}
       </div>
-      <div class="fd-bar${t.kcal>tgt?' over':''}"><div style="width:${kPct}%"></div></div>
+      <div class="fd-bar${t.kcal>tgt+KCAL_OVER_AMBER?' way':t.kcal>tgt?' over':''}"><div style="width:${kPct}%"></div></div>
       <div class="fd-row">
         <div class="fd-cell" onclick="foodEditTargets()" style="cursor:pointer"><div class="v">${fmtN(tgt)}</div><div class="l">Target</div></div>
         <div class="fd-cell"><div class="v">${fmtN(t.kcal)}</div><div class="l">Eaten</div></div>
@@ -342,6 +343,8 @@ function gUnit(){try{return localStorage.getItem('fitness_glucose_unit')||'mgdl'
 function gShow(mmol){return gUnit()==='mgdl'?Math.round(mmol*18):r1(mmol);}
 // Traffic-light colours for Today's top metrics, owner's thresholds (7 Oct 2026). Steps and active kcal on TODAY are
 // judged against the time of day (active 06:00-20:00) so a normal morning is not red; past days use the full numbers.
+// Calories: up to 400 over target is amber (owner: still a small deficit at ~2,500), more than 400 over is red.
+const KCAL_OVER_AMBER=400;
 const KPI={steps:[6000,10000],active:[250,400]};
 function kpiPace(day){
   if(day!==localDay(new Date()))return 1;
