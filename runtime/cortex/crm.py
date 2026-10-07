@@ -546,6 +546,55 @@ def phone_key(phone: str | None) -> str:
     return d[-9:] if len(d) >= 9 else ""
 
 
+def who_is(phone: str, display_name: str = "") -> dict:
+    """WHO IS MESSAGING, out of what we already hold. Built because WhatsApp gives us a number and a
+    display name and nothing else: Meta's Cloud API exposes no profile photo, so "do I know this person"
+    has to be answered from our own records rather than from their avatar (owner, 7 Oct 2026).
+
+    Every field is read, never inferred. An unknown number returns known=False and, ONLY when the display
+    name is a distinctive full name, up to three EXACT name matches as possibles - never a first-name
+    match, which on 33k contacts is noise, and never presented as the same person."""
+    out: dict = {"known": False, "contact": None, "deals": [], "emailed": None, "name_matches": []}
+    c = find_by_phone(phone)
+    if c:
+        acct = db.one("select name from crm_accounts where id=%s", (c["account_id"],)) if c.get("account_id") else None
+        name = " ".join(x for x in [(c.get("first_name") or "").strip(),
+                                    (c.get("last_name") or "").strip()] if x).strip()
+        out["known"] = True
+        out["contact"] = {
+            "id": c["id"], "name": name, "email": c.get("email") or "",
+            "job_title": c.get("job_title") or "",
+            "company": (acct or {}).get("name") or c.get("company_name") or "",
+            "organisation": c.get("organisation") or "", "stage": c.get("stage") or "",
+            "classification": c.get("classification") or "", "is_client": bool(c.get("is_client")),
+            "tier": c.get("tier") or "", "lead_source": c.get("lead_source") or "",
+            "linkedin": c.get("linkedin") or "",
+            "where": ", ".join(x for x in [c.get("city") or "", c.get("country") or ""] if x),
+            "tags": [t for t in (c.get("tags") or []) if isinstance(t, str)][:6],
+            "note": (c.get("note") or "")[:240]}
+        out["deals"] = db.query(
+            "select id, title, stage from crm_projects where lower(coalesce(contact_email,'')) = lower(%s) "
+            "or (account_id is not null and account_id = %s) order by id desc limit 6",
+            (c.get("email") or "", c.get("account_id")))
+        if c.get("email"):
+            row = db.one("select max(created_at) as ts from tasks where status='done' "
+                         "and kind in ('email_reply','email_draft') "
+                         "and lower(coalesce(request->'inquiry'->>'email','')) = lower(%s)",
+                         (c["email"],))
+            ts = (row or {}).get("ts")
+            out["emailed"] = ts.isoformat() if ts else None
+        return out
+    # Not in the CRM by number. A FULL name we can match exactly is worth showing; anything less is not.
+    nm = " ".join((display_name or "").split())
+    if len(nm.split()) >= 2 and len(nm) >= 6 and not re.search(r"\d", nm):
+        out["name_matches"] = db.query(
+            "select id, trim(coalesce(first_name,'') || ' ' || coalesce(last_name,'')) as name, "
+            "company_name, organisation, email from crm_master "
+            "where lower(trim(coalesce(first_name,'') || ' ' || coalesce(last_name,''))) = lower(%s) "
+            "order by id limit 3", (nm,))
+    return out
+
+
 def find_by_phone(phone: str) -> dict | None:
     """Find the ONE contact this number belongs to, or None. Deliberately refuses to guess.
 

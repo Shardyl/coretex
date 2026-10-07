@@ -482,6 +482,13 @@ def _enrich_action_card(t: dict) -> dict:
                    "summary": (rq.get("triage") or {}).get("summary") or "",
                    "source": (rq.get("lead_source") or {}).get("line") or "",
                    "minutes_left": int(whatsapp.window_closes_in(ph) // 60) if ph else 0}
+        try:
+            # WHO IS THIS, from our own records. WhatsApp hands over a number and a display name and
+            # nothing else (no profile photo exists on the Cloud API), so the answer to "do I know them"
+            # is the CRM, their deals and whether we have ever emailed them.
+            t["wa"]["who_is"] = crm.who_is(ph, rq.get("recipient") or "")
+        except Exception:  # noqa: BLE001 - a lookup hiccup must never cost him the card
+            t["wa"]["who_is"] = None
         left = whatsapp.window_closes_in(ph) if ph else 0.0
         if not left:
             t["card_problem"] = ("WhatsApp will not deliver this - over 24 hours since their last "

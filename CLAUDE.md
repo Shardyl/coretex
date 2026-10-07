@@ -835,6 +835,17 @@ voice note from him is never triaged, CRM-captured or answered.
     accounts` returns empty, `debug_token` shows unscoped grants). `entry.id` on any webhook IS it, so
     `ingest_cloud` stamps setting `wa_waba_id` the first time it sees one. `create_card_template()` /
     `template_status()` then work from the box; never click it together in Meta's UI.
+- **THERE IS NO PROFILE PHOTO TO FETCH (7 Oct 2026).** Meta's Cloud API exposes a sender's `wa_id` and
+  `profile.name` and NOTHING else; the only profile-picture endpoint is for our OWN business profile. A
+  customer's avatar exists solely in the WhatsApp app and WhatsApp Web, so the only route to it is the
+  runner, which is the banned path. Do not go looking for the endpoint again. "Do I know this person" is
+  answered from our own records instead: `crm.who_is(phone, display_name)` returns the CRM contact matched
+  by number (`find_by_phone`, which refuses an ambiguous last-9 key), their account, stage, tier, lead
+  source, note, LinkedIn and location, their deals, and when we last emailed them. An unknown number
+  returns `known=False` plus, ONLY for a distinctive full display name, up to three EXACT name matches
+  labelled as possibles, never a first-name match (noise across 33k contacts) and never as the same
+  person. `waWho` draws it above the draft: a green "you know them" panel with an Open contact button and
+  clickable deal chips, or "not in the CRM on <number>" with the possibles.
 - Spam and other no-reply messages raise the FYI card only — they never interrupt him on WhatsApp.
 
 **BOTH SITES POINT AT THE SAME NUMBER, so the MESSAGE carries the brand (28 Sep 2026).** sensa.digital and

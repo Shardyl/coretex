@@ -2127,6 +2127,37 @@ function emailBlock(em){
 
 // THE WHATSAPP CONVERSATION, so a reply can be judged against what it answers. A wa_reply card used to
 // render the draft alone, which is not enough to approve anything (owner, 6 Oct 2026).
+// WHO IS THIS. WhatsApp gives a number and a display name, and Meta's Cloud API exposes no profile
+// photo, so "do I possibly know them" is answered from our own records (owner, 7 Oct 2026).
+function waWho(wi, phone){
+  if(!wi) return '';
+  const row=(label,val)=>val?`<div style="font-size:12.5px;margin:2px 0"><span style="opacity:.6">${label}</span> ${val}</div>`:'';
+  if(wi.known&&wi.contact){
+    const c=wi.contact;
+    const lines=[
+      row('company', esc([c.company,c.job_title].filter(Boolean).join(' · '))),
+      row('email', c.email?`<a href="mailto:${esc(c.email)}" style="color:var(--link);text-decoration:underline">${esc(c.email)}</a>`:''),
+      row('stage', esc([c.stage,c.classification,c.tier].filter(Boolean).join(' · '))),
+      row('where', esc(c.where)),
+      row('came from', esc(c.lead_source)),
+      row('last email', wi.emailed?esc(new Date(wi.emailed).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})):''),
+      row('note', esc(c.note)),
+      c.linkedin?row('linkedin', `<a href="${esc(c.linkedin)}" target="_blank" rel="noopener" style="color:var(--link);text-decoration:underline">profile</a>`):''
+    ].join('');
+    const deals=(wi.deals||[]).map(d=>`<span class="chip" onclick="openProject(${d.id})" style="cursor:pointer">#${d.id} ${esc(d.title)} · ${esc(d.stage||'')}</span>`).join(' ');
+    return `<div style="margin:8px 0;padding:10px 12px;background:var(--bg2,#0e1620);border:1px solid #6ee7a855;border-radius:11px">
+      <div class="meta" style="margin-bottom:5px;color:#6ee7a8">${ic('check',14)} you know them${c.is_client?' — existing client':''}</div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:4px">${esc(c.name||'(no name on the record)')}${c.organisation?` <span class="chip">${esc(c.organisation)}</span>`:''}</div>
+      ${lines}
+      ${deals?`<div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">${deals}</div>`:''}
+      <div class="row" style="margin-top:8px">${c.email?`<button class="btn sm" onclick="openContact('${esc(c.email)}')">${ic('inbox',14)} Open contact</button>`:''}</div></div>`;
+  }
+  const maybes=(wi.name_matches||[]).map(m=>`<div style="font-size:12.5px;margin:2px 0">${esc(m.name)}${m.company_name?' · '+esc(m.company_name):''}${m.organisation?' · '+esc(m.organisation):''}${m.email?` <a href="mailto:${esc(m.email)}" style="color:var(--link);text-decoration:underline">${esc(m.email)}</a>`:''}</div>`).join('');
+  return `<div style="margin:8px 0;padding:10px 12px;background:var(--bg2,#0e1620);border:1px solid var(--ln,#22303f);border-radius:11px">
+    <div class="meta">${ic('alert',14)} not in the CRM on ${esc(phone||'that number')}</div>
+    ${maybes?`<div class="meta" style="margin:6px 0 2px">same name on file, may or may not be them:</div>${maybes}`:''}</div>`;
+}
+
 function waBlock(w){
   if(!w) return '';
   const bubbles=(w.messages||[]).map(m=>`<div style="margin:4px 0;padding:8px 11px;background:var(--bg,#0a111a);border:1px solid var(--ln,#22303f);border-radius:11px 11px 11px 3px;font-size:13.5px;color:var(--fg,#dfe7ef);white-space:pre-wrap">${esc(m)}</div>`).join('');
@@ -2135,7 +2166,8 @@ function waBlock(w){
   return `<div style="margin:8px 0;padding:10px 12px;background:var(--bg2,#0e1620);border:1px solid var(--ln,#22303f);border-radius:11px">
     <div class="meta" style="margin-bottom:6px">${ic('inbox',14)} ${esc(w.who||'them')} said${(w.messages||[]).length>1?` (${w.messages.length} messages)`:''}</div>
     <div style="max-height:260px;overflow:auto">${bubbles||'<div class="meta">(no message text)</div>'}</div>
-    ${chips?`<div class="meta" style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">${chips}</div>`:''}</div>`;
+    ${chips?`<div class="meta" style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">${chips}</div>`:''}</div>
+    ${waWho(w.who_is, w.phone)}`;
 }
 
 function mgrVerdict(v){
