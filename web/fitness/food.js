@@ -685,9 +685,17 @@ window.renderMission=function(){
   const pep=missionPep(s), wkTxt=cw&&s.cur!=null?(s.cur<=cw.target?'on target':r1(s.cur-cw.target)+' kg to go'):'';
   const msg=pep||(s.eta?`On your current trend: ${r1(m.goalKg)} kg around ${fmtDate(s.eta)}.`:'');
   el.innerHTML=`<div onclick="foodEditMission()" style="cursor:pointer;margin:6px 0 2px;padding:8px 11px;border-radius:var(--radius);background:var(--bg,transparent);border:0.5px solid var(--border)">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
-      <div style="font-size:12px;font-weight:800">Mission ${r1(m.goalKg)} kg${m.goalFat?' &middot; '+m.goalFat+'%':''}</div>
-      <div style="font-size:12px;white-space:nowrap">${s.cur!=null?'Now <b>'+r1(s.cur)+' kg</b>'+(s.fat!=null?' &middot; ~'+Math.round(s.fat)+'%':''):'No weigh-in yet'}</div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px">
+      <div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;font-weight:800;letter-spacing:0.12em;color:var(--teal)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>MISSION</div>
+        <div style="font-size:30px;font-weight:900;line-height:1.05;color:var(--teal);letter-spacing:-0.02em">${r1(m.goalKg)}<span style="font-size:15px;font-weight:800"> kg</span></div>
+        <div style="font-size:11px;color:var(--ink3);font-weight:700">${m.goalFat?m.goalFat+'% fat &middot; ':''}by ${fmtDate(m.goalDate)}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:10px;font-weight:800;letter-spacing:0.12em;color:var(--ink3)">NOW</div>
+        <div style="font-size:22px;font-weight:900;line-height:1.1">${s.cur!=null?r1(s.cur)+'<span style="font-size:13px;font-weight:800"> kg</span>':'&mdash;'}</div>
+        <div style="font-size:11px;color:var(--ink3);font-weight:700">${s.fat!=null?'~'+Math.round(s.fat)+'% fat':''}${s.cur!=null?(s.fat!=null?' &middot; ':'')+'<span style="color:var(--amber)">'+r1(Math.max(0,s.cur-m.goalKg))+' kg to go</span>':''}</div>
+      </div>
     </div>
     <div style="display:flex;gap:4px;margin-top:7px;align-items:center" title="Weekly checkpoints">
       ${wk.map(w=>`<div title="Sun ${fmtDate(w.date)}: target ${w.target} kg${w.avg!=null&&w.state!=='future'?', 7-day avg '+w.avg+' kg':''}" style="flex:1;height:8px;border-radius:4px;background:${w.state==='hit'?'var(--teal)':w.state==='close'?'var(--amber)':w.state==='miss'?'var(--red)':'var(--border)'};${w.current?'outline:1.5px solid var(--ink);outline-offset:1px':''}"></div>`).join('')}
