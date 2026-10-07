@@ -175,6 +175,7 @@ const css=`
 .fd-ecg path{animation:fdEcg 1.6s ease-in-out infinite}
 @keyframes fdEcg{0%,100%{opacity:.6}12%{opacity:1;filter:drop-shadow(0 0 3px var(--teal))}40%{opacity:.75}}
 @media (prefers-reduced-motion:reduce){.fd-ecg path{animation:none}}
+.fd-vo2{font-family:'Orbitron',system-ui,sans-serif;font-size:27px;font-weight:900;line-height:1.1;letter-spacing:0.01em;color:var(--teal);background:linear-gradient(90deg,var(--teal),var(--blue));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .fd-actions{display:flex;gap:8px;margin-top:10px}
 .fd-act{flex:1;min-height:46px;border-radius:var(--radius);font-size:14px;font-weight:800;cursor:pointer;background:var(--surface);color:var(--ink);border:0.5px solid var(--border2)}
 .fd-act.main{background:var(--teal);color:#fff;border:none}
@@ -689,12 +690,17 @@ window.renderMission=function(){
       <div>
         <div style="display:flex;align-items:center;gap:5px;font-size:10px;font-weight:800;letter-spacing:0.12em;color:var(--teal)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>MISSION</div>
         <div style="font-size:30px;font-weight:900;line-height:1.05;color:var(--teal);letter-spacing:-0.02em">${r1(m.goalKg)}<span style="font-size:15px;font-weight:800"> kg</span></div>
-        <div style="font-size:11px;color:var(--ink3);font-weight:700">${m.goalFat?m.goalFat+'% fat &middot; ':''}by ${fmtDate(m.goalDate)}</div>
+        <div style="font-size:10.5px;color:var(--ink3);font-weight:700;white-space:nowrap">${m.goalFat?m.goalFat+'% &middot; ':''}by ${fmtDate(m.goalDate)}</div>
       </div>
+      ${(()=>{const v=(typeof vo2Records!=='undefined'?vo2Records:[]).filter(x=>x&&x.value!=null).sort((a,b)=>a.date<b.date?-1:1).pop();if(!v)return '';
+        return `<div style="text-align:center">
+        <div style="display:flex;align-items:center;justify-content:center;gap:4px;font-size:10px;font-weight:800;letter-spacing:0.12em;color:var(--blue)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3l0 7l6 0l-8 11l0 -7l-6 0l8 -11"/></svg>VO2 MAX</div>
+        <div class="fd-vo2">${r1(v.value)}</div>
+        <div style="font-size:10.5px;color:var(--ink3);font-weight:700;white-space:nowrap">tested ${fmtDate(v.date)}</div></div>`;})()}
       <div style="text-align:right">
         <div style="font-size:10px;font-weight:800;letter-spacing:0.12em;color:var(--ink3)">NOW</div>
         <div style="font-size:22px;font-weight:900;line-height:1.1">${s.cur!=null?r1(s.cur)+'<span style="font-size:13px;font-weight:800"> kg</span>':'&mdash;'}</div>
-        <div style="font-size:11px;color:var(--ink3);font-weight:700">${s.fat!=null?'~'+Math.round(s.fat)+'% fat':''}${s.cur!=null?(s.fat!=null?' &middot; ':'')+'<span style="color:var(--amber)">'+r1(Math.max(0,s.cur-m.goalKg))+' kg to go</span>':''}</div>
+        <div style="font-size:10.5px;color:var(--ink3);font-weight:700;white-space:nowrap">${s.fat!=null?'~'+Math.round(s.fat)+'%':''}${s.cur!=null?(s.fat!=null?' &middot; ':'')+'<span style="color:var(--amber)">'+r1(Math.max(0,s.cur-m.goalKg))+' to go</span>':''}</div>
       </div>
     </div>
     <div style="display:flex;gap:4px;margin-top:7px;align-items:center" title="Weekly checkpoints">
