@@ -4426,7 +4426,13 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                                                        (None, "") and round(float(inp["discount_pct"]), 2)
                                                        in _said else None))
         except ValueError as _e:
-            return str(_e)
+            _why = str(_e)
+            if _priced and _priced.get("blanked"):
+                _why += (" Lines with no price: " + "; ".join(_priced["blanked"][:8]) + ". A typed price is accepted only "
+                         "if it is a rate-card rate or a figure Rashad wrote. Figures read from his words: "
+                         + (", ".join(f"{v:,.0f}" for v in sorted(_said)) or "none")
+                         + ". If his figure is not among them, ask him to restate it; never resend the same request.")
+            return "Quotation NOT built: " + _why
         if inp.get("deal_id") and t.get("id"):
             db.execute("update tasks set deal_id=%s where id=%s", (int(inp["deal_id"]), t["id"]))
         req = t.get("request") or {}
@@ -5056,6 +5062,8 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
             chosen = ""
     co = _talk_company(body.company, user)
     system += "\n\n" + (_company_knowledge(co) if co else _NO_FOCUS_NOTE)
+    _refused: dict = {}   # quotation requests refused in THIS turn, by exact input (8 Oct 2026: eight identical retries)
+
     def _exec(name: str, inp: dict) -> str:   # carry the turn's attachments through when a tool drafts/creates
         if name in ("create_task", "draft", "draft_email", "save_document", "create_proposal",
                     "create_creative_proposal", "create_quotation") and body.images:
@@ -5069,7 +5077,19 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
         if name == "add_rule" and inp.get("scope") == "universal" and (user or {}).get("role") != "owner":
             return ("Universal (all-company) rules are the owner's call alone. Save it for this user's own "
                     "company instead, and tell them Rashad can widen it to all companies.")
-        return _exec_skill_tool(name, inp, u=user)
+        _qkey = None
+        if name in ("create_quotation", "reissue_quotation"):
+            _qkey = name + json.dumps({k: v for k, v in inp.items() if not str(k).startswith("_")},
+                                      sort_keys=True, default=str)
+            if _qkey in _refused:
+                return ("NOT RUN: this exact request was already refused in this turn (" + _refused[_qkey][:400] + "). "
+                        "Change what caused the refusal, or tell Rashad plainly what is missing and ask him. "
+                        "Never send it unchanged again, and never say it was done.")
+        out = _exec_skill_tool(name, inp, u=user)
+        if _qkey and isinstance(out, str) and re.match(r"\s*(Quotation NOT built|NOT issued|NOT RUN|unknown business)",
+                                                       out, re.I):
+            _refused[_qkey] = out
+        return out
     return msgs, chosen, system, tools, _exec
 
 

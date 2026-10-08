@@ -2696,3 +2696,15 @@ shoot needs none), then 10% off the whole quotation.
   `addresses`, Tabscanner = support@ + ben@) ANYWHERE in To/Cc/From. Ben is copied on nearly every Tabscanner client
   thread, so any client reply-all was skipped. Now the address must be the sender or on the To line, with no other
   address of ours on the To line beside it. Policy recompiled after the rule edit (`policy.compile_skill`).
+
+## Talk quotations: his figures are read as he writes them; a refused build is never resent (8 Oct 2026)
+- CAUSE: SEN-2026-0033 (Special Olympics, card 1126). Rashad wrote "production crew will be 42Kaed total, camera 4K
+  total, remove the color grade, photo editing 2K per day". `engine._stated_numbers` needed a word boundary after
+  the k, so "42Kaed" was never read; the crew line was blanked; `deliver_quotation` refuses a new version with a blank
+  line; Talk resent the identical request eight times and claimed work it had not done. The removal never happened
+  because nothing was built.
+- `_stated_numbers` now reads 42K, 42Kaed, 42k AED, AED 42,000, 42 thousand, and a trailing full stop.
+- `create_quotation` refusal says "Quotation NOT built", names the blank lines and lists the figures read from his
+  words, telling Talk to ask him rather than retry.
+- `_chat_prepare._exec`: a create/reissue_quotation request refused in a turn is refused again WITHOUT running if
+  sent unchanged ("NOT RUN: this exact request was already refused...").

@@ -1750,9 +1750,11 @@ def _is_quotation_prep(task: dict) -> bool:
 
 
 def _stated_numbers(text: str) -> set:
-    """Every figure the owner actually wrote: 15,000 / 15000 / 15k / 15 thousand / 1.5k."""
+    """Every figure the owner actually wrote: 15,000 / 15000 / 15k / 15 thousand / 1.5k / 42Kaed / AED 42k.
+    (8 Oct 2026: "production crew will be 42Kaed total" was never read, because the old pattern needed a word
+    boundary after the k, so the crew line printed blank and every rebuild of SEN-2026-0033 was refused.)"""
     out = set()
-    for m in re.finditer(r"(\d[\d,]*(?:\.\d+)?)\s*(k|thousand)?\b", (text or "").lower()):
+    for m in re.finditer(r"(\d[\d,]*(?:\.\d+)?)\s*(k|thousand)?(?!\d|\.\d|,\d)", (text or "").lower()):
         try:
             v = float(m.group(1).replace(",", ""))
         except ValueError:
