@@ -2680,3 +2680,15 @@ shoot needs none), then 10% off the whole quotation.
   still gets no opportunity raises a high-priority notification (`qualified-no-opp:<email>`); a qualify error
   prints `[qualify] <email>: ...` instead of passing silently.
 - Backfilled the four on 7 Oct through `crm.auto_opportunity` (on auto; Al Hamra holds its chase until we send).
+
+## A client's email with no draft is still logged and surfaced (8 Oct 2026)
+- CAUSE: Franco Fung (Sampras HK, recurring deal 60) wrote to Rashad about Cyberport stability issues and newer AI
+  competitors, Ben copied. Tabscanner's rule "never draft responses to training or support requests, handled by Ben"
+  matched it in `policy.should_skip`; the skip branch only recorded the contact, so the email left no card, no deal
+  entry and no notice.
+- `poll_inbox` skip branch: a skipped email from someone on an active deal is logged on that deal (`email_in`, with
+  "[no draft: <rule>]", ref = mail_ref) and raises one high-priority notification naming the rule
+  (`skipped-client:<mail_ref>`).
+- Rule text (Tabscanner sales-first-response, live DB): the two support/training no-draft rules now carry the
+  exception "never applies to an email addressed to Rashad about the relationship, contract, pricing, service
+  stability or competitors; only to genuine technical help or training requests".

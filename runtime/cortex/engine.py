@@ -5781,6 +5781,27 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                 # the sender: Massar's RFP arrived by BCC, was rightly not replied to, and the prospect
                 # never reached the CRM (9 Sep 2026).
                 _record_contact()
+                # A CLIENT'S EMAIL WITH NO DRAFT IS STILL ON THE DEAL AND IN FRONT OF THE OWNER (8 Oct 2026). Franco at
+                # Sampras HK (recurring deal 60) wrote to Rashad about stability problems and newer AI competitors, with
+                # Ben copied; the "support emails are Ben's" rule matched it and the message vanished: no card, nothing on
+                # the deal, no notice. A skipped email from someone on an active deal is now logged on that deal and the
+                # owner is told once, naming the rule that held the draft.
+                try:
+                    _sk_deals = crm.active_deals_for_email(e.get("email") or "", company_slug) if e.get("email") else []
+                    if _sk_deals:
+                        _sd = _sk_deals[0] if len(_sk_deals) == 1 else (_deal_for_thread(e, _sk_deals) or _sk_deals[0])
+                        _snip = re.sub(r"\s+", " ", e.get("body") or e.get("snippet") or "")[:220]
+                        pipeline.log_deal(int(_sd["id"]), "email_in",
+                                          f"from {e.get('email')}: {(e.get('subject') or '(no subject)')} - {_snip} "
+                                          f"[no draft: {_skip['reason']}]", ref=mref or "")
+                        notifications.notify(
+                            f"Not drafted: {e.get('name') or e.get('email')} ({(e.get('subject') or '')[:60]})",
+                            f"An email from a client on '{_sd['title']}' got no draft because of the rule: {_skip['reason']}. "
+                            f"It is on the deal's timeline. If it needs your reply, ask Talk to draft one.",
+                            priority="high", category="client", company_id=co.get("id"),
+                            target_type="deal", target_id=str(_sd["id"]), dedup_key=f"skipped-client:{mref or gid}")
+                except Exception as _ske:  # noqa: BLE001
+                    print(f"[skip-log] {type(_ske).__name__}: {_ske}", flush=True)
                 results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
                                 "category": cls["category"], "to_crm": cls.get("to_crm"),
                                 "reason": f"no draft - {_skip['reason']}"})
