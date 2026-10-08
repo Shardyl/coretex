@@ -2692,3 +2692,7 @@ shoot needs none), then 10% off the whole quotation.
 - Rule text (Tabscanner sales-first-response, live DB): the two support/training no-draft rules now carry the
   exception "never applies to an email addressed to Rashad about the relationship, contract, pricing, service
   stability or competitors; only to genuine technical help or training requests".
+- THE REAL CAUSE was code, not the rule: `policy.should_skip` matched a compiled handling mailbox (`no_draft:<skill>`
+  `addresses`, Tabscanner = support@ + ben@) ANYWHERE in To/Cc/From. Ben is copied on nearly every Tabscanner client
+  thread, so any client reply-all was skipped. Now the address must be the sender or on the To line, with no other
+  address of ours on the To line beside it. Policy recompiled after the rule edit (`policy.compile_skill`).

@@ -142,10 +142,16 @@ def should_skip(company: dict, email: dict, skill_key: str = "sales-first-respon
             sits = [s for s in sits if not _TENDER_SITUATION.search(s)]
         if not sits and not addrs:
             return None
-        # deterministic first: the rule named the mailbox that handles these
-        blob = " ".join(str(email.get(k) or "") for k in ("to", "cc", "from", "email")).lower()
+        # deterministic first: the rule named the mailbox that handles these. A HANDLING MAILBOX MEANS MAIL SENT
+        # TO IT, NOT MAIL IT IS COPIED ON (8 Oct 2026). Tabscanner's compiled policy holds ben@ and support@, and Ben
+        # is copied on nearly every client thread, so matching anywhere in To/Cc skipped Franco's email TO Rashad
+        # (Sampras, deal 60) and would skip any client reply-all. Now: the address must be on the To line (or be the
+        # sender), and no other address of ours may be on the To line beside it.
+        to_line = str(email.get("to") or "").lower()
+        sender = " ".join(str(email.get(k) or "") for k in ("from", "email")).lower()
+        ours_on_to = set(re.findall(r"[\w.+-]+@" + re.escape(own_domain.lower()), to_line)) if own_domain else set()
         for a in addrs:
-            if a in blob:
+            if a in sender or (a in to_line and not (ours_on_to - set(addrs))):
                 return {"reason": f"handled by {a} (standing rule)"}
         if not sits:
             return None
