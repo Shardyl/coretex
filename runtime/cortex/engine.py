@@ -8388,6 +8388,11 @@ def run(poll_idle: float = 1.0) -> None:
             except Exception:  # noqa: BLE001
                 pass
             try:
+                from . import helpdocs
+                helpdocs.maybe_sync()   # each company's published help pages, re-read weekly
+            except Exception:  # noqa: BLE001
+                pass
+            try:
                 from . import meetingprep
                 meetingprep.sweep()     # T-24h: research + write the brief for tomorrow's meetings
             except Exception:  # noqa: BLE001 — self-throttled; a bad meeting never stops the loop

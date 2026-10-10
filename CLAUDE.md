@@ -2708,3 +2708,19 @@ shoot needs none), then 10% off the whole quotation.
   words, telling Talk to ask him rather than retry.
 - `_chat_prepare._exec`: a create/reissue_quotation request refused in a turn is refused again WITHOUT running if
   sent unchanged ("NOT RUN: this exact request was already refused...").
+
+## Support replies are written from the company's own help pages (10 Oct 2026)
+- CAUSE: Ralph Delgado (Snap Rewards, card 1114) asked why receipt images did not show on dvbrands.com. Cortex had
+  read none of Snap Rewards' 16 help pages, so the draft asked which browser and offered call times, while the answer
+  (Campaign Data -> open the submission -> the Campaign Result screen shows the receipt) was on snap-rewards.com/docs.
+- `runtime/cortex/helpdocs.py`: profile key `help_docs_api` (a WordPress REST collection; Snap Rewards =
+  https://snap-rewards.com/wp-json/wp/v2/docs) -> `sync(company_id)` stores every page's text in setting
+  `helpdocs:<company_id>`; `maybe_sync()` (engine loop, looks hourly) re-reads a copy older than 7 days.
+  The site's HTML pages sit behind a Cloudflare challenge; the REST API is readable.
+- `worker.draft` puts `helpdocs.block()` (PRODUCT DOCUMENTATION) in the cached system prompt of every email draft
+  for a company that has help pages, above the rules. `profile.trusted_links` admits the page URLs, so linking the
+  exact help page passes the invented-link guard.
+- Behaviour is a RULE (Snap Rewards sales-first-response + email-handling, "SUPPORT QUESTIONS"): answer how-to and
+  problem emails from the documentation with exact steps and screen names; never invent a feature; not covered or a
+  fault -> ask for store URL, submission email and a screenshot and say Ben (CTO) will look into it; no call times.
+- Ben is NOT copied automatically on fault replies (the envelope compiler has no conditional cc); add him on the card.

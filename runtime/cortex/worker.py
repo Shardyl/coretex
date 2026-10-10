@@ -18,6 +18,15 @@ def _now_line() -> str:
             + ". Anchor every day, date and time you mention to this moment — never guess or assume.")
 
 
+def _help_docs(company: dict) -> str:
+    """The company's own published help pages (helpdocs.py), when it has them. Stable per company, so it caches."""
+    try:
+        from . import helpdocs
+        return helpdocs.block(int((company or {}).get("id") or 0))
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _company_context(company: dict, author: str | None = None) -> str:
     ctx = company.get("context") or {}
     parts = [f"Company: {company['name']}"]
@@ -255,6 +264,7 @@ def draft(skill: dict, company: dict, request: dict,
              + (" " + _QUOTE_PREP_CLOSE if (request or {}).get("prep_action") == "quotation" else ""))
             if _is_internal_prep(request) else "")),
         _company_context(company, author),
+        _help_docs(company) if is_email else "",
         skill.get("craft") or "",
         _rules_block(skill),
         _related_block(skill, company) if is_email else "",

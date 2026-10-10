@@ -185,8 +185,14 @@ def trusted_links(company_id) -> list[str]:
         data = get(company_id)
     except Exception:  # noqa: BLE001
         return []
-    return [data[k].strip() for k in ("review_link", "live_site")
-            if isinstance(data.get(k), str) and data[k].strip().startswith("http")]
+    out = [data[k].strip() for k in ("review_link", "live_site")
+           if isinstance(data.get(k), str) and data[k].strip().startswith("http")]
+    try:   # the company's own help pages (helpdocs.py): a reply may link the exact page
+        from . import helpdocs
+        out += helpdocs.urls(int(company_id))
+    except Exception:  # noqa: BLE001
+        pass
+    return out
 
 
 def resolve_identity(company_id, email: str | None) -> dict:
