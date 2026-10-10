@@ -404,6 +404,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
     </div>
 
     <div id="page-cardio-history" class="page" data-section="cardio">
+      <div id="zone2Week"></div>
       <div class="section-label">Cardio history</div>
       <div style="display:flex;gap:8px;margin-bottom:12px">
         <select id="cardioHistEx" style="flex:1;font-size:14px"><option value="all">All sessions</option></select>
@@ -989,7 +990,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='79';                         // keep in step with CACHE in sw.js
+const APP_VERSION='80';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1986,7 +1987,45 @@ function fileToBase64(file){
 }
 
 // ─── CARDIO HISTORY ───────────────────────────────────────────────────────────
+// ---------- Zone 2 this week (owner, 10 Oct 2026) ----------
+// Weekly target 180 min, Monday to Sunday. Counts every session on a "Zone 2" preset PLUS the treadmill warm-up
+// attached to a 4x4 (watch.warmup_min): he warms up in true Zone 2 (about 120 bpm), so it is part of his 3 hours.
+const ZONE2_WEEK_MIN=180;
+function cardioMinutes(r){
+  if(r.minutes!=null&&!isNaN(+r.minutes))return +r.minutes;
+  const d=String(r.duration||'').trim();if(!d)return 0;
+  const p=d.split(':').map(Number);
+  if(p.length===3)return p[0]*60+p[1]+p[2]/60;
+  if(p.length===2)return p[0]+p[1]/60;
+  return +d||0;
+}
+function zone2Week(){
+  const now=new Date(), dow=(now.getDay()+6)%7;
+  const mon=new Date(now.getFullYear(),now.getMonth(),now.getDate()-dow), sun=new Date(mon.getFullYear(),mon.getMonth(),mon.getDate()+6);
+  const iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  const a=iso(mon), b=iso(sun), items=[];
+  cardioSessions.forEach(r=>{
+    if(!r||!r.date||r.date<a||r.date>b)return;
+    const name=r.exerciseName||'';
+    if(/zone\s*2/i.test(name))items.push({date:r.date,label:name.replace(/^Zone 2\s*/i,'').replace(/\s*-\s*\d+(\.\d+)?\s*mins?$/i,''),min:cardioMinutes(r),hr:r.avgHR});
+    const w=r.watch&&+r.watch.warmup_min;
+    if(w>0)items.push({date:r.date,label:'4x4 warm-up',min:w,hr:null});
+  });
+  return {a,b,items,total:items.reduce((x,i)=>x+i.min,0)};
+}
+function renderZone2Week(){
+  const el=document.getElementById('zone2Week');if(!el)return;
+  const z=zone2Week(), tot=Math.round(z.total), left=Math.max(0,ZONE2_WEEK_MIN-tot), pct=Math.min(100,tot/ZONE2_WEEK_MIN*100);
+  const fd=d=>new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric'});
+  el.innerHTML=`<div class="card" style="padding:12px 14px;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:12px;font-weight:800">Zone 2 this week</div>
+      <div style="font-size:12px;font-weight:800;color:${left?'var(--amber)':'var(--teal)'}">${tot} / ${ZONE2_WEEK_MIN} min${left?' &middot; '+left+' to go':' &middot; done'}</div></div>
+    <div style="height:8px;border-radius:4px;background:var(--border);margin:8px 0 6px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div>
+    <div style="font-size:11px;color:var(--ink3)">${z.items.length?z.items.sort((x,y)=>x.date<y.date?-1:1).map(i=>`${fd(i.date)} ${i.label} ${Math.round(i.min)}m`).join(' &middot; '):'No Zone 2 yet this week (Mon to Sun).'}</div>
+  </div>`;
+}
 function renderCardioHistory(){
+  try{renderZone2Week();}catch(e){}
   const exFilter=document.getElementById('cardioHistEx').value;
   const q=(document.getElementById('cardioHistSearch').value||'').toLowerCase();
   // Populate filter
@@ -2950,6 +2989,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=79"></script>
+<script src="food.js?v=80"></script>
 </body>
 </html>
