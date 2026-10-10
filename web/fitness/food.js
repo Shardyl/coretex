@@ -898,7 +898,9 @@ function entryRow(e){
 let foodSel=new Set(), foodPressT=null, foodPressFired=false;
 function foodCard(list){
   const t=totals(list);
-  const sorted=list.slice().sort((a,b)=>(a.at||'9')<(b.at||'9')?-1:1);
+  // earliest first, planned (no time) last; compare as times: server rows carry +04:00, local ones Z
+  const tms=e=>e.at?new Date(e.at).getTime():Infinity;
+  const sorted=list.slice().sort((a,b)=>tms(a)-tms(b));
   const sel=foodSel.size>0;
   return `<div class="fd-meal">
     <div class="fd-meal-h"><b>${sel?foodSel.size+' selected':'Food'}</b><span>${sel?'<a href="#" onclick="foodSelClear();return false" style="color:var(--ink3)">Cancel</a>':(list.length?fmtN(t.kcal)+' kcal &middot; '+fmtN(t.protein)+' g P':'')}</span></div>
