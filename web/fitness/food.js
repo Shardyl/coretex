@@ -386,7 +386,8 @@ function hrvBaseline(day){
   const v=[];for(let i=1;i<=14;i++){const sl=nightFor(shiftDay(day,-i));if(sl&&sl.hrv!=null)v.push(+sl.hrv);}
   return v.length>=3?v.reduce((a,b)=>a+b,0)/v.length:null;
 }
-function kpiHrv(v,day){if(v==null)return '';const b=hrvBaseline(day);if(b==null)return '';return v>=b?'var(--teal)':v>=b*0.9?'var(--amber)':'var(--red)';}
+// HRV fixed bands (owner, 10 Oct 2026; his nights mostly run 30-39 ms): 30+ green, 25-29 amber, under 25 red.
+function kpiHrv(v,day){if(v==null)return '';const r=Math.round(v);return r>=30?'var(--teal)':r>=25?'var(--amber)':'var(--red)';}
 function kpiSleepHR(v){if(v==null)return '';const r=Math.round(v);return r<=50?'var(--teal)':r<=55?'var(--amber)':'var(--red)';}
 const TREND_ARROW={1:'&darr;',2:'&searr;',3:'&rarr;',4:'&nearr;',5:'&uarr;'};
 // Light glucose refresh while the app is open: only new points since the last one held, every 2 minutes.
