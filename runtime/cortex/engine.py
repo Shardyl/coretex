@@ -371,8 +371,11 @@ def _email_envelope(task: dict, company: dict) -> dict:
     outbound = bool(req.get("outbound"))   # a Talk-composed email_draft (not a reply) — no "Re:" prefix
     subj = inq.get("subject") or "your enquiry"
     from_addr = (req.get("from_email") or data.get("reply_from") or "").strip() or None
-    if from_addr and from_addr.lower() in {a.lower() for a in INBOXES.values()}:
-        # HARD policy: catch-all addresses never send — fall back to the company's reply_from person
+    if (from_addr and from_addr.lower() in {a.lower() for a in INBOXES.values()}
+            and not data.get("inbox_sends")):
+        # HARD policy: catch-all addresses never send — fall back to the company's reply_from person.
+        # EXCEPT a company whose profile says `inbox_sends` (owner, 10 Oct 2026: Snap Rewards support replies go
+        # from loyalty@snap-rewards.com, a real mailbox connected with send rights, not from Rashad).
         from_addr = (data.get("reply_from") or "").strip() or None
         req = {**req, "mailbox_rt": None}   # and never their mailbox token either
     # cc exclusions — RULE-driven via the compiled envelope config (never_cc), plus the owner's per-card
@@ -4563,6 +4566,10 @@ def _rt_for_sender(co: dict, email: str) -> str | None:
     sa = db.setting_get(f"gmail_send_account:{slug}")
     if sa and str(sa).strip('" ').lower() == email and db.setting_get(f"gmail_send_refresh_token:{slug}"):
         return f"gmail_send_refresh_token:{slug}"
+    if email and email == (INBOXES.get(slug) or "").lower() and (profile.get(co["id"]) or {}).get("inbox_sends"):
+        for ent in inbox_registry():   # the inbox's own connected token (it reads AND sends for this company)
+            if (ent.get("address") or "").lower() == email and db.setting_get(ent.get("rt_key") or ""):
+                return ent["rt_key"]
     return None
 
 
@@ -5435,7 +5442,8 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
         # The CATCH-ALL mailbox (hello@ etc.) never sends: replies to mail it received route through the
         # company's send mailbox + reply_from person (their token, their signature). Personal mailboxes
         # (gino@/rashad@/ayresh@) still reply as themselves.
-        catchall = (address or "").lower() == (INBOXES.get(co.get("slug"), "") or "").lower()
+        catchall = ((address or "").lower() == (INBOXES.get(co.get("slug"), "") or "").lower()
+                    and not (profile.get(co["id"]) or {}).get("inbox_sends"))
         from_email = None if catchall else address
         mailbox_rt = None if catchall else rt_key
         # HIGH-VALUE ROUTING (config lives in the company profile; the CONDITION is code, because a

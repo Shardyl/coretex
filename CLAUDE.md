@@ -2726,3 +2726,9 @@ shoot needs none), then 10% off the whole quotation.
 - Ben is copied on EVERY Snap Rewards email: profile `always_cc` = [ben@snap-rewards.com] (owner, 10 Oct 2026).
 - Snap Rewards mail: inbound to loyalty@snap-rewards.com (catch-all, never sends); every reply goes FROM
   rashad@snap-rewards.com (`reply_from`, token `gmail_send_refresh_token:snaprewards`), cc Ben, bcc the owner's Gmail.
+- SUPPORT SENDS FROM loyalty@ (owner, 10 Oct 2026: "I don't want them to come from Rashad"). Profile flag
+  `inbox_sends: true` lifts "catch-alls never send" for that company only: `_email_envelope` keeps the inbox as From,
+  `_draft_direct_reply` keeps the receiving inbox + its token, `_rt_for_sender` returns the inbox's registry token.
+  Snap Rewards: `reply_from` = loyalty@snap-rewards.com; `signatures` keyed by email (loyalty@ = "Snap Rewards
+  Support Team", rashad@ keeps his own). loyalty@'s token (gmail_refresh_token:snaprewards) has gmail.modify, so it
+  can send. Old threads where a contact was last emailed from rashad@ stay with rashad@ (thread-sticky sender).
