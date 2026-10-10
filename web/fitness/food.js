@@ -1363,6 +1363,62 @@ window.foodDelWeight=function(d){
   bodyweightLog.splice(i,1);saveBodyweight();renderWeight();
 };
 window.foodWtRange=function(n){wtRange=n;renderWeight();};
+// ---------- progress photos (weekly, Sundays with the waist; owner 10 Oct 2026) ----------
+// Private: stored on the Cortex box, fetched with the device token and shown as blob URLs. Never in the sync document.
+const _photoBlobs={};
+async function photoBlob(id){
+  if(_photoBlobs[id])return _photoBlobs[id];
+  const r=await fetch(API_BASE+'/api/fitness/photos/'+encodeURIComponent(id),{headers:{'Authorization':'Bearer '+syncToken()}});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  return (_photoBlobs[id]=URL.createObjectURL(await r.blob()));
+}
+async function photoCard(){
+  const el=document.getElementById('fdPhotoCard');if(!el)return;
+  let list=[];try{list=await syncApi('/api/fitness/photos')||[];}catch(e){el.innerHTML='<div class="fd-sub">Progress photos</div><div class="fd-note" style="margin:4px 0 0">Could not reach Cortex.</div>';return;}
+  const today=localDay(new Date()), last=list[list.length-1], due=!last||last.date<=shiftDay(today,-7);
+  const byDay={};list.forEach(p=>{(byDay[p.date]=byDay[p.date]||[]).push(p);});
+  const days=Object.keys(byDay).sort().reverse();
+  el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:baseline"><div class="fd-sub">Progress photos &middot; weekly</div>
+      ${last?`<div style="font-size:11px;color:${due?'var(--amber)':'var(--ink3)'};font-weight:700">${due?'Due':'Next '+fmtDate(shiftDay(last.date,7))}</div>`:''}</div>
+    <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+      <input type="date" id="fdPhotoDay" value="${today}" max="${today}" class="fd-input" style="width:auto;font-size:14px"/>
+      <label class="fd-btn" style="width:auto;margin:0;padding:12px 16px;display:inline-block;text-align:center;cursor:pointer">+ Add photo<input type="file" accept="image/*" multiple style="display:none" onchange="foodPhotoUpload(this)"/></label></div>
+    <div class="fd-note" style="margin:6px 0 0">Same place, light and pose each week. Private: stored only on your Cortex server.</div>
+    ${days.length?days.map(d=>`<div style="margin-top:12px"><div style="font-size:11px;font-weight:800;color:var(--ink3);margin-bottom:6px">${fmtDate(d)}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${byDay[d].map(p=>`<img data-ph="${p.id}" onclick="foodPhotoView('${p.id}','${d}')" alt="Progress photo ${fmtDate(d)}" style="width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;background:var(--border);cursor:pointer"/>`).join('')}</div></div>`).join('')
+      :'<div class="fd-note" style="margin:10px 0 0">No photos yet.</div>'}`;
+  el.querySelectorAll('img[data-ph]').forEach(async img=>{try{img.src=await photoBlob(img.dataset.ph);}catch(e){}});
+}
+window.foodPhotoUpload=async function(inp){
+  const files=[...(inp.files||[])];if(!files.length)return;
+  const day=document.getElementById('fdPhotoDay').value||localDay(new Date());
+  toast('Uploading '+files.length+' photo'+(files.length>1?'s':'')+'…');
+  let ok=0;
+  for(const f of files){
+    try{
+      const img=await shrinkImage(f,1600);
+      const r=await fetch(API_BASE+'/api/fitness/photos',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+syncToken()},body:JSON.stringify({image:img,date:day})});
+      if(r.ok)ok++;
+    }catch(e){}
+  }
+  toast(ok===files.length?'Saved':'Saved '+ok+' of '+files.length);photoCard();
+};
+window.foodPhotoView=async function(id,day){
+  let src='';try{src=await photoBlob(id);}catch(e){toast('Could not load the photo');return;}
+  const ov=document.createElement('div');ov.id='phOverlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+  ov.innerHTML=`<img src="${src}" alt="Progress photo" style="max-width:100%;max-height:80vh;border-radius:10px;object-fit:contain"/>
+    <div style="display:flex;gap:10px;margin-top:14px;align-items:center"><span style="color:#fff;font-weight:700">${fmtDate(day)}</span>
+      <button class="btn-sm" onclick="event.stopPropagation();foodPhotoDelete('${id}')">Delete</button>
+      <button class="btn-sm" onclick="event.stopPropagation();document.getElementById('phOverlay').remove()">Close</button></div>`;
+  ov.onclick=()=>ov.remove();document.body.appendChild(ov);
+};
+window.foodPhotoDelete=async function(id){
+  if(!confirm('Remove this photo?'))return;
+  try{await fetch(API_BASE+'/api/fitness/photos/'+encodeURIComponent(id),{method:'DELETE',headers:{'Authorization':'Bearer '+syncToken()}});}catch(e){}
+  const o=document.getElementById('phOverlay');if(o)o.remove();delete _photoBlobs[id];photoCard();toast('Removed');
+};
+
 // ---------- waist (weekly, at the navel; owner 8 Oct 2026) ----------
 // Stored as a reading of kind 'waist' (value in cm, at 08:00 on the day), so it syncs with the other readings.
 function waists(){return readings.filter(x=>x.kind==='waist').sort((a,b)=>a.at<b.at?-1:1);}
@@ -1418,6 +1474,7 @@ function renderWeight(){
       <div class="fd-cell"><div class="v">${chip(diff(a7,a30))}</div><div class="l">vs 30 days ago</div></div>
     </div><div class="fd-note" style="margin:8px 0 0">Daily weight swings with water and food, so judge progress by the 7-day average.</div>${projectWeek()}</div>
     ${waistCard()}
+    <div class="card" id="fdPhotoCard"><div class="fd-sub">Progress photos</div><div class="fd-note" style="margin:4px 0 0">Loading&hellip;</div></div>
     <div class="chart-section">
       <div class="chart-toggle" style="margin-bottom:8px">${[[30,'30d'],[90,'90d'],[365,'1y'],[99999,'All']].map(([n,l])=>`<button class="${wtRange===n?'active':''}" onclick="foodWtRange(${n})">${l}</button>`).join('')}</div>
       <div style="position:relative;width:100%;height:210px"><canvas id="fdWtChart" role="img" aria-label="Weight trend"></canvas></div>
@@ -1426,6 +1483,7 @@ function renderWeight(){
       ${all.slice().reverse().slice(0,30).map(w=>`<div class="fd-entry" style="cursor:default"><div><div class="n">${w.kg} kg</div><div class="q">${fmtDate(w.date)}${isFree(shiftDay(w.date,-1))?' &middot; after a free day':''} ${new Date(w.date+'T12:00:00').getFullYear()!==new Date().getFullYear()?new Date(w.date+'T12:00:00').getFullYear():''}${w.src==='watch'?' &middot; from Health Connect':''}</div></div>
         ${w.src==='log'?`<button class="hist-del" onclick="foodDelWeight('${w.date}')">&times;</button>`:''}</div>`).join('')||'<div class="fd-note">No weigh-ins yet.</div>'}
     </div>`;
+  try{photoCard();}catch(e){}
   const from=shiftDay(today,-wtRange), pts=all.filter(w=>w.date>=from);
   const roll=pts.map(w=>{const v=all.filter(x=>x.date<=w.date&&x.date>=shiftDay(w.date,-6)).map(x=>x.kg);return r1(v.reduce((a,b)=>a+b,0)/v.length);});
   const cs=getComputedStyle(document.documentElement);

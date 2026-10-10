@@ -499,3 +499,15 @@ alter table fitness.fast_days add column if not exists free_day_at timestamptz;
 alter table fitness.foods add column if not exists units jsonb;
 alter table fitness.food_log add column if not exists unit_label text;
 alter table fitness.food_log add column if not exists unit_count numeric;
+
+-- weekly body progress photos (cortex/fitness_photos.py): files private on the box, never public; soft-deleted only
+create table if not exists fitness.progress_photos (
+    uid        text primary key,
+    day        date not null,
+    file       text not null,
+    mime       text,
+    bytes      int,
+    note       text,
+    deleted    boolean not null default false,
+    created_at timestamptz not null default now()
+);

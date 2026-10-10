@@ -5683,6 +5683,43 @@ def fitness_cgm(since: str = "", _: None = Depends(auth)) -> list:
     return fitness.cgm_since(since or None)
 
 
+class ProgressPhoto(BaseModel):
+    image: str                                  # data:image/jpeg;base64,... (the app shrinks it first)
+    date: str
+    note: str | None = None
+
+
+@app.post("/api/fitness/photos")
+def fitness_photo_add(body: ProgressPhoto, _: None = Depends(auth)) -> dict:
+    from . import fitness_photos
+    try:
+        return fitness_photos.save(body.image, body.date, body.note or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/fitness/photos")
+def fitness_photo_list(_: None = Depends(auth)) -> list:
+    from . import fitness_photos
+    return fitness_photos.listing()
+
+
+@app.get("/api/fitness/photos/{uid}")
+def fitness_photo_get(uid: str, _: None = Depends(auth)):
+    """Owner-only image bytes; the app fetches with its token and shows a blob URL (no public link exists)."""
+    from . import fitness_photos
+    hit = fitness_photos.path_of(uid)
+    if not hit:
+        raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(hit[0], media_type=hit[1], headers={"Cache-Control": "private, max-age=86400"})
+
+
+@app.delete("/api/fitness/photos/{uid}")
+def fitness_photo_delete(uid: str, _: None = Depends(auth)) -> dict:
+    from . import fitness_photos
+    return fitness_photos.delete(uid)
+
+
 class LabUpload(BaseModel):
     file: str                                   # data:application/pdf or data:image/... URL
 
