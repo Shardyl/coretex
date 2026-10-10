@@ -367,7 +367,8 @@ function gShow(mmol){return gUnit()==='mgdl'?Math.round(mmol*18):r1(mmol);}
 // judged against the time of day (active 06:00-20:00) so a normal morning is not red; past days use the full numbers.
 // Calories: up to 400 over target is amber (owner: still a small deficit at ~2,500), more than 400 over is red.
 const KCAL_OVER_AMBER=400;
-const KPI={steps:[6000,10000],active:[250,400]};
+const KPI={steps:[4000,8000],   // steps: 8,000+ green, 4,000-7,999 amber, under 4,000 red (owner, 10 Oct 2026)
+  active:[250,400]};
 function kpiPace(day){
   if(day!==localDay(new Date()))return 1;
   const n=new Date(), h=n.getHours()+n.getMinutes()/60;
