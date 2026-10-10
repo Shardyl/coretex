@@ -2723,4 +2723,6 @@ shoot needs none), then 10% off the whole quotation.
 - Behaviour is a RULE (Snap Rewards sales-first-response + email-handling, "SUPPORT QUESTIONS"): answer how-to and
   problem emails from the documentation with exact steps and screen names; never invent a feature; not covered or a
   fault -> ask for store URL, submission email and a screenshot and say Ben (CTO) will look into it; no call times.
-- Ben is NOT copied automatically on fault replies (the envelope compiler has no conditional cc); add him on the card.
+- Ben is copied on EVERY Snap Rewards email: profile `always_cc` = [ben@snap-rewards.com] (owner, 10 Oct 2026).
+- Snap Rewards mail: inbound to loyalty@snap-rewards.com (catch-all, never sends); every reply goes FROM
+  rashad@snap-rewards.com (`reply_from`, token `gmail_send_refresh_token:snaprewards`), cc Ben, bcc the owner's Gmail.
