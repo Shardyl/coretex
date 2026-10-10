@@ -860,7 +860,42 @@ voice note from him is never triaged, CRM-captured or answered.
   worse than no greeting.
 - Spam and other no-reply messages raise the FYI card only — they never interrupt him on WhatsApp.
 
-**REVERTED 10 Oct 2026 (owner): both sites' `wa.me` links point at Rashad's personal WhatsApp +971 54 404 9549 again (Sensa 0.8.64, Sky Vision 0.9.5); the Business API route was losing genuine enquiries (no number shown to call, replies failing outside the 24h window). The click-ref hook stays, so a PPC enquiry still arrives tagged '(ref XXXXX)' and `lead_source` decodes it on request; Cortex no longer sees those chats.** **BOTH SITES POINT AT THE SAME NUMBER, so the MESSAGE carries the brand (28 Sep 2026).** sensa.digital and
+**THE SHAPE CHANGED, 10 Oct 2026 (owner). CORTEX CAPTURES, RASHAD CONVERSES.** The links went back to his
+personal number that morning because the API route was losing genuine enquiries (the 24h window, drafts that
+talked about crew sizes and day rates). His call, same day: stop trying to hold the sales conversation on
+WhatsApp and do the part a human is bad at. Both sites point at **+44 7772 480414** again (Sensa 0.8.65,
+Sky Vision 0.9.6) and an enquiry now runs:
+1. **Triage.** Spam is filtered COMPLETELY: no acknowledgement, no opportunity, nothing written to his phone.
+   The FYI card stays, in Cortex only, so a wrong spam call is visible and reversible.
+2. **A FIXED acknowledgement**, not a model draft (`whatsapp.auto_reply_text`). Its wording is the
+   `AUTO REPLY:` rule on `social-dm-replies`; ONLY THE RULE'S FIRST LINE is sent (the first version sent the
+   client the guidance note meant for whoever edits the rule next) and `{name}` / `{company}` are substituted
+   by `.replace`, never `.format`, so a literal brace cannot raise. The message NAMES THE NUMBER he will reply
+   from: they wrote to the business line, and a stranger on another number is otherwise a cold approach.
+3. **CRM row** (`match_or_add_by_phone`, unchanged) and **an opportunity**, always, for anything not spam
+   (owner: "if it's not spam, then it's an opportunity ... it won't get missed"; he deletes the duds). The deal
+   carries the person by NAME AND PHONE, because there is no email on this lane, and is held off the chase
+   clock (`crm.hold_auto`): an email cadence against a contact with no address nudges into a void.
+4. **The alert** (`cortex_wa_card` template) carries the whole enquiry and the three buttons, in or out of
+   his 24h window.
+5. **On approval the acknowledgement sends, and ONLY THEN** `engine._push_wa_contact` writes the person into
+   his personal Google Contacts (his sequence: "after I've sent the auto reply, that needs to be added to my
+   contacts"). Google syncs it to his Android handset, the handset is where WhatsApp reads its contact list,
+   so the stranger he is about to answer already has a name, a company and a note saying where they came from.
+6. He answers from his own WhatsApp. Cortex never sees those messages, so the deal timeline stays as he leaves
+   it; opportunity notes are his to add.
+
+**GOOGLE CONTACTS (`contacts.py`, 10 Oct 2026).** Scope `auth/contacts` on the personal OAuth client
+(`/oauth/google/start?purpose=contacts&company=personal` -> setting `contacts_refresh_token:personal`), People
+API enabled on `cortex-personal`. **DEDUPE NEEDS OUR OWN LEDGER:** `people:searchContacts` does not index a
+contact immediately after it is written (a contact created a second earlier came back not found) and needs a
+WARMUP request before it returns anything at all, so `find_by_phone` checks setting `wa_contact:<digits>`
+first and only then the warmed search. Without that a repeat enquirer collected a duplicate every time.
+Contacts are named "<Name> (Sensa enquiry, 10 Oct)" so he can spot and prune them; a push name with no letters
+(the number, an emoji handle) becomes "Unknown", never "+971 58". This is a convenience copy on his phone;
+`crm_master` is still the record.
+
+**BOTH SITES POINT AT THE SAME NUMBER, so the MESSAGE carries the brand (28 Sep 2026).** sensa.digital and
 skyvision.film both link `wa.me/447772480414`. Each theme has a `wp_footer` hook (`sensa_wa_lead_source` /
 `skyvision_wa_lead_source`) that appends a 5-character click reference to every WhatsApp link's pre-filled
 text and beacons the Google Ads click detail to `/api/lp/click`; a link with no pre-filled text gets one
