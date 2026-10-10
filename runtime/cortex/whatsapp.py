@@ -875,7 +875,10 @@ def _owner_control(msg: dict, text: str) -> str:
         if action == "ok":
             r = engine.approve_wa_reply(task_id)
             ok = bool(r.get("ok"))
-            _tell(f"Sent." if ok else f"Not sent: {r.get('error') or 'blocked'}")
+            # ONE message back, carrying the thing he needs next: they are in his contacts, so he can
+            # open WhatsApp and talk to them (owner, 10 Oct 2026). A second message would just be noise.
+            note = ((r.get("result") or {}).get("contact") or "") if ok else ""
+            _tell(("Sent. " + note).strip() if ok else f"Not sent: {r.get('error') or 'blocked'}")
             return "approved" if ok else "blocked"
         if action == "skip":
             engine.skip_task(task_id)
