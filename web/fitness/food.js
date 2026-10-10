@@ -379,8 +379,8 @@ function kpiUp(v,lo,hi,f){if(v==null)return '';f=f||1;return v>=hi*f?'var(--teal
 // Nothing logged yet (still fasting) stays the neutral blue, so the day doesn't open red.
 function kpiProtein(v,tgt){if(!v||!tgt)return 'var(--blue)';return v>=tgt?'var(--teal)':v>=tgt*0.75?'var(--amber)':'var(--red)';}
 function kpiGlucose(mg){if(mg==null)return '';return mg>=131?'var(--red)':mg>90?'var(--amber)':'var(--teal)';}
-// Sleep score (owner, 10 Oct 2026): over 85 green, 70-85 amber, under 70 red.
-function kpiSleepScore(v){if(v==null)return '';return v>85?'var(--teal)':v>=70?'var(--amber)':'var(--red)';}
+// Sleep score (owner, 10 Oct 2026): 85+ green, 70-84 amber, under 70 red.
+function kpiSleepScore(v){if(v==null)return '';return v>=85?'var(--teal)':v>=70?'var(--amber)':'var(--red)';}
 // HRV vs his own 14-night average (full nights only, before this day): at/above green, up to 10% below amber, worse red.
 function hrvBaseline(day){
   const v=[];for(let i=1;i<=14;i++){const sl=nightFor(shiftDay(day,-i));if(sl&&sl.hrv!=null)v.push(+sl.hrv);}
