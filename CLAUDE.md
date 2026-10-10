@@ -1628,7 +1628,7 @@ while a local change is queued — a pull once erased a cardio session seconds a
   Health via Android Health Connect (READ only) and POSTs to `POST /api/fitness/health` with
   `Authorization: Bearer <token>`. Daily totals use HC aggregate APIs per local day (HC dedupes
   sources); sessions/weights carry HC `metadata.id`/timestamps. Missing data is null, never a default.
-  Hourly WorkManager 7-day sync (needs READ_HEALTH_DATA_IN_BACKGROUND), sync on open, Backfill =
+  15-minute WorkManager 7-day sync since 1.3.2 (ExistingPeriodicWorkPolicy.UPDATE; was hourly; work name still `health-bridge-hourly`). 1.3.2 also adds `SyncNowActivity` on `cortexbridge://sync` (no UI: syncs, toasts, finishes back to the caller), which the Fitness app's refresh button fires as `intent://sync#Intent;scheme=cortexbridge;package=uk.coretex.healthbridge;S.browser_fallback_url=...;end` then pulls (app v82). Older: hourly (needs READ_HEALTH_DATA_IN_BACKGROUND), sync on open, Backfill =
   2026-01-01..today in monthly chunks (older than 30 days needs READ_HEALTH_DATA_HISTORY).
 - Built ON THE BOX, never on Windows: copy the folder to `/opt/health-bridge-build` (tar over ssh,
   excluding build/.gradle), then run `./build-on-box.sh` there. Toolchain: JDK 21 at
