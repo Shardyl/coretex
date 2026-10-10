@@ -11,7 +11,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import java.util.concurrent.TimeUnit
 
-/** Hourly 7-day sync. Only reads when the background-read permission is granted. */
+/** 7-day sync every 15 minutes. Only reads when the background-read permission is granted. */
 class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
         val ctx = applicationContext
@@ -27,13 +27,14 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
     }
 
     companion object {
+        // Name kept from the hourly era so UPDATE replaces the existing periodic work in place.
         private const val NAME = "health-bridge-hourly"
 
         fun schedule(ctx: Context) {
-            val req = PeriodicWorkRequestBuilder<SyncWorker>(1, TimeUnit.HOURS)
+            val req = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
-            WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.KEEP, req)
+            WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.UPDATE, req)
         }
     }
 }
