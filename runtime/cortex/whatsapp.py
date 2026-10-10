@@ -31,7 +31,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from . import config, crm, db, provider, social_dm, store, worker
+from psycopg.types.json import Json
+
+from . import config, db, provider, social_dm, store
 
 # Which WhatsApp account routes to which company. Overridable live via the 'wa_routing' setting so a new
 # number/company never needs a deploy.
@@ -94,24 +96,63 @@ def _clean_phone(p: str) -> str:
     return ("+" + p.lstrip("+")) if p else ""
 
 
-def _brief(verdict: dict, know_name: str, phone: str, msg: str, src: dict | None) -> str:
-    """The FACTS of this enquiry, as the drafting brief. Channel voice and personal/unknown-number
-    behaviour live in the social-dm-replies skill RULES (worker.draft serves them), never here.
+AUTO_RULE = "AUTO REPLY:"
 
-    Shared by the first message and by every follow-up folded in after it, so a burst redrafts against
-    exactly the same framing it would have had if they had typed it all in one go."""
-    personal = verdict.get("category") == "personal"
-    line = (src or {}).get("line")
-    return (
-        "Draft a reply to this WhatsApp message (the skill's standing rules govern the voice and shape). "
-        + ("FACT: this is a PERSONAL message from someone who knows the owner, not a business lead.\n\n"
-           if personal else f"FACT: triaged as a '{verdict.get('category')}' message.\n\n")
-        + ("FACT: the sender's name is unknown, only their number.\n\n" if not know_name else "")
-        + (f"FACT: they came from our Google Ads landing page ({line}). The '(ref ...)' in their message "
-           "is our tracking code: never mention it.\n\n" if line else "")
-        + ("FACT: these are consecutive messages from the same person, moments apart. One enquiry, not "
-           "several: answer the whole thing once.\n\n" if "\n" in msg.strip() else "")
-        + f"From: {know_name or phone}\nTheir message: {msg}")
+# What the automated acknowledgement SAYS lives on the skill, never here (standing rule: behaviour in
+# editable craft/rules). This is the safety net for a company whose skill has no such rule yet.
+AUTO_REPLY_DEFAULT = ("Hi {name}, thanks for getting in touch with {company}. "
+                      "Rashad will be in touch with you shortly from +971 54 404 9549.")
+
+
+def auto_reply_text(skill: dict, co: dict, name: str = "") -> str:
+    """The acknowledgement we send a new WhatsApp enquiry.
+
+    NOT a model draft. He answers WhatsApp himself from his personal number (10 Oct 2026); Cortex's job
+    on this channel is to acknowledge instantly, capture the person and open the opportunity, so the
+    message has to be the same every time and has to say who will follow up and FROM WHICH NUMBER: they
+    wrote to the business line and a stranger on another number is otherwise a cold approach."""
+    body = ""
+    for r in (skill.get("rules") or []):
+        t = (r if isinstance(r, str) else (r or {}).get("text") or "").strip()
+        if t.upper().startswith(AUTO_RULE):
+            body = t.split(":", 1)[1].strip()
+            break
+    first = ""
+    if name and re.search(r"[A-Za-z]", name) and not _clean_phone(name):
+        first = name.strip().split()[0]
+    return (body or AUTO_REPLY_DEFAULT).format(name=first or "there",
+                                               company=co.get("name") or "Sensa Productions")
+
+
+def _ensure_opportunity(co: dict, phone: str, who: str, summary: str, src: dict | None) -> int | None:
+    """Open an opportunity for a WhatsApp enquiry. Owner, 10 Oct 2026: "if it's not spam, then it's an
+    opportunity... at least if the opportunity is created, then everything can be tracked and it won't
+    get missed." He removes the ones that turn out to be nothing.
+
+    NO EMAIL EXISTS on this lane, so the deal carries the person by name and phone and is held off the
+    chase clock (`hold_auto`): an email cadence against a contact with no address would nudge into a void,
+    and he is answering these by hand from his own WhatsApp anyway."""
+    from . import crm, pipeline
+    title = f"WhatsApp enquiry: {who or phone}"
+    try:
+        deal = crm.create_deal(co.get("slug") or "sensa", title, stage="Opportunity", arm=False)
+    except Exception as e:  # noqa: BLE001 - DuplicateDeal included: an existing deal is the right answer
+        print(f"[whatsapp] no opportunity for {phone}: {str(e)[:160]}", flush=True)
+        return None
+    did = deal["id"]
+    try:
+        db.execute("update crm_projects set contacts=%s, note=%s, updated_at=now() where id=%s",
+                   (Json([{"name": who or phone, "email": "", "phone": phone, "primary": True}]),
+                    f"WhatsApp enquiry from {phone}." + (f" {summary}" if summary else ""), did))
+        crm.hold_auto(did)
+        pipeline.log_deal(did, "whatsapp_in",
+                          f"WhatsApp enquiry from {who or phone} ({phone})."
+                          + (f" {summary}" if summary else "")
+                          + (f" Source: {src['line']}" if (src or {}).get("line") else ""),
+                          ref=f"wa-open:{_digits(phone)}")
+    except Exception as e:  # noqa: BLE001 - the deal exists; detail is a bonus
+        print(f"[whatsapp] opportunity {did} detail failed: {str(e)[:160]}", flush=True)
+    return did
 
 
 def _open_card(account: str, phone: str) -> dict | None:
@@ -130,23 +171,15 @@ def _arm_alert(req: dict) -> dict:
     return req
 
 
-def _fold_in(card: dict, co: dict, skill: dict, rt: dict, msg: str, src: dict | None) -> str:
-    """Add a follow-up message to an open card: redraft against the whole conversation so far and push
-    the alert back, so the burst rings once with the full picture rather than three times in pieces."""
+def _fold_in(card: dict, msg: str, src: dict | None) -> str:
+    """Add a follow-up message to an open card. The acknowledgement does not change, so nothing is
+    redrafted: the messages accumulate and the alert is pushed back so a burst rings him once."""
     req = dict(card.get("request") or {})
     msgs = [m for m in (req.get("messages") or [req.get("their_message") or ""]) if m] + [msg]
-    joined = "\n".join(msgs)
-    brief = _brief(req.get("triage") or {}, req.get("recipient") or "", req.get("phone") or "", joined,
-                   req.get("lead_source") or src)
-    try:
-        draft = worker.draft(skill, co, {"brief": brief}, author=rt.get("author") or "rashad")
-    except Exception:  # noqa: BLE001 - keep the draft we already had rather than losing the card
-        draft = card.get("draft") or ""
-    req.update({"brief": brief, "their_message": joined, "messages": msgs})
+    req.update({"their_message": "\n".join(msgs), "messages": msgs})
     if src and not req.get("lead_source"):
         req["lead_source"] = src
-    store.update_task(card["id"], request=_arm_alert(req),
-                      **({"draft": draft, "status": "awaiting_approval"} if draft else {}))
+    store.update_task(card["id"], request=_arm_alert(req))
     print(f"[whatsapp] folded a follow-up into card {card['id']} ({len(msgs)} messages)", flush=True)
     return "folded"
 
@@ -155,8 +188,14 @@ def _fold_in(card: dict, co: dict, skill: dict, rt: dict, msg: str, src: dict | 
 
 def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
                      phone: str, name: str, msg: str, chat_id: str = "") -> str:
-    """Triage one inbound message, capture the contact, draft a reply card. Returns drafted | skipped.
-    Shared by BOTH transports so the Cloud API and the runner can never drift apart in behaviour."""
+    """One inbound message -> acknowledged, captured, opportunity opened. Returns drafted | skipped.
+
+    THE SHAPE CHANGED ON 10 OCT 2026. Cortex no longer tries to hold the sales conversation here: the
+    owner answers WhatsApp himself from his personal number, and Cortex's job is the part a human is bad
+    at, which is never losing the lead. So an enquiry gets a fixed acknowledgement for him to approve, a
+    CRM row, an opportunity, an alert carrying the whole thing, and (once he sends the acknowledgement)
+    a contact on his phone. Spam gets none of it."""
+    from . import crm
     src = None
     try:   # a landing-page reference in the pre-filled text names the ad click behind this lead (lptrack)
         from . import lptrack
@@ -164,22 +203,23 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
     except Exception:  # noqa: BLE001
         src = None
     verdict = _classify(name, phone, msg, slug)
-    # CRM capture happens for every real human (even ones we don't draft for) so the contact is never lost.
-    if verdict.get("category") != "spam":
+    spam = verdict.get("category") == "spam"
+    # CRM capture happens for every real human (even ones we don't answer) so the contact is never lost.
+    if not spam:
         try:
             # WhatsApp never gives us a name for an unknown sender. The only honest source is the message
-            # itself, when they introduce themselves. Fill-if-blank, so a later message where they DO say who
-            # they are backfills the contact.
+            # itself, when they introduce themselves. Fill-if-blank, so a later message where they DO say
+            # who they are backfills the contact.
             crm.match_or_add_by_phone(
                 phone, verdict.get("name") or name, slug,
                 source=("whatsapp, PPC landing page: " + src["line"])[:200] if src else "whatsapp",
                 summary=verdict.get("summary") or msg[:200], classification=verdict.get("category"))
-        except Exception:  # noqa: BLE001 — a CRM hiccup must not lose the reply
+        except Exception:  # noqa: BLE001 - a CRM hiccup must not lose the enquiry
             pass
-    if not verdict.get("reply"):
-        # Traffic on this number is very low (Rashad, 22 Aug 2026), so nothing arrives silently: a message we
-        # decline to answer still raises an FYI card, with the reason, so he can see it was a real decision
-        # and override it. No draft, no approval, nothing armed to send.
+    if spam or not verdict.get("reply"):
+        # SPAM IS FILTERED COMPLETELY (owner, 10 Oct 2026): no acknowledgement, no opportunity, and
+        # nothing written to his phone's address book. The FYI card stays, in Cortex only, so a wrong
+        # spam call is visible and reversible rather than silent.
         try:
             from . import notifications
             notifications.notify(
@@ -187,30 +227,28 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
                 f"{name or phone}: {msg[:180]}" + (f"  [{verdict.get('reason')}]" if verdict.get("reason") else ""),
                 priority="fyi", category="social", company_id=rt["company_id"],
                 item={"name": name or phone, "phone": phone, "cat": verdict.get("category") or "spam"})
-        except Exception:  # noqa: BLE001 — visibility must never block ingest
+        except Exception:  # noqa: BLE001 - visibility must never block ingest
             pass
         return "skipped"
     # ONE ENQUIRY, ONE CARD. A second message moments after the first is the rest of the same thought,
-    # so it joins the open card and redrafts there instead of opening a rival card with its own draft.
+    # so it joins the open card rather than opening a rival one.
     open_card = _open_card(account, phone)
     if open_card:
-        return _fold_in(open_card, co, skill, rt, msg, src)
+        return _fold_in(open_card, msg, src)
     # a real name only - never the phone number WhatsApp puts where a name would go
     know_name = verdict.get("name") or ("" if _clean_phone(name) else name)
-    brief = _brief(verdict, know_name, phone, msg, src)
-    try:
-        draft = worker.draft(skill, co, {"brief": brief}, author=rt.get("author") or "rashad")
-    except Exception:  # noqa: BLE001
-        draft = ""
+    deal_id = _ensure_opportunity(co, phone, know_name, verdict.get("summary") or "", src)
     task = store.create_task(rt["company_id"], skill["id"], "wa_reply", {
-        "brief": brief, "channel": "whatsapp", "account": account, "recipient": know_name or phone,
+        "channel": "whatsapp", "account": account, "recipient": know_name or phone,
         "phone": phone, "chat_id": chat_id, "their_message": msg, "messages": [msg], "triage": verdict,
+        "auto_reply": True, "push_contact": True,
+        **({"deal_id": deal_id} if deal_id else {}),
         **({"lead_source": src} if src else {})})
-    if draft:
-        # ARMED, not fired: flush_alerts sends it once the burst has settled, so one enquiry rings his
-        # phone once. The Inbox card is live immediately either way.
-        req = _arm_alert(dict(task.get("request") or {}))
-        store.update_task(task["id"], draft=draft, status="awaiting_approval", request=req)
+    # ARMED, not fired: flush_alerts sends the alert once the burst has settled, so one enquiry rings his
+    # phone once. The Inbox card is live immediately either way.
+    req = _arm_alert(dict(task.get("request") or {}))
+    store.update_task(task["id"], draft=auto_reply_text(skill, co, know_name),
+                      status="awaiting_approval", request=req)
     return "drafted"
 
 

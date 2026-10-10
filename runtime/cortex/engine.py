@@ -1457,6 +1457,7 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
                 # as a failure, so a bare ok:False reported a failed send back to him as "Sent."
                 return {"blocked": True, "error": f"WhatsApp send failed: {str(e)[:200]}"}
             store.update_task(task["id"], status="done")
+            _push_wa_contact(task, req, who)
         else:
             store.update_task(task["id"], status="queued")
         store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"draft": task.get("draft")})
@@ -3470,6 +3471,32 @@ def set_email_sending_paused(paused: bool) -> dict:
 
 def email_status() -> dict:
     return {"ok": True, "paused": bool(db.setting_get("email_sending_paused"))}
+
+
+def _push_wa_contact(task: dict, req: dict, who: str) -> None:
+    """AFTER the acknowledgement has gone, put them in his phone's address book.
+
+    His sequence, 10 Oct 2026: "after I've sent the auto reply, that needs to be added to my contacts."
+    Google syncs it to the handset and WhatsApp reads the handset, so the stranger he is about to answer
+    already has a name. Only ever for a card that carried the acknowledgement, never for spam, and never
+    twice. Fail-soft: the CRM row and the opportunity are the record."""
+    if not req.get("push_contact"):
+        return
+    try:
+        from . import contacts
+        co = store.get_company(task["company_id"]) or {}
+        src = (req.get("lead_source") or {}).get("line") or ""
+        r = contacts.add_enquiry(
+            req.get("phone") or "", name=who if who != req.get("phone") else "",
+            brand=co.get("name") or "", note=(req.get("triage") or {}).get("summary") or "",
+            source=("Came from " + src) if src else "WhatsApp enquiry")
+        rq = dict(req)
+        rq["push_contact"] = False
+        rq["contact_pushed"] = r.get("created") or r.get("exists") or r.get("error") or "skipped"
+        store.update_task(task["id"], request=rq)
+        print(f"[whatsapp] contact for {req.get('phone')}: {rq['contact_pushed']}", flush=True)
+    except Exception as e:  # noqa: BLE001 - never let the address book cost us the send
+        print(f"[whatsapp] contact push failed: {str(e)[:200]}", flush=True)
 
 
 def approve_wa_reply(task_id: int) -> dict:
