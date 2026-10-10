@@ -5738,6 +5738,12 @@ def fitness_photo_delete(uid: str, _: None = Depends(auth)) -> dict:
     return fitness_photos.delete(uid)
 
 
+@app.post("/api/fitness/push/subscribe")
+def fitness_push_subscribe(body: PushSub, _: None = Depends(auth)) -> dict:
+    """The Fitness PWA's own push subscription (app='fitness'): its reminders never reach, or come from, the cockpit."""
+    return push.subscribe(body.subscription, user_id=None, app="fitness")
+
+
 class LabUpload(BaseModel):
     file: str                                   # data:application/pdf or data:image/... URL
 

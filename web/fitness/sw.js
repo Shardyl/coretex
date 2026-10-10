@@ -1,6 +1,6 @@
 // Fitness PWA service worker.
 // Bump CACHE on every ship or the phone keeps serving the cached index.html.
-const CACHE = 'fitness-v85';
+const CACHE = 'fitness-v86';
 const ASSETS = [
   './',
   './index.html',
@@ -39,4 +39,21 @@ self.addEventListener('fetch', e => {
     if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
     return res;
   }).catch(() => cached)));
+});
+
+// Reminders pushed by Cortex for THIS app only (cortex/fitness_remind.py): shown as the Fitness app.
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (_) {}
+  e.waitUntil(self.registration.showNotification(d.title || 'Fitness', {
+    body: d.body || '', tag: d.tag || 'fitness', renotify: true,
+    icon: 'icon-192.png', badge: 'icon-192.png', data: { url: d.url || '/' }
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) { if ('focus' in c) return c.focus(); }
+    return clients.openWindow((e.notification.data && e.notification.data.url) || '/');
+  }));
 });

@@ -992,7 +992,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='85';                         // keep in step with CACHE in sw.js
+const APP_VERSION='86';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1476,7 +1476,8 @@ function renderSubnav(section){
   const nav=document.getElementById('subnav');
   nav.innerHTML=SUBNAVS[section].map(({label,key})=>{
     const active=currentSubpage[section]===key;
-    return`<button class="subnav-btn${active?' active':''}" data-sub="${key}">${label}</button>`;
+    let n=0;try{if(section==='food'&&typeof window.fitnessBadges==='function'){const b=window.fitnessBadges();n=key==='today'?b.today:key==='weight'?b.weight:0;}}catch(e){}
+    return`<button class="subnav-btn${active?' active':''}" data-sub="${key}">${label}${n?`<span style="display:inline-block;min-width:17px;height:17px;line-height:17px;margin-left:5px;padding:0 4px;border-radius:9px;background:var(--amber);color:#111;font-size:11px;font-weight:800;text-align:center;vertical-align:1px">${n}</span>`:''}</button>`;
   }).join('');
   nav.querySelectorAll('.subnav-btn').forEach(b=>b.addEventListener('click',()=>{
     currentSubpage[currentSection]=b.dataset.sub;
@@ -3023,6 +3024,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=85"></script>
+<script src="food.js?v=86"></script>
 </body>
 </html>

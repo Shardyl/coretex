@@ -23,7 +23,8 @@ create table if not exists push_subscriptions (
   last_ok timestamptz);
 """
 
-_ALTERS = "alter table push_subscriptions add column if not exists user_id bigint"
+_ALTERS = ("alter table push_subscriptions add column if not exists user_id bigint; "
+           "alter table push_subscriptions add column if not exists app text")   # null = cockpit; 'fitness' = Fitness PWA
 
 
 _PEM_PATH = None
@@ -44,7 +45,7 @@ def public_key() -> str:
     return _vapid().get("public_key", "")
 
 
-def subscribe(sub: dict, user_id=None) -> dict:
+def subscribe(sub: dict, user_id=None, app: str | None = None) -> dict:
     """Register a device. user_id None = the OWNER's device (receives everything); a team user's device
     receives only notifications for companies inside their scope (resolved at send time, so a scope
     change applies immediately)."""
@@ -53,10 +54,10 @@ def subscribe(sub: dict, user_id=None) -> dict:
     ep = (sub or {}).get("endpoint")
     if not ep or not keys.get("p256dh") or not keys.get("auth"):
         return {"ok": False, "error": "bad subscription"}
-    db.execute("insert into push_subscriptions (endpoint, p256dh, auth, user_id) values (%s,%s,%s,%s) "
+    db.execute("insert into push_subscriptions (endpoint, p256dh, auth, user_id, app) values (%s,%s,%s,%s,%s) "
                "on conflict (endpoint) do update set p256dh=excluded.p256dh, auth=excluded.auth, "
-               "user_id=excluded.user_id",
-               (ep, keys["p256dh"], keys["auth"], user_id))
+               "user_id=excluded.user_id, app=excluded.app",
+               (ep, keys["p256dh"], keys["auth"], user_id, app))
     return {"ok": True}
 
 
@@ -93,7 +94,7 @@ def send_to_devices(notif: dict) -> bool:
     pem = _pem_file()
     if not pem:
         return False
-    subs = db.query("select * from push_subscriptions")
+    subs = db.query("select * from push_subscriptions where app is null")     # cockpit devices only
     if not subs:
         return False
     # Scope filter: owner devices (user_id null) get everything; a team device gets a notification only
@@ -132,3 +133,29 @@ def send_to_devices(notif: dict) -> bool:
         except Exception:  # noqa: BLE001
             pass
     return sent > 0
+
+
+def send_to_app(app: str, title: str, body: str, tag: str, url: str = "/") -> int:
+    """Push to one app's devices only (e.g. the Fitness PWA's own reminders). Returns how many were delivered."""
+    ensure_schema()
+    pem = _pem_file()
+    subs = db.query("select * from push_subscriptions where app=%s", (app,))
+    if not pem or not subs:
+        return 0
+    from pywebpush import WebPushException, webpush
+    v = _vapid()
+    payload = json.dumps({"title": title, "body": body, "tag": tag, "url": url})
+    sent = 0
+    for s in subs:
+        sub = {"endpoint": s["endpoint"], "keys": {"p256dh": s["p256dh"], "auth": s["auth"]}}
+        try:
+            webpush(subscription_info=sub, data=payload, vapid_private_key=pem,
+                    vapid_claims={"sub": v.get("subject", "mailto:hello@sensa.digital")})
+            sent += 1
+            db.execute("update push_subscriptions set last_ok=now() where id=%s", (s["id"],))
+        except WebPushException as e:  # noqa: PERF203
+            if getattr(getattr(e, "response", None), "status_code", None) in (404, 410):
+                db.execute("delete from push_subscriptions where id=%s", (s["id"],))
+        except Exception:  # noqa: BLE001
+            pass
+    return sent

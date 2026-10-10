@@ -227,7 +227,7 @@ window.renderFoodCurrent=function(){
 };
 
 // ---------- Today ----------
-function renderToday(){renderTodayInner();try{drawCgm();}catch(e){}}
+function renderToday(){renderTodayInner();try{drawCgm();}catch(e){}refreshBadges();}
 function renderTodayInner(){
   const el=document.getElementById('page-food-today');
   const list=entriesFor(foodDay);
@@ -283,6 +283,7 @@ function renderTodayInner(){
       ${balance}
       ${projectToday()}
     </div>
+    ${isToday?remindersCard():''}
     ${isFuture?'':fastCard()}
     ${isFuture?'':readingsCard()}
     ${isFuture?'':creatineCard()}
@@ -1386,6 +1387,53 @@ window.foodDelWeight=function(d){
   bodyweightLog.splice(i,1);saveBodyweight();renderWeight();
 };
 window.foodWtRange=function(n){wtRange=n;renderWeight();};
+// ---------- reminders: tab badges + Fitness-branded push (owner, 10 Oct 2026) ----------
+// Today badge = weigh-in + creatine still to do today; Weight badge = waist + progress photo when a week has passed.
+// Pushes come from cortex/fitness_remind.py at 05:30 (and 19:00 for creatine) to THIS app's subscription only.
+const PHOTO_LAST_KEY='fitness_photo_last', PUSH_KEY='fitness_push_ok';
+function photoLast(){try{return localStorage.getItem(PHOTO_LAST_KEY)||'';}catch(e){return '';}}
+function setPhotoLast(d){try{if(d&&d>photoLast())localStorage.setItem(PHOTO_LAST_KEY,d);}catch(e){}}
+window.fitnessBadges=function(){
+  const t=localDay(new Date()), week=shiftDay(t,-6);
+  const today=(bodyweightLog.some(b=>b.date===t)?0:1)+(creatineOn(t).length?0:1);
+  const lastW=waists().map(x=>localDay(new Date(x.at))).pop()||'';
+  const weight=(lastW>=week?0:1)+(photoLast()>=week?0:1);
+  return {today,weight};
+};
+function refreshBadges(){try{if(typeof currentSection!=='undefined'&&currentSection==='food'&&typeof renderSubnav==='function')renderSubnav('food');}catch(e){}}
+async function photoLastFetch(){try{const l=await syncApi('/api/fitness/photos');if(l&&l.length)setPhotoLast(l[l.length-1].date);refreshBadges();}catch(e){}}
+function b64ToU8(b){const p='='.repeat((4-b.length%4)%4),r=atob((b+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from([...r].map(c=>c.charCodeAt(0)));}
+async function pushSubscribe(){
+  if(!('serviceWorker' in navigator)||!('PushManager' in window))return false;
+  const reg=await navigator.serviceWorker.ready;
+  let sub=await reg.pushManager.getSubscription();
+  if(!sub){const k=await syncApi('/api/push/vapid');if(!k||!k.public_key)return false;
+    sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(k.public_key)});}
+  const r=await fetch(API_BASE+'/api/fitness/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+syncToken()},body:JSON.stringify({subscription:sub.toJSON()})});
+  if(r.ok){try{localStorage.setItem(PUSH_KEY,localDay(new Date()));}catch(e){}}
+  return r.ok;
+}
+window.foodRemindersOn=async function(){
+  try{
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){toast('Notifications are blocked: allow them for this app in Android settings');return;}
+    toast((await pushSubscribe())?'Reminders on: 05:30 each morning':'Could not turn reminders on');renderToday();
+  }catch(e){toast('Could not turn reminders on');}
+};
+window.foodRemindersHide=function(){try{localStorage.setItem('fitness_push_hide','1');}catch(e){}renderToday();};
+function remindersCard(){
+  if(!('Notification' in window)||!('PushManager' in window))return '';
+  if(Notification.permission==='granted')return '';
+  try{if(localStorage.getItem('fitness_push_hide'))return '';}catch(e){}
+  return `<div class="card" style="padding:12px 16px;display:flex;gap:10px;align-items:center">
+    <div style="flex:1"><div class="fd-sub">Morning reminders</div><div class="fd-note" style="margin:2px 0 0">05:30 nudge for weigh-in and creatine; Sundays add waist and photo. Creatine again at 19:00 if missed.</div></div>
+    <button class="fd-btn" style="width:auto;margin:0;padding:10px 14px" onclick="foodRemindersOn()">Turn on</button>
+    <button class="btn-sm" onclick="foodRemindersHide()" aria-label="Hide">&times;</button></div>`;
+}
+// keep the subscription registered (once a day) when permission is already granted
+setTimeout(()=>{try{if('Notification' in window&&Notification.permission==='granted'&&localStorage.getItem(PUSH_KEY)!==localDay(new Date()))pushSubscribe();}catch(e){}},4000);
+setTimeout(photoLastFetch,3000);
+
 // ---------- progress photos (weekly, Sundays with the waist; owner 10 Oct 2026) ----------
 // Private: stored on the Cortex box, fetched with the device token and shown as blob URLs. Never in the sync document.
 const _photoBlobs={};
@@ -1399,6 +1447,7 @@ async function photoCard(){
   const el=document.getElementById('fdPhotoCard');if(!el)return;
   let list=[];try{list=await syncApi('/api/fitness/photos')||[];}catch(e){el.innerHTML='<div class="fd-sub">Progress photos</div><div class="fd-note" style="margin:4px 0 0">Could not reach Cortex.</div>';return;}
   const today=localDay(new Date()), last=list[list.length-1], due=!last||last.date<=shiftDay(today,-7);
+  if(last){setPhotoLast(last.date);refreshBadges();}
   const byDay={};list.forEach(p=>{(byDay[p.date]=byDay[p.date]||[]).push(p);});
   const days=Object.keys(byDay).sort().reverse();
   el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:baseline"><div class="fd-sub">Progress photos &middot; weekly</div>
@@ -1507,6 +1556,7 @@ function renderWeight(){
         ${w.src==='log'?`<button class="hist-del" onclick="foodDelWeight('${w.date}')">&times;</button>`:''}</div>`).join('')||'<div class="fd-note">No weigh-ins yet.</div>'}
     </div>`;
   try{photoCard();}catch(e){}
+  refreshBadges();
   const from=shiftDay(today,-wtRange), pts=all.filter(w=>w.date>=from);
   const roll=pts.map(w=>{const v=all.filter(x=>x.date<=w.date&&x.date>=shiftDay(w.date,-6)).map(x=>x.kg);return r1(v.reduce((a,b)=>a+b,0)/v.length);});
   const cs=getComputedStyle(document.documentElement);
