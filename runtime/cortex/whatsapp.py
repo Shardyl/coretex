@@ -115,13 +115,18 @@ def auto_reply_text(skill: dict, co: dict, name: str = "") -> str:
     for r in (skill.get("rules") or []):
         t = (r if isinstance(r, str) else (r or {}).get("text") or "").strip()
         if t.upper().startswith(AUTO_RULE):
-            body = t.split(":", 1)[1].strip()
+            # THE MESSAGE IS THE FIRST LINE, nothing else. A rule carries guidance for whoever edits it
+            # next, and the first version of this sent the guidance to the client (caught in testing).
+            body = t.split(":", 1)[1].split("\n")[0].strip()
             break
     first = ""
     if name and re.search(r"[A-Za-z]", name) and not _clean_phone(name):
         first = name.strip().split()[0]
-    return (body or AUTO_REPLY_DEFAULT).format(name=first or "there",
-                                               company=co.get("name") or "Sensa Productions")
+    # Substituted, never .format()'d: a literal brace someone types into the rule must not raise, and
+    # nothing outside these two placeholders is ever touched.
+    return ((body or AUTO_REPLY_DEFAULT)
+            .replace("{name}", first or "there")
+            .replace("{company}", co.get("name") or "Sensa Productions"))
 
 
 def _ensure_opportunity(co: dict, phone: str, who: str, summary: str, src: dict | None) -> int | None:
