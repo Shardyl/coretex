@@ -243,7 +243,7 @@ function renderTodayInner(){
   let balance='';
   if(burned!=null&&list.length){
     const d=burned-t.kcal;
-    balance=`<div style="margin-top:10px;font-size:12px;color:var(--ink2)">${isToday?'So far today: ':''}burned ${fmtN(burned)} &minus; eaten ${fmtN(t.kcal)} = <span class="${d>=0?'fd-pos':'fd-neg'}">${d>=0?'deficit':'surplus'} ${fmtN(Math.abs(d))} kcal</span></div>`;
+    balance=`<div style="margin-top:10px;font-size:12px;color:var(--ink2)">${isToday?'So far today: ':''}burned ${fmtN(burned)} &minus; eaten ${fmtN(t.kcal)} = <span style="color:${ragDeficit(d)};font-weight:800">${d>=0?'deficit':'surplus'} ${fmtN(Math.abs(d))} kcal</span></div>`;
   }
   const sess=sessionsOn(foodDay);
   el.innerHTML=`
@@ -332,20 +332,20 @@ function fastCard(){
     const sinceTxt=since?(localDay(since)===shiftDay(localDay(new Date()),-1)?tOf(since.toISOString())+' yesterday':since.toLocaleString('en-GB',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})):'';
     return `<div class="card" style="padding:12px 16px">
       <div class="fd-sub">Fasting${since&&isToday?' &middot; since '+sinceTxt:''}</div>
-      ${since&&isToday?`<div class="fd-big" style="font-size:28px" id="fdFastLive" data-since="${since.toISOString()}">${longHM(Date.now()-since)}</div>
+      ${since&&isToday?`<div class="fd-big" style="font-size:28px;color:${ragFast(Date.now()-since)}" id="fdFastLive" data-since="${since.toISOString()}">${longHM(Date.now()-since)}</div>
         <div style="font-size:12px;color:var(--ink3);margin-top:2px">${(Math.floor((Date.now()-since)/360000)/10).toFixed(1)} hours total</div>`:`<div class="fd-note" style="margin:4px 0">${since?'':'Tap &quot;Close eating window&quot; tonight so tomorrow&#39;s fast length is known.'}</div>`}
       <div style="display:flex;gap:8px;margin-top:8px">${timePick('fdBreakT',nowHM())}
       <button class="fd-btn" style="width:auto;margin:0;padding:0 16px" onclick="foodFastSet('brokeAt','fdBreakT')">Break fast</button></div></div>`;
   }
   const len=fastLength(foodDay);
   if(!f.closedAt)return `<div class="card" style="padding:12px 16px">
-    <div class="fd-sub">Fast ${len!=null?'&middot; '+longHM(len):''} &middot; broken at ${tOf(f.brokeAt)}</div>
+    <div class="fd-sub">Fast ${len!=null?'&middot; '+ragSpan(longHM(len),ragFast(len)):''} &middot; broken at ${tOf(f.brokeAt)}</div>
     <div style="display:flex;gap:8px;margin-top:8px">${timePick('fdCloseT',nowHM())}
     <button class="fd-btn sec" style="width:auto;margin:0;padding:0 16px" onclick="foodFastSet('closedAt','fdCloseT')">Close eating window</button>
     <button class="btn-sm" onclick="foodFastClear('brokeAt')">Undo</button></div></div>`;
   return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
-    <div><div class="fd-sub">Fast ${len!=null?longHM(len):''}</div>
-    <div style="font-size:13px;font-weight:700">Eating window ${tOf(f.brokeAt)} to ${tOf(f.closedAt)} (${hm(new Date(f.closedAt)-new Date(f.brokeAt))})</div></div>
+    <div><div class="fd-sub">Fast ${len!=null?ragSpan(longHM(len),ragFast(len)):''}</div>
+    <div style="font-size:13px;font-weight:700">Eating window ${tOf(f.brokeAt)} to ${tOf(f.closedAt)} ${ragSpan('('+hm(new Date(f.closedAt)-new Date(f.brokeAt))+')',ragWindow(new Date(f.closedAt)-new Date(f.brokeAt)))}</div></div>
     <button class="btn-sm" onclick="foodFastClear('closedAt')">Reopen</button></div>`;
 }
 window.foodFastSet=function(field,inputId){
@@ -393,6 +393,16 @@ function hrvBaseline(day){
 // HRV fixed bands (owner, 10 Oct 2026; his nights mostly run 30-39 ms): 30+ green, 25-29 amber, under 25 red.
 function kpiHrv(v,day){if(v==null)return '';const r=Math.round(v);return r>=30?'var(--teal)':r>=25?'var(--amber)':'var(--red)';}
 function kpiSleepHR(v){if(v==null)return '';const r=Math.round(v);return r<=50?'var(--teal)':r<=55?'var(--amber)':'var(--red)';}
+const RAG={g:'var(--teal)',a:'var(--amber)',r:'var(--red)'};
+function ragSpan(txt,col){return col?`<span style="color:${col};font-weight:800">${txt}</span>`:txt;}
+function ragDeficit(d){return d==null?'':d>=850?RAG.g:d>=400?RAG.a:RAG.r;}                 // daily kcal deficit
+function ragProj(kg5w){return kg5w==null?'':kg5w<=-4?RAG.g:kg5w<=-2?RAG.a:RAG.r;}          // 5-week projected change
+function ragFast(ms){if(ms==null)return '';const h=ms/3600000;return h>=16?RAG.g:h>=14?RAG.a:RAG.r;}
+function ragWindow(ms){if(ms==null)return '';const h=ms/3600000;return h<=8?RAG.g:h<=10?RAG.a:RAG.r;}
+function ragKcalDay(k,tgt){if(!k)return '';return k<=tgt?RAG.g:k<=tgt+KCAL_OVER_AMBER?RAG.a:RAG.r;}
+function ragProteinDay(p,tgt){if(!p)return '';return p>=tgt?RAG.g:p>=tgt*0.75?RAG.a:RAG.r;}
+function ragWeekChange(v){return v==null?'':v<=-0.5?RAG.g:v<=0?RAG.a:RAG.r;}               // kg vs last week
+function ragWaist(v){return v==null?'':v<-0.5?RAG.g:v<=0.5?RAG.a:RAG.r;}                   // cm vs last
 const TREND_ARROW={1:'&darr;',2:'&searr;',3:'&rarr;',4:'&nearr;',5:'&uarr;'};
 // Light glucose refresh while the app is open: only new points since the last one held, every 2 minutes.
 async function refreshCgm(){
@@ -448,8 +458,8 @@ function readingsCard(){
   return `<div class="card" style="padding:12px 16px">
     ${last?`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
       <div class="fd-sub">Libre sensor</div><div style="font-size:12px;color:var(--ink3)">${tOf(last.at)}${foodDay===localDay(new Date())?' &middot; '+Math.round((Date.now()-new Date(last.at))/60000)+' min ago':''}</div></div>
-      <div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px"><div class="fd-big" style="font-size:28px">${gShow(last.mmol)} <span style="font-size:13px;color:var(--ink3)">${u==='mgdl'?'mg/dL':'mmol/L'}</span></div>
-      <div style="font-size:12px;color:var(--ink3)">day ${gShow(Math.min(...cg.map(x=>x.mmol)))}&ndash;${gShow(Math.max(...cg.map(x=>x.mmol)))}, avg ${gShow(cg.reduce((a,x)=>a+x.mmol,0)/cg.length)}</div></div>
+      <div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px"><div class="fd-big" style="font-size:28px;color:${kpiGlucose(Math.round(last.mmol*18.0182))}">${gShow(last.mmol)} <span style="font-size:13px;color:var(--ink3)">${u==='mgdl'?'mg/dL':'mmol/L'}</span></div>
+      <div style="font-size:12px;color:var(--ink3)">day ${gShow(Math.min(...cg.map(x=>x.mmol)))} to ${ragSpan(gShow(Math.max(...cg.map(x=>x.mmol))),kpiGlucose(Math.round(Math.max(...cg.map(x=>x.mmol))*18.0182)))}, avg ${ragSpan(gShow(cg.reduce((a,x)=>a+x.mmol,0)/cg.length),kpiGlucose(Math.round(cg.reduce((a,x)=>a+x.mmol,0)/cg.length*18.0182)))}</div></div>
       <div style="position:relative;height:90px;margin-bottom:10px"><canvas id="fdCgmChart" role="img" aria-label="Glucose today"></canvas></div>`:''}
     ${!manual?'</div>':''}${!manual?'':`
     <div class="fd-sub" style="margin-bottom:6px">Ketones and glucose${g!=null?` &middot; GKI ${g}`:''}</div>
@@ -504,7 +514,7 @@ function renderFasting(){
       <div style="position:relative;width:100%;height:210px"><canvas id="fdFastChart" role="img" aria-label="Fast length and ketones"></canvas></div></div>
     <div class="card" style="padding:8px 12px">
       <div class="fd-hrow h"><div>Day</div><div>Fast</div><div>Ketones</div><div>Glucose</div><div>GKI</div></div>
-      ${rows.map(r=>`<div class="fd-hrow"><div>${dayLabel(r.d).replace('Yesterday','Yest.')}${isFree(r.d)?FREE_TAG:''}</div><div>${r.len!=null?hm(r.len):'—'}</div><div>${r.k!=null?r1(r.k):'—'}</div><div>${r.g!=null?gShow(r.g):'—'}</div><div>${r.gki??'—'}</div></div>`).join('')}
+      ${rows.map(r=>`<div class="fd-hrow"><div>${dayLabel(r.d).replace('Yesterday','Yest.')}${isFree(r.d)?FREE_TAG:''}</div><div>${r.len!=null?ragSpan(hm(r.len),ragFast(r.len)):'—'}</div><div>${r.k!=null?r1(r.k):'—'}</div><div>${r.g!=null?gShow(r.g):'—'}</div><div>${r.gki??'—'}</div></div>`).join('')}
     </div>
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px"><div><div class="fd-sub">Finger-prick entry on Today</div><div class="fd-note" style="margin:2px 0 0">Ketone and glucose strips</div></div>
       <button class="btn-sm" onclick="foodToggleManualReadings()">${manualReadingsOn()?'Hide':'Show'}</button></div>
@@ -583,10 +593,10 @@ function renderRecovery(){
   const a7s=avg(r=>r.sl&&r.sl.score,7), a7n=avg(r=>r.night,7), a7d=avg(r=>r.day,7);
   el.innerHTML=`${sl?`<div class="card">
       <div class="fd-sub">${last.d===today?'Last night':'Latest night, ending '+dayLabel(last.d).toLowerCase()}${sl.start&&sl.end?` &middot; ${tOf(sl.start)} to ${tOf(sl.end)}`:''}</div>
-      <div class="fd-row">${cell(sl.score!=null?fmtN(sl.score):'—','Sleep score')}${cell(durHM(sl.min),'Asleep')}${cell(sl.hrv!=null?fmtN(sl.hrv):'—','HRV ms')}</div>
+      <div class="fd-row">${cell(sl.score!=null?ragSpan(fmtN(sl.score),kpiSleepScore(sl.score)):'—','Sleep score')}${cell(durHM(sl.min),'Asleep')}${cell(sl.hrv!=null?ragSpan(fmtN(sl.hrv),kpiHrv(sl.hrv,last.d)):'—','HRV ms')}</div>
       ${sl.deep!=null||sl.rem!=null?`<div style="display:flex;border-radius:5px;overflow:hidden;margin-top:12px;gap:1px">${stage(sl.deep,'Deep','var(--purple)')}${stage(sl.rem,'REM','var(--blue)')}${stage(sl.light,'Light','var(--teal)')}${stage(sl.awake,'Awake','var(--amber)')}</div>
       <div style="font-size:11px;color:var(--ink3);margin-top:6px">Deep ${durHM(sl.deep)} &middot; REM ${durHM(sl.rem)} &middot; Light ${durHM(sl.light)}${sl.awake!=null?' &middot; Awake '+durHM(sl.awake):''}</div>`:''}
-      <div class="fd-row">${cell(nightHR(sl)!=null?fmtN(nightHR(sl)):'—',sl.hrMin!=null?'Sleeping HR (low)':'Sleeping HR')}${cell(last.day!=null?fmtN(last.day):'—','Day resting HR')}${cell(sl.resp!=null?r1(sl.resp):'—','Breaths/min')}</div>
+      <div class="fd-row">${cell(nightHR(sl)!=null?ragSpan(fmtN(nightHR(sl)),kpiSleepHR(nightHR(sl))):'—',sl.hrMin!=null?'Sleeping HR (low)':'Sleeping HR')}${cell(last.day!=null?fmtN(last.day):'—','Day resting HR')}${cell(sl.resp!=null?r1(sl.resp):'—','Breaths/min')}</div>
     </div>`:`<div class="card"><div class="fd-sub">Sleep</div><div class="fd-note" style="margin:4px 0 0">No sleep data yet. Eight Sleep writes to Health Connect each morning (Bridge 1.3.0 reads it); the score comes from the Eight Sleep connection below.</div></div>`}
     <div class="card"><div class="fd-row" style="margin-top:0">
       ${cell(a7s!=null?fmtN(a7s):'—','Avg score, 7 days')}${cell(a7n!=null?fmtN(a7n):'—','Sleeping HR, 7d')}${cell(a7d!=null?fmtN(a7d):'—','Day resting HR, 7d')}
@@ -595,7 +605,7 @@ function renderRecovery(){
       <div style="position:relative;width:100%;height:220px"><canvas id="fdRecChart" role="img" aria-label="Sleep score and resting heart rate"></canvas></div></div>
     <div class="card" style="padding:8px 12px">
       <div class="fd-hrow h"><div>Night to</div><div>Score</div><div>Asleep</div><div>Sleep HR</div><div>Day HR</div></div>
-      ${rows.map(r=>{const x=r.any;return `<div class="fd-hrow"${r.nap?' style="color:var(--ink3)"':''}><div>${dayLabel(r.d).replace('Yesterday','Yest.')}${isFree(shiftDay(r.d,-1))?FREE_TAG:''}</div><div>${r.nap?'nap':(x&&x.score!=null?fmtN(x.score):'—')}</div><div>${x?durHM(x.min):'—'}</div><div>${r.nap?'—':(r.night!=null?fmtN(r.night):'—')}</div><div>${r.day!=null?fmtN(r.day):'—'}</div></div>`;}).join('')}
+      ${rows.map(r=>{const x=r.any;return `<div class="fd-hrow"${r.nap?' style="color:var(--ink3)"':''}><div>${dayLabel(r.d).replace('Yesterday','Yest.')}${isFree(shiftDay(r.d,-1))?FREE_TAG:''}</div><div>${r.nap?'nap':(x&&x.score!=null?ragSpan(fmtN(x.score),kpiSleepScore(x.score)):'—')}</div><div>${x?durHM(x.min):'—'}</div><div>${r.nap?'—':(r.night!=null?ragSpan(fmtN(r.night),kpiSleepHR(r.night)):'—')}</div><div>${r.day!=null?fmtN(r.day):'—'}</div></div>`;}).join('')}
     </div>
     <div class="card" id="fdEightCard"><div class="fd-sub">Eight Sleep</div><div class="fd-note" style="margin:4px 0">Checking&hellip;</div></div>`;
   eightCard();
@@ -739,6 +749,12 @@ window.foodEditMission=function(){
 // ---------- Bloods: lab results by panel, year on year, plus the next-test checklist ----------
 // Server-owned (fitness.lab_results via the pull); values are the lab's own, flags computed on the server.
 const LAB_PANELS=['Metabolic','Lipids','Advanced lipids','Liver','Kidney','Iron','Vitamins','Minerals','Thyroid','Hormones','Inflammation','Blood count','Screening','Urine','Heavy metals','Body composition','Other'];
+function labRag(r){
+  if(!r||r.value==null)return '';
+  if(!r.flag)return (r.low!=null||r.high!=null)?RAG.g:'';
+  const lim=r.flag==='high'?r.high:r.low;if(lim==null||!lim)return RAG.a;
+  return Math.abs(r.value-lim)/Math.abs(lim)>0.25?RAG.r:RAG.a;
+}
 function labVal(r){if(!r)return '—';return r.value!=null?(Math.round(r.value*1000)/1000).toLocaleString():esc(r.text||'—');}
 function labRange(r){
   if(!r)return '';
@@ -759,7 +775,7 @@ function renderBloods(){
   blood.forEach(r=>{(byPanel[r.panel]=byPanel[r.panel]||{});(byPanel[r.panel][r.marker]=byPanel[r.panel][r.marker]||{})[r.date]=r;});
   const due=latest?shiftDay(latest,365):null;
   const yr=d=>new Date(d+'T12:00:00').toLocaleDateString('en-GB',{month:'short',year:'numeric'});
-  const cell=(r)=>`<div style="text-align:right;${r&&r.flag?'color:var(--amber);font-weight:800':''}">${labVal(r)}${r&&r.flag?(r.flag==='high'?' ↑':' ↓'):''}</div>`;
+  const cell=(r)=>`<div style="text-align:right;color:${labRag(r)};font-weight:${r&&r.flag?800:600}">${labVal(r)}${r&&r.flag?(r.flag==='high'?' ↑':' ↓'):''}</div>`;
   const panels=LAB_PANELS.filter(p=>byPanel[p]).map(p=>{
     const rows=Object.entries(byPanel[p]);
     const nFlag=rows.filter(([m,v])=>v[latest]&&v[latest].flag).length;
@@ -848,8 +864,9 @@ function creatineCard(){
     <div><div class="fd-sub">Creatine</div><div style="font-size:16px;font-weight:800;color:var(--teal)">&#10003; ${r1(g)} g taken</div>
     <div style="font-size:11px;color:var(--ink3)">${st>1?st+' days in a row':''}</div></div>
     <button class="btn-sm" onclick="foodCreatineUndo()">Undo</button></div>`;
-  return `<div class="card" style="padding:12px 16px;border:1px solid var(--amber)">
-    <div class="fd-sub" style="margin-bottom:6px;color:var(--amber)">Creatine not taken${foodDay===localDay(new Date())?' yet today':''}</div>
+  const late=foodDay<localDay(new Date())||(foodDay===localDay(new Date())&&new Date().getHours()>=20), cc=late?RAG.r:RAG.a;
+  return `<div class="card" style="padding:12px 16px;border:1px solid ${cc}">
+    <div class="fd-sub" style="margin-bottom:6px;color:${cc}">Creatine not taken${foodDay===localDay(new Date())?' yet today':''}</div>
     <div style="display:flex;gap:8px;align-items:center"><input class="fd-input" type="number" step="0.5" inputmode="decimal" id="fdCreIn" value="${dose}" style="max-width:110px"/>
     <span style="font-size:13px;color:var(--ink3)">g</span>
     <button class="fd-btn" style="width:auto;margin:0 0 0 auto;padding:0 18px" onclick="foodCreatineTake()">Taken</button></div>
@@ -869,9 +886,9 @@ window.foodCreatineUndo=function(){
 function weighCard(){
   const t=localDay(new Date()), w=bodyweightLog.find(b=>b.date===t);
   if(w)return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
-    <div><div class="fd-sub">Weigh-in</div><div style="font-size:18px;font-weight:800">${w.kg} kg</div></div>
+    <div><div class="fd-sub">Weigh-in</div><div style="font-size:18px;font-weight:800;color:var(--teal)">&#10003; ${w.kg} kg</div></div>
     <button class="btn-sm" onclick="document.querySelector('.subnav-btn[data-sub=weight]').click()">Trend</button></div>`;
-  return `<div class="card" style="padding:12px 16px"><div class="fd-sub" style="margin-bottom:6px">Morning weigh-in</div>
+  return `<div class="card" style="padding:12px 16px;border:1px solid var(--amber)"><div class="fd-sub" style="margin-bottom:6px;color:var(--amber)">Morning weigh-in not logged yet</div>
     <div style="display:flex;gap:8px"><input class="fd-input" type="number" step="0.1" inputmode="decimal" id="wtTodayIn" placeholder="kg"/>
     <button class="fd-btn" style="width:auto;margin:0;padding:0 18px" onclick="foodLogWeight(null,'wtTodayIn')">Save</button></div></div>`;
 }
@@ -1293,7 +1310,7 @@ function renderHistory(){
       <div style="position:relative;width:100%;height:210px"><canvas id="fdHistChart" role="img" aria-label="Calories eaten versus burned over 30 days"></canvas></div></div>
     <div class="card" style="padding:8px 12px">
       <div class="fd-hrow h"><div>Day</div><div>Eaten</div><div>Protein</div><div>Burned</div><div>Steps</div></div>
-      ${rows.map(r=>`<div class="fd-hrow"><div>${dayLabel(r.d).replace('Yesterday','Yest.')}${isFree(r.d)?FREE_TAG:''}</div><div>${r.logged?fmtN(r.kcal):'—'}</div><div>${r.logged?fmtN(r.protein):'—'}</div><div>${fmtN(r.burned)}</div><div>${fmtN(r.steps)}</div></div>`).join('')}
+      ${rows.map(r=>`<div class="fd-hrow"><div>${dayLabel(r.d).replace('Yesterday','Yest.')}${isFree(r.d)?FREE_TAG:''}</div><div>${r.logged?ragSpan(fmtN(r.kcal),ragKcalDay(r.kcal,+foodTargets.kcal||2100)):'—'}</div><div>${r.logged?ragSpan(fmtN(r.protein),ragProteinDay(r.protein,+foodTargets.protein||160)):'—'}</div><div>${fmtN(r.burned)}</div><div>${r.steps!=null?ragSpan(fmtN(r.steps),kpiUp(r.steps,KPI.steps[0],KPI.steps[1],r.d===localDay(new Date())?kpiPace(r.d):1)):'—'}</div></div>`).join('')}
     </div>`;
   const chartRows=rows.slice().reverse();
   const cs=getComputedStyle(document.documentElement);
@@ -1325,7 +1342,7 @@ function projLine(label,kcalDiffPerDay){
   const b=baseWeight();if(b==null)return '';
   const end=b+kcalDiffPerDay*PROJ_DAYS/KCAL_PER_KG, d=end-b;
   return `<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border);font-size:13px">${label}
-    <b>${r1(end)} kg</b> <span class="${d<=0?'fd-pos':'fd-neg'}">(${d>0?'+':''}${r1(d)} kg)</span></div>`;
+    <b style="color:${ragProj(d)}">${r1(end)} kg</b> <span style="color:${ragProj(d)};font-weight:800">(${d>0?'+':''}${r1(d)} kg)</span></div>`;
 }
 function projectToday(){
   const t=totals(entriesFor(foodDay));
@@ -1431,7 +1448,7 @@ function waists(){return readings.filter(x=>x.kind==='waist').sort((a,b)=>tAt(a)
 function waistCard(){
   const L=waists(), today=localDay(new Date()), last=L[L.length-1], first=L[0];
   const lastDay=last?localDay(new Date(last.at)):null, due=!last||lastDay<=shiftDay(today,-7);
-  const d=(a,b)=>{const v=r1(a-b);return `<span class="${v<=0?'fd-pos':'fd-neg'}">${v>0?'+':''}${v} cm</span>`;};
+  const d=(a,b)=>{const v=r1(a-b);return `<span style="color:${ragWaist(v)};font-weight:800">${v>0?'+':''}${v} cm</span>`;};
   return `<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:baseline"><div class="fd-sub">Waist at the navel &middot; weekly</div>
       ${last?`<div style="font-size:11px;color:${due?'var(--amber)':'var(--ink3)'};font-weight:700">${due?'Due':'Next '+fmtDate(shiftDay(lastDay,7))}</div>`:''}</div>
@@ -1463,7 +1480,7 @@ function renderWeight(){
   const a7=avgBetween(all,shiftDay(today,-6),today), p7=avgBetween(all,shiftDay(today,-13),shiftDay(today,-7));
   const a30=avgBetween(all,shiftDay(today,-36),shiftDay(today,-30));
   const diff=(x,y)=>x!=null&&y!=null?r1(x-y):null;
-  const chip=v=>v==null?'—':`<span class="${v<=0?'fd-pos':'fd-neg'}">${v>0?'+':''}${v} kg</span>`;
+  const chip=v=>v==null?'—':`<span style="color:${ragWeekChange(v)};font-weight:800">${v>0?'+':''}${v} kg</span>`;
   el.innerHTML=`
     <div class="card">
       <div class="fd-sub">${todays?'Today':'Morning weigh-in'}</div>
@@ -1475,7 +1492,7 @@ function renderWeight(){
       <input type="date" id="fdWtDay" value="${today}" max="${today}" class="fd-input" style="margin-top:8px;font-size:14px"/>
     </div>
     <div class="card"><div class="fd-row" style="margin-top:0">
-      <div class="fd-cell"><div class="v">${a7!=null?r1(a7):'—'}</div><div class="l">7-day avg</div></div>
+      <div class="fd-cell"><div class="v">${a7!=null?ragSpan(r1(a7),(()=>{const m=foodTargets.mission;if(!m||!m.startDate)return '';const cw=missionWeeks(m).find(w=>w.current);if(!cw)return '';return a7<=cw.target?RAG.g:a7-cw.target<=0.3?RAG.a:RAG.r;})()):'—'}</div><div class="l">7-day avg</div></div>
       <div class="fd-cell"><div class="v">${chip(diff(a7,p7))}</div><div class="l">vs last week</div></div>
       <div class="fd-cell"><div class="v">${chip(diff(a7,a30))}</div><div class="l">vs 30 days ago</div></div>
     </div><div class="fd-note" style="margin:8px 0 0">Daily weight swings with water and food, so judge progress by the 7-day average.</div>${projectWeek()}</div>
