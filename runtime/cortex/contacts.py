@@ -64,25 +64,41 @@ def _digits(phone: str) -> str:
     return re.sub(r"\D", "", phone or "")
 
 
+def _ledger_key(phone: str) -> str:
+    return "wa_contact:" + _digits(phone)
+
+
 def find_by_phone(phone: str) -> str | None:
     """The resourceName of an existing contact on this number, or None.
 
-    Matched on the LAST NINE DIGITS, which is the opposite of the CRM's rule and right here: this is one
-    person's own address book, not 33k imported rows, so a collision is vanishingly unlikely and the real
-    risk is the reverse, writing a second copy of someone he already has under a different spelling."""
+    TWO LOOKUPS, because neither alone is enough. Our own LEDGER is authoritative for contacts Cortex
+    created: `people:searchContacts` does not index a contact immediately after it is written (proved in
+    testing, 10 Oct 2026 - a contact created a second earlier came back not found), so without the ledger
+    a repeat enquirer would collect a duplicate every time. The SEARCH then catches the people he already
+    had in his address book before any of this existed.
+
+    Matched on the LAST NINE DIGITS, the opposite of the CRM's rule and right here: this is one person's
+    own address book, not 33k imported rows, so a collision is vanishingly unlikely and the real risk is
+    the reverse, writing a second copy of someone he already has under a different spelling."""
     d = _digits(phone)
     if len(d) < 9:
         return None
+    known = db.setting_get(_ledger_key(phone))
+    if known:
+        return known
     try:
+        # searchContacts needs a WARMUP request before it returns anything reliable; Google documents
+        # this and it is not optional.
+        _call("GET", "people:searchContacts?" + urllib.parse.urlencode({"query": "", "readMask": "names"}))
         out = _call("GET", "people:searchContacts?" + urllib.parse.urlencode(
             {"query": d[-9:], "readMask": "names,phoneNumbers"}))
     except Exception:  # noqa: BLE001 - a failed search must never block the write
         return None
     for r in out.get("results") or []:
-        p = r.get("person") or {}
-        for n in p.get("phoneNumbers") or []:
+        pr = r.get("person") or {}
+        for n in pr.get("phoneNumbers") or []:
             if _digits(n.get("canonicalForm") or n.get("value") or "").endswith(d[-9:]):
-                return p.get("resourceName")
+                return pr.get("resourceName")
     return None
 
 
@@ -120,4 +136,7 @@ def add_enquiry(phone: str, name: str = "", company: str = "", brand: str = "",
         out = _call("POST", "people:createContact", body)
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)[:200]}
-    return {"ok": True, "created": out.get("resourceName"), "name": given}
+    rn = out.get("resourceName")
+    if rn:
+        db.setting_set(_ledger_key(phone), rn)   # the dedupe search cannot see it yet; we can
+    return {"ok": True, "created": rn, "name": given}
