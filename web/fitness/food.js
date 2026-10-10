@@ -403,6 +403,7 @@ async function refreshCgm(){
   if(typeof currentSection!=='undefined'&&currentSection==='food'&&currentSubpage.food==='today')renderToday();
 }
 setInterval(refreshCgm,120000);
+window.refreshCgm=refreshCgm;
 function cgmOn(day){return (cgmData||[]).filter(x=>localDay(new Date(x.at))===day);}
 function drawCgm(){
   const el=document.getElementById('fdCgmChart');if(!el)return;

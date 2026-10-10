@@ -212,6 +212,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
 .splash-icon{width:72px;height:72px;background:rgba(255,255,255,0.2);border-radius:18px;display:flex;align-items:center;justify-content:center;margin-bottom:16px}
 .splash-title{font-size:28px;font-weight:800;color:#fff;letter-spacing:-0.8px}
 .splash-sub{font-size:13px;color:rgba(255,255,255,0.7);margin-top:4px;font-weight:500}
+@keyframes fdSpin{to{transform:rotate(360deg)}}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@800;900&display=swap" rel="stylesheet">
 </head>
@@ -246,11 +247,12 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
   <div class="topbar">
     <div class="topbar-head">
       <div>
-        <button type="button" class="app-name" onclick="syncNow(true)" aria-label="Sync now" style="cursor:pointer;background:none;border:none;padding:0;margin:0;color:inherit;font:inherit;text-align:left;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent">Fitness</button>
+        <div class="app-name" style="-webkit-user-select:none;user-select:none;-webkit-touch-callout:none">Fitness</div>
         <div class="app-tagline">training tracker</div>
       </div>
       <div style="display:flex;gap:7px;align-items:center">
         <button class="install-btn" id="installBtn" style="display:none">Install</button>
+        <button class="export-btn" id="refreshBtn" aria-label="Refresh data" title="Refresh: sync the watch and pull the latest" onclick="refreshAll()" style="display:inline-flex;align-items:center;justify-content:center;padding:0 10px"><svg id="refreshIco" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"/></svg></button>
         <button class="export-btn" id="exportBtn">Export</button>
       </div>
     </div>
@@ -990,7 +992,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='81';                         // keep in step with CACHE in sw.js
+const APP_VERSION='82';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1117,6 +1119,35 @@ async function syncApi(path,opts){
 
 // Push local, then pull the server's merged truth back. Push-then-pull (not pull-then-push) so a
 // session logged offline is never overwritten by an older server copy.
+// ---------- Refresh button (10 Oct 2026) ----------
+// On Android it first asks the Health Bridge (1.3.2+) to sync via cortexbridge://sync: Android hands over to the
+// Bridge, which syncs and finishes back to this app; on return we pull from Cortex (twice, a few seconds apart, so a
+// slow Bridge upload still lands). Elsewhere, or if the Bridge is missing, it just pulls from Cortex.
+const REFRESH_KEY='fitness_refresh_at';
+function refreshSpin(on){const i=document.getElementById('refreshIco');if(i){i.style.transition='transform 0.8s linear';i.style.animation=on?'fdSpin 0.9s linear infinite':'none';}}
+async function refreshPull(){
+  refreshSpin(true);
+  try{await syncNow(false);if(typeof window.refreshCgm==='function')await window.refreshCgm();}catch(e){}
+  refreshSpin(false);
+  const at=localStorage.getItem(SYNC_AT_KEY);
+  toast('Up to date'+(at?' · '+new Date(at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):''));
+}
+function refreshAll(){
+  const android=/Android/i.test(navigator.userAgent);
+  if(!android){refreshPull();return;}
+  try{sessionStorage.setItem(REFRESH_KEY,String(Date.now()));}catch(e){}
+  refreshSpin(true);
+  const back=encodeURIComponent(location.href.split('#')[0]);
+  location.href='intent://sync#Intent;scheme=cortexbridge;package=uk.coretex.healthbridge;S.browser_fallback_url='+back+';end';
+  // If nothing took over (Bridge not installed / older Bridge), still pull after a moment.
+  setTimeout(()=>{if(!document.hidden)refreshReturned(true);},2500);
+}
+function refreshReturned(force){
+  let t=0;try{t=+sessionStorage.getItem(REFRESH_KEY)||0;}catch(e){}
+  if(!t||Date.now()-t>120000){if(force)refreshPull();return;}
+  try{sessionStorage.removeItem(REFRESH_KEY);}catch(e){}
+  refreshPull();setTimeout(()=>{syncNow(false);},6000);
+}
 async function syncNow(manual){
   if(_syncing){_syncPending=true;return;}
   if(!navigator.onLine){setSyncState('offline');return;}
@@ -1229,7 +1260,8 @@ function initSync(){
   setSyncState(syncToken()?'idle':'auth');
   window.addEventListener('online',()=>syncNow(false));
   window.addEventListener('offline',()=>setSyncState('offline'));
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncNow(false);});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden){syncNow(false);refreshReturned();}});
+  setTimeout(()=>{try{refreshReturned();}catch(e){}},2000);   // came back via the intent's fallback reload
   syncNow(false);
 }
 
@@ -2989,6 +3021,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=81"></script>
+<script src="food.js?v=82"></script>
 </body>
 </html>
