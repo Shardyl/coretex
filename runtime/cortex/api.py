@@ -5306,6 +5306,12 @@ def google_start(purpose: str = "drive", company: str = "", mailbox: str = "") -
         scope = ("https://www.googleapis.com/auth/calendar "
                  "https://www.googleapis.com/auth/drive.readonly openid "
                  "https://www.googleapis.com/auth/userinfo.email")
+    elif purpose == "contacts":
+        # Google CONTACTS (People API), write. The point is the PHONE: a contact written here syncs to his
+        # Android handset and therefore into WhatsApp, so a new enquiry is already a named contact by the
+        # time he opens the chat. `contacts` covers read + write of his own contacts and nothing else.
+        scope = ("https://www.googleapis.com/auth/contacts openid "
+                 "https://www.googleapis.com/auth/userinfo.email")
     elif purpose == "google_ads":   # per-company Google Ads API (Keyword Planner) on the Internal token -> never expires
         scope = ("https://www.googleapis.com/auth/adwords openid "
                  "https://www.googleapis.com/auth/userinfo.email")
@@ -5383,6 +5389,18 @@ def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLRes
         db.setting_set("calendar_account" + sfx, em)
         return page(f"✓ Cortex can read {who}'s calendar availability and propose booking slots "
                     f"via {em or 'this account'}. You can close this tab.")
+    if purpose == "contacts":   # Google Contacts (People API) — writes a contact that syncs to his phone
+        em = ""
+        try:
+            em = httpx.get("https://www.googleapis.com/oauth2/v2/userinfo",
+                           headers={"Authorization": "Bearer " + body.get("access_token", "")},
+                           timeout=15).json().get("email", "")
+        except Exception:  # noqa: BLE001
+            pass
+        db.setting_set("contacts_refresh_token" + sfx, rt)
+        db.setting_set("contacts_account" + sfx, em)
+        return page(f"✓ Cortex can add contacts to {em or 'this account'} — they sync to your phone, and "
+                    "therefore to WhatsApp. You can close this tab.")
     if purpose == "google_ads":   # per-company Google Ads API (Keyword Planner) — Internal token, never expires
         em = ""
         try:
