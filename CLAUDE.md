@@ -860,7 +860,7 @@ voice note from him is never triaged, CRM-captured or answered.
   worse than no greeting.
 - Spam and other no-reply messages raise the FYI card only — they never interrupt him on WhatsApp.
 
-**BOTH SITES POINT AT THE SAME NUMBER, so the MESSAGE carries the brand (28 Sep 2026).** sensa.digital and
+**REVERTED 10 Oct 2026 (owner): both sites' `wa.me` links point at Rashad's personal WhatsApp +971 54 404 9549 again (Sensa 0.8.64, Sky Vision 0.9.5); the Business API route was losing genuine enquiries (no number shown to call, replies failing outside the 24h window). The click-ref hook stays, so a PPC enquiry still arrives tagged '(ref XXXXX)' and `lead_source` decodes it on request; Cortex no longer sees those chats.** **BOTH SITES POINT AT THE SAME NUMBER, so the MESSAGE carries the brand (28 Sep 2026).** sensa.digital and
 skyvision.film both link `wa.me/447772480414`. Each theme has a `wp_footer` hook (`sensa_wa_lead_source` /
 `skyvision_wa_lead_source`) that appends a 5-character click reference to every WhatsApp link's pre-filled
 text and beacons the Google Ads click detail to `/api/lp/click`; a link with no pre-filled text gets one
