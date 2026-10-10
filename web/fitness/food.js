@@ -97,6 +97,9 @@ function settleAllEatenTimes(){
   fastDays.forEach(f=>{if(f.date>=EATEN_FIX_FROM&&settleEatenTimes(f.date))any=true;});
   if(any)saveFoodLog();
 }
+// Times arrive as '...+04:00' (server) or '...Z' (this device): always compare as instants, never as text.
+function tAt(x){return x&&x.at?new Date(x.at).getTime():0;}
+function tWhen(x){return x&&x.at?new Date(x.at).getTime():(x&&x.date?new Date(x.date+'T12:00:00').getTime():0);}
 function newId(p){return p+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function r0(v){return v==null||isNaN(v)?null:Math.round(v);}
 function r1(v){return v==null||isNaN(v)?null:Math.round(v*10)/10;}
@@ -140,7 +143,7 @@ function portion(f,g){
   const k=g/100;
   return {kcal:r0(f.kcal100*k),protein:r1((f.protein100||0)*k),carbs:r1((f.carbs100||0)*k),fat:r1((f.fat100||0)*k)};
 }
-function lastQty(fid){const e=foodLog.filter(x=>x.foodId===fid&&x.qtyG!=null).sort((a,b)=>((b.at||b.date)>(a.at||a.date)?1:-1))[0];return e?e.qtyG:null;}
+function lastQty(fid){const e=foodLog.filter(x=>x.foodId===fid&&x.qtyG!=null).sort((a,b)=>tWhen(b)-tWhen(a))[0];return e?e.qtyG:null;}
 function lastUsed(){const m={};foodLog.forEach(e=>{if(e.foodId&&(!m[e.foodId]||e.date>m[e.foodId]))m[e.foodId]=e.date;});return m;}
 function sessionName(s){
   if(s.title)return s.title;
@@ -412,13 +415,13 @@ function drawCgm(){
   window._cgmChart=new Chart(el,{type:'line',data:{labels:cg.map(x=>tOf(x.at)),datasets:[{data:cg.map(x=>gShow(x.mmol)),borderColor:c,borderWidth:2,pointRadius:0,tension:0.3}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:txc,font:{size:9},maxTicksLimit:6},grid:{display:false}},y:{ticks:{color:txc,font:{size:9},maxTicksLimit:4},grid:{display:false}}}}});
 }
-function readingsOn(day){return readings.filter(x=>(x.kind==='ketones'||x.kind==='glucose')&&localDay(new Date(x.at))===day).sort((a,b)=>a.at<b.at?-1:1);}
+function readingsOn(day){return readings.filter(x=>(x.kind==='ketones'||x.kind==='glucose')&&localDay(new Date(x.at))===day).sort((a,b)=>tAt(a)-tAt(b));}
 // What state was he in when the reading was taken? Worked out from the actual times, not from the
 // moment it was saved: before break-fast = fasted (since last night's window close); after = time
 // since the last food with an eaten-at time.
 function readingState(x){
   const day=localDay(new Date(x.at)), t=new Date(x.at), f=fastDay(day), prev=fastDay(shiftDay(day,-1));
-  const ate=foodLog.filter(e=>e.at&&new Date(e.at)<=t&&localDay(new Date(e.at))===day).sort((a,b)=>a.at<b.at?1:-1)[0];
+  const ate=foodLog.filter(e=>e.at&&new Date(e.at)<=t&&localDay(new Date(e.at))===day).sort((a,b)=>tAt(b)-tAt(a))[0];
   const broke=f&&f.brokeAt?new Date(f.brokeAt):null;
   if((!broke||t<broke)&&!ate){
     const since=lastCloseBefore(t);
@@ -1159,8 +1162,8 @@ function portionView(food,entry){
   stopScan();
   const sg=+food.servingG||0;
   // New entry: start from the amount he logged LAST time for this food (he usually repeats it).
-  const lastQ=!entry&&food.id?(foodLog.filter(e=>e.foodId===food.id&&e.qtyG!=null).sort((a,b)=>((b.at||b.date)>(a.at||a.date)?1:-1))[0]||{}).qtyG:null;
-  const lastE=!entry&&food.id?foodLog.filter(e=>e.foodId===food.id&&e.qtyG!=null).sort((a,b)=>((b.at||b.date)>(a.at||a.date)?1:-1))[0]:null;
+  const lastQ=!entry&&food.id?(foodLog.filter(e=>e.foodId===food.id&&e.qtyG!=null).sort((a,b)=>tWhen(b)-tWhen(a))[0]||{}).qtyG:null;
+  const lastE=!entry&&food.id?foodLog.filter(e=>e.foodId===food.id&&e.qtyG!=null).sort((a,b)=>tWhen(b)-tWhen(a))[0]:null;
   const units=foodUnits(food);
   const src=entry||lastE;
   let uLab=src&&src.unitLabel&&units.some(u=>u.label===src.unitLabel)?src.unitLabel:(src&&src.qtyG!=null&&!src.unitLabel?'g':(units[0]?units[0].label:'g'));
@@ -1276,7 +1279,7 @@ function renderHistory(){
     return {d,logged:entriesFor(d).length>0,kcal:t.kcal,protein:t.protein,burned:burnedFor(d),steps:h?h.steps:null};});
   const avg=(arr,k)=>{const v=arr.filter(r=>r[k]!=null&&(k==='burned'||k==='steps'||r.logged)).map(r=>r[k]);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
   const wk1=rows.slice(1,8), wk2=rows.slice(8,15);   // the last 7 COMPLETE days, and the 7 before
-  const weights=(healthData.weights||[]).slice().sort((a,b)=>a.at<b.at?-1:1);
+  const weights=(healthData.weights||[]).slice().sort((a,b)=>tAt(a)-tAt(b));
   const lw=weights.length?weights[weights.length-1]:null;
   el.innerHTML=`
     <div class="section-label">Last 7 complete days</div>
@@ -1424,7 +1427,7 @@ window.foodPhotoDelete=async function(id){
 
 // ---------- waist (weekly, at the navel; owner 8 Oct 2026) ----------
 // Stored as a reading of kind 'waist' (value in cm, at 08:00 on the day), so it syncs with the other readings.
-function waists(){return readings.filter(x=>x.kind==='waist').sort((a,b)=>a.at<b.at?-1:1);}
+function waists(){return readings.filter(x=>x.kind==='waist').sort((a,b)=>tAt(a)-tAt(b));}
 function waistCard(){
   const L=waists(), today=localDay(new Date()), last=L[L.length-1], first=L[0];
   const lastDay=last?localDay(new Date(last.at)):null, due=!last||lastDay<=shiftDay(today,-7);
