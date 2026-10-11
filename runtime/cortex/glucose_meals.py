@@ -99,9 +99,8 @@ def meals(days: int = 30) -> dict:
     out.reverse()
 
     board: dict[str, dict] = {}
-    for m in out:
-        for f in m["foods"]:
-            k = (f["name"] or "").strip()
+    for m in out:                                   # one vote per meal, even if a food was logged twice in it
+        for k in {(f["name"] or "").strip() for f in m["foods"]}:
             b = board.setdefault(k.lower(), {"name": k, "rises": []})
             b["rises"].append(m["rise"])
     lead = [{"name": b["name"], "meals": len(b["rises"]), "avgRise": round(sum(b["rises"]) / len(b["rises"])),

@@ -184,6 +184,8 @@ const css=`
 .fd-act.main{background:var(--teal);color:#fff;border:none}
 .fd-act.danger{background:none;color:var(--red);border:1px solid var(--red)}
 .fd-entry.sel{background:var(--teal);background:color-mix(in srgb,var(--teal) 22%,transparent);border-radius:8px;outline:1.5px solid var(--teal)}
+@keyframes fdFlash{0%,100%{background:transparent}30%{background:color-mix(in srgb,var(--amber) 35%,transparent)}}
+.fd-entry.flash{animation:fdFlash 1.1s ease-in-out 2;border-radius:8px}
 .fd-entry{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .fd-add{width:100%;margin-top:8px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);padding:8px;font-size:12px;font-weight:700;color:var(--teal);cursor:pointer}
 .fd-chip{display:inline-block;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;padding:2px 6px;border-radius:6px;background:var(--surface3);color:var(--ink2);margin-left:6px;vertical-align:middle}
@@ -221,6 +223,7 @@ window.renderFood=function(sub){
   else if(sub==='fasting')renderFasting();
   else if(sub==='recovery')renderRecovery();
   else if(sub==='bloods')renderBloods();
+  else if(sub==='glucose')renderGlucose();
 };
 window.renderFoodCurrent=function(){
   if(typeof currentSection!=='undefined'&&currentSection==='food')window.renderFood(currentSubpage.food);
@@ -418,13 +421,94 @@ async function refreshCgm(){
 setInterval(refreshCgm,120000);
 window.refreshCgm=refreshCgm;
 function cgmOn(day){return (cgmData||[]).filter(x=>localDay(new Date(x.at))===day);}
+// ---------- glucose chart with meal markers (owner, 11 Oct 2026) ----------
+// A meal = food logged within 30 min of the previous item. Each meal gets a dot on the chart's floor; tapping it shows
+// the foods and the response (rise over the 30-min baseline, peak, time to peak), with a jump to the foods in the log.
+function mealsOn(day){
+  const L=entriesFor(day).filter(e=>e.at).sort((a,b)=>tAt(a)-tAt(b)), out=[];
+  L.forEach(e=>{const t=tAt(e);const m=out[out.length-1];if(m&&t-m.lastT<=30*60000){m.items.push(e);m.lastT=t;}else out.push({t0:t,lastT:t,items:[e]});});
+  return out;
+}
+function mealResponse(m,next){
+  const pts=(cgmData||[]).map(x=>({t:new Date(x.at).getTime(),v:x.mmol*18.0182}));
+  const before=pts.filter(p=>p.t>=m.t0-30*60000&&p.t<=m.t0).map(p=>p.v).sort((a,b)=>a-b);
+  const end=Math.min(m.t0+150*60000,next?Math.max(next.t0,m.t0+45*60000):Infinity);
+  const after=pts.filter(p=>p.t>=m.t0&&p.t<=end);
+  if(!before.length||!after.length)return null;
+  const base=before[Math.floor(before.length/2)], pk=after.reduce((a,b)=>b.v>a.v?b:a);
+  const rise=Math.round(pk.v-base);
+  return {base:Math.round(base),peak:Math.round(pk.v),rise,toPeak:Math.round((pk.t-m.t0)/60000),rag:rise<30?RAG.g:rise<=50?RAG.a:RAG.r};
+}
 function drawCgm(){
   const el=document.getElementById('fdCgmChart');if(!el)return;
   const cg=cgmOn(foodDay), cs=getComputedStyle(document.documentElement), c=cs.getPropertyValue('--blue').trim()||'#185FA5', txc=cs.getPropertyValue('--ink3').trim()||'#888';
+  const ms=mealsOn(foodDay), vals=cg.map(x=>+gShow(x.mmol)), floor=vals.length?Math.min(...vals):0;
+  window._cgmMeals=ms;
   if(window._cgmChart)window._cgmChart.destroy();
-  window._cgmChart=new Chart(el,{type:'line',data:{labels:cg.map(x=>tOf(x.at)),datasets:[{data:cg.map(x=>gShow(x.mmol)),borderColor:c,borderWidth:2,pointRadius:0,tension:0.3}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:txc,font:{size:9},maxTicksLimit:6},grid:{display:false}},y:{ticks:{color:txc,font:{size:9},maxTicksLimit:4},grid:{display:false}}}}});
+  const resp=ms.map((m,i)=>mealResponse(m,ms[i+1]));
+  window._cgmChart=new Chart(el,{type:'line',data:{datasets:[
+      {data:cg.map(x=>({x:new Date(x.at).getTime(),y:+gShow(x.mmol)})),borderColor:c,borderWidth:2,pointRadius:0,tension:0.3},
+      {type:'scatter',data:ms.map(m=>({x:m.t0,y:floor})),pointRadius:7,pointHoverRadius:9,pointStyle:'triangle',
+        backgroundColor:resp.map(r=>r?r.rag.replace(/var\(([^)]+)\)/,(a,b)=>cs.getPropertyValue(b).trim()):txc),borderColor:'transparent'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},
+      onClick:(ev,els)=>{const hit=els.find(e=>e.datasetIndex===1);if(hit)foodMealPanel(hit.index);},
+      scales:{x:{type:'linear',ticks:{color:txc,font:{size:9},maxTicksLimit:6,callback:v=>new Date(v).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})},grid:{display:false}},
+        y:{ticks:{color:txc,font:{size:9},maxTicksLimit:4},grid:{display:false},suggestedMin:floor-4}}}});
 }
+window.foodMealPanel=function(i){
+  const ms=window._cgmMeals||[], m=ms[i];if(!m)return;
+  const r=mealResponse(m,ms[i+1]), u=gUnit()==='mgdl'?'mg/dL':'mmol/L', cv=v=>u==='mg/dL'?v:r1(v/18.0182);
+  const ov=document.createElement('div');ov.id='mealOverlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center';
+  ov.innerHTML=`<div onclick="event.stopPropagation()" style="width:100%;max-width:440px;box-sizing:border-box;background:var(--surface);border-radius:16px 16px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 16px)">
+    <div class="fd-sub">Meal at ${new Date(m.t0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</div>
+    <div style="margin:6px 0 10px;font-size:13px;line-height:1.5">${m.items.map(e=>esc(e.name)).join(', ')}</div>
+    ${r?`<div class="fd-row" style="margin-top:0">
+      <div class="fd-cell"><div class="v" style="color:${r.rag}">${r.rise>0?'+':''}${cv(r.rise)}</div><div class="l">Rise ${u}</div></div>
+      <div class="fd-cell"><div class="v" style="color:${kpiGlucose(r.peak)}">${cv(r.peak)}</div><div class="l">Peak (from ${cv(r.base)})</div></div>
+      <div class="fd-cell"><div class="v">${r.toPeak}m</div><div class="l">To peak</div></div></div>`
+      :'<div class="fd-note">No sensor readings around this meal.</div>'}
+    <div class="fd-actions"><button class="fd-act main" onclick="foodMealShow(${i})">Show in log</button><button class="fd-act" onclick="document.getElementById('mealOverlay').remove()">Close</button></div></div>`;
+  ov.onclick=()=>ov.remove();document.body.appendChild(ov);
+};
+window.foodMealShow=function(i){
+  const m=(window._cgmMeals||[])[i];const o=document.getElementById('mealOverlay');if(o)o.remove();if(!m)return;
+  const els=m.items.map(e=>document.querySelector(`.fd-entry[data-id="${e.id}"]`)).filter(Boolean);
+  if(!els.length)return;
+  els[0].scrollIntoView({behavior:'smooth',block:'center'});
+  els.forEach(el=>{el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),2200);});
+};
+
+// ---------- Glucose tab: every meal's response + a food leaderboard (server-computed, 30 days) ----------
+function sparkSvg(curve,base){
+  if(!curve||curve.length<2)return '';
+  const W=120,H=36, xs=curve.map(p=>p[0]), ys=curve.map(p=>p[1]).concat([base]);
+  const x0=-30,x1=150, y0=Math.min(...ys)-3, y1=Math.max(...ys)+3;
+  const X=x=>((x-x0)/(x1-x0)*W).toFixed(1), Y=y=>(H-(y-y0)/(y1-y0)*H).toFixed(1);
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true"><line x1="${X(0)}" x2="${X(0)}" y1="0" y2="${H}" stroke="var(--border2)" stroke-dasharray="2 2"/><line x1="0" x2="${W}" y1="${Y(base)}" y2="${Y(base)}" stroke="var(--border2)"/><polyline fill="none" stroke="var(--blue)" stroke-width="1.8" points="${curve.map(p=>X(p[0])+','+Y(p[1])).join(' ')}"/></svg>`;
+}
+async function renderGlucose(){
+  const el=document.getElementById('page-food-glucose');if(!el)return;
+  el.innerHTML='<div class="card"><div class="fd-note" style="margin:0">Loading&hellip;</div></div>';
+  let d=null;try{d=await syncApi('/api/fitness/glucose/meals?days=30');}catch(e){}
+  if(!d){el.innerHTML='<div class="card"><div class="fd-note" style="margin:0">Could not reach Cortex.</div></div>';return;}
+  const col=r=>r==='green'?RAG.g:r==='amber'?RAG.a:r==='red'?RAG.r:'';
+  const lb=d.leaderboard||[], ms=d.meals||[];
+  el.innerHTML=`${lb.length?`<div class="card" style="padding:10px 12px"><div class="fd-sub">Food leaderboard &middot; average rise of meals containing it</div>
+      <div style="margin-top:6px">${lb.map(x=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:13px"><span>${esc(x.name)} <span style="color:var(--ink3);font-size:11px">&times;${x.meals}</span></span><span style="font-weight:800;color:${col(x.rag)}">+${x.avgRise} <span style="font-weight:600;font-size:11px;color:var(--ink3)">(${x.min} to ${x.max})</span></span></div>`).join('')}</div>
+      <div class="fd-note" style="margin:6px 0 0">Foods eaten in 2+ meals. Mixed meals share the credit, so read it as a guide.</div></div>`:''}
+    ${ms.map(m=>`<div class="card" style="padding:10px 12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:12px;font-weight:800">${fmtDate(m.date)} &middot; ${new Date(m.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</div>
+        <div style="font-size:15px;font-weight:900;color:${col(m.rag)}">${m.rise>0?'+':''}${m.rise}</div></div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+        ${sparkSvg(m.curve,m.baseline)}
+        <div style="font-size:11px;color:var(--ink3);line-height:1.5">${m.baseline} &rarr; <b style="color:${kpiGlucose(m.peak)}">${m.peak}</b> mg/dL<br>peak at ${m.toPeak} min${m.back!=null?' &middot; back in '+m.back+' min':''}<br>${fmtN(m.kcal)} kcal &middot; ${m.carbs} g carbs</div></div>
+      <div style="font-size:12px;margin-top:6px;line-height:1.45">${m.foods.map(f=>esc(f.name)).join(', ')}</div>
+      ${m.tags.length?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${m.tags.map(t=>`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;background:var(--border);color:var(--ink2)">${esc(t)}</span>`).join('')}</div>`:''}
+    </div>`).join('')||'<div class="card"><div class="fd-note" style="margin:0">No meals with sensor data yet.</div></div>'}
+    <div class="fd-note">Rise = peak minus the median of the 30 minutes before the first bite; green under +30, amber +30 to 50, red over 50 mg/dL. Window: up to 2.5 h, or until the next meal.</div>`;
+}
+
 function readingsOn(day){return readings.filter(x=>(x.kind==='ketones'||x.kind==='glucose')&&localDay(new Date(x.at))===day).sort((a,b)=>tAt(a)-tAt(b));}
 // What state was he in when the reading was taken? Worked out from the actual times, not from the
 // moment it was saved: before break-fast = fasted (since last night's window close); after = time
