@@ -792,6 +792,10 @@ class Job:
                               "caption": caps[i] if i < len(caps) else "", "thumb": deck.thumbnail(f["youtube_video_id"], self.dir)})
             d.samples(f"{n:02d} · Our work", (cp.get("samples") or {}).get("heading") or "Films we have made", "", films)
             n += 1
+        # A TREATMENT IS NOT A QUOTATION (owner, 11 Oct 2026). When several routes are presented for one
+        # job, each deck would otherwise carry its own auto-priced investment page and the client would
+        # read three different numbers before our real quotation reached them. `omit_investment` on the
+        # job leaves the money to the quotation document; the exclusions still reach the terms page.
         det = (cp.get("investment") or {}).get("details") or {}
         short = lambda t: t if len(t) <= 95 else t[:92].rsplit(" ", 1)[0] + "..."     # noqa: E731
         inv = [{"item": r["item"], "detail": short(str(det.get(r["item"]) or "; ".join(str(x) for x in r["items"]))),
@@ -803,9 +807,10 @@ class Job:
             d.compact = True
         blurb = ("Excluding VAT" + (f", as Quotation {q['number']} v{q.get('version')}" if q.get("number") else "")
                  + ". " + ((cp.get("investment") or {}).get("blurb") or ""))
-        d.investment(f"{n:02d} · Investment", f"AED {net:,.0f}", blurb.strip(), inv)
-        d.with_bg(bgi(len(bg) - 1))
-        n += 1
+        if not self.s.get("omit_investment"):
+            d.investment(f"{n:02d} · Investment", f"AED {net:,.0f}", blurb.strip(), inv)
+            d.with_bg(bgi(len(bg) - 1))
+            n += 1
         tcards = [x for x in (cp["terms"].get("cards") or [])
                   if not re.search(r"includ|exclu", str(x.get("title", "")), re.I)][:2]
         if exc:     # what is not included comes from the QUOTATION, by code
