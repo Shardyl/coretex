@@ -689,9 +689,9 @@ function missionWeeks(m){
   if(d===m.startDate)d=shiftDay(d,7);
   for(;d<=m.goalDate;d=shiftDay(d,7)){
     const target=Math.round((m.startKg-total*missionDays(m.startDate,d)/span)*10)/10;
-    const avg=avgBetween(all,shiftDay(d,-6),d);
+    const raw=avgBetween(all,shiftDay(d,-6),d), avg=raw==null?null:Math.round(raw*10)/10;   // judge on the 1-decimal figure he sees
     const state=d>today?'future':(avg==null?'nodata':(avg<=target?'hit':(avg-target<=0.3?'close':'miss')));
-    out.push({date:d,target,avg:avg!=null?Math.round(avg*10)/10:null,state,current:d>=today&&shiftDay(d,-6)<=today});
+    out.push({date:d,target,avg,state,current:d>=today&&shiftDay(d,-6)<=today});
   }
   return out;
 }
@@ -701,7 +701,7 @@ window.renderMission=function(){
   if(!s){el.innerHTML=`<button onclick="foodEditMission()" style="width:100%;margin:8px 0 2px;background:none;border:0.5px dashed var(--border2);border-radius:var(--radius);padding:8px;font-size:12px;font-weight:700;color:var(--ink3);cursor:pointer">Set your mission goal</button>`;return;}
   const m=s.m;
   const wk=missionWeeks(m), cw=wk.find(w=>w.current)||wk.find(w=>w.state==='future')||null;
-  const pep=missionPep(s), wkTxt=cw&&s.cur!=null?(s.cur<=cw.target?'on target':r1(s.cur-cw.target)+' kg to go'):'';
+  const cur1=s.cur!=null?r1(s.cur):null, pep=missionPep(s), wkTxt=cw&&cur1!=null?(cur1<=cw.target?'on target':r1(cur1-cw.target)+' kg to go'):'';
   const msg=pep||(s.eta?`On your current trend: ${r1(m.goalKg)} kg around ${fmtDate(s.eta)}.`:'');
   el.innerHTML=`<div onclick="foodEditMission()" style="cursor:pointer;margin:6px 0 2px;padding:8px 11px;border-radius:var(--radius);background:var(--bg,transparent);border:0.5px solid var(--border)">
     <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px">
@@ -727,7 +727,7 @@ window.renderMission=function(){
     </div>
     ${cw?`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;font-size:11px">
       <span>This week <b>${cw.target} kg</b> by Sun ${fmtDate(cw.date)}</span>
-      <span style="font-weight:800;color:${s.cur!=null&&s.cur<=cw.target?'var(--teal)':'var(--amber)'}">${wkTxt}</span></div>`:''}
+      <span style="font-weight:800;color:${cur1!=null&&cur1<=cw.target?'var(--teal)':'var(--amber)'}">${wkTxt}</span></div>`:''}
     ${msg?`<div style="margin-top:4px;font-size:11px;font-weight:700;color:var(--teal)">${esc(msg)}</div>`:''}
   </div>`;
 };
@@ -1541,7 +1541,7 @@ function renderWeight(){
       <input type="date" id="fdWtDay" value="${today}" max="${today}" class="fd-input" style="margin-top:8px;font-size:14px"/>
     </div>
     <div class="card"><div class="fd-row" style="margin-top:0">
-      <div class="fd-cell"><div class="v">${a7!=null?ragSpan(r1(a7),(()=>{const m=foodTargets.mission;if(!m||!m.startDate)return '';const cw=missionWeeks(m).find(w=>w.current);if(!cw)return '';return a7<=cw.target?RAG.g:a7-cw.target<=0.3?RAG.a:RAG.r;})()):'—'}</div><div class="l">7-day avg</div></div>
+      <div class="fd-cell"><div class="v">${a7!=null?ragSpan(r1(a7),(()=>{const m=foodTargets.mission;if(!m||!m.startDate)return '';const cw=missionWeeks(m).find(w=>w.current);if(!cw)return '';const v=r1(a7);return v<=cw.target?RAG.g:v-cw.target<=0.3?RAG.a:RAG.r;})()):'—'}</div><div class="l">7-day avg</div></div>
       <div class="fd-cell"><div class="v">${chip(diff(a7,p7))}</div><div class="l">vs last week</div></div>
       <div class="fd-cell"><div class="v">${chip(diff(a7,a30))}</div><div class="l">vs 30 days ago</div></div>
     </div><div class="fd-note" style="margin:8px 0 0">Daily weight swings with water and food, so judge progress by the 7-day average.</div>${projectWeek()}</div>
