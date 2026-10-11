@@ -283,7 +283,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
         <div id="lastBox" style="display:none"></div>
         <div class="two-col form-group">
           <div><label class="form-label">Date</label><input type="date" id="liftDateIn"/></div>
-          <div><label class="form-label">Weight (kg / BW)</label><input type="text" id="wtIn" placeholder="e.g. 90, BW or BW+10"/><div id="bwHint" style="display:none;font-size:11px;color:var(--ink3);margin-top:4px"></div></div>
+          <div><label class="form-label" id="wtLabel">Weight (kg / BW)</label><input type="text" id="wtIn" placeholder="e.g. 90, BW or BW+10"/><div id="bwHint" style="display:none;font-size:11px;color:var(--ink3);margin-top:4px"></div></div>
         </div>
         <div id="liftSetsArea">
           <div class="form-group">
@@ -993,7 +993,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='91';                         // keep in step with CACHE in sw.js
+const APP_VERSION='92';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1356,7 +1356,39 @@ function isLoadPR(r){
 function unresolvedBWCount(){
   return liftSessions.filter(s=>!s.isManual&&s.totalReps>0&&liftKg(s)===null).length;
 }
-function getExerciseDef(name){for(const w of liftWorkouts)for(const e of w.exercises)if(e.name===name)return e;return null;}
+function getExerciseDef(name){
+  const wk=(document.getElementById('wkSelect')||{}).value, w0=liftWorkouts.find(w=>w.id===wk), hit=w0&&w0.exercises.find(e=>e.name===name);
+  if(hit)return hit;
+  for(const w of liftWorkouts)for(const e of w.exercises)if(e.name===name)return e;return null;
+}
+// ─── REP-RANGE PROGRESSION (owner, 11 Oct 2026) ───────────────────────────────
+// A plan exercise with range:[lo,hi] gets its target from the last session, by code:
+// every set at the top of the range -> level up (exDef.step) and back to lo; otherwise +1 rep on the weakest set.
+function wtNum(w){const r=String(w==null?'':w).trim(),m=/^bw\s*(?:\+\s*([\d.]+))?$/i.exec(r);if(m)return m[1]?+m[1]:0;const n=parseFloat(r.replace(/[^0-9.]/g,''));return isNaN(n)?0:n;}
+function rangeTarget(exDef,last){
+  const lo=exDef.range[0],hi=exDef.range[1],n=exDef.sets||3;
+  if(!last)return{sets:Array(n).fill(lo),level:false,first:true,bump:-1};
+  const s=(last.sets||[]).slice(0,n).map(v=>parseFloat(v)||0);while(s.length<n)s.push(0);
+  if(s.every(v=>v>=hi))return{sets:Array(n).fill(lo),level:true,bump:-1};
+  const i=s.indexOf(Math.min(...s));s[i]=Math.min(s[i]+1,hi);
+  return{sets:s,level:false,bump:i};
+}
+function prevLiftSession(sess){return liftSessions.filter(x=>x.exercise===sess.exercise&&!x.isManual&&new Date(x.date)<new Date(sess.date)).sort((a,b)=>new Date(b.date)-new Date(a.date))[0]||null;}
+// How a logged session did against the target it was set: g = beat / levelled up, a = matched, r = missed.
+function rangeVerdict(exDef,sess){
+  const prev=prevLiftSession(sess);if(!prev)return null;
+  const tot=x=>(x.sets||[]).reduce((a,b)=>a+(parseFloat(b)||0),0);
+  const w=wtNum(sess.weight),pw=wtNum(prev.weight);
+  if(w>pw)return{rag:'g',text:'Levelled up'};
+  if(w<pw)return{rag:'r',text:'Lighter than last time'};
+  const t=rangeTarget(exDef,prev),tgt=t.sets.reduce((a,b)=>a+b,0);
+  if(t.level)return{rag:'a',text:'Held: was due to level up'};
+  if(tot(sess)>=tgt)return{rag:'g',text:'Beat the target'};
+  if(tot(sess)>=tot(prev))return{rag:'a',text:'Matched last time'};
+  return{rag:'r',text:'Missed the target'};
+}
+const RANGE_RAG={g:'var(--teal)',a:'var(--amber)',r:'var(--red)'};
+function rangeUnit(exDef,w){const raw=String(w==null?'':w).trim();if(!raw||raw==='—')return'';if(/^bw/i.test(raw))return raw;return raw+' '+(exDef.unit||'kg');}
 function getCardioExDef(id){return cardioExercises.find(e=>e.id===id)||null;}
 function getLastCardioSession(exId){return cardioSessions.filter(s=>s.exerciseId===exId).sort((a,b)=>new Date(b.date)-new Date(a.date))[0]||null;}
 
@@ -1556,6 +1588,7 @@ function renderLastBox(){
   if(!exName){box.style.display='none';clearLiftForm();return;}
   const exDef=getExerciseDef(exName);
   const isManual=(exDef?.mode==='manual');
+  const wl=document.getElementById('wtLabel');if(wl)wl.textContent=exDef?.wtLabel||'Weight (kg / BW)';
 
   // Show/hide sets vs manual fields area
   const setsArea=document.getElementById('liftSetsArea');
@@ -1579,7 +1612,7 @@ function renderLastBox(){
 
   // Show/hide target area (only for sets mode)
   const targetArea=document.getElementById('liftTargetArea');
-  if(targetArea)targetArea.style.display=isManual?'none':'block';
+  if(targetArea)targetArea.style.display=(isManual||exDef?.range)?'none':'block';
 
   if(isManual){
     // Manual mode — just show last session values
@@ -1599,6 +1632,7 @@ function renderLastBox(){
   const sc=exDef?exDef.sets:3;
   if(sc!==currentSetCount){currentSetCount=sc;buildSetsRow(sc,false);buildSetsRow(sc,true);}
   const last=getLastLiftSession(exName);
+  if(exDef?.range){renderRangeBox(exDef,last,sc);return;}
   if(!last){
     box.style.display='none';clearNtFields();
     document.getElementById('restIn').value=exDef?.rest||'';
@@ -1640,6 +1674,33 @@ function renderLastBox(){
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:${hasSavedTarget?'10px':'0'}">${chips}</div>
     ${hasSavedTarget?`<div style="background:var(--amber-light);border-radius:7px;padding:8px 10px"><div style="font-size:10px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Your saved target</div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${nt.wt?`<span style="font-size:13px;font-weight:700;color:var(--ink)">${nt.wt}${nt.wt!=='BW'?' kg':''}</span><span style="color:var(--ink3)">·</span>`:''} ${nt.sets?`<span style="font-size:14px;font-weight:800;color:var(--ink)">${nt.sets.join(' / ')}</span>`:''} ${nt.note?`<span style="font-size:12px;color:var(--ink2);font-style:italic">${nt.note}</span>`:''}</div></div>`:''}
   </div>`;
+}
+
+function renderRangeBox(exDef,last,sc){
+  const box=document.getElementById('lastBox'), t=rangeTarget(exDef,last), lo=exDef.range[0], hi=exDef.range[1];
+  for(let i=1;i<=sc;i++){
+    const inp=document.getElementById(`s${i}`),wrap=document.getElementById(`s${i}wrap`),lbl=document.getElementById(`s${i}label`);
+    if(inp)inp.value=t.sets[i-1]||'';
+    const hot=t.level||t.first||i-1===t.bump;
+    if(wrap)wrap.classList.toggle('target-set',hot);
+    if(lbl)lbl.textContent=hot?`Set ${i}: target`:'Set '+i;
+  }
+  const hint=document.getElementById('targetHint');hint.style.display='';
+  hint.textContent=t.first?`First time: start easy, ${lo} ${exDef.per||'reps'} a set`:t.level?`Level up today: ${exDef.step}, back to ${lo}`:`Beat last time: +1 on set ${t.bump+1}`;
+  document.getElementById('wtIn').value=last?bwFormValue(exDef.name,last.weight||''):(isBWExercise(exDef.name)?'BW':'');
+  document.getElementById('restIn').value=exDef.rest||'';
+  clearNtFields();updateBwHint();updateLiftTotals();
+  const goal=`<div style="background:var(--amber-light);border-radius:7px;padding:8px 10px;margin-top:8px"><div style="font-size:10px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Today</div>
+    <div style="font-size:15px;font-weight:800;color:var(--ink)">${t.sets.join(' / ')}${t.level?` <span style="font-size:12px;font-weight:700;color:var(--amber)">${exDef.step}</span>`:''}</div>
+    <div style="font-size:11px;color:var(--ink2);margin-top:3px">Range ${lo} to ${hi} ${exDef.per||'reps'}. All sets at ${hi}: ${exDef.step}${exDef.cue?'. '+exDef.cue:''}</div></div>`;
+  if(!last){box.style.display='';box.innerHTML=`<div class="last-session">${goal}</div>`;return;}
+  const v=rangeVerdict(exDef,last), ls=(last.sets||[]).map(x=>parseFloat(x)||0);
+  box.style.display='';
+  box.innerHTML=`<div class="last-session">
+    <div class="last-session-head">Last: ${fmtDateFull(last.date)}${v?` <span style="color:${RANGE_RAG[v.rag]};font-weight:800">· ${v.text}</span>`:''}</div>
+    <div style="font-size:13px;color:var(--ink)">${rangeUnit(exDef,last.weight)?rangeUnit(exDef,last.weight)+' · ':''}${ls.join(' / ')}</div>
+    ${last.notes&&last.notes!=='—'?`<div style="font-size:11px;color:var(--ink3);margin-top:4px;font-style:italic">${last.notes}</div>`:''}
+    ${goal}</div>`;
 }
 
 function clearNtFields(){for(let i=1;i<=currentSetCount;i++){const el=document.getElementById(`nt${i}`);if(el){el.value='';delete el.dataset.manuallyEdited;}}document.getElementById('ntWt').value='';document.getElementById('targetIn').value='';}
@@ -1696,7 +1757,7 @@ function renderLiftHistory(){
       <div><div class="hist-date-main">${d[0]}<br>${d[1]}</div><div class="hist-date-day">${dayStr(r.date)}</div></div>
       <div>
         <div class="hist-ex">${r.exercise}</div>
-        <div class="hist-sets">${isManual?manualSummary:(r.weight+(r.weight!=='BW'?' kg':'')+' · '+rSets.filter(v=>v>0).join('/'))}</div>
+        <div class="hist-sets">${isManual?manualSummary:(exDef&&exDef.range?(rangeUnit(exDef,r.weight)?rangeUnit(exDef,r.weight)+' · ':'')+rSets.filter(v=>v>0).join('/'):(r.weight+(r.weight!=='BW'?' kg':'')+' · '+rSets.filter(v=>v>0).join('/')))}${!isManual&&exDef&&exDef.range?(v=>v?` <span style="color:${RANGE_RAG[v.rag]};font-weight:700">· ${v.text}</span>`:'')(rangeVerdict(exDef,r)):''}</div>
         ${r.notes&&r.notes!=='—'?`<div class="hist-note">${r.notes}</div>`:''}
       </div>
       <div>
@@ -2383,7 +2444,7 @@ function renderLiftWorkouts(){
             </div>
             <div class="wk-ex-info">
               <div class="wk-ex-name">${e.name}</div>
-              <div class="wk-ex-sets">${e.sets} set${e.sets!==1?'s':''}${e.rest?' · '+e.rest:''}</div>
+              <div class="wk-ex-sets">${e.sets} set${e.sets!==1?'s':''}${e.range?' · '+e.range[0]+' to '+e.range[1]+' '+(e.per||'reps'):''}${e.rest?' · '+e.rest:''}</div>
             </div>
             <div class="wk-ex-actions">
               <button class="btn-sm" onclick="openEditLiftEx(${wi},${ei})">Edit</button>
@@ -3025,6 +3086,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=91"></script>
+<script src="food.js?v=92"></script>
 </body>
 </html>
