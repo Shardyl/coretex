@@ -1,7 +1,7 @@
 """Fitness app reminders (owner, 10 Oct 2026), pushed ONLY to the Fitness PWA's own subscription (push app='fitness'),
 so they arrive branded as the Fitness app, never as Cortex.
 
-  morning (05:30 Dubai, every day): weigh-in + creatine; on Sundays also waist + progress photo. Only what is not done.
+  morning (05:30 Dubai, every day): weigh-in + creatine; on Sundays also waist + progress photo + grip test. Only what is not done.
   evening (19:00 Dubai): creatine, if still not logged.
 
 Run by cortex-fitness-remind.timer: `python -m cortex.fitness_remind morning|evening`.
@@ -25,7 +25,9 @@ def pending(today) -> dict:
                    "(at at time zone 'Asia/Dubai')::date > %s::date - 7", (today,)) is not None
     photo = db.one("select 1 from fitness.progress_photos where not deleted and day > %s::date - 7",
                    (today,)) is not None
-    return {"weigh-in": not weighed, "creatine": not creatine, "waist": not waist, "progress photo": not photo}
+    grip = db.one("select 1 from fitness.lift_sessions where exercise='Dynamometer tests' and not deleted "
+                  "and readings is not null and day > %s::date - 6", (today,)) is not None
+    return {"weigh-in": not weighed, "creatine": not creatine, "waist": not waist, "progress photo": not photo, "grip test": not grip}
 
 
 def run(slot: str) -> dict:
@@ -38,7 +40,7 @@ def run(slot: str) -> dict:
     else:
         todo = [k for k in ("weigh-in", "creatine") if p[k]]
         if now.weekday() == 6:                                     # Sunday check-in
-            todo += [k for k in ("waist", "progress photo") if p[k]]
+            todo += [k for k in ("waist", "progress photo", "grip test") if p[k]]
         title = "Fitness: Sunday check-in" if now.weekday() == 6 else "Fitness: morning check-in"
         tag = f"fit-am-{today}"
     if not todo:

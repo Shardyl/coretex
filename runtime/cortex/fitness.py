@@ -142,6 +142,16 @@ def _bw_log() -> list[dict]:
     return db.query("select day, kg from fitness.bodyweight order by day")
 
 
+def _manual(r: dict):
+    """A manual exercise's values (grip test fields etc.). The app keeps them as `manualData`; the column is
+    `readings`. Until 11 Oct 2026 only `readings` was read, so every manual value the app saved was dropped.
+    An empty set of values is None, so a push can never blank values the server already holds."""
+    m = r.get("manualData") or r.get("readings")
+    if not isinstance(m, dict) or not any(v not in (None, "") for v in m.values()):
+        return None
+    return m
+
+
 def pull() -> dict:
     """Everything, in the shapes the app already uses, so the client needs no translation layer."""
     bw = [{"date": r["day"].isoformat(), "kg": float(r["kg"]), "notes": r["notes"]}
@@ -153,7 +163,8 @@ def pull() -> dict:
               "workoutId": r["plan_uid"], "weight": r["weight"], "sets": r["sets"],
               "totalReps": _num(r["total_reps"]), "bestSet": _num(r["best_set"]),
               "rest": r["rest"], "target": r["target"], "nextTarget": r["next_target"],
-              "readings": r["readings"], "notes": r["notes"]}
+              "readings": r["readings"], "manualData": r["readings"],
+              "isManual": r["readings"] is not None and not r["sets"], "notes": r["notes"]}
              for r in db.query("select * from fitness.lift_sessions where not deleted "
                                "order by day, exercise")]
     presets = [{"id": r["uid"], "name": r["name"], "brand": r["brand"], "location": r["location"],
@@ -597,13 +608,13 @@ def _push_inner(doc: dict, source: str = "app") -> dict:
             "plan_uid=excluded.plan_uid, weight=excluded.weight, kg=excluded.kg, sets=excluded.sets, "
             "total_reps=excluded.total_reps, best_set=excluded.best_set, "
             "volume_load=excluded.volume_load, rest=excluded.rest, target=excluded.target, "
-            "next_target=excluded.next_target, readings=excluded.readings, notes=excluded.notes, "
+            "next_target=excluded.next_target, readings=coalesce(excluded.readings, lift_sessions.readings), notes=excluded.notes, "
             "deleted=lift_sessions.deleted or excluded.deleted, updated_at=now()",
             (_lift_uid(r), r["exercise"], d, r.get("workoutId"), r.get("weight"), kg,
              Json(r.get("sets") or []), _num(r.get("totalReps")), _num(r.get("bestSet")),
              volume_load(kg, r.get("totalReps")), r.get("rest"), r.get("target"),
              Json(r.get("nextTarget")) if r.get("nextTarget") is not None else None,
-             Json(r.get("readings")) if r.get("readings") is not None else None,
+             Json(_manual(r)) if _manual(r) is not None else None,
              r.get("notes"), bool(r.get("deleted"))))
         counts["liftSessions"] += 1
 

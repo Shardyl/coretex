@@ -1509,7 +1509,7 @@ function remindersCard(){
   if(Notification.permission==='granted')return '';
   try{if(localStorage.getItem('fitness_push_hide'))return '';}catch(e){}
   return `<div class="card" style="padding:12px 16px;display:flex;gap:10px;align-items:center">
-    <div style="flex:1"><div class="fd-sub">Morning reminders</div><div class="fd-note" style="margin:2px 0 0">05:30 nudge for weigh-in and creatine; Sundays add waist and photo. Creatine again at 19:00 if missed.</div></div>
+    <div style="flex:1"><div class="fd-sub">Morning reminders</div><div class="fd-note" style="margin:2px 0 0">05:30 nudge for weigh-in and creatine; Sundays add waist, photo and grip test. Creatine again at 19:00 if missed.</div></div>
     <button class="fd-btn" style="width:auto;margin:0;padding:10px 14px" onclick="foodRemindersOn()">Turn on</button>
     <button class="btn-sm" onclick="foodRemindersHide()" aria-label="Hide">&times;</button></div>`;
 }

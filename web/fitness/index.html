@@ -993,7 +993,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='92';                         // keep in step with CACHE in sw.js
+const APP_VERSION='93';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1387,6 +1387,20 @@ function rangeVerdict(exDef,sess){
   if(tot(sess)>=tot(prev))return{rag:'a',text:'Matched last time'};
   return{rag:'r',text:'Missed the target'};
 }
+// Grip test (owner, 11 Oct 2026): fields alternate Left, Right per attempt (3 attempts, the last one all out);
+// a test's score is the best of each hand.
+function gripBest(md){const L=[],R=[];Object.keys(md||{}).forEach(k=>{const v=parseFloat(md[k]);if(!isNaN(v)&&v>0)(+k%2?R:L).push(v);});return{L:L.length?Math.max(...L):null,R:R.length?Math.max(...R):null};}
+function gripLine(md){const b=gripBest(md);return [b.L!=null?'L '+b.L:'',b.R!=null?'R '+b.R:''].filter(Boolean).join(' · ')+(b.L!=null||b.R!=null?' kg':'');}
+function gripHistory(exName){
+  const rows=liftSessions.filter(x=>x.exercise===exName&&x.manualData&&(gripBest(x.manualData).L!=null||gripBest(x.manualData).R!=null)).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(!rows.length)return'<div style="font-size:12px;color:var(--ink3)">No grip readings yet</div>';
+  const d=(v,p)=>v==null||p==null?'':`<span style="color:${v>p?'var(--teal)':v<p?'var(--red)':'var(--amber)'};font-weight:700;font-size:11px"> ${v>p?'+':''}${Math.round((v-p)*10)/10}</span>`;
+  const out=rows.map((r,i)=>{const b=gripBest(r.manualData),p=i?gripBest(rows[i-1].manualData):{};
+    return `<div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:6px;padding:5px 0;border-top:0.5px solid var(--line,rgba(0,0,0,0.08));font-size:13px"><span style="color:var(--ink2)">${fmtDate(r.date)}</span><span><b>${b.L??'-'}</b>${d(b.L,p.L)}</span><span><b>${b.R??'-'}</b>${d(b.R,p.R)}</span></div>`;}).reverse().slice(0,10);
+  const bestL=Math.max(...rows.map(r=>gripBest(r.manualData).L||0)),bestR=Math.max(...rows.map(r=>gripBest(r.manualData).R||0));
+  return `<div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:6px;font-size:10px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:0.05em"><span>Test</span><span>Left kg</span><span>Right kg</span></div>${out.join('')}
+    <div style="font-size:11px;color:var(--ink3);margin-top:6px">Best ever: L ${bestL||'-'} · R ${bestR||'-'} kg. Score = best of your 3 attempts per hand.</div>`;
+}
 const RANGE_RAG={g:'var(--teal)',a:'var(--amber)',r:'var(--red)'};
 function rangeUnit(exDef,w){const raw=String(w==null?'':w).trim();if(!raw||raw==='—')return'';if(/^bw/i.test(raw))return raw;return raw+' '+(exDef.unit||'kg');}
 function getCardioExDef(id){return cardioExercises.find(e=>e.id===id)||null;}
@@ -1618,6 +1632,7 @@ function renderLastBox(){
     // Manual mode — just show last session values
     const last=getLastLiftSession(exName);
     document.getElementById('restIn').value=exDef?.rest||'';
+    if(exDef.grip){box.style.display='';box.innerHTML=`<div class="last-session"><div class="last-session-head">Grip history</div>${gripHistory(exName)}<div style="font-size:11px;color:var(--ink2);margin-top:6px">Attempts 1 and 2 build up, attempt 3 all out. 1 min between.</div></div>`;return;}
     if(!last){box.style.display='none';return;}
     const fields=exDef.manualFields||[];
     const extraSummary=last.manualData&&fields.length
@@ -1750,7 +1765,8 @@ function renderLiftHistory(){
     const rSets=r.sets||[r.set1||0,r.set2||0,r.set3||0];
     const exDef=getExerciseDef(r.exercise);
     const isManual=r.isManual||exDef?.mode==='manual';
-    const manualSummary=isManual&&r.manualData&&exDef?.manualFields
+    const manualSummary=isManual&&r.manualData&&exDef?.grip?gripLine(r.manualData)+' best'
+      :isManual&&r.manualData&&exDef?.manualFields
       ?exDef.manualFields.map((f,i)=>r.manualData[i]?`${r.manualData[i]}`:null).filter(Boolean).join(' / ')
       :'';
     return dayHdr+`<div class="hist-item" onclick="showExDetail('${r.exercise.replace(/'/g,"\\'")}')">
@@ -3086,6 +3102,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=92"></script>
+<script src="food.js?v=93"></script>
 </body>
 </html>
