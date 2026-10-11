@@ -947,6 +947,8 @@ _PRESETS_WATCH = {
     "id_w_treadmill": ("Treadmill - from watch", "Treadmill", False),
     "id_w_4x4": ("HIIT 4X4 Treadmill - from watch", "Treadmill", True),
     "id_steam": ("Steam Room", "Steam room", False),
+    # 11 Oct 2026 (owner): the treadmill warm-up before a 4x4 is its OWN Zone 2 session, not hidden inside the 4x4
+    "id_jge_z2_warmup": ("Zone 2 Treadmill warm-up - JGE", "Treadmill", False),
 }
 _JGE = {"z2_30": "id_1kgluk8k", "z2_45": "id_88zxee26", "z2_67": "id_n6yi12xi", "4x4": "id_bv0krd6v"}
 
@@ -955,7 +957,7 @@ def _ensure_watch_presets():
     for uid, (name, machine, hiit) in _PRESETS_WATCH.items():
         db.execute("insert into fitness.cardio_presets (uid, name, machine, location, is_hiit, manual_fields) "
                    "values (%s,%s,%s,%s,%s,'[]'::jsonb) on conflict (uid) do nothing",
-                   (uid, name, machine, None if uid != "id_steam" else "JGE", hiit))
+                   (uid, name, machine, "JGE" if uid in ("id_steam", "id_jge_z2_warmup") else None, hiit))
 
 
 def _dur(mins: float) -> str:
@@ -1005,15 +1007,16 @@ def reconcile_watch(since: date | None = None) -> dict:
             for w in sess:
                 if (w["type_name"] == "TREADMILL" and w["uid"] != s["uid"] and float(w["mins"]) <= 20
                         and timedelta(0) <= s["start_at"] - w["end_at"] <= timedelta(minutes=15)):
-                    warm[s["uid"]] = w
-                    warm[w["uid"]] = None          # consumed as a warm-up, not its own entry
+                    warm[w["uid"]] = "warmup"      # its own Zone 2 entry (owner, 11 Oct 2026), not folded into the 4x4
 
     for s in sess:
-        if s["uid"] in linked or (s["uid"] in warm and warm[s["uid"]] is None):
+        if s["uid"] in linked:
             continue
         tn, title = s["type_name"], (s["title"] or "")
         if "steam" in title.lower():
             kind = "steam"
+        elif warm.get(s["uid"]) == "warmup":
+            kind = "warmup"
         elif tn == "ELLIPTICAL":
             kind = "elliptical"
         elif tn == "TREADMILL":
@@ -1022,13 +1025,9 @@ def reconcile_watch(since: date | None = None) -> dict:
             n["skipped"] += 1
             continue
         mins = float(s["mins"])
-        wu = warm.get(s["uid"])
         watch = {"uid": s["uid"]}
-        if wu:
-            watch.update(warmup_uid=wu["uid"], warmup_min=round(float(wu["mins"]), 1))
-            n["warmups"] += 1
         # 1. a hand-logged entry that day on the same kind of machine -> link only
-        if kind != "steam":
+        if kind not in ("steam", "warmup"):
             cands = db.query(
                 "select c.uid, c.minutes, c.watch from fitness.cardio_sessions c join fitness.cardio_presets p "
                 "on p.uid=c.preset_uid where c.day=%s and not c.deleted and c.watch is null "
@@ -1045,6 +1044,9 @@ def reconcile_watch(since: date | None = None) -> dict:
         if kind == "steam":
             preset, extra, conf, how = "id_steam", {}, True, "none"
             n["steam"] += 1
+        elif kind == "warmup":
+            preset, extra, conf, how = "id_jge_z2_warmup", {}, True, "none"
+            n["warmups"] += 1
         elif new and kind == "elliptical":
             preset = _JGE["z2_67"] if mins >= 60 else _JGE["z2_45"] if mins >= 40 else _JGE["z2_30"]
             extra = _last_settings(preset) or {"1": "17", "2": "60"}   # his stated defaults: level 17, 60 rpm
