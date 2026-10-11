@@ -283,7 +283,6 @@ function renderTodayInner(){
       ${balance}
       ${projectToday()}
     </div>
-    ${isToday?remindersCard():''}
     ${isFuture?'':fastCard()}
     ${isFuture?'':readingsCard()}
     ${isFuture?'':creatineCard()}
@@ -1430,6 +1429,16 @@ function remindersCard(){
     <button class="fd-btn" style="width:auto;margin:0;padding:10px 14px" onclick="foodRemindersOn()">Turn on</button>
     <button class="btn-sm" onclick="foodRemindersHide()" aria-label="Hide">&times;</button></div>`;
 }
+// No opt-in card (owner, 11 Oct 2026: "should just be enabled"). Browsers only allow the permission prompt from a
+// user gesture, so the first tap anywhere in the app asks once; Android shows its own Allow / Don't allow prompt.
+document.addEventListener('click',function askOnce(){
+  try{
+    if(!('Notification' in window)||!('PushManager' in window))return;
+    if(Notification.permission==='default')Notification.requestPermission().then(p=>{if(p==='granted')pushSubscribe();});
+    else if(Notification.permission==='granted'&&localStorage.getItem(PUSH_KEY)!==localDay(new Date()))pushSubscribe();
+  }catch(e){}
+  document.removeEventListener('click',askOnce,true);
+},true);
 // keep the subscription registered (once a day) when permission is already granted
 setTimeout(()=>{try{if('Notification' in window&&Notification.permission==='granted'&&localStorage.getItem(PUSH_KEY)!==localDay(new Date()))pushSubscribe();}catch(e){}},4000);
 setTimeout(photoLastFetch,3000);
