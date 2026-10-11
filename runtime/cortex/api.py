@@ -5744,6 +5744,13 @@ def fitness_push_subscribe(body: PushSub, _: None = Depends(auth)) -> dict:
     return push.subscribe(body.subscription, user_id=None, app="fitness")
 
 
+@app.get("/api/fitness/glucose/meals")
+def fitness_glucose_meals(days: int = 30, _: None = Depends(auth)) -> dict:
+    """Per-meal glucose responses (rise, peak, time to peak, back to baseline) + a food leaderboard."""
+    from . import glucose_meals
+    return glucose_meals.meals(max(1, min(days, 120)))
+
+
 class LabUpload(BaseModel):
     file: str                                   # data:application/pdf or data:image/... URL
 
