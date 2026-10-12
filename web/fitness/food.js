@@ -380,14 +380,17 @@ function kpiPace(day){
   const n=new Date(), h=n.getHours()+n.getMinutes()/60;
   return Math.max(0.1,Math.min(1,(h-6)/14));
 }
-function kpiUp(v,lo,hi,f){if(v==null)return '';f=f||1;return v>=hi*f?'var(--teal)':v>=lo*f?'var(--amber)':'var(--red)';}
+// EVERY colour is judged on the number as SHOWN (owner, 12 Oct 2026: 160 of 160 protein showed amber at 159.6).
+function kpiUp(v,lo,hi,f){if(v==null)return '';f=f||1;v=Math.round(v);return v>=hi*f?'var(--teal)':v>=lo*f?'var(--amber)':'var(--red)';}
 // Glucose (owner, 8 Oct 2026): up to 90 green, 91-130 amber, 131+ red.
 // Protein (owner, 8 Oct 2026): at/over target (160) green, 75% of it (120) up to target amber, below red.
 // Nothing logged yet (still fasting) stays the neutral blue, so the day doesn't open red.
-function kpiProtein(v,tgt){if(!v||!tgt)return 'var(--blue)';return v>=tgt?'var(--teal)':v>=tgt*0.75?'var(--amber)':'var(--red)';}
-function kpiGlucose(mg){if(mg==null)return '';return mg>=131?'var(--red)':mg>90?'var(--amber)':'var(--teal)';}
+function kpiProtein(v,tgt){if(!v||!tgt)return 'var(--blue)';v=Math.round(v);return v>=tgt?'var(--teal)':v>=tgt*0.75?'var(--amber)':'var(--red)';}
+function kpiGlucose(mg){if(mg==null)return '';
+  if(typeof gUnit==='function'&&gUnit()!=='mgdl'){const m=Math.round(mg/18.0182*10)/10;return m>=7.3?'var(--red)':m>5.0?'var(--amber)':'var(--teal)';}   // shown in mmol/L
+  mg=Math.round(mg);return mg>=131?'var(--red)':mg>90?'var(--amber)':'var(--teal)';}
 // Sleep score (owner, 10 Oct 2026): 85+ green, 70-84 amber, under 70 red.
-function kpiSleepScore(v){if(v==null)return '';return v>=85?'var(--teal)':v>=70?'var(--amber)':'var(--red)';}
+function kpiSleepScore(v){if(v==null)return '';v=Math.round(v);return v>=85?'var(--teal)':v>=70?'var(--amber)':'var(--red)';}
 // HRV vs his own 14-night average (full nights only, before this day): at/above green, up to 10% below amber, worse red.
 function hrvBaseline(day){
   const v=[];for(let i=1;i<=14;i++){const sl=nightFor(shiftDay(day,-i));if(sl&&sl.hrv!=null)v.push(+sl.hrv);}
@@ -398,14 +401,14 @@ function kpiHrv(v,day){if(v==null)return '';const r=Math.round(v);return r>=30?'
 function kpiSleepHR(v){if(v==null)return '';const r=Math.round(v);return r<=50?'var(--teal)':r<=55?'var(--amber)':'var(--red)';}
 const RAG={g:'var(--teal)',a:'var(--amber)',r:'var(--red)'};
 function ragSpan(txt,col){return col?`<span style="color:${col};font-weight:800">${txt}</span>`:txt;}
-function ragDeficit(d){return d==null?'':d>=850?RAG.g:d>=400?RAG.a:RAG.r;}                 // daily kcal deficit
-function ragProj(kg5w){return kg5w==null?'':kg5w<=-4?RAG.g:kg5w<=-2?RAG.a:RAG.r;}          // 5-week projected change
-function ragFast(ms){if(ms==null)return '';const h=ms/3600000;return h>=16?RAG.g:h>=14?RAG.a:RAG.r;}
-function ragWindow(ms){if(ms==null)return '';const h=ms/3600000;return h<=8?RAG.g:h<=10?RAG.a:RAG.r;}
-function ragKcalDay(k,tgt){if(!k)return '';return k<=tgt?RAG.g:k<=tgt+KCAL_OVER_AMBER?RAG.a:RAG.r;}
-function ragProteinDay(p,tgt){if(!p)return '';return p>=tgt?RAG.g:p>=tgt*0.75?RAG.a:RAG.r;}
-function ragWeekChange(v){return v==null?'':v<=-0.5?RAG.g:v<=0?RAG.a:RAG.r;}               // kg vs last week
-function ragWaist(v){return v==null?'':v<-0.5?RAG.g:v<=0.5?RAG.a:RAG.r;}                   // cm vs last
+function ragDeficit(d){if(d!=null)d=Math.round(d);return d==null?'':d>=850?RAG.g:d>=400?RAG.a:RAG.r;}                 // daily kcal deficit
+function ragProj(kg5w){if(kg5w!=null)kg5w=r1(kg5w);return kg5w==null?'':kg5w<=-4?RAG.g:kg5w<=-2?RAG.a:RAG.r;}          // 5-week projected change
+function ragFast(ms){if(ms==null)return '';const h=Math.round(ms/60000)/60;return h>=16?RAG.g:h>=14?RAG.a:RAG.r;}
+function ragWindow(ms){if(ms==null)return '';const h=Math.round(ms/60000)/60;return h<=8?RAG.g:h<=10?RAG.a:RAG.r;}
+function ragKcalDay(k,tgt){if(!k)return '';k=Math.round(k);return k<=tgt?RAG.g:k<=tgt+KCAL_OVER_AMBER?RAG.a:RAG.r;}
+function ragProteinDay(p,tgt){if(!p)return '';p=Math.round(p);return p>=tgt?RAG.g:p>=tgt*0.75?RAG.a:RAG.r;}
+function ragWeekChange(v){if(v!=null)v=r1(v);return v==null?'':v<=-0.5?RAG.g:v<=0?RAG.a:RAG.r;}               // kg vs last week
+function ragWaist(v){if(v!=null)v=r1(v);return v==null?'':v<-0.5?RAG.g:v<=0.5?RAG.a:RAG.r;}                   // cm vs last
 const TREND_ARROW={1:'&darr;',2:'&searr;',3:'&rarr;',4:'&nearr;',5:'&uarr;'};
 // Light glucose refresh while the app is open: only new points since the last one held, every 2 minutes.
 async function refreshCgm(){
