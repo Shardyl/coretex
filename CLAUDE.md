@@ -2013,6 +2013,30 @@ scripts), on the owner's call "one run with the ability to do revisions" (not a 
   how much narration there actually is (14px/1.4 under 900 characters, then 12.5, 11.5, 10.5 with the row padding
   shrinking with it). LESSON, and it generalises past this page: when a page overflows, ask first whether the
   content or the TYPE should give way, and only clamp content a reader is not being asked to approve.
+- A CONTRADICTING CORRECTION REPLACES THE DIRECTION, IT NEVER EXTENDS IT (MENA Water deal 155, 12 Oct 2026).
+  The owner changed his mind four times on one job (pure AI, then two routes, then one hybrid route, then a
+  shorter film). Each change was APPENDED to `job.s["words"]`, so by the fourth the writer was reconciling 19,000
+  characters of mutually contradictory instruction and kept reaching back into the stale layers: the deck cover
+  still said "half a day" and "240 seconds" against a quotation for one day and two minutes, and one card still
+  listed a four-person crew where the quotation bought a single operator. Re-prompting could not fix it, and two
+  more copy runs were paid for before that was obvious. When a correction contradicts an earlier one, REPLACE
+  `words` with a single clean brief; only append when it genuinely adds.
+- A STALE FIGURE USUALLY LIVES IN DATA TOO. The same job's running time was not only in the prose: `concept.
+  duration_s` was still 240 after `script.duration_s` had been set to 120, and the cover reads the concept. A
+  re-prompt can never fix a number the code stamps. Grep the whole state for the old value, not just the
+  direction.
+- WHEN THE WORDING IS KNOWN EXACTLY, PATCH IT, DO NOT REGENERATE. Two stubborn phrases ("half-day", "route")
+  were fixed by a deterministic pass over the copy dict, keys and values, longest match first, in one go at no
+  model cost, after two regenerations had failed to shift them. `stage_render` alone then re-lays the deck.
+- VERIFY A DRAFT WITH WORD BOUNDARIES, NEVER A SUBSTRING. Checking `"call" in draft` reported the missing call
+  offer as present, because the email said "The film is called ONE DROP". The same pass also reported "seven
+  working days" missing when the draft said "seven working day delivery". Both checks were wrong in opposite
+  directions; use `` anchors and allow for a singular adjective.
+- A LONG MULTI-POINT CORRECTION IS PARTLY EXECUTED. A six point correction on card 1163 produced an email
+  covering the first three: no links, no drone paragraph, no call offer, and a vague timeline. `owner_links` was
+  on the request and the manifest showed `availability(owner)`, so nothing had been stripped by a guard and
+  nothing was missing from the context, the writer simply stopped. Correct in small batches and CHECK each point
+  landed rather than reading the result approvingly.
 - CLI: `python -m cortex.creative dry <deal_id> "<direction>"` (no card, no quote issued, no filing; output in the job
   dir) and `python -m cortex.creative resume <job> [task_id]`.
 
