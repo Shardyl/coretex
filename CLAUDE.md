@@ -2831,3 +2831,15 @@ shoot needs none), then 10% off the whole quotation.
   hold, pause the clock, notify the owner once to move the stage; date -> resolved from THEIR message's date, the
   chase moves to the next working day after it (or goes now if passed); none -> the chase goes. The general gate
   still runs for Opportunity-stage and won-work check-ins.
+
+## A WhatsApp enquiry is filed under the brand it was written to (12 Oct 2026)
+- CAUSE: sensa.digital and skyvision.film share one WhatsApp number, `wa_routing` names one company, so every Sky
+  Vision enquiry was a Sensa card and the acknowledgement said "Sensa Productions" (card 1188, "Hi Sky Vision, I
+  would like to enquire about drone filming"). The owner's correction ("Rashad from Sky Vision") was redrafted by the
+  worker, which re-read the AUTO REPLY rule and put the same words back.
+- `whatsapp._brand_lane`: setting `wa_brands` = [{company_id, match: [words], hosts: [domains]}]. A brand word in
+  the message, or the ad click's page on that host, files the card, the opportunity, the CRM row and the phone
+  contact under that company and its `social-dm-replies` skill (and its AUTO REPLY rule). Set: Sky Vision (4),
+  match "sky vision" / "skyvision", host skyvision.film.
+- `apply_correction`: a correction on an `auto_reply` wa_reply card is a Haiku minimal edit of THAT text
+  (`wa-ack-edit`), never a worker redraft.

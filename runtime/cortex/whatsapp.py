@@ -62,6 +62,29 @@ def routing(account: str) -> dict:
     return {**_DEFAULT_ROUTING, **cfg}.get(account) or _DEFAULT_ROUTING["sensa-uk"]
 
 
+def _brand_lane(rt: dict, msg: str, src: dict | None) -> dict | None:
+    """WHICH BRAND THEY WROTE TO (owner, 12 Oct 2026). sensa.digital and skyvision.film share one WhatsApp
+    number, so the routing setting can only ever name one company, and every Sky Vision enquiry was filed
+    and acknowledged as Sensa Productions (card 1188, "Hi Sky Vision, I would like to enquire about drone
+    filming"). The site pre-fills the brand name and the click reference records the page, so the brand is
+    a fact in the message. Setting `wa_brands` = [{"company_id", "match": [words], "hosts": [domains]}];
+    the first entry whose word is in the message, or whose host is the ad click's page, wins. None = the
+    account's own routing."""
+    low = (msg or "").lower()
+    page = str(((src or {}).get("click") or {}).get("page") or "").lower()
+    for b in (db.setting_get("wa_brands") or []):
+        cid = int(b.get("company_id") or 0)
+        if not cid or cid == int(rt.get("company_id") or 0):
+            continue
+        if (any(w and w.lower() in low for w in (b.get("match") or []))
+                or (page and any(h and h.lower() in page for h in (b.get("hosts") or [])))):
+            co = store.get_company(cid)
+            sk = store.get_skill_by_key(cid, rt.get("skill_key") or "social-dm-replies") if co else None
+            if co and sk:
+                return {"rt": {**rt, "company_id": cid}, "co": co, "skill": sk, "slug": co.get("slug") or ""}
+    return None
+
+
 def _key(account: str, phone: str, msg: str) -> str:
     return hashlib.sha1(f"{account}|{phone}|{msg}".encode("utf-8", "replace")).hexdigest()[:16]
 
@@ -207,6 +230,12 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
         src = lptrack.from_message(msg)
     except Exception:  # noqa: BLE001
         src = None
+    try:
+        lane = _brand_lane(rt, msg, src)
+    except Exception:  # noqa: BLE001 - a lookup hiccup keeps the account's own routing
+        lane = None
+    if lane:
+        rt, co, skill, slug = lane["rt"], lane["co"], lane["skill"], lane["slug"]
     verdict = _classify(name, phone, msg, slug)
     spam = verdict.get("category") == "spam"
     # CRM capture happens for every real human (even ones we don't answer) so the contact is never lost.

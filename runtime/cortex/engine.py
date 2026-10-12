@@ -2069,6 +2069,28 @@ def apply_correction(task: dict, text: str) -> None:
             task = _prebook_meeting(task) or task   # a stamped meeting -> real Meet link for the drafter
     _CORRECTION_NOW.set(text or "")     # his words on THIS redraft, not logged yet: the call-times gate reads them
     try:
+        if task.get("kind") == "wa_reply" and (task.get("request") or {}).get("auto_reply") and old:
+            # THE ACKNOWLEDGEMENT IS FIXED TEXT, so a correction edits it rather than redrafting: the worker
+            # re-read the AUTO REPLY rule and put the same words back (card 1188: "say Rashad from Sky Vision
+            # will be in touch" came back as Sensa Productions, unchanged).
+            try:
+                new = (provider.think(
+                    "You edit a short WhatsApp acknowledgement. Apply the owner's instruction and change ONLY "
+                    "what it asks; keep every other word, the phone number and the person's name exactly. "
+                    "His words may be voice-transcribed, so a person's name in them can be misspelt: keep the "
+                    "name already in the message unless he plainly asks for a different person. Return the "
+                    "message only, no quotes, no commentary.",
+                    f"MESSAGE:\n{old}\n\nOWNER'S INSTRUCTION:\n{text}", model=provider.MODEL_ROUTER,
+                    max_tokens=300, purpose="wa-ack-edit", company=company.get("slug")) or "").strip().strip('"')
+            except Exception as _e:  # noqa: BLE001
+                print(f"[wa-ack-edit] {type(_e).__name__}: {_e}", flush=True)
+                new = ""
+            if new:
+                store.update_task(task["id"], draft=new, status="awaiting_approval",
+                                  attempts=task["attempts"] + 1)
+                store.log_decision(task["id"], skill["id"], "owner", "correct", note=text,
+                                   snapshot={"old": old, "new": new})
+                return
         dreq = _request_for_draft(task)
     finally:
         _CORRECTION_NOW.set("")
