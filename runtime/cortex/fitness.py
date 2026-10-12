@@ -993,15 +993,54 @@ def _last_settings(preset_uid: str) -> dict:
     return out
 
 
+SETTLE_MIN = 20     # minutes after a session's last recorded moment before it is filed in the cardio log
+
+
+def _refresh_grown(since: date | None = None) -> int:
+    """A watch-made entry ('w:' uid) whose session has since grown or changed gets its watch numbers refreshed.
+    The phone's push overwrites any server-side edit, so the fix is a COPY under a new uid (preset, settings, notes
+    and confirmation kept from the entry, only duration / HR / kcal from the watch) plus a tombstone on the old row."""
+    q = ("select c.*, h.avg_hr h_avg, h.max_hr h_max, h.kcal h_kcal, extract(epoch from h.end_at-h.start_at)/60 h_mins "
+         "from fitness.cardio_sessions c join fitness.health_sessions h on h.uid = c.watch->>'uid' "
+         "where not c.deleted and c.uid like 'w:%%' and h.end_at < now() - make_interval(mins => %s)")
+    params: list = [SETTLE_MIN]
+    if since:
+        q += " and c.day >= %s"
+        params.append(since)
+    n = 0
+    for r in db.query(q, tuple(params)):
+        hm = float(r["h_mins"])
+        hmax = round(float(r["h_max"])) if r["h_max"] is not None else None
+        if abs(float(r["minutes"] or 0) - hm) < 0.5 and (hmax is None or r["max_hr"] == hmax):
+            continue
+        base, _, ver = r["uid"].partition("|r")
+        new_uid = f"{base}|r{int(ver) + 1 if ver.isdigit() else 2}"
+        db.execute(
+            "insert into fitness.cardio_sessions (uid, preset_uid, preset_name, day, duration, minutes, avg_hr, max_hr, "
+            "calories, distance_km, m_per_beat, extra, next_target, notes, watch) "
+            "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (uid) do nothing",
+            (new_uid, r["preset_uid"], r["preset_name"], r["day"], _dur(hm), round(hm, 2),
+             round(float(r["h_avg"])) if r["h_avg"] is not None else r["avg_hr"], hmax if hmax is not None else r["max_hr"],
+             round(float(r["h_kcal"])) if r["h_kcal"] is not None else r["calories"], r["distance_km"], r["m_per_beat"],
+             Json(r["extra"] or {}), Json(r["next_target"]) if r["next_target"] is not None else None, r["notes"],
+             Json(r["watch"])))
+        db.execute("update fitness.cardio_sessions set deleted=true, updated_at=now() where uid=%s", (r["uid"],))
+        n += 1
+    return n
+
+
 def reconcile_watch(since: date | None = None) -> dict:
     _ensure_watch_presets()
     linked = {r["u"] for r in db.query(
         "select watch->>'uid' u from fitness.cardio_sessions where watch is not null union "
         "select watch->>'warmup_uid' from fitness.cardio_sessions where watch ? 'warmup_uid'") if r["u"]}
+    _refresh_grown(since)
+    # A session still running is sent by the Bridge with end = now (owner's 4x4, 12 Oct 2026: the 07:30 sync made an
+    # 11-minute "treadmill" entry out of a 30-minute 4x4 that was 11 minutes in). Wait until it has settled.
     q = ("select uid, day, start_at, end_at, type_name, title, kcal, avg_hr, max_hr, "
          "extract(epoch from end_at-start_at)/60 as mins from fitness.health_sessions "
-         "where extract(epoch from end_at-start_at)/60 >= %s")
-    params: list = [MIN_WORKOUT_MIN]
+         "where extract(epoch from end_at-start_at)/60 >= %s and end_at < now() - make_interval(mins => %s)")
+    params: list = [MIN_WORKOUT_MIN, SETTLE_MIN]
     if since:
         q += " and day >= %s"
         params.append(since)
