@@ -2772,3 +2772,14 @@ shoot needs none), then 10% off the whole quotation.
   Snap Rewards: `reply_from` = loyalty@snap-rewards.com; `signatures` keyed by email (loyalty@ = "Snap Rewards
   Support Team", rashad@ keeps his own). loyalty@'s token (gmail_refresh_token:snaprewards) has gmail.modify, so it
   can send. Old threads where a contact was last emailed from rashad@ stay with rashad@ (thread-sticky sender).
+
+## Closing chases: code decides, the model answers one narrow question (12 Oct 2026)
+- CAUSE: owner "I've not seen many follow-ups recently". In the week to 12 Oct the general chase gate held 27 chases
+  on quoted deals ("our last email already covers it", "client is reviewing") and re-checked every 2 working days to
+  hold again: two chase cards went out. It ignored its own instruction (RAFED: "waiting for their response is the
+  reason for chase, not a reason to hold" -> held) and misread dates (ValuStrat: 3 Oct "not yet passed" on 9 Oct).
+- `engine._closing_gate` replaces it for Quote / closing-cadence deals: (1) our email in the last 2 working days
+  (deal timeline, code) -> wait; (2) Haiku classifies ONLY their newest message: declined / on_hold / accepted ->
+  hold, pause the clock, notify the owner once to move the stage; date -> resolved from THEIR message's date, the
+  chase moves to the next working day after it (or goes now if passed); none -> the chase goes. The general gate
+  still runs for Opportunity-stage and won-work check-ins.

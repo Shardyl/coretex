@@ -4121,6 +4121,105 @@ def _deal_thread_context(co: dict, email: str, limit: int = 5, msgs: list | None
         return ""
 
 
+class _SkipGate(Exception):
+    """The closing gate already decided; the general chase gate does not run."""
+
+
+def _working_days_since(ts: datetime, now: datetime) -> int:
+    n, d = 0, ts.astimezone(_GST).date()
+    end = now.astimezone(_GST).date()
+    while d < end:
+        d += timedelta(days=1)
+        if d.weekday() < 5:
+            n += 1
+    return n
+
+
+def _closing_gate(co: dict, opp: dict, email: str, msgs: list, label: str) -> bool:
+    """WHETHER A CLOSING CHASE GOES (12 Oct 2026). For a week the general chase gate held almost every quoted
+    deal's chase ("our last email already covers it", "client is reviewing"), re-checking every two working days
+    and holding again: 27 holds, two chase cards. On RAFED it wrote "waiting for their response is the reason
+    for chase, not a reason to hold" and held anyway; on ValuStrat it called 3 Oct "not yet passed" on 9 Oct.
+    A broad "should we send?" asks the model to weigh the rules; it does not. Now CODE decides:
+      - we emailed them in the last 2 working days -> wait (from the deal timeline, not the model);
+      - otherwise ONE narrow question about THEIR newest words: declined / on hold / accepted / gave a date /
+        none. Declined, on hold or accepted -> no chase, the clock pauses, the owner is told once to move the
+        stage. A date -> resolved from the date of THEIR message, the chase moves to the next working day after
+        it (or goes now if it has passed). Anything else -> the chase goes.
+    Returns True when the chase is held."""
+    now = datetime.now(timezone.utc)
+    did = int(opp["id"])
+    hist = (db.one("select history from crm_projects where id=%s", (did,)) or {}).get("history") or []
+    outs = []
+    for e in hist:
+        if str(e.get("event", "")).startswith("email_out"):
+            try:
+                outs.append(datetime.fromisoformat(str(e.get("ts")).replace("Z", "+00:00")))
+            except ValueError:
+                pass
+    outs = [o if o.tzinfo else o.replace(tzinfo=timezone.utc) for o in outs]
+
+    def _hold(why: str, until: datetime | None = None, pause: bool = False, notice: str = "") -> bool:
+        db.execute("update crm_projects set followup_step=%s where id=%s", (opp.get("followup_step") or 0, did))
+        if pause:
+            crm.pause_followups(did)
+        else:
+            nxt = until or crm._schedule_point({"working_days": True, "steps": [{"after_days": 2}]}, 0)
+            db.execute("update crm_projects set next_followup=%s where id=%s and automation='auto'", (nxt, did))
+        pipeline.log_deal(did, "note", f"No {label} drafted: {why}.")
+        if notice:
+            notifications.notify(f"{opp['title'][:60]}: {notice}", why, priority="high", category="lead",
+                                 company_id=co.get("id"), target_type="deal", target_id=str(did),
+                                 dedup_key=f"closing-gate:{did}:{notice}")
+        return True
+
+    if outs and _working_days_since(max(outs), now) < 2:
+        return _hold(f"we emailed them on {max(outs).astimezone(_GST):%a %d %b}, under 2 working days ago")
+    theirs = [m for m in (msgs or []) if (m.get("email") or "").lower() == (email or "").lower()]
+    if not theirs:
+        return False
+    last = theirs[0]
+    said = re.sub(r"\s+", " ", last.get("body") or last.get("snippet") or "")[:1500]
+    try:
+        out = provider.think_json(
+            "Read the client's newest message about a quotation or proposal we sent. Classify ONLY what THEY say: "
+            "'declined' (they chose another supplier, cancelled, or said no), 'on_hold' (project paused or postponed "
+            "with no date), 'accepted' (they approved, signed or confirmed going ahead), 'date' (they say WHEN they "
+            "will come back or decide), or 'none' (anything else: reviewing, thanks, questions, silence). "
+            'Return {"status": "declined|on_hold|accepted|date|none", "phrase": "<their exact words for the date, '
+            'only when status is date>", "quote": "<their words, under 20 words>"}.',
+            f"Message date: {last.get('date') or ''}\n\n{said}", model=provider.MODEL_ROUTER, max_tokens=200,
+            purpose="closing-gate", company=co.get("slug"))
+    except Exception as _e:  # noqa: BLE001 - on doubt the chase goes
+        print(f"[closing-gate] {type(_e).__name__}: {_e}", flush=True)
+        return False
+    st = (out or {}).get("status") if isinstance(out, dict) else None
+    q = ((out or {}).get("quote") or "").strip() if isinstance(out, dict) else ""
+    if st == "declined":
+        return _hold(f'they declined: "{q}"', pause=True, notice="they declined, move it to Lost?")
+    if st == "on_hold":
+        return _hold(f'they put it on hold: "{q}"', pause=True, notice="on hold, chasing paused")
+    if st == "accepted":
+        return _hold(f'they accepted: "{q}"', pause=True, notice="they accepted, move it to Booked?")
+    if st == "date" and (out.get("phrase") or "").strip():
+        try:   # the date is resolved from THEIR message's date, never from today
+            base = last.get("date") or ""
+            r = provider.think_json(
+                f'A client wrote this in a message dated {base}. Resolve the phrase to a calendar date relative to '
+                'THAT message date (end of week = that Friday; next week = the Monday after). Return {"iso": "YYYY-MM-DD"} '
+                'or {"iso": null} if it cannot be resolved.', out["phrase"], model=provider.MODEL_ROUTER, max_tokens=60,
+                purpose="closing-gate-date", company=co.get("slug"))
+            iso = (r or {}).get("iso") if isinstance(r, dict) else None
+            when = datetime.fromisoformat(iso).replace(tzinfo=_GST, hour=9) if iso else None
+        except Exception:  # noqa: BLE001
+            when = None
+        if when and when.date() >= now.astimezone(_GST).date():
+            nxt = crm._schedule_point({"working_days": True, "steps": [{"after_days": 1}]}, 0, base=when)
+            return _hold(f'they said they would come back by {when:%a %d %b} ("{out["phrase"]}"); the chase moves '
+                         f'to {nxt.astimezone(_GST):%a %d %b}', until=nxt)
+    return False
+
+
 def _spawn_followup_card(opp: dict, action: str) -> None:
     """Create a deal-linked follow-up card. Drafts a chase via the company's first-response skill when there's a
     contact to chase; otherwise drops a nudge notification on the opportunity. Drafting quality is the skill's
@@ -4231,7 +4330,14 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
         # two weeks after Mai signed it off.) The clock decides WHEN, the thread decides WHETHER: Haiku reads the
         # newest messages and the deal's timeline; signed off, already answered, on hold or waiting on a date they
         # gave means no card. A sign-off on won work stops the cadence and tells the owner the next step.
+        _closing = stage == "Quote" or (opp.get("cadence") or {}).get("name") == "closing"
+        if _closing:
+            _hold = _closing_gate(co, opp, email, msgs, label)
+            if _hold:
+                return
         try:
+            if _closing:
+                raise _SkipGate()
             _recent = "\n---\n".join(
                 f"[{x.get('date') or ''} | from {x.get('email') or x.get('from') or ''}] "
                 + re.sub(r"\s+", " ", x.get("body") or x.get("snippet") or "")[:900] for x in (msgs or [])[:6])
@@ -4268,6 +4374,8 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
                         "is outstanding, or to Completed.", priority="normal", category="lead", company_id=co.get("id"),
                         target_type="deal", target_id=str(opp["id"]), dedup_key=f"signed-off:{opp['id']}")
                 return
+        except _SkipGate:
+            pass
         except Exception as _ge:  # noqa: BLE001 - on any doubt the chase is drafted as before
             print(f"[chase-gate] {type(_ge).__name__}: {_ge}", flush=True)
         thread = _deal_thread_context(co, email, msgs=msgs)
