@@ -1760,14 +1760,16 @@ window.editWatchCardio=function(id){
   openModal('Check session',`
     <div class="fd-note" style="margin-top:0">${fmtDate(r.date)} &middot; ${r.duration||''} &middot; avg ${r.avgHR??'—'} / max ${r.maxHR??'—'} bpm${r.calories?' &middot; '+r.calories+' kcal':''} (from your watch)</div>
     <div class="form-group"><label class="form-label">Session</label><select id="wcPreset" onchange="document.getElementById('wcFields').innerHTML=window._wcFields(this.value)">${opts}</select></div>
-    <div id="wcFields">${fieldsFor(r.exerciseId)}</div>`,
+    <div id="wcFields">${fieldsFor(r.exerciseId)}</div>
+    <div class="form-group"><label class="form-label">Notes</label><textarea id="wcNotes" style="height:60px;resize:none" placeholder="Machine, how it felt, anything to remember">${esc(/^From watch/.test(r.notes||'')?'':(r.notes||''))}</textarea></div>`,
   function(){
     const exId=document.getElementById('wcPreset').value, ex=getCardioExDef(exId);
     const extra={};
     ((ex&&ex.manualFields)||[]).forEach((x,i)=>{const el=document.getElementById('wcF'+i);if(el&&el.value!=='')extra[i]=el.value;});
     r.exerciseId=exId;r.exerciseName=ex?ex.name:r.exerciseName;r.extra=extra;
     r.watch=Object.assign({},r.watch||{},{confirmed:true,settings:Object.keys(extra).length?'manual':(r.watch&&r.watch.settings)||'not recorded'});
-    if(/^From watch/.test(r.notes||''))r.notes='From watch';
+    const nt=(document.getElementById('wcNotes').value||'').trim();
+    r.notes=nt||'From watch';
     saveCardio();closeModal();
     if(typeof renderCardioHistory==='function')renderCardioHistory();
     toast('Session saved');
