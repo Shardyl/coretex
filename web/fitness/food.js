@@ -439,6 +439,23 @@ function mealResponse(m,next){
   const rise=Math.round(pk.v-base);
   return {base:Math.round(base),peak:Math.round(pk.v),rise,toPeak:Math.round((pk.t-m.t0)/60000),rag:rise<30?RAG.g:rise<=50?RAG.a:RAG.r};
 }
+// Workouts on the glucose chart (owner, 12 Oct 2026): a square at each session's start (10+ min), tap for what it did.
+// Heat (steam/sauna) distorts the sensor, and no real glucose moves faster than ~5 mg/dL a minute (judged over 3+ minutes), so both are flagged.
+function workoutsOn(day){return sessionsOn(day).filter(s=>s.start).map(s=>{
+  const c=(cardioSessions||[]).find(x=>x&&x.watch&&x.watch.uid===s.id), d=c&&typeof getCardioExDef==='function'?getCardioExDef(c.exerciseId):null;
+  const name=(d&&d.name)||s.title||String(s.typeName||'Workout').replace(/_/g,' ').toLowerCase().replace(/^./,x=>x.toUpperCase());
+  return {t0:new Date(s.start).getTime(),t1:new Date(s.end).getTime(),name,s,heat:/steam|sauna/i.test(name+' '+(s.title||''))};
+}).sort((a,b)=>a.t0-b.t0);}
+function workoutResponse(w,next){              // the window stops where the next session starts
+  const pts=(cgmData||[]).map(x=>({t:new Date(x.at).getTime(),v:x.mmol*18.0182})).sort((a,b)=>a.t-b.t);
+  const before=pts.filter(p=>p.t>=w.t0-15*60000&&p.t<=w.t0).map(p=>p.v).sort((a,b)=>a-b);
+  const stop=next?next.t0:Infinity, win=pts.filter(p=>p.t>=w.t0&&p.t<=Math.min(w.t1+45*60000,stop));
+  if(!before.length||!win.length)return null;
+  const base=before[Math.floor(before.length/2)], pk=win.reduce((a,b)=>b.v>a.v?b:a), lo=win.reduce((a,b)=>b.v<a.v?b:a);
+  const during=pts.filter(p=>p.t>=w.t0&&p.t<=Math.min(w.t1+15*60000,stop));let jump=false;
+  for(let i=1;i<during.length;i++){const q=during.slice(0,i).reverse().find(p=>during[i].t-p.t>=3*60000);if(!q)continue;const dt=(during[i].t-q.t)/60000;if(dt<=10&&Math.abs(during[i].v-q.v)/dt>5)jump=true;}   // over 3+ min: 1-min readings are noisy
+  return {base:Math.round(base),peak:Math.round(pk.v),low:Math.round(lo.v),rise:Math.round(pk.v-base),peakAt:pk.t,artefact:w.heat||jump};
+}
 function drawCgm(){
   const el=document.getElementById('fdCgmChart');if(!el)return;
   const cg=cgmOn(foodDay), cs=getComputedStyle(document.documentElement), c=cs.getPropertyValue('--blue').trim()||'#185FA5', txc=cs.getPropertyValue('--ink3').trim()||'#888';
@@ -446,12 +463,16 @@ function drawCgm(){
   window._cgmMeals=ms;
   if(window._cgmChart)window._cgmChart.destroy();
   const resp=ms.map((m,i)=>mealResponse(m,ms[i+1]));
+  const ws=workoutsOn(foodDay);window._cgmWorkouts=ws;
+  const col=v=>v.replace(/var\(([^)]+)\)/,(a,b)=>cs.getPropertyValue(b).trim());
   window._cgmChart=new Chart(el,{type:'line',data:{datasets:[
       {data:cg.map(x=>({x:new Date(x.at).getTime(),y:+gShow(x.mmol)})),borderColor:c,borderWidth:2,pointRadius:0,tension:0.3},
       {type:'scatter',data:ms.map(m=>({x:m.t0,y:floor})),pointRadius:7,pointHoverRadius:9,pointStyle:'triangle',
-        backgroundColor:resp.map(r=>r?r.rag.replace(/var\(([^)]+)\)/,(a,b)=>cs.getPropertyValue(b).trim()):txc),borderColor:'transparent'}]},
+        backgroundColor:resp.map(r=>r?r.rag.replace(/var\(([^)]+)\)/,(a,b)=>cs.getPropertyValue(b).trim()):txc),borderColor:'transparent'},
+      {type:'scatter',data:ws.map(w=>({x:w.t0,y:floor})),pointRadius:6,pointHoverRadius:8,pointStyle:'rect',
+        backgroundColor:ws.map(w=>w.heat?txc:col('var(--teal)')),borderColor:'transparent'}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},
-      onClick:(ev,els)=>{const hit=els.find(e=>e.datasetIndex===1);if(hit)foodMealPanel(hit.index);},
+      onClick:(ev,els)=>{const hit=els.find(e=>e.datasetIndex===1);if(hit)return foodMealPanel(hit.index);const w=els.find(e=>e.datasetIndex===2);if(w)foodWorkoutPanel(w.index);},
       scales:{x:{type:'linear',ticks:{color:txc,font:{size:9},maxTicksLimit:6,callback:v=>new Date(v).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})},grid:{display:false}},
         y:{ticks:{color:txc,font:{size:9},maxTicksLimit:4},grid:{display:false},suggestedMin:floor-4}}}});
 }
@@ -469,6 +490,23 @@ window.foodMealPanel=function(i){
       <div class="fd-cell"><div class="v">${r.toPeak}m</div><div class="l">To peak</div></div></div>`
       :'<div class="fd-note">No sensor readings around this meal.</div>'}
     <div class="fd-actions"><button class="fd-act main" onclick="foodMealShow(${i})">Show in log</button><button class="fd-act" onclick="document.getElementById('mealOverlay').remove()">Close</button></div></div>`;
+  ov.onclick=()=>ov.remove();document.body.appendChild(ov);
+};
+window.foodWorkoutPanel=function(i){
+  const w=(window._cgmWorkouts||[])[i];if(!w)return;
+  const r=workoutResponse(w,(window._cgmWorkouts||[])[i+1]), u=gUnit()==='mgdl'?'mg/dL':'mmol/L', cv=v=>u==='mg/dL'?v:r1(v/18.0182), hm=t=>new Date(t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  const ov=document.createElement('div');ov.id='mealOverlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center';
+  ov.innerHTML=`<div onclick="event.stopPropagation()" style="width:100%;max-width:440px;box-sizing:border-box;background:var(--surface);border-radius:16px 16px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 16px)">
+    <div class="fd-sub">${esc(w.name)}</div>
+    <div style="margin:6px 0 10px;font-size:13px;color:var(--ink2)">${hm(w.t0)} to ${hm(w.t1)} &middot; ${Math.round((w.t1-w.t0)/60000)} min${w.s.avgHR!=null?' &middot; avg '+Math.round(w.s.avgHR)+' / max '+Math.round(w.s.maxHR)+' bpm':''}</div>
+    ${r?`<div class="fd-row" style="margin-top:0">
+      <div class="fd-cell"><div class="v">${r.rise>0?'+':''}${cv(r.rise)}</div><div class="l">Rise ${u}</div></div>
+      <div class="fd-cell"><div class="v" style="color:${kpiGlucose(r.peak)}">${cv(r.peak)}</div><div class="l">Peak at ${hm(r.peakAt)} (from ${cv(r.base)})</div></div>
+      <div class="fd-cell"><div class="v">${cv(r.low)}</div><div class="l">Low</div></div></div>
+      <div class="fd-note" style="margin:8px 0 0">${w.heat?'Heat distorts the sensor: readings in and just after the steam room or sauna are not real glucose.':r.artefact?'Some readings moved faster than glucose can, likely sensor noise (heat, pressure or sweat). Read the shape, not the exact peak.':'Hard efforts raise glucose: adrenaline releases liver sugar faster than the muscles use it. Normal, and it settles within the hour.'}</div>`
+      :'<div class="fd-note">No sensor readings around this session.</div>'}
+    <div class="fd-actions"><button class="fd-act" onclick="document.getElementById('mealOverlay').remove()">Close</button></div></div>`;
   ov.onclick=()=>ov.remove();document.body.appendChild(ov);
 };
 window.foodMealShow=function(i){
