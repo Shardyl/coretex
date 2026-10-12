@@ -2075,11 +2075,13 @@ def apply_correction(task: dict, text: str) -> None:
             # will be in touch" came back as Sensa Productions, unchanged).
             try:
                 new = (provider.think(
-                    "You edit a short WhatsApp acknowledgement. Apply the owner's instruction and change ONLY "
-                    "what it asks; keep every other word, the phone number and the person's name exactly. "
-                    "His words may be voice-transcribed, so a person's name in them can be misspelt: keep the "
-                    "name already in the message unless he plainly asks for a different person. Return the "
-                    "message only, no quotes, no commentary.",
+                    "You edit a short WhatsApp acknowledgement sent on behalf of a company. Apply the owner's "
+                    "instruction and keep everything else: the greeting, the phone number, the sentence shape. "
+                    "If he names a different company or brand, that brand REPLACES the company everywhere in the "
+                    "message, never added beside it. His words are often voice-transcribed, so a person's name in "
+                    "them that SOUNDS like a name already in the message IS that person: keep the spelling already "
+                    "in the message. Write brand names with their usual spacing (two words where the brand is two "
+                    "words). Return the message only, no quotes, no commentary.",
                     f"MESSAGE:\n{old}\n\nOWNER'S INSTRUCTION:\n{text}", model=provider.MODEL_ROUTER,
                     max_tokens=300, purpose="wa-ack-edit", company=company.get("slug")) or "").strip().strip('"')
             except Exception as _e:  # noqa: BLE001
