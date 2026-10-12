@@ -816,6 +816,9 @@ function missionWeeks(m){
   }
   return out;
 }
+// NOW is judged against TODAY's point on the straight line (owner, 12 Oct 2026), not Sunday's checkpoint:
+// on or under pace green, up to 0.2 kg over amber, more red. Both sides rounded to the 1 decimal he sees.
+function ragPace(s){if(s.cur==null||s.paceKg==null)return 'inherit';const d=Math.round((r1(s.cur)-r1(s.paceKg))*10)/10;return d<=0?RAG.g:d<=0.2?RAG.a:RAG.r;}
 window.renderMission=function(){
   const el=document.getElementById('missionStrip');if(!el)return;
   const s=missionStats();
@@ -838,7 +841,7 @@ window.renderMission=function(){
         <div style="font-size:10.5px;color:var(--ink3);font-weight:700;white-space:nowrap">tested ${fmtDate(v.date)}</div></div>`;})()}
       <div style="text-align:right">
         <div style="font-size:10px;font-weight:800;letter-spacing:0.12em;color:var(--ink3)">NOW</div>
-        <div style="font-size:22px;font-weight:900;line-height:1.1;color:${cur1!=null&&cw?(cur1<=cw.target?RAG.g:cur1-cw.target<=0.3?RAG.a:RAG.r):'inherit'}">${s.cur!=null?r1(s.cur)+'<span style="font-size:13px;font-weight:800"> kg</span>':'&mdash;'}</div>
+        <div style="font-size:22px;font-weight:900;line-height:1.1;color:${ragPace(s)}">${s.cur!=null?r1(s.cur)+'<span style="font-size:13px;font-weight:800"> kg</span>':'&mdash;'}</div>
         <div style="font-size:10.5px;color:var(--ink3);font-weight:700;white-space:nowrap">${s.fat!=null?'~'+Math.round(s.fat)+'%':''}${s.cur!=null?(s.fat!=null?' &middot; ':'')+'<span style="color:var(--amber)">'+r1(Math.max(0,s.cur-m.goalKg))+' to go</span>':''}</div>
       </div>
     </div>
