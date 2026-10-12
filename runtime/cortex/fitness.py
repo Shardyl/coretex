@@ -630,7 +630,9 @@ def _push_inner(doc: dict, source: str = "app") -> dict:
             "on conflict (uid) do update set name=excluded.name, brand=excluded.brand, "
             "location=excluded.location, machine=excluded.machine, machine_note=excluded.machine_note, "
             "is_hiit=excluded.is_hiit, target_duration=excluded.target_duration, "
-            "manual_fields=excluded.manual_fields, deleted=cardio_presets.deleted or excluded.deleted, updated_at=now()",
+            # a device holding an older copy with no fields never blanks fields added since (warm-up preset, 12 Oct 2026)
+            "manual_fields=case when jsonb_array_length(excluded.manual_fields)=0 then cardio_presets.manual_fields "
+            "else excluded.manual_fields end, deleted=cardio_presets.deleted or excluded.deleted, updated_at=now()",
             (r["id"], r.get("name") or "", r.get("brand"), r.get("location"), r.get("machine"),
              r.get("machineNote"), bool(r.get("isHIIT")), r.get("targetDuration"),
              Json(fields), bool(r.get("deleted"))))
@@ -969,11 +971,25 @@ def _ensure_watch_presets():
         db.execute("insert into fitness.cardio_presets (uid, name, machine, location, is_hiit, manual_fields) "
                    "values (%s,%s,%s,%s,%s,'[]'::jsonb) on conflict (uid) do nothing",
                    (uid, name, machine, "JGE" if uid in ("id_steam", "id_jge_z2_warmup") else None, hiit))
+    db.execute("update fitness.cardio_presets set manual_fields=%s, updated_at=now() where uid='id_jge_z2_warmup' "
+               "and jsonb_array_length(manual_fields)=0", (Json(WARMUP_FIELDS),))
 
 
 def _dur(mins: float) -> str:
     s = int(round(mins * 60))
     return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
+
+
+# His standing machine settings (owner, 12 Oct 2026), used only when a preset has no earlier session to copy from;
+# after that the last session's settings carry forward, so when he raises a speed the next entry follows.
+WARMUP_FIELDS = [{"type": "number", "label": "Incline (%)"}, {"type": "number", "label": "Speed (km/h)"}]
+_DEFAULT_SETTINGS = {"id_jge_z2_warmup": {"0": "2", "1": "9"},
+                     "id_bv0krd6v": {"0": "2", "1": "12.2", "2": "6.5"},
+                     "id_dvp1x65m": {"0": "2", "1": "12.2", "2": "6.5"}}
+
+
+def _settings_for(preset_uid: str) -> dict:
+    return _last_settings(preset_uid) or dict(_DEFAULT_SETTINGS.get(preset_uid, {}))
 
 
 def _last_settings(preset_uid: str) -> dict:
@@ -1096,14 +1112,14 @@ def reconcile_watch(since: date | None = None) -> dict:
             preset, extra, conf, how = "id_steam", {}, True, "none"
             n["steam"] += 1
         elif kind == "warmup":
-            preset, extra, conf, how = "id_jge_z2_warmup", {}, True, "none"
+            preset, extra, conf, how = "id_jge_z2_warmup", _settings_for("id_jge_z2_warmup"), True, "prefilled"
             n["warmups"] += 1
         elif new and kind == "elliptical":
             preset = _JGE["z2_67"] if mins >= 60 else _JGE["z2_45"] if mins >= 40 else _JGE["z2_30"]
             extra = _last_settings(preset) or {"1": "17", "2": "60"}   # his stated defaults: level 17, 60 rpm
             conf, how = False, "prefilled"
         elif new and kind == "4x4":
-            preset, extra, conf, how = _JGE["4x4"], _last_settings(_JGE["4x4"]), False, "prefilled"
+            preset, extra, conf, how = _JGE["4x4"], _settings_for(_JGE["4x4"]), False, "prefilled"
         else:
             preset = {"elliptical": "id_w_elliptical", "4x4": "id_w_4x4"}.get(kind, "id_w_treadmill")
             extra, conf, how = {}, not new, "not recorded"
