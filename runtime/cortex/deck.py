@@ -893,10 +893,18 @@ class CreativeDeck(_Deck):
             if len(s) <= n:
                 return s
             return s[:n].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."
-        r = "".join(f'<div><div class="t">{_esc(x.get("time"))}</div>'
-                    + (f'<div class="l">{_esc(x["line"])}</div>' if x.get("line")
-                       else '<div class="l none">No narration</div>') + "</div>"
-                    for x in (rows or [])[:12])
+        rows = (rows or [])[:12]
+        # THE NARRATION IS NEVER TRUNCATED, THE TYPE IS (MENA Water, 12 Oct 2026). Clamping the footnotes was
+        # not enough: ten beats of a talky film overflowed this page onto a second, orphan page with no
+        # heading. This page exists so the client can approve the WORDS, so cutting a line here would defeat
+        # it; the rows are set smaller instead, stepped by how much narration there actually is.
+        load = sum(len(x.get("line") or "") for x in rows)
+        fs, lh, pd = next((v for lim, v in ((900, (14, 1.4, 6)), (1200, (12.5, 1.35, 4.5)),
+                                            (1600, (11.5, 1.3, 3.5))) if load <= lim), (10.5, 1.25, 3))
+        r = "".join(f'<div style="padding:{pd}px 0"><div class="t">{_esc(x.get("time"))}</div>'
+                    + (f'<div class="l" style="font-size:{fs}px;line-height:{lh}">{_esc(x["line"])}</div>'
+                       if x.get("line") else '<div class="l none">No narration</div>') + "</div>"
+                    for x in rows)
         sub, note = cut(sub, 150), cut(note, 240)   # 240 is one full line at this page width; 150 cut the UAS note short
         self.pages.append(
             f'<div class="pg"><div class="pad" style="padding-top:40px"><h3>{_esc(kicker)}</h3>'

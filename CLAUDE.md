@@ -2005,6 +2005,14 @@ scripts), on the owner's call "one run with the ability to do revisions" (not a 
   two thirds across the page; it clamps on a word boundary with an ellipsis, at 240 (one full line at that
   width). LESSON: every clamp in the deck cuts on a boundary, never a character count, and READ the rendered PDF
   before it goes out.
+- THE NARRATION IS NEVER TRUNCATED, THE TYPE IS (MENA Water deal 155, 12 Oct 2026). Clamping `voscript`'s two
+  FOOTNOTES (23 Sep, above) was not the whole fix: the ROWS had no guard at all, so ten beats of a talky film
+  overflowed the page onto a second, orphan page carrying no heading (23 pages rendered against 22 planned, and
+  `stage_render`'s compact re-set could not recover it). The page exists so the client can approve the WORDS on
+  their own, so clamping a narration line there would defeat the page. `voscript` now steps the row type down by
+  how much narration there actually is (14px/1.4 under 900 characters, then 12.5, 11.5, 10.5 with the row padding
+  shrinking with it). LESSON, and it generalises past this page: when a page overflows, ask first whether the
+  content or the TYPE should give way, and only clamp content a reader is not being asked to approve.
 - CLI: `python -m cortex.creative dry <deal_id> "<direction>"` (no card, no quote issued, no filing; output in the job
   dir) and `python -m cortex.creative resume <job> [task_id]`.
 
