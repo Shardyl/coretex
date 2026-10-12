@@ -2843,3 +2843,5 @@ shoot needs none), then 10% off the whole quotation.
   match "sky vision" / "skyvision", host skyvision.film.
 - `apply_correction`: a correction on an `auto_reply` wa_reply card is a Haiku minimal edit of THAT text
   (`wa-ack-edit`), never a worker redraft.
+- `engine._keep_team_names`: voice transcription turns Rashad into "Richard" and the edit copied it. A roster first
+  name (profile `signatures`) that was in the old text and vanished is put back over the ONE new capitalised word.

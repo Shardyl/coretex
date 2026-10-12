@@ -1904,6 +1904,23 @@ def _prep_build_quotation(task: dict, skill: dict, company: dict, text: str) -> 
     return True
 
 
+def _keep_team_names(company: dict, old: str, new: str) -> str:
+    """A voice-transcribed correction mishears our own people ("Richard" for Rashad, card 1188), and the model
+    copies the mishearing in. CODE puts the name back: a first name from the company's signature roster that
+    was in the old text and is gone from the new one replaces the ONE capitalised word the edit introduced."""
+    sigs = (profile.get(company.get("id")) or {}).get("signatures") or {}
+    roster = {str(v.get("name") or "").split()[0] for v in sigs.values()
+              if isinstance(v, dict) and (v.get("name") or "").strip()}
+    words_old = set(re.findall(r"[A-Z][a-z]+", old))
+    brand = set(re.findall(r"[A-Z][a-z]+", company.get("name") or ""))
+    for first in roster:
+        if re.search(rf"\b{re.escape(first)}\b", old) and not re.search(rf"\b{re.escape(first)}\b", new):
+            added = [w for w in dict.fromkeys(re.findall(r"[A-Z][a-z]+", new)) if w not in words_old and w not in brand]
+            if len(added) == 1:
+                new = re.sub(rf"\b{added[0]}\b", first, new)
+    return new
+
+
 def apply_correction(task: dict, text: str) -> None:
     """Redraft a task from the owner's correction (works from Telegram OR the cockpit API)."""
     # a link in his words is REAL: kept on the card before anything else reads or rewrites the text
@@ -2088,6 +2105,7 @@ def apply_correction(task: dict, text: str) -> None:
                 print(f"[wa-ack-edit] {type(_e).__name__}: {_e}", flush=True)
                 new = ""
             if new:
+                new = _keep_team_names(company, old, new)
                 store.update_task(task["id"], draft=new, status="awaiting_approval",
                                   attempts=task["attempts"] + 1)
                 store.log_decision(task["id"], skill["id"], "owner", "correct", note=text,
