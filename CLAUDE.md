@@ -2037,6 +2037,19 @@ scripts), on the owner's call "one run with the ability to do revisions" (not a 
   on the request and the manifest showed `availability(owner)`, so nothing had been stripped by a guard and
   nothing was missing from the context, the writer simply stopped. Correct in small batches and CHECK each point
   landed rather than reading the result approvingly.
+- SOCIAL SERIES PROPOSALS: THE VERTICAL FRAME IS THE DELIVERABLE (Al Hamra deal 143, 12 Oct 2026). A brief
+  whose output is 10 to 12 cinematic 9:16 reels could not be pitched: beat frames are 16:9 by construction, and
+  the only vertical frame the pipeline made was the CONTRIBUTOR tile, hardcoded "phone selfie video, front
+  camera, handheld", capped at 8, carrying no reference photographs, and described to the script writer as
+  "tiles only if the concept has contributors filming themselves". Three state keys now steer it, defaults
+  unchanged so every existing job behaves exactly as before:
+  `tile_style: "cinematic"` swaps `TILE_SELFIE` for `TILE_CINEMATIC` (a film still on a cinema camera, real
+  people mid-action, composed for a phone) and passes the concept's look through to the tile; `tile_cap: N`
+  raises the count from 8; and a tile may carry `refs` into the location's reference photographs exactly as a
+  beat does, so the reels are built from the client's real place. `_tile_schema` / `_tile_rule` swap the script
+  prompt to match, asking for exactly N items, one per reel in release order, spread across the dayparts.
+  `render` pages the tiles SIX to a page: the old `[:8]` here and `deck.tiles`' own `[:7]` silently dropped five
+  reels of a twelve reel series.
 - CLI: `python -m cortex.creative dry <deal_id> "<direction>"` (no card, no quote issued, no filing; output in the job
   dir) and `python -m cortex.creative resume <job> [task_id]`.
 

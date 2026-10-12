@@ -41,6 +41,37 @@ from . import db, deck, documents, imagegen, notifications, pipeline, profile, p
 MODEL = "claude-fable-5"          # every creative stage (owner, 12 Sep 2026); never the CORTEX_MODEL tier pin
 ROOT = "/opt/coretex/creative"
 IMAGE_CAP = 40                    # images per run unless the profile sets creative_image_cap
+
+# The two registers a 9:16 tile can be shot in. `selfie` is the original: a contributor talking to their
+# own phone. `cinematic` is for a social SERIES, where the vertical frame is the deliverable itself and
+# has to look like a film still, not a vox pop. Chosen per job with state key `tile_style`.
+TILE_SELFIE = ("Vertical still from a phone selfie video, front camera, handheld, natural light, "
+               "eye level: ")
+TILE_CINEMATIC = ("Vertical 9:16 cinematic film still from a short social film, shot on a cinema camera "
+                  "with a fast prime, shallow depth of field, natural light, real unposed people caught "
+                  "mid-moment, composed for a phone screen with the subject in the upper two thirds: ")
+
+
+def _tile_schema(s: dict) -> str:
+    """The tiles half of the script schema. A social SERIES asks for one vertical frame per reel, so it
+    needs a count, a daypart and reference photographs; a contributor tile needs none of that."""
+    if (s.get("tile_style") or "selfie") != "cinematic":
+        return ('{"heading": "", "body": "", "items": [{"label": "", "prompt": "a vertical phone selfie '
+                'still of the contributor, place and action"}]} or null')
+    n = int(s.get("tile_cap") or 8)
+    return ('{"heading": "", "body": "", "items": [{"label": "the reel title, 2 to 4 words", "prompt": '
+            '"one vertical 9:16 film still: subject, action, setting, daypart, light, lens, camera '
+            'position; under 90 words", "refs": [numbers of the reference photographs that show this '
+            f'place]}}]}}, with EXACTLY {n} items, one per reel in release order')
+
+
+def _tile_rule(s: dict) -> str:
+    if (s.get("tile_style") or "selfie") != "cinematic":
+        return "Tiles only if the concept has contributors filming themselves (else null)."
+    return ("The TILES are the deliverable here, one vertical frame per reel of the series: real people "
+            "mid-action in a real place, never a posed portrait and never a phone clip. Spread them "
+            "across the dayparts and the locations the brief names, and give every one a different "
+            "subject, place and time of day.")
 UA = {"User-Agent": "SensaCortex/1.0 (hello@sensa.digital)"}
 LICENCES = re.compile(r"^(cc0|cc by(-sa)?( \d\.\d)?|public domain|pd)", re.I)
 _EM = re.compile(r"\s*[—–]\s*")
@@ -402,15 +433,14 @@ class Job:
                "words\", \"refs\": [numbers of the reference photographs that show this view], \"assets\": "
                "[\"the @tags of every asset this beat shows\"], \"cover\": <true on the ONE beat that makes the "
                "best cover: the location at its most striking, never a phone clip>}], \"tiles\": "
-               "{\"heading\": \"\", \"body\": \"\", \"items\": [{\"label\": \"\", \"prompt\": \"a vertical phone "
-               "selfie still of the contributor, place and action\"}]} or null}. "
+               + _tile_schema(self.s) + "}. "
                f"Between 7 and 11 beats; contiguous timings from 0:00 ending exactly at {dur // 60}:{dur % 60:02d}. "
                "ON-SCREEN TEXT and VOICEOVER are different things: never put the same words in both, and leave "
                "voiceover empty on a beat the owner's direction says carries no narration. The voiceover across "
                "all beats must read as one continuous piece of writing at a speakable pace for its timings. "
                "No legible text, logos or readable screens inside any frame: typography is added in post. "
                "Asymmetric compositions, one clear focal subject, never two people squared off to camera. "
-               "No em dashes. Tiles only if the concept has contributors filming themselves (else null).")
+               "No em dashes. " + _tile_rule(self.s))
         user = (f"CONCEPT:\n{json.dumps(c, ensure_ascii=False)}\n\nBRIEF:\n{json.dumps(self.s['brief'], ensure_ascii=False)}"
                 f"\n\nOWNER'S DIRECTION:\n{self.s.get('words') or '(none)'}")
         if prev:
@@ -473,9 +503,19 @@ class Job:
             for v in "ab":
                 jobs.append((f"b{b['n']}_{v}", b["frame_prompt"] + look + bans, rp, "16:9", pre))
         if only is None:
-            for i, t in enumerate(((sc.get("tiles") or {}).get("items") or [])[:8]):
-                jobs.append((f"t{i + 1}", "Vertical still from a phone selfie video, front camera, handheld, natural "
-                                          f"light, eye level: {t['prompt']}." + bans, [], "9:16", ""))
+            # VERTICAL TILES ARE NOT ALWAYS VOX POPS (Al Hamra deal 143, 12 Oct 2026). The tile was built for
+            # contributor clips, so its prompt was hardcoded "phone selfie video, front camera, handheld" and
+            # capped at 8 with no reference photographs. A social series brief, where the DELIVERABLE is 10 to
+            # 12 cinematic 9:16 reels, had no way to show a single frame of what it is buying. `tile_style`
+            # picks the register, `tile_cap` the count, and a tile may now carry reference photographs by index
+            # exactly as a beat does.
+            cinematic = (self.s.get("tile_style") or "selfie") == "cinematic"
+            pre_t = (TILE_CINEMATIC if cinematic else TILE_SELFIE)
+            items = ((sc.get("tiles") or {}).get("items") or [])[:int(self.s.get("tile_cap") or 8)]
+            for i, t in enumerate(items):
+                rt = [refs[k - 1] for k in (t.get("refs") or []) if isinstance(k, int) and 0 < k <= len(refs)][:3]
+                jobs.append((f"t{i + 1}", pre_t + f"{t['prompt']}." + (look if cinematic else "") + bans,
+                             rt, "9:16", use_ref if rt else ""))
         if len(jobs) > self.image_cap():     # the cap is per generation pass (a revision regenerates only a few)
             raise RuntimeError(f"this pass needs {len(jobs)} images, over the cap of {self.image_cap()}; raise "
                                "creative_image_cap on the company profile or cut beats")
@@ -766,13 +806,22 @@ class Job:
                        [{"time": b["time"], "line": b.get("voiceover") or ""} for b in beats], "The voice over",
                        cp["voscript"].get("note") or "Read unhurried, one voice, over the picture.")
             n += 1
+        cap_t = int(self.s.get("tile_cap") or 8)
         tiles = [(t, (fr.get(f"t{i + 1}") or {}).get("pick")) for i, t in
-                 enumerate(((sc.get("tiles") or {}).get("items") or [])[:8])]
+                 enumerate(((sc.get("tiles") or {}).get("items") or [])[:cap_t])]
         tiles = [{"img": p, "label": t.get("label")} for t, p in tiles if p]
         if tiles:
-            d.tiles(f"{n:02d} · {cp['tiles'].get('heading') or 'The voices'}", cp["tiles"].get("heading") or "",
-                    cp["tiles"].get("body") or "", tiles, cp["tiles"].get("note") or "", "The voices")
-            n += 1
+            # A page holds six comfortably. Beyond that they used to be dropped on the floor by the [:8]
+            # above and deck.tiles' own [:7], so a 12 reel series showed seven reels and lost five.
+            head = cp["tiles"].get("heading") or ("The reels" if cap_t > 8 else "The voices")
+            sect = "The reels" if cap_t > 8 else "The voices"
+            pages = [tiles[i:i + 6] for i in range(0, len(tiles), 6)]
+            for pi, chunk in enumerate(pages):
+                more = f" ({pi + 1} of {len(pages)})" if len(pages) > 1 else ""
+                d.tiles(f"{n:02d} · {head}{more}", head if pi == 0 else "",
+                        cp["tiles"].get("body") or "" if pi == 0 else "", chunk,
+                        cp["tiles"].get("note") or "" if pi == len(pages) - 1 else "", sect)
+                n += 1
         d.strip(f"{n:02d} · Look and feel", cp["look"].get("heading"), "", (cp["look"].get("cols") or [])[:4])
         d.with_bg(bgi(4))
         n += 1
