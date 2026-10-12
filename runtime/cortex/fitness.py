@@ -997,7 +997,8 @@ SETTLE_MIN = 20     # minutes after a session's last recorded moment before it i
 
 
 def _refresh_grown(since: date | None = None) -> int:
-    """A watch-made entry ('w:' uid) whose session has since grown or changed gets its watch numbers refreshed.
+    """A watch-made entry ('w:' uid) whose session has since GROWN (it was filed mid-session) gets its watch numbers
+    refreshed. Never when the entry is longer than the watch: that is his own correction (5 Oct warm-up set to 15:00).
     The phone's push overwrites any server-side edit, so the fix is a COPY under a new uid (preset, settings, notes
     and confirmation kept from the entry, only duration / HR / kcal from the watch) plus a tombstone on the old row."""
     q = ("select c.*, h.avg_hr h_avg, h.max_hr h_max, h.kcal h_kcal, extract(epoch from h.end_at-h.start_at)/60 h_mins "
@@ -1011,7 +1012,7 @@ def _refresh_grown(since: date | None = None) -> int:
     for r in db.query(q, tuple(params)):
         hm = float(r["h_mins"])
         hmax = round(float(r["h_max"])) if r["h_max"] is not None else None
-        if abs(float(r["minutes"] or 0) - hm) < 0.5 and (hmax is None or r["max_hr"] == hmax):
+        if hm < float(r["minutes"] or 0) + 0.5:     # only a session that GREW; a shorter watch figure may be his edit
             continue
         base, _, ver = r["uid"].partition("|r")
         new_uid = f"{base}|r{int(ver) + 1 if ver.isdigit() else 2}"

@@ -1592,6 +1592,7 @@ while a local change is queued — a pull once erased a cardio session seconds a
   are pre-filled at JGE from the last session on that preset and tagged unconfirmed until checked in the app; a
   10-20 min treadmill ending within 15 min of a 4x4 is its warm-up; title "Steam Room" -> preset `id_steam`.
   `watch` is pushed by the app with `coalesce` so an old client never erases it. Creatine: `fitness.supplements`.
+- **A session still running is never filed (12 Oct 2026):** the Bridge sends an in-progress Samsung session with end = now, so the 07:00 and 07:30 syncs filed his warm-up at 10:19 and his 30-min 4x4 at 11:02 as plain treadmill entries (an 11-min session fails `is_4x4`). `reconcile_watch` now only files sessions that ended `SETTLE_MIN` (20) minutes ago, and `_refresh_grown` re-files any `w:` entry whose session has since GROWN, as a copy (`<uid>|r2`, preset/settings/notes kept, duration/HR/kcal from the watch) plus a tombstone, because the phone's push overwrites a server edit. It never touches an entry LONGER than the watch figure: that is his own correction (a first version reverted his 15:00 warm-up of 5 Oct to 12:08; restored).
 - **MASS-DELETE INCIDENT (5 Oct 2026):** a device whose localStorage filled up (4,300 imported food rows) lost its
   foods + meals locally and its next push tombstoned all 242 foods and 13 meals (restored by flipping
   `deleted`). Now: the app never sends more than 5 tombstones per collection in one push, the server strips
