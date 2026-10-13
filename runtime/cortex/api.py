@@ -2139,6 +2139,26 @@ def crm_project_automation(id: int, body: AutomationBody, u: dict = Depends(curr
     return r
 
 
+class NextChaseBody(BaseModel):
+    when: str = ""                   # natural language ("Thursday 10am", "in 2 days") or ISO
+    every_days: int | None = None    # his own rhythm from then on
+
+
+@app.post("/api/crm/project/{id}/next-chase")
+def crm_project_next_chase(id: int, body: NextChaseBody, u: dict = Depends(current_user)) -> dict:
+    """Set the next chase (and optionally its rhythm) by hand from the deal page (owner, 13 Oct 2026)."""
+    _guard_deal(u, id)
+    from . import reminders
+    when = reminders.parse_when(body.when) if (body.when or "").strip() else None
+    if (body.when or "").strip() and not when:
+        raise HTTPException(status_code=400, detail="could not read that date; try 'Thursday 10am' or a date")
+    every = body.every_days if body.every_days and 0 < body.every_days <= 90 else None
+    r = crm.set_next_chase(id, when, every, by=_person(u) or "owner")
+    if not r:
+        raise HTTPException(status_code=400, detail="give a date or a number of days")
+    return {"ok": True, "next_followup": r.get("next_followup")}
+
+
 class DealReminderBody(BaseModel):
     when: str                        # natural language ("in 3 days") or ISO
     note: str
@@ -3676,7 +3696,10 @@ SKILL_TOOLS = [
             "time": {"type": "string", "description": "HH:MM, Dubai time, e.g. 17:00"},
             "title": {"type": "string", "description": "words from the meeting title"}}},
         "documents": {"type": "array", "items": {"type": "string"},
-                      "description": "library document ids (or exact file names) to file on this opportunity"}}}},
+                      "description": "library document ids (or exact file names) to file on this opportunity"},
+        "next_chase": {"type": "string", "description": "when the next email chase goes, in his words ('Thursday "
+                       "10am', 'tomorrow', 'in 3 days')"},
+        "chase_every_days": {"type": "integer", "description": "his own chase rhythm from then on, in days"}}}},
     {"name": "reissue_quotation",
      "description": "Issue an EXISTING quotation again as its next version, copied EXACTLY by code from the stored "
                     "version: same lines, same prices, same total. Use this, never create_quotation, whenever "
@@ -4028,6 +4051,16 @@ def _update_opportunity(inp: dict) -> str:
         db.execute("update company_documents set deal_id=%s where id=%s", (did, doc["id"]))
         _pl.log_deal(did, "document_filed", f"Filed: {doc['filename']} (owner, via Talk).", ref=f"doc:{doc['id']}")
         done.append(f"filed {doc['filename']}")
+    if (inp.get("next_chase") or "").strip() or inp.get("chase_every_days"):
+        from datetime import timedelta, timezone
+        from . import reminders
+        when = reminders.parse_when(inp["next_chase"]) if (inp.get("next_chase") or "").strip() else None
+        ev = int(inp["chase_every_days"]) if inp.get("chase_every_days") and 0 < int(inp["chase_every_days"]) <= 90 else None
+        if (inp.get("next_chase") or "").strip() and not when:
+            done.append(f"next chase NOT set: could not read '{inp['next_chase']}'")
+        elif crm.set_next_chase(did, when, ev, by="owner, via Talk"):
+            done.append("next chase " + (f"{when.astimezone(timezone(timedelta(hours=4))):%a %d %b %H:%M}" if when else "")
+                        + (f", then every {ev} days" if ev else ""))
     stage = (inp.get("stage") or "").strip()
     if stage:
         if stage in crm.DEAL_STAGES:

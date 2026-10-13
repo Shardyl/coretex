@@ -235,11 +235,15 @@ def fire(r: dict) -> int | None:
     return (n or {}).get("id")
 
 
-_NOTE_Q = ("This is the owner's own note on a sales opportunity. Answer two narrow questions about it, from its words "
+_NOTE_Q = ("This is the owner's own note on a sales opportunity. Answer narrow questions about it, from its words "
            "only. contacted: true if it records that he (or we) actually spoke, called, messaged on WhatsApp or met the "
            "client; false for anything else (a budget, a preference, a fact). next: the exact words that say WHEN to "
-           "contact them next ('next Tuesday', 'after Eid', 'in two weeks'), or null if the note does not say. "
-           'Return {"contacted": true|false, "next": "<their words>"|null}.')
+           "follow up or contact them next ('next Tuesday', 'after Eid', 'in two weeks', 'chase Thursday'), or null if "
+           "the note does not say. channel: 'email' if that next follow-up is an email or a chase, 'call' if it is a "
+           "call, WhatsApp or meeting, 'any' if it does not say. every_days: a number only if the note sets a "
+           "repeating frequency ('chase every 3 days' = 3, 'weekly' = 7), else null. "
+           'Return {"contacted": true|false, "next": "<their words>"|null, "channel": "email"|"call"|"any", '
+           '"every_days": <int>|null}.')
 
 
 def on_note(deal_id, text: str) -> str:
@@ -248,18 +252,34 @@ def on_note(deal_id, text: str) -> str:
     from . import engine, pipeline, provider, stages, store
     if not str(deal_id or "").isdigit() or not (text or "").strip():
         return ""
+    try:
+        r = provider.think_json(_NOTE_Q, text[:2000], model=provider.MODEL_ROUTER, max_tokens=100, purpose="touch-note")
+    except Exception:  # noqa: BLE001
+        return ""
+    r = r if isinstance(r, dict) else {}
+    said = []
+    # THE EMAIL CHASE FOLLOWS HIS NOTE TOO (owner, 13 Oct 2026: "a note or a voice note ... instantly read by Cortex
+    # and updated with a chase up or draft frequency"). Code resolves the date; the model only quotes his words.
+    if (r.get("next") and r.get("channel") in ("email", "any")) or r.get("every_days"):
+        from . import crm, reminders
+        try:
+            when = reminders.parse_when(str(r["next"])) if r.get("next") else None
+            ev = int(r["every_days"]) if str(r.get("every_days") or "").isdigit() and 0 < int(r["every_days"]) <= 90 else None
+            if when or ev:
+                crm.set_next_chase(int(deal_id), when, ev, by="owner's note", why=text[:160])
+                said.append("Next email chase: " + (f"{when.astimezone(timezone(timedelta(hours=4))):%a %d %b}" if when else "")
+                            + (f", then every {ev} days" if ev else "") + ".")
+        except Exception as e:  # noqa: BLE001
+            print(f"[touch] chase from note on deal {deal_id}: {type(e).__name__}: {e}", flush=True)
+    if r.get("channel") == "email" and not r.get("contacted"):
+        return " ".join(said)              # an email instruction does not move the WhatsApp/call track
     alias = db.setting_get(f"touch_alias:{int(deal_id)}")   # the same person's track lives on their other deal
     if alias and not _state(deal_id):
         deal_id = int(alias)
     st = _state(deal_id)
     deal = db.one("select id, stage, company from crm_projects where id=%s", (int(deal_id),))
     if not st or not deal or deal.get("stage") not in stages.SALES:
-        return ""
-    try:
-        r = provider.think_json(_NOTE_Q, text[:2000], model=provider.MODEL_ROUTER, max_tokens=80, purpose="touch-note")
-    except Exception:  # noqa: BLE001
-        return ""
-    r = r if isinstance(r, dict) else {}
+        return " ".join(said)
     from . import crm
     co = next((store.get_company_by_slug(s) for s in companies()
                if (deal.get("company") or "").lower() in (s, crm._org(s).lower())), None) or {}
@@ -273,9 +293,9 @@ def on_note(deal_id, text: str) -> str:
         if not when:                       # spoke to them, no date said: the rhythm runs on from today
             when = datetime.now(timezone.utc) + timedelta(days=_gap(co.get("id"), st["step"] - 1))
     if not when:
-        return ""
+        return " ".join(said)
     _schedule(co.get("id"), int(deal_id), when, st)
-    return f"Next WhatsApp/call reminder: {when.astimezone(timezone(timedelta(hours=4))):%a %d %b}."
+    return " ".join(said + [f"Next WhatsApp/call reminder: {when.astimezone(timezone(timedelta(hours=4))):%a %d %b}."])
 
 
 # ---------------------------------------------------------------- retro: every open opportunity (owner, 13 Oct 2026)

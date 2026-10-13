@@ -478,6 +478,29 @@ def _cases():
          lambda: "A FAILED DRAFT IS NEVER SILENT" in inspect.getsource(engine)
          and 'dedup_key=f"draftfail:' in inspect.getsource(engine))
 
+    # --- the follow-up rhythm (owner, 13 Oct): receipt check next working day, then weekly, then fortnightly until
+    # they answer; he can set the next chase himself
+    _crm = __import__("cortex.crm", fromlist=["x"])
+    def _rhythm():
+        pts = _crm.cadence_points(_crm.CLOSING_CADENCE)
+        d = _crm.cadence_points(_crm.DEFAULT_CADENCE)
+        rv = _crm.cadence_points(__import__("cortex.stages", fromlist=["x"]).REVIVAL_CADENCE)
+        return (pts[0]["after_days"] == 1 and pts[1]["after_days"] == 5 and pts[-1]["after_days"] == 10
+                and len(pts) >= 30 and _crm.CLOSING_CADENCE.get("working_days")
+                and max(p["after_days"] for p in d) <= 14 and all(p["after_days"] <= 14 for p in rv))
+    case("submitted: receipt check next day, then weekly, then every two weeks", "owner, follow-up audit", _rhythm)
+    case("a reply restarts at the weekly step; his own rhythm is never reset", "owner, follow-up audit",
+         lambda: "followup_step=1" in inspect.getsource(_crm.enter_closing)
+         and 'was == "owner"' in inspect.getsource(_crm.enter_closing))
+    case("the receipt check is not held by the two-day waits", "owner, follow-up audit",
+         lambda: "_need = 1 if not (opp.get(\"followup_step\") or 0) else 2" in inspect.getsource(engine._closing_gate)
+         and "quiet = 0.8" in inspect.getsource(__import__("cortex.gate", fromlist=["x"]).check))
+    case("he can set the next chase: deal page, note, Talk", "owner, follow-up audit",
+         lambda: callable(getattr(_crm, "set_next_chase", None))
+         and "set_next_chase(" in inspect.getsource(_t.on_note)
+         and "set_next_chase(" in inspect.getsource(__import__("cortex.api", fromlist=["x"])._update_opportunity)
+         and hasattr(__import__("cortex.api", fromlist=["x"]), "crm_project_next_chase"))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

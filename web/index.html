@@ -1181,6 +1181,7 @@ function dealAutomation(p){
   return `<div class="dsec"><div class="dlbl">Follow-up automation</div>
     <div class="row" style="gap:6px;margin:4px 0 6px">${btn('auto','Auto')}${btn('manual','Manual')}${btn('off','Off')}</div>
     ${mode==='auto'?`<div class="csub" style="margin-bottom:8px">${next?'Next chase: '+esc(next)+' · step '+((p.followup_step||0)+1):'Chase starts when we next email them'}</div>`:''}
+    <div class="row" style="gap:6px;margin:2px 0 8px"><button class="btn sm" onclick="setNextChase(${p.id})">${ic('clock',14)} Set next chase</button></div>
     <div class="dlbl" style="margin-top:8px">Reminders</div>${rems}
     <div class="row" style="margin-top:7px"><button class="btn sm" onclick="addDealReminder(${p.id})">${ic('plus',15)} Add reminder</button></div></div>`;
 }
@@ -1188,6 +1189,18 @@ async function setDealAutomation(id,mode){
   try{ await api('/api/crm/project/'+id+'/automation',{method:'POST',body:JSON.stringify({mode:mode==='off'?null:mode})});
     toast(mode==='auto'?'Auto follow-ups on':(mode==='manual'?'Switched to manual':'Automation off')); openProject(id); }
   catch(e){ toast('Could not update: '+e.message); }
+}
+async function setNextChase(id){
+  // HE SETS THE NEXT CHASE (13 Oct 2026): a date in words, and optionally his own rhythm from then on
+  const when=prompt('When should the next chase go? (e.g. "tomorrow 9am", "Thursday", "in 2 days", or a date). Leave empty to only set a rhythm.');
+  if(when===null) return;
+  const ev=prompt('Then chase every how many days? (leave empty to keep the normal rhythm)');
+  if(ev===null) return;
+  const every=parseInt(ev,10)||null;
+  if(!when.trim()&&!every){ toast('Nothing set'); return; }
+  try{ await api('/api/crm/project/'+id+'/next-chase',{method:'POST',body:JSON.stringify({when:when.trim(),every_days:every})});
+    toast('Next chase set'); openProject(id); }
+  catch(e){ toast('Could not set: '+e.message); }
 }
 async function addDealReminder(id){
   const when=prompt('When? (e.g. "in 3 days", "next Tuesday 10am", or a date)'); if(!when) return;

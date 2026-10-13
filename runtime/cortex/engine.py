@@ -4517,8 +4517,12 @@ def _closing_gate(co: dict, opp: dict, email: str, msgs: list, label: str) -> bo
                                  dedup_key=f"closing-gate:{did}:{notice}")
         return True
 
-    if outs and _working_days_since(max(outs), now) < 2:
-        return _hold(f"we emailed them on {max(outs).astimezone(_GST):%a %d %b}, under 2 working days ago")
+    # THE RECEIPT CHECK GOES THE NEXT WORKING DAY (owner, 13 Oct 2026: "did they even get it"): the closing rhythm's
+    # step 0 follows the submission by one working day, every later step waits two since our last email
+    _need = 1 if not (opp.get("followup_step") or 0) else 2
+    if outs and _working_days_since(max(outs), now) < _need:
+        return _hold(f"we emailed them on {max(outs).astimezone(_GST):%a %d %b}, under {_need} working day"
+                     f"{'s' if _need > 1 else ''} ago")
     theirs = [m for m in (msgs or []) if (m.get("email") or "").lower() == (email or "").lower()]
     # ONLY A MESSAGE ABOUT THIS QUOTE COUNTS (MAH Gold, 13 Oct 2026: Mai's sign-off of the VIDEO was read as acceptance
     # of the SSD quotation, because her newest message was the newest message): the matcher must place it on this deal

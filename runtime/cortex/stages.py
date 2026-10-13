@@ -38,8 +38,9 @@ CANCEL_ON_ENTRY = tuple(s for s, v in STAGES.items() if v["cancel_on_entry"])   
 NO_RHYTHM = tuple(s for s, v in STAGES.items() if v["rhythm"] is None)
 NO_CORRESPONDENCE = tuple(s for s, v in STAGES.items() if not v["correspondence"])     # Lost
 
+# a Dormant deal is still followed up every two weeks until they answer (owner, 13 Oct 2026), not twice in 6 months
 REVIVAL_CADENCE = {"name": "revival", "skip_weekends": True,
-                   "steps": [{"after_days": 90, "repeat": 2, "action": "revive"}]}
+                   "steps": [{"after_days": 14, "repeat": 26, "action": "revive"}]}
 
 
 def rhythm(stage: str | None) -> str | None:

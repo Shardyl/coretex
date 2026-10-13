@@ -1078,12 +1078,14 @@ CLOSING_CADENCE = {   # quotation with them AND they have engaged with it: push 
     "name": "closing",
     "skip_weekends": True,
     "working_days": True,
+    # OWNER, 13 Oct 2026: "once we've submitted a quote or proposal ... we must find out whether they received it at
+    # least, almost the next day or at the very latest the day after ... then five days or something, once a week ...
+    # we won't let people go until they respond ... every two weeks." Step 0 is the RECEIPT CHECK and only runs when
+    # the deal enters Quote (the submission); a reply from them restarts at step 1 (they have it).
     "steps": [
-        {"after_days": 2, "repeat": 5, "action": "chase"},
-        {"after_days": 3, "repeat": 4, "action": "chase"},
-        {"after_days": 5, "repeat": 4, "action": "chase"},
-        {"after_days": 10, "repeat": 2, "action": "checkin"},
-        {"after_days": 90, "repeat": 2, "action": "revive"},
+        {"after_days": 1, "repeat": 1, "action": "chase"},       # did you receive it? (next working day)
+        {"after_days": 5, "repeat": 8, "action": "chase"},       # then weekly, about two months
+        {"after_days": 10, "repeat": 26, "action": "checkin"},   # then every two weeks until they answer
     ],
 }
 
@@ -1320,7 +1322,7 @@ def _apply_stage_rhythm(p: dict, old: str | None, new: str) -> None:
     elif r == "revival" and p.get("automation") != "manual" and stages.rhythm(old) != "revival":
         db.execute("update crm_projects set automation='auto', cadence=%s, followup_step=0, next_followup=%s "
                    "where id=%s", (Json(stages.REVIVAL_CADENCE), _schedule_point(stages.REVIVAL_CADENCE, 0), did))
-        note = f"Moved to {new}: soft revivals only, the first in about 90 days."
+        note = f"Moved to {new}: a soft check-in every two weeks until they answer."
     if note:
         db.execute("update crm_projects set history = history || %s::jsonb where id=%s",
                    (Json([{"ts": _now(), "event": "note", "text": note}]), did))
@@ -1367,11 +1369,10 @@ DEFAULT_CADENCE = {
     "skip_weekends": True,
     "steps": [
         {"after_days": 3, "repeat": 4, "action": "chase"},      # 4 chases, 3 days apart
-        {"after_days": 14, "repeat": 2, "action": "checkin"},   # then 2 fortnightly check-ins
-        # Nobody who approached us is ever dumped as dead (Rashad, 2026-08-25): after the active
-        # sequence, soft revivals at ~3 and ~6 months, then the opportunity rests as Dormant —
-        # never auto-Lost. Lost is reserved for an explicit "no".
-        {"after_days": 90, "repeat": 2, "action": "revive"},
+        # then every two weeks until they answer (owner, 13 Oct 2026: "we won't let people go until they respond ...
+        # I would follow up every two weeks"). Nobody who approached us is dumped as dead (25 Aug): after about a
+        # year of fortnightly check-ins the opportunity rests as Dormant, never auto-Lost. Lost = an explicit "no".
+        {"after_days": 14, "repeat": 26, "action": "checkin"},
     ],
 }
 
@@ -1419,15 +1420,41 @@ def enter_closing(deal_id: int) -> bool:
     if not p or p.get("automation") != "auto" or p.get("stage") != "Quote":
         return False
     was = (p.get("cadence") or {}).get("name") if isinstance(p.get("cadence"), dict) else None
-    db.execute("update crm_projects set cadence=%s, followup_step=0, updated_at=now() where id=%s",
+    if was == "owner":                     # he set this deal's rhythm himself: a reply never overrides it
+        return False
+    # step 1, not 0: they have written, so they have it; the receipt check is only for the submission itself
+    db.execute("update crm_projects set cadence=%s, followup_step=1, updated_at=now() where id=%s",
                (Json(get_closing_cadence(p["company"])), int(deal_id)))
     if was != "closing":
         db.execute("update crm_projects set history = history || %s::jsonb where id=%s",
                    (Json([{"ts": _now(), "event": "note",
-                           "text": "Closing rhythm on: the client is weighing our quotation, so chases now run every "
-                                   "2 working days, then twice a week, then weekly, restarting whenever they reply."}]),
+                           "text": "Closing rhythm on: a chase every 5 working days while they weigh our quotation, "
+                                   "then every two weeks until they answer, restarting whenever they reply."}]),
                     int(deal_id)))
     return True
+
+
+def set_next_chase(deal_id: int, when: datetime | None = None, every_days: int | None = None,
+                   by: str = "owner", why: str = "") -> dict | None:
+    """THE OWNER SETS THE NEXT CHASE (owner, 13 Oct 2026: "I can't set the frequency of the next reminder or the
+    next follow-up manually ... I should be able to do that on Cortex, or a note or a voice note"). `when` = the
+    next chase; `every_days` = his own rhythm from then on (a per-deal 'owner' cadence that a client's reply does
+    not reset). The deal goes on auto. Used by the deal page, his notes (touch.on_note) and Talk."""
+    p = db.one("select * from crm_projects where id=%s", (int(deal_id),))
+    if not p or not (when or every_days):
+        return None
+    if every_days:
+        cad = {"name": "owner", "skip_weekends": True,
+               "steps": [{"after_days": int(every_days), "repeat": 52, "action": "chase"}]}
+        when = when or _schedule_point(cad, 0)
+        db.execute("update crm_projects set cadence=%s, followup_step=0 where id=%s", (Json(cad), int(deal_id)))
+    db.execute("update crm_projects set automation='auto', next_followup=%s, updated_at=now() where id=%s",
+               (when, int(deal_id)))
+    txt = (f"Next chase set to {when.astimezone(timezone(timedelta(hours=4))):%a %d %b %H:%M} Dubai"
+           + (f", then every {int(every_days)} days" if every_days else "") + f" ({by}" + (f": {why[:160]}" if why else "") + ").")
+    db.execute("update crm_projects set history = history || %s::jsonb where id=%s",
+               (Json([{"ts": _now(), "event": "note", "text": txt}]), int(deal_id)))
+    return db.one("select * from crm_projects where id=%s", (int(deal_id),))
 
 
 def repair_quote_rhythm(rows: list) -> list:

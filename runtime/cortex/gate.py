@@ -98,8 +98,12 @@ def check(company_id: int, email: str, deal_id, request: dict | None) -> str | N
         if last_in and (not last_out or last_in > last_out):
             return f"they wrote to us last ({last_in:%d %b}), so a reply is owed, not a nudge"
         quiet = QUIET_DAYS.get(why, 2)
+        # a quoted deal's own rhythm decides its gaps (receipt check the next working day, then weekly); the closing
+        # gate holds anything inside two working days, so this only stops a same-day repeat
+        if why == "chase" and deal and stages.rhythm(deal.get("stage")) == "closing":
+            quiet = 0.8
         if quiet and last_out and now - last_out < timedelta(days=quiet):
-            return f"we emailed them on {last_out:%d %b}, under {quiet} days ago"
+            return f"we emailed them on {last_out:%d %b}, under {quiet:g} days ago"
         # A MEETING IS CONTACT (audit 13 Oct): a "they have not replied" chase could go out the day after a call
         met = db.one("select max(starts_at) at from meeting_notes where attendees @> %s::jsonb and starts_at <= now()",
                      (f'["{email}"]',)) or {}

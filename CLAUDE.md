@@ -3279,3 +3279,22 @@ shoot needs none), then 10% off the whole quotation.
 - A FAILED DRAFT IS NEVER SILENT: the generic exception in `process_new_tasks` used to set `failed` and tell only
   Telegram, so card 1200 (an automatic chase to Heidar) vanished. An email card now stays in the Inbox
   (`awaiting_correction`, empty, unsendable) with the reason on it; every failure raises a high-priority notice.
+
+## The follow-up rhythm, and he sets the next chase himself (owner, 13 Oct 2026)
+- OWNER: "once we've submitted a quote or proposal ... find out whether they received it, almost the next day or at
+  the very latest the day after ... then five days or something, once a week ... we won't let people go until they
+  respond ... every two weeks." And: "I can't set the frequency of the next follow-up manually ... a note or a voice
+  note should be instantly read by Cortex."
+- `crm.CLOSING_CADENCE` (Quote, working days): 1 (the RECEIPT CHECK, only on entering Quote), 5 x8 (weekly, about two
+  months), then 10 x26 (every two weeks until they answer). `enter_closing` (their reply) restarts at step 1, never
+  the receipt check, and never touches an `owner` cadence. `crm.DEFAULT_CADENCE` (Opportunity): 4 chases 3 days
+  apart, then every 14 days x26 (the 90-day revivals are gone). `stages.REVIVAL_CADENCE` (Dormant): every 14 days x26.
+- The two waits let the receipt check through: `_closing_gate` needs 1 working day since our email for step 0 and 2
+  otherwise; `gate.check` uses 0.8 days for a chase on a closing-rhythm deal (the closing gate holds the rest).
+- HE SETS IT: `crm.set_next_chase(deal, when, every_days, by)` (deal goes on auto; `every_days` = a per-deal `owner`
+  cadence). Deal page "Set next chase" (`POST /api/crm/project/{id}/next-chase`, words via `reminders.parse_when`);
+  his notes (`touch.on_note` now also reads `channel` and `every_days`: an email/any next step moves the email chase,
+  a call/WhatsApp one the touch track); Talk `update_opportunity(next_chase, chase_every_days)`.
+- Migration 13 Oct: open deals moved onto the new rhythm; client- or owner-stated dates kept (Brent 93 end of year,
+  Dawn Christine 103 Jan 2027, Bioscience 113 Mar 2027, Noon 1 quarterly nurture). Honor 120 and Merkle 98 set Lost
+  (owner).
