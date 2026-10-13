@@ -41,8 +41,10 @@ _QUOTE_RX = re.compile(r"quotation|proposal|\bSEN-\d{4}-\d{4}\b", re.I)
 
 
 def _open(deal_id: int) -> list[dict]:
+    """Cortex's reminders on the deal that are still owed: pending or snoozed, and FIRED ones too (a fired nudge is
+    still owed until the thing is done; settling it clears the notice it raised)."""
     return db.query("select id, title, created_by from reminders where target_type='deal' and target_id=%s and "
-                    "status in ('pending','snoozed') and coalesce(created_by,'') like 'cortex%%'", (str(int(deal_id)),))
+                    "status in ('pending','snoozed','fired') and coalesce(created_by,'') like 'cortex%%'", (str(int(deal_id)),))
 
 
 def kind_of(r: dict) -> str | None:
@@ -57,6 +59,8 @@ def kind_of(r: dict) -> str | None:
 def _done(deal_id: int, r: dict, why: str) -> None:
     from . import pipeline, reminders
     reminders.mark_done(int(r["id"]))
+    db.execute("update notifications set state='dismissed' where state in ('unread','read','snoozed') and id = "
+               "(select last_notification_id from reminders where id=%s)", (int(r["id"]),))   # its nudge is answered too
     pipeline.log_deal(int(deal_id), "commitment_done", f"{r['title'][:160]} ({why})")
 
 

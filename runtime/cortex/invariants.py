@@ -61,13 +61,15 @@ CHECKS = [
         "key": "proposal_reminder_after_quote",
         "what": "'Prepare and send the proposal' still pending after a quotation or proposal went out",
         "sql": "select r.id, r.title, p.stage from reminders r join crm_projects p on r.target_type='deal' and "
-               "p.id::text=r.target_id where r.status in ('pending','snoozed') and r.title like "
+               "p.id::text=r.target_id where r.status in ('pending','snoozed','fired') and r.title like "
                "'Prepare and send the proposal%%' and (p.stage <> 'Opportunity' or exists (select 1 from "
                "jsonb_array_elements(p.history) e where e->>'event' = 'quotation_sent'))",
-        "fix": "update reminders r set status='done' from crm_projects p where r.target_type='deal' and "
-               "p.id::text=r.target_id and r.status in ('pending','snoozed') and r.title like "
+        "fix": "with d as (update reminders r set status='done' from crm_projects p where r.target_type='deal' and "
+               "p.id::text=r.target_id and r.status in ('pending','snoozed','fired') and r.title like "
                "'Prepare and send the proposal%%' and (p.stage <> 'Opportunity' or exists (select 1 from "
-               "jsonb_array_elements(p.history) e where e->>'event' = 'quotation_sent')) returning r.id",
+               "jsonb_array_elements(p.history) e where e->>'event' = 'quotation_sent')) returning r.id, "
+               "r.last_notification_id) , n as (update notifications set state='dismissed' where id in (select "
+               "last_notification_id from d) and state in ('unread','read','snoozed') returning id) select id from d",
     },
     {
         "key": "notice_on_closed_deal",
