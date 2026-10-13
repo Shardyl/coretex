@@ -180,6 +180,16 @@ def _cases():
                                    "Never sign off with Warm regards, always Best regards.", "", "")
          .get("place") == "email-handling", model=True)
 
+    # --- a person's deal-page reminder is theirs (regression from the 13 Oct created_by change)
+    case("deal-page reminder is filed as the person", "13 Oct map: api crm_project_reminder",
+         lambda: "created_by=_person(u)" in inspect.getsource(__import__("cortex.api", fromlist=["x"]).crm_project_reminder))
+    case("the owner is filed as rashad, a team member by name", "13 Oct map",
+         lambda: __import__("cortex.api", fromlist=["x"])._person({"role": "owner"}) == "rashad"
+         and __import__("cortex.api", fromlist=["x"])._person({"role": "member", "name": "Gino Palmes"}) == "gino")
+    # --- a scheduled email on a deal that closed is parked, never sent
+    case("scheduled send checks the deal stage first", "13 Oct map: scheduled chase on a Lost deal",
+         lambda: "THE DEAL CLOSED AFTER IT WAS SCHEDULED" in inspect.getsource(engine.promote_due_tasks))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

@@ -2166,8 +2166,16 @@ def crm_project_reminder(id: int, body: DealReminderBody, u: dict = Depends(curr
     action = ({"company": slug, "skill": "sales-first-response", "kind": "email_reply", "brief": body.note}
               if body.draft else None)
     r = _rem.create(body.note, when, company_id=(co["id"] if co else None), target_type="deal", target_id=id,
-                    recurrence=body.recurrence, action=action)
+                    recurrence=body.recurrence, action=action, created_by=_person(u))
     return {"ok": True, "reminder": {"id": r["id"], "title": r["title"], "due_at": r["due_at"]}}
+
+
+def _person(u: dict | None) -> str:
+    """Who a person-made record is filed as: the owner is 'rashad', a team member their own name. Never 'cortex%':
+    a closed deal cancels Cortex's reminders and leaves a person's alone."""
+    if not u or (u.get("role") == "owner"):
+        return "rashad"
+    return ((u.get("name") or u.get("email") or "team").split()[0]).lower()
 
 
 @app.get("/api/crm/opportunities")

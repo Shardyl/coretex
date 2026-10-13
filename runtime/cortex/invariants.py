@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from . import db
 
 OPEN = "('new','drafting','queued','awaiting_approval','awaiting_correction')"
+OPEN_OR_SCHEDULED = "('new','drafting','queued','awaiting_approval','awaiting_correction','scheduled')"
 NO_CHASE = "('Lost','Completed')"          # Dormant deliberately absent: dormant deals get soft revivals
 CLOSED = "('Lost','Dormant','Completed')"
 AUTO_CARD = ("(coalesce(t.request->>'followup','')<>'' or t.request->>'lead_chase'='true' "
@@ -31,11 +32,11 @@ CHECKS = [
         "key": "auto_card_on_closed_deal",
         "what": "An unsent card Cortex raised by itself (chase, check-in, reminder email) on a closed deal",
         "sql": f"select t.id, t.deal_id, p.stage from tasks t join crm_projects p on p.id=t.deal_id "
-               f"where t.status in {OPEN} and {AUTO_CARD} and (p.stage in {NO_CHASE} or "
+               f"where t.status in {OPEN_OR_SCHEDULED} and {AUTO_CARD} and (p.stage in {NO_CHASE} or "
                f"(p.stage='Dormant' and coalesce(t.request->>'followup','')<>'revive'))",
         "fix": f"update tasks t set status='cancelled', updated_at=now(), request = request || "
                f"'{{\"cancelled_reason\": \"invariant: the deal is closed\"}}'::jsonb from crm_projects p "
-               f"where p.id=t.deal_id and t.status in {OPEN} and {AUTO_CARD} and (p.stage in {NO_CHASE} or "
+               f"where p.id=t.deal_id and t.status in {OPEN_OR_SCHEDULED} and {AUTO_CARD} and (p.stage in {NO_CHASE} or "
                f"(p.stage='Dormant' and coalesce(t.request->>'followup','')<>'revive')) returning t.id",
     },
     {

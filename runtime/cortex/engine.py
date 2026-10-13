@@ -8585,6 +8585,16 @@ def promote_due_tasks() -> None:
         if t["ap"]:      # already owner-approved (approve & schedule): EXECUTE the frozen draft
             try:
                 task, skill, company = _load(t["id"])
+                _did = task.get("deal_id") or (task.get("request") or {}).get("deal_id")
+                _st = (db.one("select stage from crm_projects where id=%s", (int(_did),)) or {}).get("stage") if _did else None
+                if _st in ("Lost", "Completed", "Dormant"):
+                    # THE DEAL CLOSED AFTER IT WAS SCHEDULED (13 Oct 2026 map: nothing stopped a scheduled chase on a
+                    # deal moved to Lost). Parked for the owner, never sent blind and never silently dropped.
+                    db.execute("update tasks set status='awaiting_approval', schedule_kind=null, run_at=null, "
+                               "updated_at=now(), request = (request - 'approved_send') || %s::jsonb where id=%s",
+                               (json.dumps({"card_problem": f"Held, not sent: the deal moved to {_st} after this was "
+                                                            "scheduled. Approve to send anyway, or skip it."}), t["id"]))
+                    continue
                 db.execute("update tasks set status='awaiting_approval', last_run=now(), updated_at=now() "
                            "where id=%s", (t["id"],))
                 task = store.get_task(t["id"])
