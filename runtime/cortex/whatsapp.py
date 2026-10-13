@@ -89,6 +89,9 @@ def _key(account: str, phone: str, msg: str) -> str:
     return hashlib.sha1(f"{account}|{phone}|{msg}".encode("utf-8", "replace")).hexdigest()[:16]
 
 
+_GREETING_ONLY = re.compile(r"^(hi+|hello+|hey+|hiya|salam|salaam|assalam[ou]? ?alaikum|marhaba|good (morning|afternoon|"
+                            r"evening)|dear( sir| team)?)[\s,!.]*(there|team|sensa|sky ?vision)?[\s,!.?]*$", re.I)
+
 _WA_CHANNEL_NOTE = (
     "CHANNEL: this message arrived on the company's WhatsApp business line, not by email. People write to it the way "
     "they text: short, informal, sometimes a bare greeting or one line, often split across several messages. "
@@ -285,7 +288,11 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
          "body": (("EARLIER MESSAGES FROM THEM (last 24h, oldest first):\n" + "\n".join(f"- {m}" for m in earlier)
                    + "\n\nNEWEST MESSAGE:\n") if earlier else "") + msg, "snippet": msg[:200]}
     cls = engine.classify_email(co, e, channel_note=_WA_CHANNEL_NOTE)
-    if src and cls["category"] in ("spam", "automated", "marketing", "unclear", "personal"):
+    if not earlier and not src and _GREETING_ONLY.match((msg or "").strip()):
+        # "Hi" / "Hello" on its own is the start of a message, not spam: no card yet, their next line (sorted with
+        # this one as context) makes the card.
+        cls = {**cls, "category": "greeting", "to_crm": False, "reason": "a greeting only, waiting for their message"}
+    if src and cls["category"] in ("spam", "automated", "marketing", "unclear", "personal", "greeting"):
         # A WEBSITE-BUTTON REFERENCE IS A FACT: the message was typed after clicking our own WhatsApp button, so it
         # is an enquiry however bare (1117 "I need a video produced in Dubai. My project: (ref RSHCS)" read as spam).
         cls = {**cls, "category": "lead", "to_crm": True, "reason": "came from our website's WhatsApp button"}

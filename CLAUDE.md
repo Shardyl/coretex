@@ -2914,3 +2914,11 @@ shoot needs none), then 10% off the whole quotation.
   (anything else = FYI notification only, nothing sent, nothing to his phone contacts); a `lead` with no deal runs
   `engine.qualify_suggest` and gets an opportunity ONLY when qualified (else the ack card + a notice). The fixed
   acknowledgement is unchanged. `_classify` is gone; `_name_from` reads a stated name only.
+- WHAT WHATSAPP NEEDED ON TOP (found by a dry run over the last 25 real messages): `classify_email(channel_note=)`
+  gets `_WA_CHANNEL_NOTE` (a fact: WhatsApp, people text briefly, classify the conversation); the classifier sees
+  their last 24h of messages (`_recent_messages`/`_remember_message`, setting `wa_recent:<digits>`); a website-
+  button reference (lptrack) makes it a lead whatever the label (ad-click text had read as spam); a bare greeting
+  (`_GREETING_ONLY`) is category `greeting`, no card, the next line makes it. Leads: qualification says needs_info
+  for nearly every short WhatsApp lead, so on this lane only `not_qualified` withholds the opportunity.
+  Dry run result: job seekers -> recruitment, models/agencies -> freelancer/vendor, a friend -> personal, all no
+  card; ad-click and real enquiries -> lead with an opportunity.
