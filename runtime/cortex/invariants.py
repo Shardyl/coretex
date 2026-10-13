@@ -80,6 +80,30 @@ CHECKS = [
                f"returning n.id",
     },
     {
+        "key": "clock_on_stage_without_rhythm",
+        "what": "A deal in a stage with no chase rhythm (Lost, Completed, Close & review, Nurture) still has a clock",
+        "sql": "select id, title, stage from crm_projects where stage in ('Lost','Completed','Close & review','Nurture') "
+               "and (automation='auto' or next_followup is not null)",
+        "fix": "update crm_projects set automation=null, next_followup=null, updated_at=now() where stage in "
+               "('Lost','Completed','Close & review','Nurture') and (automation='auto' or next_followup is not null) "
+               "returning id",
+    },
+    {
+        "key": "won_deal_on_closing_rhythm",
+        "what": "Won work still carries the quote-chasing rhythm",
+        "sql": "select id, title, stage from crm_projects where stage in ('Booked','Production','Delivered',"
+               "'Final Payment','Recurring','Close & review','Nurture','Completed') and cadence->>'name'='closing'",
+        "fix": "update crm_projects set cadence=null, updated_at=now() where stage in ('Booked','Production',"
+               "'Delivered','Final Payment','Recurring','Close & review','Nurture','Completed') and "
+               "cadence->>'name'='closing' returning id",
+    },
+    {
+        "key": "dormant_not_on_revivals",
+        "what": "A Dormant deal has a clock that is not the revival rhythm",
+        "sql": "select id, title, next_followup from crm_projects where stage='Dormant' and next_followup is not null "
+               "and coalesce(cadence->>'name','') <> 'revival'",
+    },
+    {
         "key": "double_chase",
         "what": "One person has more than one open automatic chase",
         "sql": f"select lower(request->'inquiry'->>'email') who, count(*), array_agg(id) from tasks "

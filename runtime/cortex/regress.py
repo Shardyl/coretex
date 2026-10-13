@@ -190,6 +190,22 @@ def _cases():
     case("scheduled send checks the deal stage first", "13 Oct map: scheduled chase on a Lost deal",
          lambda: "THE DEAL CLOSED AFTER IT WAS SCHEDULED" in inspect.getsource(engine.promote_due_tasks))
 
+    # --- what a stage means is one table (audit step 2a)
+    from . import stages
+    case("Nurture and Close & review have no chase rhythm", "audit 2a: double contact / chasing a wrap-up",
+         lambda: not stages.chases("Nurture") and not stages.chases("Close & review"))
+    case("Quote chases on the closing rhythm, won work never does", "audit 2a: booked client on the quote rhythm",
+         lambda: stages.rhythm("Quote") == "closing" and all(stages.rhythm(s) != "closing" for s in stages.WON))
+    case("Dormant gets revivals only", "audit 2a: Dormant kept chasing",
+         lambda: stages.rhythm("Dormant") == "revival"
+         and all(s["action"] == "revive" for s in stages.REVIVAL_CADENCE["steps"]))
+    case("a client's mail attaches to every stage but Lost", "audit 2a: Close & review replies never matched",
+         lambda: stages.NO_CORRESPONDENCE == ("Lost",))
+    case("delivery stages include Delivered", "audit 2a: _DELIVERY_STAGES lacked it",
+         lambda: "Delivered" in engine._DELIVERY_STAGES and "Delivered" in __import__("cortex.pipeline", fromlist=["x"]).PLAN_STAGES)
+    case("closing gate follows the stage, not a leftover cadence", "audit 2a",
+         lambda: "stages.rhythm(stage) == \"closing\"" in inspect.getsource(engine._spawn_followup_card))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

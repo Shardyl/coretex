@@ -482,7 +482,8 @@ def maybe_advance_on_send(deal_id: int, task: dict, env: dict) -> None:
             pass
 
 
-PLAN_STAGES = ("Booked", "Production", "Recurring", "Delivered", "Final Payment")
+from . import stages as _stages
+PLAN_STAGES = _stages.DELIVERY
 
 
 def plan_request(deal_id: int, title: str, stage: str, why: str) -> dict:

@@ -13,7 +13,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Json
 
-from . import config, db
+from . import config, db, stages
 
 # company slug -> the Organisation label used in crm_master (matches the imported master sheet)
 ORG = {"tabscanner": "Tabscanner", "sensa": "Sensa", "skyvision": "Sky Vision",
@@ -230,7 +230,7 @@ def open_deal_for_email(email: str, company: str | None) -> dict | None:
     return db.one("select id, title, stage, company, value from crm_projects "
                   f"where (lower(contact_email)=lower(%s) or {_ON_DEAL_CONTACTS} "
                   "or (%s::int is not null and account_id=%s)) "
-                  "and company=%s and stage not in ('Lost','Close & review') order by id desc limit 1",
+                  "and company=%s and stage not in " + stages.sql_list(stages.NO_CORRESPONDENCE) + " order by id desc limit 1",
                   (email, email, acc, acc, _org(company)))
 
 
@@ -247,7 +247,7 @@ def active_deals_for_email(email: str, company: str | None) -> list[dict]:
                     "from crm_projects "
                     f"where (lower(contact_email)=lower(%s) or {_ON_DEAL_CONTACTS} "
                     "or (%s::int is not null and account_id=%s)) "
-                    "and company=%s and stage not in ('Lost','Close & review') order by id desc",
+                    "and company=%s and stage not in " + stages.sql_list(stages.NO_CORRESPONDENCE) + " order by id desc",
                     (email, email, acc, acc, _org(company)))
 
 
@@ -263,7 +263,7 @@ def open_deal_for_domain(email: str, company: str | None) -> dict | None:
     if not (c and c.get("account_id")):
         return None
     return db.one("select id, title, stage, company, value from crm_projects where account_id=%s and company=%s "
-                  "and stage not in ('Lost','Close & review') order by id desc limit 1",
+                  "and stage not in " + stages.sql_list(stages.NO_CORRESPONDENCE) + " order by id desc limit 1",
                   (c["account_id"], _org(company)))
 
 
@@ -1106,13 +1106,6 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
         pass
     terms = ((p.get("payment_terms") or {}).get("splits")) or []
     now = datetime.now(timezone.utc)
-    if new == "Quote" and p.get("automation") == "auto":
-        # THE CLOSING RHYTHM FROM THE MOMENT THE QUOTE GOES OUT (owner, 6 Oct 2026: "it seems a little bit slow").
-        # DECISION_CADENCE (day 3 / 7 / 14, then fortnightly) ran until the client first replied; now every quoted
-        # deal chases every 2 working days, then twice a week, then weekly. DECISION_CADENCE is kept for reference.
-        _cc = get_closing_cadence(p["company"])
-        db.execute("update crm_projects set cadence=%s, followup_step=0, next_followup=%s where id=%s",
-                   (Json(_cc), _schedule_point(_cc, 0), did))
     if new == "Booked":
         adv = next((x for x in terms if "approval" in (x.get("due") or "").lower()
                     or "advance" in (x.get("due") or "").lower() or "booking" in (x.get("due") or "").lower()),
@@ -1177,14 +1170,11 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
                                              "system_note": "Post-delivery feedback ask, ~4 days after delivery."}})
             except Exception:  # noqa: BLE001
                 pass
-    if new == "Recurring" and p.get("automation") == "auto":
-        db.execute("update crm_projects set cadence=%s, followup_step=0, next_followup=%s where id=%s",
-                   (Json(RECURRING_CADENCE), _schedule_point(RECURRING_CADENCE, 0), did))
     if new == COMPLETED_STAGE:
         try:   # SILENT terminal: no loops, no touches, no asks - kill every pending clock on the deal
             db.execute("update reminders set status='cancelled' where target_type='deal' and target_id=%s "
                        "and status in ('pending','snoozed')", (str(did),))
-            db.execute("update crm_projects set automation='manual', next_followup=null where id=%s", (did,))
+            pass   # the clock is already off: stages.py gives Completed no rhythm (_apply_stage_rhythm)
         except Exception:  # noqa: BLE001
             pass
     if new == NURTURE_STAGE:
@@ -1232,10 +1222,10 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
 # A CLOSED DEAL OWES NOTHING (owner, 12 Sep 2026): Property Finder (deal 104) was marked Lost on 11 Sep and
 # the next day a reminder Cortex had set on 7 Sep ("schedule a call to discuss the proposal") still fired.
 # Close & review is NOT here: delivery promises can still be owed while a project wraps up.
-CLOSED_STAGES = (LOST_STAGE, DORMANT_STAGE, COMPLETED_STAGE)
+CLOSED_STAGES = stages.CANCEL_ON_ENTRY        # Lost, Dormant, Completed (stages.py is the definition)
 # A deal in these stages is NEVER chased (14 Sep 2026). Dormant is deliberately not here: the owner's rule is
 # that nobody who approached us is dumped as dead, so a dormant deal keeps its soft revivals.
-NO_CHASE_STAGES = (LOST_STAGE, COMPLETED_STAGE)
+NO_CHASE_STAGES = stages.NO_RHYTHM            # no automatic contact from the deal's own clock
 
 
 def _cancel_cortex_reminders(p: dict, stage: str) -> list:
@@ -1278,6 +1268,47 @@ def _cancel_cortex_reminders(p: dict, stage: str) -> list:
     return rows
 
 
+def _apply_stage_rhythm(p: dict, old: str | None, new: str) -> None:
+    """THE CHASE CLOCK FOLLOWS THE STAGE (audit 13 Oct 2026, step 2a). One place sets what a deal's own clock does
+    when it enters a stage, from `stages.rhythm(new)`:
+      None      clock off, automation null (Lost, Completed, Close & review, Nurture). Codexa went Lost with its
+                chases on (14 Sep); Nurture deals got check-ins AND nurture touches; Close & review kept chasing.
+      closing   the quote-chasing rhythm from step 0 (owner, 6 Oct: every quoted deal, every 2 working days)
+      won       entering won work from a sales stage drops the closing rhythm for the company cadence (a booked
+                client kept being chased every 2 working days); within won stages the clock is left alone
+      recurring the quarterly check-in
+      revival   a deal moved to Dormant gets soft revivals only (~90 days, twice): it kept its full chase rhythm
+                while its cards were being cancelled. A cadence-exhausted deal is set Dormant by advance_followup,
+                which then switches the clock off itself.
+    Only a deal on automation (or, for revival, any deal not switched off by hand) is touched."""
+    did = int(p["id"])
+    r = stages.rhythm(new)
+    note = None
+    if r is None:
+        if p.get("automation") or p.get("next_followup"):
+            db.execute("update crm_projects set automation=null, next_followup=null, updated_at=now() where id=%s", (did,))
+            note = f"Automatic follow-ups switched off: the deal moved to {new}."
+    elif r == "closing" and p.get("automation") == "auto" and stages.rhythm(old) != "closing":
+        _cc = get_closing_cadence(p["company"])
+        db.execute("update crm_projects set cadence=%s, followup_step=0, next_followup=%s where id=%s",
+                   (Json(_cc), _schedule_point(_cc, 0), did))
+    elif r == "won" and (old in stages.SALES or old is None or ((p.get("cadence") or {}).get("name") == "closing")):
+        if p.get("automation") == "auto":
+            _dc = get_cadence(p["company"])
+            db.execute("update crm_projects set cadence=null, followup_step=0, next_followup=%s where id=%s",
+                       (_schedule_point(_dc, 0), did))
+    elif r == "recurring" and p.get("automation") == "auto":
+        db.execute("update crm_projects set cadence=%s, followup_step=0, next_followup=%s where id=%s",
+                   (Json(RECURRING_CADENCE), _schedule_point(RECURRING_CADENCE, 0), did))
+    elif r == "revival" and p.get("automation") != "manual" and stages.rhythm(old) != "revival":
+        db.execute("update crm_projects set automation='auto', cadence=%s, followup_step=0, next_followup=%s "
+                   "where id=%s", (Json(stages.REVIVAL_CADENCE), _schedule_point(stages.REVIVAL_CADENCE, 0), did))
+        note = f"Moved to {new}: soft revivals only, the first in about 90 days."
+    if note:
+        db.execute("update crm_projects set history = history || %s::jsonb where id=%s",
+                   (Json([{"ts": _now(), "event": "note", "text": note}]), did))
+
+
 def set_project_stage(project_id: int, stage: str, actor: str = "system") -> dict | None:
     """Move a deal to a new stage; logs the change, and (un)marks the linked contact a client across the
     Booked boundary. Moving across 'Booked' shifts it between the Opportunities and Projects screens."""
@@ -1291,13 +1322,7 @@ def set_project_stage(project_id: int, stage: str, actor: str = "system") -> dic
     p["stage"] = stage
     if stage in CLOSED_STAGES and old not in CLOSED_STAGES:
         _cancel_cortex_reminders(p, stage)
-    if stage in NO_CHASE_STAGES and (p.get("automation") == "auto" or p.get("next_followup")):
-        # MOVING A DEAL TO LOST OR COMPLETED SWITCHES ITS CHASES OFF (14 Sep 2026): Codexa went to Lost on
-        # 12 Sep with automation left on, so a fourth chase was drafted two days later and another booked.
-        db.execute("update crm_projects set automation=null, next_followup=null, updated_at=now(), "
-                   "history = history || %s::jsonb where id=%s",
-                   (Json([{"ts": _now(), "event": "note",
-                           "text": f"Automatic follow-ups switched off: the deal moved to {stage}."}]), project_id))
+    _apply_stage_rhythm(p, old, stage)
     if stage in WON_STAGES:
         flag_clients_for_deal(p)        # won = the people/company on it become clients (sticky)
     if p.get("contact_email"):
@@ -1430,7 +1455,7 @@ def hold_auto(deal_id: int) -> None:
     'auto' but with no clock: the first email we send arms it (pipeline.record_send -> touch_followups), and the
     stalled-chase net (engine._rearm_stalled_chases) flags an email of theirs left unanswered."""
     db.execute("update crm_projects set automation='auto', next_followup=null, updated_at=now() where id=%s "
-               "and stage not in ('Lost','Completed','Dormant','Nurture')", (int(deal_id),))
+               "and stage not in " + stages.sql_list(stages.NO_RHYTHM + ("Dormant",)), (int(deal_id),))
 
 
 def set_opportunity_automation(deal_id: int, mode: str | None) -> dict | None:
@@ -1493,7 +1518,7 @@ def advance_followup(deal_id: int) -> dict | None:
     p = db.one("select * from crm_projects where id=%s", (deal_id,))
     if not p or p.get("automation") != "auto":
         return None
-    if p.get("stage") in NO_CHASE_STAGES:     # a lost or completed deal is never chased, whatever the flag says
+    if not stages.chases(p.get("stage")):     # no rhythm for this stage (stages.py): never chased, whatever the flag says
         db.execute("update crm_projects set automation=null, next_followup=null, updated_at=now() where id=%s",
                    (deal_id,))
         return None
@@ -1794,7 +1819,7 @@ class DuplicateDeal(ValueError):
     pass
 
 
-OPEN_SALES_STAGES = ("Opportunity", "Quote")
+OPEN_SALES_STAGES = stages.SALES
 
 
 def open_opportunity_for_account(account_id, company: str | None) -> dict | None:
@@ -1838,6 +1863,8 @@ def create_deal(company: str, title: str, value=None, currency: str = "AED", sta
         arm_new_deal(row["id"])
     else:
         hold_auto(row["id"])
+    if stage != "Opportunity":   # born in a later stage: that stage's rhythm, as if it had moved there
+        _apply_stage_rhythm(db.one("select * from crm_projects where id=%s", (row["id"],)), None, stage)
     return db.one("select * from crm_projects where id=%s", (row["id"],))
 
 
@@ -1851,8 +1878,7 @@ def arm_new_deal(deal_id: int) -> None:
     cannot be chased, so it is left off and the owner is told once, rather than nudged every 3 days
     into a void."""
     p = db.one("select * from crm_projects where id=%s", (deal_id,))
-    if not p or p.get("automation") or p.get("stage") in (
-            LOST_STAGE, DORMANT_STAGE, NURTURE_STAGE, COMPLETED_STAGE):
+    if not p or p.get("automation") or not stages.chases(p.get("stage")) or p.get("stage") == DORMANT_STAGE:
         return
     has_contact = bool((p.get("contact_email") or "").strip()) or bool(p.get("contacts"))
     if not has_contact and p.get("account_id"):

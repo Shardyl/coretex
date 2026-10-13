@@ -327,7 +327,7 @@ def _closed_deal(r: dict) -> bool:
     except (TypeError, ValueError):
         return False
     from . import crm
-    return bool(d) and d.get("stage") in crm.CLOSED_STAGES
+    return bool(d) and d.get("stage") in crm.CLOSED_STAGES      # = stages.CANCEL_ON_ENTRY
 
 
 def fire_due() -> dict:

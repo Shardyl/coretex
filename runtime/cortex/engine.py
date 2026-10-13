@@ -30,7 +30,7 @@ from psycopg.types.json import Json
 
 from . import (contentqueue, crm, db, deck, doctext, documents, envelope, gmail, manager, media, meetnotes, policy,
                newsletter, notifications, phishing, pipeline, profile, ppc_report, provider, quotation, reminders,
-               schedule, seo_report, store, webauthn_auth, whatsapp, worker)
+               schedule, seo_report, stages, store, webauthn_auth, whatsapp, worker)
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -4196,7 +4196,7 @@ def _rearm_stalled_chases() -> list:
             "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='email_in') li, "
             "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='chase_stopped') cs "
             "from crm_projects p where p.automation='auto' and p.next_followup is null "
-            "and p.stage in ('Opportunity','Quote') and not exists (select 1 from tasks t where t.status in "
+            "and p.stage in " + stages.sql_list(stages.SALES) + " and not exists (select 1 from tasks t where t.status in "
             + _STALL_OPEN + " and (t.deal_id=p.id or (coalesce(p.contact_email,'') <> '' and "
             "lower(t.request->'inquiry'->>'email') = lower(p.contact_email))))")
         for r in rows:
@@ -4536,7 +4536,8 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
         # two weeks after Mai signed it off.) The clock decides WHEN, the thread decides WHETHER: Haiku reads the
         # newest messages and the deal's timeline; signed off, already answered, on hold or waiting on a date they
         # gave means no card. A sign-off on won work stops the cadence and tells the owner the next step.
-        _closing = stage == "Quote" or (opp.get("cadence") or {}).get("name") == "closing"
+        # the closing gate belongs to the STAGE's rhythm, not to a cadence a won deal may still carry
+        _closing = stages.rhythm(stage) == "closing"
         if _closing:
             _hold = _closing_gate(co, opp, email, msgs, label)
             if _hold:
@@ -4886,7 +4887,7 @@ def classify_email(company: dict, email: dict, channel_note: str = "") -> dict:
             "summary": (out.get("summary") or "").strip(), "market": (out.get("market") or "").strip()}
 
 
-_DELIVERY_STAGES = {"Booked", "Production", "Final Payment", "Recurring"}
+_DELIVERY_STAGES = set(stages.DELIVERY)   # stages.py: Booked, Production, Delivered, Final Payment, Recurring
 
 
 def _addressed_person(co: dict, e: dict, mailbox: str | None) -> dict | None:

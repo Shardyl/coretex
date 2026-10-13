@@ -3011,3 +3011,20 @@ shoot needs none), then 10% off the whole quotation.
   `poll_inbox` checks it right after classification: category lead, contact recorded, then
   `_flag_skipped_opportunity` (scope judged against the company's services; in scope -> tracked opportunity with
   closing reminder, held off the email chase). No reply card: portal bids are not answered by email.
+
+## What a stage means is one table: `stages.py` (audit step 2a, 13 Oct 2026)
+- See `docs/ARCHITECTURE-AUDIT-2026-10.md` (the plan). Every question about a deal stage is a lookup in
+  `runtime/cortex/stages.py`: group (sales / won / closed), RHYTHM (default, closing, won, recurring, revival, none),
+  cancel-on-entry, and whether a client's mail attaches to it. `crm.CLOSED_STAGES`, `NO_CHASE_STAGES`,
+  `OPEN_SALES_STAGES`, `engine._DELIVERY_STAGES`, `pipeline.PLAN_STAGES` and the deal lookups now read it. Never write
+  a stage list by hand again; add a property to the table.
+- `crm._apply_stage_rhythm(p, old, new)` is the ONE place the deal clock follows a stage: no rhythm -> clock off
+  (Lost, Completed, Close & review, Nurture); Quote -> closing rhythm; entering won work from sales -> the closing
+  cadence is dropped for the company cadence; Recurring -> quarterly; Dormant -> soft revivals only (~90 days, twice).
+  Called by `set_project_stage` and by `create_deal` for a deal born in a later stage.
+- Fixed by it: Close & review replies now attach to the deal (lookups excluded it); Nurture deals no longer get deal
+  check-ins on top of nurture touches; a booked deal can no longer run the closing gate (`_closing` reads the stage's
+  rhythm, not a leftover cadence); Completed ends off, not manual. Migration 13 Oct: 9 Dormant deals moved from their
+  old chase rhythm to revivals (before-state in setting `stage_migration_2026_10_13`).
+- Health checks: `clock_on_stage_without_rhythm`, `won_deal_on_closing_rhythm` (both self-repair),
+  `dormant_not_on_revivals` (report).
