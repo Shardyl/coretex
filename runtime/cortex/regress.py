@@ -348,7 +348,8 @@ def _cases():
 
     # --- WhatsApp is a door into Talk (owner, 13 Oct)
     case("the owner's pictures and longer messages go to Talk", "Farheen screenshot dropped",
-         lambda: "_talk_turn" in inspect.getsource(__import__("cortex.whatsapp", fromlist=["x"])._owner_control)
+         lambda: "_talk_buffer(" in inspect.getsource(__import__("cortex.whatsapp", fromlist=["x"])._owner_control)
+         and "_talk_turn(" in inspect.getsource(__import__("cortex.whatsapp", fromlist=["x"])._talk_flush)
          and hasattr(__import__("cortex.api", fromlist=["x"]), "talk_from_whatsapp"))
     case("a caption is read with the picture", "WhatsApp Talk",
          lambda: __import__("cortex.whatsapp", fromlist=["x"])._owner_text(
