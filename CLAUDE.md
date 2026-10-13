@@ -3131,3 +3131,13 @@ shoot needs none), then 10% off the whole quotation.
   title or record, else one whose contacts include the sender. `_track_tender` uses it before creating anything.
   `closing_reminder` never adds a second reminder for the same deal and date. Health check
   `same_contact_two_sales_deals_sister_brands` (report).
+
+## Remaining map items closed (13 Oct 2026)
+- A MEETING IS CONTACT: `gate.check` holds an automatic email when we met the person (meeting_notes attendees) inside
+  the quiet window; `pipeline.record_meeting` restarts the deal's chase clock (`touch_followups`) for live meetings
+  (never for a backfill).
+- A scheduled email re-checks its recipient when it fires (left-company / not qualified) as well as the deal stage,
+  and is parked for the owner, never sent blind.
+- "Tender worth a look" is raised after the tender is tracked and points at its deal, so it clears when the deal
+  closes. Meeting notes that arrive by email draft the post-meeting follow-up too (it dedups on an email since the
+  meeting). Closing a deal also cancels an unsent project-plan card raised from a reminder.

@@ -1258,7 +1258,7 @@ def _cancel_cortex_reminders(p: dict, stage: str) -> list:
     try:
         cards = db.query(
             "update tasks set status='cancelled', updated_at=now(), request = request || %s::jsonb where deal_id=%s "
-            "and kind in ('email_reply','email_draft','followup') and status in ('new','drafting','queued',"
+            "and kind in ('email_reply','email_draft','followup','project_plan') and status in ('new','drafting','queued',"
             "'awaiting_approval','awaiting_correction','scheduled') and (request->>'system_note' like 'From reminder #%%' or "
             "request->>'system_note' like 'From commitment reminder%%' or coalesce(request->>'followup','') in "
             "('followup','checkin','chase')) returning id",

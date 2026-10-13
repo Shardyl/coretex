@@ -293,6 +293,15 @@ def _cases():
          lambda: (_crm.find_tender_deal("skyvision", "eproc@wasl.ae",
                   "Invitation to RFQ - Request for Quotation Code 2026_1170 on Wasl Asset Management") or {}).get("id") == 162)
 
+    # --- remaining map items (13 Oct)
+    case("a meeting counts as contact in the gate", "audit map: chase the day after a call",
+         lambda: "A MEETING IS CONTACT" in inspect.getsource(gate.check)
+         and "_meeting_touches_clock(" in inspect.getsource(__import__("cortex.pipeline", fromlist=["x"]).record_meeting))
+    case("a scheduled email re-checks its recipient when it fires", "audit map",
+         lambda: "left-company" in inspect.getsource(engine.promote_due_tasks))
+    case("the tender notice is linked to its deal", "Wasl notice 1130",
+         lambda: "target_type\": \"deal\"" in inspect.getsource(engine._flag_skipped_opportunity))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

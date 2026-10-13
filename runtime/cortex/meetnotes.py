@@ -534,6 +534,14 @@ def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = 
                         crm.log_event(em, "meeting_notes", f"Meeting: {title} — notes captured", None)
                     except Exception:  # noqa: BLE001
                         pass
+                if not backfill:
+                    try:   # the same follow-up the calendar path drafts (it dedups on an email since the meeting)
+                        from .identity import is_internal
+                        _ext = [x for x in (emails or []) if x and not is_internal(x)]
+                        _spawn_post_meeting_followup({"summary": title, "start": {"dateTime": str(start)}}, _ext,
+                                                     company_id, deal_id, summary)
+                    except Exception as _fe:  # noqa: BLE001
+                        print(f"[meetnotes] follow-up: {type(_fe).__name__}: {_fe}", flush=True)
                 if deal_id:
                     from . import pipeline
                     pipeline.record_meeting(deal_id, company_id, title, summary, commitments=not backfill)

@@ -100,6 +100,12 @@ def check(company_id: int, email: str, deal_id, request: dict | None) -> str | N
         quiet = QUIET_DAYS.get(why, 2)
         if quiet and last_out and now - last_out < timedelta(days=quiet):
             return f"we emailed them on {last_out:%d %b}, under {quiet} days ago"
+        # A MEETING IS CONTACT (audit 13 Oct): a "they have not replied" chase could go out the day after a call
+        met = db.one("select max(starts_at) at from meeting_notes where attendees @> %s::jsonb and starts_at <= now()",
+                     (f'["{email}"]',)) or {}
+        met_at = _ts(met.get("at"))
+        if met_at and now - met_at < timedelta(days=max(quiet, 2)):
+            return f"we met them on {met_at:%d %b}"
     return None
 
 

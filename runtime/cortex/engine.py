@@ -2761,17 +2761,20 @@ def _flag_skipped_opportunity(co: dict, e: dict, reason: str, rt_key: str | None
         # subject expand on the card instead of one hiding the other.
         _subj = re.sub(r"[^a-z0-9]+", "-", (e.get("subject") or "").lower()).strip("-")[:60]
         _day = datetime.now(timezone.utc).date().isoformat()
+        _td_deal = None
+        try:   # tracked FIRST, so the notice points at its deal and clears when the deal closes (audit 13 Oct)
+            _td_deal = _track_tender(co, e, what, rt_key=rt_key, client=client)
+        except Exception as _te:  # noqa: BLE001 - tracking must never lose the notification below
+            print(f"[tender] {type(_te).__name__}: {_te}", flush=True)
         notifications.notify(
             "Tender worth a look" + (f" - closes {due}" if due else ""),
             f"{what}\n\nFrom {e.get('email')}. No reply was drafted ({reason}) - broadcasts are bid "
-            "through the issuing portal, not answered by email.",
+            "through the issuing portal, not answered by email."
+            + (f" Tracked on '{_td_deal.get('title')}'." if _td_deal else ""),
             category="crm", company_id=co.get("id"),
+            **({"target_type": "deal", "target_id": str(_td_deal["id"])} if _td_deal else {}),
             dedup_key=f"skipped-opp:{(e.get('email') or '').lower()}:{_subj or _day}:{_day}",
             item={"cat": due or "tender", "name": what[:160]})
-        try:
-            _track_tender(co, e, what, rt_key=rt_key, client=client)
-        except Exception as _te:  # noqa: BLE001 - tracking must never lose the notification above
-            print(f"[tender] {type(_te).__name__}: {_te}", flush=True)
     except Exception:  # noqa: BLE001 - a relevance hiccup must never disturb the inbox sweep
         pass
 
@@ -8637,13 +8640,19 @@ def promote_due_tasks() -> None:
                 task, skill, company = _load(t["id"])
                 _did = task.get("deal_id") or (task.get("request") or {}).get("deal_id")
                 _st = (db.one("select stage from crm_projects where id=%s", (int(_did),)) or {}).get("stage") if _did else None
-                if _st in ("Lost", "Completed", "Dormant"):
+                _to = ((task.get("request") or {}).get("inquiry") or {}).get("email") or ""
+                _p = db.one("select lead_status, classification from crm_master where lower(email)=lower(%s)", (_to,)) or {}
+                if _p.get("lead_status") == "left-company" or _p.get("classification") == "not_qualified":
+                    _st = "a recipient who has left their company" if _p.get("lead_status") == "left-company" \
+                        else "a recipient marked not qualified"
+                if _st in ("Lost", "Completed", "Dormant") or str(_st or "").startswith("a recipient"):
                     # THE DEAL CLOSED AFTER IT WAS SCHEDULED (13 Oct 2026 map: nothing stopped a scheduled chase on a
                     # deal moved to Lost). Parked for the owner, never sent blind and never silently dropped.
                     db.execute("update tasks set status='awaiting_approval', schedule_kind=null, run_at=null, "
                                "updated_at=now(), request = (request - 'approved_send') || %s::jsonb where id=%s",
-                               (json.dumps({"card_problem": f"Held, not sent: the deal moved to {_st} after this was "
-                                                            "scheduled. Approve to send anyway, or skip it."}), t["id"]))
+                               (json.dumps({"card_problem": f"Held, not sent: since it was scheduled, "
+                                                            + (f"the deal moved to {_st}" if not str(_st).startswith("a recipient") else f"it is going to {_st}")
+                                                            + ". Approve to send anyway, or skip it."}), t["id"]))
                     continue
                 db.execute("update tasks set status='awaiting_approval', last_run=now(), updated_at=now() "
                            "where id=%s", (t["id"],))

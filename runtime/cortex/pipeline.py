@@ -793,6 +793,14 @@ def log_conversation(text: str, company_slug: str = "sensa", contact_hint: str =
 
 # ---------- meetings feed the same loop ----------
 
+def _meeting_touches_clock(deal_id) -> None:
+    """A meeting is contact: the deal's chase clock restarts from it, like our own email (audit 13 Oct)."""
+    try:
+        crm.touch_followups(int(deal_id))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def record_meeting(deal_id: int, company_id: int | None, title: str, summary: str,
                    commitments: bool = True) -> None:
     """A meeting on a deal lands on its timeline, and the things OUR side committed to in it become
@@ -804,7 +812,8 @@ def record_meeting(deal_id: int, company_id: int | None, title: str, summary: st
         return
     log_deal(deal_id, "meeting", f"{title}: {(summary or '')[:900]}")
     if not commitments:
-        return
+        return          # a backfilled old meeting is history only: it never moves today's clock
+    _meeting_touches_clock(deal_id)
     try:
         out = provider.think_json(
             "From this meeting summary, extract only the action items OUR side (the production company) "
