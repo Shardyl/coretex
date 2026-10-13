@@ -2874,4 +2874,8 @@ shoot needs none), then 10% off the whole quotation.
   earlier correction's snapshot (old -> new) CODE finds sentences he removed (no close match after) and reworded
   (0.5-0.85 word overlap); if one comes back it is dropped, or swapped back to his wording. A sentence his own words
   ask for again (this or a later correction) is left alone. Sentences under 4 words (greetings, sign-offs) never
-  count. Each action prints `[corrections] task N: ...`.
+  count. Each action prints `[corrections] task N: ...`. A sentence that returns in a LATER round's draft is cleared
+  (he asked for it back, card 1163's call times), and a round that changed over half the email ("redraft it
+  completely") records nothing: that is a rewrite, not a list of removals; those rely on the in-force list.
+  Checked on 60 real multi-correction cards: no approved draft altered; 36 of 52 injected regressions stripped
+  (the rest came from full-rewrite rounds, by design).
