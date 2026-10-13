@@ -166,7 +166,7 @@ def _cases():
     # --- a weekday beside a date is computed (Al Hamra ack said Wednesday 12 October)
     case("weekday corrected against the calendar", "card 1110",
          lambda: "Monday 12 October 2026" in engine._fix_weekdays(
-             "The deadline is Wednesday 12 October 2026.", datetime(2026, 10, 7, tzinfo=timezone.utc)))
+             "The deadline is Wednesday 12 October 2026.", datetime(2026, 10, 7, tzinfo=timezone.utc))[0])
 
     # --- structural guarantees
     case("the silence-chase list is retired", "Ekaterina, card 1180",

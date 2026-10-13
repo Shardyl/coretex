@@ -1950,9 +1950,15 @@ def _sim(a: str, b: str) -> float:
 
 
 def _mentions(note: str, sentence: str) -> bool:
-    """The owner's words refer to this sentence: most of its content words are in what he wrote."""
+    """The owner's words refer to this sentence: most of its content words are in what he wrote, OR three of its
+    distinctive words are. "Put back the paragraph about outsourcing and due diligence" names 4 of 16 content words
+    of that sentence: under a ratio alone it did not count, and the sentence he asked for back was stripped again
+    (caught by the case library, 13 Oct 2026)."""
     content = {w for w in _words(sentence) if len(w) > 3}
-    return bool(content) and len(content & set(_words(note))) / len(content) >= 0.4
+    if not content:
+        return False
+    said = set(_words(note))
+    return len(content & said) / len(content) >= 0.4 or len({w for w in content if len(w) > 6} & said) >= 3
 
 
 def _hold_corrections(task_id: int, draft: str, now_text: str = "", corrections: list | None = None) -> str:
