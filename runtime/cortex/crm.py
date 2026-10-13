@@ -1001,11 +1001,15 @@ def add_contact_note(email: str, note: str) -> dict | None:
     return db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
 
 
-def add_project_note(project_id: int, note: str) -> dict | None:
+def add_project_note(project_id: int, note: str, by: str = "") -> dict | None:
+    """A note a PERSON adds on the deal page. Filed as `context` (owner, 13 Oct 2026: "sometimes the drafts are not
+    right because there's been a phone call or a WhatsApp Cortex doesn't have"): every draft on the deal reads every
+    context note in full. As a plain `note` it sat among Cortex's own bookkeeping notes and fell out of the last-12
+    timeline window on a busy deal."""
     p = db.one("select * from crm_projects where id=%s", (project_id,))
     if not p:
         return None
-    ev = {"ts": _now(), "event": "note", "text": (note or "")[:1200]}
+    ev = {"ts": _now(), "event": "context", "text": (note or "")[:3000], **({"by": by} if by else {})}
     db.execute("update crm_projects set history = history || %s::jsonb, updated_at=now() where id=%s",
                (Json([ev]), project_id))
     if p.get("contact_email"):

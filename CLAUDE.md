@@ -2967,3 +2967,14 @@ shoot needs none), then 10% off the whole quotation.
   cortex-pipeline / cortex-nextstep). Existing rows relabelled 13 Oct.
 - `crm._cancel_cortex_reminders` (every move into Lost / Dormant / Completed) also marks the deal's unread, read or
   snoozed notifications dismissed (never deleted).
+
+## Update the deal notes, then redraft from them (13 Oct 2026)
+- Owner: "update the opportunity notes, go back to the draft and ask it to recheck the latest notes and redraft".
+- The deal page's "Add a note" (`crm.add_project_note`, `/api/crm/project/{id}/note`) now files a `context` event
+  (with `by`), not `note`: `pipeline.deal_context` gives every context event IN FULL to every draft, where a plain
+  note sat among Cortex's own bookkeeping notes and fell out of the last-12 timeline window. Talk `note_opportunity`
+  and correction facts already wrote `context`.
+- `_draft_context_for_reply` serves `request.new_notes`: context events newer than the card's last draft (its
+  creation or last correction). `worker.draft` shows them as NEW NOTES, fact, the newest word, and authorises
+  rewriting the parts they affect (overriding "keep every other sentence"). Manifest `new_notes(N)`.
+- Use: add the note on the deal, then on the card say "recheck the latest notes and redraft".

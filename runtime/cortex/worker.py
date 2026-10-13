@@ -201,7 +201,7 @@ def _identity_block(company: dict, request: dict, author: str | None):
 
 
 _CONTEXT_FIELDS = ("brief", "system_note", "deal_timeline", "contact_notes", "owner_feedback",
-                   "meeting_notes", "owed", "card_corrections")
+                   "meeting_notes", "owed", "card_corrections", "new_notes")
 
 
 def _colleagues_named(company: dict, request: dict, me: str) -> list:
@@ -421,6 +421,12 @@ def draft(skill: dict, company: dict, request: dict,
                     "feedback requires, keep every other sentence exactly as it is):\n" + prev_draft[:6000])
     if manager_feedback:
         user.append("Your manager flagged these to fix:\n- " + "\n- ".join(manager_feedback))
+    _nn = (request.get("new_notes") or "").strip() if isinstance(request, dict) else ""
+    if _nn and (correction or prev_draft):
+        user.append("NEW NOTES ON THIS OPPORTUNITY SINCE YOUR LAST DRAFT (the team's own update, often from a call or "
+                    "a WhatsApp you did not see). They are FACT and they are the newest word: the email must reflect "
+                    "them. Where they change the situation, rewrite the parts they affect; anything in the draft they "
+                    "contradict must go. This overrides 'keep every other sentence':\n" + _nn[:4000])
     _cc = (request.get("card_corrections") or "").strip() if isinstance(request, dict) else ""
     if _cc and (correction or prev_draft):
         user.append("THE OWNER'S EARLIER CORRECTIONS ON THIS SAME EMAIL, oldest first. EVERY ONE IS STILL IN FORCE: "

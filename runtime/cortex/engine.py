@@ -5495,6 +5495,20 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
             if tl:
                 req["deal_timeline"] = tl
                 manifest.append("deal_timeline")
+            # NOTES ADDED SINCE THIS CARD WAS LAST DRAFTED (owner, 13 Oct 2026: "update the opportunity notes, go back
+            # to the draft and ask it to recheck the latest notes and redraft accordingly"). Code finds them by time;
+            # the writer is told they are new and must be reflected, not just tolerated.
+            if task.get("id"):
+                _last = db.one("select greatest(t.created_at, coalesce((select max(d.created_at) from decisions d "
+                               "where d.task_id=t.id and d.action='correct'), t.created_at)) at from tasks t where t.id=%s",
+                               (int(task["id"]),))
+                _since = ((_last or {}).get("at") or datetime.now(timezone.utc)).isoformat()
+                _h = (db.one("select history from crm_projects where id=%s", (int(did),)) or {}).get("history") or []
+                _new = [h for h in _h if h.get("event") == "context" and not h.get("voided")
+                        and str(h.get("ts") or "") > _since]
+                if _new:
+                    req["new_notes"] = "\n".join(f"- {str(h.get('ts'))[:16]}: {h.get('text')}" for h in _new)
+                    manifest.append(f"new_notes({len(_new)})")
     except Exception:  # noqa: BLE001
         pass
     try:   # notes the team saved on the CONTACT (deal notes already ride the deal_timeline shelf)

@@ -2372,7 +2372,7 @@ def crm_project_note(id: int, body: NoteBody, u: dict = Depends(current_user)) -
     _guard_deal(u, id)
     if not (body.note or "").strip():
         raise HTTPException(status_code=400, detail="note required")
-    r = crm.add_project_note(id, body.note.strip())
+    r = crm.add_project_note(id, body.note.strip(), by=(u or {}).get("name") or (u or {}).get("email") or "")
     if not r:
         raise HTTPException(status_code=404, detail="deal not found")
     # a note on a LIVE project is new context (a call, a WhatsApp update): re-plan so the next steps
