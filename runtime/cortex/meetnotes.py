@@ -287,7 +287,9 @@ def _spawn_post_meeting_followup(event: dict, ext: list, company_id, deal_id, su
               "(status in ('new','drafting','awaiting_approval','awaiting_correction') "
               " or created_at > %s::timestamptz) limit 1", (company_id, contact, started)):
         return
-    skill = store.get_skill_by_key(company_id, "sales-first-response")
+    # a post-meeting follow-up is a conversation in progress: sales-followup (audit step 2e; first response is
+    # only ever the very first reply to a new enquiry)
+    skill = store.get_skill_by_key(company_id, "sales-followup") or store.get_skill_by_key(company_id, "sales-first-response")
     if not skill:
         return
     c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (contact,))

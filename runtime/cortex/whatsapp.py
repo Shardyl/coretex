@@ -329,7 +329,8 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
     skip = None
     if cat in policy.card_categories(co):
         try:
-            skip = policy.should_skip(co, e, deal=(deals[0] if deals else None))
+            skip = policy.should_skip(co, e, skill_key=policy.NO_DRAFT_LANES + ("social-dm-replies",),
+                                      deal=(deals[0] if deals else None))
         except Exception:  # noqa: BLE001
             skip = None
     if cat not in policy.card_categories(co) or skip:
@@ -1099,7 +1100,7 @@ def ingest_threads(account: str, threads: list[dict]) -> dict:
     drafted = skipped = stale = 0
     fresh: list[str] = []
     for t in threads or []:
-        if t.get("from_me"):                       # our own outbound echo — never a thing to answer
+        if t.get("from_me") or is_owner(t.get("phone") or ""):   # our own echo, or the owner: never an enquiry
             continue
         msg = (t.get("message") or "").strip()
         phone = _clean_phone(t.get("phone") or "")

@@ -250,6 +250,17 @@ def _cases():
     case("same-day reminders never merge across authors or actions", "audit 13 Oct",
          lambda: "coalesce(created_by,'')=%s and action is null" in inspect.getsource(reminders.create))
 
+    # --- one intake: the same steps on every channel (audit step 2e, batch 1)
+    case("an existing client on the web form is treated as a client", "audit 2e",
+         lambda: "events.they_wrote(" in inspect.getsource(engine.intake_enquiry)
+         and "deal_id=(opp or {}).get(\"id\")" in inspect.getsource(engine.intake_enquiry))
+    case("the no-draft policy reads every email lane", "audit 2e: rules moved off first response",
+         lambda: set(policy.NO_DRAFT_LANES) == {"sales-first-response", "sales-followup", "email-handling"})
+    case("a sales-mailbox reply is claimed once like any email", "audit 2e",
+         lambda: "_claim_mail(" in inspect.getsource(engine.poll_sales_replies))
+    case("qualification reads the universal rules too", "audit 2e",
+         lambda: "worker._rule_lines(skill)" in inspect.getsource(engine.qualify_suggest))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

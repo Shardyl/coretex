@@ -3921,7 +3921,9 @@ def qualify_suggest(co: dict, inq: dict) -> dict | None:
     email = (inq.get("email") or "").strip().lower()
     domain = email.split("@")[-1] if "@" in email else ""
     free = (domain in _FREE_EMAIL_DOMAINS) or not domain
-    rules = "\n".join(f"- {r}" for r in (skill.get("rules") or [])) or (skill.get("craft") or "")
+    # the EFFECTIVE rules (universal + local), like every other skill reader: universal lead-qualification rules
+    # never reached qualification before (audit step 2e)
+    rules = "\n".join(f"- {r}" for r in worker._rule_lines(skill)) or (skill.get("craft") or "")
     ctx = co.get("context") or {}
     system = (
         f"You qualify inbound sales enquiries for {co.get('name')}."
@@ -4087,6 +4089,28 @@ def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
                  (co["id"], em, norm))
     if dup:
         return {"ok": True, "captured": True, "duplicate_of": dup["id"]}
+    # AN EXISTING CLIENT USING THE WEBSITE FORM IS A CLIENT (audit step 2e). The form path had no client override and
+    # no deal lookup: a client on a live deal was triaged and qualified as a brand-new lead, and their deal never heard
+    # from them. Their deal hears it like any reply (events.they_wrote) and the card drafts on the deal's lane.
+    _deals = crm.active_deals_for_email(em, slug)
+    if not _deals:
+        _dd = crm.open_deal_for_domain(em, slug)
+        _deals = [_dd] if _dd else []
+    if _deals:
+        from . import events
+        _msg = {"email": em, "name": inq.get("name") or "", "subject": inq.get("subject") or "Website enquiry",
+                "body": inq.get("message") or ""}
+        _deal = events.they_wrote(co, _msg, _deals)
+        if draft and _deal:
+            _lane = "email-handling" if _deal.get("stage") in _DELIVERY_STAGES else "sales-followup"
+            skill = store.get_skill_by_key(co["id"], _lane) or store.get_skill_by_key(co["id"], "sales-first-response")
+            if skill:
+                store.create_card(co["id"], skill["id"], "email_reply",
+                                  {"brief": _email_brief(inq, co) + f" CONTEXT: this is an existing client, on the deal "
+                                   f"'{_deal.get('title')}' (stage {_deal.get('stage')}); answer as their partner on it.",
+                                   "inquiry": inq, "triage": verdict, "deal_id": _deal["id"]},
+                                  contact=em, deal_id=_deal["id"])
+        return {"ok": True, "captured": True, "category": "client", "deal_id": (_deal or {}).get("id")}
     sug = None                                       # domain-led qualification suggestion (owner still decides)
     try:
         sug = qualify_suggest(co, inq)
@@ -4096,8 +4120,9 @@ def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
             db.setting_set(f"qual:email:{em}", {**sug, "company_id": co["id"]})
     except Exception:  # noqa: BLE001
         pass
-    try:   # high-confidence qualified -> auto-create the pipeline entry (account + opportunity + estimate);
-        opp = crm.auto_opportunity(inq.get("email"), slug, sug, inq)   # never blocks intake, reversible
+    opp = None
+    try:   # a qualified lead -> the pipeline entry (account + opportunity + estimate); never blocks intake, reversible
+        opp = crm.auto_opportunity(inq.get("email"), slug, sug, inq)
         if opp:
             _notify_new_opportunity(co, opp, "auto-qualified from a new enquiry")
     except Exception:  # noqa: BLE001
@@ -4107,9 +4132,11 @@ def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
                 # trained lead-qualification rule sets the senior register; nothing sends without the owner)
         skill = store.get_skill_by_key(co["id"], "sales-first-response")
         if skill:
+            # the card carries the opportunity made for it (it used to be dropped) and joins the person's conveyor
             store.create_card(co["id"], skill["id"], "email_reply",
                               {"brief": _email_brief(inq, co), "inquiry": inq, "triage": verdict,
-                               "qual_suggest": sug})
+                               "qual_suggest": sug, **({"deal_id": opp["id"]} if opp else {})},
+                              contact=em, deal_id=(opp or {}).get("id"))
         if strategic:   # heads-up so the owner watches this thread personally
             tg.send(f"[{co['name']}] STRATEGIC lead: {inq.get('name') or ''} <{inq.get('email')}> — "
                     f"{(sug or {}).get('reason') or 'enterprise potential'}. Reply drafted for your approval.")
@@ -6461,6 +6488,8 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
         if _ph:
             _flag_phishing(co, m, _ph)
             continue
+        if not _claim_mail(co["id"], gmail.mail_ref(m), m.get("id") or m.get("gmail_id") or ""):
+            continue    # ONE EMAIL, ONE HANDLING (audit step 2e): the inbox sweep already took this message
         c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (frm,))
         nm = ((((c or {}).get("first_name")) or "") + " " + (((c or {}).get("last_name")) or "")).strip()
         name = nm if re.search(r"[A-Za-z]", nm) else frm.split("@")[0]
@@ -6484,7 +6513,10 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
                         _file_inbound_attachments(co, m, _d["id"], send_rt, client)
                 except Exception as _fe:  # noqa: BLE001
                     print(f"[deal-doc] reply: {type(_fe).__name__}: {_fe}", flush=True)
-            store.create_card(co["id"], skill["id"], "email_reply", fu, contact=frm)
+            _sd = crm.open_deal_for_email(frm, slug) or crm.open_deal_for_domain(frm, slug)
+            if _sd:
+                fu["deal_id"] = _sd["id"]
+            store.create_card(co["id"], skill["id"], "email_reply", fu, contact=frm, deal_id=(_sd or {}).get("id"))
         try:
             from . import events
             events.they_wrote(co, {**m, "email": frm})   # the deal hears it: chase paused, scheduled mail held, logged

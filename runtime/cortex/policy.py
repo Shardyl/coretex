@@ -128,16 +128,26 @@ def card_categories(company: dict) -> tuple:
     return DEFAULT_CARD_CATEGORIES
 
 
-def should_skip(company: dict, email: dict, skill_key: str = "sales-first-response",
+NO_DRAFT_LANES = ("sales-first-response", "sales-followup", "email-handling")
+
+
+def should_skip(company: dict, email: dict, skill_key: str | tuple = NO_DRAFT_LANES,
                 own_domain: str = "", deal: dict | None = None) -> dict | None:
     """Does this inbound email fall into a NO-DRAFT situation for this company? Returns {reason} to skip,
-    or None to proceed. Cheap: no model call at all unless the company actually has such a rule."""
+    or None to proceed. Cheap: no model call at all unless the company actually has such a rule.
+    THE POLICY OF EVERY EMAIL LANE (audit step 2e): it read sales-first-response only, so after the 13 Oct rule move
+    any no-draft rule now on sales-followup or email-handling was never evaluated."""
     try:
-        sk = store.get_skill_by_key(company["id"], skill_key)
-        if not sk:
+        sits, addrs = [], []
+        for _k in ((skill_key,) if isinstance(skill_key, str) else tuple(skill_key)):
+            sk = store.get_skill_by_key(company["id"], _k)
+            if not sk:
+                continue
+            cfg = get(sk["id"])
+            sits += [x for x in (cfg.get("situations") or []) if x not in sits]
+            addrs += [x for x in (cfg.get("addresses") or []) if x not in addrs]
+        if not sits and not addrs:
             return None
-        cfg = get(sk["id"])
-        sits, addrs = list(cfg.get("situations") or []), cfg.get("addresses") or []
         # A RULE'S OWN EXCEPTION IS A FACT, SO CODE CHECKS IT. Sheraa's urgent ERF film RFP was sent
         # DIRECTLY to hello@sensa.digital with a deadline the next day; a model reading the body saw
         # "procurement" and matched it to "broadcast circulars ... (not addressed to us specifically)",

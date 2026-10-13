@@ -3067,3 +3067,14 @@ shoot needs none), then 10% off the whole quotation.
   "untracked sales email" notices are dismissed.
 - `reminders.create` merges a same-day reminder only with one from the SAME author and neither carrying an action.
 - Health check `notice_for_closed_card` (self-repairs).
+
+## One intake, batch 1 (audit step 2e, 13 Oct 2026)
+- Web forms (`intake_enquiry`): a sender on a live deal (their own or a colleague's by domain) is a CLIENT: the deal
+  hears it (`events.they_wrote`), the card drafts on the deal's lane with the deal on it, no qualification. A new
+  lead's card now carries the opportunity `auto_opportunity` made for it (it was dropped) and joins the conveyor.
+- `policy.should_skip` reads the compiled no-draft policy of EVERY email lane (`policy.NO_DRAFT_LANES`:
+  sales-first-response, sales-followup, email-handling; WhatsApp adds social-dm-replies). It read first response
+  only, so no-draft rules moved off it on 13 Oct were never evaluated.
+- `poll_sales_replies` claims each message by Message-Id like `poll_inbox` (one email, one handling) and puts the
+  deal on its card. Post-meeting follow-ups draft on sales-followup. The WhatsApp runner path ignores the owner's own
+  number. `qualify_suggest` reads the EFFECTIVE lead-qualification rules (universal + local).
