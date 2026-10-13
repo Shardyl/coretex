@@ -1991,7 +1991,10 @@ def _hold_corrections(task_id: int, draft: str, now_text: str = "") -> str:
             keep.append(s)
         if parts and not keep:
             continue                                        # the whole line was a sentence he removed
-        lines.append(" ".join(keep) if parts else line)
+        if keep == parts:
+            lines.append(line)                              # untouched lines keep their exact layout
+        else:
+            lines.append(line[:len(line) - len(line.lstrip())] + " ".join(keep))
     if held:
         print(f"[corrections] task {task_id}: " + " | ".join(held), flush=True)
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
