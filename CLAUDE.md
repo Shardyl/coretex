@@ -2922,3 +2922,18 @@ shoot needs none), then 10% off the whole quotation.
   for nearly every short WhatsApp lead, so on this lane only `not_qualified` withholds the opportunity.
   Dry run result: job seekers -> recruitment, models/agencies -> freelancer/vendor, a friend -> personal, all no
   card; ad-click and real enquiries -> lead with an opportunity.
+
+## A company can show its sister company's films; a named film always reaches the email (13 Oct 2026)
+- CAUSE: card 1186 (Sky Vision, Ausra) was asked twice to include the AI drone showreel and never did. Every film in
+  `media_assets` sits under Sensa (company 3); Sky Vision (4) has none, so its drafts got no media shelf and the
+  invented-link guard stripped any film link. And `deck.films_in_text` only matched a CLIENT name or an exact title
+  segment, so "AI drone show reel" never matched "Sensa Productions, AI drone showreel" even for Sensa.
+- `deck.library_scope(company_id, named=False)` is the one definition of the films a company may show: its own plus
+  profile `media_library_from` = [{company_id, categories}] (borrowed films limited to those categories; a film the
+  owner NAMES may be any of the sister's). Used by the email shelf, `pick_samples`, `films_in_text`, `films_by_ids`,
+  `library_slugs`, meetingprep; `playlist_for`/`playlists` fall back to the sister's playlists.
+  Sky Vision: `media_library_from` = [{3, [aerial, real-estate, construction, showreel]}]. Sensa branding on those
+  films is fine (owner).
+- `films_in_text` also matches a title's text after the client name with spaces/punctuation removed (3+ words).
+- The email shelf puts every film the owner's words on the card name (corrections + the live one + an outbound
+  brief) at the top as FILMS THE OWNER NAMED, with exact links (manifest `named_films(N)`).

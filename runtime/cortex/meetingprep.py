@@ -306,13 +306,15 @@ def _context(company: dict, event: dict, guests: list[dict]) -> tuple[dict, int 
         pass
 
     try:    # REAL portfolio links — the only links the brief may offer as our work
+        from . import deck as _deck
+        _lw, _lp = _deck.library_scope(cid)
         rows = db.query(
             "select distinct on (cat) cat, title, watch_url from ("
             "  select title, watch_url, rating, views, jsonb_array_elements_text(categories) cat"
-            "  from media_assets where company_id=%s and coalesce(watch_url,'')<>'' and status='live'"
+            f"  from media_assets where {_lw} and coalesce(watch_url,'')<>'' and status='live'"
             "  and privacy in ('public','unlisted')) x "
             "where cat not in ('version-variant','internal-test') "
-            "order by cat, rating desc nulls last, views desc nulls last", (cid,))
+            "order by cat, rating desc nulls last, views desc nulls last", tuple(_lp))
         if rows:
             ctx["media_library"] = "\n".join(
                 f"- {r['title']} [{r['cat']}]: {r['watch_url']}" for r in rows)

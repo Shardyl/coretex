@@ -5520,13 +5520,14 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
     except Exception:  # noqa: BLE001
         pass
     try:   # the media library — REAL portfolio links, so 'share sample work' can never be invented
+        _w, _p = deck.library_scope(task["company_id"])     # own films + any borrowed from a sister company
         rows = db.query(
             "select distinct on (cat) cat, title, watch_url, rating from ("
             "  select title, watch_url, rating, views, jsonb_array_elements_text(categories) cat"
-            "  from media_assets where company_id=%s and coalesce(watch_url,'')<>'' and status='live'"
+            f"  from media_assets where {_w} and coalesce(watch_url,'')<>'' and status='live'"
             "  and privacy in ('public','unlisted')) x "
             "where cat not in ('version-variant','internal-test') "
-            "order by cat, rating desc nulls last, views desc nulls last", (task["company_id"],))
+            "order by cat, rating desc nulls last, views desc nulls last", tuple(_p))
         if rows:   # category-balanced: the BEST film of every genre (a global top-N drowns niche
             # categories — 118 films tie at 7/10, so fashion/beauty never surfaced for a beauty client)
             req["media_library"] = "\n".join(
@@ -5539,6 +5540,20 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
             except Exception:  # noqa: BLE001
                 pass
             manifest.append("media_library")
+        # A FILM HE NAMES IS ON THE SHELF (13 Oct 2026, card 1186: "include a link to the AI drone show reel", asked
+        # twice, never linked). The shelf holds the best film per category, so a named film could be missing from
+        # it, and the link guard then strips it. Every film his words on this card name is served with its link.
+        _said = " ".join([str(req.get("card_corrections") or ""), _CORRECTION_NOW.get() or "",
+                          str(req.get("brief") or "") if req.get("outbound") else ""])
+        _named = deck.films_in_text(task["company_id"], _said) if _said.strip() else []
+        if _named:
+            _nr = db.query("select title, watch_url from media_assets where youtube_video_id = any(%s) and "
+                           "coalesce(watch_url,'')<>''", (_named,))
+            if _nr:
+                req["media_library"] = ("FILMS THE OWNER NAMED FOR THIS EMAIL (include these, with these exact links):\n"
+                                        + "\n".join(f"- {r['title']}: {r['watch_url']}" for r in _nr)
+                                        + ("\n\n" + req["media_library"] if req.get("media_library") else ""))
+                manifest.append(f"named_films({len(_nr)})")
     except Exception:  # noqa: BLE001
         pass
     try:   # stamp the manifest on the card (field-level jsonb_set: no read-modify-write clobber)

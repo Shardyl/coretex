@@ -74,16 +74,53 @@ def thumbnail(video_id: str, out_dir: str = "/tmp") -> str | None:
     return path
 
 
+def library_scope(company_id: int, named: bool = False) -> tuple[str, list]:
+    """SQL (and params) for "films this company may show", on media_assets. Its own films, plus films BORROWED from
+    a sister company on the profile key `media_library_from` = [{"company_id": 3, "categories": [...]}] (owner,
+    13 Oct 2026: Sky Vision has no films of its own in Cortex, every film sits under Sensa, so a Sky Vision email
+    could never link the AI drone showreel and the link guard stripped it). Borrowed films are limited to the
+    listed categories, except when the owner NAMES a film (`named=True`): then any film of the sister company."""
+    sql, params = "(company_id=%s", [int(company_id)]
+    try:
+        src = (db.one("select data->'media_library_from' m from company_profiles where company_id=%s",
+                      (int(company_id),)) or {}).get("m") or []
+    except Exception:  # noqa: BLE001
+        src = []
+    for b in src if isinstance(src, list) else []:
+        cid = int((b or {}).get("company_id") or 0)
+        cats = [str(c).lower() for c in ((b or {}).get("categories") or []) if c]
+        if not cid or cid == int(company_id):
+            continue
+        if cats and not named:
+            sql += " or (company_id=%s and categories ?| %s::text[])"
+            params += [cid, cats]
+        else:
+            sql += " or company_id=%s"
+            params.append(cid)
+    return sql + ")", params
+
+
+def library_owners(company_id: int) -> list[int]:
+    """This company and every sister company it borrows films from (for playlists)."""
+    try:
+        src = (db.one("select data->'media_library_from' m from company_profiles where company_id=%s",
+                      (int(company_id),)) or {}).get("m") or []
+    except Exception:  # noqa: BLE001
+        src = []
+    return [int(company_id)] + [int(b["company_id"]) for b in src if isinstance(b, dict) and b.get("company_id")]
+
+
 def pick_samples(company_id: int, categories: list[str], limit: int = 3) -> list[dict]:
     """Sample films from the MEDIA LIBRARY only: the intersection of the enquiry's categories first,
     highest-rated wins; widen to any of the categories if the intersection is thin. Unrated films rank
     below rated ones — the operator's rating is the quality filter."""
     cats = [c.strip().lower() for c in (categories or []) if c and c.strip()]
     if not cats:                                 # nothing asked for: the owner's best-rated work stands in
+        _w, _p = library_scope(company_id)
         return db.query(
             "select youtube_video_id, title, rating, duration, categories, client from media_assets "
-            "where company_id=%s and status='live' and rating is not null "
-            "order by rating desc, suggested_rating desc nulls last limit %s", (company_id, limit))
+            f"where {_w} and status='live' and rating is not null "
+            "order by rating desc, suggested_rating desc nulls last limit %s", (*_p, limit))
     # RELEVANCE BEFORE RATING (owner, 17 Sep 2026). The old "intersection, then widen to ANY category"
     # meant a writer asking for event-coverage + interviews + corporate + government-projects got the three
     # top-rated films in the library (HBMSU, SEHA, Dubai Police) captioned as event coverage, because the
@@ -92,9 +129,10 @@ def pick_samples(company_id: int, categories: list[str], limit: int = 3) -> list
     # matches nothing never appears while any film matches something.
     anyw = " or ".join(["categories @> %s::jsonb"] * len(cats))
     params = [f'["{c}"]' for c in cats]
+    _w, _p = library_scope(company_id)
     rows = db.query(
         "select youtube_video_id, title, rating, duration, categories, client from media_assets "
-        f"where company_id=%s and status='live' and ({anyw})", (company_id, *params))
+        f"where {_w} and status='live' and ({anyw})", (*_p, *params))
     weights = {c: (len(cats) - i) for i, c in enumerate(cats)}        # first category asked = heaviest
 
     def score(r):
@@ -125,12 +163,24 @@ def films_in_text(company_id: int, text: str, limit: int | None = None) -> list[
     if len(said) < 4:
         return []
     out = []
+    _w, _p = library_scope(company_id, named=True)
     rows = db.query("select youtube_video_id, title, client, rating, categories from media_assets where "
-                    "company_id=%s and status='live' order by rating desc nulls last", (company_id,))
+                    f"{_w} and status='live' order by rating desc nulls last", tuple(_p))
     rows = [r for r in rows if "internal-test" not in [str(c) for c in (r.get("categories") or [])]]
     for r in rows:                                   # an id pasted from the library or a watch link
         if r["youtube_video_id"] and r["youtube_video_id"] in (text or "") and r["youtube_video_id"] not in out:
             out.append(r["youtube_video_id"])
+    # A TITLE SAID THE WAY HE SAYS IT (13 Oct 2026): "the AI drone show reel" is "Sensa Productions, AI drone
+    # showreel". The part after the client name, compared with spaces and punctuation removed, names the film
+    # whoever the client is. Three words or more, so "drone" alone never picks a film.
+    flat = re.sub(r"[^a-z0-9]", "", said)
+    for r in rows:
+        t = (r.get("title") or "")
+        tail = (t.split(",", 1)[1] if "," in t else t).strip().lower()
+        if len(tail.split()) >= 3:
+            ft = re.sub(r"[^a-z0-9]", "", tail)
+            if len(ft) >= 10 and ft in flat and r["youtube_video_id"] not in out:
+                out.append(r["youtube_video_id"])
     # ONE FILM PER NAME HE SAID, in the order he said them: a client with many films (Dubai Police, 35 of
     # them, all rated high) must never crowd out a lower-rated client he also named (China Innovation Center,
     # rated 4). For each named client the exact film wins when he said its title, else its best-rated film.
@@ -155,8 +205,9 @@ def playlist_for(company_id: int, category: str) -> dict | None:
     """The company's YouTube playlist for a library category ({title, url, category}), from media_playlists."""
     if not category:
         return None
-    r = db.one("select title, playlist_id, category from media_playlists where company_id=%s and category=%s",
-               (company_id, str(category).lower()))
+    r = db.one("select title, playlist_id, category from media_playlists where company_id = any(%s) and category=%s "
+               "and coalesce(playlist_id,'')<>'' order by (company_id=%s) desc limit 1",
+               (library_owners(company_id), str(category).lower(), int(company_id)))
     if not r or not r.get("playlist_id"):
         return None
     return {"title": r.get("title") or category, "category": r["category"],
@@ -167,6 +218,13 @@ def playlists(company_id: int, categories: list | None = None) -> list[dict]:
     """All of a company's category playlists, or those for the given categories, as {title, url, category}."""
     if categories:
         return [p for p in (playlist_for(company_id, c) for c in categories) if p]
+    _own = db.query("select 1 from media_playlists where company_id=%s and coalesce(playlist_id,'')<>'' limit 1",
+                    (company_id,))
+    if not _own:   # a company with no playlists of its own shares its sister's, in the categories it borrows
+        src = (db.one("select data->'media_library_from' m from company_profiles where company_id=%s",
+                      (int(company_id),)) or {}).get("m") or []
+        cats = [c for b in src if isinstance(b, dict) for c in (b.get("categories") or [])]
+        return [p for p in (playlist_for(company_id, c) for c in cats) if p]
     return [{"title": r["title"] or r["category"], "category": r["category"],
              "url": f"https://www.youtube.com/playlist?list={r['playlist_id']}"}
             for r in db.query("select title, playlist_id, category from media_playlists where company_id=%s "
@@ -268,9 +326,10 @@ def our_work_page(company: dict, creative: bool = False) -> bool:
 def library_slugs(company_id: int, limit: int = 40) -> list[str]:
     """The category slugs the media library actually uses, most-used first, so the writer picks from the
     real list (SEF'27 asked for 'hero-film' and 'brand-film', which exist nowhere, and got no films)."""
+    _w, _p = library_scope(company_id)
     return [r["c"] for r in db.query(
         "select c, count(*) n from media_assets, jsonb_array_elements_text(categories) c "
-        "where company_id=%s and status='live' group by c order by n desc limit %s", (company_id, limit))]
+        f"where {_w} and status='live' group by c order by n desc limit %s", (*_p, limit))]
 
 
 def cover_image(subject: str, palette: str, company_slug: str, out_dir: str = "/tmp") -> str | None:
@@ -1216,9 +1275,10 @@ def films_by_ids(company_id: int, video_ids: list) -> list[dict]:
     ids = [v for v in (video_ids or []) if v]
     if not ids:
         return []
+    _w, _p = library_scope(company_id, named=True)
     rows = db.query("select youtube_video_id, title, rating, duration, categories, client "
-                    "from media_assets where company_id=%s and status='live' "
-                    "and youtube_video_id = any(%s)", (company_id, ids))
+                    f"from media_assets where {_w} and status='live' "
+                    "and youtube_video_id = any(%s)", (*_p, ids))
     order = {v: i for i, v in enumerate(ids)}
     return sorted(rows, key=lambda r: order.get(r["youtube_video_id"], 999))
 
