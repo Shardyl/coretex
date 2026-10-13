@@ -4019,8 +4019,15 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         if not rows:
             return f"No opportunity found for {did or words!r}."
         if len(rows) > 1:
-            return "Several match, which one? " + json.dumps(
-                [{"deal_id": r["id"], "title": r["title"], "stage": r.get("stage")} for r in rows])
+            # SAY HOW MANY ARE OPEN (13 Oct 2026: Talk was given Shama's three deals, opened #130 only and told the owner
+            # there was ONE open opportunity, missing the Ramadan deal created an hour earlier)
+            _open = [r for r in rows if r.get("stage") not in ("Lost", "Completed", "Dormant")]
+            _shut = [r for r in rows if r not in _open]
+            return (f"{len(rows)} deals match: {len(_open)} OPEN, {len(_shut)} closed. Account for EVERY open one in your "
+                    "answer (name each), and open one with deal_id when you need its detail.\nOPEN: " + json.dumps(
+                        [{"deal_id": r["id"], "title": r["title"], "stage": r.get("stage")} for r in _open])
+                    + ("\nCLOSED: " + json.dumps([{"deal_id": r["id"], "title": r["title"], "stage": r.get("stage")}
+                                                  for r in _shut]) if _shut else ""))
         d = rows[0]
         scope = (u or {}).get("companies")
         biz = str(d.get("business") or d.get("company") or d.get("organisation") or "").lower().replace(" ", "")
