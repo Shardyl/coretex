@@ -3266,3 +3266,7 @@ shoot needs none), then 10% off the whole quotation.
   of clients he already had (deleted with his OK; the ledger `wa_contact:<digits>` now points at HIS entries). It now
   checks the ledger, then `_book_index()`: every number in his Google Contacts by its last nine digits (People API
   connections, ~3,500 contacts, cached 30 min in setting `contacts_book_index`).
+
+- THE DIGEST CARD SHOWS ITS ITEMS (13 Oct 2026). `infoCard` listed items only when there were two or more, so a
+  one-item "Today's updates" showed just its generic body and read as empty. A digest now always shows its items
+  (open when fewer than four, behind "Show the N" above that) and never the generic line. sw cortex-v64.

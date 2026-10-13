@@ -462,6 +462,13 @@ def _cases():
          lambda: "_book_index()" in inspect.getsource(__import__("cortex.contacts", fromlist=["x"]).find_by_phone)
          and "searchContacts?" not in inspect.getsource(__import__("cortex.contacts", fromlist=["x"]).find_by_phone))
 
+    # --- the digest card shows its items, even one (13 Oct: "Today's updates" read as empty)
+    def _digest_card():
+        import os
+        web = open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"), encoding="utf-8").read()
+        return "isDigest&&items.length>0" in web and "!isDigest&&(!grouped||!isContacts)" in web
+    case("a one-item digest card shows the item, not the generic line", "Today's updates card", _digest_card)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

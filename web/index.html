@@ -1682,7 +1682,9 @@ function inboxCard(id){
     setTimeout(()=>{ el.style.boxShadow=''; }, 2200); }, 500);
 }
 function infoCard(t){
-  const items=t.items||[], grouped=items.length>1;
+  // A DIGEST ALWAYS SHOWS ITS ITEMS (13 Oct 2026): with one item the card hid it behind the generic
+  // "For information..." line, so "Today's updates" read as empty. The items ARE the digest.
+  const items=t.items||[], isDigest=t.category==='digest', grouped=items.length>1||(isDigest&&items.length>0);
   const cnt=t.count>1?` <span class="chip">×${t.count}</span>`:'';
   const coChip=t.company?`<span class="chip cy">${esc(t.company)}</span>`:'';
   // grouped items are not always contacts (a tender circular groups its copies): only the contact
@@ -1691,8 +1693,8 @@ function infoCard(t){
   const title=(grouped&&isContacts)?`${t.count} new contacts captured`:(t.title||'');
   const did='nd'+t.id;
   const details=grouped?`
-    <div class="row" style="margin-top:7px"><button class="btn sm" onclick="document.getElementById('${did}').classList.toggle('hidden')">${ic('grid',14)} Show the ${items.length}</button></div>
-    <div id="${did}" class="hidden" style="margin-top:8px;display:flex;flex-direction:column;gap:7px">
+    ${(isDigest&&items.length<4)?'':`<div class="row" style="margin-top:7px"><button class="btn sm" onclick="document.getElementById('${did}').classList.toggle('hidden')">${ic('grid',14)} Show the ${items.length}</button></div>`}
+    <div id="${did}" class="${(isDigest&&items.length<4)?'':'hidden'}" style="margin-top:8px;display:flex;flex-direction:column;gap:7px">
       ${items.slice().reverse().map(it=>`<div ${it.email?`onclick="inboxContact('${esc(it.email)}')" style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:2px 0"`:'style="display:flex;align-items:center;gap:8px;font-size:13px"'} title="${it.email?'Open this contact in the CRM':''}">
         <span class="chip" style="opacity:.85">${esc(it.cat||'')}</span>
         <span style="flex:1;min-width:0"><b>${esc(it.name||it.email||'')}</b>${(it.email&&it.name)?` <span style="color:var(--mut)">${esc(it.email)}</span>`:''}</span>${it.email?ic('arrow',13):''}</div>`).join('')}
@@ -1700,7 +1702,7 @@ function infoCard(t){
   return `<div class="card" id="n${t.id}" style="border-left:3px solid var(--accent)">
     <div class="meta">${coChip}<span class="chip">${esc(t.category||'update')}</span>${cnt}<span style="margin-left:auto;color:var(--mut)">${timeTag(t.ts)}</span></div>
     <div class="title" style="font-size:15px">${esc(title)}</div>
-    ${(t.body&&(!grouped||!isContacts))?`<div class="csub">${linky(t.body)}</div>`:''}
+    ${(t.body&&!isDigest&&(!grouped||!isContacts))?`<div class="csub">${linky(t.body)}</div>`:''}
     ${targetLine(t)}
     ${details}
     <div class="row" style="margin-top:8px">
