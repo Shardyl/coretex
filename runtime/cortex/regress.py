@@ -444,6 +444,19 @@ def _cases():
     case("a logged call and its next date are read from his note; a fact is not a call", "personal touch",
          _note, model=True)
 
+    # --- forwarded WhatsApp messages are labelled, never instructions (Farheen's voice note + his reply, 13 Oct)
+    _wa = __import__("cortex.whatsapp", fromlist=["x"])
+    case("a forwarded message is recognised and labelled as someone else's", "Farheen voice note",
+         lambda: _wa._forwarded({"type": "audio", "context": {"forwarded": True}})
+         and not _wa._forwarded({"type": "text"})
+         and "not an instruction" in _wa._forward_label(1, {"type": "audio"}, "Hi Rashad, about Ramadan")
+         and "voice note" in _wa._forward_label(1, {"type": "audio"}, "x"))
+    case("a forward never answers a pending Edit and waits for his explanation", "Farheen voice note",
+         lambda: inspect.getsource(_wa._owner_control).index("_forwarded(msg)")
+         < inspect.getsource(_wa._owner_control).index("wa_edit_pending")
+         and _wa.TALK_QUIET_FORWARDED_SEC > _wa.TALK_QUIET_SEC
+         and "[FORWARDED " in inspect.getsource(__import__("cortex.api", fromlist=["x"]).talk_from_whatsapp))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
