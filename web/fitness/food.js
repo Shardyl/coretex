@@ -1092,7 +1092,7 @@ window.foodEntryTap=function(id){
 window.foodSelClear=function(){foodSel.clear();renderToday();};
 window.foodSelDelete=function(){
   const ids=[...foodSel];if(!ids.length)return;
-  if(!confirm('Delete '+ids.length+' item'+(ids.length===1?'':'s')+' from the log?'))return;
+  // no second confirmation: selecting the items then tapping Delete is the confirmation (owner, 13 Oct 2026)
   ids.forEach(id=>{const i=foodLog.findIndex(x=>x.id===id);if(i>=0){markDeleted('foodLog',id);foodLog.splice(i,1);}});
   foodSel.clear();saveFoodLog();renderToday();toast('Deleted '+ids.length);
 };
