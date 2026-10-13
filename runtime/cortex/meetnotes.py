@@ -234,7 +234,7 @@ def _resumed_session(fam: list, key: str, file_id: str, title: str, when, text: 
                                                    "outcome replaces the first one where they differ (Gemini notes).")
     if not backfill:
         try:
-            # a SYSTEM redraft, never one filed as the owner's correction (it used to go through apply_correction,
+            # a SYSTEM redraft, never one filed as the owner's correction (it used to run the owner-correction path,
             # which logged it as his and inferred a rule from it)
             if not _refresh_followup({"starts_at": when, "deal_id": deal_id, "attendees": emails or []}, combined,
                                      "The meeting RESUMED later on the same link and the later session changes the "
