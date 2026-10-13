@@ -354,6 +354,10 @@ def _cases():
          lambda: __import__("cortex.whatsapp", fromlist=["x"])._owner_text(
              {"type": "image", "image": {"id": "x", "caption": "Farheen's number"}}) == "Farheen's number")
 
+    case("a picture and a voice note sent together are one Talk turn", "Farheen screenshot + voice note",
+         lambda: "_talk_buffer(" in inspect.getsource(__import__("cortex.whatsapp", fromlist=["x"])._owner_control)
+         and "_TALK_RUN" in inspect.getsource(__import__("cortex.whatsapp", fromlist=["x"])._talk_flush))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

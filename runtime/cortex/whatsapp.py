@@ -1050,9 +1050,8 @@ def _owner_control(msg: dict, text: str) -> str:
     # opportunities, contacts, drafts, reminders), and Talk's answer comes back on WhatsApp. It runs on a thread so the
     # webhook answers Meta at once. A short acknowledgement still rings the doorbell below.
     media = _owner_media(msg)
-    if media or len(text.split()) > 3:
-        import threading
-        threading.Thread(target=_talk_turn, args=(text, media), daemon=True).start()
+    if media or len(text.split()) > 3 or _TALK_BUF["parts"]:
+        _talk_buffer(text, media)
         return "talk"
     # HONOUR THE DOORBELL. The out-of-window template tells him to reply so Cortex can send the draft: his
     # reply is what reopens the 24h window, and this is the half that walks through the door it opened.
@@ -1092,6 +1091,38 @@ def _owner_media(m: dict) -> list[tuple[str, str]]:
     mime = obj.get("mime_type") or mime or "application/octet-stream"
     name = obj.get("filename") or ("whatsapp-image.jpg" if t == "image" else "whatsapp-file")
     return [(f"data:{mime};base64,{base64.b64encode(data).decode()}", name)]
+
+
+# A PICTURE AND A VOICE NOTE ARE ONE MESSAGE (13 Oct 2026: the owner sent Farheen's screenshot and a voice note; they
+# arrived seconds apart, ran as two parallel Talk turns, and the voice turn overwrote the picture's). Everything he
+# sends within TALK_QUIET_SEC of the last part is gathered into ONE Talk turn, and turns run one at a time.
+import threading as _threading
+TALK_QUIET_SEC = 8
+_TALK_BUF: dict = {"parts": [], "media": [], "timer": None}
+_TALK_LOCK = _threading.Lock()
+_TALK_RUN = _threading.Lock()
+
+
+def _talk_buffer(text: str, media: list) -> None:
+    with _TALK_LOCK:
+        if text.strip():
+            _TALK_BUF["parts"].append(text.strip())
+        _TALK_BUF["media"] += media
+        if _TALK_BUF["timer"]:
+            _TALK_BUF["timer"].cancel()
+        _TALK_BUF["timer"] = _threading.Timer(TALK_QUIET_SEC, _talk_flush)
+        _TALK_BUF["timer"].daemon = True
+        _TALK_BUF["timer"].start()
+
+
+def _talk_flush() -> None:
+    with _TALK_LOCK:
+        text, media = "
+".join(_TALK_BUF["parts"]), list(_TALK_BUF["media"])
+        _TALK_BUF.update({"parts": [], "media": [], "timer": None})
+    if text or media:
+        with _TALK_RUN:                     # one Talk turn at a time: none overwrites another's conversation save
+            _talk_turn(text, media)
 
 
 def _talk_turn(text: str, media: list) -> None:
