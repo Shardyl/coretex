@@ -5,6 +5,9 @@
 #   bin/deploy.sh --fast   code-only cases
 set -e
 cd "$(dirname "$0")/.."
+# a file that does not even compile never leaves this machine (13 Oct 2026: a broken string reached GitHub; the box
+# gate caught it and rolled back, but nothing broken should be pushed at all)
+for f in runtime/cortex/*.py; do python -W error -m py_compile "$f" || { echo "SYNTAX CHECK FAILED: $f, nothing was pushed"; exit 1; }; done
 # a name used but never defined is caught HERE, before anything is pushed (13 Oct 2026: 'subj' in the sent sweep)
 if python -m pyflakes runtime/cortex/*.py 2>&1 | grep -i "undefined name\|referenced before assignment"; then
   echo "STATIC CHECK FAILED: fix the names above, nothing was pushed"; exit 1

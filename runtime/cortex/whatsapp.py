@@ -1117,8 +1117,7 @@ def _talk_buffer(text: str, media: list) -> None:
 
 def _talk_flush() -> None:
     with _TALK_LOCK:
-        text, media = "
-".join(_TALK_BUF["parts"]), list(_TALK_BUF["media"])
+        text, media = "\n".join(_TALK_BUF["parts"]), list(_TALK_BUF["media"])
         _TALK_BUF.update({"parts": [], "media": [], "timer": None})
     if text or media:
         with _TALK_RUN:                     # one Talk turn at a time: none overwrites another's conversation save
