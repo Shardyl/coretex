@@ -72,10 +72,10 @@ def find_by_phone(phone: str) -> str | None:
     """The resourceName of an existing contact on this number, or None.
 
     TWO LOOKUPS, because neither alone is enough. Our own LEDGER is authoritative for contacts Cortex
-    created: `people:searchContacts` does not index a contact immediately after it is written (proved in
-    testing, 10 Oct 2026 - a contact created a second earlier came back not found), so without the ledger
-    a repeat enquirer would collect a duplicate every time. The SEARCH then catches the people he already
-    had in his address book before any of this existed.
+    created: Google does not show a contact in a read immediately after it is written (proved in testing,
+    10 Oct 2026 - a contact created a second earlier came back not found), so without the ledger a repeat
+    enquirer would collect a duplicate every time. The ADDRESS-BOOK INDEX (`_book_index`, every number he
+    has saved) then catches the people he already had before any of this existed.
 
     Matched on the LAST NINE DIGITS, the opposite of the CRM's rule and right here: this is one person's
     own address book, not 33k imported rows, so a collision is vanishingly unlikely and the real risk is
@@ -86,20 +86,35 @@ def find_by_phone(phone: str) -> str | None:
     known = db.setting_get(_ledger_key(phone))
     if known:
         return known
+    # THE WHOLE ADDRESS BOOK, NOT A SEARCH (13 Oct 2026). searchContacts on the last nine digits missed numbers he
+    # had saved with spaces ("050 429 8867"): the personal-touch backfill created seven duplicates of clients he
+    # already had (Farheen, Mai, Hussein, Shehryar...). Every number in his book is indexed by its last nine digits.
     try:
-        # searchContacts needs a WARMUP request before it returns anything reliable; Google documents
-        # this and it is not optional.
-        _call("GET", "people:searchContacts?" + urllib.parse.urlencode({"query": "", "readMask": "names"}))
-        out = _call("GET", "people:searchContacts?" + urllib.parse.urlencode(
-            {"query": d[-9:], "readMask": "names,phoneNumbers"}))
-    except Exception:  # noqa: BLE001 - a failed search must never block the write
+        return _book_index().get(d[-9:])
+    except Exception:  # noqa: BLE001 - a failed read must never block the write
         return None
-    for r in out.get("results") or []:
-        pr = r.get("person") or {}
-        for n in pr.get("phoneNumbers") or []:
-            if _digits(n.get("canonicalForm") or n.get("value") or "").endswith(d[-9:]):
-                return pr.get("resourceName")
-    return None
+
+
+def _book_index(max_age_min: int = 30) -> dict:
+    """{last nine digits: resourceName} for every number in his Google Contacts, cached for `max_age_min`."""
+    import time
+    cache = db.setting_get("contacts_book_index") or {}
+    if cache.get("map") and time.time() - float(cache.get("at") or 0) < max_age_min * 60:
+        return cache["map"]
+    book, tok = {}, None
+    for _ in range(20):                                   # 20 pages of 1,000: far beyond any real address book
+        out = _call("GET", "people/me/connections?" + urllib.parse.urlencode(
+            {"personFields": "phoneNumbers", "pageSize": 1000, **({"pageToken": tok} if tok else {})}))
+        for c in out.get("connections") or []:
+            for n in c.get("phoneNumbers") or []:
+                dd = _digits(n.get("canonicalForm") or n.get("value") or "")
+                if len(dd) >= 9:
+                    book.setdefault(dd[-9:], c.get("resourceName"))
+        tok = out.get("nextPageToken")
+        if not tok:
+            break
+    db.setting_set("contacts_book_index", {"at": time.time(), "map": book})
+    return book
 
 
 def add_enquiry(phone: str, name: str = "", company: str = "", brand: str = "",

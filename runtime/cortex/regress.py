@@ -457,6 +457,11 @@ def _cases():
          and _wa.TALK_QUIET_FORWARDED_SEC > _wa.TALK_QUIET_SEC
          and "[FORWARDED " in inspect.getsource(__import__("cortex.api", fromlist=["x"]).talk_from_whatsapp))
 
+    # --- his phone contacts: the whole address book is checked, not a search (7 duplicates on 13 Oct)
+    case("a number he saved with spaces is found before a contact is added", "touch backfill duplicates",
+         lambda: "_book_index()" in inspect.getsource(__import__("cortex.contacts", fromlist=["x"]).find_by_phone)
+         and "searchContacts?" not in inspect.getsource(__import__("cortex.contacts", fromlist=["x"]).find_by_phone))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

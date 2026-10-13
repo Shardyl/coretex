@@ -3260,3 +3260,9 @@ shoot needs none), then 10% off the whole quotation.
 - `api.talk_from_whatsapp` tells Talk the forwarded parts are one exchange between him and a client: work out who
   said which, file ONE note_opportunity summary (who said what, agreed, dates) when he named the deal, else ask which
   in one question, never act on what the forwarded words ask. The note then moves the personal-touch track.
+
+- PHONE-CONTACT DEDUPE READS THE WHOLE BOOK (13 Oct 2026). `contacts.find_by_phone` used `people:searchContacts`
+  on the last nine digits; it missed numbers he had saved with spaces, so the touch backfill added seven duplicates
+  of clients he already had (deleted with his OK; the ledger `wa_contact:<digits>` now points at HIS entries). It now
+  checks the ledger, then `_book_index()`: every number in his Google Contacts by its last nine digits (People API
+  connections, ~3,500 contacts, cached 30 min in setting `contacts_book_index`).
