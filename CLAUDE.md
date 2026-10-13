@@ -2879,3 +2879,20 @@ shoot needs none), then 10% off the whole quotation.
   completely") records nothing: that is a rewrite, not a list of removals; those rely on the in-force list.
   Checked on 60 real multi-correction cards: no approved draft altered; 36 of 52 injected regressions stripped
   (the rest came from full-rewrite rounds, by design).
+
+## First response means first response; a rule goes where it applies (13 Oct 2026)
+- CAUSE: owner, "whenever we add rules it always says first response drafting, even when it's not first responses".
+  A taught rule lands on the skill of the card it was taught on, and almost every sales email card was filed on
+  sales-first-response: in 30 days 235 reply cards there, 222 of them threaded and 86 automatic chases
+  (`_spawn_followup_card` hardcoded it). So 33 of the last 48 confirmed rules went there, leaking first-reply rules
+  into chases, and never reaching email-handling cards (Talk drafts, booked projects).
+- CARDS: `_draft_direct_reply` files a reply on sales-first-response ONLY when we have never written to the person
+  (`_we_wrote_to`: a Cortex send to them, or an email_out on one of their deals); otherwise sales-followup;
+  delivery-stage deals stay on email-handling. `_spawn_followup_card`, `_spawn_lead_chase` and
+  `poll_sales_replies` draft on sales-followup. Website enquiries (`intake_enquiry`) stay first response.
+- `worker._RELATED_SKILLS_DEFAULT["sales-followup"]` reads email-handling, sales-scheduling, lead-qualification AND,
+  INTERIM, sales-first-response, until the rules filed there by habit are moved. Remove it from that tuple once done.
+- RULES: `worker.RULE_PLACES` (first reply / all sales emails after it / every email) + `rule_places(skill_key)`;
+  `infer_rule` also returns `place`, chosen by what the rule says. The proposal stores the chosen skill and
+  `places`; the cockpit rule card has an "Applies to" picker (`placeSel`, sent as `skill_key`), and
+  `decide_rule(..., skill_key=)` lands it there (only one of the proposal's places). sw `cortex-v62`.

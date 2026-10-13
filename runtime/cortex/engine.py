@@ -1682,14 +1682,20 @@ def _infer_rule_offer(task: dict, skill: dict, text: str, old: str, new: str) ->
     if rule.get("is_rule") and rule.get("rule"):
         company = store.get_company(task["company_id"])
         co = company["name"] if company else "this company"
+        places = worker.rule_places(skill.get("skill_key") or "")
+        target = skill
+        if places and rule.get("place") in {k for k, _l, _d in places}:
+            target = store.get_skill_by_key(task["company_id"], rule["place"]) or skill
+        label = next((l for k, l, _d in places if k == target.get("skill_key")), target.get("name"))
         # store the proposal SELF-CONTAINED (skill + company baked in) so it survives the task being archived/
         # deleted and can always be decided + landed in the right skill, even days later.
         db.setting_set(f"rule:{task['id']}", {
-            "rule": rule["rule"], "skill_id": skill["id"], "skill_key": skill.get("skill_key"),
+            "rule": rule["rule"], "skill_id": target["id"], "skill_key": target.get("skill_key"),
             "company_id": task["company_id"], "company": co,
-            "skill_name": skill.get("name"), "kind": task.get("kind")})
-        tg.send(f"I'm reading your correction as a standing rule:\n\n“{rule['rule']}”\n\n"
-                f"Where should it live? '{co}' only, or ALL companies?",
+            "skill_name": label, "kind": task.get("kind"), "taught_on": skill.get("skill_key"),
+            "places": [{"key": k, "label": l} for k, l, _d in places]})
+        tg.send(f"I'm reading your correction as a standing rule for {label}:\n\n“{rule['rule']}”\n\n"
+                f"Where should it live? '{co}' only, or ALL companies? (Change the email lane on the cockpit card.)",
                 [[tg.button(f"{co} only", f"ry:{task['id']}"), tg.button("All companies", f"ru:{task['id']}")],
                  [tg.button("No, just this once", f"rn:{task['id']}")]])
 
@@ -1710,8 +1716,8 @@ def pending_rule(task_id: int) -> dict:
     """Cockpit polls this after a correction: returns the rule the background inference proposed (if any)."""
     raw = db.setting_get(f"rule:{task_id}")
     p = _norm_proposal(task_id, raw) if raw else {}
-    return {"ok": True, "proposed_rule": p.get("rule"),
-            "skill_name": p.get("skill_name"), "company": p.get("company")}
+    return {"ok": True, "proposed_rule": p.get("rule"), "skill_name": p.get("skill_name"),
+            "company": p.get("company"), "skill_key": p.get("skill_key"), "places": p.get("places") or []}
 
 
 def pending_rules() -> list[dict]:
@@ -3706,14 +3712,20 @@ def correct_task(task_id: int, text: str) -> dict:
             "company": company["name"] if company else None}
 
 
-def decide_rule(task_id: int, add: bool, scope: str = "company") -> dict:
+def decide_rule(task_id: int, add: bool, scope: str = "company", skill_key: str | None = None) -> dict:
     """Cockpit confirm/dismiss of the rule Cortex inferred from a correction. `scope` is the owner's
-    explicit choice: 'company' (this company's skill only) or 'universal' (that skill_key on EVERY company)."""
+    explicit choice: 'company' (this company's skill only) or 'universal' (that skill_key on EVERY company).
+    `skill_key` is the email lane he picked on the card (one of the proposal's `places`)."""
     raw = db.setting_get(f"rule:{task_id}")
     added = False
     if add and raw:
         p = _norm_proposal(task_id, raw)
-        rule, skill_key, skill_id = p.get("rule"), p.get("skill_key"), p.get("skill_id")
+        rule, skill_key_p, skill_id = p.get("rule"), p.get("skill_key"), p.get("skill_id")
+        if skill_key and skill_key != skill_key_p and skill_key in {x.get("key") for x in (p.get("places") or [])}:
+            _sk = store.get_skill_by_key(int(p.get("company_id") or 0), skill_key)
+            if _sk:
+                skill_key_p, skill_id = skill_key, _sk["id"]
+        skill_key = skill_key_p
         if rule and scope == "universal" and skill_key:
             store.add_universal_rule(skill_key, rule)
             added = True
@@ -4409,7 +4421,8 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
                         "d.action='send' and lower(t.request->'inquiry'->>'email')=lower(%s) and "
                         "d.created_at > now() - interval '3 days' limit 1", (co["id"], email)):
         return   # something went to them within three days: a chase on top of it is a nag (card 907, 24 Sep 2026)
-    skill = store.get_skill_by_key(co["id"], "sales-first-response")
+    # a chase is a sales email after the first reply: it drafts on sales-followup (13 Oct 2026)
+    skill = store.get_skill_by_key(co["id"], "sales-followup") or store.get_skill_by_key(co["id"], "sales-first-response")
     label = {"checkin": "check-in", "revive": "revival"}.get(action, "follow-up")
     if email and skill:
         stage = opp.get("stage")
@@ -5721,8 +5734,11 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
         # skill (+ its related project skills' rules), not the sales lane — that is where project-management
         # behaviour gets trained. Opportunity-stage and no-deal mail stays on sales-first-response.
         in_delivery = bool(deal and deal.get("stage") in _DELIVERY_STAGES)
-        skill = (store.get_skill_by_key(co["id"], "email-handling") if in_delivery else None) \
-            or store.get_skill_by_key(co["id"], "sales-first-response")
+        # FIRST REPLY OR NOT IS A FACT (13 Oct 2026): only someone we have never written to gets the first-response
+        # lane; anyone we are already talking to is a sales conversation in progress (sales-followup).
+        _lane = "email-handling" if in_delivery else ("sales-followup" if _we_wrote_to(co["id"], sender, deals)
+                                                      else "sales-first-response")
+        skill = store.get_skill_by_key(co["id"], _lane) or store.get_skill_by_key(co["id"], "sales-first-response")
         if not skill:
             return
         subj = (e.get("subject") or "").strip()
@@ -6322,7 +6338,8 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
         msgs = gmail.list_recent(days=14, limit=30, rt_key=send_rt, company=client, q="newer_than:14d", skip=seen_set)
     except Exception as e:  # noqa: BLE001
         return {"reason": f"read failed: {e}"}
-    skill = store.get_skill_by_key(co["id"], "sales-first-response")
+    # a reply to our own outreach is a conversation in progress, not a first response (13 Oct 2026)
+    skill = store.get_skill_by_key(co["id"], "sales-followup") or store.get_skill_by_key(co["id"], "sales-first-response")
     made = 0
     for m in msgs:
         gid = m.get("gmail_id")
@@ -6444,8 +6461,22 @@ def _lead_chase_brief(inq: dict, co: dict | None = None) -> str:
             )
 
 
+def _we_wrote_to(company_id: int, email: str, deals: list | None = None) -> bool:
+    """Have we already written to this person? A Cortex send to them, or our email on one of their deals' timelines."""
+    if not email:
+        return False
+    if db.one("select 1 from decisions d join tasks t on t.id=d.task_id where t.company_id=%s and d.action='send' "
+              "and lower(t.request->'inquiry'->>'email')=lower(%s) limit 1", (company_id, email)):
+        return True
+    for d in deals or []:
+        h = (db.one("select history from crm_projects where id=%s", (int(d["id"]),)) or {}).get("history") or []
+        if any(str(e.get("event", "")).startswith("email_out") for e in h):
+            return True
+    return False
+
+
 def _spawn_lead_chase(co: dict, email: str) -> None:
-    skill = store.get_skill_by_key(co["id"], "sales-first-response")
+    skill = store.get_skill_by_key(co["id"], "sales-followup") or store.get_skill_by_key(co["id"], "sales-first-response")
     if not skill:
         return
     c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (email,))

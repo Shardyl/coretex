@@ -524,6 +524,8 @@ def _enrich_action_card(t: dict) -> dict:
         t["proposed_rule"] = _p.get("rule") if _p else pr
         t["rule_skill"] = _p.get("skill_name") or (sk["name"] if sk else None)
         t["rule_company"] = _p.get("company") or ((store.get_company(t["company_id"]) or {}).get("name") if t.get("company_id") else None)
+        t["rule_skill_key"] = _p.get("skill_key")
+        t["rule_places"] = _p.get("places") or []
     return t
 
 
@@ -2892,6 +2894,7 @@ def rules_pending(_: None = Depends(auth)) -> dict:
 class RuleDecision(BaseModel):
     add: bool
     scope: str = "company"   # 'company' = this company only | 'universal' = every company
+    skill_key: str | None = None   # the email lane he picked on the card (one of the proposal's places)
 
 
 @app.post("/api/tasks/{task_id}/rule")
@@ -2902,7 +2905,7 @@ def task_rule(task_id: int, body: RuleDecision, u: dict = Depends(current_user))
     if body.scope == "universal" and (u or {}).get("role") != "owner":
         raise HTTPException(status_code=403, detail="Only the owner can set a rule across all companies — "
                                                     "save it for your company, and Rashad can widen it.")
-    return engine.decide_rule(task_id, body.add, body.scope)
+    return engine.decide_rule(task_id, body.add, body.scope, body.skill_key)
 
 
 class SendConfirm(BaseModel):

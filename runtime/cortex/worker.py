@@ -84,6 +84,10 @@ def _rules_block(skill: dict) -> str:
 _RELATED_SKILLS_DEFAULT = {
     # email-handling holds the company's general email voice; sales-followup governs thread continuations.
     "sales-first-response": ("email-handling", "sales-scheduling", "lead-qualification", "sales-followup"),
+    # every sales email after the first reply (chases, check-ins, replies on an open thread) drafts here (13 Oct 2026).
+    # sales-first-response is read too ONLY until the rules filed there by habit are moved to where they belong:
+    # take it out of this tuple (or the 'related_skills' setting) once that move is approved and done.
+    "sales-followup": ("email-handling", "sales-scheduling", "lead-qualification", "sales-first-response"),
     # project correspondence drafts ON email-handling and also reads the project skills' rules.
     "email-handling": ("sales-scheduling", "prod-revisions", "prod-status-reporting", "prod-pipeline"),
     # the email that carries a pro forma drafts on its own finance lane and reads the company's email voice
@@ -321,7 +325,7 @@ def draft(skill: dict, company: dict, request: dict,
         user.insert(0, " ".join(bits))
     if atts:
         user.append(f"{len(atts)} file(s)/image(s) are attached below — use them as source material for the deliverable.")
-    if (skill.get("skill_key") or "") in ("sales-quotation", "sales-first-response", "email-handling"):
+    if (skill.get("skill_key") or "") in ("sales-quotation", "sales-first-response", "sales-followup", "email-handling"):
         try:   # the rate card rides every quotation-adjacent draft: approved prices only, never invented
             from . import ratecard
             _rc = ratecard.render((company or {}).get("slug") or "")
@@ -495,11 +499,42 @@ def draft_article(skill: dict, company: dict, request: dict,
     return {"title": title, "html": html}
 
 
+# WHERE A RULE LIVES IS DECIDED BY WHAT IT SAYS, not by which card it was taught on (owner, 13 Oct 2026: "whenever we
+# add rules it always says first response drafting, even when it's not first responses"). These are the email lanes a
+# rule taught on an email card may be filed under; the owner sees the choice and can change it before confirming.
+RULE_PLACES = [
+    ("sales-first-response", "First reply to a new enquiry",
+     "only the very first reply to someone who has just contacted us"),
+    ("sales-followup", "All sales emails after the first reply",
+     "chases, check-ins and every reply on an open sales conversation or opportunity"),
+    ("email-handling", "Every email the company sends",
+     "voice, tone, formatting, signatures, attachments, meetings, project and client correspondence"),
+]
+
+
+def rule_places(skill_key: str) -> list[tuple[str, str, str]]:
+    """The places a rule taught on this skill may go: the email lanes for an email card, else the skill itself."""
+    keys = [k for k, _l, _d in RULE_PLACES]
+    if skill_key in keys or skill_key in ("sales-quotation", "sales-scheduling"):
+        return RULE_PLACES + ([(skill_key, skill_key.replace("-", " ").capitalize(), "this skill only")]
+                              if skill_key not in keys else [])
+    return []
+
+
 def infer_rule(skill: dict, correction: str, old_draft: str, new_draft: str) -> dict:
-    """Turn a one-off correction into a standing rule, if it implies one."""
+    """Turn a one-off correction into a standing rule, if it implies one, and say which lane it belongs to."""
+    places = rule_places(skill.get("skill_key") or "")
+    where = ""
+    if places:
+        where = ("\n\nWhere does the rule belong? Choose by WHAT THE RULE IS ABOUT, never by where it was taught:\n"
+                 + "\n".join(f'- "{k}": {l} ({d})' for k, l, d in places)
+                 + "\nA rule about voice, layout, sign-offs, attachments or meetings is every email. A rule about "
+                   "chasing, deals in progress or what to say once we are talking is all sales emails after the "
+                   "first reply. Only a rule that is truly about the very first reply belongs there.")
     return provider.think_json(
         "You convert an owner's correction into a concise general standing rule for a skill — but ONLY "
         "if the correction implies a durable preference. One-offs with no general lesson are not rules.",
-        f"Skill: {skill['name']}\nThe owner's correction: {correction}\n\n"
-        'Return JSON: {"is_rule": boolean, "rule": "a short imperative rule (or empty string)"}',
+        f"Skill: {skill['name']}\nThe owner's correction: {correction}{where}\n\n"
+        'Return JSON: {"is_rule": boolean, "rule": "a short imperative rule (or empty string)"'
+        + (', "place": "<one of the keys above>"' if places else "") + "}",
     )

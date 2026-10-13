@@ -1640,7 +1640,7 @@ async function renderInbox(v){
   hydrateAttachments();   // fill in attachment thumbnails / filenames on the cards
   // surface any standing rule a correction inferred but that wasn't decided yet — persistent, not poll-dependent
   const inSlot=new Set();
-  shown.forEach(it=>{ if(it.card!=='info' && it.proposed_rule && proposeRule(it.id, it.proposed_rule, it.rule_skill, it.rule_company)!==false) inSlot.add(it.id); });
+  shown.forEach(it=>{ if(it.card!=='info' && it.proposed_rule && proposeRule(it.id, it.proposed_rule, it.rule_skill, it.rule_company, it.rule_places, it.rule_skill_key)!==false) inSlot.add(it.id); });
   renderPendingRules(inSlot);   // every un-decided proposal not shown on its own card -> the banner; never lost
 }
 async function renderPendingRules(skipIds){
@@ -1652,6 +1652,7 @@ async function renderPendingRules(skipIds){
     + pend.map(p=>`<div class="card" style="border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:11px;padding:11px 13px;margin-bottom:9px">
         <div class="meta" style="margin:0 0 6px;color:var(--mut)">${ic('check',13)} Standing rule for <b style="color:var(--ink)">${esc(p.skill_name||'a skill')}</b>${p.company?(' &middot; '+esc(p.company)):''}</div>
         <div style="background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:14px;margin-bottom:9px">${esc(p.rule)}</div>
+        ${placeSel(p.task_id, p.places, p.skill_key)}
         <div class="row" style="flex-wrap:wrap;gap:7px">
           <button class="btn go sm" onclick="decideRule(${p.task_id},true,'company')">${ic('check',14)} ${esc(p.company||'This company')} only</button>
           ${window.isScopedUser?'':`<button class="btn go sm" onclick="decideRule(${p.task_id},true,'universal')">${ic('grid',14)} All companies</button>`}
@@ -2363,7 +2364,7 @@ async function sendCorr(id){
   const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;
   try{ const r=await api(`/api/tasks/${id}/correct`,{method:'POST',body:JSON.stringify({text})});
     if(card) card.style.opacity=1;
-    if(r&&r.proposed_rule){ toast('Redrafted — one quick thing'); if(proposeRule(id,r.proposed_rule,r.skill_name,r.company)===false) renderPendingRules(); }
+    if(r&&r.proposed_rule){ toast('Redrafted — one quick thing'); if(proposeRule(id,r.proposed_rule,r.skill_name,r.company,r.places,r.skill_key)===false) renderPendingRules(); }
     else { toast('Redrafted ✓'); render(); pollRule(id,0); }   // rule offer (if any) lands shortly, off the critical path
   }
   catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
@@ -2374,16 +2375,23 @@ function pollRule(id, tries){
   setTimeout(async()=>{
     let got=false;
     try{ const r=await api(`/api/tasks/${id}/pending-rule`);
-      if(r&&r.proposed_rule){ got=true; if(proposeRule(id,r.proposed_rule,r.skill_name,r.company)===false) renderPendingRules(); }
+      if(r&&r.proposed_rule){ got=true; if(proposeRule(id,r.proposed_rule,r.skill_name,r.company,r.places,r.skill_key)===false) renderPendingRules(); }
     }catch(e){}
     if(!got) pollRule(id,tries+1);   // keep polling through transient errors; the rule lands a few seconds later
   }, 2500);
 }
-function proposeRule(id, rule, skillName, co){
+// WHERE A RULE LIVES (13 Oct 2026): Cortex suggests the email lane from what the rule says; he can change it here.
+function placeSel(id, places, key){
+  if(!places||!places.length) return '';
+  return `<div class="row" style="gap:7px;align-items:center;margin-bottom:9px;flex-wrap:wrap"><span class="meta" style="margin:0;color:var(--mut)">Applies to</span>
+    <select id="rp${id}" class="fsel" style="flex:1;min-width:200px;margin:0">${places.map(x=>`<option value="${esc(x.key)}" ${x.key===key?'selected':''}>${esc(x.label)}</option>`).join('')}</select></div>`;
+}
+function proposeRule(id, rule, skillName, co, places, key){
   const p=document.getElementById('cp'+id); if(!p){ return false; }   // no slot on this card: the banner shows it
   p.style.display='block';
   p.innerHTML=`<div class="meta" style="margin:1px 0 7px">${ic('check',13)} I read that as a standing rule for ${esc(skillName||'this skill')}. Where should it live?</div>
     <div style="background:var(--bg2,#0e1620);border:1px solid #2563EB66;border-radius:11px;padding:10px 12px;font-size:14px;color:var(--fg,#dfe7ef);margin-bottom:10px">${esc(rule)}</div>
+    ${placeSel(id, places, key)}
     <div class="row" style="flex-wrap:wrap;gap:7px">
       <button class="btn go" onclick="decideRule(${id},true,'company')">${ic('check',15)} ${esc(co||'This company')} only</button>
       ${window.isScopedUser?'':`<button class="btn go" onclick="decideRule(${id},true,'universal')">${ic('grid',15)} All companies (universal)</button>`}
@@ -2391,7 +2399,8 @@ function proposeRule(id, rule, skillName, co){
 }
 async function decideRule(id, add, scope){
   scope=scope||'company';
-  try{ const r=await api(`/api/tasks/${id}/rule`,{method:'POST',body:JSON.stringify({add,scope})});
+  const sel=document.getElementById('rp'+id), skill_key=sel?sel.value:null;
+  try{ const r=await api(`/api/tasks/${id}/rule`,{method:'POST',body:JSON.stringify({add,scope,skill_key})});
     toast(add&&r.added?(r.scope==='universal'?'Added as a universal rule — applies to every company ✓':'Added as a company rule ✓'):'Okay, not a rule'); render(); }
   catch(e){ toast('Error: '+e.message); render(); }
 }
