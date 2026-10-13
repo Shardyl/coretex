@@ -104,6 +104,16 @@ CHECKS = [
                "and coalesce(cadence->>'name','') <> 'revival'",
     },
     {
+        "key": "notice_for_closed_card",
+        "what": "A notification about a card that is already sent, done or cancelled",
+        "sql": "select n.id, left(n.title,80), t.status from notifications n join tasks t on n.target_type='task' and "
+               "n.target_id=t.id::text where n.state in ('unread','read','snoozed') and t.status in "
+               "('done','sent','cancelled','rejected','failed')",
+        "fix": "update notifications n set state='dismissed' from tasks t where n.target_type='task' and "
+               "n.target_id=t.id::text and n.state in ('unread','read','snoozed') and t.status in "
+               "('done','sent','cancelled','rejected','failed') returning n.id",
+    },
+    {
         "key": "double_chase",
         "what": "One person has more than one open automatic chase",
         "sql": f"select lower(request->'inquiry'->>'email') who, count(*), array_agg(id) from tasks "

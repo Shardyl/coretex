@@ -744,6 +744,12 @@ def add_deal_contact(deal_id: int, email: str, role: str = "", primary: bool = F
                (Json(lst), prim, deal_id))
     log_event(email, "deal_linked", f"Linked to deal: {db.one('select title from crm_projects where id=%s',(deal_id,))['title']}")
     ensure_deal_account(deal_id, prim)
+    try:
+        from . import obligations
+        obligations.on_contact_added(deal_id)
+        obligations.on_deal_for_contact(email)
+    except Exception:  # noqa: BLE001
+        pass
     return db.one("select * from crm_projects where id=%s", (deal_id,))
 
 
@@ -1323,6 +1329,11 @@ def set_project_stage(project_id: int, stage: str, actor: str = "system") -> dic
     if stage in CLOSED_STAGES and old not in CLOSED_STAGES:
         _cancel_cortex_reminders(p, stage)
     _apply_stage_rhythm(p, old, stage)
+    try:
+        from . import obligations
+        obligations.on_stage(project_id, old, stage)
+    except Exception as _oe:  # noqa: BLE001
+        print(f"[obligations] stage: {type(_oe).__name__}: {_oe}", flush=True)
     if stage in WON_STAGES:
         flag_clients_for_deal(p)        # won = the people/company on it become clients (sticky)
     if p.get("contact_email"):

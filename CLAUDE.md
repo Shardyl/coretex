@@ -3052,3 +3052,18 @@ shoot needs none), then 10% off the whole quotation.
 - Called from: `_draft_direct_reply` (BEFORE the 40-character check, so "Thanks, will review" now pauses the chase),
   the `poll_inbox` no-draft branch (a client email the policy held), `poll_sales_replies`, and WhatsApp messages from
   a deal client. Before this only `_draft_direct_reply` did any of it.
+
+## What Cortex owes completes itself: `obligations.py` (audit step 2d, 13 Oct 2026)
+- `obligations.KINDS` names every kind of reminder Cortex sets for something it owes (by title prefix or creator)
+  and what completes it. Settled only for reminders Cortex created; the owner's own are his.
+- `on_sent` (from `pipeline.record_send`, every email out on a deal): a quotation or proposal (attachment name or
+  subject) settles "Prepare and send the proposal"; then ONE Haiku judgement settles commitments, meeting
+  commitments, client deadlines, next steps and conversation commitments the email actually delivers. It replaced
+  `pipeline.settle_commitments`, which only knew two kinds and skipped snoozed ones.
+- `on_stage` (from `crm.set_project_stage`): leaving Opportunity settles "send the proposal"; won or Lost settles
+  "Tender closes"; notices asking about the stage (closing-gate, signed-off) are dismissed.
+- `on_task_closed` (from `store.update_task` when a card is sent/done/cancelled/rejected/failed): notices about that
+  card are dismissed. `on_contact_added` / `on_deal_for_contact` (from `crm.add_deal_contact`): "no contact" and
+  "untracked sales email" notices are dismissed.
+- `reminders.create` merges a same-day reminder only with one from the SAME author and neither carrying an action.
+- Health check `notice_for_closed_card` (self-repairs).

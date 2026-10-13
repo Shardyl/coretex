@@ -107,9 +107,13 @@ def create(title: str, due_at: datetime, *, company_id: int | None = None, targe
         # and creator) - they must never be merged away into a nudge
         # ONE reminder per target per day (audit follow-on: deal 103 accumulated SIX overlapping Monday
         # reminders from four mechanisms). Same target, same day -> the existing reminder absorbs it.
-        ex = db.one("select * from reminders where status in ('pending','snoozed') and target_type=%s "
-                    "and target_id=%s and due_at::date = %s::date limit 1",
-                    (target_type, tid, due_at))
+        # ...but only with one from the SAME author and neither carrying an action (audit 13 Oct: a Cortex reminder
+        # absorbed into the owner's survived a closed deal, an owner's absorbed into Cortex's was auto-cancelled,
+        # and an action reminder merged into a nudge lost its action)
+        ex = None if action else db.one(
+            "select * from reminders where status in ('pending','snoozed') and target_type=%s and target_id=%s "
+            "and due_at::date = %s::date and coalesce(created_by,'')=%s and action is null limit 1",
+            (target_type, tid, due_at, created_by))
         if ex:
             if title and title.lower()[:40] not in (ex.get("title") or "").lower():
                 db.execute("update reminders set title = left(title || ' + ' || %s, 400) where id=%s",

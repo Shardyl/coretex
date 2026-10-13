@@ -183,10 +183,13 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
     # once: the Message-Id makes the timeline entry idempotent (this call passed no ref at all before).
     log_deal(did, "email_out_manual" if manual else "email_out",
              f"{who} from {frm or 'company mailbox'} to {to}: {subj or '(no subject)'}", ref=ref)
-    try:   # FIRST settle what this email fulfils, THEN track the new promises it makes
-        settle_commitments(int(did), body, to)
-    except Exception:  # noqa: BLE001
-        pass
+    try:   # FIRST settle what this email completes (obligations.py, audit 2d), THEN track the new promises it makes
+        from . import obligations
+        _names = [str((a or {}).get("filename") or "") for a in (req.get("attach_docs") or [])] \
+            + [str(x) for x in (env.get("attachment_names") or [])]
+        obligations.on_sent(int(did), body, to, subj, _names)
+    except Exception as _oe:  # noqa: BLE001
+        print(f"[obligations] {type(_oe).__name__}: {_oe}", flush=True)
     try:   # a QUOTATION going out: logged with its amount, and the deal's value becomes that quotation
         record_quotation_sent(int(did), task, env, company)
     except Exception:  # noqa: BLE001
@@ -581,32 +584,8 @@ def on_stage_change(deal: dict, old: str, new: str, actor: str = "system") -> No
 
 # ---------- commitment fulfilment (a send can settle what an earlier send promised) ----------
 
-def settle_commitments(deal_id: int, sent_body: str, to: str) -> None:
-    """When a new email goes out on a deal, check the deal's OPEN commitment reminders: any the model
-    judges genuinely fulfilled by this email is marked done and logged. Judgement is per-commitment
-    and conservative - unclear stays open."""
-    open_rs = db.query("select id, title from reminders where created_by='cortex-pipeline' and "
-                       "status='pending' and target_type='deal' and target_id=%s and "
-                       "(title like %s or title like %s)",
-                       (str(int(deal_id)), "Commitment owed%", "Meeting commitment%"))
-    if not open_rs or not (sent_body or "").strip():
-        return
-    listing = "\n".join(f"[{r['id']}] {r['title']}" for r in open_rs)
-    try:
-        out = provider.think_json(
-            "An email was just sent on a deal. Below are the OPEN commitments previously promised to this "
-            "client. Decide which (if any) THIS email genuinely fulfils - the promised thing is actually "
-            'delivered/attached/answered in it, not merely mentioned. Return {"fulfilled_ids":[<int>...]}. '
-            "Be conservative: when unclear, leave it open (empty list).",
-            f"OPEN COMMITMENTS:\n{listing}\n\nEMAIL JUST SENT (to {to}):\n{(sent_body or '')[:3000]}",
-            model=provider.MODEL_ROUTER, purpose="commitment-settle")
-        ids = {int(i) for i in (out or {}).get("fulfilled_ids", [])}
-    except Exception:  # noqa: BLE001
-        return
-    for r in open_rs:
-        if r["id"] in ids:
-            reminders.mark_done(r["id"])
-            log_deal(deal_id, "commitment_done", r["title"])
+# settle_commitments was replaced by obligations.on_sent (audit step 2d, 13 Oct 2026): one place settles what
+# an email delivers, for every kind of thing Cortex owes, not only 'Commitment owed' / 'Meeting commitment'.
 
 
 # ---------- next-step engine (the inbound decides what we should PREPARE, not just what to reply) ----------

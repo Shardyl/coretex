@@ -234,6 +234,22 @@ def _cases():
          lambda: any(int(d["id"]) == 108 for d in __import__("cortex.events", fromlist=["x"])._deals(
              _co("tabscanner"), "someone.new@nl.abnamro.com", None)))
 
+    # --- what Cortex owes completes itself (audit step 2d)
+    from . import obligations
+    case("every owed-reminder title has a kind", "MENA Water reminder 334",
+         lambda: obligations.kind_of({"title": "Prepare and send the proposal — X"}) == "proposal_owed"
+         and obligations.kind_of({"title": "Client deadline 2026-10-20: x"}) == "client_deadline"
+         and obligations.kind_of({"title": "anything", "created_by": "cortex-commitment"}) == "conversation_commitment")
+    case("sending a quotation settles 'send the proposal'", "MENA Water reminder 334",
+         lambda: bool(obligations._QUOTE_RX.search("MENA Water - Quotation SEN-2026-0035 v1.pdf")))
+    case("a sent email, a stage change, a closed card and a new contact all settle", "audit 2d",
+         lambda: "obligations.on_sent(" in inspect.getsource(__import__("cortex.pipeline", fromlist=["x"]).record_send)
+         and "obligations.on_stage(" in inspect.getsource(__import__("cortex.crm", fromlist=["x"]).set_project_stage)
+         and "obligations.on_task_closed(" in inspect.getsource(store.update_task)
+         and "obligations.on_contact_added(" in inspect.getsource(__import__("cortex.crm", fromlist=["x"]).add_deal_contact))
+    case("same-day reminders never merge across authors or actions", "audit 13 Oct",
+         lambda: "coalesce(created_by,'')=%s and action is null" in inspect.getsource(reminders.create))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

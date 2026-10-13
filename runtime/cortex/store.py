@@ -321,7 +321,14 @@ def update_task(tid: int, **fields) -> dict | None:
         sets.append(f"{k}=%s")
         vals.append(Json(v) if isinstance(v, (dict, list)) else v)
     vals.append(tid)
-    return db.execute(f"update tasks set {', '.join(sets)}, updated_at=now() where id=%s returning *", tuple(vals))
+    row = db.execute(f"update tasks set {', '.join(sets)}, updated_at=now() where id=%s returning *", tuple(vals))
+    if fields.get("status") in ("done", "sent", "cancelled", "rejected", "failed"):
+        try:   # notices about this card have done their job (obligations.py, audit 2d)
+            from . import obligations
+            obligations.on_task_closed(tid)
+        except Exception:  # noqa: BLE001
+            pass
+    return row
 
 
 def tasks_by_status(status: str) -> list[dict]:
