@@ -94,7 +94,11 @@ def parse_when(text: str) -> datetime | None:
 
 def create(title: str, due_at: datetime, *, company_id: int | None = None, target_type: str | None = None,
            target_id=None, recurrence: str = "none", custom_days: int | None = None,
-           priority: str = "normal", action: dict | None = None, created_by: str = "rashad") -> dict:
+           priority: str = "normal", action: dict | None = None, created_by: str = "cortex") -> dict:
+    # WHO SET IT DECIDES WHETHER A CLOSED DEAL CANCELS IT (13 Oct 2026). The default was "rashad", so every code
+    # path that did not say otherwise (the "Prepare and send the proposal" reminder, the feedback ask) was filed as
+    # the owner's own, and closing the deal left it alone: Liebherr's fired four hours after the deal went Lost.
+    # The default is now Cortex; the cockpit, Talk and the owner's correction words pass the person explicitly.
     ensure_schema()
     recurrence = recurrence if recurrence in RECURRENCES else "none"
     tid = target_id if target_id is None else str(target_id)

@@ -810,7 +810,7 @@ def log_conversation(text: str, company_slug: str = "sensa", contact_hint: str =
         r = reminders.create(f"{c} ({out.get('counterpart_name') or 'contact'})", when,
                              company_id=co["id"], priority="normal",
                              target_type="deal" if deal else None,
-                             target_id=deal["id"] if deal else None)
+                             target_id=deal["id"] if deal else None, created_by="cortex-commitment")
         applied.append(f"reminder {r['id']}: {c} on {when.strftime('%a %-d %b')}")
     return {"ok": True, "counterpart": out.get("counterpart_name"), "deal": (deal or {}).get("id"),
             "summary": out.get("summary"), "applied": applied,

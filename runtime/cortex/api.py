@@ -1135,7 +1135,7 @@ def reminders_create(body: ReminderBody, _: None = Depends(auth)) -> dict:
         cid = co["id"] if co else None
     r = reminders.create(body.title, due, company_id=cid, target_type=body.target_type,
                          target_id=body.target_id, recurrence=body.recurrence, custom_days=body.custom_days,
-                         priority=body.priority, action=body.action)
+                         priority=body.priority, action=body.action, created_by="rashad")
     return {"ok": True, "reminder": r}
 
 
@@ -4527,7 +4527,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                         "card it spawns is written to that deal's contact with its full timeline.")
         r = reminders.create(inp["title"], due, company_id=cid, target_type=inp.get("target_type"),
                              target_id=inp.get("target_id"), recurrence=inp.get("recurrence") or "none",
-                             custom_days=inp.get("custom_days"), action=action)
+                             custom_days=inp.get("custom_days"), action=action, created_by="rashad")
         rep = (" repeating " + r["recurrence"]) if r.get("recurrence") not in (None, "none") else ""
         kind = "action reminder (drafts when it fires)" if action else "reminder"
         return f"Set {kind} #{r['id']}: \"{inp['title']}\" for {due.strftime('%a %d %b, %H:%M')} GST{rep}."

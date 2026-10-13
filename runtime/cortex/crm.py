@@ -1162,7 +1162,7 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
                 if email and cid:
                     reminders.create(f"Feedback ask: how did '{p['title']}' land?",
                                      now + timedelta(days=4), company_id=cid, target_type="deal",
-                                     target_id=did, priority="normal", action={
+                                     target_id=did, priority="normal", created_by="cortex-feedback", action={
                                          "company": (db.one("select slug from companies where id=%s", (cid,)) or {}).get("slug"),
                                          "skill": "sales-followup", "kind": "email_reply", "request": {
                                              "brief": (f"POST-DELIVERY FEEDBACK ask for '{p['title']}', delivered a few "
@@ -1211,7 +1211,7 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
                 if email and cid:
                     reminders.create(f"Feedback ask: how did '{p['title']}' land?",
                                      now + timedelta(days=2), company_id=cid, target_type="deal",
-                                     target_id=did, priority="normal", action={
+                                     target_id=did, priority="normal", created_by="cortex-feedback", action={
                                          "company": (db.one("select slug from companies where id=%s", (cid,)) or {}).get("slug"),
                                          "skill": "sales-followup", "kind": "email_reply", "request": {
                                              "brief": (f"POST-DELIVERY FEEDBACK ask for '{p['title']}', just closed "
@@ -1264,6 +1264,12 @@ def _cancel_cortex_reminders(p: dict, stage: str) -> list:
                                        "from its reminders or cadence: " + ", ".join(f"#{c['id']}" for c in cards)}]),
                         p["id"]))
     except Exception:  # noqa: BLE001 - the stage change stands
+        pass
+    try:   # ...AND ITS UNREAD NOTICES (13 Oct 2026): "New opportunity", "Follow-up due" and the like stayed in the
+        # Inbox for a deal already Lost (Liebherr, deal 144). They are marked dismissed, never deleted.
+        db.execute("update notifications set state='dismissed' where target_type='deal' and target_id=%s "
+                   "and state in ('unread','read','snoozed')", (str(p["id"]),))
+    except Exception:  # noqa: BLE001
         pass
     return rows
 
@@ -1551,7 +1557,8 @@ def qualify_opportunity(email: str, company_slug: str, title: str | None = None)
             cidx = (store.get_company_by_slug(company_slug) or {}).get("id")
             reminders.create(f"Prepare and send the proposal — {title}",
                              _roll_weekend(datetime.now(timezone.utc) + timedelta(days=1), True),
-                             company_id=cidx, target_type="deal", target_id=d["id"], priority="high")
+                             company_id=cidx, target_type="deal", target_id=d["id"], priority="high",
+                             created_by="cortex-qualify")
         except Exception:  # noqa: BLE001 — the reminder is a convenience; never fail the qualify
             pass
     else:                                          # we're waiting on THEM -> start the Auto chase cadence

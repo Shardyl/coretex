@@ -1613,7 +1613,8 @@ def _arm_on_done_reminders(task: dict) -> None:
             reminders.create(str(r.get("title") or "Follow-up")[:200], d,
                              company_id=task.get("company_id"), priority="high",
                              target_type="deal" if (task.get("request") or {}).get("deal_id") else "task",
-                             target_id=(task.get("request") or {}).get("deal_id") or task["id"])
+                             target_id=(task.get("request") or {}).get("deal_id") or task["id"],
+                             created_by="cortex-ondone")
         if specs:
             notifications.notify(f"Card #{task['id']} done — {len(specs)} follow-up clock(s) armed.",
                                  "Follow-up armed", category="reminder", company_id=task.get("company_id"))
@@ -2536,7 +2537,7 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
             if d and datetime.now(timezone.utc) < d < datetime.now(timezone.utc) + timedelta(days=90):
                 reminders.create(str(r.get("title") or "Follow-up")[:150], d, company_id=task["company_id"],
                                  priority="high", target_type="deal" if req.get("deal_id") else None,
-                                 target_id=req.get("deal_id"))
+                                 target_id=req.get("deal_id"), created_by="rashad")   # his words on the card
                 created.append(f"reminder '{r.get('title')}' on {d:%a %d %b}")
         except Exception:  # noqa: BLE001
             continue

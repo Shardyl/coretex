@@ -2953,3 +2953,17 @@ shoot needs none), then 10% off the whole quotation.
 - `deck._closest_films`: when the owner's words point at a film (`_FILM_WORDS`) and nothing matched by id, client or
   title, Haiku picks the obvious film(s) from the scoped library; code keeps only ids in that list (max 3). The email
   card manifest shows `named_films(<titles>)` so a wrong pick is visible.
+
+## A reminder is the owner's only when it came from the owner; a closed deal clears its notices (13 Oct 2026)
+- CAUSE: Liebherr (Sky Vision deal 144) went Lost on 8 Oct 08:28 and "Prepare and send the proposal" fired at
+  12:27 anyway. `reminders.create` defaulted `created_by="rashad"`, so the qualify path's reminder (and the
+  feedback asks) were filed as the owner's own, and `_cancel_cortex_reminders` deliberately leaves those alone.
+  20 proposal reminders carried the wrong label. Also: the deal had been opened by a hand backfill on 7 Oct from a
+  3 July enquiry the owner had chosen not to answer (card 183 rejected); Accor 145 and NTUC 146 likewise (all Lost).
+  LESSON for backfills: check the enquiry DATE and whether the owner already declined it before creating anything.
+- `reminders.create` now defaults to `created_by="cortex"`. The person is passed explicitly by the cockpit
+  (`/api/reminders`), Talk `set_reminder`, and `_apply_understood` (reminders from his correction words). Automatic
+  sources name themselves: cortex-qualify, cortex-feedback, cortex-ondone, cortex-commitment (plus the existing
+  cortex-pipeline / cortex-nextstep). Existing rows relabelled 13 Oct.
+- `crm._cancel_cortex_reminders` (every move into Lost / Dormant / Completed) also marks the deal's unread, read or
+  snoozed notifications dismissed (never deleted).
