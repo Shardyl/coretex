@@ -2978,3 +2978,14 @@ shoot needs none), then 10% off the whole quotation.
   creation or last correction). `worker.draft` shows them as NEW NOTES, fact, the newest word, and authorises
   rewriting the parts they affect (overriding "keep every other sentence"). Manifest `new_notes(N)`.
 - Use: add the note on the deal, then on the card say "recheck the latest notes and redraft".
+
+## A buyer's portal invitation is a lead on the tender path (13 Oct 2026)
+- CAUSE: Wasl Asset Management's eProc invitation (RFQ 2026_1170, Viya corporate festive video) and its reminder
+  reached fly@skyvision.film on 12-13 Oct and were classified "vendor", as if Wasl were selling to us. Vendor is not
+  a card category, so the no-draft check and `_flag_skipped_opportunity` never ran and no opportunity was tracked.
+  Ayresh forwarded them to Sensa; deal 162 was created from them through `_track_tender`.
+- `policy.portal_invitation(email)`: an invitation to bid/quote (`_BID_INVITE`) AND portal wording (`_VIA_PORTAL`,
+  now also eProcurement, ESOP, Jaggaer, Ariba, "Submit Response", "Intend To Respond", "Username and Password").
+  `poll_inbox` checks it right after classification: category lead, contact recorded, then
+  `_flag_skipped_opportunity` (scope judged against the company's services; in scope -> tracked opportunity with
+  closing reminder, held off the email chase). No reply card: portal bids are not answered by email.

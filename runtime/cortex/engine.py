@@ -6176,6 +6176,22 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                            "reason": "active deal/project in CRM (deterministic override)"}
             except Exception:  # noqa: BLE001 — a CRM hiccup must never break classification
                 pass
+        if commit and policy.portal_invitation(e):
+            # A BUYER'S PORTAL INVITATION IS A LEAD ON THE TENDER PATH (13 Oct 2026, Wasl RFQ 2026_1170 filed as
+            # "vendor"): no reply is drafted (it is bid through the portal); the scope check decides whether it is
+            # work we would bid for, and if so it becomes a tracked opportunity with its closing reminder.
+            cls = {**cls, "category": "lead", "to_crm": True, "reason": "invitation to bid through the buyer's portal"}
+            try:
+                crm.add_inbound_contact({"email": e.get("email"), "name": e.get("name")}, company_slug, "lead",
+                                        stage="Engaged", newsletter=False, summary=cls.get("summary"),
+                                        market=cls.get("market"))
+            except Exception:  # noqa: BLE001
+                pass
+            _flag_skipped_opportunity(co, e, "an invitation to bid through the buyer's portal", rt_key=rt_key,
+                                      client=company)
+            seen.add(gid)
+            results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60], **cls})
+            continue
         def _record_contact() -> None:
             nonlocal added
             if not (cls["to_crm"] and e.get("email")):

@@ -78,7 +78,20 @@ _ASKS = re.compile(
     r"requested (?:media\s+)?deliverables|invite you to (?:submit|quote|bid)", re.I)
 _VIA_PORTAL = re.compile(
     r"\bportal\b|e-?tender|tejari|unifiedreg|log ?in to|(?:through|via) the (?:system|platform)|"
-    r"supplier registration system|بوابة", re.I)
+    r"supplier registration system|e-?procurement|esop|jaggaer|ariba|submit response|intend to respond|"
+    r"username and password|بوابة", re.I)
+# AN INVITATION TO BID ON A BUYER'S PORTAL (13 Oct 2026): Wasl's eProc RFQ 2026_1170 reached fly@skyvision.film and was
+# classified "vendor" (as if Wasl sold to us), so it never reached the tender path and no opportunity existed.
+_BID_INVITE = re.compile(
+    r"request for (?:quotation|proposal|tender)|invitation to (?:rf[qpi]|bid|tender|participate|quote)|"
+    r"invites you to (?:participate|bid|submit|quote)|\brf[qpi]\b|\btender\b|expression of interest", re.I)
+
+
+def portal_invitation(email: dict) -> bool:
+    """True for an invitation to bid or quote that is answered through the buyer's procurement portal. It is a LEAD
+    (the buyer wants something from us), never a vendor email, and never answered by email: the tender path tracks it."""
+    text = f"{email.get('subject') or ''}{chr(10)}{email.get('body') or email.get('snippet') or ''}"
+    return bool(_BID_INVITE.search(text) and _VIA_PORTAL.search(text))
 _ROBOT_NAME = re.compile(r"application|portal|system|no-?reply|notification|mailer|automat", re.I)
 
 
