@@ -89,6 +89,26 @@ def _key(account: str, phone: str, msg: str) -> str:
     return hashlib.sha1(f"{account}|{phone}|{msg}".encode("utf-8", "replace")).hexdigest()[:16]
 
 
+_WA_CHANNEL_NOTE = (
+    "CHANNEL: this message arrived on the company's WhatsApp business line, not by email. People write to it the way "
+    "they text: short, informal, sometimes a bare greeting or one line, often split across several messages. "
+    "Earlier messages from the same person, when shown, are the same conversation: classify the conversation, "
+    "not the last line alone. Brevity or informality is never a sign of spam on this channel.")
+
+
+def _recent_messages(phone: str) -> list[str]:
+    cur = db.setting_get(f"wa_recent:{_digits(phone)}") or []
+    cutoff = time.time() - 86400
+    return [m["text"] for m in cur if isinstance(m, dict) and m.get("ts", 0) >= cutoff][-5:]
+
+
+def _remember_message(phone: str, msg: str) -> None:
+    """The last few messages per number for 24h, so a follow-up line is sorted with what came before it."""
+    k = f"wa_recent:{_digits(phone)}"
+    cur = [m for m in (db.setting_get(k) or []) if isinstance(m, dict) and m.get("ts", 0) >= time.time() - 86400]
+    db.setting_set(k, (cur + [{"ts": time.time(), "text": (msg or "")[:600]}])[-6:])
+
+
 def _open_deals_for_phone(phone: str, slug: str) -> list[dict]:
     """This company's open deals for the person on this number: their phone on the deal (every WhatsApp
     opportunity carries it), or their CRM contact's email / account (find_by_phone refuses an ambiguous number)."""
@@ -259,9 +279,16 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
     # lead-qualification skill, exactly as an email does. Only a qualified lead becomes an opportunity.
     from . import engine, notifications, pipeline, policy
     push = "" if _clean_phone(name) else (name or "").strip()
+    earlier = _recent_messages(phone)
+    _remember_message(phone, msg)
     e = {"name": push or phone, "email": "", "from": phone, "subject": "WhatsApp message",
-         "body": msg, "snippet": msg[:200]}
-    cls = engine.classify_email(co, e)
+         "body": (("EARLIER MESSAGES FROM THEM (last 24h, oldest first):\n" + "\n".join(f"- {m}" for m in earlier)
+                   + "\n\nNEWEST MESSAGE:\n") if earlier else "") + msg, "snippet": msg[:200]}
+    cls = engine.classify_email(co, e, channel_note=_WA_CHANNEL_NOTE)
+    if src and cls["category"] in ("spam", "automated", "marketing", "unclear", "personal"):
+        # A WEBSITE-BUTTON REFERENCE IS A FACT: the message was typed after clicking our own WhatsApp button, so it
+        # is an enquiry however bare (1117 "I need a video produced in Dubai. My project: (ref RSHCS)" read as spam).
+        cls = {**cls, "category": "lead", "to_crm": True, "reason": "came from our website's WhatsApp button"}
     deals = _open_deals_for_phone(phone, slug)
     if deals and cls["category"] not in ("spam",):
         # CLIENT OVERRIDE, by phone: someone on an active deal is project correspondence, as with email
@@ -311,7 +338,10 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
                                               "subject": "WhatsApp enquiry", "phone": phone})
         except Exception as _qe:  # noqa: BLE001
             print(f"[whatsapp] qualify {phone}: {type(_qe).__name__}: {_qe}", flush=True)
-        if (sug or {}).get("verdict") == "qualified":
+        # WHATSAPP LEADS ARE SHORT. Qualification answers "needs_info" for nearly every one ("Hi, I need a video
+        # produced in Dubai"), and the deal is the only record of a conversation he holds on his own phone, so on
+        # this lane only an explicit not_qualified withholds the opportunity.
+        if (sug or {}).get("verdict") != "not_qualified":
             deal_id = _ensure_opportunity(co, phone, know_name, cls.get("summary") or "", src)
         else:
             try:

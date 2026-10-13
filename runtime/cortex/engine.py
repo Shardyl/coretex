@@ -4808,7 +4808,7 @@ def _apply_unsubscribe(e: dict, company_slug: str) -> int:
     return len(rows)
 
 
-def classify_email(company: dict, email: dict) -> dict:
+def classify_email(company: dict, email: dict, channel_note: str = "") -> dict:
     """Classify ONE inbound email via the `sales-triage` universal skill, on Haiku. Reads the skill's rules
     + the company context, so the intelligence lives in the skill. Returns {category, to_crm, reason}."""
     skill = store.get_skill_by_key(company["id"], "sales-triage")
@@ -4825,6 +4825,7 @@ def classify_email(company: dict, email: dict) -> dict:
          '"market":"<a short industry/market label, e.g. video production, e-commerce, real estate, '
          'music/audio, hospitality; empty string if genuinely unclear>"}. to_crm is true for '
          "lead/partner/support/freelancer/vendor/recruitment, false for marketing/spam/personal/automated."),
+        channel_note,          # a FACT about the channel the message came through (WhatsApp), never a judgement
     ]))
     user = (f"From: {email.get('name')} <{email.get('email')}>\nSubject: {email.get('subject')}\n\n"
             + (email.get("body") or email.get("snippet") or "").strip()[:2500])
