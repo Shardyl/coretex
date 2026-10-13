@@ -116,6 +116,9 @@ def on_stage(deal_id: int, old: str | None, new: str) -> None:
             _done(deal_id, r, f"the deal moved to {new}")
         elif k == "tender_close" and (new in stages.WON or new == "Lost"):
             _done(deal_id, r, f"the deal moved to {new}")
+    if old in stages.SALES and new not in stages.SALES:      # won, lost or parked: the personal touch track ends
+        db.execute("update reminders set status='cancelled' where status in ('pending','snoozed') and "
+                   "created_by='cortex-touch' and target_type='deal' and target_id=%s", (str(int(deal_id)),))
     if new != old:
         db.execute("update notifications set state='dismissed' where state in ('unread','read','snoozed') and "
                    "(dedup_key like %s or dedup_key like %s)", (f"closing-gate:{int(deal_id)}:%", f"signed-off:{int(deal_id)}"))

@@ -402,6 +402,42 @@ def _cases():
     case("a file sent on WhatsApp is kept for the next message", "iTellu brief PDF",
          lambda: "save_data_url(" in inspect.getsource(__import__("cortex.api", fromlist=["x"]).talk_from_whatsapp))
 
+    # --- personal touch: WhatsApp and calls beside the email track (owner, 13 Oct)
+    from . import touch as _t
+    _sig = ("Thanks,\nSarah Khan\nMarketing Manager | Emaar\nT: +971 4 366 1688\nM: +971 50 123 4567\n"
+            "Quote ref SEN-2026-0021, 13/10/2026\n\nOn Mon, 12 Oct 2026, Gino <gino@sensa.digital> wrote:\n"
+            "> call me on +971 55 999 8888")
+    case("the mobile is picked from a signature, not the office line", "personal touch",
+         lambda: (_t.pick(_t.numbers_in(_sig)) or {}).get("e164") == "+971501234567")
+    case("a number in the quoted reply below is not theirs", "personal touch",
+         lambda: "+971559998888" not in {n["e164"] for n in _t.numbers_in(_sig)})
+    case("a local UAE mobile becomes +971; a quote number is not a phone", "personal touch",
+         lambda: (_t.normalise("050 123 4567") or {}).get("e164") == "+971501234567"
+         and _t.numbers_in("Quotation SEN-2026-0021 dated 13/10/2026, total 236,250") == [])
+    case("a landline is call-only", "personal touch",
+         lambda: (_t.normalise("+971 4 366 1688") or {}).get("mobile") is False)
+    case("touch reminders fire their own notice and move on", "personal touch",
+         lambda: "touch.fire(" in inspect.getsource(reminders.fire)
+         and "touch_made" in inspect.getsource(__import__("cortex.gate", fromlist=["x"]).check)
+         and "cortex-touch" in inspect.getsource(__import__("cortex.obligations", fromlist=["x"]).on_stage))
+    case("every door a lead comes in by starts the track", "personal touch",
+         lambda: inspect.getsource(engine).count("_start_touch(") >= 5
+         and "touch.start(" in inspect.getsource(engine._push_wa_contact))
+    case("only Sensa and Sky Vision run it unless the setting says otherwise", "personal touch",
+         lambda: set(_t.companies()) >= {"sensa", "skyvision"} and "tabscanner" not in _t.companies())
+
+    def _note():
+        r = __import__("cortex.provider", fromlist=["x"]).think_json(
+            _t._NOTE_Q, "Called Sarah, she's comparing three agencies, coffee next Tuesday",
+            model=__import__("cortex.provider", fromlist=["x"]).MODEL_ROUTER, max_tokens=80, purpose="regress")
+        r2 = __import__("cortex.provider", fromlist=["x"]).think_json(
+            _t._NOTE_Q, "Budget is around 50k, they prefer AI over a shoot",
+            model=__import__("cortex.provider", fromlist=["x"]).MODEL_ROUTER, max_tokens=80, purpose="regress")
+        return r.get("contacted") is True and "tuesday" in str(r.get("next") or "").lower() \
+            and r2.get("contacted") is False and not r2.get("next")
+    case("a logged call and its next date are read from his note; a fact is not a call", "personal touch",
+         _note, model=True)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

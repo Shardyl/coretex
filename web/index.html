@@ -582,7 +582,8 @@ const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"
 // Notes and deal timelines carry REAL links (brief pages, Drive docs, portfolio films). Render them
 // clickable. Escapes FIRST and linkifies the escaped text, so a note can never inject markup.
 function linky(s){
-  return esc(s).replace(/https?:\/\/[^\s<]+/g, m=>{
+  return esc(s).replace(/https?:\/\/[^\s<]+|tel:\+?[0-9]{6,16}/g, m=>{
+    if(m.startsWith('tel:')) return `<a href="${m}" style="color:var(--link);text-decoration:underline">Call ${m.slice(4)}</a>`;
     let tail='';
     while(/[.,;:!?)\]]$/.test(m)){ tail=m.slice(-1)+tail; m=m.slice(0,-1); }
     return `<a href="${m}" target="_blank" rel="noopener" style="color:var(--link);text-decoration:underline;word-break:break-all">${m}</a>`+tail;

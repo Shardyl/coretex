@@ -106,6 +106,10 @@ def check(company_id: int, email: str, deal_id, request: dict | None) -> str | N
         met_at = _ts(met.get("at"))
         if met_at and now - met_at < timedelta(days=max(quiet, 2)):
             return f"we met them on {met_at:%d %b}"
+        # A CALL OR WHATSAPP HE LOGGED IS CONTACT TOO (personal touch, touch.py, 13 Oct 2026)
+        spoke = max((_ts(e.get("ts")) for e in hist if e.get("event") == "touch_made"), default=None)
+        if spoke and now - spoke < timedelta(days=max(quiet, 2)):
+            return f"we spoke to them on {spoke:%d %b} (a logged call or WhatsApp)"
     return None
 
 

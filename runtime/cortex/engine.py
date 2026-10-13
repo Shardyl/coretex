@@ -896,6 +896,7 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
                                   f"{(env.get('subject') or '')[:120]}", ref=str(res.get("id") or ""))
                 crm.touch_followups(int(opp["id"]))
                 _notify_new_opportunity(company, opp, "qualified lead answered")
+                _start_touch(company, opp["id"], to, req.get("inquiry") or {}, [], "Enquiry")
     except Exception as _oe:  # noqa: BLE001
         print(f"[lead-opp] {type(_oe).__name__}: {_oe}", flush=True)
     if auto:
@@ -3697,6 +3698,18 @@ def email_status() -> dict:
     return {"ok": True, "paused": bool(db.setting_get("email_sending_paused"))}
 
 
+def _start_touch(co: dict, deal_id, email: str, inq: dict, texts: list, source: str, phone: str = "") -> None:
+    """A new lead became an opportunity: the personal-touch track starts (touch.py). Never costs the reply card."""
+    try:
+        from . import touch
+        r = touch.start(co, deal_id, email=email, name=(inq or {}).get("name") or "",
+                        org=(inq or {}).get("company") or "", texts=texts, phone=phone, source=source)
+        if r.get("started"):
+            print(f"[touch] deal {deal_id}: started, phone {r.get('phone') or 'none'}", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[touch] deal {deal_id}: {type(e).__name__}: {e}", flush=True)
+
+
 def _push_wa_contact(task: dict, req: dict, who: str) -> str:
     """AFTER the acknowledgement has gone, put them in his phone's address book. Returns a line to tell
     him, because the whole point is that he goes and messages them NEXT and needs to know they are there.
@@ -3739,6 +3752,15 @@ def _push_wa_contact(task: dict, req: dict, who: str) -> str:
     except Exception:  # noqa: BLE001
         pass
     print(f"[whatsapp] contact for {phone}: {mark}", flush=True)
+    # the acknowledgement is his first response: the personal-touch track starts now (already in his contacts)
+    _did = task.get("deal_id") or req.get("deal_id")
+    if _did:
+        try:
+            from . import touch
+            touch.start(store.get_company(task["company_id"]) or {}, _did, name=name, phone=phone,
+                        push_contact=False, source="WhatsApp enquiry")
+        except Exception as e:  # noqa: BLE001
+            print(f"[touch] whatsapp deal {_did}: {type(e).__name__}: {e}", flush=True)
     return note
 
 
@@ -4186,6 +4208,8 @@ def intake_enquiry(slug: str, inq: dict, draft: bool = True) -> dict:
         opp = crm.auto_opportunity(inq.get("email"), slug, sug, inq)
         if opp:
             _notify_new_opportunity(co, opp, "auto-qualified from a new enquiry")
+            _start_touch(co, opp["id"], inq.get("email") or "", inq,
+                         [inq.get("phone") or "", inq.get("message") or ""], "Website enquiry", phone=inq.get("phone") or "")
     except Exception:  # noqa: BLE001
         pass
     strategic = bool(sug and sug.get("bucket") == "strategic")
@@ -6037,6 +6061,7 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
                     if opp:
                         req["deal_id"] = opp["id"]
                         _notify_new_opportunity(co, opp, "auto-qualified from direct email")
+                        _start_touch(co, opp["id"], sender, inq, [e.get("body") or ""], "Email enquiry")
                     elif sug.get("confidence") == "high" and not crm.active_deals_for_email(sender, co.get("slug")):
                         notifications.notify(
                             f"Qualified lead, no opportunity: {inq.get('name') or sender}",
@@ -6667,6 +6692,7 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
                 opp = crm.auto_opportunity(frm, slug, sug, inq)      # idempotent — skips if a deal is open
                 if opp:
                     _notify_new_opportunity(co, opp, "auto-qualified from the reply thread")
+                    _start_touch(co, opp["id"], frm, inq, [m.get("body") or ""], "Email enquiry")
         except Exception:  # noqa: BLE001
             pass
         db.execute("delete from settings where key=%s", (f"lead_fu:{co['id']}:{frm}",))   # retired list: never re-create a key

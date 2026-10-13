@@ -164,6 +164,13 @@ CAPABILITIES: list[tuple[str, str]] = [
      "our companies who was invited to that meeting, read from the calendar, and links the meeting so its notes file "
      "on the deal. Never ask Rashad for attendee emails the invite already holds. A file he sent earlier on WhatsApp "
      "is already in the library (its id is in the message): file it with documents=[id]."),
+    ("Personal touch: WhatsApp and calls (touch.py)",
+     "Every new Sensa / Sky Vision lead that becomes an opportunity starts a personal-touch track: their number is "
+     "read from the signature or form by code, saved on the contact, added to Rashad's phone contacts, and he gets a "
+     "'WhatsApp or call <name>' reminder with tap links, then more on a rhythm (7, 21, then every 30 days) while the "
+     "deal is open. When he tells you what was said ('called Sarah, coffee next Tuesday'), file it with "
+     "note_opportunity: the next reminder moves to the date he states, and a logged call holds the email chase. "
+     "Cortex never messages or calls the client itself."),
     ("The same quotation again: reissue_quotation",
      "reissue_quotation(company, number) issues an EXISTING quotation as its next version, copied exactly by "
      "code from the stored version: same lines, prices and total, today's date. It is the ONLY way to send a "

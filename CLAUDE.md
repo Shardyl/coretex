@@ -3218,3 +3218,27 @@ shoot needs none), then 10% off the whole quotation.
   future; private "Prep:" blocks skipped), attaches every attendee who is not us (created in the CRM if new) and
   links the meeting so its notes file on the deal. `documents` files library rows on it. Every change is logged.
 - `talk_from_whatsapp` saves a non-image file to the library the moment it arrives and tells Talk its id.
+
+## Personal touch: WhatsApp and calls beside the email track (owner, 13 Oct 2026)
+- Owner: "a lot of merit in me asking these people how they're doing, whether they want to hook up for a coffee,
+  trying to get relationships on WhatsApp and calls." `runtime/cortex/touch.py`. Cortex never messages or calls the
+  client; it makes sure the owner does and keeps the deal straight when he has. Companies: setting `touch_companies`
+  (default sensa, skyvision).
+- START (`touch.start`, idempotent per deal, setting `touch:<deal_id>`): wherever a new lead becomes an opportunity
+  (`engine._start_touch` at all four `auto_opportunity` sites: direct email, website form, a lead answered, a reply
+  thread) and, for WhatsApp, when the acknowledgement is sent (`_push_wa_contact`). The number comes from the
+  signature or form by CODE (`numbers_in`/`pick`, Google's libphonenumber, region AE; text below a quoted reply is
+  ignored; toll-free/premium dropped; a labelled or genuine mobile wins, a landline is call-only), else the CRM or the
+  deal contacts. Saved on `crm_master.phone` and the deal contact ONLY where none is held. Pushed to his personal
+  Google Contacts via `contacts.add_enquiry` ("<Name> (Sensa enquiry, 13 Oct)", ledger-deduped). First reminder now.
+- REMINDERS: `created_by='cortex-touch'`, one pending per deal. `reminders.fire` hands them to `touch.fire`: a notice
+  "WhatsApp or call <name>, <org>" with the opportunity, his last note, `https://wa.me/<digits>` and `tel:+<digits>`
+  (the cockpit's `linky` now renders tel: as a Call link; sw cortex-v63), then the next touch after
+  `rhythm()` days (profile `touch_rhythm`, default 7, 21, then 30 repeating).
+- HIS NOTES DRIVE IT: `crm.add_project_note` (deal page) and Talk `note_opportunity` call `touch.on_note`: ONE Haiku
+  question (did contact happen; the words of a stated next contact), code resolves the date
+  (`engine._resolve_their_date`) and moves the pending touch there; contact made = `touch_made` on the timeline,
+  which `gate.check` counts as contact (no email chase inside the quiet window after a call he logged).
+- ENDS: leaving the sales stages cancels the pending touch (`obligations.on_stage`); a closed deal cancels it like
+  every Cortex reminder; `touch.fire` never fires on a deal outside Opportunity/Quote.
+- Dependency added: `phonenumbers==8.13.55` (pip-installed in /opt/coretex/.venv by hand; deploy.sh does not pip).

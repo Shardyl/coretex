@@ -4521,7 +4521,14 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         if not d:
             return f"no opportunity #{did}"
         _pl.log_deal(int(did), "context", f"{note} (owner, via Talk)")
-        return f"Noted on opportunity #{d['id']} '{d['title']}': {note}. Every future email on it will carry this."
+        _next = ""
+        try:                               # a call or WhatsApp he logged moves the next personal touch (touch.py)
+            from . import touch
+            _next = touch.on_note(int(did), note)
+        except Exception as e:  # noqa: BLE001
+            print(f"[touch] note on deal {did}: {type(e).__name__}: {e}", flush=True)
+        return (f"Noted on opportunity #{d['id']} '{d['title']}': {note}. Every future email on it will carry this."
+                + (f" {_next}" if _next else ""))
     if name == "reissue_quotation":
         _co = _talk_company(inp.get("company"), u)
         if not _co:

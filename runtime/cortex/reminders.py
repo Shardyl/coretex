@@ -145,6 +145,15 @@ def fire(r: dict) -> dict:
                    (nxt, r["id"]))
     else:                                        # one-off -> done
         db.execute("update reminders set status='fired', snooze_until=null where id=%s", (r["id"],))
+    if str(r.get("created_by") or "") == "cortex-touch":      # personal touch: the notice with tap links + next touch
+        note_id = None
+        try:
+            from . import touch
+            note_id = touch.fire(r)
+        except Exception as e:  # noqa: BLE001 - the row is already advanced; never refires in a loop
+            print(f"[touch] reminder {r['id']}: {type(e).__name__}: {e}", flush=True)
+        db.execute("update reminders set last_notification_id=%s where id=%s", (note_id, r["id"]))
+        return {"reminder_id": r["id"], "notification_id": note_id, "task_id": None}
     action = r.get("action") or _commitment_action(r)
     if isinstance(action, dict) and action.get("noop"):     # closed on the facts: no card, no nudge
         db.execute("update reminders set last_notification_id=null, last_task_id=null where id=%s", (r["id"],))
