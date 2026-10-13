@@ -3953,7 +3953,8 @@ def _meeting_on(spec: dict) -> tuple:
     words = set(re.findall(r"[a-z]{3,}", (spec.get("title") or "").lower()))
     if words:
         evs = [e for e in evs if words & set(re.findall(r"[a-z]{3,}", e["title"].lower()))]
-    evs = [e for e in evs if not e["title"].lower().startswith("prep:")]      # our private prep blocks
+    # our private prep blocks, and untitled guest-less entries (a free/busy-only calendar's view of the same slot)
+    evs = [e for e in evs if not e["title"].lower().startswith("prep:") and (e["title"] or e.get("attendees"))]
     uniq = {(e["title"], e["starts_at"]): e for e in evs}                    # one meeting on two calendars
     if len(uniq) == 1:
         return next(iter(uniq.values())), ""

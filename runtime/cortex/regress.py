@@ -397,7 +397,8 @@ def _cases():
     # --- Talk can edit an opportunity (deal 156: no rename, no way to add the meeting's people)
     case("Talk can rename an opportunity and add a meeting's people", "deal 156, Learning App meeting",
          lambda: "update_opportunity" in {t["name"] for t in __import__("cortex.api", fromlist=["x"]).SKILL_TOOLS}
-         and "update_opportunity" in inspect.getsource(__import__("cortex.capabilities", fromlist=["x"])))
+         and "update_opportunity" in inspect.getsource(__import__("cortex.capabilities", fromlist=["x"]))
+         and 'e["title"] or e.get("attendees")' in inspect.getsource(__import__("cortex.api", fromlist=["x"])._meeting_on))
     case("a file sent on WhatsApp is kept for the next message", "iTellu brief PDF",
          lambda: "save_data_url(" in inspect.getsource(__import__("cortex.api", fromlist=["x"]).talk_from_whatsapp))
 
