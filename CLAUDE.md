@@ -3141,3 +3141,17 @@ shoot needs none), then 10% off the whole quotation.
 - "Tender worth a look" is raised after the tender is tracked and points at its deal, so it clears when the deal
   closes. Meeting notes that arrive by email draft the post-meeting follow-up too (it dedups on an email since the
   meeting). Closing a deal also cancels an unsent project-plan card raised from a reminder.
+
+## The notification policy (owner, 13 Oct 2026)
+- Audit: 454 notices in 30 days (~15 a day, 4.5 per opportunity, Merck 23); ~125 were contact-captured FYIs, ~55
+  pointed at cards already in the Inbox, next steps were announced twice, one tender produced four.
+- `notifications.notify` applies ONE policy (`_treatment`): KEEP (needs the owner, no card) with ONE live notice per
+  deal and topic (`dedup_key deal:<id>:<topic>`; a different earlier notice is kept as a line in `items`); COVERED (a
+  notice about a card already open in the Inbox: phone ping via `push_only`, no row); DIGEST (`DIGEST_PREFIXES` /
+  `DIGEST_CATEGORIES`: contacts captured, filed messages, new opportunities, robot no-replies) rolled into ONE
+  "Today's updates" notice per company per day, each as an item. Critical/security always KEEP.
+- At the source: a next step is announced once (when its reminder fires; "Next step (reminder)" at creation and "Next
+  step queued" removed); tender deals never raise "Unanswered" (`_rearm_stalled_chases`) or "Not drafted"; a re-sent
+  tender for a tracked deal is logged, not announced; our reply on a deal clears its "Unanswered" / "Not drafted" /
+  "replied: no ..." notices (`obligations.on_reply_sent`). Health check `unanswered_after_our_reply` (self-repairs).
+- Meeting brief CARDS are kept (owner finds them useful); only the duplicate notice pointing at the card is gone.

@@ -188,6 +188,7 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
         _names = [str((a or {}).get("filename") or "") for a in (req.get("attach_docs") or [])] \
             + [str(x) for x in (env.get("attachment_names") or [])]
         obligations.on_sent(int(did), body, to, subj, _names)
+        obligations.on_reply_sent(int(did))
     except Exception as _oe:  # noqa: BLE001
         print(f"[obligations] {type(_oe).__name__}: {_oe}", flush=True)
     try:   # a QUOTATION going out: logged with its amount, and the deal's value becomes that quotation
@@ -628,9 +629,7 @@ def suggest_next_step(e: dict, deal: dict, company: dict) -> None:
         reminders.create(f"Next step on {title[:60]}: {what[:160]}",
                          datetime.now(timezone.utc) + timedelta(hours=2), company_id=company.get("id"),
                          target_type="deal", target_id=did, priority="high", created_by="cortex-nextstep")
-        notifications.notify("Next step (reminder)", f"{title}: {what}", category="crm",
-                             company_id=company.get("id"), target_type="deal", target_id=did)
-        return
+        return      # announced once, when the reminder fires (it was also announced here: two notices, one step)
     brief = (f"NEXT STEP for deal {did} ({title}) - the client latest email requires: {what} ({act}). "
              "Prepare it as a clear internal work-up the owner can approve and act on: exactly what "
              "changes/content is needed, based ONLY on the timeline below and the client's words. Any price "
@@ -642,9 +641,7 @@ def suggest_next_step(e: dict, deal: dict, company: dict) -> None:
                           deal_id=did)
     if t:
         db.execute("update tasks set deal_id=%s where id=%s", (did, t["id"]))
-        notifications.notify("Next step queued", f"{title}: {what}",
-                             category="crm", company_id=company.get("id"),
-                             target_type="deal", target_id=did)
+        pass        # the prep card IS the notification (a "Next step queued" notice pointed at it)
 
 
 

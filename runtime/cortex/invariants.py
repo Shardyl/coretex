@@ -123,6 +123,19 @@ CHECKS = [
                "('Sensa','Sky Vision','FilmSpoke') group by 1 having count(distinct company) > 1",
     },
     {
+        "key": "unanswered_after_our_reply",
+        "what": "An 'Unanswered' notice on a deal whose latest email is ours",
+        "sql": "select n.id, left(n.title,80) from notifications n join crm_projects p on n.target_type='deal' and "
+               "n.target_id=p.id::text where n.state in ('unread','read','snoozed') and n.title like 'Unanswered%%' and "
+               "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event' like 'email_out%%') > "
+               "coalesce((select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='email_in'),'')",
+        "fix": "update notifications n set state='dismissed' from crm_projects p where n.target_type='deal' and "
+               "n.target_id=p.id::text and n.state in ('unread','read','snoozed') and n.title like 'Unanswered%%' and "
+               "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event' like 'email_out%%') > "
+               "coalesce((select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='email_in'),'') "
+               "returning n.id",
+    },
+    {
         "key": "double_chase",
         "what": "One person has more than one open automatic chase",
         "sql": f"select lower(request->'inquiry'->>'email') who, count(*), array_agg(id) from tasks "

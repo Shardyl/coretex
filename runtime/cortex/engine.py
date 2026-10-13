@@ -2766,6 +2766,8 @@ def _flag_skipped_opportunity(co: dict, e: dict, reason: str, rt_key: str | None
             _td_deal = _track_tender(co, e, what, rt_key=rt_key, client=client)
         except Exception as _te:  # noqa: BLE001 - tracking must never lose the notification below
             print(f"[tender] {type(_te).__name__}: {_te}", flush=True)
+        if _td_deal and not _td_deal.get("_fresh"):
+            return     # already tracked (a re-sent invitation): it is on the deal's timeline, not a new notice
         notifications.notify(
             "Tender worth a look" + (f" - closes {due}" if due else ""),
             f"{what}\n\nFrom {e.get('email')}. No reply was drafted ({reason}) - broadcasts are bid "
@@ -2826,6 +2828,7 @@ def _track_tender(co: dict, e: dict, what: str, rt_key: str | None = None, clien
                        (org, title))
     if not d:
         return None
+    d = {**d, "_fresh": fresh}
     if fresh:
         crm.hold_auto(d["id"])   # a portal tender: auto, but no chase until we have emailed them ourselves
         try:
@@ -4230,6 +4233,7 @@ def _rearm_stalled_chases() -> list:
             "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='email_in') li, "
             "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='chase_stopped') cs "
             "from crm_projects p where p.automation='auto' and p.next_followup is null "
+            "and p.title not like 'Tender:%%' and not p.history @> '[{\"event\": \"tender\"}]'::jsonb "
             "and p.stage in " + stages.sql_list(stages.SALES) + " and not exists (select 1 from tasks t where t.status in "
             + _STALL_OPEN + " and (t.deal_id=p.id or (coalesce(p.contact_email,'') <> '' and "
             "lower(t.request->'inquiry'->>'email') = lower(p.contact_email))))")
@@ -6276,7 +6280,8 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                 # the deal, no notice. A skipped email from someone on an active deal is now logged on that deal and the
                 # owner is told once, naming the rule that held the draft.
                 try:
-                    _sk_deals = _cdeals
+                    # a tender deal is bid through its portal: its circulars are not unanswered client mail
+                    _sk_deals = [d for d in (_cdeals or []) if not str(d.get("title") or "").startswith("Tender:")]
                     if _sk_deals:
                         _sd = _sk_deals[0] if len(_sk_deals) == 1 else (_deal_for_thread(e, _sk_deals) or _sk_deals[0])
                         _snip = re.sub(r"\s+", " ", e.get("body") or e.get("snippet") or "")[:220]

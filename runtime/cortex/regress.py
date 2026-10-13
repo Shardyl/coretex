@@ -302,6 +302,22 @@ def _cases():
     case("the tender notice is linked to its deal", "Wasl notice 1130",
          lambda: "target_type\": \"deal\"" in inspect.getsource(engine._flag_skipped_opportunity))
 
+    # --- the notification policy (owner, 13 Oct: one per deal and topic; covered by a card; daily summary)
+    from . import notifications as _nt
+    case("contact-captured notices go to the daily summary", "notification audit",
+         lambda: _nt._treatment("New vendor captured", "fyi", "contact", None, None) == "digest"
+         and _nt._treatment("New opportunity: X", "normal", "lead", "deal", "1") == "digest")
+    case("security notices always stand alone", "notification audit",
+         lambda: _nt._treatment("Suspected phishing from x", "critical", "security", None, None) == "keep")
+    case("a client-deadline notice is kept, one per deal and topic", "notification audit",
+         lambda: _nt._treatment("Client deadline 2026-10-14: X", "high", "reminder", "deal", "133") == "keep"
+         and _nt._topic("Client deadline 2026-10-14: X") == _nt._topic("Client deadline 2026-10-20: Y"))
+    case("a next step is announced once, tender deals never 'Unanswered'", "notification audit",
+         lambda: "Next step (reminder)" not in inspect.getsource(__import__("cortex.pipeline", fromlist=["x"]).suggest_next_step)
+         and "Tender:" in inspect.getsource(engine._rearm_stalled_chases))
+    case("our reply clears 'Unanswered'", "Rakez notice 1125",
+         lambda: "obligations.on_reply_sent(" in inspect.getsource(__import__("cortex.pipeline", fromlist=["x"]).record_send))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

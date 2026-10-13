@@ -55,23 +55,73 @@ def _push(notif: dict) -> bool:
         return False
 
 
+# THE NOTIFICATION POLICY (owner, 13 Oct 2026: "I'm getting a lot ... it's a bit of a minefield", 454 notices in 30
+# days, ~15 a day, before an Instantly campaign makes it busier). Every notice gets one treatment, decided HERE:
+#   KEEP    something that needs the owner and has no card: one live notice per deal and topic (repeats coalesce)
+#   COVERED a notice about a card that is already open in the Inbox: the card IS the notification (a phone ping only)
+#   DIGEST  for-information only: rolled into ONE daily summary per company, each item listed inside it
+# Critical notices (security, phishing) are always KEEP. Add a title prefix below to change a notice's treatment.
+DIGEST_PREFIXES = ("New opportunity", "New ", "WhatsApp filed", "No reply drafted to", "Internal links seeded",
+                   "Untracked sales email", "Card #", "Creative proposal ready", "Follow-up on '")
+DIGEST_CATEGORIES = ("contact", "registration")
+
+
+def _topic(title: str) -> str:
+    import re as _re
+    return _re.sub(r"[^a-z]+", "-", _re.split(r"[:\u2014(]", title or "", 1)[0].lower()).strip("-")[:40] or "notice"
+
+
+def _treatment(title: str, priority: str, category: str, target_type, target_id) -> str:
+    if priority == "critical" or category in ("security",):
+        return "keep"
+    if target_type == "task" and str(target_id or "").isdigit():
+        t = db.one("select status from tasks where id=%s", (int(target_id),))
+        if t and t["status"] in ("new", "drafting", "queued", "awaiting_approval", "awaiting_correction"):
+            return "covered"
+    if category in DIGEST_CATEGORIES or any((title or "").startswith(p) for p in DIGEST_PREFIXES):
+        return "digest"
+    return "keep"
+
+
 def notify(title: str, body: str = "", *, priority: str = "normal", category: str = "system",
            company_id: int | None = None, target_type: str | None = None, target_id=None,
            dedup_key: str | None = None, item: dict | None = None) -> dict:
-    """Create + route ONE notification. If `dedup_key` matches an existing UNREAD row, coalesce into it
-    (bumps count + refreshes title/body/time) instead of adding another — this is the FYI grouping. `item`
+    """Create + route ONE notification, under the NOTIFICATION POLICY above. If `dedup_key` matches an existing
+    UNREAD row, coalesce into it (bumps count + refreshes title/body/time) instead of adding another. `item`
     (a small dict, e.g. a captured contact) is accumulated into the row's `items` so the card can expand."""
     ensure_schema()
     priority = priority if priority in PRIORITIES else "normal"
     tid = target_id if target_id is None else str(target_id)
+    how = _treatment(title, priority, category, target_type, tid)
+    if how == "covered":     # the card is already in the Inbox: ping the phone, no second row to drift
+        push_only(title, body, url=f"/#task/{tid}", category=category)
+        return {"id": None, "title": title, "treatment": "covered"}
+    if how == "digest":      # one daily summary per company; this notice becomes a line inside it
+        from datetime import datetime, timezone
+        day = datetime.now(timezone.utc).date().isoformat()
+        item = {"cat": category, "name": (title + (f": {body}" if body else ""))[:220],
+                **({k: v for k, v in (item or {}).items() if k in ("email", "phone")})}
+        dedup_key = f"digest:{company_id or 0}:{day}"
+        priority, category = "fyi", "digest"
+        title, body = "Today's updates", "For information: contacts captured, filed messages, new opportunities."
+        target_type = tid = None
+    elif target_type == "deal" and tid and not dedup_key:
+        dedup_key = f"deal:{tid}:{_topic(title)}"     # one live notice per deal and topic
 
     if dedup_key:
         existing = db.one("select * from notifications where dedup_key=%s and state='unread' "
                           "order by id desc limit 1", (dedup_key,))
         if existing:
             items = (existing.get("items") or [])
+            if not item and existing.get("title") != title and not dedup_key.startswith("digest:"):
+                # one notice per deal and topic: a DIFFERENT earlier notice on it is kept as a line, never lost
+                if not items:
+                    items = [{"name": (existing.get("title") or "")[:220]}]
+                item = {"name": (title or "")[:220]}
             if item:
                 items = (items + [item])[-50:]   # keep the most recent 50 in one rolling card
+            if dedup_key.startswith("digest:"):
+                title = f"Today's updates ({len(items)})"
             row = db.execute("update notifications set count=count+1, title=%s, body=%s, items=%s::jsonb, "
                              "fired_at=now() where id=%s returning *",
                              (title, body, Json(items), existing["id"]))

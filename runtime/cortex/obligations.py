@@ -99,6 +99,13 @@ def on_sent(deal_id: int, body: str, to: str, subject: str = "", attachment_name
     return settled
 
 
+def on_reply_sent(deal_id: int) -> None:
+    """We emailed them: notices that said a reply was owed on this deal are answered."""
+    db.execute("update notifications set state='dismissed' where target_type='deal' and target_id=%s and "
+               "state in ('unread','read','snoozed') and (title like 'Unanswered%%' or title like 'Not drafted%%' "
+               "or title like '%%replied: no %%')", (str(int(deal_id)),))
+
+
 def on_stage(deal_id: int, old: str | None, new: str) -> None:
     """The deal moved stage: what the stage itself completes is settled, and notices that asked about the stage
     (move it to Booked? to Lost? signed off?) are cleared, because the owner has answered them."""
