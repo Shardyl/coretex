@@ -321,8 +321,9 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
             pass
     if deals and cat == "client":
         try:   # their message goes on the deal it belongs to
-            pipeline.log_deal(int(deals[0]["id"]), "whatsapp_in", f"WhatsApp from {know_name or phone}: {msg[:400]}",
-                              ref=f"wa:{_key(account, phone, msg)}")
+            from . import events      # the deal hears it like an email: chase paused, scheduled mail held, logged
+            events.they_wrote(co, {"phone": phone, "name": know_name, "body": msg, "ref": f"wa:{_key(account, phone, msg)}"},
+                              deals, channel="whatsapp")
         except Exception:  # noqa: BLE001
             pass
     skip = None

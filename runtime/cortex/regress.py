@@ -222,6 +222,18 @@ def _cases():
     case("cards are gated where they are created and where they are released", "audit 2b",
          lambda: "gate.check(" in inspect.getsource(store.create_card) and "gate.check(" in inspect.getsource(store._release_gate))
 
+    # --- one "they wrote to us" handler for every channel (audit step 2c)
+    case("every inbound path tells the deal through events.they_wrote", "audit 2c",
+         lambda: all("events.they_wrote(" in inspect.getsource(f) for f in (
+             engine._draft_direct_reply, engine.poll_inbox, engine.poll_sales_replies,
+             __import__("cortex.whatsapp", fromlist=["x"])._process_message)))
+    case("a short reply still reaches the deal before the length check", "audit 2c: 'Thanks, will review'",
+         lambda: inspect.getsource(engine._draft_direct_reply).index("events.they_wrote(")
+         < inspect.getsource(engine._draft_direct_reply).index("len(body) < 40"))
+    case("a colleague matched by domain finds the deal", "Mike Enting / deal 108",
+         lambda: any(int(d["id"]) == 108 for d in __import__("cortex.events", fromlist=["x"])._deals(
+             _co("tabscanner"), "someone.new@nl.abnamro.com", None)))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

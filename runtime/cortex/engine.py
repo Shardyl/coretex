@@ -5775,7 +5775,7 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
     try:
         sender = (e.get("email") or "").strip()
         body = (e.get("body") or e.get("snippet") or "").strip()
-        if not sender or len(body) < 40:
+        if not sender:
             return
         dup = db.one("select id, request from tasks where company_id=%s and kind='email_reply' and "
                      "status in ('new','drafting','awaiting_approval','awaiting_correction') and "
@@ -5801,14 +5801,13 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
         if robot and not deals:
             return
         deal = deals[0] if len(deals) == 1 else _deal_for_thread(e, deals)   # unambiguous, or by its thread
-        if deal:
-            try:
-                crm.enter_closing(int(deal["id"]))   # set the rhythm first: a stated date below re-arms within it
-            except Exception:  # noqa: BLE001
-                pass
-        _pause_or_reschedule_followups(co, deals, sender, body, ref=gmail.mail_ref(e))
-        _hold_scheduled_emails(co["id"], sender, [d["id"] for d in (deals or [])],
-                               f"{sender} wrote to us at {datetime.now(_GST):%H:%M} ({(e.get('subject') or '')[:60]})")
+        # THEY WROTE TO US: closing rhythm, chase pause or their stated date, scheduled emails held, the message and
+        # its deadlines on the deal. One handler for every channel (events.py, audit step 2c), and it runs for a
+        # short reply too: "Thanks, will review" used to return before any of this, so the chase went out anyway.
+        from . import events
+        events.they_wrote(co, e, deals)
+        if len(body) < 40:
+            return          # too thin to draft a reply to; the deal has still heard it
         # PROJECT correspondence (deal already in delivery) drafts on the company's general email-handling
         # skill (+ its related project skills' rules), not the sales lane — that is where project-management
         # behaviour gets trained. Opportunity-stage and no-deal mail stays on sales-first-response.
@@ -6248,9 +6247,10 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                     if _sk_deals:
                         _sd = _sk_deals[0] if len(_sk_deals) == 1 else (_deal_for_thread(e, _sk_deals) or _sk_deals[0])
                         _snip = re.sub(r"\s+", " ", e.get("body") or e.get("snippet") or "")[:220]
-                        pipeline.log_deal(int(_sd["id"]), "email_in",
-                                          f"from {e.get('email')}: {(e.get('subject') or '(no subject)')} - {_snip} "
-                                          f"[no draft: {_skip['reason']}]", ref=mref or "")
+                        from . import events
+                        events.they_wrote(co, e, _sk_deals)       # pause, hold, log + deadlines: same as any reply
+                        pipeline.log_deal(int(_sd["id"]), "note", f"No reply drafted to {e.get('email')} "
+                                          f"({(e.get('subject') or '(no subject)')[:80]}): {_skip['reason']}.")
                         notifications.notify(
                             f"Not drafted: {e.get('name') or e.get('email')} ({(e.get('subject') or '')[:60]})",
                             f"An email from a client on '{_sd['title']}' got no draft because of the rule: {_skip['reason']}. "
@@ -6485,6 +6485,11 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
                 except Exception as _fe:  # noqa: BLE001
                     print(f"[deal-doc] reply: {type(_fe).__name__}: {_fe}", flush=True)
             store.create_card(co["id"], skill["id"], "email_reply", fu, contact=frm)
+        try:
+            from . import events
+            events.they_wrote(co, {**m, "email": frm})   # the deal hears it: chase paused, scheduled mail held, logged
+        except Exception as _ee:  # noqa: BLE001
+            print(f"[events] sales reply: {type(_ee).__name__}: {_ee}", flush=True)
         try:                                                         # re-qualify on the new info
             sug = qualify_suggest(co, inq)
             if sug:

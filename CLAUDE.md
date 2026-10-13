@@ -3042,3 +3042,13 @@ shoot needs none), then 10% off the whole quotation.
   reason goes on the deal via `gate.note_hold`) and `store._release_gate` from `promote_queued` (a queued automatic
   card is re-checked before release and cancelled with the reason if it may no longer go). The deal chase's own
   3-day check moved into the gate; a held chase no longer consumes a cadence step.
+
+## One "they wrote to us" handler: `events.py` (audit step 2c, 13 Oct 2026)
+- `events.they_wrote(company, message, deals=None, channel="email"|"whatsapp")` does what a client or lead writing
+  in must do to their deal, whatever the channel: `crm.enter_closing`, `_pause_or_reschedule_followups` (pause, or
+  re-arm at a date they state), `_hold_scheduled_emails`, and the log (`pipeline.record_inbound` for email: timeline +
+  deadlines, deduped by Message-Id; `whatsapp_in` for WhatsApp). Deals: the ones passed, else the sender's, else a
+  colleague's at the same client by domain. It never drafts and never decides whether to reply.
+- Called from: `_draft_direct_reply` (BEFORE the 40-character check, so "Thanks, will review" now pauses the chase),
+  the `poll_inbox` no-draft branch (a client email the policy held), `poll_sales_replies`, and WhatsApp messages from
+  a deal client. Before this only `_draft_direct_reply` did any of it.
