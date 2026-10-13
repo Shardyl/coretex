@@ -165,8 +165,22 @@ def start(co: dict, deal_id, *, email: str = "", name: str = "", org: str = "", 
         org = a.get("name") or ""
     num = normalise(phone) if phone else None
     num = num or _find_number(email, deal, texts)
-    if num:
-        _save_number(deal, email, num)
+    if not num:
+        # NO NUMBER, NO TRACK (owner, 13 Oct 2026: "if you were able to scrape the contact's phone number, then you
+        # should add them"). A reminder to call someone with no number is noise; the email track carries them.
+        pipeline.log_deal(deal["id"], "note", "Personal touch not started: no phone number in their signature, "
+                                              "form or the CRM. Add one to the contact and ask Talk to start it.")
+        return {"skipped": "no number"}
+    # ONE PERSON, ONE WEEKLY TOUCH: Farheen is on two Shama deals and Mai on two MAH Gold deals; a check-in is with
+    # the person, so a second deal with the same number joins nothing (its notes still reach the person's track).
+    other = db.one("select key from settings where key like 'touch:%%' and key <> %s and value->>'phone' = %s limit 1",
+                   (f"touch:{deal['id']}", num["e164"]))
+    if other:
+        db.setting_set(f"touch_alias:{deal['id']}", int(other["key"].split(":")[1]))
+        pipeline.log_deal(deal["id"], "note", f"Personal touch: {num['e164']} is already checked in with weekly on "
+                                              f"opportunity #{other['key'].split(':')[1]}.")
+        return {"skipped": "same person on " + other["key"]}
+    _save_number(deal, email, num)
     st = {"name": (name or "").strip(), "org": (org or "").strip(), "email": email, "step": 0,
           "phone": (num or {}).get("e164") or "", "mobile": bool((num or {}).get("mobile")),
           "started": datetime.now(timezone.utc).isoformat()}
@@ -234,6 +248,9 @@ def on_note(deal_id, text: str) -> str:
     from . import engine, pipeline, provider, stages, store
     if not str(deal_id or "").isdigit() or not (text or "").strip():
         return ""
+    alias = db.setting_get(f"touch_alias:{int(deal_id)}")   # the same person's track lives on their other deal
+    if alias and not _state(deal_id):
+        deal_id = int(alias)
     st = _state(deal_id)
     deal = db.one("select id, stage, company from crm_projects where id=%s", (int(deal_id),))
     if not st or not deal or deal.get("stage") not in stages.SALES:
@@ -259,3 +276,84 @@ def on_note(deal_id, text: str) -> str:
         return ""
     _schedule(co.get("id"), int(deal_id), when, st)
     return f"Next WhatsApp/call reminder: {when.astimezone(timezone(timedelta(hours=4))):%a %d %b}."
+
+
+# ---------------------------------------------------------------- retro: every open opportunity (owner, 13 Oct 2026)
+
+_TENDER = re.compile(r"\b(tender|rfq|rfp|rft|eoi)\b", re.I)
+
+
+def _slug_for(company_label: str) -> str:
+    from . import crm
+    return next((s for s in companies() if (company_label or "").lower() in (s, crm._org(s).lower())), "")
+
+
+def _number_from_mail(slug: str, addrs: list) -> tuple:
+    """(number, address) from the newest emails these people sent us that carry one in their signature."""
+    from . import engine, gmail
+    for entry in engine.inbox_registry():
+        if entry.get("slug") != slug or not engine._inbox_connected(entry):
+            continue
+        rt = entry.get("rt_key") or engine._default_rt_key(slug)
+        for a in addrs:
+            try:
+                msgs = gmail.list_recent(limit=5, rt_key=rt, q=f"from:{a} newer_than:365d",
+                                         company=engine._inbox_client_company(slug))
+            except Exception:  # noqa: BLE001 - one unreadable mailbox never stops the rest
+                continue
+            for m in msgs:
+                n = pick(numbers_in(m.get("body") or ""))
+                if n:
+                    return n, a
+    return None, ""
+
+
+def backfill(apply: bool = False, per_day: int = 7) -> list[dict]:
+    """Put every open Sensa / Sky Vision opportunity with a findable number on the track. Tenders and portal bids
+    are left out (nobody WhatsApps a procurement portal). Numbers come from the deal, the CRM, then the signatures
+    of the newest emails they sent us. First reminders are spread over the coming working days at 10:00 Dubai,
+    `per_day` a day, so the backlog does not land at once. apply=False is the dry run."""
+    from . import identity, stages, store
+    from zoneinfo import ZoneInfo
+    rows = db.query("select id, title, company, stage, contact_email, contacts from crm_projects where stage = any(%s) "
+                    "order by id", (list(stages.SALES),))
+    plan = []
+    for d in rows:
+        slug = _slug_for(d.get("company") or "")
+        if not slug or _TENDER.search(d.get("title") or "") or _state(d["id"]):
+            continue
+        addrs = [a for a in dict.fromkeys([(d.get("contact_email") or "").lower()] +
+                                          [(c.get("email") or "").lower() for c in (d.get("contacts") or [])])
+                 if a and "@" in a and not identity.is_internal(a)]
+        num, who = _find_number(addrs[0] if addrs else "", d, []), (addrs[0] if addrs else "")
+        src = "deal or CRM"
+        if not num:
+            for a in addrs[1:]:
+                num = _find_number(a, {"contacts": []}, [])
+                if num:
+                    who = a
+                    break
+        if not num and addrs:
+            num, who = _number_from_mail(slug, addrs)
+            src = "email signature"
+        plan.append({"deal": d["id"], "title": d["title"], "company": slug, "email": who,
+                     "phone": (num or {}).get("e164") or "", "mobile": bool((num or {}).get("mobile")), "source": src})
+    if apply:
+        tz = ZoneInfo("Asia/Dubai")
+        day, n = datetime.now(tz).date(), 0
+        for p in plan:
+            if not p["phone"]:
+                continue
+            c = db.one("select first_name, last_name from crm_master where lower(email)=%s", (p["email"],)) or {}
+            name = " ".join(x for x in (c.get("first_name"), c.get("last_name")) if x)
+            co = store.get_company_by_slug(p["company"])
+            r = start(co, p["deal"], email=p["email"], name=name, phone=p["phone"], source="Open opportunity")
+            p["result"] = r
+            if not r.get("started"):
+                continue
+            workdays = [day + timedelta(days=i) for i in range(1, 30) if (day + timedelta(days=i)).weekday() < 5]
+            d2 = workdays[min(n // max(1, per_day), len(workdays) - 1)]     # Monday to Friday, UAE week
+            _schedule(co["id"], p["deal"], datetime(d2.year, d2.month, d2.day, 10, 0, tzinfo=tz), _state(p["deal"]))
+            p["first"] = d2.isoformat()
+            n += 1
+    return plan

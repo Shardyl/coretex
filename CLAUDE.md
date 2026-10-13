@@ -3241,4 +3241,11 @@ shoot needs none), then 10% off the whole quotation.
   which `gate.check` counts as contact (no email chase inside the quiet window after a call he logged).
 - ENDS: leaving the sales stages cancels the pending touch (`obligations.on_stage`); a closed deal cancels it like
   every Cortex reminder; `touch.fire` never fires on a deal outside Opportunity/Quote.
+- WEEKLY (owner, 13 Oct 2026: "if these guys are opportunities, I should be checking in with them once a week"):
+  profile `touch_rhythm` = [7] on Sensa and Sky Vision. NO NUMBER, NO TRACK: a deal with no findable number gets a
+  timeline note, never a reminder. ONE PERSON, ONE TRACK: a second deal with the same number is aliased
+  (`touch_alias:<deal>`) to the first, and a note on either moves the one track.
+- RETRO: `touch.backfill(apply=False)` (dry run) / `apply=True` puts every open Sensa/Sky Vision opportunity with a
+  number on the track (deal, CRM, then the signatures of the newest emails they sent us), tenders/RFQ/RFP left out
+  (`_TENDER`), first reminders spread over the coming working days at 10:00 Dubai, 7 a day. Run 13 Oct 2026.
 - Dependency added: `phonenumbers==8.13.55` (pip-installed in /opt/coretex/.venv by hand; deploy.sh does not pip).

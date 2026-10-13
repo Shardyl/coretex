@@ -423,6 +423,12 @@ def _cases():
     case("every door a lead comes in by starts the track", "personal touch",
          lambda: inspect.getsource(engine).count("_start_touch(") >= 5
          and "touch.start(" in inspect.getsource(engine._push_wa_contact))
+    case("no number, no track; one person, one weekly touch", "Farheen on two Shama deals",
+         lambda: '{"skipped": "no number"}' in inspect.getsource(_t.start)
+         and "touch_alias:" in inspect.getsource(_t.start) and "touch_alias:" in inspect.getsource(_t.on_note))
+    case("the retro pass leaves tenders and portal bids out", "personal touch backfill",
+         lambda: bool(_t._TENDER.search("Tender: SEF'27 10th Anniversary")) and bool(_t._TENDER.search("Wasl festive video (RFQ 2026_1170)"))
+         and not _t._TENDER.search("Shama Perfumes - Ramadan commercial"))
     case("only Sensa and Sky Vision run it unless the setting says otherwise", "personal touch",
          lambda: set(_t.companies()) >= {"sensa", "skyvision"} and "tabscanner" not in _t.companies())
 
