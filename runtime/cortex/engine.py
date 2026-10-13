@@ -1904,6 +1904,93 @@ def _prep_build_quotation(task: dict, skill: dict, company: dict, text: str) -> 
     return True
 
 
+def _card_corrections(task_id: int) -> list[tuple[str, str, str]]:
+    """(note, draft before, draft after) for every correction already applied to this card, oldest first."""
+    if not task_id:
+        return []
+    rows = db.query("select note, snapshot from decisions where task_id=%s and action='correct' "
+                    "and coalesce(note,'')<>'' order by id", (int(task_id),))
+    return [(r["note"], ((r.get("snapshot") or {}).get("old") or ""), ((r.get("snapshot") or {}).get("new") or ""))
+            for r in rows]
+
+
+def _sentences(text: str) -> list[str]:
+    out = []
+    for line in (text or "").split("\n"):
+        out += [s for s in re.split(r"(?<=[.!?])\s+", line.strip()) if s]
+    return out
+
+
+def _words(s: str) -> list[str]:
+    return re.findall(r"[a-z0-9']+", (s or "").lower())
+
+
+def _sim(a: str, b: str) -> float:
+    wa, wb = _words(a), _words(b)
+    if not wa or not wb:
+        return 0.0
+    sa, sb = set(wa), set(wb)
+    return len(sa & sb) / max(len(sa), len(sb))
+
+
+def _mentions(note: str, sentence: str) -> bool:
+    """The owner's words refer to this sentence: most of its content words are in what he wrote."""
+    content = {w for w in _words(sentence) if len(w) > 3}
+    return bool(content) and len(content & set(_words(note))) / len(content) >= 0.4
+
+
+def _hold_corrections(task_id: int, draft: str, now_text: str = "") -> str:
+    """WHAT HE CORRECTED STAYS CORRECTED (owner, 13 Oct 2026: "it pulls back the same problem that I told it to
+    correct two corrections ago"). Each redraft saw only the newest correction, so the thread or the deal record
+    could put back a sentence he had removed two rounds earlier. From the before/after of every earlier correction
+    on this card, CODE finds the sentences he removed and the ones he reworded; if one comes back in the new draft
+    it is taken out again (removed) or swapped back to his version (reworded). A sentence he asks for again, in
+    this correction or a later one, is his to bring back and is left alone."""
+    removed, replaced = {}, {}
+    for note, old, new in _card_corrections(task_id):
+        for k in [k for k in list(removed) if _mentions(note, k)]:
+            removed.pop(k, None)                            # he asked for it back in a later round
+        for k in [k for k in list(replaced) if _mentions(note, k)]:
+            replaced.pop(k, None)
+        new_s = _sentences(new)
+        for o in _sentences(old):
+            if len(_words(o)) < 4:
+                continue                                    # greetings, sign-offs, names
+            best = max(new_s, key=lambda n: _sim(o, n), default="")
+            score = _sim(o, best) if best else 0.0
+            if score >= 0.85:
+                continue
+            if score >= 0.5:
+                replaced[o] = best
+            else:
+                removed[o] = True
+    if not (removed or replaced):
+        return draft
+    held = []
+    lines = []
+    for line in (draft or "").split("\n"):
+        parts = re.split(r"(?<=[.!?])\s+", line.strip()) if line.strip() else []
+        keep = []
+        for s in parts:
+            gone = next((r for r in removed if len(_words(s)) >= 4 and _sim(s, r) >= 0.8
+                         and not _mentions(now_text, r)), None)
+            if gone:
+                held.append(f"removed again: {s[:80]}")
+                continue
+            back = next((o for o in replaced if len(_words(s)) >= 4 and _sim(s, o) >= 0.85
+                         and _sim(s, replaced[o]) < 0.85 and not _mentions(now_text, o)), None)
+            if back and not any(_sim(x, replaced[back]) >= 0.85 for x in _sentences(draft)):
+                held.append(f"kept his wording: {replaced[back][:80]}")
+                s = replaced[back]
+            keep.append(s)
+        if parts and not keep:
+            continue                                        # the whole line was a sentence he removed
+        lines.append(" ".join(keep) if parts else line)
+    if held:
+        print(f"[corrections] task {task_id}: " + " | ".join(held), flush=True)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
 def _keep_team_names(company: dict, old: str, new: str) -> str:
     """A voice-transcribed correction mishears our own people ("Richard" for Rashad, card 1188), and the model
     copies the mishearing in. CODE puts the name back: a first name from the company's signature roster that
@@ -2122,6 +2209,7 @@ def apply_correction(task: dict, text: str) -> None:
         new = _ensure_clean_email(skill, company, dreq,
                                   worker.draft(skill, company, dreq, correction=text, prev_draft=new,
                                                manager_feedback=[_mm]), prev=old)
+    new = _hold_corrections(task["id"], new, text)     # what he corrected earlier on this email stays corrected
     # corrections bypass the Manager by design (the owner is reviewing personally) — clear any verdict
     # from the PREVIOUS pass so a stale flag never scares the owner off his own corrected draft
     task = store.update_task(task["id"], draft=new, status="awaiting_approval", manager=None,
@@ -2143,6 +2231,7 @@ def apply_correction(task: dict, text: str) -> None:
             _dreq = _request_for_draft(task)
             new = _ensure_clean_email(skill, company, _dreq,
                                       worker.draft(skill, company, _dreq, correction=text, prev_draft=new))
+            new = _hold_corrections(task["id"], new, text)
             task = store.update_task(task["id"], draft=new)
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text, snapshot={"old": old, "new": new})
     msg2 = tg.send(_fmt(task, skill, company, None), _approval_buttons(task["id"]))
@@ -5364,6 +5453,13 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
         if notes:
             req["owner_feedback"] = "\n".join("- " + n["note"][:250] for n in notes)
             manifest.append("owner_feedback")
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # this card's OWN earlier corrections: each redraft carries all of them, not just the newest (13 Oct 2026)
+        _cn = [n for n, _o, _n in _card_corrections(task.get("id") or 0)]
+        if _cn:
+            req["card_corrections"] = "\n".join(f"{i}. {n[:600]}" for i, n in enumerate(_cn, 1))
+            manifest.append(f"card_corrections({len(_cn)})")
     except Exception:  # noqa: BLE001
         pass
     try:   # EVERYONE ON THE DEAL STAYS COPIED: the deal's whole cast rides every email on it (24 Sep 2026)

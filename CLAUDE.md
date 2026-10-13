@@ -2862,3 +2862,16 @@ shoot needs none), then 10% off the whole quotation.
   day. Used by `_closing_gate` and now the general chase gate: the gate is given today's date, holds only for a date
   that has NOT passed, returns their words; code resolves them; passed -> the chase goes; future -> next_followup =
   the next working day after it.
+
+## What he corrected earlier on an email stays corrected (13 Oct 2026)
+- CAUSE: owner, "I send a correction, then a different correction, and it pulls back the problem I corrected two
+  corrections ago". A redraft saw only the NEWEST correction plus the previous draft; this card's own earlier
+  corrections were deliberately excluded (`owner_feedback` reads OTHER cards to the same person), so the thread or
+  the deal record could put back what he had removed.
+- `_draft_context_for_reply` serves `request.card_corrections`: every earlier correction on this card, oldest first
+  (`_card_corrections` reads the `correct` decisions); `worker.draft` shows them as STILL IN FORCE, newest wins.
+- `engine._hold_corrections(task_id, draft, now_text)` runs on every correction redraft before it is saved. From each
+  earlier correction's snapshot (old -> new) CODE finds sentences he removed (no close match after) and reworded
+  (0.5-0.85 word overlap); if one comes back it is dropped, or swapped back to his wording. A sentence his own words
+  ask for again (this or a later correction) is left alone. Sentences under 4 words (greetings, sign-offs) never
+  count. Each action prints `[corrections] task N: ...`.

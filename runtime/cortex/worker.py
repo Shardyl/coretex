@@ -198,7 +198,7 @@ def _identity_block(company: dict, request: dict, author: str | None):
 
 
 _CONTEXT_FIELDS = ("brief", "system_note", "deal_timeline", "contact_notes", "owner_feedback",
-                   "meeting_notes", "owed")
+                   "meeting_notes", "owed", "card_corrections")
 
 
 def _colleagues_named(company: dict, request: dict, me: str) -> list:
@@ -418,6 +418,11 @@ def draft(skill: dict, company: dict, request: dict,
                     "feedback requires, keep every other sentence exactly as it is):\n" + prev_draft[:6000])
     if manager_feedback:
         user.append("Your manager flagged these to fix:\n- " + "\n- ".join(manager_feedback))
+    _cc = (request.get("card_corrections") or "").strip() if isinstance(request, dict) else ""
+    if _cc and (correction or prev_draft):
+        user.append("THE OWNER'S EARLIER CORRECTIONS ON THIS SAME EMAIL, oldest first. EVERY ONE IS STILL IN FORCE: "
+                    "what he removed stays removed, what he changed stays changed, what he added stays in. Where the "
+                    "newest correction below contradicts one of these, the newest wins:\n" + _cc[:4000])
     if correction:
         user.append("The owner corrected your previous draft. Apply it LITERALLY and MINIMALLY: when he asks "
                     "to remove something, remove exactly that and nothing around it (removing 'the date' "
