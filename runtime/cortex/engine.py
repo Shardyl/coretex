@@ -8853,6 +8853,11 @@ def run(poll_idle: float = 1.0) -> None:
             except Exception:  # noqa: BLE001
                 pass
             try:
+                from . import invariants
+                invariants.maybe_run()  # nightly: things that must never be true, safe repairs applied
+            except Exception:  # noqa: BLE001
+                pass
+            try:
                 from . import helpdocs
                 helpdocs.maybe_sync()   # each company's published help pages, re-read weekly
             except Exception:  # noqa: BLE001
