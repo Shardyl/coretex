@@ -265,7 +265,7 @@ function renderTodayInner(){
           return `<div style="flex:0 0 auto;display:grid;grid-template-columns:auto auto auto;gap:6px 12px;text-align:right;white-space:nowrap">
             <div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiUp(h.steps,KPI.steps[0],KPI.steps[1],kpiPace(foodDay))}">${h.steps!=null?fmtN(h.steps):'—'}</div><div class="fd-sub" style="font-size:10px">Steps</div></div>
             <div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${bp?kpiUp(bp.move+bp.work,KPI.active[0],KPI.active[1],kpiPace(foodDay)):''}">${bp?fmtN(bp.move+bp.work):'—'}</div><div class="fd-sub" style="font-size:10px">Active kcal</div></div>
-            ${gLast?`<div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiGlucose(Math.round(gLast.mmol*18.0182))}">${gShow(gLast.mmol)}<span style="font-size:13px;color:var(--ink3)"> ${TREND_ARROW[gLast.trend]||''}</span></div><div class="fd-sub" style="font-size:10px">Glucose ${foodDay===localDay(new Date())?Math.max(0,Math.round((Date.now()-new Date(gLast.at))/60000))+'m':tOf(gLast.at)}</div></div>`:''}
+            ${gLast?`<div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiGlucose(Math.round(gLast.mmol*18.0182),gLast.at)}">${gShow(gLast.mmol)}<span style="font-size:13px;color:var(--ink3)"> ${TREND_ARROW[gLast.trend]||''}</span></div><div class="fd-sub" style="font-size:10px">Glucose ${foodDay===localDay(new Date())?Math.max(0,Math.round((Date.now()-new Date(gLast.at))/60000))+'m':tOf(gLast.at)}</div></div>`:''}
             ${(()=>{const sl=nightFor(foodDay), hr=nightHR(sl);
               return `<div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiSleepScore(sl&&sl.score)}">${sl&&sl.score!=null?fmtN(sl.score):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep score</div>${sl&&sl.awake!=null&&sl.awake>=5?`<div style="font-size:9px;color:${sl.awake>=45?'var(--amber)':'var(--ink3)'};font-weight:700">${durHM(sl.awake)} awake</div>`:''}</div>
               <div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiSleepHR(hr)}">${hr!=null?fmtN(hr):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep HR</div></div>
@@ -386,7 +386,23 @@ function kpiUp(v,lo,hi,f){if(v==null)return '';f=f||1;v=Math.round(v);return v>=
 // Protein (owner, 8 Oct 2026): at/over target (160) green, 75% of it (120) up to target amber, below red.
 // Nothing logged yet (still fasting) stays the neutral blue, so the day doesn't open red.
 function kpiProtein(v,tgt){if(!v||!tgt)return 'var(--blue)';v=Math.round(v);return v>=tgt?'var(--teal)':v>=tgt*0.75?'var(--amber)':'var(--red)';}
-function kpiGlucose(mg){if(mg==null)return '';
+// Exercise-made glucose (owner, 13 Oct 2026): a reading during a workout or up to 45 min after it is GREEN, whatever the
+// number (adrenaline releases liver glucose; healthy, not a food spike). 45-60 min after: amber only above 130. A reading
+// in or just after the steam room/sauna is heat noise on the sensor: grey. `at` = the reading's time; omitted = plain bands.
+function glucoseContext(at){
+  if(!at)return null;const t=new Date(at).getTime();
+  const ss=(healthData.sessions||[]).filter(s=>s.start&&s.end&&!(s.minutes!=null&&s.minutes<MIN_WORKOUT_MIN));
+  const heat=s=>/steam|sauna/i.test((s.title||'')+' '+(s.typeName||'')), T=x=>new Date(x).getTime();
+  if(ss.some(s=>heat(s)&&t>=T(s.start)&&t<=T(s.end)+15*60000))return 'heat';     // heat noise wins over everything
+  if(ss.some(s=>!heat(s)&&t>=T(s.start)&&t<=T(s.end)+45*60000))return 'workout';
+  if(ss.some(s=>!heat(s)&&t>T(s.end)+45*60000&&t<=T(s.end)+60*60000))return 'settling';
+  return null;
+}
+function kpiGlucose(mg,at){if(mg==null)return '';
+  const cx=glucoseContext(at);
+  if(cx==='heat')return 'var(--ink3)';
+  if(cx==='workout')return 'var(--teal)';
+  if(cx==='settling')return Math.round(mg)>130?'var(--amber)':'var(--teal)';
   if(typeof gUnit==='function'&&gUnit()!=='mgdl'){const m=Math.round(mg/18.0182*10)/10;return m>=7.3?'var(--red)':m>5.0?'var(--amber)':'var(--teal)';}   // shown in mmol/L
   mg=Math.round(mg);return mg>=131?'var(--red)':mg>90?'var(--amber)':'var(--teal)';}
 // Sleep score (owner, 10 Oct 2026): 85+ green, 70-84 amber, under 70 red.
@@ -505,7 +521,7 @@ window.foodWorkoutPanel=function(i){
     <div style="margin:6px 0 10px;font-size:13px;color:var(--ink2)">${hm(w.t0)} to ${hm(w.t1)} &middot; ${Math.round((w.t1-w.t0)/60000)} min${w.s.avgHR!=null?' &middot; avg '+Math.round(w.s.avgHR)+' / max '+Math.round(w.s.maxHR)+' bpm':''}</div>
     ${r?`<div class="fd-row" style="margin-top:0">
       <div class="fd-cell"><div class="v">${r.rise>0?'+':''}${cv(r.rise)}</div><div class="l">Rise ${u}</div></div>
-      <div class="fd-cell"><div class="v" style="color:${kpiGlucose(r.peak)}">${cv(r.peak)}</div><div class="l">Peak at ${hm(r.peakAt)} (from ${cv(r.base)})</div></div>
+      <div class="fd-cell"><div class="v" style="color:${kpiGlucose(r.peak,r.peakAt)}">${cv(r.peak)}</div><div class="l">Peak at ${hm(r.peakAt)} (from ${cv(r.base)})</div></div>
       <div class="fd-cell"><div class="v">${cv(r.low)}</div><div class="l">Low</div></div></div>
       <div class="fd-note" style="margin:8px 0 0">${w.heat?'Heat distorts the sensor: readings in and just after the steam room or sauna are not real glucose.':r.artefact?'Some readings moved faster than glucose can, likely sensor noise (heat, pressure or sweat). Read the shape, not the exact peak.':'Hard efforts raise glucose: adrenaline releases liver sugar faster than the muscles use it. Normal, and it settles within the hour.'}</div>`
       :'<div class="fd-note">No sensor readings around this session.</div>'}
@@ -583,8 +599,8 @@ function readingsCard(){
   return `<div class="card" style="padding:12px 16px">
     ${last?`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
       <div class="fd-sub">Libre sensor</div><div style="font-size:12px;color:var(--ink3)">${tOf(last.at)}${foodDay===localDay(new Date())?' &middot; '+Math.round((Date.now()-new Date(last.at))/60000)+' min ago':''}</div></div>
-      <div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px"><div class="fd-big" style="font-size:28px;color:${kpiGlucose(Math.round(last.mmol*18.0182))}">${gShow(last.mmol)} <span style="font-size:13px;color:var(--ink3)">${u==='mgdl'?'mg/dL':'mmol/L'}</span></div>
-      <div style="font-size:12px;color:var(--ink3)">day ${gShow(Math.min(...cg.map(x=>x.mmol)))} to ${ragSpan(gShow(Math.max(...cg.map(x=>x.mmol))),kpiGlucose(Math.round(Math.max(...cg.map(x=>x.mmol))*18.0182)))}, avg ${ragSpan(gShow(cg.reduce((a,x)=>a+x.mmol,0)/cg.length),kpiGlucose(Math.round(cg.reduce((a,x)=>a+x.mmol,0)/cg.length*18.0182)))}</div></div>
+      <div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px"><div class="fd-big" style="font-size:28px;color:${kpiGlucose(Math.round(last.mmol*18.0182),last.at)}">${gShow(last.mmol)} <span style="font-size:13px;color:var(--ink3)">${u==='mgdl'?'mg/dL':'mmol/L'}</span></div>
+      <div style="font-size:12px;color:var(--ink3)">day ${gShow(Math.min(...cg.map(x=>x.mmol)))} to ${ragSpan(gShow(Math.max(...cg.map(x=>x.mmol))),(()=>{const hi=cg.reduce((a,x)=>x.mmol>a.mmol?x:a);return kpiGlucose(Math.round(hi.mmol*18.0182),hi.at);})())}, avg ${ragSpan(gShow(cg.reduce((a,x)=>a+x.mmol,0)/cg.length),kpiGlucose(Math.round(cg.reduce((a,x)=>a+x.mmol,0)/cg.length*18.0182)))}</div></div>
       <div style="position:relative;height:90px;margin-bottom:10px"><canvas id="fdCgmChart" role="img" aria-label="Glucose today"></canvas></div>`:''}
     ${!manual?'</div>':''}${!manual?'':`
     <div class="fd-sub" style="margin-bottom:6px">Ketones and glucose${g!=null?` &middot; GKI ${g}`:''}</div>
