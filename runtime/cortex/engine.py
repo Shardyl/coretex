@@ -4461,11 +4461,12 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
     if email and db.one("select id from tasks where company_id=%s and kind='email_reply' and "
                         "status in ('new','drafting','awaiting_approval','awaiting_correction','sending') "
                         "and lower(request->'inquiry'->>'email')=lower(%s) limit 1", (co["id"], email)):
-        return   # an email card for this contact is already in flight — never stack chases (audit F10)
-    if email and db.one("select 1 from decisions d join tasks t on t.id=d.task_id where t.company_id=%s and "
-                        "d.action='send' and lower(t.request->'inquiry'->>'email')=lower(%s) and "
-                        "d.created_at > now() - interval '3 days' limit 1", (co["id"], email)):
-        return   # something went to them within three days: a chase on top of it is a nag (card 907, 24 Sep 2026)
+        # an email card for this contact is already in flight: never stack chases (audit F10). The step is NOT
+        # consumed (audit 13 Oct: this early return used to burn a cadence step with nothing sent).
+        db.execute("update crm_projects set followup_step=%s where id=%s", (opp.get("followup_step") or 0, opp["id"]))
+        return
+    # "something went to them in the last 3 days" (card 907) and every other may-we-contact check is gate.py now,
+    # applied inside store.create_card below; a held chase restores its step there too.
     # a chase is a sales email after the first reply: it drafts on sales-followup (13 Oct 2026)
     skill = store.get_skill_by_key(co["id"], "sales-followup") or store.get_skill_by_key(co["id"], "sales-first-response")
     label = {"checkin": "check-in", "revive": "revival"}.get(action, "follow-up")
@@ -4619,6 +4620,8 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
                               contact=email, deal_id=opp["id"])
         if t:
             db.execute("update tasks set deal_id=%s where id=%s", (opp["id"], t["id"]))
+        else:     # the contact gate held it: the step is not counted, the reason is on the deal (gate.note_hold)
+            db.execute("update crm_projects set followup_step=%s where id=%s", (opp.get("followup_step") or 0, opp["id"]))
     else:
         # nobody to write to: say WHY, so the owner can fix the deal, instead of a bare "follow-up due"
         notifications.notify(f"No {label} drafted: '{opp['title']}' has no contact",

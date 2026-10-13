@@ -164,6 +164,15 @@ def create_card(company_id, skill_id, kind, request, contact: str | None = None,
     step is dealt with (promote_queued in the engine loop). Chronology is preserved: the oldest queued
     step always goes first. Talk-composed owner cards bypass this via plain create_task."""
     kind = _coerce_kind(kind, request)
+    if kind in ("email_reply", "email_draft") and isinstance(request, dict):
+        # THE CONTACT GATE (gate.py, audit step 2b): every automatic email passes the same checks here.
+        from . import gate
+        _did = deal_id or request.get("deal_id")
+        _why = gate.check(company_id, contact or (request.get("inquiry") or {}).get("email") or "", _did, request)
+        if _why:
+            gate.note_hold(_did, _why, request)
+            print(f"[gate] held {gate.purpose(request)} to {contact}: {_why}", flush=True)
+            return None
     key = (contact or "").strip().lower() or (f"deal:{deal_id}" if deal_id else None)
     if not key:
         return create_task(company_id, skill_id, kind, request)
@@ -204,8 +213,30 @@ def promote_queued(company_id=None, key: str | None = None) -> int:
                    or lower(o.request->'inquiry'->>'email') = q.request->>'serialize_key'))
         order by q.request->>'serialize_key', q.id)
       returning t.id"""
+    _release_gate(company_id, key)
     rows = db.query(sql, tuple(params)) if params else db.query(sql)
     return len(rows or [])
+
+
+def _release_gate(company_id=None, key: str | None = None) -> None:
+    """A card that waited in line is checked again before it is released: while it queued, our earlier email may
+    have gone, the client may have written, or the deal may have closed (audit 13 Oct: promote_queued re-checked
+    nothing). An automatic card the gate now holds is cancelled with the reason; a person's card is never touched."""
+    from . import gate
+    conds, params = ["status='queued'", "kind in ('email_reply','email_draft')"], []
+    if company_id is not None:
+        conds.append("company_id=%s"); params.append(company_id)
+    if key:
+        conds.append("request->>'serialize_key'=%s"); params.append(key)
+    for q in db.query("select id, company_id, deal_id, request from tasks where " + " and ".join(conds), tuple(params)):
+        req = q.get("request") or {}
+        if not gate.purpose(req):
+            continue
+        why = gate.check(q["company_id"], (req.get("inquiry") or {}).get("email") or "", q.get("deal_id") or req.get("deal_id"), req)
+        if why:
+            db.execute("update tasks set status='cancelled', updated_at=now(), request = request || %s::jsonb "
+                       "where id=%s and status='queued'", (Json({"cancelled_reason": f"held before release: {why}"}), q["id"]))
+            gate.note_hold(q.get("deal_id") or req.get("deal_id"), why, req)
 
 
 # ---- the CARD CONTRACT (rebuild Stage 2b) ------------------------------------------------------

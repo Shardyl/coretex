@@ -186,6 +186,10 @@ def _spawn_task(r: dict, action: dict) -> int | None:
         req = action.get("request") or {"brief": brief, "title": r["title"]}
         if isinstance(req, dict):
             req = _with_deal(r, kind, req)
+            if kind in _EMAIL_KINDS and str(r.get("created_by") or "").startswith("cortex"):
+                # an email Cortex raises from its OWN reminder passes the contact gate (gate.py); one the owner set
+                # himself is his instruction and is never held there
+                req["auto_source"] = "commitment" if _COMMITMENT_RX.match(r.get("title") or "") else "reminder"
         contact = ((req.get("inquiry") or {}).get("email") if isinstance(req, dict) else None)
         t = store.create_card(co["id"], sk["id"], kind, req, contact=contact,
                               deal_id=(req.get("deal_id") if isinstance(req, dict) else None))

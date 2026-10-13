@@ -206,6 +206,22 @@ def _cases():
     case("closing gate follows the stage, not a leftover cadence", "audit 2a",
          lambda: "stages.rhythm(stage) == \"closing\"" in inspect.getsource(engine._spawn_followup_card))
 
+    # --- one contact gate for every automatic email (audit step 2b)
+    from . import gate
+    case("an email a person asked for is never gated", "audit 2b",
+         lambda: gate.purpose({"brief": "reply to their email"}) is None
+         and gate.check(3, "someone@example.com", 154, {"brief": "x"}) is None)
+    case("no automatic email on a Lost deal", "Liebherr / Codexa",
+         lambda: "Lost" in (gate.check(3, "someone@example.com", 154, {"followup": "chase"}) or ""))
+    case("a Dormant deal gets revivals, not chases", "audit 2a/2b",
+         lambda: "revival" in (gate.check(3, "someone@example.com", 94, {"followup": "chase"}) or ""))
+    case("nobody who has left their company is contacted", "Tim Piper, EY",
+         lambda: "left" in (gate.check(3, "tim.piper@ae.ey.com", None, {"followup": "nurture"}) or ""))
+    case("a reminder email Cortex raised is gated, the owner's is not", "audit 2b",
+         lambda: gate.purpose({"auto_source": "reminder"}) == "reminder" and gate.purpose({"system_note": "From reminder #5"}) is None)
+    case("cards are gated where they are created and where they are released", "audit 2b",
+         lambda: "gate.check(" in inspect.getsource(store.create_card) and "gate.check(" in inspect.getsource(store._release_gate))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

@@ -3028,3 +3028,17 @@ shoot needs none), then 10% off the whole quotation.
   old chase rhythm to revivals (before-state in setting `stage_migration_2026_10_13`).
 - Health checks: `clock_on_stage_without_rhythm`, `won_deal_on_closing_rhythm` (both self-repair),
   `dormant_not_on_revivals` (report).
+
+## One contact gate for every automatic email: `gate.py` (audit step 2b, 13 Oct 2026)
+- `gate.check(company_id, email, deal_id, request)` answers "may Cortex contact this person, unprompted, now?" for
+  every AUTOMATIC email (`gate.purpose`: followup chase/checkin/followup/revive/nurture/post-meeting, lead_chase, or
+  `auto_source` set by `reminders._spawn_task` on a reminder Cortex created). An email a person asked for (a reply,
+  Talk, the cockpit, his own reminder) is never gated.
+- Checks, in order: the person (left-company, not qualified); the deal (Lost/Completed never; chases only where
+  `stages.rhythm` allows, Dormant revivals only; a `chase_stopped` newer than any email); who spoke last on any
+  channel we see (deal email_in/whatsapp_in, CRM inbound events vs Cortex sends and email_out); a quiet period
+  after our last email (`QUIET_DAYS`: 3 for chases, 2 for reminder/promise emails, 14 for revivals and nurture).
+- Applied in exactly two places: `store.create_card` (an automatic card that may not contact is not created; the
+  reason goes on the deal via `gate.note_hold`) and `store._release_gate` from `promote_queued` (a queued automatic
+  card is re-checked before release and cancelled with the reason if it may no longer go). The deal chase's own
+  3-day check moved into the gate; a held chase no longer consumes a cadence step.
