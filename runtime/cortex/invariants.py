@@ -106,6 +106,13 @@ CHECKS = [
                "and coalesce(cadence->>'name','') <> 'revival'",
     },
     {
+        "key": "quote_deal_off_closing_rhythm",
+        "what": "A deal at Quote on auto chases on a slower rhythm than the closing one",
+        "sql": "select id, title, cadence->>'name' cadence, next_followup from crm_projects where stage='Quote' and "
+               "automation='auto' and coalesce(cadence->>'name','') <> 'closing'",
+        "fix": "crm.repair_quote_rhythm",
+    },
+    {
         "key": "meeting_stored_twice",
         "what": "One meeting stored twice: an email-only record beside the full notes document (same title, same day)",
         "sql": "select a.id, b.id, a.title from meeting_notes a join meeting_notes b on a.id < b.id and "
@@ -228,7 +235,11 @@ def run(fix: bool = False) -> dict:
                                          for r in rows[:25]], "count": len(rows), "fixed": 0}
         if fix and c.get("fix"):
             try:
-                f["fixed"] = len(db.query(c["fix"]) or [])
+                if str(c["fix"]).startswith("crm."):        # a repair written in code, given the rows it found
+                    from . import crm
+                    f["fixed"] = len(getattr(crm, c["fix"][4:])(rows) or [])
+                else:
+                    f["fixed"] = len(db.query(c["fix"]) or [])
             except Exception as e:  # noqa: BLE001
                 f["fix_error"] = f"{type(e).__name__}: {str(e)[:200]}"
         out["findings"][c["key"]] = f

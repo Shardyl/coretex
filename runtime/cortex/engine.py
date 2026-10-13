@@ -975,7 +975,21 @@ def _process_task(task: dict) -> None:
                              target_type="task", target_id=str(task["id"]),
                              dedup_key=f"emptydraft:{task['id']}")
     except Exception as e:  # noqa: BLE001
-        store.update_task(task["id"], status="failed")
+        # A FAILED DRAFT IS NEVER SILENT (13 Oct 2026): card 1200, an automatic chase to Heidar, failed while drafting;
+        # the reason went only to Telegram and a 'failed' card is not in the Inbox, so the chase simply vanished. An
+        # email card stays in the Inbox, empty and unsendable, with the reason; any card raises a notice.
+        why = f"{type(e).__name__}: {str(e)[:200]}"
+        print(f"[draft] task {task['id']} failed: {why}", flush=True)
+        if task.get("kind") in EMAIL_RENDER_KINDS:
+            store.update_task(task["id"], status="awaiting_correction", draft="",
+                              manager={"verdict": "escalate", "escalate": True, "aligned": False, "confidence": "low",
+                                       "issues": [why], "rule_refs": [],
+                                       "summary": "Cortex could not write this draft (" + why[:120] + "). Ask it to redraft."})
+        else:
+            store.update_task(task["id"], status="failed", last_status=why[:120])
+        notifications.notify(f"Card #{task['id']}: the draft failed", why, priority="high", category="approval",
+                             company_id=task.get("company_id"), target_type="task", target_id=str(task["id"]),
+                             dedup_key=f"draftfail:{task['id']}")
         tg.send(f"Task #{task['id']} failed: {e}")
 
 

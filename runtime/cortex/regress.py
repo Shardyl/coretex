@@ -469,6 +469,15 @@ def _cases():
         return "isDigest&&items.length>0" in web and "!isDigest&&(!grouped||!isContacts)" in web
     case("a one-item digest card shows the item, not the generic line", "Today's updates card", _digest_card)
 
+    # --- follow-up audit (13 Oct): quoted deals on the closing rhythm; a failed draft stays visible
+    case("a quoted deal off the closing rhythm is repaired by the health check", "Gulf Cryo 147, Unified Robotics 149",
+         lambda: any(c["key"] == "quote_deal_off_closing_rhythm" and c.get("fix") == "crm.repair_quote_rhythm"
+                     for c in __import__("cortex.invariants", fromlist=["x"]).CHECKS)
+         and callable(getattr(__import__("cortex.crm", fromlist=["x"]), "repair_quote_rhythm", None)))
+    case("a draft that fails stays in the Inbox with its reason", "card 1200",
+         lambda: "A FAILED DRAFT IS NEVER SILENT" in inspect.getsource(engine)
+         and 'dedup_key=f"draftfail:' in inspect.getsource(engine))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

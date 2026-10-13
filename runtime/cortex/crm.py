@@ -1430,6 +1430,20 @@ def enter_closing(deal_id: int) -> bool:
     return True
 
 
+def repair_quote_rhythm(rows: list) -> list:
+    """HEALTH-CHECK REPAIR (13 Oct 2026): a Quote deal on auto that is not on the closing rhythm (Gulf Cryo 147 and
+    Unified Robotics 149 reached Quote before Quote meant closing, so they sat on 10-day gaps). Puts it on the
+    closing rhythm and pulls a clock set further out than two days back to two days from now."""
+    fixed = []
+    for r in rows or []:
+        did = int(r.get("id"))
+        if enter_closing(did):
+            db.execute("update crm_projects set next_followup = least(coalesce(next_followup, now() + interval '2 days'), "
+                       "now() + interval '2 days') where id=%s", (did,))
+            fixed.append(did)
+    return fixed
+
+
 def cadence_points(cadence: dict) -> list[dict]:
     """Flatten the cadence steps into individual fire-points, each carrying the gap (after_days) before it."""
     pts: list[dict] = []

@@ -3270,3 +3270,12 @@ shoot needs none), then 10% off the whole quotation.
 - THE DIGEST CARD SHOWS ITS ITEMS (13 Oct 2026). `infoCard` listed items only when there were two or more, so a
   one-item "Today's updates" showed just its generic body and read as empty. A digest now always shows its items
   (open when fewer than four, behind "Show the N" above that) and never the generic line. sw cortex-v64.
+
+## Follow-up audit fixes (13 Oct 2026)
+- A Quote deal on auto is ALWAYS on the closing rhythm: health check `quote_deal_off_closing_rhythm` repairs it with
+  `crm.repair_quote_rhythm` (enter_closing + a clock no further out than two days). A check's `fix` may now name a
+  code repair (`"crm.<function>"`, called with the rows found) instead of SQL. Gulf Cryo 147 and Unified Robotics
+  149 reached Quote before Quote meant closing and sat on 10-day gaps.
+- A FAILED DRAFT IS NEVER SILENT: the generic exception in `process_new_tasks` used to set `failed` and tell only
+  Telegram, so card 1200 (an automatic chase to Heidar) vanished. An email card now stays in the Inbox
+  (`awaiting_correction`, empty, unsendable) with the reason on it; every failure raises a high-priority notice.
