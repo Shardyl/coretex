@@ -1253,7 +1253,10 @@ window.foodDoSearch=async function(){
       :'<div class="fd-note">No results. Try a simpler name, or use Quick add.</div>';
   }catch(e){el.innerHTML='<div class="fd-note">Search failed. Check your connection.</div>';}
 };
-window.foodPickResult=function(i){const f=_fdResults[i];if(f)portionView(Object.assign({},f,{id:null}),null);};
+window.foodPickResult=function(i){const f=_fdResults[i];if(!f)return;
+  const key=x=>((x.name||'')+'|'+(x.brand||'')).toLowerCase().trim();
+  const mine=foods.find(x=>!x.deleted&&((f.sourceId&&x.sourceId===f.sourceId&&x.source===f.source)||(f.barcode&&x.barcode===f.barcode)||key(x)===key(f)));
+  portionView(mine||Object.assign({},f,{id:null}),null);};
 window.foodPickSaved=function(id){const f=foods.find(x=>x.id===id);if(f)portionView(f,null);};
 window.foodLookupCode=async function(code){
   code=String(code||'').replace(/\D/g,'');
@@ -1310,15 +1313,19 @@ function portionView(food,entry){
   const lastQ=!entry&&food.id?(foodLog.filter(e=>e.foodId===food.id&&e.qtyG!=null).sort((a,b)=>tWhen(b)-tWhen(a))[0]||{}).qtyG:null;
   const lastE=!entry&&food.id?foodLog.filter(e=>e.foodId===food.id&&e.qtyG!=null).sort((a,b)=>tWhen(b)-tWhen(a))[0]:null;
   const units=foodUnits(food);
-  const src=entry||lastE;
+  // Fallback when no entry is left in the log: the amount remembered on the food itself (owner, 13 Oct 2026:
+  // he logged sardines at 120 g, deleted the entry, and the next add opened at 100 g again).
+  const mem=(()=>{const g=+food.servingG||0;if(!g)return null;const u=units.find(x=>x.label===food.servingLabel);
+    return u?{unitLabel:u.label,unitCount:r1(g/u.g),qtyG:g}:{unitLabel:null,unitCount:null,qtyG:g};})();
+  const src=entry||lastE||mem;
   let uLab=src&&src.unitLabel&&units.some(u=>u.label===src.unitLabel)?src.unitLabel:(src&&src.qtyG!=null&&!src.unitLabel?'g':(units[0]?units[0].label:'g'));
   let uCnt=src&&src.unitLabel===uLab&&src.unitCount!=null?+src.unitCount:1;
-  const grams=entry&&entry.qtyG!=null?entry.qtyG:(uLab!=='g'?units.find(u=>u.label===uLab).g*uCnt:(lastQ!=null?lastQ:(sg||100)));
+  const grams=entry&&entry.qtyG!=null?entry.qtyG:(uLab!=='g'?units.find(u=>u.label===uLab).g*uCnt:(lastQ!=null?lastQ:(mem?mem.qtyG:(sg||100))));
   window._fdUnits=units;
   const saved=!!(food.id&&foods.find(f=>f.id===food.id));
   const meal=entry?entry.meal:sheetMeal;
   const inner=`<div class="fd-sheet-b">
-    <div class="fd-item" style="cursor:default"><div class="n">${esc(food.name)}${food.brand?` <span class="fd-chip">${esc(food.brand)}</span>`:''}</div>
+    <div class="fd-item" style="cursor:default"><div class="n">${esc(food.name)}${food.brand?` <span class="fd-chip">${esc(food.brand)}</span>`:''}${saved?` <button class="btn-sm" style="float:right" onclick="foodEditFood('${food.id}')">Edit / rename</button>`:''}</div>
       <div class="m">Per 100 g: ${fmtN(food.kcal100)} kcal &middot; P ${r1(food.protein100)??'—'} &middot; C ${r1(food.carbs100)??'—'} &middot; F ${r1(food.fat100)??'—'}</div></div>
     <div style="display:grid;grid-template-columns:90px 1fr;gap:8px;margin-bottom:6px">
       <div><label class="form-label">How many</label><input class="fd-input" type="number" step="0.5" inputmode="decimal" id="fdCnt" value="${uLab==='g'?'':uCnt}" oninput="foodUnitCalc()" ${uLab==='g'?'disabled':''}/></div>
@@ -1354,6 +1361,8 @@ function portionView(food,entry){
       name:f.name+(f.brand?' ('+f.brand+')':''),qtyG:r1(g),kcal:p.kcal,protein:p.protein,carbs:p.carbs,fat:p.fat,
       unitLabel:ul!=='g'&&uc>0?ul:null,unitCount:ul!=='g'&&uc>0?uc:null};
     if(entry)Object.assign(entry,row);else foodLog.push(Object.assign({id:newId('fl')},row));
+    const mf=f.id&&foods.find(x=>x.id===f.id);
+    if(mf&&(+mf.servingG!==r1(g)||(mf.servingLabel||null)!==row.unitLabel)){mf.servingG=r1(g);mf.servingLabel=row.unitLabel;saveFoods();}
     saveFoodLog();closeSheet();renderToday();toast(entry?'Updated':'Added');
   };
 }
@@ -1818,8 +1827,8 @@ window.foodEditFood=function(id,preset){
     <div class="form-group"><label class="form-label">Protein g</label><input type="number" id="ffP" value="${v(f.protein100)}"/></div></div>
     <div class="two-col"><div class="form-group"><label class="form-label">Carbs g</label><input type="number" id="ffCa" value="${v(f.carbs100)}"/></div>
     <div class="form-group"><label class="form-label">Fat g</label><input type="number" id="ffF" value="${v(f.fat100)}"/></div></div>
-    <div class="two-col"><div class="form-group"><label class="form-label">Serving name</label><input type="text" id="ffSL" value="${esc(v(f.servingLabel))}" placeholder="e.g. 1 scoop"/></div>
-    <div class="form-group"><label class="form-label">Serving grams</label><input type="number" id="ffSG" value="${v(f.servingG)}"/></div></div>
+    <div class="two-col"><div class="form-group"><label class="form-label">Usual unit</label><input type="text" id="ffSL" value="${esc(v(f.servingLabel))}" placeholder="e.g. 1 scoop"/></div>
+    <div class="form-group"><label class="form-label">Usual amount (g)</label><input type="number" id="ffSG" value="${v(f.servingG)}"/></div></div>
     ${id?`<button class="fd-btn ghost" onclick="foodDeleteFood('${id}')">Delete food</button>`:''}`,
   function(){
     const g=x=>{const s=document.getElementById(x).value;return s===''?null:+s;};
