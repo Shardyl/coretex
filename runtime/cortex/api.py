@@ -5104,6 +5104,29 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
     return msgs, chosen, system, tools, _exec
 
 
+def talk_from_whatsapp(text: str, images: list | None = None, names: list | None = None) -> str:
+    """A Talk turn from the owner's WhatsApp (whatsapp._talk_turn). The conversation rolls on one 'WhatsApp' chat
+    (shown in Talk's history) and starts fresh after a day of quiet, so a quick follow-up keeps its context."""
+    from datetime import datetime, timedelta, timezone
+    cid = db.setting_get("wa_talk_conv")
+    conv = store.conv_get(int(cid)) if cid else None
+    if not conv or (conv.get("updated_at") and datetime.now(timezone.utc) - conv["updated_at"] > timedelta(hours=24)):
+        conv = store.conv_create("WhatsApp", None)
+        db.setting_set("wa_talk_conv", conv["id"])
+    history = [m for m in (conv.get("messages") or []) if m.get("role") in ("user", "assistant")]
+    said = (text or "").strip() or ("(a picture, no words)" if images else "")
+    user_msg = {"role": "user", "content": said + "\n\n[Sent from WhatsApp. Answer in a few short plain-text lines: no "
+                "markdown, no tables. If a picture or file came with it, read it and act on it; if you cannot tell which "
+                "deal or contact it is about, ask one short question.]"}
+    body = ChatTurn(messages=(history + [user_msg])[-40:], images=images or None, image_names=names or None)
+    owner = {"id": None, "name": "Owner", "role": "owner", "companies": None}
+    msgs, chosen, system, tools, _exec = _chat_prepare(body, owner)
+    reply = provider.chat_tools(system, msgs, tools, _exec, purpose="chat:whatsapp", company=None) or ""
+    store.conv_save(conv["id"], history + [{"role": "user", "content": said + (" [+ attachment]" if images else "")},
+                                           {"role": "assistant", "content": reply}])
+    return reply
+
+
 @app.post("/api/chat")
 def chat(body: ChatTurn, u: dict = Depends(current_user)) -> dict:
     msgs, chosen, system, tools, _exec = _chat_prepare(body, u)

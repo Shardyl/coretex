@@ -3178,3 +3178,12 @@ shoot needs none), then 10% off the whole quotation.
 - `engine._linkify` (outgoing email HTML) leaves trailing punctuation out of links: "(https://meet.google.com/x)."
   linked to "x)." (card 1208), a dead link for the client.
 - `bin/deploy.sh` runs `pyflakes` for undefined names before pushing.
+
+## WhatsApp is a door into Talk (owner, 13 Oct 2026)
+- The owner's own messages to the business WhatsApp were a control channel only (buttons, Edit instructions, a
+  doorbell); a screenshot he sent of a client was dropped silently. Now `whatsapp._owner_control`: after the buttons
+  and a pending Edit, a picture/document (`_owner_media`, caption read as text) or anything typed or spoken longer
+  than three words goes to TALK (`api.talk_from_whatsapp`, the same `_chat_prepare` + tools as the cockpit, the
+  owner's scope), on a thread; the reply comes back on WhatsApp (`_tell`, split at 3,500 characters). The
+  conversation rolls on one "WhatsApp" chat in Talk's history (setting `wa_talk_conv`) and starts fresh after a day
+  of quiet. A short "ok"/"hi" still rings the doorbell for waiting cards.

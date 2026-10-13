@@ -1044,6 +1044,16 @@ def _owner_control(msg: dict, text: str) -> str:
             return "ignored"
         alert_owner(int(task_id))
         return "corrected"
+    # TALK FROM WHATSAPP (owner, 13 Oct 2026: "use that WhatsApp as a way to communicate with Cortex, basic requests
+    # via voice message and pictures and information"). A picture, a document, a forwarded message, or anything said
+    # or typed that is more than a quick "ok", goes to TALK, the same brain and tools as the cockpit (notes on deals,
+    # opportunities, contacts, drafts, reminders), and Talk's answer comes back on WhatsApp. It runs on a thread so the
+    # webhook answers Meta at once. A short acknowledgement still rings the doorbell below.
+    media = _owner_media(msg)
+    if media or len(text.split()) > 3:
+        import threading
+        threading.Thread(target=_talk_turn, args=(text, media), daemon=True).start()
+        return "talk"
     # HONOUR THE DOORBELL. The out-of-window template tells him to reply so Cortex can send the draft: his
     # reply is what reopens the 24h window, and this is the half that walks through the door it opened.
     # Without it the template promises something nothing delivers (his first real reply, 29 Sep 2026).
@@ -1066,11 +1076,42 @@ def _owner_control(msg: dict, text: str) -> str:
     return "ignored"
 
 
+def _owner_media(m: dict) -> list[tuple[str, str]]:
+    """A picture or document the owner sent, as [(data_url, filename)]. A caption stays with the text."""
+    import base64
+    t = m.get("type")
+    obj = m.get(t) if t in ("image", "document", "sticker") else None
+    if not obj or not obj.get("id"):
+        return []
+    try:
+        data, mime = download_media(obj["id"])
+    except Exception as e:  # noqa: BLE001
+        print(f"[whatsapp] media not fetched: {str(e)[:160]}", flush=True)
+        _tell("I could not open that file. Send it again?")
+        return []
+    mime = obj.get("mime_type") or mime or "application/octet-stream"
+    name = obj.get("filename") or ("whatsapp-image.jpg" if t == "image" else "whatsapp-file")
+    return [(f"data:{mime};base64,{base64.b64encode(data).decode()}", name)]
+
+
+def _talk_turn(text: str, media: list) -> None:
+    """One Talk turn from the owner's WhatsApp; the reply comes back to him there."""
+    try:
+        from . import api
+        reply = api.talk_from_whatsapp(text, [d for d, _n in media], [n for _d, n in media])
+    except Exception as e:  # noqa: BLE001
+        reply = f"Talk could not finish that: {str(e)[:160]}"
+    for i in range(0, len(reply or ""), 3500):        # WhatsApp caps one message near 4,096 characters
+        _tell(reply[i:i + 3500])
+
+
 def _owner_text(m: dict) -> str:
     """The owner's words out of one message: typed text, or a voice note transcribed. A voice note IS the
     natural way to correct a draft on a phone, so it is a first-class input, not a fallback."""
     if m.get("type") == "text":
         return ((m.get("text") or {}).get("body") or "").strip()
+    if m.get("type") in ("image", "document"):                       # the caption is what he said with it
+        return (((m.get(m["type"]) or {}).get("caption")) or "").strip()
     if m.get("type") in ("audio", "voice"):
         mid = ((m.get("audio") or m.get("voice")) or {}).get("id")
         if not mid:

@@ -346,6 +346,14 @@ def _cases():
                                                                           {"id": 2, "title": "Shama - Ramadan commercial"}]) or {}).get("id") == 2
          and _mn._bound_deal("", "Catch up", "2026-10-13", [{"id": 1, "title": "A film"}, {"id": 2, "title": "B shoot"}]) is None)
 
+    # --- WhatsApp is a door into Talk (owner, 13 Oct)
+    case("the owner's pictures and longer messages go to Talk", "Farheen screenshot dropped",
+         lambda: "_talk_turn" in inspect.getsource(__import__("cortex.whatsapp", fromlist=["x"])._owner_control)
+         and hasattr(__import__("cortex.api", fromlist=["x"]), "talk_from_whatsapp"))
+    case("a caption is read with the picture", "WhatsApp Talk",
+         lambda: __import__("cortex.whatsapp", fromlist=["x"])._owner_text(
+             {"type": "image", "image": {"id": "x", "caption": "Farheen's number"}}) == "Farheen's number")
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
