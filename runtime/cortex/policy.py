@@ -116,7 +116,7 @@ def card_categories(company: dict) -> tuple:
 
 
 def should_skip(company: dict, email: dict, skill_key: str = "sales-first-response",
-                own_domain: str = "") -> dict | None:
+                own_domain: str = "", deal: dict | None = None) -> dict | None:
     """Does this inbound email fall into a NO-DRAFT situation for this company? Returns {reason} to skip,
     or None to proceed. Cheap: no model call at all unless the company actually has such a rule."""
     try:
@@ -150,9 +150,14 @@ def should_skip(company: dict, email: dict, skill_key: str = "sales-first-respon
         to_line = str(email.get("to") or "").lower()
         sender = " ".join(str(email.get(k) or "") for k in ("from", "email")).lower()
         ours_on_to = set(re.findall(r"[\w.+-]+@" + re.escape(own_domain.lower()), to_line)) if own_domain else set()
-        for a in addrs:
-            if a in sender or (a in to_line and not (ours_on_to - set(addrs))):
-                return {"reason": f"handled by {a} (standing rule)"}
+        # A CLIENT ON AN OPEN DEAL IS NEVER SKIPPED ON WHO IS COPIED (13 Oct 2026). Mike Enting at ABN AMRO (Tikkie,
+        # deal 108, our biggest opportunity) wrote on the deal thread that the bank would answer the report in the
+        # week of 5-9 October; Ben was on it, the address match fired and the email left no card, no deal entry and
+        # no change to the chase. Only what the email SAYS can hold a client's reply, judged below with the deal named.
+        if not deal:
+            for a in addrs:
+                if a in sender or (a in to_line and not (ours_on_to - set(addrs))):
+                    return {"reason": f"handled by {a} (standing rule)"}
         if not sits:
             return None
         out = provider.think_json(
@@ -161,7 +166,11 @@ def should_skip(company: dict, email: dict, skill_key: str = "sales-first-respon
             '\nReturn JSON {"skip": boolean, "which": "<the matching situation, or empty>"}. Be strict: '
             "skip only when the email clearly IS one of those situations. An email in which a person asks US "
             "for a quotation, a proposal, prices or answers is NEVER a broadcast circular, however generic its "
-            "greeting: never skip it.",
+            "greeting: never skip it."
+            + (f" THIS SENDER IS ON OUR OPEN OPPORTUNITY '{deal.get('title')}'. Their email about the work, the "
+               "report, the proposal, the price, the contract, timing, availability, who is involved or when they "
+               "will come back is deal correspondence and is NEVER one of those situations. Skip ONLY a message that "
+               "is purely a technical help or training question about using the product." if deal else ""),
             f"From: {email.get('name')} <{email.get('email')}>\nSubject: {email.get('subject')}\n\n"
             + (email.get("body") or email.get("snippet") or "")[:1500],
             model=provider.MODEL_ROUTER, max_tokens=120, purpose="no-draft-check",

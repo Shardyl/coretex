@@ -4177,6 +4177,24 @@ def _working_days_since(ts: datetime, now: datetime) -> int:
     return n
 
 
+def _resolve_their_date(co: dict, phrase: str, base: str) -> datetime | None:
+    """THEIR date, resolved from the date of THEIR message, never from today. A range resolves to its LAST day:
+    "the week of 5-9 October" means they come back by Friday 9 October (Tikkie, deal 108)."""
+    if not (phrase or "").strip():
+        return None
+    try:
+        r = provider.think_json(
+            f'A client wrote this in a message dated {base or "unknown"}. Resolve the phrase to ONE calendar date '
+            'relative to THAT message date: a range or a week resolves to its LAST day (end of week / "the week of" = '
+            'that Friday; next week = the Friday of the week after; end of month = its last day). Return '
+            '{"iso": "YYYY-MM-DD"} or {"iso": null} if it cannot be resolved.', phrase, model=provider.MODEL_ROUTER,
+            max_tokens=60, purpose="their-date", company=co.get("slug"))
+        iso = (r or {}).get("iso") if isinstance(r, dict) else None
+        return datetime.fromisoformat(iso).replace(tzinfo=_GST, hour=9) if iso else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _closing_gate(co: dict, opp: dict, email: str, msgs: list, label: str) -> bool:
     """WHETHER A CLOSING CHASE GOES (12 Oct 2026). For a week the general chase gate held almost every quoted
     deal's chase ("our last email already covers it", "client is reviewing"), re-checking every two working days
@@ -4244,17 +4262,7 @@ def _closing_gate(co: dict, opp: dict, email: str, msgs: list, label: str) -> bo
     if st == "accepted":
         return _hold(f'they accepted: "{q}"', pause=True, notice="they accepted, move it to Booked?")
     if st == "date" and (out.get("phrase") or "").strip():
-        try:   # the date is resolved from THEIR message's date, never from today
-            base = last.get("date") or ""
-            r = provider.think_json(
-                f'A client wrote this in a message dated {base}. Resolve the phrase to a calendar date relative to '
-                'THAT message date (end of week = that Friday; next week = the Monday after). Return {"iso": "YYYY-MM-DD"} '
-                'or {"iso": null} if it cannot be resolved.', out["phrase"], model=provider.MODEL_ROUTER, max_tokens=60,
-                purpose="closing-gate-date", company=co.get("slug"))
-            iso = (r or {}).get("iso") if isinstance(r, dict) else None
-            when = datetime.fromisoformat(iso).replace(tzinfo=_GST, hour=9) if iso else None
-        except Exception:  # noqa: BLE001
-            when = None
+        when = _resolve_their_date(co, out["phrase"], last.get("date") or "")
         if when and when.date() >= now.astimezone(_GST).date():
             nxt = crm._schedule_point({"working_days": True, "steps": [{"after_days": 1}]}, 0, base=when)
             return _hold(f'they said they would come back by {when:%a %d %b} ("{out["phrase"]}"); the chase moves '
@@ -4385,23 +4393,40 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
                 + re.sub(r"\s+", " ", x.get("body") or x.get("snippet") or "")[:900] for x in (msgs or [])[:6])
             _tl = (pipeline.deal_context(int(opp["id"]), limit=12) or "")[:3000]
             _g = provider.think_json(
+                f"Today is {datetime.now(_GST):%A %d %B %Y}. "
                 f"A scheduled {label} is due on the deal '{opp['title']}' (stage {stage}). Read the newest messages and "
                 "the deal record. Should we send it? No when: the client has SIGNED OFF or approved the final work; our "
-                "last email already covers it; they put it on hold or gave a date they will come back by; they asked us "
-                "for nothing and nothing is outstanding. "
+                "last email already covers it; they put it on hold; they gave a date they will come back by THAT HAS NOT "
+                "PASSED (a date that has passed with no word from them is the reason to send); they asked us for nothing "
+                "and nothing is outstanding. When the reason is a date they gave, copy their words for it into "
+                "their_date and the date of the message it is in into their_date_sent. "
                 + ("This deal is CLOSING: our quotation or proposal is with them and we are waiting for their answer. "
                    "Waiting for their answer is the REASON for this chase, never a reason to hold it: 'our last email "
                    "already covers it', 'we are reviewing', 'we will get back to you', 'awaiting their response' and our "
                    "own 'we will wait to hear back' do NOT hold it. Hold ONLY for: a decision (yes or no), an on-hold, a "
                    "date they gave that has not passed, or an email from us to them in the last 2 working days. "
                    if stage == "Quote" or (opp.get("cadence") or {}).get("name") == "closing" else "")
-                + 'Return {"send": true|false, "signed_off": true|false, "why": "<one line>"}. When unsure, send.',
+                + 'Return {"send": true|false, "signed_off": true|false, "why": "<one line>", "their_date": "<their '
+                'words or empty>", "their_date_sent": "<date of that message or empty>"}. When unsure, send.',
                 f"NEWEST MESSAGES (newest first):\n{_recent or '(none)'}\n\n{_tl}",
                 model=provider.MODEL_ROUTER, purpose="chase-gate", company=co.get("slug"))
+            _when = None
+            if isinstance(_g, dict) and _g.get("send") is False and (_g.get("their_date") or "").strip():
+                # CODE checks the date the model read (Tikkie, deal 108: held on 8 Oct for "the week of 5-9 October",
+                # then left to the next full gap, 22 Oct, instead of chasing on Monday 12th).
+                _when = _resolve_their_date(co, _g["their_date"], _g.get("their_date_sent") or "")
+                if _when and _when.date() < datetime.now(_GST).date():
+                    _g["send"], _when = True, None       # their date has passed with no word: the chase goes
             if isinstance(_g, dict) and _g.get("send") is False:
                 db.execute("update crm_projects set followup_step=%s where id=%s",
                            (opp.get("followup_step") or 0, opp["id"]))      # the chase that did not fire is not counted
-                if stage == "Quote" and opp.get("automation") == "auto":
+                if _when and opp.get("automation") == "auto":
+                    _nx = crm._schedule_point({"working_days": True, "steps": [{"after_days": 1}]}, 0, base=_when)
+                    db.execute("update crm_projects set next_followup=%s where id=%s and automation='auto'",
+                               (_nx, opp["id"]))
+                    _g["why"] = (f"{_g.get('why') or 'they gave a date'}; they said {_when:%a %d %b}, so the chase "
+                                 f"moves to {_nx.astimezone(_GST):%a %d %b}")
+                elif stage == "Quote" and opp.get("automation") == "auto":
                     # A HELD CHASE IS RE-CHECKED IN 2 WORKING DAYS (owner, 6 Oct 2026): it used to wait for the next
                     # full gap (4 to 14 days), so one hold silenced a quoted deal for up to a fortnight.
                     _rt = crm._schedule_point({"working_days": True, "steps": [{"after_days": 2}]}, 0)
@@ -5981,7 +6006,16 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
             # NO-DRAFT POLICY: the owner's own rules can say a kind of message never gets a drafted
             # reply (support handled by Ben, etc.). That decision belongs HERE - a rule on the drafting
             # skill can never stop a card that already exists, which is why it kept being ignored.
-            _skip = policy.should_skip(co, e, own_domain=own_domain)
+            _cdeals = []
+            try:   # the person's deals, else a colleague's at the same client (Mike Enting was not on deal 108)
+                _cdeals = crm.active_deals_for_email(e.get("email") or "", company_slug) if e.get("email") else []
+                if not _cdeals and e.get("email"):
+                    _dd = crm.open_deal_for_domain(e["email"], company_slug)
+                    _cdeals = [_dd] if _dd else []
+            except Exception:  # noqa: BLE001
+                _cdeals = []
+            _skip = policy.should_skip(co, e, own_domain=own_domain,
+                                       deal=(_cdeals[0] if _cdeals else None))
             if _skip:
                 # SKIPPING THE REPLY NEVER SKIPS THE PERSON. This branch used to mark the mail seen and
                 # move on BEFORE the CRM step below, so a correctly-skipped supplier blast also erased
@@ -5994,7 +6028,7 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                 # the deal, no notice. A skipped email from someone on an active deal is now logged on that deal and the
                 # owner is told once, naming the rule that held the draft.
                 try:
-                    _sk_deals = crm.active_deals_for_email(e.get("email") or "", company_slug) if e.get("email") else []
+                    _sk_deals = _cdeals
                     if _sk_deals:
                         _sd = _sk_deals[0] if len(_sk_deals) == 1 else (_deal_for_thread(e, _sk_deals) or _sk_deals[0])
                         _snip = re.sub(r"\s+", " ", e.get("body") or e.get("snippet") or "")[:220]

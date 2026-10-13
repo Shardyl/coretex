@@ -2847,3 +2847,18 @@ shoot needs none), then 10% off the whole quotation.
   (`wa-ack-edit`), never a worker redraft.
 - `engine._keep_team_names`: voice transcription turns Rashad into "Richard" and the edit copied it. A roster first
   name (profile `signatures`) that was in the old text and vanished is put back over the ONE new capitalised word.
+
+## A client on an open deal is never skipped on who is copied; a client's date moves every chase (13 Oct 2026)
+- CAUSE: Mike Enting (ABN AMRO, Tikkie deal 108) wrote on the deal thread on 24 Sep that the bank would answer the
+  report in the week of 5-9 October. Ben was copied, the compiled "support is Ben's" address match skipped it: no
+  card, nothing on the deal, the chase not moved. Mike was not a deal contact (a colleague at the same account), so
+  the 8 Oct skipped-client log would also have missed him. On 8 Oct the general chase gate held "for their date" and
+  the deal then waited the next full gap (22 Oct) instead of chasing on Monday 12th.
+- `poll_inbox` resolves the sender's deals (`active_deals_for_email`, else `open_deal_for_domain`) BEFORE the no-draft
+  check and passes the deal to `policy.should_skip(deal=)`: with a deal, the handling-mailbox address match never
+  applies, and the content check is told the deal by name (deal correspondence is never a no-draft situation; only a
+  pure technical help/training question is). The skipped-client timeline log + notice use the same deals.
+- `engine._resolve_their_date(co, phrase, base)`: one resolver, from THEIR message's date, a range or week = its LAST
+  day. Used by `_closing_gate` and now the general chase gate: the gate is given today's date, holds only for a date
+  that has NOT passed, returns their words; code resolves them; passed -> the chase goes; future -> next_followup =
+  the next working day after it.
