@@ -311,7 +311,7 @@ def _cases():
          lambda: _nt._treatment("Suspected phishing from x", "critical", "security", None, None) == "keep")
     case("a client-deadline notice is kept, one per deal and topic", "notification audit",
          lambda: _nt._treatment("Client deadline 2026-10-14: X", "high", "reminder", "deal", "133") == "keep"
-         and _nt._topic("Client deadline 2026-10-14: X") == _nt._topic("Client deadline 2026-10-20: Y"))
+         and _nt._topic("Client deadline 2026-10-14: X") == _nt._topic("Client deadline 2026-10-20T15:00: Y") == "client-deadline")
     case("a next step is announced once, tender deals never 'Unanswered'", "notification audit",
          lambda: "Next step (reminder)" not in inspect.getsource(__import__("cortex.pipeline", fromlist=["x"]).suggest_next_step)
          and "Tender:" in inspect.getsource(engine._rearm_stalled_chases))

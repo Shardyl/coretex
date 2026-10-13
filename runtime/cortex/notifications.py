@@ -67,8 +67,11 @@ DIGEST_CATEGORIES = ("contact", "registration")
 
 
 def _topic(title: str) -> str:
+    """The kind of notice, from its title: 'Client deadline 2026-10-14T15:00: X' -> 'client-deadline'."""
     import re as _re
-    return _re.sub(r"[^a-z]+", "-", _re.split(r"[:\u2014(]", title or "", 1)[0].lower()).strip("-")[:40] or "notice"
+    head = _re.split(r"[:\u2014(]", title or "", 1)[0]
+    head = " ".join(w for w in head.split() if not any(ch.isdigit() for ch in w))   # dates/times/ids are not topics
+    return _re.sub(r"[^a-z]+", "-", head.lower()).strip("-")[:40] or "notice"
 
 
 def _treatment(title: str, priority: str, category: str, target_type, target_id) -> str:
