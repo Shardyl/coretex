@@ -6491,7 +6491,7 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
                     _notify_new_opportunity(co, opp, "auto-qualified from the reply thread")
         except Exception:  # noqa: BLE001
             pass
-        db.setting_set(f"lead_fu:{co['id']}:{frm}", None)   # they replied -> stop the silence chase
+        db.execute("delete from settings where key=%s", (f"lead_fu:{co['id']}:{frm}",))   # retired list: never re-create a key
         made += 1
     db.setting_set(f"sales_replies_seen:{slug}", seen[-500:])
     if made:

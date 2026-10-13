@@ -89,7 +89,7 @@ CHECKS = [
     {
         "key": "retired_silence_chase",
         "what": "Keys of the retired silence-chase list exist again (something is still arming it)",
-        "sql": "select key from settings where key like 'lead_fu:%%'",
+        "sql": "select key from settings where key like 'lead_fu:%%' and value is not null and value::text <> 'null'",
         "fix": "delete from settings where key like 'lead_fu:%%' returning key",
     },
     {
