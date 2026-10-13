@@ -1948,18 +1948,24 @@ def _hold_corrections(task_id: int, draft: str, now_text: str = "") -> str:
     this correction or a later one, is his to bring back and is left alone."""
     removed, replaced = {}, {}
     for note, old, new in _card_corrections(task_id):
-        for k in [k for k in list(removed) if _mentions(note, k)]:
-            removed.pop(k, None)                            # he asked for it back in a later round
-        for k in [k for k in list(replaced) if _mentions(note, k)]:
-            replaced.pop(k, None)
         new_s = _sentences(new)
+        # BACK IN A LATER ROUND IS HIS CALL: a sentence that returns in a later draft he went on correcting (card
+        # 1163: the call times removed in round 2, asked back in round 4) or that his words ask for is no longer held.
+        for k in [k for k in list(removed) if _mentions(note, k) or any(_sim(k, n) >= 0.8 for n in new_s)]:
+            removed.pop(k, None)
+        for k in [k for k in list(replaced) if _mentions(note, k) or any(_sim(k, n) >= 0.85 for n in new_s)]:
+            replaced.pop(k, None)
+        found = []
         for o in _sentences(old):
             if len(_words(o)) < 4:
                 continue                                    # greetings, sign-offs, names
             best = max(new_s, key=lambda n: _sim(o, n), default="")
             score = _sim(o, best) if best else 0.0
-            if score >= 0.85:
-                continue
+            if score < 0.85:
+                found.append((o, best, score))
+        if len(found) > max(2, 0.5 * len([o for o in _sentences(old) if len(_words(o)) >= 4])):
+            continue      # "redraft it completely": a rewrite, not a list of things he took out
+        for o, best, score in found:
             if score >= 0.5:
                 replaced[o] = best
             else:
