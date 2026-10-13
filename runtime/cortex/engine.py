@@ -868,13 +868,21 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         pass
     # pre-qualification chase clock: a reply to a FUNNEL LEAD (came via intake, qual:email exists) that is NOT an
     # opportunity chase (no deal_id) -> (re)arm the silence chase, so a lead who then goes quiet gets followed up.
+    # ONE CHASE SYSTEM (13 Oct 2026): a qualified funnel lead we have just answered becomes an opportunity, and the
+    # deal cadence (with every check it carries) does the chasing. The separate silence-chase list is retired.
     try:
         to = (env.get("to") or "").lower()
         q = db.setting_get(f"qual:email:{to}") if to else None
-        if q and q.get("company_id") == company["id"] and not req.get("deal_id"):
-            _arm_lead_followup(company["id"], to)
-    except Exception:  # noqa: BLE001
-        pass
+        if q and q.get("company_id") == company["id"] and not req.get("deal_id") \
+                and not crm.active_deals_for_email(to, company.get("slug")):
+            opp = crm.auto_opportunity(to, company.get("slug"), q, req.get("inquiry") or {})
+            if opp:
+                pipeline.log_deal(int(opp["id"]), "email_out", f"sent (Cortex-approved) to {to}: "
+                                  f"{(env.get('subject') or '')[:120]}", ref=str(res.get("id") or ""))
+                crm.touch_followups(int(opp["id"]))
+                _notify_new_opportunity(company, opp, "qualified lead answered")
+    except Exception as _oe:  # noqa: BLE001
+        print(f"[lead-opp] {type(_oe).__name__}: {_oe}", flush=True)
     if auto:
         tg.send(f"[{company['name']} · {skill['name']}] auto-sent a reply to {env['to']}. #{task['id']} done.")
     return {"sent_to": env["to"], "id": res.get("id")}
@@ -1662,6 +1670,7 @@ def _skip(task: dict, skill: dict, company: dict) -> None:
             print(f"[skip] task {task['id']}: event delete skipped: {_de}", flush=True)
     store.reset_streak(skill["id"])   # a rejection breaks the clean-approval streak
     store.log_decision(task["id"], skill["id"], "owner", "reject", snapshot={"draft": task.get("draft")})
+    _stop_chasing_on_skip(task, company)
     if task.get("tg_message_id"):
         tg.edit(task["tg_message_id"], f"✗ Skipped — '{skill['name']}'.")
 
@@ -3693,6 +3702,32 @@ def approve_wa_reply(task_id: int) -> dict:
     return {"ok": True, "task": store.get_task(task_id), "result": result}
 
 
+def _stop_chasing_on_skip(task: dict, company: dict) -> None:
+    """A SKIPPED AUTOMATIC CHASE MEANS STOP CHASING THEM (owner, 13 Oct 2026). Three of Ekaterina's chases were
+    rejected and the next one came anyway: nothing read a rejection. Now the deal's clock pauses, a `chase_stopped`
+    event goes on its timeline (the stalled-chase net respects it), and the owner is told once. It restarts when
+    they write in and we answer, or when anyone emails them from the deal."""
+    req = task.get("request") or {}
+    if not (req.get("lead_chase") or req.get("followup") in ("chase", "checkin", "followup", "revive")):
+        return
+    try:
+        email = ((req.get("inquiry") or {}).get("email") or "").lower()
+        if email:
+            db.execute("delete from settings where key like %s", (f"lead_fu:%:{email}",))
+        did = task.get("deal_id") or req.get("deal_id")
+        if did:
+            crm.pause_followups(int(did))
+            pipeline.log_deal(int(did), "chase_stopped", "Automatic chasing stopped: the owner skipped the chase "
+                              f"(card {task['id']}). It restarts when they write in or we email them.")
+            t = (db.one("select title from crm_projects where id=%s", (int(did),)) or {}).get("title") or ""
+            notifications.notify(f"Chasing stopped: {t[:70]}", "You skipped the automatic chase, so no more chases "
+                                 "go to them. It restarts when they write in or we email them; turn it back on from "
+                                 "the deal.", priority="normal", category="lead", company_id=(company or {}).get("id"),
+                                 target_type="deal", target_id=str(did), dedup_key=f"chase-stopped:{did}")
+    except Exception as _se:  # noqa: BLE001
+        print(f"[chase-stop] {type(_se).__name__}: {_se}", flush=True)
+
+
 def skip_task(task_id: int) -> dict:
     task, skill, company = _load(task_id)
     if not task:
@@ -4151,7 +4186,8 @@ def _rearm_stalled_chases() -> list:
         rows = db.query(
             "select p.id, p.title, p.contact_email, "
             "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event' like 'email_out%%') lo, "
-            "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='email_in') li "
+            "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='email_in') li, "
+            "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='chase_stopped') cs "
             "from crm_projects p where p.automation='auto' and p.next_followup is null "
             "and p.stage in ('Opportunity','Quote') and not exists (select 1 from tasks t where t.status in "
             + _STALL_OPEN + " and (t.deal_id=p.id or (coalesce(p.contact_email,'') <> '' and "
@@ -4160,6 +4196,8 @@ def _rearm_stalled_chases() -> list:
             lo, li = r.get("lo"), r.get("li")
             if not lo and not li:
                 continue                      # no email on record: nothing to chase from
+            if r.get("cs") and r["cs"] >= max(lo or "", li or ""):
+                continue                      # the owner stopped the chase and nothing has happened since
             if lo and (not li or lo >= li):
                 if crm.resume_followups(int(r["id"])):
                     pipeline.log_deal(int(r["id"]), "note", "Automatic follow-up re-armed: our email was the last "
@@ -5553,7 +5591,7 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
                 req["media_library"] = ("FILMS THE OWNER NAMED FOR THIS EMAIL (include these, with these exact links):\n"
                                         + "\n".join(f"- {r['title']}: {r['watch_url']}" for r in _nr)
                                         + ("\n\n" + req["media_library"] if req.get("media_library") else ""))
-                manifest.append(f"named_films({len(_nr)})")
+                manifest.append("named_films(" + "; ".join(r["title"] for r in _nr)[:200] + ")")
     except Exception:  # noqa: BLE001
         pass
     try:   # stamp the manifest on the card (field-level jsonb_set: no read-modify-write clobber)
@@ -6506,8 +6544,13 @@ def _spawn_lead_chase(co: dict, email: str) -> None:
 
 
 def run_lead_followups() -> dict:
-    """Chase funnel leads who went silent BEFORE qualifying: per LEAD_CADENCE draft a gentle nudge into the Inbox,
-    then DROP (mark dormant) once exhausted. Self-clears a lead that has since been qualified or disqualified."""
+    """RETIRED 13 Oct 2026: one chase system. Leads are chased only through an opportunity's cadence (owner: card
+    1180, Ekaterina at FLC, chased four times with no opportunity open; three chases rejected and it carried on).
+    Kept as a no-op so nothing that calls it breaks."""
+    return {"fired": [], "retired": True}
+
+
+def _run_lead_followups_retired() -> dict:
     now = datetime.now(timezone.utc)
     fired = []
     for r in db.query("select key, value from settings where key like %s", ("lead_fu:%",)):

@@ -155,6 +155,34 @@ _CAT_LABELS = {"event-coverage": "event coverage", "interviews": "interviews", "
                "event-promotion": "event promotion", "testimonial": "testimonial", "apps": "app"}
 
 
+_FILM_WORDS = re.compile(r"\b(film|films|video|videos|reel|reels|showreel|show reel|clip|clips|sample|samples|"
+                         r"footage|piece|commercial|ad)\b", re.I)
+
+
+def _closest_films(rows: list[dict], text: str) -> list[str]:
+    """THE OBVIOUS MATCH, NOT AN EXACT ONE (owner, 13 Oct 2026: "it shouldn't need an exact match, it should find
+    the closest match"). When his words point at a film but name no title or client the code can match, Haiku picks
+    the closest films from the library list by meaning; CODE keeps only ids that are really in that list."""
+    from . import provider
+    lib = [r for r in rows if r.get("youtube_video_id")][:400]
+    if not lib:
+        return []
+    try:
+        out = provider.think_json(
+            "The owner is asking for one or more of our films in his own words, often loosely or from memory. From the "
+            "library list, pick the film(s) he most plausibly means. Only pick when the match is obvious from his "
+            "words (subject, client, style, format); never pick a film just to fill the slot. Return "
+            '{"ids": ["<id from the list>", ...]} or {"ids": []} if nothing is an obvious match.',
+            "HIS WORDS:\n" + (text or "")[:1500] + "\n\nLIBRARY (id | title | client | categories):\n"
+            + "\n".join(f"{r['youtube_video_id']} | {r.get('title') or ''} | {r.get('client') or ''} | "
+                        f"{', '.join(str(c) for c in (r.get('categories') or []))}" for r in lib),
+            model=provider.MODEL_ROUTER, max_tokens=200, purpose="film-match")
+        valid = {r["youtube_video_id"] for r in lib}
+        return [i for i in ((out or {}).get("ids") or []) if i in valid][:3]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def films_in_text(company_id: int, text: str, limit: int | None = None) -> list[str]:
     """YouTube ids of library films the owner NAMES in his own words (a client name, a title, or an id),
     matched by code against media_assets. This is how a spoken suggestion reaches a deck, on the first
@@ -181,6 +209,8 @@ def films_in_text(company_id: int, text: str, limit: int | None = None) -> list[
             ft = re.sub(r"[^a-z0-9]", "", tail)
             if len(ft) >= 10 and ft in flat and r["youtube_video_id"] not in out:
                 out.append(r["youtube_video_id"])
+    if not out and _FILM_WORDS.search(said):
+        out = _closest_films(rows, text)
     # ONE FILM PER NAME HE SAID, in the order he said them: a client with many films (Dubai Police, 35 of
     # them, all rated high) must never crowd out a lower-rated client he also named (China Innovation Center,
     # rated 4). For each named client the exact film wins when he said its title, else its best-rated film.

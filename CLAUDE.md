@@ -2937,3 +2937,19 @@ shoot needs none), then 10% off the whole quotation.
 - `films_in_text` also matches a title's text after the client name with spaces/punctuation removed (3+ words).
 - The email shelf puts every film the owner's words on the card name (corrections + the live one + an outbound
   brief) at the top as FILMS THE OWNER NAMED, with exact links (manifest `named_films(N)`).
+
+## One chase system; a skipped chase stops chasing; films matched by meaning (13 Oct 2026)
+- CAUSE: Ekaterina (FLC Group, Sky Vision, intern@flc-me.com) got four chases with no opportunity open; three were
+  rejected and the next came anyway. She qualified at MEDIUM confidence, `crm.auto_opportunity` only fired at high,
+  so the send path armed the separate silence-chase list (`lead_fu:<cid>:<email>`, `run_lead_followups`), which ran
+  none of the deal checks and never read a rejection. Brent (deal 93) and Boo Boo Laand (deal 139) were on BOTH
+  systems at once, so chased twice.
+- `crm.auto_opportunity`: a qualified verdict at ANY confidence makes the opportunity. The send path makes it (and
+  logs the email, arms the deal clock) instead of arming `lead_fu`. `run_lead_followups` is a no-op ("retired");
+  all `lead_fu` keys were cleared 13 Oct. Leads judged needs_info get no opportunity and so no chase.
+- `_skip` -> `_stop_chasing_on_skip`: skipping an automatic chase (followup chase/checkin/followup/revive or a
+  lead_chase) pauses the deal clock, logs `chase_stopped` on the timeline and notifies once. `_rearm_stalled_chases`
+  skips a deal whose `chase_stopped` is newer than any email; our next email to them (`touch_followups`) restarts it.
+- `deck._closest_films`: when the owner's words point at a film (`_FILM_WORDS`) and nothing matched by id, client or
+  title, Haiku picks the obvious film(s) from the scoped library; code keeps only ids in that list (max 3). The email
+  card manifest shows `named_films(<titles>)` so a wrong pick is visible.

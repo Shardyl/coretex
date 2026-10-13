@@ -1568,7 +1568,10 @@ def auto_opportunity(email: str, company_slug: str, sug: dict | None, inq: dict 
     (amount 0 = not stamped, never invented). Reversible with disqualify(); the owner edits value/stage any
     time. Idempotent: skips when the contact already has an open deal for this organisation."""
     s = sug or {}
-    if not (s.get("verdict") == "qualified" and s.get("confidence") == "high"):
+    # ANY CONFIDENCE (owner, 13 Oct 2026): a medium-confidence qualified lead (Ekaterina at FLC Group) got no
+    # opportunity and was chased instead by a separate silence-chase list with none of the deal checks. A qualified
+    # lead is an opportunity, so it is chased through the one deal cadence and shows in the pipeline.
+    if s.get("verdict") != "qualified":
         return None
     email = (email or "").strip().lower()
     c = db.one("select * from crm_master where lower(email)=lower(%s)", (email,))
