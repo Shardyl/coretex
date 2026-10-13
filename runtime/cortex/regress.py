@@ -342,9 +342,9 @@ def _cases():
     # --- a meeting linked to its deal (Shama Ramadan call, 13 Oct)
     from . import meetnotes as _mn
     case("a meeting with a two-deal contact goes to the deal its title names", "Shama Ramadan meeting",
-         lambda: (_mn._bound_deal("", "Ramadan Meeting", "2026-10-13", [{"id": 1, "title": "Shama - Qabiala launch film"},
+         lambda: (_mn._bound_deal("", "Ramadan Meeting", "2000-01-01", [{"id": 1, "title": "Shama - Qabiala launch film"},
                                                                           {"id": 2, "title": "Shama - Ramadan commercial"}]) or {}).get("id") == 2
-         and _mn._bound_deal("", "Catch up", "2026-10-13", [{"id": 1, "title": "A film"}, {"id": 2, "title": "B shoot"}]) is None)
+         and _mn._bound_deal("", "Catch up", "2000-01-01", [{"id": 1, "title": "A film"}, {"id": 2, "title": "B shoot"}]) is None)
 
     # --- WhatsApp is a door into Talk (owner, 13 Oct)
     case("the owner's pictures and longer messages go to Talk", "Farheen screenshot dropped",
