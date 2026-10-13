@@ -1507,11 +1507,12 @@ window.foodLogWeight=function(day,inputId){
   if(typeof renderBodyweightCard==='function')renderBodyweightCard();
   toast('Weight saved');
   if(currentSubpage.food==='weight')renderWeight();else renderToday();
+  try{renderMission();}catch(e){}            // the strip's NOW + checkpoints move with every weigh-in (12 Oct 2026: it didn't)
 };
 window.foodDelWeight=function(d){
   const i=bodyweightLog.findIndex(b=>b.date===d);if(i<0)return;
   if(!confirm('Delete the weigh-in for '+fmtDate(d)+'?'))return;
-  bodyweightLog.splice(i,1);saveBodyweight();renderWeight();
+  bodyweightLog.splice(i,1);saveBodyweight();renderWeight();try{renderMission();}catch(e){}
 };
 window.foodWtRange=function(n){wtRange=n;renderWeight();};
 // ---------- reminders: tab badges + Fitness-branded push (owner, 10 Oct 2026) ----------

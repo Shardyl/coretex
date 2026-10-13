@@ -993,7 +993,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='97';                         // keep in step with CACHE in sw.js
+const APP_VERSION='98';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1942,7 +1942,7 @@ window.openLogBodyweight=function(){
     const existing=bodyweightLog.findIndex(e=>e.date===date);
     if(existing>=0)bodyweightLog[existing].kg=kg;
     else bodyweightLog.push({id:uid(),kg,date});
-    saveBodyweight();renderBodyweightCard();renderLiftReports();renderLiftHistory();
+    saveBodyweight();renderBodyweightCard();renderLiftReports();renderLiftHistory();try{renderMission();}catch(e){}
     closeModal();toast('Bodyweight logged');
   });
   document.getElementById('bwDate').value=new Date().toISOString().slice(0,10);
@@ -1950,7 +1950,7 @@ window.openLogBodyweight=function(){
 window.delBodyweight=function(id){
   if(!confirm('Delete this bodyweight entry?'))return;
   bodyweightLog=bodyweightLog.filter(e=>e.id!==id);
-  saveBodyweight();renderBodyweightCard();renderLiftReports();renderLiftHistory();toast('Deleted');
+  saveBodyweight();renderBodyweightCard();renderLiftReports();renderLiftHistory();try{renderMission();}catch(e){}toast('Deleted');
 };
 
 function renderLiftReports(){
@@ -3102,6 +3102,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=97"></script>
+<script src="food.js?v=98"></script>
 </body>
 </html>
