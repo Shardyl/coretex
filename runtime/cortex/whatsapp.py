@@ -89,29 +89,39 @@ def _key(account: str, phone: str, msg: str) -> str:
     return hashlib.sha1(f"{account}|{phone}|{msg}".encode("utf-8", "replace")).hexdigest()[:16]
 
 
-def _classify(name: str, phone: str, msg: str, slug: str) -> dict:
-    """WhatsApp triage. People who message a business WhatsApp are overwhelmingly real, so the bar to reply is
-    LOW — only obvious spam/scam is filed. Also flags 'personal' (an actual friend/acquaintance, common on a
-    number that used to be Rashad's personal line) so the draft doesn't answer a mate like a lead."""
+def _open_deals_for_phone(phone: str, slug: str) -> list[dict]:
+    """This company's open deals for the person on this number: their phone on the deal (every WhatsApp
+    opportunity carries it), or their CRM contact's email / account (find_by_phone refuses an ambiguous number)."""
+    from . import crm
+    d = _digits(phone)
+    if not d:
+        return []
+    c = None
+    try:
+        c = crm.find_by_phone(phone)
+    except Exception:  # noqa: BLE001
+        c = None
+    email = ((c or {}).get("email") or "").strip().lower()
+    acc = (c or {}).get("account_id")
+    return db.query(
+        "select id, title, stage from crm_projects where company=%s and stage not in "
+        "('Lost','Completed','Dormant','Close & review') and ("
+        "regexp_replace(contacts::text, '[^0-9]', '', 'g') like %s "
+        "or (%s <> '' and lower(coalesce(contact_email,''))=%s) or (%s::bigint is not null and account_id=%s)) "
+        "order by id desc", (crm._org(slug), f"%{d}%", email, email, acc, acc))
+
+
+def _name_from(msg: str, slug: str) -> str:
+    """Their personal name ONLY if the message states it or signs off with it. WhatsApp puts the number where a
+    name would go for an unknown sender, so this is the only honest source. Never guessed."""
     try:
         out = provider.think_json(
-            "You triage inbound WHATSAPP messages for a Dubai production company. WhatsApp is a personal, "
-            "informal channel. Almost every real human deserves a reply. Only decline for obvious spam, "
-            "scams, crypto, or automated blasts. Distinguish a genuine business ENQUIRY from a PERSONAL "
-            "message (a friend, family, or someone who knows the owner personally) — this number was once a "
-            "personal line, so old contacts still message it.",
-            f"From: {name or 'unknown'} ({phone})\nTheir message: {msg}\n\n"
-            'Return JSON: {"reply": boolean, "category": "enquiry|personal|supplier|spam", '
-            '"name": "their personal name ONLY if they actually state it or sign off with it, '
-            'else empty string - never guess, never use the phone number", '
-            '"summary": "one line, who and what", "reason": "short"}',
-            model=provider.MODEL_ROUTER, purpose="wa_triage", company=slug)
-        return {"reply": bool(out.get("reply")), "category": (out.get("category") or "enquiry"),
-                "name": (out.get("name") or "").strip(),
-                "summary": (out.get("summary") or "").strip(), "reason": (out.get("reason") or "").strip()}
-    except Exception:  # noqa: BLE001 — triage must never block an inbound message
-        return {"reply": True, "category": "enquiry", "name": "", "summary": "",
-                "reason": "triage unavailable -> default reply"}
+            "Extract the sender's personal name from their message ONLY if they state it or sign off with it. "
+            'Never guess. Return {"name": "<name or empty string>"}.', (msg or "")[:1500],
+            model=provider.MODEL_ROUTER, max_tokens=40, purpose="wa_name", company=slug)
+        return ((out or {}).get("name") or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _clean_phone(p: str) -> str:
@@ -236,45 +246,87 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
         lane = None
     if lane:
         rt, co, skill, slug = lane["rt"], lane["co"], lane["skill"], lane["slug"]
-    verdict = _classify(name, phone, msg, slug)
-    spam = verdict.get("category") == "spam"
-    # CRM capture happens for every real human (even ones we don't answer) so the contact is never lost.
-    if not spam:
-        try:
-            # WhatsApp never gives us a name for an unknown sender. The only honest source is the message
-            # itself, when they introduce themselves. Fill-if-blank, so a later message where they DO say
-            # who they are backfills the contact.
-            crm.match_or_add_by_phone(
-                phone, verdict.get("name") or name, slug,
-                source=("whatsapp, PPC landing page: " + src["line"])[:200] if src else "whatsapp",
-                summary=verdict.get("summary") or msg[:200], classification=verdict.get("category"))
-        except Exception:  # noqa: BLE001 - a CRM hiccup must not lose the enquiry
-            pass
-    if spam or not verdict.get("reply"):
-        # SPAM IS FILTERED COMPLETELY (owner, 10 Oct 2026): no acknowledgement, no opportunity, and
-        # nothing written to his phone's address book. The FYI card stays, in Cortex only, so a wrong
-        # spam call is visible and reversible rather than silent.
-        try:
-            from . import notifications
-            notifications.notify(
-                f"WhatsApp filed, no reply drafted ({verdict.get('category') or 'spam'})",
-                f"{name or phone}: {msg[:180]}" + (f"  [{verdict.get('reason')}]" if verdict.get("reason") else ""),
-                priority="fyi", category="social", company_id=rt["company_id"],
-                item={"name": name or phone, "phone": phone, "cat": verdict.get("category") or "spam"})
-        except Exception:  # noqa: BLE001 - visibility must never block ingest
-            pass
-        return "skipped"
-    # ONE ENQUIRY, ONE CARD. A second message moments after the first is the rest of the same thought,
-    # so it joins the open card rather than opening a rival one.
+    # ONE ENQUIRY, ONE CARD. A second message moments after the first is the rest of the same thought, so it
+    # joins the open card rather than being sorted on its own.
     open_card = _open_card(account, phone)
     if open_card:
         return _fold_in(open_card, msg, src)
-    # a real name only - never the phone number WhatsApp puts where a name would go
-    know_name = verdict.get("name") or ("" if _clean_phone(name) else name)
-    deal_id = _ensure_opportunity(co, phone, know_name, verdict.get("summary") or "", src)
+    # THE SAME SORTER AS EMAIL (owner, 13 Oct 2026: "it should just be doing the same job as any inbound email").
+    # A job application from a marketing graduate (Adham Amr, card 1190) became opportunity 159: this lane had its
+    # own four-label triage written in code (enquiry/personal/supplier/spam, "almost every human deserves a reply")
+    # and opened an opportunity for anything not spam. It now runs `engine.classify_email` on the company's
+    # sales-triage rules, the email categories, the card categories setting, the no-draft policy and the
+    # lead-qualification skill, exactly as an email does. Only a qualified lead becomes an opportunity.
+    from . import engine, notifications, pipeline, policy
+    push = "" if _clean_phone(name) else (name or "").strip()
+    e = {"name": push or phone, "email": "", "from": phone, "subject": "WhatsApp message",
+         "body": msg, "snippet": msg[:200]}
+    cls = engine.classify_email(co, e)
+    deals = _open_deals_for_phone(phone, slug)
+    if deals and cls["category"] not in ("spam",):
+        # CLIENT OVERRIDE, by phone: someone on an active deal is project correspondence, as with email
+        cls = {**cls, "category": "client", "to_crm": True, "reason": "active deal in CRM (deterministic override)"}
+    know_name = push or _name_from(msg, slug)
+    cat = cls["category"]
+    if cls.get("to_crm"):
+        try:   # every real person is captured, whether or not we answer, so the contact is never lost
+            crm.match_or_add_by_phone(
+                phone, know_name, slug,
+                source=("whatsapp, PPC landing page: " + src["line"])[:200] if src else "whatsapp",
+                summary=cls.get("summary") or msg[:200], classification=cat)
+        except Exception:  # noqa: BLE001 - a CRM hiccup must not lose the message
+            pass
+    if deals and cat == "client":
+        try:   # their message goes on the deal it belongs to
+            pipeline.log_deal(int(deals[0]["id"]), "whatsapp_in", f"WhatsApp from {know_name or phone}: {msg[:400]}",
+                              ref=f"wa:{_key(account, phone, msg)}")
+        except Exception:  # noqa: BLE001
+            pass
+    skip = None
+    if cat in policy.card_categories(co):
+        try:
+            skip = policy.should_skip(co, e, deal=(deals[0] if deals else None))
+        except Exception:  # noqa: BLE001
+            skip = None
+    if cat not in policy.card_categories(co) or skip:
+        # NOT A CARD: spam, a job seeker, a supplier, a personal message... filed exactly as an email would be. The
+        # FYI keeps it visible and reversible in Cortex; nothing is sent and nothing reaches his phone's contacts.
+        try:
+            why = (skip or {}).get("reason") or cls.get("reason") or ""
+            notifications.notify(
+                f"WhatsApp filed as {cat}, no reply drafted",
+                f"{know_name or phone}: {msg[:180]}" + (f"  [{why}]" if why else ""),
+                priority="fyi", category="social", company_id=rt["company_id"],
+                item={"name": know_name or phone, "phone": phone, "cat": cat})
+        except Exception:  # noqa: BLE001 - visibility must never block ingest
+            pass
+        return "skipped"
+    deal_id = int(deals[0]["id"]) if deals else None
+    if cat == "lead" and not deal_id:
+        # QUALIFIED, AS AN EMAIL LEAD IS: the lead-qualification skill judges it; only a qualified lead gets the
+        # opportunity. A lead it will not qualify still gets the acknowledgement and the owner is told.
+        sug = None
+        try:
+            sug = engine.qualify_suggest(co, {"name": know_name, "email": "", "message": msg,
+                                              "subject": "WhatsApp enquiry", "phone": phone})
+        except Exception as _qe:  # noqa: BLE001
+            print(f"[whatsapp] qualify {phone}: {type(_qe).__name__}: {_qe}", flush=True)
+        if (sug or {}).get("verdict") == "qualified":
+            deal_id = _ensure_opportunity(co, phone, know_name, cls.get("summary") or "", src)
+        else:
+            try:
+                notifications.notify(
+                    f"WhatsApp lead not qualified: {know_name or phone}",
+                    f"{msg[:180]}  [{(sug or {}).get('reason') or 'no verdict'}] No opportunity opened; open one from "
+                    "the card if it is real.", priority="normal", category="lead", company_id=rt["company_id"],
+                    dedup_key=f"wa-unqualified:{_digits(phone)}")
+            except Exception:  # noqa: BLE001
+                pass
     task = store.create_task(rt["company_id"], skill["id"], "wa_reply", {
         "channel": "whatsapp", "account": account, "recipient": know_name or phone,
-        "phone": phone, "chat_id": chat_id, "their_message": msg, "messages": [msg], "triage": verdict,
+        "phone": phone, "chat_id": chat_id, "their_message": msg, "messages": [msg],
+        "triage": {"category": cat, "summary": cls.get("summary") or "", "reason": cls.get("reason") or "",
+                   "name": know_name},
         "auto_reply": True, "push_contact": True,
         **({"deal_id": deal_id} if deal_id else {}),
         **({"lead_source": src} if src else {})})

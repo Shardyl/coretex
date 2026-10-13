@@ -2901,3 +2901,16 @@ shoot needs none), then 10% off the whole quotation.
   `infer_rule` also returns `place`, chosen by what the rule says. The proposal stores the chosen skill and
   `places`; the cockpit rule card has an "Applies to" picker (`placeSel`, sent as `skill_key`), and
   `decide_rule(..., skill_key=)` lands it there (only one of the proposal's places). sw `cortex-v62`.
+
+## WhatsApp is sorted exactly like email (13 Oct 2026)
+- CAUSE: a job application (Adham Amr, card 1190) became opportunity 159. The WhatsApp lane had its own triage
+  written in code, four labels (enquiry/personal/supplier/spam) and "almost every human deserves a reply", so a job
+  seeker was an "enquiry"; and `_process_message` opened an opportunity for EVERYTHING not spam, never reading the
+  label. None of the sales-triage or lead-qualification rules taught on email reached it.
+- NOW (`whatsapp._process_message`): fold into an open card first; then `engine.classify_email` on the company's
+  sales-triage rules with the email categories; client override by phone (`_open_deals_for_phone`: the number on a
+  deal's contacts, or the CRM contact's email/account, this company only) and the message logged on that deal;
+  CRM capture for `to_crm` categories; `policy.card_categories` + `policy.should_skip` decide whether a card exists
+  (anything else = FYI notification only, nothing sent, nothing to his phone contacts); a `lead` with no deal runs
+  `engine.qualify_suggest` and gets an opportunity ONLY when qualified (else the ack card + a notice). The fixed
+  acknowledgement is unchanged. `_classify` is gone; `_name_from` reads a stated name only.
