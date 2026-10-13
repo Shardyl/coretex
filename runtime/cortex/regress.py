@@ -318,6 +318,27 @@ def _cases():
     case("our reply clears 'Unanswered'", "Rakez notice 1125",
          lambda: "obligations.on_reply_sent(" in inspect.getsource(__import__("cortex.pipeline", fromlist=["x"]).record_send))
 
+    # --- forward to Cortex (owner, 13 Oct: Ayresh's Wasl forward did nothing)
+    _fw_body = ("FYI please see below\n\n---------- Forwarded message ---------\nFrom: wasl eProcurement <eproc@wasl.ae>\n"
+                "Date: Mon, Oct 12, 2026 at 7:49 PM\nSubject: Invitation to RFQ - Request for Quotation Code 2026_1170\n"
+                "To: <fly@skyvision.film>\n\nDear Supplier,\n\nwasl Asset Management invites you to participate...")
+    case("a forward is handled as the email inside it", "Wasl forward by Ayresh",
+         lambda: (engine._forwarded_original({"email": "ayresh@sensa.digital", "name": "Ayresh", "subject": "Fwd: x",
+                                              "body": _fw_body}) or {}).get("email") == "eproc@wasl.ae"
+         and "Invitation to RFQ" in (engine._forwarded_original({"email": "a@sensa.digital", "body": _fw_body}) or {}).get("subject", ""))
+    case("an ordinary internal email is not a forward", "forward to Cortex",
+         lambda: engine._forwarded_original({"email": "gino@sensa.digital", "body": "Hi team, lunch at 1?"}) is None)
+    case("the owner's other businesses are internal", "card 1211, Flixton Manor",
+         lambda: __import__("cortex.identity", fromlist=["x"]).is_internal("rashad@flixtonmanor.com"))
+    case("a card link never swallows a closing bracket", "card 1208 Meet link",
+         lambda: 'href="https://meet.google.com/ert-wnwx-cah"' in engine._linkify("already shared (https://meet.google.com/ert-wnwx-cah).")
+         and "cah)" not in engine._linkify("(https://meet.google.com/ert-wnwx-cah)").split('href="')[1].split('"')[0])
+    case("the quote check only reads messages about this deal", "MAH Gold deal 112",
+         lambda: "theirs = [m for m in theirs if _deal_for_thread(m, [opp])]" in inspect.getsource(engine._closing_gate))
+    case("several open deals: never the first, ask instead", "MAH Gold deal 112",
+         lambda: "ask_which_deal(" in inspect.getsource(__import__("cortex.pipeline", fromlist=["x"])._sweep_mailbox)
+         and "ask_which_deal(" in inspect.getsource(__import__("cortex.events", fromlist=["x"]).they_wrote))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

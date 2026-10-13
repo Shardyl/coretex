@@ -21,6 +21,17 @@ def internal_index() -> dict:
     domains = set(OWN_COMPANY_DOMAINS)
     domains |= {str(d).lower().strip() for d in (db.setting_get("own_sending_domains") or [])}
     emails = {str(e).lower().strip() for e in (db.setting_get("internal_people") or [])}
+    try:   # EVERY BUSINESS IN CORTEX IS US (13 Oct 2026: the owner forwarding from rashad@flixtonmanor.com was drafted a
+        # client reply). The registrable domains on each company profile's `domains` field; subdomains of platforms
+        # (apps.shopify.com) never count, only two-label domains like flixtonmanor.com.
+        for r in db.query("select p.data->>'domains' d from company_profiles p join companies c on c.id=p.company_id "
+                          "where c.kind in ('owned','personal')"):
+            for tok in _re.findall(r"([a-z0-9-]+(?:\.[a-z0-9-]+)+)", (r.get("d") or "").lower()):
+                tok = tok[4:] if tok.startswith("www.") else tok
+                if tok.count(".") == 1 or tok.endswith((".co.uk", ".com.au", ".co.ae")):
+                    domains.add(tok)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         for r in db.query("select value from settings where key like 'gmail_account%%' or key like 'gmail_send_account%%'"):
             v = (r["value"] if isinstance(r["value"], str) else str(r["value"] or "")).strip('" ').lower()

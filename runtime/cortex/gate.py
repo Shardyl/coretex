@@ -78,11 +78,11 @@ def check(company_id: int, email: str, deal_id, request: dict | None) -> str | N
                 return f"a deal in {st} is not chased"
             if r == "revival" and why != "revive":
                 return f"a {st} deal only gets soft revivals"
-        stopped = max((_ts(e.get("ts")) for e in hist if e.get("event") == "chase_stopped"), default=None)
+        stopped = max((_ts(e.get("ts")) for e in hist if e.get("event") in ("chase_stopped", "chase_paused")), default=None)
         last_mail = max((_ts(e.get("ts")) for e in hist if str(e.get("event", "")).startswith(("email_", "whatsapp_"))),
                         default=None)
         if why in CHASE_TYPES and stopped and (not last_mail or stopped >= last_mail):
-            return "the owner stopped chasing this deal"
+            return "chasing is stopped or paused on this deal until they or we write again"
 
     # 3. who spoke last, on any channel we can see
     if email and why != "post-meeting":

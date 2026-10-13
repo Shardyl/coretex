@@ -3155,3 +3155,26 @@ shoot needs none), then 10% off the whole quotation.
   tender for a tracked deal is logged, not announced; our reply on a deal clears its "Unanswered" / "Not drafted" /
   "replied: no ..." notices (`obligations.on_reply_sent`). Health check `unanswered_after_our_reply` (self-repairs).
 - Meeting brief CARDS are kept (owner finds them useful); only the duplicate notice pointing at the card is gone.
+
+## Which deal, never guessed; forward to Cortex; own businesses internal; email links (13 Oct 2026)
+- NEVER GUESS WHICH DEAL. MAH Gold: Mai is the contact on three deals; the sent sweep took `deals[0]`, so her video
+  emails were filed on the SSD-assignment quotation deal (112) and the quote check read her video sign-off as "they
+  accepted" the quote. Now `engine._deal_for_thread` tries, in order: the owner's answer bound to the thread
+  (setting `thread_deal:<thread or message id>`), a quote number (SEN-YYYY-NNNN) in the subject/body, the thread id,
+  the References chain, the subject. When nothing matches and the contact has several open deals,
+  `events.ask_which_deal` raises ONE small "Which deal is this?" card (request.kind `deal_pick`, numbered options);
+  the owner replies with the number (`events.answer_which_deal` via `apply_correction`), the thread is bound, the
+  message is filed (they_wrote / email_out_manual). Approve on that card is blocked (it needs the answer).
+  Used by `events.they_wrote` and `pipeline._sweep_mailbox` (no more first-deal pick).
+- `_closing_gate` only reads a client message the matcher places on THIS deal. A gate pause (declined, on hold,
+  accepted, signed off) logs `chase_paused`; `gate.check` and `_rearm_stalled_chases` respect it like
+  `chase_stopped` (the 13 Oct pause on deal 112 was re-armed 26 minutes later before this).
+- FORWARD TO CORTEX: a forward from one of us of an email from outside (`_forwarded_original`: Gmail/Outlook/Apple
+  forward markers, original From/Subject/body, the forwarder's note kept as context) is handled as that email, unless
+  it already reached us (`_seen_original`: same sender + subject on a card or deal timeline in 45 days).
+- Every business in Cortex is "us": `identity.internal_index` adds each owned/personal company profile's
+  `domains` (two-label domains only). Flixton Manor's profile domain set to flixtonmanor.com (card 1211 drafted Gino
+  replying to the owner's own forward).
+- `engine._linkify` (outgoing email HTML) leaves trailing punctuation out of links: "(https://meet.google.com/x)."
+  linked to "x)." (card 1208), a dead link for the client.
+- `bin/deploy.sh` runs `pyflakes` for undefined names before pushing.

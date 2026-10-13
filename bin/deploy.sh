@@ -5,6 +5,10 @@
 #   bin/deploy.sh --fast   code-only cases
 set -e
 cd "$(dirname "$0")/.."
+# a name used but never defined is caught HERE, before anything is pushed (13 Oct 2026: 'subj' in the sent sweep)
+if python -m pyflakes runtime/cortex/*.py 2>&1 | grep -i "undefined name\|referenced before assignment"; then
+  echo "STATIC CHECK FAILED: fix the names above, nothing was pushed"; exit 1
+fi
 git pull -q --rebase --autostash
 git push -q
 ssh cortex "set -e

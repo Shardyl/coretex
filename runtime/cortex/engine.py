@@ -614,7 +614,18 @@ def _logo_path(company: dict | None) -> str | None:
 
 
 def _linkify(s: str) -> str:
-    return re.sub(r"(https?://[^\s<]+)", r'<a href="\1" style="color:#1E9BD7">\1</a>', s)
+    """URLs in an outgoing email become links. Trailing punctuation is NOT part of the link (13 Oct 2026: card 1208's
+    'already shared (https://meet.google.com/ert-wnwx-cah).' linked to '...cah).', a dead Meet link for the client).
+    A closing bracket stays in the URL only when the URL itself opened one (Wikipedia-style links)."""
+    def _one(m):
+        url, tail = m.group(1), ""
+        while url and url[-1] in ".,;:!?)]'\"":
+            if url[-1] == ")" and url.count("(") >= url.count(")"):
+                break
+            tail = url[-1] + tail
+            url = url[:-1]
+        return f'<a href="{url}" style="color:#1E9BD7">{url}</a>{tail}'
+    return re.sub(r"(https?://[^\s<]+)", _one, s)
 
 
 def _body_to_html(text: str) -> str:
@@ -1348,6 +1359,8 @@ def _build_blog_from_concept(task: dict, skill: dict, company: dict) -> dict:
 
 
 def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = False) -> dict:
+    if (task.get("request") or {}).get("kind") == "deal_pick":
+        return {"blocked": True, "error": "Reply on the card with the number of the deal (or 'none')."}
     # APPROVING A QUOTATION PREP CARD BUILDS THE QUOTATION (owner, 11 Sep 2026). A prep card is kind
     # 'content', which used to fall through to "mark done": the approve button silently threw the prep
     # away. Approved WITHOUT answers, it now builds from the card's own defaults, as the quotation skill's
@@ -2043,6 +2056,10 @@ def apply_correction(task: dict, text: str) -> None:
     """Redraft a task from the owner's correction (works from Telegram OR the cockpit API)."""
     # a link in his words is REAL: kept on the card before anything else reads or rewrites the text
     task = _remember_owner_links(task, text)
+    if (task.get("request") or {}).get("kind") == "deal_pick":      # "which deal is this?" answered
+        from . import events
+        events.answer_which_deal(task, text)
+        return
     if task["kind"] == "blog_menu":   # a reply on the menu = his picks (or 'more'); never a streak event
         r = menu_reply(task, text)
         if r.get("blocked"):
@@ -4231,7 +4248,7 @@ def _rearm_stalled_chases() -> list:
             "select p.id, p.title, p.contact_email, p.company, "
             "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event' like 'email_out%%') lo, "
             "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='email_in') li, "
-            "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='chase_stopped') cs "
+            "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event' in ('chase_stopped','chase_paused')) cs "
             "from crm_projects p where p.automation='auto' and p.next_followup is null "
             "and p.title not like 'Tender:%%' and not p.history @> '[{\"event\": \"tender\"}]'::jsonb "
             "and p.stage in " + stages.sql_list(stages.SALES) + " and not exists (select 1 from tasks t where t.status in "
@@ -4417,6 +4434,7 @@ def _closing_gate(co: dict, opp: dict, email: str, msgs: list, label: str) -> bo
         db.execute("update crm_projects set followup_step=%s where id=%s", (opp.get("followup_step") or 0, did))
         if pause:
             crm.pause_followups(did)
+            pipeline.log_deal(did, "chase_paused", f"Chasing paused: {why}.")   # a pause leaves a record that sticks
         else:
             nxt = until or crm._schedule_point({"working_days": True, "steps": [{"after_days": 2}]}, 0)
             db.execute("update crm_projects set next_followup=%s where id=%s and automation='auto'", (nxt, did))
@@ -4430,6 +4448,9 @@ def _closing_gate(co: dict, opp: dict, email: str, msgs: list, label: str) -> bo
     if outs and _working_days_since(max(outs), now) < 2:
         return _hold(f"we emailed them on {max(outs).astimezone(_GST):%a %d %b}, under 2 working days ago")
     theirs = [m for m in (msgs or []) if (m.get("email") or "").lower() == (email or "").lower()]
+    # ONLY A MESSAGE ABOUT THIS QUOTE COUNTS (MAH Gold, 13 Oct 2026: Mai's sign-off of the VIDEO was read as acceptance
+    # of the SSD quotation, because her newest message was the newest message): the matcher must place it on this deal
+    theirs = [m for m in theirs if _deal_for_thread(m, [opp])]
     if not theirs:
         return False
     last = theirs[0]
@@ -4632,6 +4653,7 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
                 pipeline.log_deal(int(opp["id"]), "note", f"No {label} drafted: {_g.get('why') or 'not warranted'}.")
                 if _g.get("signed_off") and stage in crm.WON_STAGES:
                     crm.pause_followups(opp["id"])
+                    pipeline.log_deal(int(opp["id"]), "chase_paused", f"Chasing paused: {_g.get('why') or 'signed off'}.")
                     notifications.notify(
                         f"{opp['title']}: signed off, check-ins stopped",
                         f"{_g.get('why') or 'The client signed off the work.'} Move the project to Final Payment if a balance "
@@ -5662,6 +5684,22 @@ def _deal_for_thread(e: dict, deals: list) -> dict | None:
         if not ids:
             return None
         tid = (e.get("thread_id") or "").strip()
+        # THE OWNER'S ANSWER WINS (13 Oct 2026): when Cortex had to ask which deal a conversation belongs to, his
+        # answer is bound to the thread, so the rest of that conversation files itself.
+        for _k in [tid] + re.findall(r"<([^<>\s]+)>", f"{e.get('references') or ''} {e.get('in_reply_to') or ''}"):
+            _b = db.setting_get(f"thread_deal:{_k}") if _k else None
+            if _b and int(_b) in ids:
+                return next((d for d in deals if int(d["id"]) == int(_b)), None)
+        # A QUOTE NUMBER NAMES ITS DEAL: SEN-2026-0008 in the subject or body belongs to the deal it was issued on
+        _nums = set(re.findall(r"\b[A-Z]{2,4}-\d{4}-\d{4}\b", f"{e.get('subject') or ''} {e.get('body') or ''}"))
+        if _nums:
+            _hits = [d for d in deals if db.one(
+                "select 1 from tasks where deal_id=%s and kind='quotation' and (title ilike any(%s) or "
+                "draft ilike any(%s)) limit 1", (int(d["id"]), [f"%{n}%" for n in _nums], [f"%{n}%" for n in _nums]))
+                or db.one("select 1 from crm_projects where id=%s and history::text ilike any(%s)",
+                          (int(d["id"]), [f"%{n}%" for n in _nums]))]
+            if len(_hits) == 1:
+                return _hits[0]
         if tid:
             r = db.one("select deal_id from tasks where deal_id = any(%s) and request->'thread'->>'id'=%s "
                        "order by id desc limit 1", (ids, tid))
@@ -6030,6 +6068,50 @@ create table if not exists inbox_mail_claims (
 _mail_claims_ready = False
 
 
+_FWD_MARK = re.compile(r"^-{3,}\s*(?:Forwarded message|Original Message)\s*-{3,}\s*$|^Begin forwarded message:", re.I | re.M)
+_FWD_FROM = re.compile(r"^\s*\*?From:\*?\s*(?:\"?([^\"<\n]*?)\"?\s*)?<?([\w.+-]+@[\w-]+(?:\.[\w-]+)+)>?", re.I | re.M)
+_FWD_SUBJ = re.compile(r"^\s*\*?Subject:\*?\s*(.+)$", re.I | re.M)
+
+
+def _forwarded_original(e: dict) -> dict | None:
+    """The email inside a forward: {email, name, subject, body, ...} with the forwarder's own note kept as context,
+    or None when this is not a forward of someone's email. The reply goes to the original sender as a fresh email
+    (the forward's thread is ours, internal), and the claim keeps the forward's own ids so it is handled once."""
+    body = e.get("body") or ""
+    m = _FWD_MARK.search(body)
+    if not m:
+        return None
+    head, rest = body[:m.start()].strip(), body[m.end():]
+    f = _FWD_FROM.search(rest[:1500])
+    if not f:
+        return None
+    s = _FWD_SUBJ.search(rest[:1500])
+    # the original's body starts after its header block (the first blank line after the From/Subject lines)
+    after = rest[max(f.end(), s.end() if s else 0):]
+    split = re.search(r"\n\s*\n", after)
+    orig = (after[split.end():] if split else after).strip()
+    who = (e.get("name") or e.get("email") or "a colleague")
+    return {**e, "email": f.group(2).lower(), "name": (f.group(1) or "").strip(),
+            "subject": (s.group(1).strip() if s else re.sub(r"^(?:fwd?|fw)\s*:\s*", "", e.get("subject") or "", flags=re.I)),
+            "body": (f"[Forwarded to us by {who}" + (f", who wrote: {head[:600]}" if head else "") + "]\n\n" + orig)[:12000],
+            "snippet": orig[:200], "thread_id": "", "references": "", "in_reply_to": "",
+            "forwarded_by": e.get("email") or ""}
+
+
+def _seen_original(company_id: int, fw: dict) -> bool:
+    """Did the forwarded email already reach us directly? Same sender and subject on a card or on a deal timeline in
+    the last 45 days. Then the forward is the team passing it round for information, not news."""
+    subj = re.sub(r"^(?:(?:re|fwd?|fw|aw)\s*:\s*)+", "", fw.get("subject") or "", flags=re.I).strip().lower()[:80]
+    if not subj:
+        return False
+    return bool(db.one(
+        "select 1 from tasks where company_id=%s and lower(request->'inquiry'->>'email')=%s and created_at > now()-interval "
+        "'45 days' and lower(coalesce(request->'inquiry'->>'subject','')) like %s limit 1",
+        (company_id, fw.get("email"), f"%{subj}%")) or db.one(
+        "select 1 from crm_projects p, jsonb_array_elements(p.history) ev where ev->>'event' in ('email_in','tender') and "
+        "lower(ev->>'text') like %s and lower(ev->>'text') like %s limit 1", (f"%{fw.get('email')}%", f"%{subj[:60]}%")))
+
+
 def _claim_mail(company_id, ref: str, gid: str) -> bool:
     """ONE EMAIL, ONE HANDLING (14 Sep 2026). The team is cc'd on everything, so one client email sits in
     several of our mailboxes and every mailbox's sweep met it again. Guards were added one step at a time
@@ -6147,11 +6229,21 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                 seen.add(gid)
             continue
         if _is_internal(e.get("email"), own_domain, intl):   # our own / internal address: never classify or CRM
-            if commit:
-                seen.add(gid)
-            results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
-                            "category": "internal", "to_crm": False, "reason": "own/internal address"})
-            continue
+            # FORWARD TO CORTEX = DEAL WITH THIS (owner, 13 Oct 2026: Ayresh forwarded Wasl's RFQ and nothing
+            # happened, because mail from the team is ignored). A forward from one of us of an email from OUTSIDE is
+            # handled as that outside email: classified, captured, opportunity, card, exactly like a direct one.
+            _fw = _forwarded_original(e)
+            if _fw and _seen_original(co["id"], _fw):
+                _fw = None      # an FYI forward of mail we already handled: never a second card for it
+            if _fw and not _is_internal(_fw["email"], own_domain, intl):
+                print(f"[forward] {e.get('email')} forwarded {_fw['email']}: {(_fw['subject'] or '')[:60]}", flush=True)
+                e = _fw
+            else:
+                if commit:
+                    seen.add(gid)
+                results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
+                                "category": "internal", "to_crm": False, "reason": "own/internal address"})
+                continue
         if _belongs_to_other_company(e, company_slug):   # another brand's conversation (aliased mailboxes)
             if commit:
                 seen.add(gid)

@@ -347,7 +347,19 @@ def _sweep_mailbox(co: dict, mailbox: str, rt_key: str, client: str | None, own:
             continue
         slug = co.get("slug")
         deals = crm.active_deals_for_email(to, slug)
-        deal = deals[0] if deals else crm.open_deal_for_domain(to, slug)
+        if len(deals) > 1:   # several open deals: the matcher decides, else the owner is asked (never the first one)
+            from . import engine as _eng, events as _ev
+            deal = _eng._deal_for_thread({"thread_id": m.get("thread_id") or "", "subject": m.get("subject") or "",
+                                          "body": m.get("body") or "", "references": m.get("references") or "",
+                                          "in_reply_to": m.get("in_reply_to") or ""}, deals)
+            if not deal:
+                _ev.ask_which_deal(co, {"to": to, "subject": m.get("subject") or "", "body": m.get("body") or "",
+                                        "thread_id": m.get("thread_id") or "", "msg_id": m.get("msg_id") or "",
+                                        "mail_ref": gmail.mail_ref(m), "references": m.get("references") or ""},
+                                   deals, "out")
+                continue
+        else:
+            deal = deals[0] if deals else crm.open_deal_for_domain(to, slug)
         dco = co                                     # the company that owns the deal (may differ from the mailbox's)
         if not deal:
             # A MAILBOX THAT SPANS COMPANIES (the owner's personal Gmail) finds the deal under whichever company owns
