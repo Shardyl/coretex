@@ -2066,6 +2066,17 @@ scripts), on the owner's call "one run with the ability to do revisions" (not a 
   prompt to match, asking for exactly N items, one per reel in release order, spread across the dayparts.
   `render` pages the tiles SIX to a page: the old `[:8]` here and `deck.tiles`' own `[:7]` silently dropped five
   reels of a twelve reel series.
+- A CAST CHARACTER IS LOCKED BY A SHEET, NOT BY A PHOTOGRAPH (DSO deal 148, 13 Oct 2026). `people_refs`
+  held one register only: a REAL person, from photographs their own company supplied. A drama has the same
+  problem for invented characters, and worse, because nobody supplies photographs of someone who does not
+  exist. The DSO concept one treatment showed it: the story is a scientist and his daughter, the daughter
+  appeared in ONE frame of ten and the father read as a different man in several, because every beat was
+  generated independently with no face to hold. `cast: True` on a `people_refs` entry switches
+  `_likeness_prefix` to the character-sheet register (the attached image is the locked CHARACTER REFERENCE
+  SHEET, the same performer plays them in every frame), so the workflow is: generate the sheet FIRST with
+  `imagegen`, save it, register the character with `cast: True` and its path, then name that character in
+  the beats and `_person_in_beat` binds it. Owner's own production protocol: nothing generates as video
+  until the locked reference sheets exist.
 - CLI: `python -m cortex.creative dry <deal_id> "<direction>"` (no card, no quote issued, no filing; output in the job
   dir) and `python -m cortex.creative resume <job> [task_id]`.
 

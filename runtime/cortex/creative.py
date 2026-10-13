@@ -210,9 +210,22 @@ def _person_in_beat(beat: dict, people: list) -> dict | None:
 
 
 def _likeness_prefix(person: dict) -> str:
-    """Hold a REAL person's face. The opposite instruction to the architecture references: there we want new
-    people, here we want exactly this one. `look` is the client's own description of them, when we have it."""
+    """Hold ONE face across every frame it appears in. The opposite instruction to the architecture
+    references: there we want new people, here we want exactly this one. `look` is the description of them.
+
+    Two registers, because they are different claims and the wrong one confuses the model. A REAL person
+    (a founder, a chief executive) is held from photographs their own company supplied. A CAST character
+    (`cast: True`) is a performer we invented, held from a character reference sheet we generated first,
+    which is how a drama keeps one face across ten beats instead of drifting to a new actor each frame."""
     look = (person.get("look") or "").strip()
+    if person.get("cast"):
+        return ("The attached image is the locked CHARACTER REFERENCE SHEET for this film's character "
+                f"{person['name']}, generated for this production. The same performer plays this character "
+                "in every frame: reproduce their face, bone structure, hair, build and wardrobe exactly as "
+                "the sheet shows them"
+                + (f": {look}" if look else "")
+                + ". Do NOT cast a different-looking person and do NOT generalise the face. Hold the "
+                  "character exactly and change only the setting, the light, the action and the camera. ")
     return ("The attached photographs are of ONE SPECIFIC REAL PERSON, supplied by their own company for this "
             f"film: {person['name']}. Reproduce THEIR face accurately and recognisably, the same person, the same "
             "bone structure, the same hair and the same build"
