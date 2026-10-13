@@ -4218,7 +4218,7 @@ def _rearm_stalled_chases() -> list:
     done = []
     try:
         rows = db.query(
-            "select p.id, p.title, p.contact_email, "
+            "select p.id, p.title, p.contact_email, p.company, "
             "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event' like 'email_out%%') lo, "
             "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='email_in') li, "
             "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='chase_stopped') cs "
@@ -4247,6 +4247,7 @@ def _rearm_stalled_chases() -> list:
             notifications.notify(f"Unanswered: {r['title'][:70]}",
                                  f"Their email of {li[:10]} has no reply card and the automatic chase is paused "
                                  "until we answer it.", priority="high", category="approval",
+                                 company_id=(store.get_company_by_slug(crm._slug_for_org(r.get("company"))) or {}).get("id"),
                                  target_type="deal", target_id=r["id"])
             done.append([r["id"], "unanswered"])
     except Exception as _e:  # noqa: BLE001
@@ -4828,29 +4829,14 @@ _PLACEHOLDER_RE = re.compile(r"^linked\d+@")
 
 
 def _internal_index() -> dict:
-    """Everything that means 'this sender is US / internal' on inbound, so the classifier never CRMs ourselves:
-    own company domains, the Instantly burner SENDING domains (settings.own_sending_domains), the named internal
-    roster (settings.internal_people), and every active newsletter test-group member. Read live so it stays current."""
-    domains = set(OWN_COMPANY_DOMAINS)
-    domains |= {str(d).lower().strip() for d in (db.setting_get("own_sending_domains") or [])}
-    emails = {str(e).lower().strip() for e in (db.setting_get("internal_people") or [])}
-    try:
-        emails |= {r["email"].lower() for r in db.query("select lower(email) email from newsletter_test_group where active")}
-    except Exception:  # noqa: BLE001
-        pass
-    return {"domains": domains, "emails": emails}
+    """One definition of 'this is us': identity.internal_index (kept here as the name every caller uses)."""
+    from . import identity
+    return identity.internal_index()
 
 
 def _is_internal(addr: str, own_domain: str = "", index: dict | None = None) -> bool:
-    a = (addr or "").lower().strip()
-    d = a.split("@")[-1]
-    if own_domain and (d == own_domain or d.endswith("." + own_domain)):
-        return True
-    if _PLACEHOLDER_RE.match(a):                 # LinkedIn placeholder identity, not a real inbound sender
-        return True
-    if index and (d in index["domains"] or a in index["emails"]):
-        return True
-    return False
+    from . import identity
+    return identity.is_internal(addr, own_domain, index if index is not None else {"domains": set(), "emails": set()})
 
 
 _UNSUB_RE = re.compile(r"\b(unsubscribe|unsuscribe|opt[- ]?out|remove me|take me off|stop (sending|emailing)|"
@@ -6212,6 +6198,19 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                            "reason": "active deal/project in CRM (deterministic override)"}
             except Exception:  # noqa: BLE001 — a CRM hiccup must never break classification
                 pass
+        if commit:
+            # AN AUTO-REPLY IS READ WHOEVER SENDS IT (audit step 2e tidy-up): "I have left, write to X" was only
+            # reached inside _draft_direct_reply, so one classified 'automated' from someone not on a deal was lost.
+            try:
+                from . import autoreply
+                if autoreply.is_auto(e):
+                    autoreply.handle(e, co, crm.active_deals_for_email(e.get("email") or "", company_slug))
+                    seen.add(gid)
+                    results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
+                                    "category": "automated", "to_crm": False, "reason": "auto-reply, read not answered"})
+                    continue
+            except Exception as _ae:  # noqa: BLE001
+                print(f"[autoreply] {type(_ae).__name__}: {_ae}", flush=True)
         if commit and policy.portal_invitation(e):
             # A BUYER'S PORTAL INVITATION IS A LEAD ON THE TENDER PATH (13 Oct 2026, Wasl RFQ 2026_1170 filed as
             # "vendor"): no reply is drafted (it is bid through the portal); the scope check decides whether it is
@@ -6332,7 +6331,7 @@ def backfill_missed_client_drafts(slug: str = "sensa", days: int = 7, limit: int
         rt = entry.get("rt_key") or _default_rt_key(slug)
         try:
             msgs = gmail.list_recent(days=days, limit=limit, rt_key=rt,
-                                     q=f'in:inbox newer_than:{days}d -subject:"New enquiry from"',
+                                     q=f'in:inbox newer_than:{days}d',
                                      company=_inbox_client_company(slug))
         except Exception as ex:  # noqa: BLE001 — one dead mailbox must not kill the sweep
             skipped.append(f"{entry.get('address')}: {ex}")

@@ -3088,3 +3088,15 @@ shoot needs none), then 10% off the whole quotation.
   stays LinkedIn's own by the owner's choice (answer every real person; skip spam/automated/marketing only).
 - WhatsApp opportunities: the card's `deal_id` column is set; the organisation the qualification names is linked
   (`crm.get_or_create_account`) and its estimate stamped (`crm.stamp_estimate`, only when the deal has no value).
+
+## Tidy-up (audit step 2e, 13 Oct 2026)
+- ONE definition of "this address is us": `identity.internal_index()` / `identity.is_internal()` (own company domains,
+  every connected mailbox's domain, own_sending_domains, internal_people, the newsletter test group). A FREE-MAIL
+  mailbox (the owner's rashadalsafar@gmail.com) adds only that address, never gmail.com. `engine._internal_index`,
+  `engine._is_internal` and `pipeline._own_domains` delegate to it.
+- `poll_inbox` reads an auto-reply ("I have left, write to X") whoever sends it, before classification; it was only
+  reached inside `_draft_direct_reply`. The "Unanswered" notice carries its company (team members saw others').
+  The next-step reader dedups on the Message-Id. The manual recovery reads replies on enquiry threads.
+- NOT unified (deliberately left): the three contact writers (`add_inbound_contact`, `add_inquiry`,
+  `match_or_add_by_phone`) still differ in stage/source wording; behaviour is consistent enough, and merging them is
+  data-shaping work best done with the per-business CRM layer.

@@ -310,15 +310,9 @@ def record_inbound(e: dict, deal: dict | None, company: dict) -> None:
 # ---------- sent-folder sweep (manual sends must not escape the loop) ----------
 
 def _own_domains() -> set[str]:
-    """Domains of our own mailboxes — mail between them is internal, never deal correspondence."""
-    doms = set()
-    for r in db.query("select value from settings where key like %s or key like %s",
-                      ("gmail_account%", "gmail_send_account%")):
-        v = r["value"] if isinstance(r["value"], str) else str(r["value"] or "")
-        v = v.strip('" ')
-        if "@" in v:
-            doms.add(v.split("@")[-1].lower())
-    return doms
+    """Our own and internal domains: the one definition in identity.internal_index (audit step 2e tidy-up)."""
+    from . import identity
+    return identity.internal_index()["domains"]
 
 
 def _sweep_mailbox(co: dict, mailbox: str, rt_key: str, client: str | None, own: set[str]) -> int:
@@ -594,7 +588,7 @@ def suggest_next_step(e: dict, deal: dict, company: dict) -> None:
     """An inbound on a deal often needs a deliverable prepared (a revised quotation, a proposal, a
     document), not only a reply. Detect that and spawn the PREP work as its own Inbox card, so the
     reply and the thing it promises both exist. Conservative: most mail needs nothing."""
-    gid = (e.get("gmail_id") or "").strip()
+    gid = (gmail.mail_ref(e) or e.get("gmail_id") or "").strip()   # the Message-Id: one email, one judgement
     did = int(deal["id"]) if isinstance(deal, dict) else int(deal)
     seen_key = f"nextstep_seen:{did}"
     seen = db.setting_get(seen_key) or []

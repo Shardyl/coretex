@@ -271,6 +271,15 @@ def _cases():
     case("a WhatsApp card carries its opportunity", "audit 2e",
          lambda: '"deal_id": deal_id} if deal_id' in inspect.getsource(__import__("cortex.whatsapp", fromlist=["x"])._process_message))
 
+    # --- tidy-up (audit step 2e)
+    from . import identity
+    case("one definition of 'this address is us'", "audit 2e tidy-up",
+         lambda: identity.is_internal("gino@sensa.digital") and not identity.is_internal("client@abnamro.com")
+         and not identity.is_internal("a.client@gmail.com") and identity.is_internal("rashadalsafar@gmail.com")
+         and engine._is_internal("ayresh@sensa.digital", "", engine._internal_index()))
+    case("a departure auto-reply is read whoever sends it", "audit 2e tidy-up",
+         lambda: "AN AUTO-REPLY IS READ WHOEVER SENDS IT" in inspect.getsource(engine.poll_inbox))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
