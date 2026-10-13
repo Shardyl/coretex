@@ -112,6 +112,29 @@ def _remember_message(phone: str, msg: str) -> None:
     db.setting_set(k, (cur + [{"ts": time.time(), "text": (msg or "")[:600]}])[-6:])
 
 
+def sort_message(co: dict, phone: str, push: str, msg: str, src: dict | None, earlier: list[str],
+                 deals: list[dict]) -> tuple[dict, dict]:
+    """THE SORTING DECISION for one WhatsApp message, with no side effects (the case library tests it directly).
+    Returns (classification, the email-shaped message it was judged as)."""
+    from . import engine
+    e = {"name": push or phone, "email": "", "from": phone, "subject": "WhatsApp message",
+         "body": (("EARLIER MESSAGES FROM THEM (last 24h, oldest first):\n" + "\n".join(f"- {m}" for m in earlier)
+                   + "\n\nNEWEST MESSAGE:\n") if earlier else "") + msg, "snippet": msg[:200]}
+    cls = engine.classify_email(co, e, channel_note=_WA_CHANNEL_NOTE)
+    if not earlier and not src and _GREETING_ONLY.match((msg or "").strip()):
+        # "Hi" / "Hello" on its own is the start of a message, not spam: no card yet, their next line (sorted with
+        # this one as context) makes the card.
+        cls = {**cls, "category": "greeting", "to_crm": False, "reason": "a greeting only, waiting for their message"}
+    if src and cls["category"] in ("spam", "automated", "marketing", "unclear", "personal", "greeting"):
+        # A WEBSITE-BUTTON REFERENCE IS A FACT: the message was typed after clicking our own WhatsApp button, so it
+        # is an enquiry however bare (1117 "I need a video produced in Dubai. My project: (ref RSHCS)" read as spam).
+        cls = {**cls, "category": "lead", "to_crm": True, "reason": "came from our website's WhatsApp button"}
+    if deals and cls["category"] not in ("spam",):
+        # CLIENT OVERRIDE, by phone: someone on an active deal is project correspondence, as with email
+        cls = {**cls, "category": "client", "to_crm": True, "reason": "active deal in CRM (deterministic override)"}
+    return cls, e
+
+
 def _open_deals_for_phone(phone: str, slug: str) -> list[dict]:
     """This company's open deals for the person on this number: their phone on the deal (every WhatsApp
     opportunity carries it), or their CRM contact's email / account (find_by_phone refuses an ambiguous number)."""
@@ -284,22 +307,8 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
     push = "" if _clean_phone(name) else (name or "").strip()
     earlier = _recent_messages(phone)
     _remember_message(phone, msg)
-    e = {"name": push or phone, "email": "", "from": phone, "subject": "WhatsApp message",
-         "body": (("EARLIER MESSAGES FROM THEM (last 24h, oldest first):\n" + "\n".join(f"- {m}" for m in earlier)
-                   + "\n\nNEWEST MESSAGE:\n") if earlier else "") + msg, "snippet": msg[:200]}
-    cls = engine.classify_email(co, e, channel_note=_WA_CHANNEL_NOTE)
-    if not earlier and not src and _GREETING_ONLY.match((msg or "").strip()):
-        # "Hi" / "Hello" on its own is the start of a message, not spam: no card yet, their next line (sorted with
-        # this one as context) makes the card.
-        cls = {**cls, "category": "greeting", "to_crm": False, "reason": "a greeting only, waiting for their message"}
-    if src and cls["category"] in ("spam", "automated", "marketing", "unclear", "personal", "greeting"):
-        # A WEBSITE-BUTTON REFERENCE IS A FACT: the message was typed after clicking our own WhatsApp button, so it
-        # is an enquiry however bare (1117 "I need a video produced in Dubai. My project: (ref RSHCS)" read as spam).
-        cls = {**cls, "category": "lead", "to_crm": True, "reason": "came from our website's WhatsApp button"}
     deals = _open_deals_for_phone(phone, slug)
-    if deals and cls["category"] not in ("spam",):
-        # CLIENT OVERRIDE, by phone: someone on an active deal is project correspondence, as with email
-        cls = {**cls, "category": "client", "to_crm": True, "reason": "active deal in CRM (deterministic override)"}
+    cls, e = sort_message(co, phone, push, msg, src, earlier, deals)
     know_name = push or _name_from(msg, slug)
     cat = cls["category"]
     if cls.get("to_crm"):

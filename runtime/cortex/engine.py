@@ -1955,7 +1955,7 @@ def _mentions(note: str, sentence: str) -> bool:
     return bool(content) and len(content & set(_words(note))) / len(content) >= 0.4
 
 
-def _hold_corrections(task_id: int, draft: str, now_text: str = "") -> str:
+def _hold_corrections(task_id: int, draft: str, now_text: str = "", corrections: list | None = None) -> str:
     """WHAT HE CORRECTED STAYS CORRECTED (owner, 13 Oct 2026: "it pulls back the same problem that I told it to
     correct two corrections ago"). Each redraft saw only the newest correction, so the thread or the deal record
     could put back a sentence he had removed two rounds earlier. From the before/after of every earlier correction
@@ -1963,7 +1963,7 @@ def _hold_corrections(task_id: int, draft: str, now_text: str = "") -> str:
     it is taken out again (removed) or swapped back to his version (reworded). A sentence he asks for again, in
     this correction or a later one, is his to bring back and is left alone."""
     removed, replaced = {}, {}
-    for note, old, new in _card_corrections(task_id):
+    for note, old, new in (corrections if corrections is not None else _card_corrections(task_id)):
         new_s = _sentences(new)
         # BACK IN A LATER ROUND IS HIS CALL: a sentence that returns in a later draft he went on correcting (card
         # 1163: the call times removed in round 2, asked back in round 4) or that his words ask for is no longer held.
