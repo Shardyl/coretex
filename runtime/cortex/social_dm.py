@@ -86,9 +86,26 @@ def _key(account: str, name: str, msg: str) -> str:
     return hashlib.sha1(f"{account}|{name}|{msg}".encode("utf-8", "replace")).hexdigest()[:16]
 
 
+_LI_NOTE = ("CHANNEL: this is a LinkedIn direct message to the owner's personal profile, not an email. People write "
+            "briefly and informally; brevity is never a sign of spam here.")
+
+
 def _classify_dm(name: str, msg: str, slug: str) -> dict:
-    """DM-appropriate triage (NOT the strict website-enquiry filter). The owner WANTS to reply to real people;
-    only obvious automated spam is skipped. Returns {reply, category, reason}."""
+    """ONE CLASSIFIER (audit step 2e): the same `engine.classify_email` on the company's sales-triage rules that sorts
+    email and WhatsApp, so a LinkedIn contact carries the same labels. The REPLY rule stays this channel's own, by the
+    owner's choice: he wants to answer every real person on LinkedIn (peers, supporters, even a human sales pitch);
+    only spam, automated sequences and marketing blasts are left. Returns {reply, category, reason}."""
+    try:
+        from . import engine
+        co = store.get_company_by_slug(slug)
+        if co:
+            cls = engine.classify_email(co, {"name": name, "email": "", "subject": "LinkedIn message", "body": msg},
+                                        channel_note=_LI_NOTE)
+            cat = cls.get("category") or "unclear"
+            return {"reply": cat not in ("spam", "automated", "marketing"), "category": cat,
+                    "reason": cls.get("reason") or "", "summary": cls.get("summary") or ""}
+    except Exception:  # noqa: BLE001 - fall back to the channel's own triage below
+        pass
     try:
         out = provider.think_json(
             "You triage LinkedIn DIRECT MESSAGES for the account owner, who WANTS to reply to real people: "

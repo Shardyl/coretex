@@ -361,6 +361,15 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
         # this lane only an explicit not_qualified withholds the opportunity.
         if (sug or {}).get("verdict") != "not_qualified":
             deal_id = _ensure_opportunity(co, phone, know_name, cls.get("summary") or "", src)
+            if deal_id:
+                try:   # like an email opportunity (audit step 2e): the organisation they named, and the estimate
+                    if (sug or {}).get("company_name"):
+                        crm.link_account(crm.get_or_create_account(str(sug["company_name"])[:120]), deal_id=deal_id)
+                    _est = (sug or {}).get("est") or {}
+                    if float(_est.get("amount") or 0) > 0:
+                        crm.stamp_estimate(deal_id, _est)
+                except Exception as _ae:  # noqa: BLE001
+                    print(f"[whatsapp] opportunity detail: {type(_ae).__name__}: {_ae}", flush=True)
         else:
             try:
                 notifications.notify(
@@ -382,7 +391,7 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
     # phone once. The Inbox card is live immediately either way.
     req = _arm_alert(dict(task.get("request") or {}))
     store.update_task(task["id"], draft=auto_reply_text(skill, co, know_name),
-                      status="awaiting_approval", request=req)
+                      status="awaiting_approval", request=req, **({"deal_id": deal_id} if deal_id else {}))
     return "drafted"
 
 

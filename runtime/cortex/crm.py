@@ -1142,6 +1142,12 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
         bal = next((x for x in reversed(terms) if "deliver" in (x.get("due") or "").lower()
                     or "final" in (x.get("due") or "").lower() or "completion" in (x.get("due") or "").lower()),
                    terms[-1] if terms else None)
+        try:   # the final-stage pro forma already issued: no card to issue it again (audit step 2e)
+            from . import proforma as _pf
+            if bal and terms and any(int(x.get("stage") or 0) == len(terms) for x in _pf.for_deal(did)):
+                bal = None      # the final stage (the last split of the signed terms) is already invoiced
+        except Exception:  # noqa: BLE001
+            pass
         if bal and old not in ("Delivered", "Final Payment"):
             try:
                 sk = (store.get_skill_by_key(cid, "finance-quote-to-invoice")
@@ -1736,6 +1742,23 @@ def get_or_create_account(name: str, domain: str | None = None) -> int:
             db.execute("update crm_accounts set domain=%s where id=%s", (domain, a["id"]))
         return a["id"]
     return db.execute("insert into crm_accounts (name, domain) values (%s,%s) returning id", (name, domain))["id"]
+
+
+def stamp_estimate(deal_id: int, est: dict) -> None:
+    """Cortex's ESTIMATED value on a deal, labelled an estimate (the same wording auto_opportunity writes)."""
+    try:
+        amount = float((est or {}).get("amount") or 0)
+    except (TypeError, ValueError):
+        return
+    if amount <= 0:
+        return
+    cur = ((est or {}).get("currency") or "USD").upper()[:3]
+    basis = ((est or {}).get("basis") or "").strip()
+    db.execute("update crm_projects set value=%s, currency=%s, history = history || %s::jsonb, updated_at=now() "
+               "where id=%s and value is null",
+               (amount, cur, Json([{"ts": _now(), "event": "estimate", "text": f"Cortex estimated value {cur} {amount:,.0f}"
+                                    + (f" — {basis}" if basis else "") + " (estimate, not a quote; edit any time)"}]),
+                int(deal_id)))
 
 
 def link_account(account_id: int, deal_id: int | None = None, email: str | None = None) -> None:

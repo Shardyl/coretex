@@ -3078,3 +3078,13 @@ shoot needs none), then 10% off the whole quotation.
 - `poll_sales_replies` claims each message by Message-Id like `poll_inbox` (one email, one handling) and puts the
   deal on its card. Post-meeting follow-ups draft on sales-followup. The WhatsApp runner path ignores the owner's own
   number. `qualify_suggest` reads the EFFECTIVE lead-qualification rules (universal + local).
+
+## One intake, batch 2 (audit step 2e, 13 Oct 2026)
+- `store.create_card`: ONE OPEN PREP CARD PER DEAL AND PURPOSE (`prep_action` + `proforma_stage`): a second request
+  returns the open card (quotation prep from a correction and from the next-step reader; balance invoices).
+  The balance-invoice card is also skipped when the final stage's pro forma already exists (`proforma.for_deal`).
+- `_spawn_recurring_child`: the clock never stacks an occurrence on an open one; `run_template_now` forces.
+- LinkedIn DMs: `social_dm._classify_dm` uses `engine.classify_email` (same labels as email/WhatsApp); the REPLY rule
+  stays LinkedIn's own by the owner's choice (answer every real person; skip spam/automated/marketing only).
+- WhatsApp opportunities: the card's `deal_id` column is set; the organisation the qualification names is linked
+  (`crm.get_or_create_account`) and its estimate stamped (`crm.stamp_estimate`, only when the deal has no value).

@@ -173,6 +173,18 @@ def create_card(company_id, skill_id, kind, request, contact: str | None = None,
             gate.note_hold(_did, _why, request)
             print(f"[gate] held {gate.purpose(request)} to {contact}: {_why}", flush=True)
             return None
+    _did = deal_id or (request.get("deal_id") if isinstance(request, dict) else None)
+    if isinstance(request, dict) and request.get("prep_action") and str(_did or "").isdigit():
+        # ONE OPEN PREP CARD PER DEAL AND PURPOSE (audit step 2e): a quotation prep was raised both by an owner
+        # correction and by the next-step reader, and a balance invoice on every move into Delivered, each without
+        # looking for the open one. The open card IS the work; a second one is returned as the first.
+        _ex = db.one("select * from tasks where deal_id=%s and status in ('queued','new','drafting',"
+                     "'awaiting_approval','awaiting_correction') and request->>'prep_action'=%s and "
+                     "coalesce(request->>'proforma_stage','')=%s order by id desc limit 1",
+                     (int(_did), str(request["prep_action"]), str(request.get("proforma_stage") or "")))
+        if _ex:
+            print(f"[card] prep '{request['prep_action']}' already open on deal {_did}: card {_ex['id']}", flush=True)
+            return _ex
     key = (contact or "").strip().lower() or (f"deal:{deal_id}" if deal_id else None)
     if not key:
         return create_task(company_id, skill_id, kind, request)

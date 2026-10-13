@@ -8595,9 +8595,15 @@ def _run_blog_scheduled_task(task: dict, skill: dict | None, company: dict | Non
 
 # ---------- Phase 3: the unified clock (scheduled tasks live in `tasks`, not scheduled_tasks) ----------
 
-def _spawn_recurring_child(template: dict) -> dict:
+def _spawn_recurring_child(template: dict, force: bool = False) -> dict:
     """One occurrence of a recurring template -> a fresh immediate task that flows through the normal
-    draft -> manager -> Inbox pipeline (its own approval + history). The template itself never executes."""
+    draft -> manager -> Inbox pipeline (its own approval + history). The template itself never executes.
+    The clock never stacks a second occurrence on one still open (audit step 2e); a manual run (force) may."""
+    if not force:
+        _open = db.one("select * from tasks where parent_id=%s and status in ('new','drafting','queued',"
+                       "'awaiting_approval','awaiting_correction') order by id desc limit 1", (template["id"],))
+        if _open:
+            return _open
     return db.execute(
         "insert into tasks (company_id,skill_id,kind,request,status,origin,title,parent_id) "
         "values (%s,%s,%s,%s,'new',%s,%s,%s) returning *",
@@ -8612,7 +8618,7 @@ def run_template_now(tid: int) -> dict | None:
     t = store.get_task(tid)
     if not t or t.get("schedule_kind") is None:
         return None
-    return _spawn_recurring_child(t)
+    return _spawn_recurring_child(t, force=True)
 
 
 def promote_due_tasks() -> None:

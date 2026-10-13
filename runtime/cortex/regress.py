@@ -261,6 +261,16 @@ def _cases():
     case("qualification reads the universal rules too", "audit 2e",
          lambda: "worker._rule_lines(skill)" in inspect.getsource(engine.qualify_suggest))
 
+    # --- one intake, batch 2 (audit step 2e)
+    case("a second open prep card for the same deal returns the first", "audit 2e",
+         lambda: "ONE OPEN PREP CARD PER DEAL AND PURPOSE" in inspect.getsource(store.create_card))
+    case("a recurring job never stacks an occurrence on an open one", "audit 2e",
+         lambda: "parent_id=%s and status in" in inspect.getsource(engine._spawn_recurring_child))
+    case("LinkedIn uses the one classifier", "audit 2e",
+         lambda: "engine.classify_email(" in inspect.getsource(__import__("cortex.social_dm", fromlist=["x"])._classify_dm))
+    case("a WhatsApp card carries its opportunity", "audit 2e",
+         lambda: '"deal_id": deal_id} if deal_id' in inspect.getsource(__import__("cortex.whatsapp", fromlist=["x"])._process_message))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
