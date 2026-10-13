@@ -3100,3 +3100,22 @@ shoot needs none), then 10% off the whole quotation.
 - NOT unified (deliberately left): the three contact writers (`add_inbound_contact`, `add_inquiry`,
   `match_or_add_by_phone`) still differ in stage/source wording; behaviour is consistent enough, and merging them is
   data-shaping work best done with the per-business CRM layer.
+
+## Rules audit (Phase 3, 13 Oct 2026)
+- 113 Sonnet reviews over every company skill, the universal rules and each company's email lanes produced 120
+  findings (`/opt/cortex-knowledge/audits/rules_audit_2026-10-13.json`). Applied, with the owner's answers to 16
+  questions: 102 changes (60 edits, 42 deletions: duplicates and the extras absorbed into merged rules); company rules
+  406 -> 394, universal 201 -> 186. Before-state of every rule list: setting `rules_audit_backup_2026_10_13`.
+- Rejected on review: all 18 "move to another skill" proposals (the reviewer assumed every rule is about email and
+  named skills that do not exist) and every CROSS-LANE duplicate deletion: lanes do not all read each other
+  (email-handling cards read neither sales lane), so the same rule on two lanes is deliberate.
+- Owner decisions now in the rules: Tabscanner Pro is a customisation add-on, a call is offered only when a lead may
+  need it (no price in the rule); every blog post has the hero plus at least one in-content image; Sensa signs off
+  "Best regards," (the universal sign-off rule now says one sign-off line, signature appended); no markdown/bold;
+  greetings mirror theirs; small projects still get a meeting to walk through a new proposal; quotation labels are
+  generic, descriptions specific; Sensa case studies stay a monthly blog category (the universal "case studies are
+  Pages" rule is OVERRIDDEN for Sensa, `skills.overrides`, exact-text match: re-add the override if that rule is ever
+  edited); FilmSpoke blogs visually rich within the design rules; newsletter test sends at the quarterly
+  pre-approval for every company; Sky Vision service line "aerial photography and drone filming"; up to three
+  sample films per email.
+- Script: `rules_apply.py` (scratch) applies by exact text, never by index, so earlier edits cannot shift later ones.
