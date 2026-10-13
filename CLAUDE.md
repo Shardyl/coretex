@@ -33,7 +33,17 @@ Hetzner box `cortex-1`. Read this before touching anything.
   day-to-day, so remembered passwords drift (bit Gino 25 Aug 2026). Cockpit demo mode
   (passcode `demo`, sample data) was removed the same day — no unauthenticated entry.
 
-## Deploy (never scp code; push + pull)
+## Deploy (never scp code; push + pull) - THROUGH THE GATE (13 Oct 2026)
+
+**`bin/deploy.sh`** (from Git Bash): push, pull on the box, run the case library, restart ONLY if every case
+passes; a failing case rolls the box back to the commit it was running and the services are not restarted.
+`--fast` skips the cases that call Haiku. **Every fix ships with its case** in `runtime/cortex/regress.py` (the
+decision function that went wrong, the real message that broke it, what must be true), and, when the fault is a
+state that should never exist, a query in `runtime/cortex/invariants.py`. The health check runs every morning
+after 05:00 Dubai (`invariants.maybe_run` in the engine loop), applies only safe reversible repairs, and raises one
+notification; `python -m cortex.invariants [--fix]` runs it on demand. A fix with no case is not done.
+
+The manual steps below are what the script does:
 
 1. Commit + push to `git@github.com:Shardyl/coretex.git` (main).
 2. `ssh cortex "sudo -u cortex git -C /opt/coretex pull --ff-only && sudo systemctl restart cortex-api cortex-engine"`
