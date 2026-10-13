@@ -339,6 +339,13 @@ def _cases():
          lambda: "ask_which_deal(" in inspect.getsource(__import__("cortex.pipeline", fromlist=["x"])._sweep_mailbox)
          and "ask_which_deal(" in inspect.getsource(__import__("cortex.events", fromlist=["x"]).they_wrote))
 
+    # --- a meeting linked to its deal (Shama Ramadan call, 13 Oct)
+    from . import meetnotes as _mn
+    case("a meeting with a two-deal contact goes to the deal its title names", "Shama Ramadan meeting",
+         lambda: (_mn._bound_deal("", "Ramadan Meeting", "2026-10-13", [{"id": 1, "title": "Shama - Qabiala launch film"},
+                                                                          {"id": 2, "title": "Shama - Ramadan commercial"}]) or {}).get("id") == 2
+         and _mn._bound_deal("", "Catch up", "2026-10-13", [{"id": 1, "title": "A film"}, {"id": 2, "title": "B shoot"}]) is None)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

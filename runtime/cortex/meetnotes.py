@@ -234,7 +234,8 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
                     ds = crm.active_deals_for_email(em, slug)
                     if ds:
                         co = store.get_company_by_slug(slug)
-                        company_id, deal_id = (co or {}).get("id"), ds[0]["id"]
+                        _b = _bound_deal(e.get("id") or "", e.get("summary") or "", (e.get("start") or {}).get("dateTime") or "", ds)
+                        company_id, deal_id = (co or {}).get("id"), (_b or {}).get("id")
                         break
                 if deal_id:
                     break
@@ -263,6 +264,33 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
                     pass
             made += 1
     return {"captured": made}
+
+
+def link_meeting(deal_id: int, event_id: str, title: str, starts_at) -> None:
+    """THE MEETING IS FOR THIS DEAL (owner, 13 Oct 2026: a Ramadan film call with Farheen, who also has the Qabiala
+    launch deal open). Bound by the calendar event id (calendar path) and by title + day (email path)."""
+    from . import pipeline
+    if event_id:
+        db.setting_set(f"meeting_deal:{event_id}", int(deal_id))
+    day = str(starts_at)[:10]
+    if title and day:
+        db.setting_set(f"meeting_deal_title:{title.strip().lower()}|{day}", int(deal_id))
+    pipeline.log_deal(int(deal_id), "note", f"Meeting linked: '{title}' on {str(starts_at)[:16]}; its notes file here.")
+
+
+def _bound_deal(event_id: str, title: str, starts_at, candidates: list[dict]) -> dict | None:
+    """The deal a meeting belongs to: the owner's link first; else, among several open deals, the one whose title
+    shares a word with the meeting title; None when that cannot be told (never just the first)."""
+    for k in ([f"meeting_deal:{event_id}"] if event_id else []) + \
+             ([f"meeting_deal_title:{(title or '').strip().lower()}|{str(starts_at)[:10]}"] if title else []):
+        b = db.setting_get(k)
+        if b:
+            return {"id": int(b)}
+    if len(candidates) == 1:
+        return candidates[0]
+    words = {w for w in re.findall(r"[a-z]{4,}", (title or "").lower())} - {"meeting", "call", "with", "catch"}
+    hits = [d for d in candidates if words & set(re.findall(r"[a-z]{4,}", (d.get("title") or "").lower()))]
+    return hits[0] if len(hits) == 1 else None
 
 
 def _spawn_post_meeting_followup(event: dict, ext: list, company_id, deal_id, summary: str) -> None:
@@ -520,7 +548,8 @@ def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = 
                         ds = crm.active_deals_for_email(em, slug)
                         if ds:
                             co = store.get_company_by_slug(slug)
-                            company_id, deal_id = (co or {}).get("id"), ds[0]["id"]
+                            _b = _bound_deal("", title, start, ds)
+                            company_id, deal_id = (co or {}).get("id"), (_b or {}).get("id")
                             break
                     if deal_id:
                         break
