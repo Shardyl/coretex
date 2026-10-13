@@ -453,7 +453,7 @@ def _cases():
          and "voice note" in _wa._forward_label(1, {"type": "audio"}, "x"))
     case("a forward never answers a pending Edit and waits for his explanation", "Farheen voice note",
          lambda: inspect.getsource(_wa._owner_control).index("_forwarded(msg)")
-         < inspect.getsource(_wa._owner_control).index("wa_edit_pending")
+         < inspect.getsource(_wa._owner_control).index('pending = db.setting_get("wa_edit_pending")')
          and _wa.TALK_QUIET_FORWARDED_SEC > _wa.TALK_QUIET_SEC
          and "[FORWARDED " in inspect.getsource(__import__("cortex.api", fromlist=["x"]).talk_from_whatsapp))
 
