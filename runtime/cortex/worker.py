@@ -85,9 +85,8 @@ _RELATED_SKILLS_DEFAULT = {
     # email-handling holds the company's general email voice; sales-followup governs thread continuations.
     "sales-first-response": ("email-handling", "sales-scheduling", "lead-qualification", "sales-followup"),
     # every sales email after the first reply (chases, check-ins, replies on an open thread) drafts here (13 Oct 2026).
-    # sales-first-response is read too ONLY until the rules filed there by habit are moved to where they belong:
-    # take it out of this tuple (or the 'related_skills' setting) once that move is approved and done.
-    "sales-followup": ("email-handling", "sales-scheduling", "lead-qualification", "sales-first-response"),
+    # It does NOT read sales-first-response: those rules are about the very first reply only (moved 13 Oct 2026).
+    "sales-followup": ("email-handling", "sales-scheduling", "lead-qualification"),
     # project correspondence drafts ON email-handling and also reads the project skills' rules.
     "email-handling": ("sales-scheduling", "prod-revisions", "prod-status-reporting", "prod-pipeline"),
     # the email that carries a pro forma drafts on its own finance lane and reads the company's email voice

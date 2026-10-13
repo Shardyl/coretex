@@ -2890,8 +2890,13 @@ shoot needs none), then 10% off the whole quotation.
   (`_we_wrote_to`: a Cortex send to them, or an email_out on one of their deals); otherwise sales-followup;
   delivery-stage deals stay on email-handling. `_spawn_followup_card`, `_spawn_lead_chase` and
   `poll_sales_replies` draft on sales-followup. Website enquiries (`intake_enquiry`) stay first response.
-- `worker._RELATED_SKILLS_DEFAULT["sales-followup"]` reads email-handling, sales-scheduling, lead-qualification AND,
-  INTERIM, sales-first-response, until the rules filed there by habit are moved. Remove it from that tuple once done.
+- `worker._RELATED_SKILLS_DEFAULT["sales-followup"]` reads email-handling, sales-scheduling, lead-qualification (NOT
+  sales-first-response). A first-response card still reads sales-followup and email-handling, so a rule on either
+  reaches first replies too; only first-reply rules stay on sales-first-response.
+- THE MOVE (owner: "use your best logic and do the move", 13 Oct 2026): of 86 rules on sales-first-response (company
+  + universal), Haiku sorted each by what it says; 41 stayed (incl. the "automated text messages" no-draft rule,
+  which the no-reply check reads from there), 37 moved, 7 already existed on the target lane and were only removed.
+  Before-state of every rule list touched: setting `rule_lane_move_2026_10_13` (skills + universal + each move).
 - RULES: `worker.RULE_PLACES` (first reply / all sales emails after it / every email) + `rule_places(skill_key)`;
   `infer_rule` also returns `place`, chosen by what the rule says. The proposal stores the chosen skill and
   `places`; the cockpit rule card has an "Applies to" picker (`placeSel`, sent as `skill_key`), and
