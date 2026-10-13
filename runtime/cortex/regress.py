@@ -359,6 +359,48 @@ def _cases():
          lambda: "_talk_buffer(" in inspect.getsource(__import__("cortex.whatsapp", fromlist=["x"])._owner_control)
          and "_TALK_RUN" in inspect.getsource(__import__("cortex.whatsapp", fromlist=["x"])._talk_flush))
 
+    # --- the full meeting notes, not the email summary (card 1212, Ramadan meeting, 13 Oct)
+    import base64 as _b64
+    _html = ('<p>Notes</p><a href="https://docs.google.com/document/d/1ENkEIrmaogZ9rY2WGLMYBa9AzM6wjGHK1MAT-hRlNxw/'
+             'edit?usp=meet_tnfm_email">Open meeting notes</a>')
+    _payload = {"mimeType": "multipart/alternative", "parts": [
+        {"mimeType": "text/plain", "body": {"data": _b64.urlsafe_b64encode(b"Notes from the meeting").decode()}},
+        {"mimeType": "text/html", "body": {"data": _b64.urlsafe_b64encode(_html.encode()).decode()}}]}
+    case("the notes email's document is found from its button", "card 1212",
+         lambda: _mn._doc_in_email(_payload, "Notes from the meeting") == "1ENkEIrmaogZ9rY2WGLMYBa9AzM6wjGHK1MAT-hRlNxw")
+    case("a Gmail message id is not a notes document; a doc id is", "every meeting stored twice",
+         lambda: not _mn._is_doc_id("1a1353a14969790e") and _mn._is_doc_id("1ENkEIrmaogZ9rY2WGLMYBa9AzM6wjGHK1MAT-hRlNxw"))
+    case("the email path reads the document and waits for it", "card 1212",
+         lambda: all(k in inspect.getsource(_mn.sweep_email) for k in ("_full_notes(", "FULL_NOTES_WAIT_MIN", "_upgrade_notes(")))
+    case("the calendar path upgrades a short record, never twins it", "every meeting stored twice",
+         lambda: "_short_copy_of(" in inspect.getsource(_mn.sweep) and "_upgrade_notes(" in inspect.getsource(_mn.sweep))
+    case("fuller notes redraft the waiting follow-up as the system, not as the owner", "card 1212",
+         lambda: "refresh_from_notes(" in inspect.getsource(_mn._refresh_followup)
+         and "apply_correction" not in inspect.getsource(_mn._resumed_session)
+         and "_hold_corrections(" in inspect.getsource(engine.refresh_from_notes))
+    case("a date-only notes subject is the meeting's Dubai day", "Ramadan Meeting row 32",
+         lambda: _mn._dubai_day("2026-10-12 20:00:00+00:00") == "2026-10-13"
+         and _mn._dubai_day("2026-10-13T16:00:00+04:00") == "2026-10-13")
+    case("a client on Gmail is an attendee; our own Gmail is not", "Learning App meeting",
+         lambda: not _mn._is_us("lunamansour92@gmail.com") and _mn._is_us("hello@sensa.digital"))
+
+    # --- the draft names its own sender (card 1212: sent from rashad@, "discussed with you and Rashad")
+    _sensa = _co("sensa")
+    _r1212 = ("Hello Farheen,\n\nThank you for the time today, it was a pleasure to have the Ramadan film discussed "
+              "with you and Rashad this afternoon.\n\nBest regards,")
+    case("a draft naming its own sender as someone else is caught", "card 1212",
+         lambda: bool(engine._identity_mismatch(_r1212, "rashad@sensa.digital", _sensa))
+         and not engine._identity_mismatch(_r1212, "gino@sensa.digital", _sensa)
+         and not engine._identity_mismatch("Hello Farheen,\n\nThank you for the time today.\n\nBest regards,",
+                                           "rashad@sensa.digital", _sensa))
+
+    # --- Talk can edit an opportunity (deal 156: no rename, no way to add the meeting's people)
+    case("Talk can rename an opportunity and add a meeting's people", "deal 156, Learning App meeting",
+         lambda: "update_opportunity" in {t["name"] for t in __import__("cortex.api", fromlist=["x"]).SKILL_TOOLS}
+         and "update_opportunity" in inspect.getsource(__import__("cortex.capabilities", fromlist=["x"])))
+    case("a file sent on WhatsApp is kept for the next message", "iTellu brief PDF",
+         lambda: "save_data_url(" in inspect.getsource(__import__("cortex.api", fromlist=["x"]).talk_from_whatsapp))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

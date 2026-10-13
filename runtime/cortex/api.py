@@ -3654,6 +3654,29 @@ SKILL_TOOLS = [
         "search": {"type": "string", "description": "words from the deal title or the client name, when no deal_id"},
         "note": {"type": "string", "description": "the fact, one or two sentences, in Rashad's words"}},
         "required": ["note"]}},
+    {"name": "update_opportunity",
+     "description": "Change an EXISTING opportunity: rename it, set its value or stage, link its client organisation, "
+                    "attach people to it, attach everyone who was in a meeting (read from the calendar invite, so "
+                    "never ask Rashad for the emails), link that meeting so its notes file on this opportunity, and "
+                    "file library documents on it. Use when he says rename the deal, add X to the opportunity, add "
+                    "the people from today's 5pm meeting, it's this deal not that one. Changes only what you pass.",
+     "input_schema": {"type": "object", "properties": {
+        "deal_id": {"type": "integer"},
+        "search": {"type": "string", "description": "words from the deal title or client name, when no deal_id"},
+        "title": {"type": "string", "description": "the new title, e.g. 'iTellu - learning app film'"},
+        "value": {"type": "number"}, "currency": {"type": "string"},
+        "stage": {"type": "string", "description": "only when he names the stage"},
+        "organisation": {"type": "string", "description": "the CLIENT organisation's real name"},
+        "add_contacts": {"type": "array", "items": {"type": "object", "properties": {
+            "email": {"type": "string"}, "name": {"type": "string"}, "role": {"type": "string"},
+            "phone": {"type": "string"}, "primary": {"type": "boolean"}}, "required": ["email"]}},
+        "meeting": {"type": "object", "description": "a meeting whose external attendees join this opportunity and "
+                    "whose notes file here", "properties": {
+            "date": {"type": "string", "description": "YYYY-MM-DD, or 'today' / 'yesterday'"},
+            "time": {"type": "string", "description": "HH:MM, Dubai time, e.g. 17:00"},
+            "title": {"type": "string", "description": "words from the meeting title"}}},
+        "documents": {"type": "array", "items": {"type": "string"},
+                      "description": "library document ids (or exact file names) to file on this opportunity"}}}},
     {"name": "reissue_quotation",
      "description": "Issue an EXISTING quotation again as its next version, copied EXACTLY by code from the stored "
                     "version: same lines, same prices, same total. Use this, never create_quotation, whenever "
@@ -3885,6 +3908,134 @@ def _file_turn_files_on_deal(inp: dict) -> list[str]:
         except Exception as e:  # noqa: BLE001
             out.append(f"{name}: FAILED ({str(e)[:80]})")
     return out
+
+
+def _talk_deal(inp: dict) -> tuple:
+    """(deal row, '') for a Talk tool's deal_id or search words, or (None, what to say back)."""
+    did = inp.get("deal_id")
+    if not did and (inp.get("search") or "").strip():
+        _k = "%" + re.sub(r"[^a-z0-9]", "", str(inp["search"]).lower()) + "%"
+        rows = db.query("select p.id, p.title from crm_projects p left join crm_accounts a on a.id=p.account_id where "
+                        "regexp_replace(lower(p.title), '[^a-z0-9]', '', 'g') like %s or "
+                        "regexp_replace(lower(coalesce(a.name,'')), '[^a-z0-9]', '', 'g') like %s "
+                        "order by (p.stage in ('Lost','Dormant')), p.id desc limit 4", (_k, _k)) if len(_k) > 4 else []
+        if len(rows) == 1:
+            did = rows[0]["id"]
+        elif rows:
+            return None, "Several opportunities match, which one? " + json.dumps(
+                [{"deal_id": r["id"], "title": r["title"]} for r in rows])
+    if not did:
+        return None, "I could not find that opportunity. Give me the deal number or words from its title."
+    d = db.one("select * from crm_projects where id=%s", (int(did),))
+    return (d, "") if d else (None, f"no opportunity #{did}")
+
+
+def _meeting_on(spec: dict) -> tuple:
+    """(event, '') for a meeting named by date + time and/or title words, read from the calendars; (None, why)."""
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+    from . import calendar as gcal
+    tz = ZoneInfo("Asia/Dubai")
+    today = datetime.now(tz).date()
+    ds = (spec.get("date") or "today").strip().lower()
+    try:
+        day = (today if ds == "today" else today - timedelta(days=1) if ds == "yesterday"
+               else datetime.strptime(ds[:10], "%Y-%m-%d").date())
+    except ValueError:
+        return None, f"I could not read the meeting date '{spec.get('date')}'. Give it as YYYY-MM-DD."
+    start = datetime(day.year, day.month, day.day, tzinfo=tz)
+    evs = gcal.events_between(start, start + timedelta(days=1))
+    if (spec.get("time") or "").strip():
+        hm = re.match(r"(\d{1,2})[:.]?(\d{2})?", spec["time"].strip())
+        if hm:
+            want = (int(hm.group(1)), int(hm.group(2) or 0))
+            evs = [e for e in evs if (e["starts_at"].astimezone(tz).hour, e["starts_at"].astimezone(tz).minute) == want]
+    words = set(re.findall(r"[a-z]{3,}", (spec.get("title") or "").lower()))
+    if words:
+        evs = [e for e in evs if words & set(re.findall(r"[a-z]{3,}", e["title"].lower()))]
+    evs = [e for e in evs if not e["title"].lower().startswith("prep:")]      # our private prep blocks
+    uniq = {(e["title"], e["starts_at"]): e for e in evs}                    # one meeting on two calendars
+    if len(uniq) == 1:
+        return next(iter(uniq.values())), ""
+    if not uniq:
+        return None, f"No meeting matches on {day.isoformat()}."
+    return None, "Several meetings match, which one? " + json.dumps(
+        [{"title": e["title"], "starts": e["starts_at"].astimezone(tz).strftime("%Y-%m-%d %H:%M")} for e in uniq.values()])
+
+
+def _update_opportunity(inp: dict) -> str:
+    """Talk's update_opportunity (owner, 13 Oct 2026: Talk could not rename deal 156 or attach the people from the
+    Learning App meeting, and asked him for emails the calendar invite already had)."""
+    from . import identity, meetnotes, pipeline as _pl
+    d, err = _talk_deal(inp)
+    if not d:
+        return err
+    did, done = d["id"], []
+    title = (inp.get("title") or "").strip()
+    if title or inp.get("value") is not None or inp.get("currency"):
+        crm.update_deal(did, title=title or None, value=inp.get("value"), currency=inp.get("currency"))
+        if title and title != d["title"]:
+            _pl.log_deal(did, "note", f"Renamed from '{d['title']}' to '{title}' (owner, via Talk).")
+            done.append(f"renamed to '{title}'")
+        if inp.get("value") is not None:
+            done.append(f"value {inp['value']} {inp.get('currency') or d.get('currency') or ''}".strip())
+    org = (inp.get("organisation") or "").strip()
+    if org:
+        aid = crm.get_or_create_account(org)
+        db.execute("update crm_projects set account_id=%s, updated_at=now() where id=%s", (aid, did))
+        _pl.log_deal(did, "organisation_linked", f"Client organisation: {org} (owner, via Talk).")
+        done.append(f"organisation {org}")
+    people = list(inp.get("add_contacts") or [])
+    meeting = None
+    if inp.get("meeting"):
+        meeting, merr = _meeting_on(inp["meeting"])
+        if not meeting:
+            done.append("meeting NOT linked: " + merr)
+        else:
+            idx = identity.internal_index()
+            for a in meeting.get("attendees") or []:
+                if a.get("email") and not identity.is_internal(a["email"], index=idx):
+                    people.append({"email": a["email"], "name": a.get("name") or ""})
+    aid = db.one("select account_id from crm_projects where id=%s", (did,))["account_id"]
+    added, seen = [], set()
+    for p in people:
+        em = (p.get("email") or "").strip().lower()
+        if "@" not in em or em in seen:
+            continue
+        seen.add(em)
+        if not db.one("select 1 from crm_master where lower(email)=%s", (em,)):
+            nm = (p.get("name") or "").split()
+            biz = next((sl for sl in ("sensa", "skyvision", "tabscanner", "filmspoke", "snaprewards")
+                        if (d.get("company") or "").lower() in (sl, crm._org(sl).lower())), None)
+            crm.create_contact(nm[0] if nm else "", " ".join(nm[1:]), em, account_id=aid, company=biz,
+                               phone=p.get("phone"))
+        crm.add_deal_contact(did, em, p.get("role") or "", bool(p.get("primary")))
+        added.append(em)
+    if added:
+        done.append("contacts on it: " + ", ".join(added))
+    if meeting:
+        meetnotes.link_meeting(did, meeting.get("event_id") or "", meeting["title"], meeting["starts_at"])
+        done.append(f"meeting '{meeting['title']}' linked, its notes file here")
+    for ref in inp.get("documents") or []:
+        ref = str(ref).strip()
+        doc = (db.one("select id, filename, deal_id from company_documents where id=%s", (int(ref),)) if ref.isdigit()
+               else db.one("select id, filename, deal_id from company_documents where filename=%s order by id desc limit 1",
+                           (ref,)))
+        if not doc:
+            done.append(f"document '{ref}' NOT found")
+            continue
+        db.execute("update company_documents set deal_id=%s where id=%s", (did, doc["id"]))
+        _pl.log_deal(did, "document_filed", f"Filed: {doc['filename']} (owner, via Talk).", ref=f"doc:{doc['id']}")
+        done.append(f"filed {doc['filename']}")
+    stage = (inp.get("stage") or "").strip()
+    if stage:
+        if stage in crm.DEAL_STAGES:
+            crm.set_project_stage(did, stage, actor="owner")
+            done.append(f"stage {stage}")
+        else:
+            done.append(f"stage NOT changed: '{stage}' is not one of {', '.join(crm.DEAL_STAGES)}")
+    t = db.one("select title from crm_projects where id=%s", (did,))["title"]
+    return f"Opportunity #{did} '{t}': " + ("; ".join(done) if done else "nothing to change")
 
 
 def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
@@ -4344,6 +4495,8 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         from . import lptrack
         row = lptrack.lookup(str(inp.get("ref") or "").replace("ref", "").strip(" ()"))
         return lptrack.describe(row) if row else "That reference is not on record (the click may be older than the log, or not from our landing page)."
+    if name == "update_opportunity":
+        return _update_opportunity(inp)
     if name == "note_opportunity":
         from . import pipeline as _pl
         note = str(inp.get("note") or "").strip()
@@ -5122,6 +5275,24 @@ def talk_from_whatsapp(text: str, images: list | None = None, names: list | None
         db.setting_set("wa_talk_conv", conv["id"])
     history = [m for m in (conv.get("messages") or []) if m.get("role") in ("user", "assistant")]
     said = (text or "").strip() or ("(a picture, no words)" if images else "")
+    # A FILE SENT ON WHATSAPP OUTLIVES THE MESSAGE (13 Oct 2026): the iTellu brief PDF came with one message, Talk
+    # asked which deal it was for, and by the answer the file was gone (only the words are kept in the chat). A
+    # document (not a picture) is saved to the library at once and Talk is told its id, so a later turn can file it.
+    kept = []
+    for i, url in enumerate(images or []):
+        nm = (names or [None] * len(images))[i] if names and i < len(names) else None
+        if not isinstance(url, str) or url.startswith("data:image/"):
+            continue
+        try:
+            co = store.get_company_by_slug("sensa")
+            doc = documents.save_data_url(co["id"], "sensa", nm or "whatsapp-file", url, kind="client-document",
+                                          uploaded_by="owner (WhatsApp)")
+            kept.append(f"#{doc['id']} '{doc['filename']}'")
+        except Exception as e:  # noqa: BLE001
+            print(f"[whatsapp-talk] file not kept: {type(e).__name__}: {e}", flush=True)
+    if kept:
+        said += ("\n[Saved to the document library: " + ", ".join(kept) + ". To put it on an opportunity, pass the id "
+                 "in update_opportunity documents.]")
     user_msg = {"role": "user", "content": said + "\n\n[Sent from WhatsApp. Answer in a few short plain-text lines: no "
                 "markdown, no tables. If a picture or file came with it, read it and act on it; if you cannot tell which "
                 "deal or contact it is about, ask one short question.]"}

@@ -106,6 +106,14 @@ CHECKS = [
                "and coalesce(cadence->>'name','') <> 'revival'",
     },
     {
+        "key": "meeting_stored_twice",
+        "what": "One meeting stored twice: an email-only record beside the full notes document (same title, same day)",
+        "sql": "select a.id, b.id, a.title from meeting_notes a join meeting_notes b on a.id < b.id and "
+               "lower(a.title) = lower(b.title) and (a.starts_at at time zone 'Asia/Dubai')::date = "
+               "(b.starts_at at time zone 'Asia/Dubai')::date where length(a.file_id) < 25 and "
+               "a.event_id not like '%%#s%%' and b.event_id not like '%%#s%%' and b.created_at > now() - interval '3 days'",
+    },
+    {
         "key": "notice_for_closed_card",
         "what": "A notification about a card that is already sent, done or cancelled",
         "sql": "select n.id, left(n.title,80), t.status from notifications n join tasks t on n.target_type='task' and "

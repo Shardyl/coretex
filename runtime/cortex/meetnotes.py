@@ -56,7 +56,10 @@ def _keep_full(key: str, title: str, text: str, company_id, deal_id, when=None) 
     except Exception as e:  # noqa: BLE001
         print(f"[meetnotes] full notes not filed: {type(e).__name__}: {e}", flush=True)
 
-from .identity import NON_CLIENT_DOMAINS as _OWN   # single definition (identity.py)
+from .identity import is_internal as _is_us   # single definition of "us" (identity.py)
+# A CLIENT ON GMAIL IS STILL A CLIENT (13 Oct 2026): attendees were filtered by NON_CLIENT_DOMAINS, which counts
+# gmail.com as ours, so Luna Mansour and iTellu's Gmail addresses vanished from the Learning App meeting. is_internal
+# treats a free-mail address as ours only when it IS one of our own mailboxes.
 
 _DOC_RX = re.compile(r"docs\.google\.com/document/d/([A-Za-z0-9_-]{20,})")
 
@@ -90,6 +93,121 @@ def _already_have(fam: list, doc_id: str, text: str) -> bool:
     return False
 
 
+# THE FULL NOTES, NOT THE EMAIL (owner, 13 Oct 2026, card 1212). Gemini's email carries a short summary; the Google
+# Doc it links to carries the summary, the details AND the transcript. The email path drafted the Ramadan follow-up
+# from the email two seconds after it landed, so "Thursday 11:30 at Galleria Mall, Farheen sends the pin" (in the doc,
+# not the email) never reached it, and the calendar path then stored the doc as a SECOND row nobody read. Every
+# meeting since September was stored twice that way. Now the email path reads the linked doc itself and stores it
+# under the doc id (so the calendar path recognises it), waits while the doc is not readable yet, and only falls back
+# to the email text after FULL_NOTES_WAIT_MIN.
+FULL_NOTES_WAIT_MIN = 30
+
+
+def _is_doc_id(file_id: str) -> bool:
+    """A Google Doc id (44 characters), as opposed to the Gmail message id a fallback row is stored under."""
+    return len(file_id or "") >= 25
+
+
+def _doc_in_email(payload: dict, body: str) -> str:
+    """The notes document the email links to: the plain text rarely carries the URL, the HTML button does."""
+    m = _DOC_RX.search(body or "")
+    if m:
+        return m.group(1)
+    from . import gmail
+    for href, _label in gmail._links(payload or {}, body or ""):
+        m = _DOC_RX.search(href or "")
+        if m:
+            return m.group(1)
+    return ""
+
+
+def _full_notes(doc_id: str) -> str:
+    """The whole notes document, or '' while it cannot be read (not shared yet, still being written)."""
+    if not doc_id:
+        return ""
+    try:
+        t = _doc_text(doc_id, _tok())
+        return t if len(t.strip()) >= 200 else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _age_minutes(date_header: str) -> float:
+    """Minutes since the email's Date header; very large when it cannot be read (so nothing waits forever)."""
+    try:
+        from email.utils import parsedate_to_datetime
+        return (datetime.now(timezone.utc) - parsedate_to_datetime(date_header)).total_seconds() / 60
+    except Exception:  # noqa: BLE001
+        return 1e9
+
+
+def _dubai_day(when) -> str:
+    try:
+        d = when if hasattr(when, "astimezone") else datetime.fromisoformat(str(when).replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        return d.astimezone(_GST_TZ()).date().isoformat()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _short_copy_of(title: str, when) -> dict | None:
+    """A row for the SAME meeting (same title, same Dubai day) stored from the email alone, with no document behind
+    it: the fuller notes now arriving replace it rather than becoming a second record."""
+    day = _dubai_day(when)
+    if not day or not title:
+        return None
+    for r in db.query("select * from meeting_notes where (starts_at at time zone 'Asia/Dubai')::date = %s::date "
+                      "and event_id not like %s order by id", (day, "%#s%")):
+        if _norm_title(r.get("title") or "") == _norm_title(title) and not _is_doc_id(r.get("file_id") or ""):
+            return r
+    return None
+
+
+def _upgrade_notes(row: dict, file_id: str, text: str, backfill: bool = False) -> bool:
+    """Replace a short (email-only) record with the full notes: re-distil, keep the full text on the row and the deal,
+    take on the doc id, and rewrite the follow-up still waiting for approval. False when the new text adds nothing."""
+    old = (row.get("full_text") or row.get("summary") or "")
+    if len(text or "") <= len(old) + 500:
+        db.execute("update meeting_notes set file_id=%s where id=%s", (file_id, row["id"]))   # same notes: one record
+        return False
+    title = row.get("title") or "Meeting"
+    summary = _distil(title, text)
+    db.execute("update meeting_notes set file_id=%s, summary=%s where id=%s", (file_id, summary, row["id"]))
+    _keep_full(row["event_id"], title, text, row.get("company_id"), row.get("deal_id"), row.get("starts_at"))
+    if row.get("deal_id") and not backfill:
+        from . import pipeline
+        pipeline.record_meeting(row["deal_id"], row.get("company_id"), title + " (full notes)", summary,
+                                commitments=True)
+    if not backfill:
+        _refresh_followup(row, summary, "The full meeting notes have arrived (the Gemini document with its transcript); "
+                                        "the draft was written from the short email summary.")
+    print(f"[meetnotes] row {row['id']} '{title}': short notes replaced by the full document", flush=True)
+    return True
+
+
+def _refresh_followup(row: dict, summary: str, why: str) -> int:
+    """The post-meeting email still waiting for approval is rewritten from these notes (brief updated, system
+    redraft, the owner's corrections kept). Returns how many cards were refreshed."""
+    from . import engine
+    emails = [e.lower() for e in (row.get("attendees") or []) if e]
+    cards = db.query(
+        "select id, request from tasks where kind='email_reply' and request->>'followup'='post-meeting' and status in "
+        "('new','drafting','awaiting_approval','awaiting_correction') and created_at >= %s::timestamptz - interval '1 day' "
+        "and ((%s::bigint is not null and deal_id=%s) or lower(request->'inquiry'->>'email') = any(%s))",
+        (row.get("starts_at") or datetime.now(timezone.utc), row.get("deal_id"), row.get("deal_id"), emails or [""]))
+    n = 0
+    for c in cards:
+        req = dict(c.get("request") or {})
+        brief = req.get("brief") or ""
+        marker = "MEETING NOTES (distilled):\n"
+        req["brief"] = (brief.split(marker)[0] if marker in brief else brief.rstrip() + "\n") + marker + summary[:3000]
+        store.update_task(c["id"], request=req)
+        if engine.refresh_from_notes(c["id"], why):
+            n += 1
+    return n
+
+
 def _resumed_session(fam: list, key: str, file_id: str, title: str, when, text: str, emails: list,
                      company_id, deal_id, backfill: bool) -> str:
     """A MEETING THAT RESUMED (owner, 28 Sep 2026: the Shama call broke off because Sarah was not there, and
@@ -116,17 +234,11 @@ def _resumed_session(fam: list, key: str, file_id: str, title: str, when, text: 
                                                    "outcome replaces the first one where they differ (Gemini notes).")
     if not backfill:
         try:
-            contact = next((em for em in (emails or []) if db.one(
-                "select id from crm_master where lower(email)=lower(%s)", (em,))), None)
-            open_card = db.one("select * from tasks where kind='email_reply' and request->>'followup'='post-meeting' and "
-                               "status in ('awaiting_approval','awaiting_correction') and lower(request->'inquiry'->>'email')"
-                               "=lower(%s) order by id desc limit 1", (contact or "",)) if contact else None
-            if open_card:
-                from . import engine
-                engine.apply_correction(open_card, "The meeting RESUMED later on the same link and the later session "
-                                                   "changes the outcome. Rewrite this follow-up from the combined notes "
-                                                   "below; the later session decides.\n\n" + combined[:3000])
-            else:
+            # a SYSTEM redraft, never one filed as the owner's correction (it used to go through apply_correction,
+            # which logged it as his and inferred a rule from it)
+            if not _refresh_followup({"starts_at": when, "deal_id": deal_id, "attendees": emails or []}, combined,
+                                     "The meeting RESUMED later on the same link and the later session changes the "
+                                     "outcome; where the sessions differ, the later one decides."):
                 _spawn_post_meeting_followup({"summary": title, "start": {"dateTime": str(when)}}, emails or [],
                                              company_id, deal_id, combined)
         except Exception as e:  # noqa: BLE001
@@ -157,7 +269,7 @@ def _distil(title: str, text: str) -> str:
         "(under 250 words, plain prose + short dashes for action items): what the meeting was about, what "
         "was DECIDED, what each side COMMITTED to (who does what, by when — only deadlines actually stated), "
         "open questions, and the agreed next step. Facts from the notes only — never invent.",
-        f"Meeting: {title}\n\nNOTES:\n{text[:24000]}", fast=True, max_tokens=800, purpose="meetnotes-distil")
+        f"Meeting: {title}\n\nNOTES:\n{text[:40000]}", fast=True, max_tokens=800, purpose="meetnotes-distil")
 
 
 def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False) -> dict:
@@ -212,7 +324,7 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
                 continue
             if db.one("select id from meeting_notes where event_id=%s", (e["id"],)):
                 _ext0 = [a.get("email", "").lower() for a in (e.get("attendees") or [])
-                         if a.get("email") and a["email"].split("@")[-1].lower() not in _OWN]
+                         if a.get("email") and not _is_us(a["email"])]
                 _fam = _family(e["id"], e.get("summary") or "", (e.get("start") or {}).get("dateTime"), None)
                 _first = _fam[0] if _fam else {}
                 _fam = _family(e["id"], e.get("summary") or "", _first.get("starts_at"), _first.get("deal_id"))
@@ -222,12 +334,17 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
                                      _first.get("deal_id"), backfill)
                     made += 1
                 continue
+            _short = _short_copy_of(e.get("summary") or "", (e.get("start") or {}).get("dateTime"))
+            if _short:                            # the email path stored it without the document: upgrade, never a twin
+                if _upgrade_notes(_short, note["fileId"], text, backfill):
+                    made += 1
+                continue
             try:
                 summary = _distil(e.get("summary") or "Meeting", text)
             except Exception:  # noqa: BLE001 — skip this one, retry next sweep
                 continue
             ext = [a.get("email", "").lower() for a in (e.get("attendees") or [])
-                   if a.get("email") and a["email"].split("@")[-1].lower() not in _OWN]
+                   if a.get("email") and not _is_us(a["email"])]
             company_id = deal_id = None
             for em in ext:                        # first attendee on an active deal decides the home
                 for slug in ("sensa", "skyvision", "tabscanner", "filmspoke", "snaprewards"):
@@ -239,6 +356,11 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
                         break
                 if deal_id:
                     break
+            if not deal_id:                       # the owner linked this meeting to a deal its people are not on yet
+                _lc, _ld = _linked_deal(e.get("id") or "", e.get("summary") or "",
+                                        (e.get("start") or {}).get("dateTime") or "")
+                if _ld:
+                    company_id, deal_id = _lc or company_id, _ld
             starts = (e.get("start") or {}).get("dateTime")
             db.execute("insert into meeting_notes (event_id, file_id, company_id, deal_id, title, starts_at, "
                        "attendees, summary) values (%s,%s,%s,%s,%s,%s,%s,%s) on conflict (event_id) do nothing",
@@ -272,7 +394,7 @@ def link_meeting(deal_id: int, event_id: str, title: str, starts_at) -> None:
     from . import pipeline
     if event_id:
         db.setting_set(f"meeting_deal:{event_id}", int(deal_id))
-    day = str(starts_at)[:10]
+    day = _dubai_day(starts_at) or str(starts_at)[:10]       # the meeting's own (Dubai) day, whatever the format
     if title and day:
         db.setting_set(f"meeting_deal_title:{title.strip().lower()}|{day}", int(deal_id))
     pipeline.log_deal(int(deal_id), "note", f"Meeting linked: '{title}' on {str(starts_at)[:16]}; its notes file here.")
@@ -281,8 +403,10 @@ def link_meeting(deal_id: int, event_id: str, title: str, starts_at) -> None:
 def _bound_deal(event_id: str, title: str, starts_at, candidates: list[dict]) -> dict | None:
     """The deal a meeting belongs to: the owner's link first; else, among several open deals, the one whose title
     shares a word with the meeting title; None when that cannot be told (never just the first)."""
+    # the day is the meeting's Dubai day: a date-only notes subject arrives as 20:00 UTC the evening BEFORE
+    days = [d for d in dict.fromkeys((_dubai_day(starts_at), str(starts_at)[:10])) if d]
     for k in ([f"meeting_deal:{event_id}"] if event_id else []) + \
-             ([f"meeting_deal_title:{(title or '').strip().lower()}|{str(starts_at)[:10]}"] if title else []):
+             [f"meeting_deal_title:{(title or '').strip().lower()}|{d}" for d in days if title]:
         b = db.setting_get(k)
         if b:
             return {"id": int(b)}
@@ -291,6 +415,19 @@ def _bound_deal(event_id: str, title: str, starts_at, candidates: list[dict]) ->
     words = {w for w in re.findall(r"[a-z]{4,}", (title or "").lower())} - {"meeting", "call", "with", "catch"}
     hits = [d for d in candidates if words & set(re.findall(r"[a-z]{4,}", (d.get("title") or "").lower()))]
     return hits[0] if len(hits) == 1 else None
+
+
+def _linked_deal(event_id: str, title: str, starts_at) -> tuple:
+    """(company_id, deal_id) for a meeting the owner LINKED to a deal, when no attendee is on a deal yet (the
+    Learning App call: iTellu's people were not on deal 156 when the notes arrived). (None, None) otherwise."""
+    b = _bound_deal(event_id, title, starts_at, [])
+    if not b:
+        return None, None
+    p = db.one("select company from crm_projects where id=%s", (b["id"],)) or {}
+    for slug in ("sensa", "skyvision", "tabscanner", "filmspoke", "snaprewards"):
+        if (p.get("company") or "").lower() in (slug, crm._org(slug).lower()):
+            return (store.get_company_by_slug(slug) or {}).get("id"), b["id"]
+    return None, b["id"]
 
 
 def _spawn_post_meeting_followup(event: dict, ext: list, company_id, deal_id, summary: str) -> None:
@@ -462,7 +599,7 @@ def _attendees_at(start: datetime, whole_day: bool = False,
             continue
         for ev in items:
             ext = sorted({(a.get("email") or "").lower() for a in (ev.get("attendees") or [])
-                          if a.get("email") and (a["email"].split("@")[-1].lower() not in _OWN)})
+                          if a.get("email") and not _is_us(a["email"])})
             if not ext:
                 continue
             # the same meeting sits on several of our calendars; count it once
@@ -520,28 +657,39 @@ def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = 
                     continue
                 start, has_time = _subject_when(subject)
                 key = _notes_key(subject, start, has_time, ref["id"])
-                _dm = _DOC_RX.search(body or "")
-                _doc = _dm.group(1) if _dm else ""
+                if key in seen_keys:
+                    continue
+                _doc = _doc_in_email(full.get("payload") or {}, body)
+                if _doc and db.one("select 1 from meeting_notes where file_id=%s", (_doc,)):
+                    seen_keys.add(key)                # this document is already stored (calendar path, or a copy)
+                    continue
+                _full = _full_notes(_doc)
+                if _doc and not _full and _age_minutes(hdr.get("Date")) < FULL_NOTES_WAIT_MIN:
+                    continue                          # the document is not readable yet: wait, never draft from the summary
+                text = _full or body
+                _fid = _doc if _full else ref["id"]   # a doc id only for a doc we read, so the calendar path can upgrade
                 if db.one("select 1 from meeting_notes where event_id=%s", (key,)):
                     _first = db.one("select * from meeting_notes where event_id=%s", (key,)) or {}
-                    _fam = _family(key, _first.get("title") or "", _first.get("starts_at"), _first.get("deal_id"))
-                    if key in seen_keys or _already_have(_fam, _doc, body):
+                    if _full and not _is_doc_id(_first.get("file_id") or ""):
+                        _upgrade_notes(_first, _doc, _full, backfill)     # stored short earlier; the document is here now
                         seen_keys.add(key)
                         continue
-                    _resumed_session(_fam, key, _doc or ref["id"], _first.get("title") or _subject_title(subject),
-                                     _first.get("starts_at") or start, body, json.loads(json.dumps(_first.get("attendees") or [])),
+                    _fam = _family(key, _first.get("title") or "", _first.get("starts_at"), _first.get("deal_id"))
+                    if _already_have(_fam, _doc, text):
+                        seen_keys.add(key)
+                        continue
+                    _resumed_session(_fam, key, _fid, _first.get("title") or _subject_title(subject),
+                                     _first.get("starts_at") or start, text, json.loads(json.dumps(_first.get("attendees") or [])),
                                      _first.get("company_id"), _first.get("deal_id"), backfill)
                     seen_keys.add(key)
                     made.append({"key": key + " (resumed)", "deal": _first.get("deal_id")})
-                    continue
-                if key in seen_keys:
                     continue
                 want_title = _subject_title(subject)
                 emails, ev_title, unmatched = (
                     _attendees_at(start, whole_day=not has_time, want_title=want_title)
                     if start else ([], "", "the subject carries no meeting date"))
                 title = ev_title or want_title or subject.replace("Notes:", "").strip()
-                summary = _distil(title, body)
+                summary = _distil(title, text)
                 company_id = deal_id = None
                 for em in emails:
                     for slug in ("sensa", "skyvision", "tabscanner", "filmspoke", "snaprewards"):
@@ -553,11 +701,15 @@ def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = 
                             break
                     if deal_id:
                         break
+                if not deal_id:                   # the owner linked this meeting to a deal its people are not on yet
+                    _lc, _ld = _linked_deal("", title, start)
+                    if _ld:
+                        company_id, deal_id = _lc or company_id, _ld
                 db.execute(
                     "insert into meeting_notes (event_id, file_id, company_id, deal_id, title, starts_at,"
                     " attendees, summary) values (%s,%s,%s,%s,%s,%s,%s,%s) on conflict (event_id) do nothing",
-                    (key, _doc or ref["id"], company_id, deal_id, title, start, json.dumps(emails), summary))
-                _keep_full(key, title, body, company_id, deal_id, start)
+                    (key, _fid, company_id, deal_id, title, start, json.dumps(emails), summary))
+                _keep_full(key, title, text, company_id, deal_id, start)
                 for em in emails:
                     try:
                         crm.log_event(em, "meeting_notes", f"Meeting: {title} — notes captured", None)

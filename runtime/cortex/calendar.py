@@ -257,7 +257,13 @@ def upcoming_events(hours: int = 30) -> list[dict]:
     Each row carries the company slug of the calendar it came from, so the brief knows which brand
     is taking the meeting. Fail-soft per calendar: a 403 on a free/busy-only share is normal."""
     start = datetime.now(timezone.utc)
-    end = start + timedelta(hours=hours)
+    return events_between(start, start + timedelta(hours=hours))
+
+
+def events_between(start: datetime, end: datetime) -> list[dict]:
+    """Every readable meeting starting between `start` and `end` (past or future), same rows as upcoming_events.
+    Talk reads who was in a meeting from here (owner, 13 Oct 2026: "add the contacts who were in the 5pm
+    meeting"), so the attendees come from the invite, never from memory."""
     out: list[dict] = []
     for entry in _registry():
         co = entry.get("company") or "sensa"

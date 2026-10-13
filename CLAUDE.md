@@ -3187,3 +3187,34 @@ shoot needs none), then 10% off the whole quotation.
   owner's scope), on a thread; the reply comes back on WhatsApp (`_tell`, split at 3,500 characters). The
   conversation rolls on one "WhatsApp" chat in Talk's history (setting `wa_talk_conv`) and starts fresh after a day
   of quiet. A short "ok"/"hi" still rings the doorbell for waiting cards.
+
+## Meeting notes: the full document, one record, the waiting draft follows it (13 Oct 2026)
+- CAUSE: card 1212 (Shama Ramadan follow-up) was drafted from Gemini's notes EMAIL two seconds after it landed. The
+  email carries a short summary; the Google Doc it links to carries the details and the transcript, where "Thursday
+  11:30 at Galleria Mall, Farheen confirms and sends the pin" was. The calendar sweep then stored that doc as a SECOND
+  row nobody read. Every meeting since September was stored twice (rows 24/25, 26/27, 28/29, 30/31, 32/33).
+- `meetnotes.sweep_email` now finds the doc from the email's button (`_doc_in_email`: the plain part has no URL, the
+  HTML anchor does), reads it (`_full_notes`, hello@'s drive.readonly), distils from it and stores the row under the
+  DOC id, so the calendar sweep's `file_id` check recognises it. A doc not readable yet: the email waits
+  (`FULL_NOTES_WAIT_MIN` = 30) and only then falls back to the email text, stored under the Gmail id.
+- `sweep` (calendar): a same-title, same-Dubai-day row with no doc behind it (`_short_copy_of`, `_is_doc_id`) is
+  UPGRADED (`_upgrade_notes`: re-distil, full text kept on the row and the deal, commitments recorded), never twinned.
+- `_refresh_followup` puts the new notes in the waiting post-meeting card's brief and `engine.refresh_from_notes`
+  redrafts it as the SYSTEM (no owner decision, no rule inferred, `_hold_corrections` keeps his corrections). The
+  resumed-session path uses it too; it used to call `apply_correction`, which filed the redraft as his correction.
+- Attendees on Gmail are clients: meetnotes filtered on NON_CLIENT_DOMAINS (gmail.com counts as ours), so Luna
+  Mansour and iTellu's Gmail addresses vanished from the Learning App meeting; it now uses `identity.is_internal`.
+- A meeting the owner LINKED to a deal (`link_meeting`) files there even when no attendee is on the deal yet
+  (`_linked_deal`), and the link's day is the meeting's DUBAI day (a date-only subject is 20:00 UTC the day before).
+- `_identity_mismatch` also catches the sender named as an object ("discussed with you and Rashad", sent from rashad@).
+- Health check `meeting_stored_twice` (report). Distil input raised to 40,000 characters (the doc carries the transcript).
+
+## Talk edits opportunities: update_opportunity (13 Oct 2026)
+- CAUSE: asked to rename deal 156 and add "the contacts who were in the meeting today at 5pm", Talk had no tool to
+  rename a deal or attach anyone, asked the owner for emails the calendar invite already held, and lost the iTellu
+  brief PDF sent on WhatsApp (only the words of a WhatsApp turn are kept in the chat).
+- `update_opportunity(deal_id|search, title, value, currency, stage, organisation, add_contacts, meeting, documents)`
+  (`api._update_opportunity`): `meeting={date,time,title}` reads the invite (`calendar.events_between`, past or
+  future; private "Prep:" blocks skipped), attaches every attendee who is not us (created in the CRM if new) and
+  links the meeting so its notes file on the deal. `documents` files library rows on it. Every change is logged.
+- `talk_from_whatsapp` saves a non-image file to the library the moment it arrives and tells Talk its id.

@@ -151,6 +151,10 @@ def _identity_mismatch(draft: str, from_addr: str, company: dict) -> str:
         third = re.search(r"\b" + re.escape(me.split()[0]) + r"\b(?!'s\b)\s+"
                           r"(?:has|have|had|is|was|will|would|can|could|said|sent|told|mentioned|"
                           r"shared|passed|kept|handled|been|and I\b)", body, re.I)
+        # ...and as the OBJECT: card 1212, sent from rashad@, thanked Farheen for "the Ramadan film discussed with you
+        # and Rashad this afternoon" (13 Oct 2026). Only after a preposition or "you and", never a possessive.
+        third = third or re.search(r"\b(?:you and|with|to|from|by|for|and)\s+" + re.escape(me.split()[0])
+                                   + r"\b(?!'s\b)", body, re.I)
         if third:
             return (f"the draft talks about {me.split()[0]} in the third person (\"{third.group(0)}...\"), "
                     f"but this email IS from {from_addr}"
@@ -3085,6 +3089,36 @@ def reconcile_attachments(task_id: int) -> None:
         except Exception:  # noqa: BLE001 — reconcile is a bonus pass; the card stays usable without it
             pass
     threading.Thread(target=_run, daemon=True).start()
+
+
+def refresh_from_notes(task_id: int, why: str) -> bool:
+    """FULLER MEETING NOTES REWRITE THE WAITING FOLLOW-UP (13 Oct 2026, card 1212). The post-meeting email was
+    drafted from Gemini's short email summary; the full notes (and the transcript) arrived after it, holding what
+    was actually agreed (Thursday 11:30 at Galleria Mall). The card's brief already carries the new notes
+    (meetnotes._refresh_followup); this redrafts from them. A SYSTEM redraft: no owner decision logged, no rule
+    inferred, and every correction he made on the card is held (_hold_corrections). A card not drafted yet just
+    drafts from the new brief."""
+    t = store.get_task(task_id)
+    if not t or t.get("status") not in ("awaiting_approval", "awaiting_correction") or not (t.get("draft") or "").strip():
+        return False
+    try:
+        skill, company = store.get_skill(t["skill_id"]), store.get_company(t["company_id"])
+        note = ("(system note, not from the owner) " + why + " The meeting notes in the brief are now the full "
+                "notes. Rewrite this email from them: what was agreed on the call (dates, times, places, who does "
+                "what) comes from the notes, and nothing already settled on the call is offered or asked again. "
+                "Every correction the owner made on this card still applies.")
+        dreq = _request_for_draft(t)
+        new = _ensure_clean_email(skill, company, dreq,
+                                  worker.draft(skill, company, dreq, correction=note, prev_draft=t.get("draft")))
+        new = _hold_corrections(task_id, new, "")
+        if not (new or "").strip():
+            return False
+        store.update_task(task_id, draft=new)
+        print(f"[meetnotes] card {task_id} redrafted from the full meeting notes", flush=True)
+        return True
+    except Exception as e:  # noqa: BLE001 — the card keeps its old draft rather than losing it
+        print(f"[meetnotes] card {task_id} not refreshed: {type(e).__name__}: {e}", flush=True)
+        return False
 
 
 _META_LEAK = re.compile(r"\bCORTEX\b\s*[,:]|OWNER TO CONFIRM|\bactions? to set\b|\[internal\b", re.I)

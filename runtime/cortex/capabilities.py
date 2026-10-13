@@ -158,6 +158,12 @@ CAPABILITIES: list[tuple[str, str]] = [
      "into every future email on that deal. It is NOT a rule: rules (add_rule) say how we write for a company or "
      "everywhere; context is about one client. When Rashad corrects a draft, facts in his words are filed this way "
      "automatically and the card says 'noted on the opportunity'."),
+    ("Editing an opportunity: update_opportunity",
+     "update_opportunity(deal_id or search, ...) renames a deal, sets its value or stage, links its client organisation, "
+     "attaches people (created in the CRM if new), and with meeting={date, time, title} attaches EVERYONE outside "
+     "our companies who was invited to that meeting, read from the calendar, and links the meeting so its notes file "
+     "on the deal. Never ask Rashad for attendee emails the invite already holds. A file he sent earlier on WhatsApp "
+     "is already in the library (its id is in the message): file it with documents=[id]."),
     ("The same quotation again: reissue_quotation",
      "reissue_quotation(company, number) issues an EXISTING quotation as its next version, copied exactly by "
      "code from the stored version: same lines, prices and total, today's date. It is the ONLY way to send a "
