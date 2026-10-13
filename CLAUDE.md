@@ -3120,3 +3120,14 @@ shoot needs none), then 10% off the whole quotation.
   pre-approval for every company; Sky Vision service line "aerial photography and drone filming"; up to three
   sample films per email.
 - Script: `rules_apply.py` (scratch) applies by exact text, never by index, so earlier edits cannot shift later ones.
+
+## Sister brands share tender deals (13 Oct 2026)
+- CAUSE: Wasl's RFQ 2026_1170 re-sent to fly@skyvision.film opened Sky Vision deal 163 next to Sensa deal 162: every
+  deal lookup searched only the brand whose inbox received the mail, and Sensa / Sky Vision / FilmSpoke are one legal
+  entity that buyers invite under either name.
+- `crm.sister_slugs(slug)` (setting `entity_groups`, default sensa/skyvision/filmspoke), `crm.tender_code(subject)`
+  (the buyer's reference: the first code/RFQ/RFP/tender/ref or #-token containing a digit) and
+  `crm.find_tender_deal(slug, sender, subject)`: the open sales deal across the sister brands carrying that code in its
+  title or record, else one whose contacts include the sender. `_track_tender` uses it before creating anything.
+  `closing_reminder` never adds a second reminder for the same deal and date. Health check
+  `same_contact_two_sales_deals_sister_brands` (report).

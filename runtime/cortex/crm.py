@@ -1744,6 +1744,47 @@ def get_or_create_account(name: str, domain: str | None = None) -> int:
     return db.execute("insert into crm_accounts (name, domain) values (%s,%s) returning id", (name, domain))["id"]
 
 
+DEFAULT_ENTITY_GROUPS = [["sensa", "skyvision", "filmspoke"]]   # Sky Vision Aerial Photography Services: one entity
+_TENDER_CODE_RX = re.compile(r"(?:code|rfq|rfp|rfi|tender|ref(?:erence)?)\s*(?:no\.?|number|#|:|-)?\s*"
+                             r"([A-Z0-9][A-Z0-9_\-/]{3,})", re.I)
+
+
+def sister_slugs(slug: str) -> list[str]:
+    """This brand and its sister brands: one legal entity, so one buyer may invite any of them (13 Oct 2026: Wasl's RFQ
+    came to fly@skyvision.film and was opened as a second deal next to the Sensa one). DATA: setting `entity_groups`."""
+    for grp in (db.setting_get("entity_groups") or DEFAULT_ENTITY_GROUPS):
+        if slug in grp:
+            return list(grp)
+    return [slug]
+
+
+def tender_code(subject: str) -> str:
+    """The buyer's reference for a tender/RFQ (e.g. '2026_1170' from 'Request for Quotation Code 2026_1170'), or ''."""
+    for m in list(_TENDER_CODE_RX.finditer(subject or "")) + list(re.finditer(r"#\s*([A-Z0-9][A-Z0-9_\-/]{3,})", subject or "", re.I)):
+        code = m.group(1).strip(" .,:;-")
+        if any(ch.isdigit() for ch in code):      # 'INVITATION' is a word, '2026_1170' is a reference
+            return code
+    return ""
+
+
+def find_tender_deal(slug: str, sender: str, subject: str) -> dict | None:
+    """THE open sales deal a tender or RFQ email belongs to, across the sister brands: one carrying the buyer's
+    reference code in its title or record, else one whose contacts include the sender."""
+    orgs = [_org(s) for s in sister_slugs(slug)]
+    open_sales = stages.sql_list(stages.SALES)
+    code = tender_code(subject)
+    if code:
+        d = db.one("select * from crm_projects where company = any(%s) and stage in " + open_sales + " and "
+                   "(title ilike %s or history::text ilike %s) order by id limit 1", (orgs, f"%{code}%", f"%{code}%"))
+        if d:
+            return d
+    if sender:
+        return db.one("select * from crm_projects where company = any(%s) and stage in " + open_sales + " and "
+                      "(lower(coalesce(contact_email,''))=lower(%s) or contacts @> %s::jsonb) order by id limit 1",
+                      (orgs, sender, Json([{"email": sender.lower()}])))
+    return None
+
+
 def stamp_estimate(deal_id: int, est: dict) -> None:
     """Cortex's ESTIMATED value on a deal, labelled an estimate (the same wording auto_opportunity writes)."""
     try:

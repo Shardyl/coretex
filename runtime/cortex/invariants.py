@@ -116,6 +116,13 @@ CHECKS = [
                "('done','sent','cancelled','rejected','failed') returning n.id",
     },
     {
+        "key": "same_contact_two_sales_deals_sister_brands",
+        "what": "One contact has open sales deals under two sister brands (Sensa / Sky Vision / FilmSpoke)",
+        "sql": "select lower(contact_email) who, array_agg(id) deals, array_agg(company) brands from crm_projects "
+               "where stage in ('Opportunity','Quote') and coalesce(contact_email,'')<>'' and company in "
+               "('Sensa','Sky Vision','FilmSpoke') group by 1 having count(distinct company) > 1",
+    },
+    {
         "key": "double_chase",
         "what": "One person has more than one open automatic chase",
         "sql": f"select lower(request->'inquiry'->>'email') who, count(*), array_agg(id) from tasks "

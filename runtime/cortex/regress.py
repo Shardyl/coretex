@@ -280,6 +280,19 @@ def _cases():
     case("a departure auto-reply is read whoever sends it", "audit 2e tidy-up",
          lambda: "AN AUTO-REPLY IS READ WHOEVER SENDS IT" in inspect.getsource(engine.poll_inbox))
 
+    # --- a tender reaching a sister brand lands on the existing deal (Wasl RFQ 2026_1170, deals 162/163)
+    from . import crm as _crm
+    case("the buyer's RFQ code is read from the subject", "Wasl RFQ 2026_1170",
+         lambda: _crm.tender_code("Invitation to RFQ - Request for Quotation Code 2026_1170 on Wasl Asset Management") == "2026_1170"
+         and _crm.tender_code("TENDER INVITATION DUBAI POLICE-RFQ- 815902,2 (Visitor counting)") == "815902"
+         and _crm.tender_code("Rafed Invitation To Proposal #RAF-REQ-0000161100") == "RAF-REQ-0000161100"
+         and _crm.tender_code("Video production enquiry") == "")
+    case("Sensa, Sky Vision and FilmSpoke are sister brands", "Wasl RFQ 2026_1170",
+         lambda: set(_crm.sister_slugs("skyvision")) == {"sensa", "skyvision", "filmspoke"} and _crm.sister_slugs("tabscanner") == ["tabscanner"])
+    case("a Sky Vision invitation finds the Sensa tender deal", "Wasl RFQ 2026_1170",
+         lambda: (_crm.find_tender_deal("skyvision", "eproc@wasl.ae",
+                  "Invitation to RFQ - Request for Quotation Code 2026_1170 on Wasl Asset Management") or {}).get("id") == 162)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

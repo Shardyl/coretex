@@ -2802,8 +2802,9 @@ def _track_tender(co: dict, e: dict, what: str, rt_key: str | None = None, clien
         # THE SENDER'S OPEN OPPORTUNITY IS THE DEAL (17 Sep 2026): Pyxis's formal RFQ opened deal 129 next to
         # 128, which Rashad had opened from Maricris's WhatsApp an hour earlier. A circular from someone who
         # already has an open opportunity with us lands on that opportunity.
-        try:
-            d = crm.open_deal_for_email(email, slug) or crm.open_deal_for_domain(email, slug)
+        try:   # across the sister brands: the same RFQ can reach Sensa and Sky Vision (Wasl, 13 Oct 2026)
+            d = crm.find_tender_deal(slug, email, subj) or crm.open_deal_for_email(email, slug) \
+                or crm.open_deal_for_domain(email, slug)
         except Exception:  # noqa: BLE001
             d = None
         if d and d.get("stage") not in crm.OPEN_SALES_STAGES:
@@ -2861,6 +2862,9 @@ def closing_reminder(co: dict, deal_id: int, e: dict, what: str, label: str = "T
         remind = when - _td(days=1)
         if remind <= now:
             remind = now + _td(hours=1)
+        if db.one("select 1 from reminders where target_type='deal' and target_id=%s and status in ('pending','snoozed') "
+                  "and title like %s", (str(deal_id), f"{label} {when.astimezone(gst):%a %d %b %Y}%")):
+            return None      # that closing date already has its reminder (a re-sent invitation, 13 Oct 2026)
         return reminders.create(f"{label} {when.astimezone(gst):%a %d %b %Y}: {what[:140]} (deal {deal_id})",
                                 remind, company_id=co.get("id"), target_type="deal", target_id=deal_id,
                                 created_by="cortex-pipeline")
