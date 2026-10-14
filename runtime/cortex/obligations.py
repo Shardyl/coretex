@@ -237,8 +237,7 @@ def working_days_before(dt, n: int):
 def _judge(title: str, due_at, rows: list) -> dict:
     """The one question, asked the same way at creation and in the morning merge."""
     from . import provider
-    listing = "
-".join(f"R{r['id']} [{'set by the owner' if not str(r.get('created_by') or '').startswith('cortex') else 'cortex'}] "
+    listing = "\n".join(f"R{r['id']} [{'set by the owner' if not str(r.get('created_by') or '').startswith('cortex') else 'cortex'}] "
                         f"{r['title'][:220]} (due {r['due_at']:%d %b})" for r in rows[:30])
     try:
         out = provider.think_json(
@@ -249,10 +248,7 @@ def _judge(title: str, due_at, rows: list) -> dict:
             "old one? (3) Is the new item a piece of work WE must produce and deliver (a treatment, proposal, "
             "quotation, deck, script, edit, document), rather than a reply, a call or an update? Return "
             '{"same": "R<id>" or null, "replaces": true|false, "deliverable": true|false}.',
-            f"OPEN:
-{listing or '(nothing open)'}
-
-NEW: {title[:300]} (due {due_at:%d %b})",
+            f"OPEN:\n{listing or '(nothing open)'}\n\nNEW: {title[:300]} (due {due_at:%d %b})",
             model=provider.MODEL_ROUTER, max_tokens=60, purpose="owed-dedup") or {}
     except Exception:  # noqa: BLE001
         return {}
