@@ -776,6 +776,13 @@ def _cases():
     case("approving a new quotation takes off the old quotation, never the proposal deck", "Shamal 1246",
          lambda: not (_qd and _pd and _qn) or engine._replaced_attachments([_qd, _pd], [_qn], ["SEN-2026-0043"]) == [_qd])
 
+    # --- a confirmed ad click is a lead; only their own words are judged (A.Yousef, 14 Oct 2026)
+    _wam = __import__("cortex.whatsapp", fromlist=["x"])
+    case("our pre-filled text and ref are not their words; a confirmed click opens the opportunity", "Waheguru NFFQ5",
+         lambda: _wam.their_words("Hi Sensa, I need a video produced in Dubai. My project: (ref NFFQ5)") == ""
+         and _wam.their_words("Hi Sensa, I need a video produced in Dubai. My project: (ref NFFQ5) a hotel launch film") == "a hotel launch film"
+         and "verified or (sug or {}).get" in inspect.getsource(_wam._process_message))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

@@ -208,6 +208,19 @@ def auto_reply_text(skill: dict, co: dict, name: str = "") -> str:
             .replace("{company}", co.get("name") or "Sensa Productions"))
 
 
+_PREFILLS_DEFAULT = ["Hi Sensa, I need a video produced in Dubai. My project:"]
+
+
+def their_words(msg: str) -> str:
+    """What the person actually wrote: the message minus our landing page's pre-filled text (setting `wa_prefills`)
+    and our tracking reference."""
+    from . import lptrack
+    t = lptrack.REF_RX.sub("", msg or "")
+    for p in (db.setting_get("wa_prefills") or _PREFILLS_DEFAULT):
+        t = re.sub(re.escape(str(p)), "", t, flags=re.I)
+    return re.sub(r"[\s()]+", " ", t).strip(" .,:-")
+
+
 def _ensure_opportunity(co: dict, phone: str, who: str, summary: str, src: dict | None) -> int | None:
     """Open an opportunity for a WhatsApp enquiry. Owner, 10 Oct 2026: "if it's not spam, then it's an
     opportunity... at least if the opportunity is created, then everything can be tracked and it won't
@@ -351,16 +364,26 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
     if cat == "lead" and not deal_id:
         # QUALIFIED, AS AN EMAIL LEAD IS: the lead-qualification skill judges it; only a qualified lead gets the
         # opportunity. A lead it will not qualify still gets the acknowledgement and the owner is told.
+        # A CONFIRMED AD CLICK IS A LEAD, AND ONLY THEIR OWN WORDS ARE JUDGED (14 Oct 2026). A.Yousef (Waheguru
+        # Travels) tapped our landing page's WhatsApp button from a paid click; the qualifier read OUR pre-filled text
+        # and OUR tracking ref as "a vague one-liner with a spammy ref code" and withheld the opportunity, while
+        # Alexander's identical message an hour earlier passed. Our text and ref are removed before any judgement, a
+        # click on record opens the opportunity whatever the verdict, and no email is expected on this channel.
+        verified = bool((src or {}).get("click"))
+        own = their_words(msg)
         sug = None
-        try:
-            sug = engine.qualify_suggest(co, {"name": know_name, "email": "", "message": msg,
-                                              "subject": "WhatsApp enquiry", "phone": phone})
-        except Exception as _qe:  # noqa: BLE001
-            print(f"[whatsapp] qualify {phone}: {type(_qe).__name__}: {_qe}", flush=True)
+        if own:
+            try:
+                sug = engine.qualify_suggest(co, {"name": know_name, "email": "", "subject": "WhatsApp enquiry",
+                                                  "phone": phone,
+                                                  "message": "[A WhatsApp message: people write briefly here and no "
+                                                             "email address is expected.] " + own})
+            except Exception as _qe:  # noqa: BLE001
+                print(f"[whatsapp] qualify {phone}: {type(_qe).__name__}: {_qe}", flush=True)
         # WHATSAPP LEADS ARE SHORT. Qualification answers "needs_info" for nearly every one ("Hi, I need a video
         # produced in Dubai"), and the deal is the only record of a conversation he holds on his own phone, so on
         # this lane only an explicit not_qualified withholds the opportunity.
-        if (sug or {}).get("verdict") != "not_qualified":
+        if verified or (sug or {}).get("verdict") != "not_qualified":
             deal_id = _ensure_opportunity(co, phone, know_name, cls.get("summary") or "", src)
             if deal_id:
                 try:   # like an email opportunity (audit step 2e): the organisation they named, and the estimate

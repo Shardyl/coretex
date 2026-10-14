@@ -3529,3 +3529,11 @@ shoot needs none), then 10% off the whole quotation.
 - `_replaced_attachments(existing, refs, nums)`: an attachment leaves only when the library files it as the SAME KIND as
   one coming in (quotation, terms) and it carries the number; decks and everything else stay. The email card shows
   `request.attach_changes` ("Added: ... · Removed (replaced): ...") until he changes the files himself. v70.
+
+## A confirmed ad click is a lead; only their own words are judged (14 Oct 2026)
+- A.Yousef (Waheguru Travels) tapped the landing page's WhatsApp button from a paid click (ref NFFQ5); qualification
+  read OUR pre-filled text and OUR tracking ref as "a vague one-liner with a spammy ref code" and withheld the
+  opportunity; Alexander's identical text an hour earlier passed (model noise on our own words).
+- `whatsapp.their_words(msg)` removes the pre-fill (setting `wa_prefills`, default the Sensa LP text) and the ref
+  before any judgement; with nothing of their own, no qualification runs. A ref matched to a click on record
+  (`lead_source.click`) opens the opportunity whatever the verdict. The qualifier is told no email is expected.
