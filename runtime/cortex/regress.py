@@ -624,6 +624,25 @@ def _cases():
          and "('queued','new','drafting'" in inspect.getsource(engine.poll_sales_replies)
          and "'queued'" in inspect.getsource(engine._rejudge_pending_replies))
 
+    # --- quotation options: Option A and Option B (owner, 14 Oct)
+    case("an option is titled by its letter, never twice", "quotation options",
+         lambda: engine._option_title("B", "AI brand film") == "Option B: AI brand film"
+         and engine._option_title("A", "Option B: AI brand film") == "Option A: AI brand film")
+    case("the pricing page lists every option, headline the lowest", "quotation options",
+         lambda: deck.investment_from_options([{"letter": "A", "title": "Option A: Full film", "net": 40000},
+                                               {"letter": "B", "title": "Option B: Lite", "net": 25000}])["headline"]
+         == "From AED 25,000 + VAT")
+    case("the email waits for every option; signing one withdraws the others", "quotation options",
+         lambda: "deal_options(" in inspect.getsource(engine._quote_to_email)
+         and "deal_options(" in inspect.getsource(engine._confirm_signed)
+         and "deal_options(" in inspect.getsource(__import__("cortex.pipeline", fromlist=["x"]).record_quotation_sent))
+
+    def _opt_intent():
+        i = engine._quote_intent("Keep the current quote, and add a second option at 18,000 + VAT without the voice over.")
+        j = engine._quote_intent("On option B, drop the vertical cut-down.")
+        return bool(i) and i.get("mode") == "option" and i.get("target") == 18000 and bool(j) and j.get("option") == "B"
+    case("'add a second option' is an option; 'on option B' targets B", "quotation options", _opt_intent, model=True)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

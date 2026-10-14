@@ -7240,7 +7240,9 @@ def _quote_intent(text: str) -> dict | None:
             "a change of scope, the number of revision rounds, how it is paid, or scrapping it for a new one? A figure "
             "the client asked for that he has not accepted is NOT a decision; saying he will go ahead at it IS. Return "
             '{"quotation": true|false, "mode": "revise" (change the current quotation) | "scrap" (scrap it and build '
-            'a new one from his words) | "new_number" (a separate quotation under a new number), "target_net": <the '
+            'a new one from his words) | "new_number" (a separate quotation under a new number) | "option" (an '
+            'ADDITIONAL price option offered alongside the current one: a second option, option B, an alternative), '
+            '"option": "<the option letter he is changing, if he names one (A, B...), else null>", "target_net": <the '
             'price he decided, a number, else null>, "vat_inclusive": <true only if he said the figure includes VAT>, '
             '"revision_rounds": <int if he set the number of revision rounds, else null>, "payment": [{"pct": <int>, '
             '"when": "<his words for when it is paid, or empty>"}] or null, "changes": "<what to change in the scope, '
@@ -7251,8 +7253,10 @@ def _quote_intent(text: str) -> dict | None:
     if not isinstance(r, dict) or not r.get("quotation"):
         return None
     said = _stated_numbers(text)
-    out = {"mode": r.get("mode") if r.get("mode") in ("revise", "scrap", "new_number") else "revise",
+    out = {"mode": r.get("mode") if r.get("mode") in ("revise", "scrap", "new_number", "option") else "revise",
            "changes": str(r.get("changes") or "").strip()[:1500]}
+    if re.fullmatch(r"[A-Fa-f]", str(r.get("option") or "")):
+        out["option"] = str(r["option"]).upper()
     t = r.get("target_net")
     try:
         if t not in (None, "") and round(float(t), 2) in said:
@@ -7280,6 +7284,62 @@ def _quote_intent(text: str) -> dict | None:
     if not (out.get("target") or out.get("rounds") or out.get("payment") or out["changes"] or out["mode"] != "revise"):
         return None
     return out
+
+
+# QUOTATION OPTIONS (owner, 14 Oct 2026: "sometimes we're giving them two different price options ... make it like an
+# option A and option B"). Each option is its own quotation NUMBER on the deal, its card carrying `option` ("A", "B"),
+# its document titled "Option B: ...". The email waits until every option is approved and then carries them all; the
+# deal value is Option A's with the range logged; a words-led deck's pricing page lists the options; signing one
+# withdraws the others.
+def deal_options(deal_id) -> list[dict]:
+    """The deal's live options, A first: the latest card per quotation number that carries an option letter."""
+    if not str(deal_id or "").isdigit():
+        return []
+    seen, out = set(), []
+    for t in db.query("select * from tasks where kind='quotation' and deal_id=%s and request->>'option' is not null "
+                      "and status not in ('cancelled','rejected') order by id desc", (int(deal_id),)):
+        n = (t.get("request") or {}).get("number")
+        if n and n not in seen:
+            seen.add(n)
+            out.append(t)
+    return sorted(out, key=lambda t: str((t.get("request") or {}).get("option") or "Z"))
+
+
+def _option_title(letter: str, title: str | None) -> str:
+    base = re.sub(r"^\s*option\s+[a-z]\s*:\s*", "", str(title or "QUOTATION"), flags=re.I).strip()
+    return f"Option {letter}: {base}"
+
+
+def _prepare_option(deal_id) -> tuple:
+    """(letter for the new option, note). The first time a deal gets a second option, its existing quotation becomes
+    Option A: its card is labelled and, when its lines are stored, it is reissued titled 'Option A: ...'."""
+    opts = deal_options(deal_id)
+    if opts:
+        last = max(str((o.get("request") or {}).get("option") or "A") for o in opts)
+        return chr(ord(last) + 1), ""
+    cur = _deal_quote(int(deal_id))
+    if not cur.get("number"):
+        return "A", ""
+    card = db.one("select * from tasks where kind='quotation' and deal_id=%s and request->>'number'=%s order by id desc "
+                  "limit 1", (int(deal_id), cur["number"]))
+    note = ""
+    if card:
+        db.execute("update tasks set request = request || %s::jsonb where id=%s", (json.dumps({"option": "A"}), card["id"]))
+        try:
+            if cur.get("entry"):
+                sp = cur["entry"].get("spec") or {}
+                t = reissue_quotation(sp.get("company") or "sensa", cur["number"], deal_id=int(deal_id),
+                                      title=_option_title("A", sp.get("title")))
+                if t:
+                    db.execute("update tasks set request = request || %s::jsonb where id=%s",
+                               (json.dumps({"option": "A"}), t["id"]))
+                    note = f"Quotation {cur['number']} is now Option A (reissued as card #{t['id']} with that title)."
+            else:
+                note = (f"Quotation {cur['number']} is now Option A; its lines were never stored, so its document still "
+                        "prints its old title.")
+        except ValueError as e:
+            note = f"Quotation {cur['number']} is Option A, but it could not be reissued with that title ({e})."
+    return "B", note
 
 
 def _deal_quote(deal_id) -> dict:
@@ -7370,8 +7430,19 @@ def build_quote_from_words(company: dict, deal_id, text: str, intent: dict, for_
     acct = (db.one("select name from crm_accounts where id=%s", (deal["account_id"],)) or {}).get("name") \
         if deal.get("account_id") else ""
     customer = cur["customer"] or acct or re.split(r"\s*(?::|\s-\s)", deal.get("title") or "")[0].strip()
-    number = None if intent.get("mode") == "new_number" else cur["number"]
-    prev = (cur["entry"] or {}).get("spec") if cur["entry"] and intent.get("mode") == "revise" else None
+    letter, opt_note = None, ""
+    if intent.get("option") and intent.get("mode") == "revise":   # "change option B": that option's own number
+        _o = next((o for o in deal_options(did) if (o.get("request") or {}).get("option") == intent["option"]), None)
+        if _o:
+            cur = {**cur, "number": (_o.get("request") or {}).get("number")}
+            _reg = db.setting_get(f"quote_versions:{cur['number']}") or []
+            cur["entry"] = next((e for e in reversed(_reg) if _version_is_priced(e)), None)
+            letter = intent["option"]
+    if intent.get("mode") == "option":
+        letter, opt_note = _prepare_option(did)
+    number = None if intent.get("mode") in ("new_number", "option") else cur["number"]
+    # an option is built FROM the current quotation (his words say how it differs); a scrap ignores the old lines
+    prev = (cur["entry"] or {}).get("spec") if cur["entry"] and intent.get("mode") in ("revise", "option") else None
     if not prev and intent.get("mode") == "revise" and cur["number"]:
         # A QUOTATION BUILT FROM ONE TOTAL STORED NO LINES (SEN-2026-0027): its printed text is the starting point
         try:
@@ -7414,8 +7485,12 @@ def build_quote_from_words(company: dict, deal_id, text: str, intent: dict, for_
                 notes.append("Priced on the Budget tier of the rate card to reach your figure.")
             if spec.get("assumptions"):
                 notes.append("Assumed: " + "; ".join(str(x) for x in spec["assumptions"][:8]) + ".")
+            if opt_note:
+                notes.append(opt_note)
             t = deliver_quotation(company["slug"], preset=spec.get("preset") or "ai-production", customer=customer,
-                                  sections=spec["sections"], title=spec.get("title") or None,
+                                  sections=spec["sections"],
+                                  title=(_option_title(letter, spec.get("title") or (prev or {}).get("title"))
+                                         if letter else (spec.get("title") or None)), option=letter,
                                   note=spec.get("note") or None, contact_email=deal.get("contact_email"),
                                   deliverables=spec.get("deliverables") or None, deal_id=did, number=number,
                                   payment_lines=pay or ((prev or {}).get("payment")),
@@ -7427,7 +7502,7 @@ def build_quote_from_words(company: dict, deal_id, text: str, intent: dict, for_
         return {"ok": False, "msg": "Not built: the quotation could not be rendered."}
     db.execute("update tasks set deal_id=%s where id=%s", (did, t["id"]))
     rq = t.get("request") or {}
-    if intent.get("mode") != "revise" and cur["number"] and rq.get("number") != cur["number"]:
+    if intent.get("mode") in ("scrap", "new_number") and cur["number"] and rq.get("number") != cur["number"]:
         # a separate quotation replaces the old one: its open card stands down
         db.execute("update tasks set status='cancelled', updated_at=now(), request = request || "
                    "jsonb_build_object('superseded_by', %s::bigint) where kind='quotation' and deal_id=%s and "
@@ -7450,6 +7525,31 @@ def _quote_to_email(task: dict, company: dict, actor: str) -> dict:
     from . import documents
     rq = task.get("request") or {}
     number, did = rq.get("number"), task.get("deal_id") or rq.get("deal_id")
+    option_line = ""
+    if rq.get("option") and did:
+        opts = deal_options(int(did))
+        waiting = [o for o in opts if o["id"] != task["id"] and o.get("status") in ("awaiting_approval", "awaiting_correction")]
+        if waiting:
+            nxt = waiting[0]
+            if rq.get("for_email"):      # the email keeps waiting, now for the option still to approve
+                db.execute("update tasks set request = request || %s::jsonb where id=%s and kind in ('email_reply','email_draft')",
+                           (json.dumps({"waiting_quote": nxt["id"]}), int(rq["for_email"])))
+                db.execute("update tasks set request = request || %s::jsonb where id=%s",
+                           (json.dumps({"for_email": int(rq["for_email"])}), nxt["id"]))
+            return {"approved": True, "note": f"Option {rq['option']} approved. The email follows once "
+                    + ", ".join(f"Option {(o.get('request') or {}).get('option')} (card #{o['id']})" for o in waiting)
+                    + " is approved too."}
+        # every option approved: they all travel together; the figures are stated by code
+        _all = []
+        for o in opts:
+            orq = o.get("request") or {}
+            _all += [a for a in (orq.get("attach_docs") or []) if a.get("id")]
+            _reg = db.setting_get(f"quote_versions:{orq.get('number')}") or []
+            from . import proforma as _pf
+            _net = _pf.net_of(_reg[-1]) if _reg else 0
+            option_line += f" Option {orq.get('option')} ({orq.get('number')}): AED {_net:,.0f} + VAT."
+        rq = {**rq, "attach_docs": _all}
+        number = " and ".join(str((o.get("request") or {}).get("number")) for o in opts)
     refs = [documents.card_ref(d) for d in (documents.get(int(a["id"]), company["id"])
                                             for a in (rq.get("attach_docs") or []) if a.get("id")) if d]
     if not refs:
@@ -7467,14 +7567,20 @@ def _quote_to_email(task: dict, company: dict, actor: str) -> dict:
                     "order by id desc limit 1", (int(did), list(_OPEN_CARD)))
     if em:
         ereq = dict(em.get("request") or {})
+        _nums = re.findall(r"SEN-\d{4}-\d{4}", str(number))
         ereq["attach_docs"] = refs + [a for a in (ereq.get("attach_docs") or [])
-                                      if number not in str(a.get("filename") or "") and a.get("id") not in {r["id"] for r in refs}]
+                                      if not any(n in str(a.get("filename") or "") for n in _nums)
+                                      and a.get("id") not in {r["id"] for r in refs}]
         instr = ereq.pop("pending_instruction", "") or ""
         ereq.pop("waiting_quote", None)
         ereq.pop("card_problem", None)
         store.update_task(em["id"], request=ereq, status="awaiting_approval")
         note = (f"Quotation {number} is now attached to this email ({refs[0]['filename']}). Write the email around it: "
                 "say it is attached, reflect what was decided, and state no figure that the quotation does not print.")
+        if option_line:
+            note = ("The price OPTIONS are attached to this email:" + option_line + " Present them as options for the "
+                    "client to choose between, explain briefly how they differ, and state no figure the quotations do not "
+                    "print.")
         if instr:
             apply_correction(store.get_task(em["id"]), instr + "\n\n" + note, _quote_checked=True, infer=False)
         else:
@@ -7638,6 +7744,10 @@ def restamp_proposal_price(deal_id, number: str, quote_card: int | None = None) 
     p = db.one("select * from tasks where deal_id=%s and request->>'kind' in ('creative_proposal','proposal') and "
                "request->>'quotation_number'=%s and status not in ('rejected','cancelled') order by id desc limit 1",
                (int(deal_id), number))
+    if not p and any((o.get("request") or {}).get("number") == number for o in deal_options(int(deal_id))):
+        # an OPTION's number is not on the deck: the deck carries Option A's, and its page lists every option
+        p = db.one("select * from tasks where deal_id=%s and request->>'kind'='proposal' and status not in "
+                   "('rejected','cancelled') order by id desc limit 1", (int(deal_id),))
     if not p:
         return None
 
@@ -7654,6 +7764,15 @@ def restamp_proposal_price(deal_id, number: str, quote_card: int | None = None) 
             if not (spec and qf):
                 return
             stamped = deck.investment_from_quotation(qf)
+            _opts = deal_options(int(deal_id))
+            if len(_opts) > 1:      # the deck shows every option side by side, never just one of them
+                _of = []
+                for o in _opts:
+                    orq = o.get("request") or {}
+                    f = _quotation_facts(orq.get("number")) or {}
+                    _of.append({"letter": orq.get("option"), "title": orq.get("title") or o.get("title"),
+                                "net": f.get("net"), "currency": f.get("currency")})
+                stamped = deck.investment_from_options(_of)
             spec["investment"] = {**(spec.get("investment") or {}), "rows": stamped["rows"], "headline": stamped["headline"],
                                   "blurb": ""}
             ver = int(req.get("version") or 1) + 1
@@ -8186,7 +8305,7 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
                       deliverables: list | None = None, deal_id: int | None = None,
                       discount_pct: float | None = None, payment_lines: list | None = None,
                       revision_rounds: int | None = None, for_email: int | None = None,
-                      owner_notes: list | None = None) -> dict:
+                      owner_notes: list | None = None, option: str | None = None) -> dict:
     """Render a quotation and drop it in the Inbox as a downloadable card (kind='quotation'). `fmt` = 'both'
     (default: editable .xlsx + ready-to-send .pdf), 'xlsx', or 'pdf'; both share one quote number. Delivery
     copies stored in R2 under <slug>/quotations/draft/. Prices come from the request (a stated total split by
@@ -8287,7 +8406,8 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
            "master_terms": x.get("master_terms"),
            **({"for_email": int(for_email)} if for_email else {}),
            **({"payment_lines": list(payment_lines)} if payment_lines else {}),
-           **({"revision_rounds": int(revision_rounds)} if revision_rounds else {})}
+           **({"revision_rounds": int(revision_rounds)} if revision_rounds else {}),
+           **({"option": option} if option else {})}
     _att = [d for d in (_doc, terms_doc) if d]
     if _att:
         req["attach_docs"] = [{"id": d["id"], "filename": d["filename"], "mime": d["mime"],
@@ -9008,6 +9128,26 @@ def _confirm_signed(task: dict, skill: dict, company: dict, actor: str) -> dict:
         card = deliver_proforma(company["slug"], sg["number"], version=sg["v"], stage=1, deal_id=did)
     except ValueError as e:          # already issued for stage 1, or unpriced: the confirmation still stands
         note = f" No new pro forma: {e}."
+    _withdrawn = []
+    for o in deal_options(did):        # the client chose: every other option is withdrawn, kept on record
+        orq = o.get("request") or {}
+        if orq.get("number") and orq.get("number") != sg["number"]:
+            if o.get("status") in ("awaiting_approval", "awaiting_correction"):
+                store.update_task(o["id"], status="cancelled",
+                                  request={**orq, "cancelled_reason": f"the client signed {sg['number']}"})
+            try:
+                from . import documents as _docs
+                _olds = [r["id"] for r in db.query("select id from company_documents where superseded_by is null and "
+                                                   "filename ilike %s", (f"%Quotation {orq['number']}%",))]
+                _keep = db.one("select id from company_documents where filename ilike %s order by id desc limit 1",
+                               (f"%Quotation {sg['number']}%",))
+                if _olds and _keep:
+                    _docs.supersede(_olds, _keep["id"])
+            except Exception:  # noqa: BLE001
+                pass
+            _withdrawn.append(f"Option {orq.get('option')} ({orq['number']})")
+    if _withdrawn:
+        pipeline.log_deal(did, "note", f"The client signed {sg['number']}: withdrawn " + ", ".join(_withdrawn) + ".")
     d = db.one("select stage from crm_projects where id=%s", (did,)) or {}
     if d.get("stage") in crm.FORECAST_STAGES:
         crm.set_project_stage(did, "Booked", actor=actor)

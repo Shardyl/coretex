@@ -479,14 +479,20 @@ def record_quotation_sent(deal_id: int, task: dict, env: dict, company: dict | N
     req = (task or {}).get("request") or {}
     names = [a.get("filename") or "" for a in req.get("attach_docs") or []] + list(req.get("attachment_names") or [])
     hay = [n for n in names if "quot" in n.lower()] + [(env or {}).get("subject") or ""]
-    found = None
+    found, every = None, []
     for h in hay:
         m = _QNUM.search(h or "")
         if m and db.setting_get(f"quote_versions:{m.group(1)}"):
-            found = (m.group(1), int(m.group(2)) if m.group(2) else None)
-            break
+            every.append((m.group(1), int(m.group(2)) if m.group(2) else None))
+            found = found or every[-1]
     if not found:
         return None
+    for _n, _v in every[1:]:     # every OPTION sent is on the record, so the signed copy can be matched to any of them
+        _r = db.setting_get(f"quote_versions:{_n}") or []
+        _e = (next((e for e in _r if e.get("v") == _v), None) if _v else None) or (_r[-1] if _r else {})
+        if _e:
+            log_deal(int(deal_id), "quotation_sent", f"Quotation {_n} v{_e.get('v')} sent (an option)",
+                     ref=f"quotation-sent:{_n}:v{_e.get('v')}")
     num, ver = found
     reg = db.setting_get(f"quote_versions:{num}") or []
     entry = (next((e for e in reg if e.get("v") == ver), None) if ver else None) or reg[-1]
@@ -502,6 +508,20 @@ def record_quotation_sent(deal_id: int, task: dict, env: dict, company: dict | N
         pass
     d = db.one("select stage, value from crm_projects where id=%s", (int(deal_id),)) or {}
     text = f"Quotation {num} v{entry.get('v')} sent: {cur} {net:,.0f} + VAT"
+    try:          # OPTIONS: the deal's value is Option A's, the range is said (owner, 14 Oct 2026)
+        from . import engine as _eng
+        _opts = _eng.deal_options(int(deal_id))
+        if len(_opts) > 1 and any((o.get("request") or {}).get("number") == num for o in _opts):
+            _nets = []
+            for o in _opts:
+                _r = db.setting_get(f"quote_versions:{(o.get('request') or {}).get('number')}") or []
+                _nets.append(((o.get("request") or {}).get("option"), _pf.net_of(_r[-1]) if _r else 0.0))
+            for letter, n in _nets:
+                text += f"; Option {letter} {cur} {n:,.0f}"
+            net = next((n for letter, n in _nets if letter == "A" and n), net)
+            text += f" (range {cur} {min(n for _l, n in _nets if n):,.0f} to {max(n for _l, n in _nets):,.0f})"
+    except Exception:  # noqa: BLE001
+        pass
     if d.get("stage") in crm.FORECAST_STAGES:
         old = d.get("value")
         db.execute("update crm_projects set value=%s, currency=%s, updated_at=now() where id=%s",

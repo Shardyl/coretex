@@ -179,6 +179,13 @@ CAPABILITIES: list[tuple[str, str]] = [
      "stated everywhere the document states them. The email waits; APPROVING the quotation attaches it, retires older "
      "versions and redrafts the email around it. Every quotation card is approved, never just seen. To do this from "
      "Talk, use correct_task on the email or quotation card, or note_opportunity, with his words."),
+    ("Quotation options: Option A and Option B",
+     "A deal can carry price OPTIONS, each its own quotation number titled 'Option A: ...' / 'Option B: ...'. Add one "
+     "by telling an email or quotation card, or a note, 'add a second option at 18,000 without the voice over', or with "
+     "create_quotation(option=true): the current quotation becomes Option A. 'Change option B ...' revises that one. "
+     "The email waits until EVERY option is approved, then carries them all; the deal value is Option A's with the "
+     "range logged; a words-led proposal's pricing page lists the options; when the client signs one, the others are "
+     "withdrawn automatically."),
     ("The same quotation again: reissue_quotation",
      "reissue_quotation(company, number) issues an EXISTING quotation as its next version, copied exactly by "
      "code from the stored version: same lines, prices and total, today's date. It is the ONLY way to send a "

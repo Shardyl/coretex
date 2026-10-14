@@ -3386,3 +3386,26 @@ shoot needs none), then 10% off the whole quotation.
   reading the same copy passed. Claims now carry a `handler` (inbox / sales) and only the same sweep retries;
   `poll_sales_replies`' open-card check counts queued cards and email_draft; `_rejudge_pending_replies` (after a send)
   judges queued cards too.
+
+## Quotation options: Option A and Option B (owner, 14 Oct 2026)
+- OWNER: "sometimes we're giving them two different price options ... make it like an option A and option B."
+  Before this a second quotation on a deal was forced into the next VERSION of the first (the Merck guard), the deal
+  value swung to whichever was sent last, each approval redrafted the email alone, and nothing closed the unchosen one.
+- An option = its own quotation NUMBER on the deal, the card's `request.option` ("A", "B"...), the document titled
+  "Option B: ..." (`engine._option_title`). `engine.deal_options(deal)` = the live options, A first (latest card per
+  number). `_prepare_option(deal)`: the first time a second option is added, the existing quotation becomes Option A
+  (card labelled; reissued with the "Option A:" title when its lines are stored) and the new one is B; later ones C...
+- HOW HE ADDS ONE: `_quote_intent` mode "option" ("add a second option at 18,000 without the voice over") on any email or
+  quotation card or note -> `build_quote_from_words` builds it FROM the current quotation (his words say how it differs)
+  under a new number; "on option B, ..." (`intent.option`) revises that option's own number. Talk:
+  `create_quotation(option=true)`.
+- `_quote_to_email`: approving one option while another is still open only notes it (the email's `waiting_quote` moves
+  to the option still to approve); when every option is approved, ALL their PDFs are attached together and the email is
+  redrafted to present them as options, each net stated by code from the version registry.
+- Deal value (`pipeline.record_quotation_sent`): every option number on the send is logged as `quotation_sent` (so a
+  signed copy of any of them matches); the value is Option A's, the timeline line states each option and the range.
+- Words-led proposal decks: `restamp_proposal_price` uses `deck.investment_from_options` (one row per option, headline
+  "From AED <lowest> + VAT") when the deal has options; an option's number finds the deal's deck. Creative decks still
+  stamp one quotation (not built for options).
+- `_confirm_signed`: the client signed one -> every other option's open card is cancelled and its library files
+  retired, logged on the deal.

@@ -1182,6 +1182,18 @@ def investment_from_quotation(quotation: dict) -> dict:
     return {"rows": rows[:10], "headline": head, "net": round(net, 2)}
 
 
+def investment_from_options(options: list) -> dict:
+    """OPTIONS ON THE PRICING PAGE (owner, 14 Oct 2026): one row per option, its own scope line and its net figure, the
+    headline the lowest. `options` = [{letter, title, net, currency}], stamped by code from the quotations."""
+    cur = (options[0].get("currency") if options else None) or "AED"
+    rows = [{"item": f"Option {o.get('letter')}",
+             "detail": re.sub(r"^\s*option\s+[a-z]\s*:\s*", "", str(o.get("title") or ""), flags=re.I)[:90],
+             "amount": f"{cur} {float(o.get('net') or 0):,.0f}"} for o in options]
+    nets = [float(o.get("net") or 0) for o in options if o.get("net")]
+    return {"rows": rows, "headline": (f"From {cur} {min(nets):,.0f} + VAT" if nets else "To be confirmed"),
+            "net": min(nets) if nets else 0}
+
+
 def build(company_slug: str, customer: str, brief: str, *, quotation: dict | None = None,
           label: str | None = None, extra_facts: str = "", out_dir: str = "/tmp",
           filename: str = "proposal.pdf", films: list | None = None) -> dict:

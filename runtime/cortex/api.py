@@ -3767,7 +3767,7 @@ SKILL_TOOLS = [
                     "short form prints on the quotation; at or above it the quotation prints numbers and scope only "
                     "and the Master Terms go with it as a separate Terms and Conditions document naming the "
                     "quotation number and the client. `customer` is the client name for the PREPARED FOR field.",
-     "input_schema": {"type": "object", "properties": {
+     "input_schema": {"type": "object", "properties": {"option": {"type": "boolean", "description": "true when this is an ADDITIONAL price option offered alongside the deal's current quotation (Option B, C...): it gets its own number and is titled 'Option B: ...'; the current quotation becomes Option A"}, 
         "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"},
         "preset": {"type": "string", "description": "line-item breakdown and printed terms: 'ai-production' "
                                                    "(default, direct clients), 'agency-ai' (an AGENCY buying AI "
@@ -4633,7 +4633,12 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                         "If there is none yet, create it first with create_deal (ask who the designated contact is), "
                         "then build the quotation with its deal_id.")
             inp["deal_id"] = _opp["id"]
-        if not inp.get("number"):
+        _letter = None
+        if inp.get("option"):          # an ADDITIONAL price option: its own number, titled Option B, C...
+            _letter, _onote = engine._prepare_option(int(inp["deal_id"]))
+            inp["title"] = engine._option_title(_letter, inp.get("title"))
+            inp["number"] = None
+        if not inp.get("number") and not _letter:
             _cur = engine._deal_quote(int(inp["deal_id"]))
             if _cur.get("number") and (_cur.get("customer") or "").strip().lower() == (inp.get("customer") or "").strip().lower():
                 inp["number"] = _cur["number"]       # the next version of the deal's quotation, never a new number
@@ -4676,7 +4681,8 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                                          deal_id=int(inp["deal_id"]) if inp.get("deal_id") else None,
                                          discount_pct=(inp.get("discount_pct") if inp.get("discount_pct") not in
                                                        (None, "") and round(float(inp["discount_pct"]), 2)
-                                                       in _said else None))
+                                                       in _said else None),
+                                         option=_letter)
         except ValueError as _e:
             _why = str(_e)
             if _priced and _priced.get("blanked"):
