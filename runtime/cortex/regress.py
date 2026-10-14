@@ -634,6 +634,9 @@ def _cases():
          lambda: deck.investment_from_options([{"letter": "A", "title": "Option A: Full film", "net": 40000},
                                                {"letter": "B", "title": "Option B: Lite", "net": 25000}])["headline"]
          == "From AED 25,000 + VAT")
+    case("a creative deck's pricing page lists every option too", "quotation options",
+         lambda: 'q.get("options")' in inspect.getsource(__import__("cortex.creative", fromlist=["x"]).Job.quote_rows)
+         and "deal_options(" in inspect.getsource(__import__("cortex.creative", fromlist=["x"]).adopt_quotation))
     case("the email waits for every option; signing one withdraws the others", "quotation options",
          lambda: "deal_options(" in inspect.getsource(engine._quote_to_email)
          and "deal_options(" in inspect.getsource(engine._confirm_signed)

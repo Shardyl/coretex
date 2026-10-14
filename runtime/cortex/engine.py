@@ -7746,8 +7746,8 @@ def restamp_proposal_price(deal_id, number: str, quote_card: int | None = None) 
                (int(deal_id), number))
     if not p and any((o.get("request") or {}).get("number") == number for o in deal_options(int(deal_id))):
         # an OPTION's number is not on the deck: the deck carries Option A's, and its page lists every option
-        p = db.one("select * from tasks where deal_id=%s and request->>'kind'='proposal' and status not in "
-                   "('rejected','cancelled') order by id desc limit 1", (int(deal_id),))
+        p = db.one("select * from tasks where deal_id=%s and request->>'kind' in ('creative_proposal','proposal') and "
+                   "status not in ('rejected','cancelled') order by id desc limit 1", (int(deal_id),))
     if not p:
         return None
 

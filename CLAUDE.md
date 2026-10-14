@@ -3405,7 +3405,10 @@ shoot needs none), then 10% off the whole quotation.
 - Deal value (`pipeline.record_quotation_sent`): every option number on the send is logged as `quotation_sent` (so a
   signed copy of any of them matches); the value is Option A's, the timeline line states each option and the range.
 - Words-led proposal decks: `restamp_proposal_price` uses `deck.investment_from_options` (one row per option, headline
-  "From AED <lowest> + VAT") when the deal has options; an option's number finds the deal's deck. Creative decks still
-  stamp one quotation (not built for options).
+  "From AED <lowest> + VAT") when the deal has options; an option's number finds the deal's deck.
 - `_confirm_signed`: the client signed one -> every other option's open card is cancelled and its library files
   retired, logged on the deal.
+- Creative decks list options too (owner, 14 Oct 2026): `creative.adopt_quotation` sets `quote.options` when the deal
+  has more than one, the deck keeps Option A's number, `Job.quote_rows` gives one row per option (its blocks as the
+  lines, each net from that option's live version) and the investment headline reads "From AED <lowest>".
+  `restamp_proposal_price` finds the deal's creative or words-led deck from any option's number.

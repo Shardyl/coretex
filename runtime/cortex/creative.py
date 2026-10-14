@@ -679,6 +679,19 @@ class Job:
         """The investment rows, READ BACK from the issued quotation (or the dry-run spec): one row per block,
         the amount summed by code. The deck can never contradict the quotation."""
         q = self.s["quote"]
+        opts = q.get("options") or []
+        if len(opts) > 1:
+            # OPTIONS (owner, 14 Oct 2026): one row per option, its blocks as the lines, each net summed by code from
+            # that option's live version; the headline is the lowest ("From AED ...")
+            rows, nets = [], []
+            for o in opts:
+                reg = db.setting_get(f"quote_versions:{o.get('number')}") or []
+                secs = ((reg[-1].get("spec") or {}).get("sections") or []) if reg else []
+                amt = sum(float(i.get("unit") or 0) * float(i.get("qty") or 1) for s in secs for i in s.get("items") or [])
+                nets.append(amt)
+                rows.append({"item": f"Option {o.get('letter')}", "amount": f"AED {amt:,.0f}",
+                             "items": [_label(s) for s in secs] or [str(o.get("title") or "")]})
+            return rows, (min(n for n in nets if n) if any(nets) else 0.0)
         sections = q["spec"]["sections"]
         if q.get("number"):
             reg = db.setting_get(f"quote_versions:{q['number']}") or []
@@ -870,7 +883,9 @@ class Job:
         blurb = ("Excluding VAT" + (f", as Quotation {q['number']} v{q.get('version')}" if q.get("number") else "")
                  + ". " + ((cp.get("investment") or {}).get("blurb") or ""))
         if not self.s.get("omit_investment"):
-            d.investment(f"{n:02d} · Investment", f"AED {net:,.0f}", blurb.strip(), inv)
+            d.investment(f"{n:02d} · Investment",
+                         (f"From AED {net:,.0f}" if len(q.get("options") or []) > 1 else f"AED {net:,.0f}"),
+                         blurb.strip(), inv)
             d.with_bg(bgi(len(bg) - 1))
             n += 1
         tcards = [x for x in (cp["terms"].get("cards") or [])
@@ -1033,6 +1048,16 @@ def adopt_quotation(task_id: int, number: str, quote_card: int | None = None) ->
     if not t or not (t.get("request") or {}).get("job"):
         return None
     job = Job(t["request"]["job"])
+    options = None
+    try:          # the deal offers OPTIONS: the deck carries Option A's number and its page lists every option
+        from . import engine
+        _opts = engine.deal_options(t.get("deal_id") or (t.get("request") or {}).get("deal_id"))
+        if len(_opts) > 1:
+            options = [{"letter": (o.get("request") or {}).get("option"), "number": (o.get("request") or {}).get("number"),
+                        "title": (o.get("request") or {}).get("title") or o.get("title")} for o in _opts]
+            number = options[0]["number"] or number
+    except Exception:  # noqa: BLE001
+        options = None
     reg = db.setting_get(f"quote_versions:{number}") or []
     if not reg:
         return None
@@ -1042,9 +1067,13 @@ def adopt_quotation(task_id: int, number: str, quote_card: int | None = None) ->
     qrow = store.get_task(int(qc)) if qc else None
     job.s["quote"] = {**(job.s.get("quote") or {}), "spec": live.get("spec") or {}, "number": number, "card": qc,
                       "version": int(live.get("v") or 1), "summary": ((qrow or {}).get("request") or {}).get("summary"),
-                      "blanked": [], "missing": [], "target": None, "scaled": None}
-    job.stage_copy(feedback=f"The quotation is now {number} v{live.get('v')}. Keep every page as it is; only wording "
-                            "that refers to the investment may change.")
+                      "blanked": [], "missing": [], "target": None, "scaled": None, "options": options}
+    job.stage_copy(feedback=(f"The client is now offered {len(options)} price options ("
+                             + ", ".join(f"Option {o['letter']}" for o in options) + "). Keep every page as it is; only "
+                             "wording that refers to the investment may change, and it must present them as options."
+                             if options else
+                             f"The quotation is now {number} v{live.get('v')}. Keep every page as it is; only wording "
+                             "that refers to the investment may change."))
     job.stage_render(int(job.s["deck"]["version"]) + 1)
     job.stage_file(t)
     job.save()
