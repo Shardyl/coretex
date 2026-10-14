@@ -193,3 +193,107 @@ def on_deal_for_contact(email: str) -> None:
     """An opportunity now exists for someone we emailed by hand: the 'untracked sales email' notice is answered."""
     db.execute("update notifications set state='dismissed' where state in ('unread','read','snoozed') and "
                "lower(dedup_key)=%s", (f"untracked-sales:{(email or '').strip().lower()}",))
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# ONE RECORD OF WHAT IS OWED (owner, 14 Oct 2026: "we can't seem to fix these duplicates ... get the fundamental cause").
+# Four writers set reminders for what we owe on a deal: meeting notes (twice per meeting: the summary email and the full
+# document), every email we send, the client's stated deadlines, and next steps. Each had its own duplicate check, or
+# none, by WORD OVERLAP, so one promise in other words became a twin: Shama #164 carried three reminders for "2 to 3
+# creative options", Sampras #60 a deadline and a promise for the same service-charge change. The check now lives in
+# the one place every Cortex reminder passes through (reminders.create -> check_new): the new item is compared by
+# MEANING with everything still open on the deal, and a match updates that one reminder instead of adding another. The
+# morning health check runs merge_twins over every deal as a safety net.
+# A PROMISE TO DELIVER WORK GETS ITS LEAD TIME: the reminder fires `delivery_lead_working_days` (profile, default 2)
+# working days before the date it is owed, and it only ever reminds: it never drafts the email that "delivers" it.
+# ---------------------------------------------------------------------------------------------------------------------
+OWED_PREFIXES = ("Commitment owed to", "Meeting commitment", "Next step on", "Client deadline")
+
+
+def _open_on_deal(deal_id) -> list[dict]:
+    return db.query("select id, title, due_at, created_by, deliver_by from reminders where target_type='deal' and "
+                    "target_id=%s and status in ('pending','snoozed') and recurrence='none' and "
+                    "coalesce(created_by,'') <> 'cortex-touch' order by id", (str(deal_id),))
+
+
+def lead_days(company_id) -> int:
+    try:
+        from . import profile
+        return max(0, int((profile.get(company_id) or {}).get("delivery_lead_working_days", 2)))
+    except Exception:  # noqa: BLE001
+        return 2
+
+
+def working_days_before(dt, n: int):
+    from datetime import timedelta
+    d = dt
+    while n > 0:
+        d -= timedelta(days=1)
+        if d.weekday() < 5:          # Monday to Friday
+            n -= 1
+    return d
+
+
+def check_new(title: str, due_at, company_id, deal_id) -> dict:
+    """{"same": <open reminder row> | None, "replaces": bool, "deliverable": bool}. One narrow model question, only
+    when there is something to compare with or the new item is a promise; code keeps only real ids."""
+    rows = _open_on_deal(deal_id) if str(deal_id or "").isdigit() else []
+    owed = (title or "").startswith(OWED_PREFIXES)
+    if not rows and not owed:
+        return {}
+    from . import provider
+    listing = "\n".join(f"R{r['id']} [{'set by the owner' if not str(r.get('created_by') or '').startswith('cortex') else 'cortex'}] "
+                        f"{r['title'][:220]} (due {r['due_at']:%d %b})" for r in rows[:30])
+    try:
+        out = provider.think_json(
+            "A new reminder is about to be set on a sales opportunity. (1) Is it the SAME obligation as one already "
+            "open (the same thing owed or due, whatever the wording, e.g. 'send 2 to 3 creative options' = 'deliver "
+            "2-3 treatments with mood, script and images')? A different deliverable, a later stage or a different "
+            "person is NOT the same. (2) If the same, does the new one state a CHANGED date that should replace the "
+            "old one? (3) Is the new item a piece of work WE must produce and deliver (a treatment, proposal, "
+            "quotation, deck, script, edit, document), rather than a reply, a call or an update? Return "
+            '{"same": "R<id>" or null, "replaces": true|false, "deliverable": true|false}.',
+            f"OPEN:\n{listing or '(nothing open)'}\n\nNEW: {title[:300]} (due {due_at:%d %b})",
+            model=provider.MODEL_ROUTER, max_tokens=60, purpose="owed-dedup") or {}
+    except Exception:  # noqa: BLE001
+        return {}
+    sid = str(out.get("same") or "").lstrip("Rr")
+    same = next((r for r in rows if sid.isdigit() and int(sid) == r["id"]), None)
+    return {"same": same, "replaces": bool(out.get("replaces")), "deliverable": bool(out.get("deliverable")) and owed}
+
+
+def merge_twins(rows: list) -> list:
+    """Safety net (invariant duplicate_obligations): per deal, group the open reminders that are the same obligation and
+    keep ONE (the owner's own if one is in the group, else the earliest due); the rest are cancelled, never deleted."""
+    from . import pipeline, provider
+    merged = []
+    for row in rows or []:
+        did = row.get("deal_id")
+        items = _open_on_deal(did)
+        if len(items) < 2:
+            continue
+        listing = "\n".join(f"R{r['id']} {r['title'][:220]} (due {r['due_at']:%d %b})" for r in items[:30])
+        try:
+            out = provider.think_json(
+                "These reminders are open on one sales opportunity. Group the ones that are the SAME obligation (the "
+                "same thing owed or due, whatever the wording). A different deliverable, a later stage or a different "
+                'person is not the same. Return {"groups": [["R<id>", "R<id>", ...], ...]} listing only groups of two '
+                "or more.", listing, model=provider.MODEL_ROUTER, max_tokens=200, purpose="owed-merge") or {}
+        except Exception:  # noqa: BLE001
+            continue
+        by_id = {r["id"]: r for r in items}
+        for g in out.get("groups") or []:
+            ids = [int(str(x).lstrip("Rr")) for x in g if str(x).lstrip("Rr").isdigit() and int(str(x).lstrip("Rr")) in by_id]
+            if len(ids) < 2:
+                continue
+            grp = [by_id[i] for i in ids]
+            keep = next((r for r in grp if not str(r.get("created_by") or "").startswith("cortex")), None) \
+                or min(grp, key=lambda r: r["due_at"])
+            for r in grp:
+                if r["id"] == keep["id"] or not str(r.get("created_by") or "").startswith("cortex"):
+                    continue
+                db.execute("update reminders set status='cancelled' where id=%s", (r["id"],))
+                pipeline.log_deal(int(did), "note", f"Reminder #{r['id']} merged into #{keep['id']} (same thing owed): "
+                                  f"{r['title'][:140]}")
+                merged.append(r["id"])
+    return merged

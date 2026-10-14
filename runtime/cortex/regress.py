@@ -743,6 +743,17 @@ def _cases():
          and "by_address" in inspect.getsource(engine.poll_inbox)
          and "if not _cdeals:" in inspect.getsource(engine.poll_inbox))
 
+    # --- one record of what is owed; deliverables get lead time and never draft an email (owner, 14 Oct 2026)
+    _rm = __import__("cortex.reminders", fromlist=["x"])
+    _ob = __import__("cortex.obligations", fromlist=["x"])
+    from datetime import datetime as _dtw, timezone as _tzw
+    case("every Cortex reminder on a deal is checked against what is already open", "Shama #164 x3",
+         lambda: "obligations.check_new(" in inspect.getsource(_rm.create)
+         and "deliver_by" in inspect.getsource(_rm._commitment_action))
+    case("a deliverable owed Friday reminds two working days before (Wednesday)", "Shama treatments",
+         lambda: _ob.working_days_before(_dtw(2026, 10, 16, 12, tzinfo=_tzw.utc), 2).day == 14
+         and _ob.working_days_before(_dtw(2026, 10, 19, 12, tzinfo=_tzw.utc), 2).day == 15)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

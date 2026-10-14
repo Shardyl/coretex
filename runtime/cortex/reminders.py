@@ -11,7 +11,7 @@ none | daily | weekly | monthly | weekday (Mon-Fri) | custom (every N days).
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from psycopg.types.json import Json
 
@@ -39,6 +39,7 @@ create table if not exists reminders (
   last_task_id bigint
 );
 create index if not exists reminders_due_idx on reminders (status, due_at);
+alter table reminders add column if not exists deliver_by timestamptz;   -- a deliverable's own date (lead time)
 """
 
 
@@ -102,6 +103,39 @@ def create(title: str, due_at: datetime, *, company_id: int | None = None, targe
     ensure_schema()
     recurrence = recurrence if recurrence in RECURRENCES else "none"
     tid = target_id if target_id is None else str(target_id)
+    deliver_by = None
+    if due_at is not None and due_at.tzinfo is None:
+        due_at = due_at.replace(tzinfo=timezone.utc)
+    if (str(created_by or "").startswith("cortex") and created_by != "cortex-touch" and target_type == "deal"
+            and recurrence == "none" and str(tid or "").isdigit() and not action):
+        # ONE RECORD OF WHAT IS OWED (obligations.check_new): compared by meaning with what is open on the deal
+        try:
+            from . import obligations
+            v = obligations.check_new(title, due_at, company_id, tid)
+        except Exception:  # noqa: BLE001
+            v = {}
+        same = v.get("same")
+        if same:
+            from . import pipeline
+            if not str(same.get("created_by") or "").startswith("cortex"):
+                pipeline.log_deal(int(tid), "note", f"Already on your own reminder #{same['id']}: {title[:160]}")
+                return same
+            new_due = due_at if v.get("replaces") else min(same["due_at"], due_at)
+            if same.get("deliver_by"):     # a deliverable keeps its lead time against its (possibly new) date
+                from . import obligations as _ob
+                dl = due_at if v.get("replaces") else same["deliver_by"]
+                new_due = _lead_due(dl, _ob.lead_days(company_id))
+                db.execute("update reminders set deliver_by=%s where id=%s", (dl, same["id"]))
+            row = db.execute("update reminders set due_at=%s, snooze_until=null where id=%s returning *",
+                             (new_due, same["id"]))
+            pipeline.log_deal(int(tid), "note", f"Same as reminder #{same['id']}, kept as one: {title[:160]}")
+            return row
+        if v.get("deliverable"):
+            from . import obligations as _ob
+            deliver_by = due_at
+            due_at = _lead_due(deliver_by, _ob.lead_days(company_id))
+            title = (title.replace(" (deal ", f" (deliver by {deliver_by:%a %d %b}) (deal ", 1)
+                     if " (deal " in title else f"{title} (deliver by {deliver_by:%a %d %b})")
     if tid is not None and recurrence == "none" and created_by != "cortex-pipeline":
         # pipeline commitment/deadline reminders are a tracked LEDGER (auto-settled by matching title
         # and creator) - they must never be merged away into a nudge
@@ -121,9 +155,20 @@ def create(title: str, due_at: datetime, *, company_id: int | None = None, targe
             return ex
     return db.execute(
         "insert into reminders (title, due_at, company_id, target_type, target_id, recurrence, custom_days, "
-        "priority, action, created_by) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *",
+        "priority, action, created_by, deliver_by) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *",
         (title, due_at, company_id, target_type, tid, recurrence, custom_days, priority,
-         Json(action) if action else None, created_by))
+         Json(action) if action else None, created_by, deliver_by))
+
+
+def _lead_due(deliver_by: datetime, days: int) -> datetime:
+    """The reminder for work owed on `deliver_by`: `days` working days before, at 10:00 Dubai; never in the past."""
+    from zoneinfo import ZoneInfo
+    from . import obligations
+    tz = ZoneInfo("Asia/Dubai")
+    d = obligations.working_days_before(deliver_by.astimezone(tz), days).replace(hour=10, minute=0, second=0,
+                                                                                  microsecond=0)
+    now = datetime.now(timezone.utc)
+    return d if d > now else now + timedelta(minutes=5)
 
 
 def due() -> list[dict]:
@@ -223,6 +268,8 @@ def _commitment_action(r: dict) -> dict | None:
     email now spawns the email that fulfils it (a call gets real slots proposed; a document gets sent),
     written with the deal behind it (_with_deal). Promises that need a person on site stay nudges."""
     if r.get("action") or str(r.get("created_by") or "") != "cortex-pipeline":
+        return None
+    if r.get("deliver_by"):      # work we must produce: a reminder to the owner only, never an email claiming it
         return None
     m = _COMMITMENT_RX.match(r.get("title") or "")
     if not m or _NOT_BY_EMAIL.search(m.group(2)):

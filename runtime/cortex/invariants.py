@@ -13,6 +13,7 @@ Add a check whenever a new kind of fault is found: the query that would have cau
 """
 from __future__ import annotations
 
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -111,6 +112,15 @@ CHECKS = [
         "sql": "select id, title, stage from crm_projects where stage in ('Opportunity','Quote') and "
                "coalesce(contact_email,'') = '' and not exists (select 1 from jsonb_array_elements(coalesce(contacts,"
                "'[]'::jsonb)) c where coalesce(c->>'email','') <> '' or coalesce(c->>'phone','') <> '')",
+    },
+    {
+        "key": "duplicate_obligations",
+        "what": "A deal carries two open reminders for the same thing owed (merged into one, the rest cancelled)",
+        "sql": "select target_id deal_id, count(*) n from reminders where status in ('pending','snoozed') and "
+               "target_type='deal' and recurrence='none' and coalesce(created_by,'') like 'cortex%%' and "
+               "created_by <> 'cortex-touch' group by 1 having count(*) > 1",
+        "fix": "obligations.merge_twins",
+        "judged": True,
     },
     {
         "key": "quote_deal_off_closing_rhythm",
@@ -242,9 +252,10 @@ def run(fix: bool = False) -> dict:
                                          for r in rows[:25]], "count": len(rows), "fixed": 0}
         if fix and c.get("fix"):
             try:
-                if str(c["fix"]).startswith("crm."):        # a repair written in code, given the rows it found
-                    from . import crm
-                    f["fixed"] = len(getattr(crm, c["fix"][4:])(rows) or [])
+                if re.match(r"^[a-z_]+\.[a-z_]+$", str(c["fix"])):   # a repair written in code, given the rows
+                    import importlib
+                    mod, fn = str(c["fix"]).split(".")
+                    f["fixed"] = len(getattr(importlib.import_module(f"cortex.{mod}"), fn)(rows) or [])
                 else:
                     f["fixed"] = len(db.query(c["fix"]) or [])
             except Exception as e:  # noqa: BLE001

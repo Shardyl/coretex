@@ -3500,3 +3500,18 @@ shoot needs none), then 10% off the whole quotation.
   (`{"by_address": True}`); a person's address (ben@) is judged on content, which keeps the ABN AMRO / Mike Enting case.
   A by-address skip goes on the deal with NO "Not drafted" notice. `_flag_skipped_opportunity` never runs for a sender
   on an open deal.
+
+## One record of what is owed; deliverables get lead time (owner, 14 Oct 2026)
+- ROOT CAUSE of the recurring duplicate reminders: four writers set reminders for what we owe on a deal (meeting notes,
+  twice per meeting; every sent email; client deadlines; next steps), each with its own word-overlap check or none.
+  Shama #164 had three reminders for one "2 to 3 creative options" promise; Sampras #60 a deadline and a promise for one
+  change. The check now lives where EVERY Cortex reminder passes: `reminders.create` -> `obligations.check_new` (one
+  Haiku question, by meaning, against everything open on the deal, the owner's own reminders included): the same thing
+  updates that one reminder (a changed stated date replaces; otherwise the earlier stays), never a twin; matching the
+  owner's own reminder adds nothing. Touch reminders, recurring and action reminders are outside it.
+- DELIVERABLES: when the new item is work we must produce (treatment, proposal, quotation, deck, script...), the
+  reminder fires `delivery_lead_working_days` (profile, default 2) working days before it is owed, at 10:00 Dubai
+  (`reminders._lead_due`), title "(deliver by Fri 16 Oct)", column `reminders.deliver_by`; `_commitment_action` never
+  turns it into an email.
+- SAFETY NET: invariant `duplicate_obligations` -> `obligations.merge_twins` each morning (keeps the owner's own or the
+  earliest due, cancels the rest, logged on the deal). Invariant fixes may now name any `module.function`.
