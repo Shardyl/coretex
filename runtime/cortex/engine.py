@@ -7317,8 +7317,10 @@ def _spec_from_words(company: dict, deal: dict, customer: str, text: str, intent
     except Exception:  # noqa: BLE001
         timeline = ""
     presets = sorted((_q.presets() or {}).keys())
-    prev_txt = json.dumps({k: (prev or {}).get(k) for k in ("preset", "title", "sections", "deliverables", "note")},
-                          ensure_ascii=False)[:6000] if prev else "(none: build it from scratch)"
+    prev_txt = (json.dumps({k: (prev or {}).get(k) for k in ("preset", "title", "sections", "deliverables", "note")},
+                           ensure_ascii=False)[:6000] if (prev or {}).get("sections")
+                else ("THE PREVIOUS QUOTATION AS PRINTED (its lines were not stored):\n" + prev["printed"][:6000]
+                      if (prev or {}).get("printed") else "(none: build it from scratch)"))
     allowed = _stated_numbers(text) | _rc.rates(slug)
     flex = (_prof.get(company["id"]) or {}).get("quote_target_flex_pct")
     feedback, last_err = "", ""
@@ -7381,6 +7383,21 @@ def build_quote_from_words(company: dict, deal_id, text: str, intent: dict, for_
     customer = cur["customer"] or acct or re.split(r"\s*(?::|\s-\s)", deal.get("title") or "")[0].strip()
     number = None if intent.get("mode") == "new_number" else cur["number"]
     prev = (cur["entry"] or {}).get("spec") if cur["entry"] and intent.get("mode") == "revise" else None
+    if not prev and intent.get("mode") == "revise" and cur["number"]:
+        # A QUOTATION BUILT FROM ONE TOTAL STORED NO LINES (SEN-2026-0027): its printed text is the starting point
+        try:
+            from . import documents as _docs
+            _d = db.one("select * from company_documents where filename ilike %s and superseded_by is null "
+                        "order by id desc limit 1", (f"%Quotation {cur['number']}%",))
+            if _d:
+                prev = {"printed": _docs.text_of(_d) or "",
+                        "preset": (db.one("select request->>'preset' p from tasks where kind='quotation' and "
+                                          "request->>'number'=%s order by id desc limit 1", (cur["number"],)) or {}).get("p")}
+                if not prev["printed"]:
+                    prev = None
+        except Exception as _pe:  # noqa: BLE001
+            print(f"[quote-flow] previous text: {type(_pe).__name__}: {_pe}", flush=True)
+            prev = None
     try:
         pay = _q.split_lines(intent["payment"]) if intent.get("payment") else None
     except ValueError as e:
@@ -7399,8 +7416,11 @@ def build_quote_from_words(company: dict, deal_id, text: str, intent: dict, for_
             if spec.get("error"):
                 return {"ok": False, "msg": spec["error"]}
             notes = []
-            if spec.get("trimmed"):
-                notes.append("Trimmed to reach your figure: " + "; ".join(str(x) for x in spec["trimmed"][:10]) + ".")
+            # what was trimmed is SCOPE: a claim about prices, tiers or discounts is code's to state, never the model's
+            _trim = [str(x) for x in (spec.get("trimmed") or [])
+                     if not re.search(r"\b(?:tier|discount|rates?|pric\w*|aed|dirhams?)\b|\d[\d,]{3,}", str(x), re.I)]
+            if _trim:
+                notes.append("Trimmed to reach your figure: " + "; ".join(_trim[:10]) + ".")
             if spec.get("tier") == "budget":
                 notes.append("Priced on the Budget tier of the rate card to reach your figure.")
             if spec.get("assumptions"):

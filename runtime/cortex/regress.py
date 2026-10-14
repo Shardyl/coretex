@@ -565,6 +565,9 @@ def _cases():
          and "_wq" in inspect.getsource(engine.approve_task))
     case("a note on the deal redirects it", "quotation flow",
          lambda: "note_redirect(" in inspect.getsource(__import__("cortex.crm", fromlist=["x"]).add_project_note))
+    case("a quote built from one total is revised from its printed text; trims never claim prices", "SEN-2026-0027",
+         lambda: '"printed"' in inspect.getsource(engine.build_quote_from_words)
+         and "tier|discount" in inspect.getsource(engine.build_quote_from_words))
     case("a reissue keeps an agreed split and the revision rounds", "quotation flow",
          lambda: 'sp.get("payment")' in inspect.getsource(engine.reissue_quotation)
          and 'sp.get("revision_rounds")' in inspect.getsource(engine.reissue_quotation))
