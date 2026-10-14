@@ -272,7 +272,7 @@ def next_meeting_with(email: str, days: int = 7):
     now = datetime.now(timezone.utc)
     if not _SOON["at"] or now - _SOON["at"] > timedelta(minutes=10):
         try:
-            _SOON["rows"] = events_between(now, now + timedelta(days=days))
+            _SOON["rows"] = events_between(now, now + timedelta(days=days), people=True)
         except Exception:  # noqa: BLE001
             _SOON["rows"] = []
         _SOON["at"] = now
@@ -281,12 +281,16 @@ def next_meeting_with(email: str, days: int = 7):
     return min(hits) if hits else None
 
 
-def events_between(start: datetime, end: datetime) -> list[dict]:
+def events_between(start: datetime, end: datetime, people: bool = False) -> list[dict]:
     """Every readable meeting starting between `start` and `end` (past or future), same rows as upcoming_events.
     Talk reads who was in a meeting from here (owner, 13 Oct 2026: "add the contacts who were in the 5pm
-    meeting"), so the attendees come from the invite, never from memory."""
+    meeting"), so the attendees come from the invite, never from memory. `people=True` also reads each team
+    member's OWN calendar (setting `people_calendars` = [{id, company}]): a client's invite lands there, not on
+    the shared calendars (Farheen's Shama meeting, 14 Oct 2026)."""
     out: list[dict] = []
-    for entry in _registry():
+    seen_ev: set = set()
+    entries = list(_registry()) + (list(db.setting_get("people_calendars") or []) if people else [])
+    for entry in entries:
         co = entry.get("company") or "sensa"
         cal_id = entry.get("id") or "primary"
         try:
@@ -317,6 +321,9 @@ def events_between(start: datetime, end: datetime) -> list[dict]:
                            for a in (ev.get("attendees") or []))
             if declined:
                 continue
+            if ev.get("iCalUID") and ev["iCalUID"] in seen_ev:
+                continue                      # the same meeting seen on two of our calendars
+            seen_ev.add(ev.get("iCalUID"))
             out.append({
                 "company": co,
                 "calendar_id": cal_id,

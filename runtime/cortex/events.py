@@ -87,8 +87,11 @@ _NEW_RX = re.compile(r"\bnew (job|opportunity|deal|project|enquiry)\b", re.I)
 
 
 def _open_deals(company: dict) -> list[dict]:
-    return db.query("select id, title, stage from crm_projects where company=%s and stage not in "
-                    + stages.sql_list(stages.NO_CORRESPONDENCE) + " order by id desc", (crm._org(company.get("slug")),))
+    """Open opportunities and projects, with the client's name: he names the client ('the Merck summit'), and a
+    deal's title often does not ('Abu Dhabi Future Health Summit')."""
+    return db.query("select p.id, p.title, p.stage, a.name client, p.contact_email from crm_projects p left join "
+                    "crm_accounts a on a.id=p.account_id where p.company=%s and p.stage not in "
+                    + stages.sql_list(stages.NO_CORRESPONDENCE) + " order by p.id desc", (crm._org(company.get("slug")),))
 
 
 def _resolve_pick(company: dict, req: dict, text: str):
@@ -118,7 +121,9 @@ def _resolve_pick(company: dict, req: dict, text: str):
     if not deals:
         return "unknown", None
     from . import provider
-    listing = "\n".join(f"#{d['id']} {d['title']} ({d['stage']})" for d in deals[:120])
+    listing = "\n".join(f"#{d['id']} {d['title']} ({d['stage']})"
+                        + (f" [client: {d['client']}]" if d.get("client") else "")
+                        + (f" [contact: {d['contact_email']}]" if d.get("contact_email") else "") for d in deals[:150])
     try:
         r = provider.think_json(
             "The owner is saying which of his open opportunities an email belongs to. Return the id(s) of every "

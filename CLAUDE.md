@@ -3475,4 +3475,6 @@ shoot needs none), then 10% off the whole quotation.
 - ONE QUESTION PER PERSON: an open deal_pick for the same person (request.who, direction) takes their next messages
   (`request.messages`); one answer files them all. INVITES NEVER ASK (`engine._no_reply_mail`).
 - GATE: `calendar.next_meeting_with(email)` (the week's events, cached 10 min) -> no automatic email to someone with a
-  meeting booked in the next 7 days; the meeting notes take over after it. sw/APP_BUILD cortex-v69.
+  meeting booked in the next 7 days, read from the shared calendars AND each person's own (setting `people_calendars`:
+  rashad@, gino@, ayresh@sensa.digital via the Sensa token; a client invite lands on the person's calendar). The
+  words matcher sees each deal's client and contact ("the Merck summit" -> Abu Dhabi Future Health Summit). v69.
