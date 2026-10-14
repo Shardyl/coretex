@@ -3298,3 +3298,23 @@ shoot needs none), then 10% off the whole quotation.
 - Migration 13 Oct: open deals moved onto the new rhythm; client- or owner-stated dates kept (Brent 93 end of year,
   Dawn Christine 103 Jan 2027, Bioscience 113 Mar 2027, Noon 1 quarterly nurture). Honor 120 and Merkle 98 set Lost
   (owner).
+
+## An offer is never a commitment; "not needed" closes the whole chain (14 Oct 2026)
+- CAUSE (MENA Water deal 155, cards 1220/1221): our 12 Oct email said "We would be glad to quote that route
+  separately alongside this one". `extract_commitments` filed it as "Commitment owed: provide separate quotation",
+  although its prompt already said an offer is not a commitment. From that ONE misreading: reminder 338, a
+  quotation-prep card from the next-step reader (1221), and "As committed, we are finalising the separate quotation"
+  in the next reply (1220, via the owed shelf). Separately, our own words quoted under his reply ("approvals at each
+  gate") were logged as HIS deadline. The root cause was trusting the model's judgement of offer vs promise.
+- SOURCE FIX, CODE DECIDES: the extractor now returns the exact `quote`; `pipeline._in_email` drops any commitment
+  whose sentence is not in the email; `pipeline._is_offer` (`_OFFER`: "would be glad", "happy to", "if you'd like",
+  "remains an option", "we could", "on request", ...) decides offer vs promise. An offer is logged on the deal as
+  context ("Offered, not promised"), owes nothing, sets no reminder, never reaches the owed shelf.
+- THEIR NEW WORDS ONLY: `gmail.new_part(body)` cuts the quoted earlier messages; `record_inbound` mines deadlines from
+  it and `suggest_next_step` judges it (and is told an earlier offer is owed only if their email asks for it).
+- NOT NEEDED CLOSES THE CHAIN: `obligations.cancel_matching(deal, words, why)` cancels the matching Cortex reminders,
+  VOIDS the timeline entries that asserted it (commitment / next_step / deadline: kept, no longer read into drafts),
+  cancels the matching open prep cards and logs `commitment_cancelled`. Matching (`_same`) needs three meaningful
+  shared words. Called from: `_skip` on a prep card (`_cancel_owed_work`); "cancel / not needed / we didn't commit"
+  on a prep card (`_cancels_work`: words, then one narrow Haiku yes/no, so "no need for the VO line" still builds the
+  quote); and the new `retract` channel of `_understand_correction` on any email card.

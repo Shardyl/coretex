@@ -86,6 +86,33 @@ _CONDITIONAL = re.compile(
     r"\b(?:the )?moment\s+(?:the|you|they|we)\b", re.I)
 
 
+# AN OFFER IS NOT A COMMITMENT, AND CODE DECIDES WHICH (14 Oct 2026). The extractor's prompt already said so, with
+# examples, and still filed "We would be glad to quote that route separately alongside this one" (MENA Water, deal
+# 155) as "Commitment owed: provide separate quotation". From that one misreading Cortex set a reminder, raised a
+# quotation-prep card (1221) and wrote "As committed, we are finalising the separate quotation" into the next reply
+# (1220). The model now only QUOTES the sentence; code checks the quote is really in the email and decides offer or
+# promise from its wording. An offer is kept on the deal as context, owes nothing and sets no reminder.
+_OFFER = re.compile(
+    r"\b(?:would|'d)\s+be\s+(?:glad|happy|pleased|delighted)\b|\b(?:happy|glad|pleased|delighted)\s+to\b|"
+    r"\bif\s+(?:you|they|the client|your team)(?:'d|\s+would)?\s+(?:like|prefer|want|wish|need)\b|\bshould\s+you\b|"
+    r"\b(?:remains?|is|as)\s+an?\s+(?:option|alternative)\b|\bon\s+request\b|\bwe\s+(?:could|may|might)\b|"
+    r"\blet\s+us\s+know\s+if\b|\bif\s+(?:it\s+)?(?:helps|useful|helpful)\b|\bavailable\s+to\b|\bwhenever\s+you\b|"
+    r"\b(?:do\s+)?let\s+me\s+know\s+if\b|\bfeel\s+free\b|\bcan\s+(?:also\s+)?(?:arrange|provide|prepare|quote)\s+.*\bif\b",
+    re.I)
+
+
+def _is_offer(sentence: str) -> bool:
+    """True when the sentence offers something they may take up, rather than promising it."""
+    return bool(_OFFER.search(sentence or ""))
+
+
+def _in_email(quote: str, email: str) -> bool:
+    """The extractor's quote must be in the email (whitespace and case aside): an invented promise is dropped."""
+    norm = lambda s: re.sub(r"\s+", " ", (s or "").lower()).strip(" .,'\"")
+    q = norm(quote)
+    return len(q) >= 12 and q in norm(email)
+
+
 def _commitment_due(hint: str) -> datetime:
     """Code computes the reminder date from the extractor's hint. An explicit ISO date is used as
     stated; vague hints map to fixed windows; no hint means a 3-day check-in."""
@@ -136,11 +163,18 @@ def extract_commitments(draft: str, stage: str = "") -> list[dict]:
             "work?', 'let us know a convenient time', 'we remain available for a call' leave the next move "
             "with THEM, so never extract them. A call or meeting counts only when the email says we WILL do "
             "it or confirms one both sides agreed. Return "
-            '{"commitments":[{"text":"<short restatement>","due_hint":"<ISO date/datetime ONLY if the email '
+            '{"commitments":[{"text":"<short restatement>","quote":"<the EXACT sentence from the email that makes '
+            'it, copied character for character>","due_hint":"<ISO date/datetime ONLY if the email '
             "states one; else one of: today | tomorrow | week | days:N | none>\"}]}. Empty list when there "
             "are none. Never invent dates.",
             draft[:3000], model=provider.MODEL_ROUTER, purpose="commitment-extract")
-        return [c for c in (out or {}).get("commitments", []) if (c.get("text") or "").strip()][:5]
+        out_list = []
+        for c in (out or {}).get("commitments", [])[:5]:
+            if not (c.get("text") or "").strip() or not _in_email(c.get("quote") or "", draft):
+                continue                       # no sentence in the email makes it: not a commitment
+            c["offer"] = _is_offer(c["quote"])  # code, not the model, decides offer or promise
+            out_list.append(c)
+        return out_list
     except Exception:  # noqa: BLE001 — extraction is best-effort; the send already happened
         return []
 
@@ -205,6 +239,9 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
                        (str(int(did)), "Commitment owed%"))
     dues = []
     for c in extract_commitments(body, stage=_stage):
+        if c.get("offer"):
+            log_deal(did, "context", f"Offered, not promised (nothing owed, no reminder): \"{c.get('quote')}\"")
+            continue
         if _CONDITIONAL.search(c.get("text") or ""):
             # A PROMISE THAT WAITS ON THEM HAS NO DATE (1 Oct 2026): "begin production on receipt of the signed
             # quotation and deposit" became a reminder due the next day and spawned an email (card 1004) to keep a
@@ -284,7 +321,7 @@ def record_inbound(e: dict, deal: dict | None, company: dict) -> None:
     after = db.one("select jsonb_array_length(history) n from crm_projects where id=%s", (did,)) or {}
     if gid and (after.get("n") == before.get("n")):
         return          # already logged from another mailbox: its deadlines were captured then too
-    for d in extract_deadlines(e.get("body") or ""):
+    for d in extract_deadlines(gmail.new_part(e.get("body") or "")):   # THEIR words, never ours quoted below
         try:
             when = datetime.fromisoformat(d["when_iso"])
         except ValueError:
@@ -611,11 +648,13 @@ def suggest_next_step(e: dict, deal: dict, company: dict) -> None:
         out = provider.think_json(
             "You read one inbound client email on an active deal (timeline below). Decide if it requires an "
             "INTERNAL DELIVERABLE to be prepared beyond a reply - e.g. a revised/new quotation, a proposal, "
-            "a document, a booking. Politeness, questions answerable in prose, or FYI mail need nothing. Return "
+            "a document, a booking. Politeness, questions answerable in prose, or FYI mail need nothing. Only "
+            "THEIR request counts: something we merely offered earlier is not owed unless their email asks for it. "
+            "Return "
             '{"action":"none|prepare_quotation|prepare_proposal|prepare_document|other","what":"<one line>"}. '
             "Be conservative - when in doubt, none.",
-            deal_context(did) + "\n\nINBOUND EMAIL from " + (e.get("email") or "") + ":\n"
-            + ((e.get("body") or "")[:2500]),
+            deal_context(did) + "\n\nINBOUND EMAIL from " + (e.get("email") or "") + " (their new words only):\n"
+            + (gmail.new_part(e.get("body") or "")[:2500]),
             model=provider.MODEL_ROUTER, purpose="next-step")
     except Exception:  # noqa: BLE001
         return

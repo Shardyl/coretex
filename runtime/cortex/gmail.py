@@ -89,6 +89,18 @@ def _field(body: str, label: str) -> str | None:
     return m.group(1).strip() if m else None
 
 
+_QUOTED_START = re.compile(r"^\s*(?:On .{5,200}wrote:|From:\s|-{2,}\s*Original Message|_{5,}|>)", re.M | re.I)
+
+
+def new_part(body: str) -> str:
+    """ONLY THE NEW WORDS of an email, above the earlier messages quoted under it (MENA Water, 14 Oct 2026: our own
+    "approvals within one working day at each gate", quoted under Alanraj's two-line reply, was read as HIS deadline).
+    Anything that judges what THEY said reads this, never the whole body."""
+    b = body or ""
+    m = _QUOTED_START.search(b)
+    return (b[:m.start()] if m and m.start() > 0 else b).strip()
+
+
 def _message_after(body: str) -> str:
     lines = body.splitlines()
     idx = 0

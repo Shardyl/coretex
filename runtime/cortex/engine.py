@@ -1704,8 +1704,45 @@ def _skip(task: dict, skill: dict, company: dict) -> None:
     store.reset_streak(skill["id"])   # a rejection breaks the clean-approval streak
     store.log_decision(task["id"], skill["id"], "owner", "reject", snapshot={"draft": task.get("draft")})
     _stop_chasing_on_skip(task, company)
+    _cancel_owed_work(task, f"the owner skipped card #{task['id']}")
     if task.get("tg_message_id"):
         tg.edit(task["tg_message_id"], f"✗ Skipped — '{skill['name']}'.")
+
+
+def _cancel_owed_work(task: dict, why: str) -> list:
+    """A skipped or cancelled PREP card (a 'Next step: ...' quotation work-up) takes its owed work with it: the
+    commitment reminder, the timeline entries and any twin card (obligations.cancel_matching)."""
+    req = task.get("request") or {}
+    did = req.get("deal_id") or task.get("deal_id")
+    if not did or not (req.get("prep_action") or str(req.get("title") or "").startswith("Next step")):
+        return []
+    try:
+        from . import obligations
+        return obligations.cancel_matching(int(did), str(req.get("title") or ""), why, except_task=task["id"])
+    except Exception as e:  # noqa: BLE001
+        print(f"[obligations] cancel on card {task.get('id')}: {type(e).__name__}: {e}", flush=True)
+        return []
+
+
+_CANCEL_HINT = re.compile(r"\b(?:cancel|not needed|no need|don'?t need|didn'?t (?:commit|promise|agree)|did not "
+                          r"(?:commit|promise|agree)|never (?:committed|promised|agreed)|not (?:requested|asked)|"
+                          r"wasn'?t (?:requested|asked)|scrap|drop (?:this|it)|ignore (?:this|it)|not required)\b", re.I)
+
+
+def _cancels_work(text: str) -> bool:
+    """Is the owner telling a prep card that its work is NOT to be done? Words first, then one narrow question, so
+    'no need to include the VO line' (an instruction for the quotation) never cancels it."""
+    if not _CANCEL_HINT.search(text or ""):
+        return False
+    try:
+        r = provider.think_json(
+            "The owner wrote this on a card that prepares a piece of work (e.g. a quotation). Is he saying the WHOLE "
+            "piece of work should not be done (cancel it, it was never requested or promised)? An instruction about "
+            'what to include or leave out of the work is NOT a cancellation. Return {"cancel": true|false}.',
+            text[:800], model=provider.MODEL_ROUTER, max_tokens=30, purpose="prep-cancel")
+        return bool((r or {}).get("cancel"))
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _maybe_propose_rule(task: dict, skill: dict, text: str, old: str, new: str) -> None:
@@ -2148,6 +2185,16 @@ def apply_correction(task: dict, text: str) -> None:
     # A QUOTATION PREP CARD DOES THE WORK. His answer on the card is the brief: build the real quotation
     # instead of redrafting a checklist about it (owner, 11 Sep 2026). Falls through to an ordinary
     # redraft only when there is nothing to build from yet.
+    if _is_quotation_prep(task) and _cancels_work(text):
+        # "NOT NEEDED" ON THE PREP CARD (owner, 14 Oct 2026): the card closes and takes the owed work with it,
+        # instead of his words being read as the brief for the quotation
+        closed = _cancel_owed_work(task, f"owner on card #{task['id']}: {text[:120]}")
+        rq = dict(task.get("request") or {})
+        rq["cancelled_reason"] = text[:300]
+        store.update_task(task["id"], status="cancelled", request=rq)
+        store.log_decision(task["id"], skill["id"], "owner", "cancel", note=text)
+        tg.send(f"Card #{task['id']} cancelled: not needed. Closed: {', '.join(closed) or 'nothing else open'}.")
+        return
     if _is_quotation_prep(task):
         try:
             if _prep_build_quotation(task, skill, company, text):
@@ -2457,6 +2504,8 @@ def _understand_correction(task: dict, text: str) -> dict:
             "and their roles, dates and deadlines, budget signals, what they liked or rejected, what was agreed on a "
             "call. Self-contained, one sentence each. NEVER a rule about how we write (that is a rule, offered "
             'separately), never wording for this email>"], '
+            '"retract": ["<anything he says we did NOT promise, do NOT owe, or that is NOT needed (e.g. \'we never '
+            "committed to a separate quote\', \'they didn't ask for the drone option\'), one item each, in his words>\"], "
             '"prep": [{"title": "<short imperative>", "brief": "<internal work to prepare, incl. stated '
             'deadline>"}]} '
             "prep is ONLY for work outside this email (build a document, research something). Changes to "
@@ -2586,6 +2635,14 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
     # OPPORTUNITY CONTEXT FROM HIS FEEDBACK (owner, 24 Sep 2026): facts he drops while correcting a draft ("Sarah is
     # the brand director", "budget is capped at 40k") are not rules and were lost once the redraft was done. They
     # are filed on the deal's timeline as [context] entries, which ride into every later draft on that deal.
+    # NOT OWED (owner, 14 Oct 2026): "we didn't commit to that" on an email card closes the commitment, its reminder
+    # and its prep card; the redraft then no longer carries it (the owed shelf reads only open commitments)
+    for _r in [str(x).strip() for x in (u.get("retract") or []) if str(x).strip()][:3]:
+        _rdid = req.get("deal_id") or task.get("deal_id")
+        if _rdid:
+            from . import obligations
+            _closed = obligations.cancel_matching(int(_rdid), _r, f"owner on card #{task.get('id')}: not owed")
+            created.append(f"not owed: {_r}" + (f" (closed {', '.join(_closed)})" if _closed else ""))
     _ctx = [str(x).strip() for x in (u.get("deal_context") or []) if str(x).strip()][:4]
     if _ctx:
         _cdid = req.get("deal_id") or task.get("deal_id")

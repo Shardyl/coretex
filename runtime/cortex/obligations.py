@@ -124,6 +124,59 @@ def on_stage(deal_id: int, old: str | None, new: str) -> None:
                    "(dedup_key like %s or dedup_key like %s)", (f"closing-gate:{int(deal_id)}:%", f"signed-off:{int(deal_id)}"))
 
 
+_MEANING_STOP = {"the", "a", "an", "to", "and", "of", "for", "with", "on", "in", "our", "their", "we", "will", "you",
+                 "your", "them", "owed", "commitment", "next", "step", "check", "deal", "prepare", "provide", "send"}
+
+
+def _words(s: str) -> set:
+    s = re.sub(r"^(?:Commitment owed to|OWED to|Next step on [^:]+:|Next step:)\s*\S*:?", "", s or "", flags=re.I)
+    return {w for w in re.findall(r"[a-z]{3,}", s.lower().split(" (check-in")[0].split(" (deal ")[0]) if w not in _MEANING_STOP}
+
+
+def _same(a: str, b: str) -> bool:
+    """The same piece of work: at least three meaningful words shared, and most of the shorter wording."""
+    x, y = _words(a), _words(b)
+    n = len(x & y)
+    return n >= 3 and n / max(1, min(len(x), len(y))) >= 0.6
+
+
+def cancel_matching(deal_id: int, words: str, why: str, except_task: int | None = None) -> list[str]:
+    """NOT NEEDED CLOSES THE WHOLE CHAIN (owner, 14 Oct 2026: "if we ask them something and they don't request it, we
+    shouldn't"). One false 'commitment' had become a reminder, a prep card and a promise in the next reply. When the
+    owner says the work is not owed (skips its prep card, or says so on it or on the email card), every Cortex
+    reminder for it is cancelled, the timeline entries that asserted it are voided (kept, no longer read back into
+    drafts), the open prep cards for it are cancelled, and the decision is logged. Returns what was closed."""
+    if not str(deal_id or "").isdigit() or len(_words(words)) < 2:
+        return []
+    from psycopg.types.json import Json
+    did, done = int(deal_id), []
+    for r in _open(did):
+        if kind_of(r) in JUDGED and _same(r.get("title") or "", words):
+            db.execute("update reminders set status='cancelled' where id=%s", (r["id"],))
+            done.append(f"reminder #{r['id']}")
+    p = db.one("select history from crm_projects where id=%s", (did,)) or {}
+    hist, n = p.get("history") or [], 0
+    for e in hist:
+        if e.get("event") in ("commitment", "next_step", "deadline") and not e.get("voided") and _same(e.get("text") or "", words):
+            e["voided"] = why
+            n += 1
+    if n:
+        db.execute("update crm_projects set history=%s where id=%s", (Json(hist), did))
+        done.append(f"{n} timeline entr{'y' if n == 1 else 'ies'} voided")
+    for t in db.query("select id, request from tasks where deal_id=%s and kind='content' and status in "
+                      "('new','drafting','awaiting_approval','awaiting_correction') and request->>'prep_action' is not null",
+                      (did,)):
+        if t["id"] != except_task and _same((t.get("request") or {}).get("title") or "", words):
+            rq = dict(t.get("request") or {})
+            rq["cancelled_reason"] = why
+            db.execute("update tasks set status='cancelled', request=%s, updated_at=now() where id=%s", (Json(rq), t["id"]))
+            done.append(f"card #{t['id']}")
+    if done:
+        from . import pipeline
+        pipeline.log_deal(did, "commitment_cancelled", f"Not owed: {words[:160]} ({why}). Closed: {', '.join(done)}.")
+    return done
+
+
 def on_task_closed(task_id: int) -> None:
     """A card left the open states (sent, done, cancelled, rejected): notices about that card have done their job."""
     db.execute("update notifications set state='dismissed' where target_type='task' and target_id=%s and "

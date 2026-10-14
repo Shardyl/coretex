@@ -501,6 +501,40 @@ def _cases():
          and "set_next_chase(" in inspect.getsource(__import__("cortex.api", fromlist=["x"])._update_opportunity)
          and hasattr(__import__("cortex.api", fromlist=["x"]), "crm_project_next_chase"))
 
+    # --- an offer is never a commitment (MENA Water deal 155, cards 1220/1221, 14 Oct)
+    _pl = __import__("cortex.pipeline", fromlist=["x"])
+    _mena = ("If you would prefer a physical drone shoot with real licensed cinema aerials instead, that remains an option, "
+             "though it runs on a longer timeline. We would be glad to quote that route separately alongside this one, so "
+             "you can see both side by side.")
+    case("'we would be glad to quote' is an offer; 'we will send it tomorrow' is a promise", "card 1221",
+         lambda: _pl._is_offer("We would be glad to quote that route separately alongside this one")
+         and _pl._is_offer("that remains an option") and _pl._is_offer("Happy to walk you through it on a call")
+         and not _pl._is_offer("We will send the revised quotation tomorrow")
+         and not _pl._is_offer("I'll send the storyboard across by Thursday"))
+    case("a commitment must quote a sentence that is really in the email", "card 1221",
+         lambda: _pl._in_email("We would be glad to quote that route separately", _mena)
+         and not _pl._in_email("We will send a separate drone quotation by Thursday", _mena))
+    case("deadlines and next steps read only their new words, not ours quoted below", "MENA Water deadline",
+         lambda: __import__("cortex.gmail", fromlist=["x"]).new_part(
+             "Dear Gino,\nThank you for the quotation. We will review it.\nThanks\nFrom: gino@sensa.digital <gino@sensa.digital>\n"
+             "Sent: Monday\napprovals come back within one working day at each gate").endswith("We will review it.\nThanks")
+         and "new_part(" in inspect.getsource(_pl.record_inbound) and "new_part(" in inspect.getsource(_pl.suggest_next_step))
+    case("not needed closes the chain: skip, a word on the prep card, or the email card", "card 1221",
+         lambda: "_cancel_owed_work(" in inspect.getsource(engine._skip)
+         and "_cancels_work(text)" in inspect.getsource(engine.apply_correction)
+         and '"retract"' in inspect.getsource(engine._understand_correction)
+         and "cancel_matching(" in inspect.getsource(engine._apply_understood))
+    case("the same work is matched on three meaningful words, never one", "card 1221",
+         lambda: __import__("cortex.obligations", fromlist=["x"])._same(
+             "Commitment owed to a@b.com: Provide separate quotation for drone shoot option with real licensed cinema aerials",
+             "Next step: Separate quotation for drone shoot option with licensed cinema aerials")
+         and not __import__("cortex.obligations", fromlist=["x"])._same("Send the quotation", "Revised quotation for Rakez"))
+
+    def _mena_extract():
+        cs = _pl.extract_commitments("Hello Alanraj,\n\n" + _mena + "\n\nBest regards,", stage="Quote")
+        return all(c.get("offer") for c in cs)
+    case("the MENA email owes nothing", "card 1221", _mena_extract, model=True)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
