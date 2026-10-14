@@ -3304,6 +3304,18 @@ def _has_outgoing_attachment(req: dict) -> bool:
     return bool(req.get("attachments")) and not req.get("inbound_attachments")
 
 
+def _outgoing_names(req: dict) -> list[str]:
+    """Every file this email will carry: library documents AND files uploaded onto the card. The read-through
+    used to see only the library ones, so on card 1239 (two option PDFs uploaded by hand) it decided nothing was
+    attached and changed "Please find attached our quotation" to "Please find our quotation" (14 Oct 2026)."""
+    req = req or {}
+    names = [r.get("filename") for r in (req.get("attach_docs") or []) if r.get("filename")]
+    if req.get("attachments") and not req.get("inbound_attachments"):
+        up = [n for n in (req.get("attachment_names") or []) if n]
+        names += up or [f"uploaded file {i + 1}" for i in range(len(req["attachments"]))]
+    return names
+
+
 def _attachment_claim(draft: str, req: dict) -> str:
     """'' when the email is truthful; else the sentence claiming an attachment the email does not carry."""
     if _has_outgoing_attachment(req):
@@ -3376,7 +3388,7 @@ def _read_through(company: dict, dreq: dict, draft: str) -> str:
     try:
         if not (draft or "").strip():
             return draft
-        names = [r.get("filename") for r in (dreq.get("attach_docs") or []) if r.get("filename")]
+        names = _outgoing_names(dreq)
         out = provider.think_json(
             "You are the last reader of an email before it is sent, checking it as a careful colleague would. "
             "Read it top to bottom. Fix ONLY these faults, minimally, keeping every other word, the voice and the "
@@ -5508,6 +5520,28 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
                     _deal_threads.add(r["t"])
         except Exception:  # noqa: BLE001
             pass
+    # A NEW JOB, A NEW THREAD (14 Oct 2026, card 1239). The Merck summit quotation went out on "National Day Graphics
+    # Quotation - Merck", deal #5's thread with the same contact: the summit deal had no thread of its own, so the
+    # newest thread with Ricola won. A thread another deal has used, and this one has not, is that deal's, never this
+    # card's; with nothing else, the email opens its own conversation under its own subject.
+    _other_threads = set()
+    if req.get("deal_id"):
+        try:
+            for r in db.query("select distinct request->'thread'->>'id' t from tasks where deal_id is not null and "
+                              "deal_id<>%s and status='done' and request->'thread'->>'id' is not null and "
+                              "lower(request->'inquiry'->>'email')=lower(%s)", (int(req["deal_id"]), email)):
+                if r.get("t") and r["t"] not in _deal_threads:
+                    _other_threads.add(r["t"])
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _another_deals(tid: str) -> bool:
+        if not req.get("deal_id") or not tid or tid in _deal_threads:
+            return False
+        if tid in _other_threads:
+            return True
+        bound = db.setting_get(f"thread_deal:{tid}")
+        return bool(bound) and str(bound) != str(req.get("deal_id"))
     hits, seen_rt = {}, set()            # rt_key -> (dt, sender, newest message in THAT mailbox)
     for s in pool:
         if s["rt_key"] in seen_rt:
@@ -5525,7 +5559,7 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
                                      company=_inbox_client_company(co.get("slug") or ""))
 
             def _usable(cand) -> bool:
-                if not cand.get("thread_id"):
+                if not cand.get("thread_id") or _another_deals(cand["thread_id"]):
                     return False
                 _subj = (cand.get("subject") or "").lower()
                 return not (cand.get("auto_marker") or any(_subj.startswith(p) for p in (

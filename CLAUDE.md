@@ -3478,3 +3478,16 @@ shoot needs none), then 10% off the whole quotation.
   meeting booked in the next 7 days, read from the shared calendars AND each person's own (setting `people_calendars`:
   rashad@, gino@, ayresh@sensa.digital via the Sensa token; a client invite lands on the person's calendar). The
   words matcher sees each deal's client and contact ("the Merck summit" -> Abu Dhabi Future Health Summit). v69.
+
+## Uploaded files count as attached; a new job opens its own thread; one copy of each core document (14 Oct 2026)
+- Card 1239 (Merck summit, two option PDFs uploaded by hand): `_read_through` saw only library `attach_docs`, decided
+  nothing was attached and turned "Please find attached our quotation" into "Please find our quotation".
+  `engine._outgoing_names(req)` = library documents + uploaded `attachment_names` (never a client's inbound files).
+- The same email went out on "National Day Graphics Quotation - Merck", deal #5's thread with the same contact: the
+  summit deal had no thread, so the newest thread with Ricola won. `_adopt_existing_thread` now skips any thread another
+  deal's sent cards used (or `thread_deal:<id>` binds elsewhere) unless this deal has used it too; with nothing left the
+  email opens its own conversation under its own subject.
+- `documents.retire_same_name`: a new core-kind document (CORE_KINDS) supersedes earlier live copies with the same name
+  (kept on record). Retired 14 Oct: Body Double 808-811 -> 812, AI Avatar Posts 813-814 -> 815. Company profile: doc 7
+  (the 2.3MB email copy, profile `high_value_attach_doc`) is now kind company-profile and the one offered/attached;
+  doc 1 (9.6MB master, same profile) is superseded by it, kept on record and on Drive.

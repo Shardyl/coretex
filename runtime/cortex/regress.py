@@ -727,6 +727,15 @@ def _cases():
     case("an automatic email is held when a meeting with them is booked", "Shama #164 chase",
          lambda: "next_meeting_with(" in inspect.getsource(__import__("cortex.gate", fromlist=["x"]).check))
 
+    # --- uploaded files count as attached; a new job opens its own thread; one copy of a core document (14 Oct)
+    case("the read-through sees files uploaded onto the card", "Merck 1239",
+         lambda: engine._outgoing_names({"attachments": [{"x": 1}], "attachment_names": ["OPTION 1.pdf"]}) == ["OPTION 1.pdf"]
+         and "_outgoing_names(dreq)" in inspect.getsource(engine._read_through))
+    case("a deal-linked card never continues a thread another deal owns", "Merck 1239 on #5's thread",
+         lambda: "_another_deals(" in inspect.getsource(engine._adopt_existing_thread))
+    case("a new build of a core document retires the earlier copies with its name", "Body Double x5",
+         lambda: "retire_same_name(" in inspect.getsource(__import__("cortex.documents", fromlist=["x"]).save))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

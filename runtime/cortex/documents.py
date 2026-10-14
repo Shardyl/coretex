@@ -242,6 +242,8 @@ def save(company_id: int, slug: str, filename: str, mime: str, data: bytes,
         raise ValueError(f"file too large ({len(data)} bytes; max {_cap})")
     sha = hashlib.sha256(data).hexdigest()
     dup = db.one("select * from company_documents where company_id=%s and sha256=%s", (company_id, sha))
+    # ONE LIVE COPY OF EACH STANDING DOCUMENT (14 Oct 2026: five "Body Double" and three "AI Avatar Posts" builds sat
+    # side by side in the attach list): a new file of a core kind with the same name retires the earlier copies
     if dup:
         if deal_id and not dup.get("deal_id"):
             dup = db.execute("update company_documents set deal_id=%s where id=%s returning *",
@@ -264,7 +266,12 @@ def save(company_id: int, slug: str, filename: str, mime: str, data: bytes,
             push_to_drive(row)
         except Exception:  # noqa: BLE001 — a Drive hiccup never blocks the save; sync_drive() catches up later
             pass
-    return db.one("select * from company_documents where id=%s", (row["id"],))
+    out = db.one("select * from company_documents where id=%s", (row["id"],))
+    try:
+        retire_same_name(out)
+    except Exception:  # noqa: BLE001
+        pass
+    return out
 
 
 def save_data_url(company_id: int, slug: str, filename: str, data_url: str,
@@ -280,6 +287,16 @@ def save_data_url(company_id: int, slug: str, filename: str, data_url: str,
 # (owner, 30 Aug: everything else is project clutter and Cortex attaches what a draft needs itself).
 # our own standing documents: they belong to no client, so a deal's document scope never hides them
 CORE_KINDS = ("company-profile", "trade-licence", "vat-certificate", "capabilities-deck", "agency-deck")
+
+
+def retire_same_name(doc: dict) -> list:
+    """A core document replaces the earlier live copies with its name (kept on record, superseded)."""
+    if not doc or doc.get("kind") not in CORE_KINDS:
+        return []
+    olds = [r["id"] for r in db.query("select id from company_documents where company_id=%s and kind=%s and "
+                                      "lower(filename)=lower(%s) and superseded_by is null and id<>%s",
+                                      (doc["company_id"], doc["kind"], doc["filename"], doc["id"]))]
+    return supersede(olds, doc["id"]) if olds else []
 
 
 def listing(company_id: int, core_only: bool = False) -> list[dict]:
