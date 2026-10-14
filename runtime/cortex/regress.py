@@ -648,6 +648,25 @@ def _cases():
         return bool(i) and i.get("mode") == "option" and i.get("target") == 18000 and bool(j) and j.get("option") == "B"
     case("'add a second option' is an option; 'on option B' targets B", "quotation options", _opt_intent, model=True)
 
+    # --- an open cockpit never runs old code against a newer server (Gino's New deal form, 14 Oct 2026)
+    import re as _re_b
+    _web = __import__("os").path.join(__import__("os").path.dirname(__import__("os").path.dirname(
+        __import__("os").path.dirname(__import__("os").path.abspath(__file__)))), "web")
+    _sw = open(_web + "/sw.js", encoding="utf-8").read()
+    _ix = open(_web + "/index.html", encoding="utf-8").read()
+    _api = __import__("cortex.api", fromlist=["x"])
+    case("the app's build equals the service worker's cache and the server reads it", "Gino 14 Oct",
+         lambda: bool(_api.cockpit_build()) and f"const CACHE = '{_api.cockpit_build()}'" in _sw
+         and "'X-Cortex-Build':APP_BUILD" in _ix and "checkBuild(true)" in _ix)
+    case("a write from another build is refused with a reload message; an old form is told it is out of date",
+         "Gino 14 Oct",
+         lambda: "stale_build" in inspect.getsource(_api._refuse_stale_cockpit)
+         and "model_fields_set" in inspect.getsource(_api.crm_create_deal))
+    case("it is an opportunity, never a deal, on the create form and in Talk", "owner 14 Oct",
+         lambda: "New deal" not in _ix and "Create deal" not in _ix and "Deal name" not in _ix
+         and any(t["name"] == "create_opportunity" for t in _api.SKILL_TOOLS)
+         and not any(t["name"] == "create_deal" for t in _api.SKILL_TOOLS))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

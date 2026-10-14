@@ -3412,3 +3412,19 @@ shoot needs none), then 10% off the whole quotation.
   has more than one, the deck keeps Option A's number, `Job.quote_rows` gives one row per option (its blocks as the
   lines, each net from that option's live version) and the investment headline reads "From AED <lowest>".
   `restamp_proposal_price` finds the deal's creative or words-led deck from any option's number.
+
+## An open cockpit never runs old code; it is an opportunity, not a deal (owner, 14 Oct 2026)
+- CAUSE: the contact rule and the new form (contact fields) deployed at 09:23 Dubai; Gino's app had been open since
+  before, kept the old form in memory (the service worker and no-store only help on a LOAD), and five creates at
+  10:48 were refused with "needs a designated contact" on a screen with no field for one. Not permissions.
+- `web/index.html` carries `const APP_BUILD = 'cortex-vNN'`, EQUAL to `sw.js` CACHE (a regress case checks it: bump
+  both together). `api()` sends it as `X-Cortex-Build`; the server reads the constant from index.html at start
+  (`api.cockpit_build`), serves it at `GET /api/version`, and `_refuse_stale_cockpit` answers any WRITE from another
+  build with 409 `stale_build` (the app shows "A new version of Cortex is ready" + Reload). `checkBuild(true)` on
+  returning to the app reloads at once when nothing is being typed; every 3 minutes while open it offers the banner.
+  Only the cockpit sends the header, so fitness, media, runners and webhooks are untouched.
+- `/api/crm/deals/new`: a body with NO contact keys at all is a pre-14-Oct form, answered "This screen is out of
+  date ... close Cortex fully and reopen it", never the contact rule.
+- Wording: New opportunity / Opportunity name / Create opportunity (New project on the Projects screen, stage Booked);
+  Talk's tool is `create_opportunity` (old `create_deal` still executes for old conversations) and Talk says
+  opportunity, never deal.

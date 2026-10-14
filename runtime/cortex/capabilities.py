@@ -290,7 +290,7 @@ CAPABILITIES: list[tuple[str, str]] = [
      "pings him; an action spawns a normal task into the Inbox."),
     ("CRM",
      "crm_lookup finds people/companies (offer close matches, never 'can't find'); crm_pipeline reads the "
-     "forecast and won work; create_company / create_contact / create_deal add records."),
+     "forecast and won work; create_company / create_contact / create_opportunity add records (say opportunity to him, never deal)."),
     ("Document library",
      "The OFFICIAL store of each company's standing files (trade licence, VAT certificate, company profile, "
      "signed forms) — on the box, in the nightly backup. save_document files what Rashad attaches this turn "

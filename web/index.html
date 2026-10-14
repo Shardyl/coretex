@@ -354,6 +354,10 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 
 <script>
 // ---- config ----
+// THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
+// never post an old form to a server that has moved on (Gino's New deal form had no contact fields). Keep equal to
+// sw.js CACHE; the server reads this line and refuses writes from any other build.
+const APP_BUILD = 'cortex-v68';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -377,12 +381,36 @@ const SAMPLE = {
 // ---- api helper ----
 async function api(path, opts={}){
   if(demo) throw new Error('demo');
-  const r = await fetch(API+path, {...opts, headers:{'Content-Type':'application/json',
+  const r = await fetch(API+path, {...opts, headers:{'Content-Type':'application/json','X-Cortex-Build':APP_BUILD,
     ...(token?{Authorization:'Bearer '+token}:{}), ...(opts.headers||{})}});
+  if(r.status===409){ const j=await r.json().catch(()=>({})); if(j.stale_build){ showUpdate(true); throw new Error(j.detail); }
+    throw new Error(j.detail || r.status); }
   if(r.status===401){ if(booted) relock(); throw new Error((await r.json().catch(()=>({}))).detail || 'auth'); }   // only re-lock on in-session expiry, never pre-auth (avoids a reload loop); surface the real detail ("wrong email or passcode"), not a bare 'auth'
   if(!r.ok){ throw new Error((await r.json().catch(()=>({}))).detail || r.status); }
   return r.status===204?null:r.json();
 }
+
+// ---- new version: reload, never run old code against a newer server ----
+let _updateShown=false;
+async function checkBuild(foreground){
+  if(demo) return;
+  let b; try{ const r=await fetch(API+'/api/version',{cache:'no-store'}); if(!r.ok) return; b=(await r.json()).build; }catch(e){ return; }
+  if(!b || b===APP_BUILD) return;
+  // coming back to the app with nothing being typed: reload straight away; otherwise offer it
+  const typing=[...document.querySelectorAll('#view input, #view textarea')].some(x=>x===document.activeElement||((x.value||'').trim()&&x.type!=='hidden'&&x.tagName==='TEXTAREA'));
+  if(foreground && !typing){ location.reload(); return; }
+  showUpdate(false);
+}
+function showUpdate(blocked){
+  let el=document.getElementById('updBanner');
+  if(!el){ el=document.createElement('div'); el.id='updBanner'; el.className='banner';
+    el.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;display:flex;gap:10px;align-items:center;justify-content:space-between';
+    el.innerHTML='<span>A new version of Cortex is ready.</span><button class="btn go sm" onclick="location.reload()">Reload</button>';
+    document.body.appendChild(el); }
+  if(blocked) toast('Cortex was updated: tap Reload, then try again');
+  _updateShown=true;
+}
+setInterval(()=>{ if(document.visibilityState==='visible') checkBuild(false); }, 180000);
 
 // ---- auth: the 4-digit PIN keypad IS the login (issues the session); biometric on mobile; passcode = recovery ----
 async function startup(){
@@ -1079,9 +1107,9 @@ async function saveEditContact(email){
 }
 async function openEditDeal(id){
   let p; try{ p=await api('/api/crm/project?id='+id); }catch(e){ p={}; }
-  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="openProject(${id})">${ic('back',18)}</button><b>Edit deal</b></div>
+  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="openProject(${id})">${ic('back',18)}</button><b>Edit ${FORECAST_STAGES.includes(p.stage)?'opportunity':'project'}</b></div>
     <div class="card">
-      <label>Deal name</label><input id="ed_title" class="fsel" value="${esc(p.title||'')}">
+      <label>Name</label><input id="ed_title" class="fsel" value="${esc(p.title||'')}">
       <label>Value</label><input id="ed_value" class="fsel" type="number" inputmode="decimal" value="${p.value!=null?esc(''+p.value):''}">
       <label>Currency</label><select id="ed_cur" class="fsel">${['AED','USD','GBP','EUR'].map(x=>`<option${x===(p.currency||'AED')?' selected':''}>${x}</option>`).join('')}</select>
       <div class="row" style="margin-top:12px"><button class="btn go" onclick="saveEditDeal(${id})">Save</button><button class="btn" onclick="openProject(${id})">Cancel</button></div></div>`;
@@ -1095,7 +1123,7 @@ async function saveEditDeal(id){
 async function deleteContact(email){ if(!confirm('Delete this contact permanently? This removes them from the database.')) return; try{ await api('/api/crm/contact?email='+encodeURIComponent(email),{method:'DELETE'}); toast('Contact deleted');
   const i=contactOrder.indexOf(email); if(i>=0) contactOrder.splice(i,1); const next=(i>=0)?(contactOrder[i]||contactOrder[i-1]):null;
   if(next) openContact(next); else go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
-async function deleteDeal(id){ if(!confirm('Delete this deal permanently? This removes it from the database.')) return; try{ await api('/api/crm/project/'+id,{method:'DELETE'}); toast('Deal deleted'); go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
+async function deleteDeal(id){ if(!confirm('Delete this permanently? This removes it from the database.')) return; try{ await api('/api/crm/project/'+id,{method:'DELETE'}); toast('Deleted'); go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
 async function deleteAccount(id){ if(!confirm('Delete this organisation permanently? Its contacts and deals stay but get unlinked from it.')) return; try{ await api('/api/crm/account/'+id,{method:'DELETE'}); toast('Organisation deleted'); go('crm'); }catch(e){ toast('Could not delete ('+e.message+')'); } }
 function openNewCompany(){
   document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')">${ic('back',18)}</button><b>New organisation</b></div>
@@ -1122,15 +1150,16 @@ async function saveNewCompany(){
   catch(e){ toast('Could not create ('+e.message+')'); }
   finally{ _saving=false; }
 }
-async function openNewDeal(accountId){
+async function openNewDeal(accountId, stage){
   await accountsCache(); const co=document.getElementById('coSel').value||'';
+  const st=stage||'Opportunity', what=FORECAST_STAGES.includes(st)?'opportunity':'project';
   const biz=(co?'':`<option value="" selected disabled>— pick a business —</option>`)
     +companies.map(c=>`<option value="${c.slug}"${c.slug===co?' selected':''}>${esc(c.name)}</option>`).join('');
-  const stages=PROJ_STAGES.map(s=>`<option value="${s}"${s==='Opportunity'?' selected':''}>${s}</option>`).join('');
-  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')">${ic('back',18)}</button><b>New deal</b></div>
+  const stages=PROJ_STAGES.map(s=>`<option value="${s}"${s===st?' selected':''}>${s}</option>`).join('');
+  document.getElementById('view').innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')">${ic('back',18)}</button><b>New ${what}</b></div>
     <div class="card">
       <label>Your business</label><select id="nd_biz" class="fsel">${biz}</select>
-      <label>Deal name</label><input id="nd_title" class="fsel">
+      <label>${what==='opportunity'?'Opportunity':'Project'} name</label><input id="nd_title" class="fsel">
       <label>Organisation</label><select id="nd_acc" class="fsel">${accountOptions(accountId)}</select>
       <label>Contact name</label><input id="nd_cname" class="fsel" autocomplete="off">
       <label>Contact email</label><input id="nd_cemail" class="fsel" type="email" autocomplete="off">
@@ -1138,10 +1167,11 @@ async function openNewDeal(accountId){
       <label>Value</label><input id="nd_value" class="fsel" type="number" inputmode="decimal">
       <label>Currency</label><select id="nd_cur" class="fsel"><option>AED</option><option>USD</option><option>GBP</option><option>EUR</option></select>
       <label>Stage</label><select id="nd_stage" class="fsel">${stages}</select>
-      <div class="row" style="margin-top:12px"><button class="btn go" onclick="saveNewDeal()">Create deal</button><button class="btn" onclick="go('crm')">Cancel</button></div></div>`;
+      <div class="row" style="margin-top:12px"><button class="btn go" onclick="saveNewDeal()">Create ${what}</button><button class="btn" onclick="go('crm')">Cancel</button></div></div>`;
 }
 async function saveNewDeal(){
-  const title=fval('nd_title').trim(); if(!title){ toast('Deal name is required'); return; }
+  const what=FORECAST_STAGES.includes(fval('nd_stage'))?'opportunity':'project';
+  const title=fval('nd_title').trim(); if(!title){ toast('Give the '+what+' a name'); return; }
   if(!fval('nd_biz')){ toast('Pick which of your businesses this opportunity is for'); return; }
   // NO OPPORTUNITY WITHOUT A CONTACT (owner, 14 Oct 2026)
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(fval('nd_cemail').trim()) && fval('nd_cphone').replace(/\D/g,'').length<8){
@@ -1150,7 +1180,7 @@ async function saveNewDeal(){
   try{ let acc=fval('nd_acc'); if(acc==='__new'){ const name=prompt('New organisation name:'); if(name){ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); acc=a.id; } else acc=''; }
     const value=parseFloat(fval('nd_value'))||null;
     const d=await api('/api/crm/deals/new',{method:'POST',body:JSON.stringify({company:fval('nd_biz'),title,value,currency:fval('nd_cur'),stage:fval('nd_stage'),account_id:acc?+acc:null,contact_name:fval('nd_cname').trim(),contact_email:fval('nd_cemail').trim(),contact_phone:fval('nd_cphone').trim()})});
-    toast('Deal created'); openProject(d.id); }
+    toast(what==='opportunity'?'Opportunity created':'Project created'); openProject(d.id); }
   catch(e){ toast('Could not create ('+e.message+')'); }
   finally{ _saving=false; }
 }
@@ -1235,7 +1265,7 @@ async function renderProjects(b,co){
   const allco=!co;
   let h=`<div class="mrow"><div class="mcard"><div class="ml">Outstanding value</div><div class="mv">${valueHeadline(d.currencies)}</div></div>
     <div class="mcard"><div class="ml">Active projects</div><div class="mv">${d.count}</div></div></div>`;
-  h+=`<div class="row" style="margin:2px 0 8px"><button class="btn go sm" onclick="openNewDeal(null)">${ic('plus',15)} New deal</button></div>`;
+  h+=`<div class="row" style="margin:2px 0 8px"><button class="btn go sm" onclick="openNewDeal(null,'Booked')">${ic('plus',15)} New project</button></div>`;
   if(!d.count){ h+='<div class="empty">No projects yet</div>'; }
   else if(allco){ const g=byCompany(d.projects); Object.keys(g).sort().forEach(cn=>{ const it=g[cn], s=it.reduce((a,p)=>a+(+p.value||0),0);
     h+=`<div class="h">${esc(cn)} · ${it.length} · ${dmoney(s)}</div>`+it.map(dealCard).join(''); }); }
@@ -1248,7 +1278,7 @@ async function renderOpps(b,co){
   const allco=!co;
   let h=`<div class="mrow"><div class="mcard"><div class="ml">Forecast value</div><div class="mv">${valueHeadline(d.currencies)}</div></div>
     <div class="mcard"><div class="ml">Open opportunities</div><div class="mv">${d.count}</div></div></div>`;
-  h+=`<div class="row" style="margin:2px 0 8px"><button class="btn go sm" onclick="openNewDeal(null)">${ic('plus',15)} New deal</button></div>`;
+  h+=`<div class="row" style="margin:2px 0 8px"><button class="btn go sm" onclick="openNewDeal(null)">${ic('plus',15)} New opportunity</button></div>`;
   if(!d.opportunities.length){ h+='<div class="empty">No open opportunities</div>'; }
   else if(allco){ const g=byCompany(d.opportunities); Object.keys(g).sort().forEach(cn=>{ const it=g[cn], s=it.reduce((a,o)=>a+(+o.value||0),0);
     h+=`<div class="h">${esc(cn)} · ${it.length}${s?' · '+dmoney(s):''}</div>`+it.map(dealCard).join(''); }); }
@@ -1388,7 +1418,7 @@ async function openAccount(id){
       <div class="dsec"><div class="dlbl">Contacts (${(a.contacts||[]).length})</div>${contacts||'<div class="csub">None linked</div>'}
         <div class="row" style="margin-top:8px"><button class="btn go sm" onclick="addContactToCompany(${a.id})">${ic('plus',14)} Add contact</button></div></div>
       <div class="dsec"><div class="dlbl">Deals (${(a.deals||[]).length})</div>${deals||'<div class="csub">None</div>'}
-        <div class="row" style="margin-top:8px"><button class="btn go sm" onclick="openNewDeal(${a.id})">${ic('plus',14)} New deal</button></div></div>
+        <div class="row" style="margin-top:8px"><button class="btn go sm" onclick="openNewDeal(${a.id})">${ic('plus',14)} New opportunity</button></div></div>
       <div class="dsec"><div class="dlbl">Nurture</div>${nurturePanel(a)}</div>
       ${noteBox('a',a.id)}
       ${(a.history&&a.history.length)?`<div class="dsec"><div class="dlbl">History</div>${a.history.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b>${histWhen(h.ts)}<div class="csub">${histText(h.text)}</div></div></div>`).join('')}</div>`:''}
@@ -3409,6 +3439,7 @@ document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden'){ hidAt=Date.now(); return; }
   if(IS_MOBILE && token && pinSet && !demo && hidAt && Date.now()-hidAt>300000){ lockNow(); return; }  // re-lock after 5 min away — MOBILE only
   syncWake();                          // re-acquire screen lock (drops when hidden)
+  checkBuild(true);                    // a deploy happened while the app was in the background: reload
   if(booted){ refreshBadge(); }   // badge only: coming back to the tab must never rebuild the list
 });
 // instant refresh when a push lands while the app is open/foreground (no need to tap the notification)

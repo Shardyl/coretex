@@ -51,6 +51,40 @@ app.add_middleware(
 TOKEN_TTL = 60 * 60 * 24 * 14  # 14 days
 
 
+# ---------- the cockpit's version (14 Oct 2026) ----------
+# An open cockpit runs the code it loaded. After a deploy changed the New deal form AND the rule behind it, Gino's
+# app (open since before) kept posting the old form with no contact fields and was refused five times with no way to
+# add one. The cockpit now sends its APP_BUILD on every call; a WRITE from any other build is refused with a reload
+# message, and /api/version lets the app reload itself. The build is read from web/index.html (one source).
+def cockpit_build() -> str:
+    try:
+        p = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "web", "index.html")
+        m = re.search(r"const APP_BUILD = '([^']+)'", open(p, encoding="utf-8").read())
+        return m.group(1) if m else ""
+    except OSError:
+        return ""
+
+
+_BUILD = cockpit_build()
+STALE_BUILD_MSG = ("Cortex has been updated since this screen was opened. Tap Reload (or close the app fully and "
+                   "reopen it), then try again.")
+
+
+@app.middleware("http")
+async def _refuse_stale_cockpit(request, call_next):
+    b = request.headers.get("x-cortex-build")
+    if (b and _BUILD and b != _BUILD and request.method not in ("GET", "HEAD", "OPTIONS")
+            and request.url.path.startswith("/api/")):
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": STALE_BUILD_MSG, "stale_build": True, "build": _BUILD}, status_code=409)
+    return await call_next(request)
+
+
+@app.get("/api/version")
+def api_version() -> dict:
+    return {"build": _BUILD}
+
+
 # ---------- auth ----------
 
 def _secret() -> bytes:
@@ -1936,6 +1970,10 @@ def crm_create_deal(body: NewDealBody, _: None = Depends(auth)) -> dict:
         raise HTTPException(status_code=400, detail="title required")
     if body.stage not in crm.DEAL_STAGES:
         raise HTTPException(status_code=400, detail=f"stage must be one of {crm.DEAL_STAGES}")
+    if not ({"contact_name", "contact_email", "contact_phone"} & body.model_fields_set):
+        # a form with no contact fields at all is a cockpit from before 14 Oct 2026, not a person leaving them blank
+        raise HTTPException(status_code=409, detail="This screen is out of date and has no contact fields. Close "
+                                                    "Cortex fully and reopen it, then create the opportunity again.")
     try:
         return crm.create_deal(body.company, body.title, body.value, body.currency, body.stage, body.account_id,
                                second_job=True,   # the cockpit form is the owner's own hand: his call
@@ -3245,8 +3283,8 @@ CHAT_SYSTEM_BASE = (
     "You ALSO run the CRM and the calendar. Use crm_lookup to find a contact or client company, and crm_pipeline "
     "to read the deal pipeline (open opportunities + forecast, won projects + value) — use these BEFORE answering "
     "'what's in the pipeline / the forecast / who is X'. You can create_company (a client company), create_contact "
-    "(a person; a deal's people come from their client company, so set the company), and create_deal (defaults to "
-    "the Opportunity stage). You can run_report (SEO & traffic report, lands in the Inbox now), schedule_report (run "
+    "(a person; an opportunity's people come from their client company, so set the company), and "
+    "create_opportunity (defaults to the Opportunity stage; call it an opportunity, never a deal). You can run_report (SEO & traffic report, lands in the Inbox now), schedule_report (run "
     "it on a cadence), and list_scheduled. When Rashad asks you to add a contact/company/deal or to send/schedule a "
     "report, DO IT with these tools, then confirm in one short spoken sentence. "
     "You ALSO have a KNOWLEDGE BASE about the Cortex system itself — its architecture and how its features "
@@ -3426,8 +3464,9 @@ SKILL_TOOLS = [
     {"name": "create_contact",
      "description": "Create a contact (a person). 'company' = the client company they work at (linked/created automatically). 'business' = which of YOUR businesses (slug) it relates to.",
      "input_schema": {"type": "object", "properties": {"first_name": {"type": "string"}, "last_name": {"type": "string"}, "email": {"type": "string"}, "company": {"type": "string", "description": "client company name"}, "business": {"type": "string", "description": "your business slug"}, "phone": {"type": "string"}, "job_title": {"type": "string"}}, "required": ["email"]}},
-    {"name": "create_deal",
-     "description": "Create a deal. EVERY OPPORTUNITY NEEDS A DESIGNATED CONTACT: before calling this, ask who the contact "
+    {"name": "create_opportunity",
+     "description": "Create an opportunity (a deal, in the CRM). Call it an opportunity when you speak to him, never a "
+                    "'deal'. EVERY OPPORTUNITY NEEDS A DESIGNATED CONTACT: before calling this, ask who the contact "
                     "is (their name and email, or a WhatsApp number if they have no email) unless you were already told; "
                     "never guess or invent one. 'business' = which of YOUR businesses (slug). 'company' = the CLIENT ORGANISATION name — a real company, NEVER the deal/project title. The deal links to that organisation (its people come from there). If you don't know the client organisation, OMIT company (the deal is created unlinked) — do NOT pass the deal title as the company, or invent an org. Defaults to the Opportunity stage.",
      "input_schema": {"type": "object", "properties": {"business": {"type": "string"}, "title": {"type": "string", "description": "the deal/project name"}, "value": {"type": "number"}, "currency": {"type": "string"}, "stage": {"type": "string"}, "company": {"type": "string", "description": "the CLIENT ORGANISATION (real company), distinct from the deal title; omit if unknown"}, "second_job": {"type": "boolean", "description": "ONLY after Rashad has been told this client already has an open opportunity and has confirmed this is a genuinely separate job"}, "contact_name": {"type": "string", "description": "the designated contact's name"}, "contact_email": {"type": "string", "description": "the designated contact's email"}, "contact_phone": {"type": "string", "description": "their WhatsApp/phone number, when they have no email"}}, "required": ["business", "title"]}},
@@ -4471,7 +4510,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         _deals = ("; on opportunity " + ", ".join(f"#{d['id']} '{d['title']}'" for d in _on) if _on else
                   "; NOT attached to any opportunity (say so, and ask which opportunity they belong on)")
         return f"created contact {c['email']}" + (f" at {inp['company']}" if inp.get("company") else "") + _deals
-    if name == "create_deal":
+    if name in ("create_opportunity", "create_deal"):   # create_deal = the old name, kept for old conversations
         comp = (inp.get("company") or "").strip()
         title = (inp.get("title") or "").strip()
         aid, link_note = None, ""
@@ -4491,7 +4530,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                     "phone": (inp.get("contact_phone") or "").strip()}
         if not crm.valid_contact(_contact):
             return ("NOT created: an opportunity needs a designated contact. Ask who the contact is for this "
-                    "opportunity (their name and email, or a WhatsApp number), then call create_deal again with it.")
+                    "opportunity (their name and email, or a WhatsApp number), then call create_opportunity again with it.")
         try:
             d = crm.create_deal(inp.get("business", "sensa"), title, value=inp.get("value"),
                                 currency=inp.get("currency", "AED"), stage=stage, account_id=aid,
@@ -4630,7 +4669,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             _opp = crm.open_opportunity_for_account(_acc["id"], slug) if _acc else None
             if not _opp:
                 return ("Quotation NOT built: which opportunity is it for? A quotation always belongs to an opportunity. "
-                        "If there is none yet, create it first with create_deal (ask who the designated contact is), "
+                        "If there is none yet, create it first with create_opportunity (ask who the designated contact is), "
                         "then build the quotation with its deal_id.")
             inp["deal_id"] = _opp["id"]
         _letter = None
