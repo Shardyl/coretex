@@ -6655,7 +6655,7 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                                           f"({(e.get('subject') or '(no subject)')[:80]}): {_skip['reason']}.")
                         # A CALENDAR INVITE OR AN AUTOMATED MESSAGE NEEDS NO REPLY, SO NO NOTICE (14 Oct 2026: Farheen's
                         # invitation and its update raised two "Not drafted" notices); a real email notifies once a day
-                        if not _no_reply_mail(e):
+                        if not (_no_reply_mail(e) or _skip.get("by_address")):   # support's mail: on the deal only
                             notifications.notify(
                                 f"Not drafted: {e.get('name') or e.get('email')} ({(e.get('subject') or '')[:60]})",
                                 f"An email from a client on '{_sd['title']}' got no draft because of the rule: {_skip['reason']}. "
@@ -6668,7 +6668,8 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                 results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
                                 "category": cls["category"], "to_crm": cls.get("to_crm"),
                                 "reason": f"no draft - {_skip['reason']}"})
-                _flag_skipped_opportunity(co, e, _skip["reason"], rt_key=rt_key, client=company)   # in-scope tender -> tracked
+                if not _cdeals:   # A CLIENT'S OWN EMAIL IS NEVER A TENDER (14 Oct 2026: Sampras support -> "Tender" #165)
+                    _flag_skipped_opportunity(co, e, _skip["reason"], rt_key=rt_key, client=company)   # in-scope tender -> tracked
                 # A BLAST THAT ASKS US TO CONFIRM RECEIPT OR PARTICIPATION gets that acknowledgement drafted
                 # (DIEZ: "Please confirm receipt of this Invitation and your participation", 16 Sep 2026).
                 # Acknowledge only: no pitch, no prices; the owner decides whether it goes.

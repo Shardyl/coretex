@@ -736,6 +736,13 @@ def _cases():
     case("a new build of a core document retires the earlier copies with its name", "Body Double x5",
          lambda: "retire_same_name(" in inspect.getsource(__import__("cortex.documents", fromlist=["x"]).save))
 
+    # --- mail to the support mailbox is support, client or not; a client's email is never a tender (Sampras, 14 Oct)
+    _pol = __import__("cortex.policy", fromlist=["x"])
+    case("a role mailbox decides even for a client on a deal; a person's address does not", "Sampras 1232 / #165",
+         lambda: bool(_pol._ROLE_LOCAL.match("support")) and not _pol._ROLE_LOCAL.match("ben")
+         and "by_address" in inspect.getsource(engine.poll_inbox)
+         and "if not _cdeals:" in inspect.getsource(engine.poll_inbox))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

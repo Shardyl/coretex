@@ -131,6 +131,10 @@ def card_categories(company: dict) -> tuple:
 NO_DRAFT_LANES = ("sales-first-response", "sales-followup", "email-handling")
 
 
+_ROLE_LOCAL = re.compile(r"^(support|help|helpdesk|service|customerservice|care|info|admin|accounts?|billing|"
+                         r"ops|operations|team|tech|techsupport|api|enquir(y|ies)|inquir(y|ies))$", re.I)
+
+
 def should_skip(company: dict, email: dict, skill_key: str | tuple = NO_DRAFT_LANES,
                 own_domain: str = "", deal: dict | None = None) -> dict | None:
     """Does this inbound email fall into a NO-DRAFT situation for this company? Returns {reason} to skip,
@@ -177,10 +181,13 @@ def should_skip(company: dict, email: dict, skill_key: str | tuple = NO_DRAFT_LA
         # deal 108, our biggest opportunity) wrote on the deal thread that the bank would answer the report in the
         # week of 5-9 October; Ben was on it, the address match fired and the email left no card, no deal entry and
         # no change to the chase. Only what the email SAYS can hold a client's reply, judged below with the deal named.
-        if not deal:
-            for a in addrs:
-                if a in sender or (a in to_line and not (ours_on_to - set(addrs))):
-                    return {"reason": f"handled by {a} (standing rule)"}
+        # ...BUT AN EMAIL SENT TO THE SUPPORT MAILBOX IS SUPPORT, CLIENT OR NOT (14 Oct 2026). Alan Cheung (Sampras,
+        # deal 60) wrote TO support@tabscanner.com with a token ID to check; the deal override above drafted Rashad a
+        # reply to Ben's support ticket (card 1232). With a deal, only a ROLE mailbox (support@, help@...) decides;
+        # a person's address (ben@) is still judged on what the email says, which keeps the ABN AMRO case.
+        for a in (addrs if not deal else [x for x in addrs if _ROLE_LOCAL.match(x.split("@")[0])]):
+            if a in sender or (a in to_line and not (ours_on_to - set(addrs))):
+                return {"reason": f"handled by {a} (standing rule)", "by_address": True}
         if not sits:
             return None
         out = provider.think_json(

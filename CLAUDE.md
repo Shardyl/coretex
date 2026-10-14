@@ -3491,3 +3491,12 @@ shoot needs none), then 10% off the whole quotation.
   (kept on record). Retired 14 Oct: Body Double 808-811 -> 812, AI Avatar Posts 813-814 -> 815. Company profile: doc 7
   (the 2.3MB email copy, profile `high_value_attach_doc`) is now kind company-profile and the one offered/attached;
   doc 1 (9.6MB master, same profile) is superseded by it, kept on record and on Drive.
+
+## Mail to the support mailbox is support, client or not; a client's email is never a tender (14 Oct 2026)
+- Alan Cheung (Sampras, deal 60) wrote TO support@tabscanner.com asking for OCR training, then sent a token ID to check.
+  The first was skipped, then judged by `_flag_skipped_opportunity` as an in-scope "tender" (deal #165 created, closed
+  Lost); the second was DRAFTED (card 1232) because the 13 Oct rule let any open deal override the handling-mailbox
+  match. `policy._ROLE_LOCAL`: with a deal, a ROLE mailbox (support@, help@, info@, accounts@...) still decides
+  (`{"by_address": True}`); a person's address (ben@) is judged on content, which keeps the ABN AMRO / Mike Enting case.
+  A by-address skip goes on the deal with NO "Not drafted" notice. `_flag_skipped_opportunity` never runs for a sender
+  on an open deal.
