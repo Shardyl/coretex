@@ -14,7 +14,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from . import crm, db, pipeline
+import json
+import re
+
+from . import crm, db, pipeline, stages
 
 
 def _deals(company: dict, email: str, deals: list | None) -> list[dict]:
@@ -35,57 +38,157 @@ def ask_which_deal(company: dict, message: dict, candidates: list[dict], directi
     When the matcher cannot tell, ONE small card asks; the owner's answer is bound to the thread (thread_deal:<id>) so
     he is asked once per conversation. Until then the message is on the contact, not on a deal."""
     from . import store
+    from . import engine
+    if direction == "in" and engine._no_reply_mail(message):
+        return      # A CALENDAR INVITE IS NOT A MESSAGE TO FILE (14 Oct 2026: Farheen's invite + update = two questions)
     ref = str(message.get("mail_ref") or message.get("msg_id") or message.get("thread_id") or "")
-    if ref and db.one("select 1 from tasks where request->>'kind'='deal_pick' and request->'message'->>'ref'=%s", (ref,)):
+    if ref and db.one("select 1 from tasks where request->>'kind'='deal_pick' and (request->'message'->>'ref'=%s or "
+                      "request->'messages' @> %s::jsonb)", (ref, json.dumps([{"ref": ref}]))):
+        return
+    who = (message.get("email") if direction == "in" else message.get("to")) or "them"
+    msg = {"ref": ref, "email": message.get("email") or "", "to": message.get("to") or "",
+           "subject": message.get("subject") or "", "body": (message.get("body") or "")[:3000],
+           "thread_id": message.get("thread_id") or "", "msg_id": message.get("msg_id") or "",
+           "references": message.get("references") or "", "mail_ref": message.get("mail_ref") or ref,
+           "gmail_id": message.get("gmail_id") or message.get("id") or ""}
+    # ONE QUESTION PER PERSON: while one is open, their next messages join it and one answer files them all
+    open_q = db.one("select * from tasks where company_id=%s and request->>'kind'='deal_pick' and status in "
+                    "('new','awaiting_approval','awaiting_correction') and request->>'direction'=%s and "
+                    "lower(request->>'who')=lower(%s) order by id desc limit 1", (company["id"], direction, who))
+    if open_q:
+        rq = open_q.get("request") or {}
+        msgs = (rq.get("messages") or [rq.get("message")]) + [msg]
+        store.update_task(open_q["id"], request={**rq, "messages": [m for m in msgs if m]},
+                          draft=_pick_text(direction, who, [m for m in msgs if m], rq.get("candidates") or []))
         return
     sk = store.get_skill_by_key(company["id"], "general-operations") or store.get_skill_by_key(company["id"], "email-handling")
-    who = message.get("email") or message.get("to") or "them"
-    lines = [f"{i}. #{d['id']} {d.get('title')} ({d.get('stage')})" for i, d in enumerate(candidates, 1)]
-    draft = (f"Which deal is this about? Cortex could not tell from the thread, the subject or a quote number.\n\n"
-             f"{'From' if direction == 'in' else 'To'} {who}: {(message.get('subject') or '(no subject)')[:120]}\n"
-             f"{(message.get('body') or message.get('snippet') or '')[:400]}\n\n" + "\n".join(lines)
-             + f"\n{len(lines) + 1}. None of these\n\nReply with the number. Your answer files this whole conversation.")
+    cands = [{"id": int(d["id"]), "title": d.get("title"), "stage": d.get("stage")} for d in candidates]
     store.create_task(company["id"], sk["id"], "content", {
-        "kind": "deal_pick", "title": f"Which deal: {(message.get('subject') or who)[:70]}",
-        "candidates": [{"id": int(d["id"]), "title": d.get("title"), "stage": d.get("stage")} for d in candidates],
-        "direction": direction,
-        "message": {"ref": ref, "email": message.get("email") or "", "to": message.get("to") or "",
-                    "subject": message.get("subject") or "", "body": (message.get("body") or "")[:3000],
-                    "thread_id": message.get("thread_id") or "", "msg_id": message.get("msg_id") or "",
-                    "references": message.get("references") or "", "mail_ref": message.get("mail_ref") or ref,
-                    "gmail_id": message.get("gmail_id") or message.get("id") or ""}})
+        "kind": "deal_pick", "title": f"Which opportunity: {(message.get('subject') or who)[:70]}",
+        "candidates": cands, "direction": direction, "who": who, "message": msg, "messages": [msg]})
     db.execute("update tasks set status='awaiting_approval', draft=%s where request->>'kind'='deal_pick' and "
-               "request->'message'->>'ref'=%s and status='new'", (draft, ref))
+               "request->'message'->>'ref'=%s and status='new'", (_pick_text(direction, who, [msg], cands), ref))
 
 
-def answer_which_deal(task: dict, text: str) -> str:
-    """The owner answered a deal_pick card: bind the thread, file the message where it belongs, close the card."""
-    import re as _re
+def _pick_text(direction: str, who: str, msgs: list, cands: list) -> str:
+    """The card's words: who, which messages, the options (also the buttons), and how else to answer."""
+    head = (f"Which opportunity are {'these messages' if len(msgs) > 1 else 'this message'} "
+            f"{'from' if direction == 'in' else 'to'} {who} about? Cortex could not tell from the thread, the subject "
+            "or a quote number.\n\n")
+    body = "\n".join(f"- {(m.get('subject') or '(no subject)')[:120]}" for m in msgs)
+    last = (msgs[-1].get("body") or "")[:400] if msgs else ""
+    opts = "\n".join(f"{i}. #{c['id']} {c.get('title')} ({c.get('stage')})" for i, c in enumerate(cands, 1))
+    return (head + body + (f"\n\n{last}" if last else "") + "\n\n" + opts + f"\n{len(cands) + 1}. None of these\n\n"
+            "Tap one, or say which opportunity (its name or number), 'a new job: <name>', or 'none'.")
+
+
+_NONE_RX = re.compile(r"\b(none|neither|not a deal|no deal|not an opportunity|no opportunity|personal|ignore it)\b", re.I)
+_NEW_RX = re.compile(r"\bnew (job|opportunity|deal|project|enquiry)\b", re.I)
+
+
+def _open_deals(company: dict) -> list[dict]:
+    return db.query("select id, title, stage from crm_projects where company=%s and stage not in "
+                    + stages.sql_list(stages.NO_CORRESPONDENCE) + " order by id desc", (crm._org(company.get("slug")),))
+
+
+def _resolve_pick(company: dict, req: dict, text: str):
+    """His words -> ("deal", row) | ("none", None) | ("new", title) | ("ask", [rows]) | ("unknown", None).
+    Code first (a number on the card, a deal number, 'none', 'new job'); otherwise ONE narrow model question
+    matches his words against EVERY open opportunity of this company, and code keeps only real ids."""
+    cands = req.get("candidates") or []
+    t = (text or "").strip()
+    deals = _open_deals(company)
+    by_id = {int(d["id"]): d for d in deals}
+    m = re.search(r"#?\b(\d{1,5})\b", t)
+    if m:
+        n = int(m.group(1))
+        if 1 <= n <= len(cands) and len(t) <= 12:
+            return "deal", cands[n - 1]
+        if n == len(cands) + 1 and len(t) <= 12:
+            return "none", None
+        if n in by_id:
+            return "deal", by_id[n]
+    if _NEW_RX.search(t):
+        title = re.split(_NEW_RX, t, maxsplit=1)[-1]
+        title = re.sub(r"^[\s:,\-]*(called|named|for)?\s*", "", title, flags=re.I).strip(" .") \
+            if isinstance(title, str) else ""
+        return "new", title
+    if _NONE_RX.search(t) and len(t.split()) <= 6:
+        return "none", None
+    if not deals:
+        return "unknown", None
+    from . import provider
+    listing = "\n".join(f"#{d['id']} {d['title']} ({d['stage']})" for d in deals[:120])
+    try:
+        r = provider.think_json(
+            "The owner is saying which of his open opportunities an email belongs to. Return the id(s) of every "
+            "opportunity his words could mean. Only ids from the list. If nothing fits, return an empty list. "
+            'Return {"ids": [<id>, ...]}.',
+            f"HIS WORDS: {t[:500]}\n\nOPEN OPPORTUNITIES:\n{listing}",
+            model=provider.MODEL_ROUTER, max_tokens=80, purpose="deal-pick-words") or {}
+    except Exception:  # noqa: BLE001
+        r = {}
+    ids = [int(i) for i in (r.get("ids") or []) if str(i).isdigit() and int(i) in by_id]
+    if len(ids) == 1:
+        return "deal", by_id[ids[0]]
+    if len(ids) > 1:
+        return "ask", [by_id[i] for i in ids[:6]]
+    return "unknown", None
+
+
+def answer_which_deal(task: dict, text: str = "", pick_id: int | None = None) -> str:
+    """The owner answered a deal_pick card, by a button (pick_id; 0 = none of these) or in his own words: bind the
+    thread, file EVERY message on the card where it belongs, close the card. Words that match several
+    opportunities re-ask with only those; words that match nothing keep the card open and say so."""
     from . import store
     req = task.get("request") or {}
-    cands = req.get("candidates") or []
-    m = _re.search(r"\d+", text or "")
-    n = int(m.group(0)) if m else 0
-    pick = None
-    if 1 <= n <= len(cands):
-        pick = cands[n - 1]
-    elif any(int(c["id"]) == n for c in cands):
-        pick = next(c for c in cands if int(c["id"]) == n)
-    msg = req.get("message") or {}
-    if pick:
-        for k in (msg.get("thread_id"), *(_re.findall(r"<([^<>\s]+)>", msg.get("references") or ""))):
-            if k:
-                db.setting_set(f"thread_deal:{k}", int(pick["id"]))
-        co = store.get_company(task["company_id"])
-        if req.get("direction") == "out":
-            pipeline.log_deal(int(pick["id"]), "email_out_manual", f"manually sent to {msg.get('to')}: "
-                              f"{msg.get('subject') or '(no subject)'}", ref=msg.get("ref") or "")
+    co = store.get_company(task["company_id"])
+    msgs = [m for m in (req.get("messages") or [req.get("message")]) if m]
+    if pick_id is not None:
+        if int(pick_id) == 0:
+            how, val = "none", None
         else:
-            they_wrote(co, {**msg, "email": msg.get("email")}, [pick])
+            row = db.one("select id, title, stage from crm_projects where id=%s", (int(pick_id),))
+            how, val = ("deal", row) if row else ("unknown", None)
+    else:
+        how, val = _resolve_pick(co, req, text)
+    if how == "ask":
+        cands = [{"id": int(d["id"]), "title": d["title"], "stage": d["stage"]} for d in val]
+        store.update_task(task["id"], status="awaiting_approval",
+                          request={**req, "candidates": cands, "card_problem": None},
+                          draft=_pick_text(req.get("direction") or "in", req.get("who") or "", msgs, cands))
+        return "Your words fit more than one opportunity: tap the right one."
+    if how == "unknown":
+        store.update_task(task["id"], request={**req, "card_problem": f"Could not match \"{(text or '')[:80]}\" to an "
+                                               "open opportunity. Tap one, give its number, or say 'a new job: <name>'."})
+        return "No opportunity matched those words: tap one, or give its number."
+    if how == "new":
+        sender = (msgs[0].get("email") if req.get("direction") != "out" else msgs[0].get("to")) if msgs else ""
+        c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (sender or "",)) or {}
+        name = f"{c.get('first_name') or ''} {c.get('last_name') or ''}".strip()
+        title = (val or (msgs[0].get("subject") if msgs else "") or "New opportunity")[:120]
+        try:
+            d = crm.create_deal(co["slug"], title, second_job=True, contact={"name": name, "email": sender})
+        except Exception as e:  # noqa: BLE001
+            store.update_task(task["id"], request={**req, "card_problem": f"Could not create the opportunity: {e}"})
+            return f"Could not create the opportunity: {e}"
+        how, val = "deal", {"id": d["id"], "title": d.get("title") or title, "stage": d.get("stage") or "Opportunity"}
+    if how == "deal":
+        pick = val
+        for msg in msgs:
+            for k in (msg.get("thread_id"), *(re.findall(r"<([^<>\s]+)>", msg.get("references") or ""))):
+                if k:
+                    db.setting_set(f"thread_deal:{k}", int(pick["id"]))
+            if req.get("direction") == "out":
+                pipeline.log_deal(int(pick["id"]), "email_out_manual", f"manually sent to {msg.get('to')}: "
+                                  f"{msg.get('subject') or '(no subject)'}", ref=msg.get("ref") or "")
+            else:
+                they_wrote(co, {**msg, "email": msg.get("email")}, [pick])
         note = f"Filed on #{pick['id']} {pick.get('title')}; the rest of this conversation will follow."
     else:
-        note = "Not filed on any deal (none of these)."
-    store.update_task(task["id"], status="done", draft=(task.get("draft") or "") + "\n\nANSWER: " + note)
+        note = "Not filed on any opportunity (none of these)."
+    store.update_task(task["id"], status="done", request={**req, "card_problem": None},
+                      draft=(task.get("draft") or "") + "\n\nANSWER: " + note)
     return note
 
 

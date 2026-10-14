@@ -2831,6 +2831,22 @@ def menu_pick(task_id: int, body: MenuPicks, u: dict = Depends(current_user)) ->
     return engine.menu_pick(task_id, body.picks)
 
 
+class DealPick(BaseModel):
+    deal_id: int | None = None      # a button (0 = none of these)
+    text: str = ""                  # or his own words
+
+
+@app.post("/api/tasks/{task_id}/deal-pick")
+def deal_pick(task_id: int, body: DealPick, u: dict = Depends(current_user)) -> dict:
+    """'Which opportunity?' card: a tap on an option, or his words ('the Ramadan one', 'deal 164', 'a new job: X')."""
+    _guard_task(u, task_id)
+    t = store.get_task(task_id)
+    if not t or (t.get("request") or {}).get("kind") != "deal_pick":
+        raise HTTPException(status_code=404, detail="not a which-opportunity card")
+    from . import events
+    return {"note": events.answer_which_deal(t, body.text, body.deal_id)}
+
+
 @app.post("/api/whatsapp/nudge/{task_id}")
 def whatsapp_nudge(task_id: int, u: dict = Depends(current_user)) -> dict:
     """Ask a lead whose 24h window has shut to reopen the chat, so the reply on this card can send.

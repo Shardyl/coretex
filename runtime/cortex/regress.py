@@ -710,6 +710,23 @@ def _cases():
          lambda: _d1 == "2026-10-14" and _due1.hour == 14 and _d2 == "2026-10-15" and _due2.day == 15
          and "'snoozed'" in inspect.getsource(_nt.notify))
 
+    # --- "which opportunity?" can be answered, once per person, never for an invite (14 Oct 2026)
+    _evm = __import__("cortex.events", fromlist=["x"])
+    _req = {"candidates": [{"id": 164, "title": "Shama - Ramadan", "stage": "Opportunity"},
+                           {"id": 130, "title": "Shama - Qabilah", "stage": "Quote"}]}
+    _coS = {"id": 3, "slug": "sensa"}
+    case("the card answers by tap, by its number, by a deal number, 'none' or 'a new job'", "Shama 1230/1231",
+         lambda: _evm._resolve_pick(_coS, _req, "1")[1]["id"] == 164 and _evm._resolve_pick(_coS, _req, "3")[0] == "none"
+         and _evm._resolve_pick(_coS, _req, "none of these")[0] == "none"
+         and _evm._resolve_pick(_coS, _req, "it's a new job: Ramadan billboard") == ("new", "Ramadan billboard")
+         and "dealPickCard(" in open(_web + "/index.html", encoding="utf-8").read()
+         and "pick_id" in inspect.getsource(_evm.answer_which_deal))
+    case("an invite never asks; a second message joins the open question", "Shama 1230/1231",
+         lambda: "_no_reply_mail(message)" in inspect.getsource(_evm.ask_which_deal)
+         and "ONE QUESTION PER PERSON" in inspect.getsource(_evm.ask_which_deal))
+    case("an automatic email is held when a meeting with them is booked", "Shama #164 chase",
+         lambda: "next_meeting_with(" in inspect.getsource(__import__("cortex.gate", fromlist=["x"]).check))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

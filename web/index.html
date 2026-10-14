@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v68';
+const APP_BUILD = 'cortex-v69';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -1918,6 +1918,7 @@ function actionCard(t){
     if(t.kind==='social_shift') return socialShiftCard(t,co);
     if(t.kind==='social_relogin') return socialReloginCard(t,co);
     if(t.kind==='social_action') return socialActionCard(t,co);
+    if(t.request&&t.request.kind==='deal_pick') return dealPickCard(t,co);
     const isEmail=t.kind==='email_reply'||t.kind==='email_draft';
     const isOutbound=t.kind==='email_draft';
     const kindLabel=t.kind==='blog_menu'?'blog menu — pick the next posts':t.kind==='blog_idea'?'blog idea':t.kind==='blog'?'blog post — review':t.kind==='newsletter_idea'?'newsletter idea':t.kind==='newsletter_review'?'newsletter ready to schedule':t.kind==='newsletter_send'?'newsletter due to send':t.kind==='email_draft'?'email draft':t.kind==='lead_escalation'?'strategic lead — yours to take':(isEmail?'email reply':esc(t.kind||'task'));
@@ -2391,6 +2392,42 @@ async function confirmLiveSend(id, r){
   catch(e){ toast('Error: '+e.message); }
 }
 // Voice (or typed) correction on every approval card: tap to talk -> editable transcript -> send.
+// "WHICH OPPORTUNITY?" (14 Oct 2026): a tap per option, or his own words. It used to render as a generic card whose
+// only way to answer was Type -> "Send correction", which nobody would guess.
+function dealPickCard(t,co){
+  const r=t.request||{}, c=r.candidates||[], msgs=r.messages||(r.message?[r.message]:[]);
+  const who=esc(r.who||(msgs[0]&&(msgs[0].email||msgs[0].to))||'');
+  return `<div class="card" id="t${t.id}">
+    <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">which opportunity?</span><span class="chip" style="margin-left:auto;opacity:.6">#${t.id}</span></div>
+    <div class="title">Which opportunity is this ${r.direction==='out'?'email to':(msgs.length>1?msgs.length+' emails from':'email from')} ${who} about?</div>
+    <div class="body">${msgs.map(m=>'<div>'+ic('mail',13)+' '+esc((m.subject||'(no subject)').slice(0,120))+'</div>').join('')}
+      ${msgs.length?'<div class="csub" style="margin-top:6px;white-space:pre-wrap">'+esc((msgs[msgs.length-1].body||'').slice(0,300))+'</div>':''}</div>
+    ${t.card_problem?`<div class="row" style="margin-bottom:8px;padding:7px 10px;border-radius:9px;border:1px solid #F43F5E55;color:#F43F5E;font-size:13px">${ic('alert',14)} ${esc(t.card_problem)}</div>`:''}
+    <div style="display:flex;flex-direction:column;gap:6px;margin:8px 0">
+      ${c.map(d=>`<button class="btn go" style="text-align:left" onclick="dealPick(${t.id},${d.id})">#${d.id} ${esc(d.title||'')} <span style="opacity:.7">(${esc(d.stage||'')})</span></button>`).join('')}
+      <button class="btn" onclick="dealPick(${t.id},0)">None of these</button></div>
+    <div class="meta" style="margin:4px 0 6px">Or say which one: its name or number, "a new job: name", or "none".</div>
+    <div class="row">
+      <button class="btn warn" id="cm${t.id}" onclick="voiceCorrect(${t.id},this)">${ic('mic',16)} Tap to talk</button>
+      <button class="btn" id="ty${t.id}" onclick="typeCorrect(${t.id})">${ic('edit',16)} Type</button>
+      <button class="btn bad" onclick="act(${t.id},'skip')">Skip</button></div>
+    <div class="corr" id="cp${t.id}" style="display:none;margin-top:9px">
+      <textarea id="corr${t.id}" rows="2" placeholder="e.g. the Ramadan one, deal 164, a new job: Ramadan billboard" style="width:100%;box-sizing:border-box;background:var(--bg2,#0e1620);color:var(--fg,#dfe7ef);border:1px solid var(--ln,#22303f);border-radius:11px;padding:9px 11px;font:inherit;font-size:14px;resize:vertical"></textarea>
+      <div class="row" style="margin-top:7px"><button class="btn go" onclick="dealPickSay(${t.id})">Send</button><button class="btn" onclick="closeCorr(${t.id})">Cancel</button></div></div>
+  </div>`;
+}
+async function dealPick(id, dealId, text){
+  const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;
+  try{ const r=await api(`/api/tasks/${id}/deal-pick`,{method:'POST',body:JSON.stringify(dealId===null?{text}:{deal_id:dealId})});
+    toast(r&&r.note||'Filed'); render(); }
+  catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
+}
+function dealPickSay(id){
+  const btn=document.getElementById('cm'+id); if(recording) stopDictation(btn);
+  const ta=document.getElementById('corr'+id), text=(ta&&ta.value||'').trim();
+  if(!text){ toast('Say or type which opportunity'); return; }
+  dealPick(id, null, text);
+}
 function voiceCorrect(id, btn){
   const p=document.getElementById('cp'+id); if(p) p.style.display='block';
   dictate(btn, 'corr'+id);   // toggles: first tap starts listening, next tap stops

@@ -1379,7 +1379,7 @@ def _build_blog_from_concept(task: dict, skill: dict, company: dict) -> dict:
 
 def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = False) -> dict:
     if (task.get("request") or {}).get("kind") == "deal_pick":
-        return {"blocked": True, "error": "Reply on the card with the number of the deal (or 'none')."}
+        return {"blocked": True, "error": "Tap the opportunity on the card, or say which one."}
     # APPROVING A QUOTATION PREP CARD BUILDS THE QUOTATION (owner, 11 Sep 2026). A prep card is kind
     # 'content', which used to fall through to "mark done": the approve button silently threw the prep
     # away. Approved WITHOUT answers, it now builds from the card's own defaults, as the quotation skill's

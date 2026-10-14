@@ -260,6 +260,27 @@ def upcoming_events(hours: int = 30) -> list[dict]:
     return events_between(start, start + timedelta(hours=hours))
 
 
+_SOON: dict = {"at": None, "rows": []}
+
+
+def next_meeting_with(email: str, days: int = 7):
+    """The start of the next meeting on our calendars with this person (attendee or organiser) in the coming
+    `days`, else None. The week's events are read once and kept 10 minutes (the contact gate asks per card)."""
+    e = (email or "").strip().lower()
+    if not e:
+        return None
+    now = datetime.now(timezone.utc)
+    if not _SOON["at"] or now - _SOON["at"] > timedelta(minutes=10):
+        try:
+            _SOON["rows"] = events_between(now, now + timedelta(days=days))
+        except Exception:  # noqa: BLE001
+            _SOON["rows"] = []
+        _SOON["at"] = now
+    hits = [r["starts_at"] for r in _SOON["rows"] if r.get("starts_at") and r["starts_at"] > now and
+            (r.get("organizer") == e or any((a.get("email") or "") == e for a in (r.get("attendees") or [])))]
+    return min(hits) if hits else None
+
+
 def events_between(start: datetime, end: datetime) -> list[dict]:
     """Every readable meeting starting between `start` and `end` (past or future), same rows as upcoming_events.
     Talk reads who was in a meeting from here (owner, 13 Oct 2026: "add the contacts who were in the 5pm

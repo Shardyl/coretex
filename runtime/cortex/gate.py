@@ -133,6 +133,15 @@ def check(company_id: int, email: str, deal_id, request: dict | None) -> str | N
             quiet = 0.8
         if quiet and last_out and now - last_out < timedelta(days=quiet):
             return f"we emailed them on {last_out:%d %b}, under {quiet:g} days ago"
+        # A MEETING ALREADY BOOKED IS CONTACT TOO (14 Oct 2026: the Shama #164 chase re-armed the day before their
+        # meeting): nothing automatic goes to someone we are about to meet; the meeting notes take it from there
+        try:
+            from . import calendar as _cal
+            soon = _cal.next_meeting_with(email)
+        except Exception:  # noqa: BLE001
+            soon = None
+        if soon:
+            return f"a meeting with them is booked for {soon:%d %b}"
         # A MEETING IS CONTACT (audit 13 Oct): a "they have not replied" chase could go out the day after a call
         met = db.one("select max(starts_at) at from meeting_notes where attendees @> %s::jsonb and starts_at <= now()",
                      (f'["{email}"]',)) or {}

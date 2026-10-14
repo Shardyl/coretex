@@ -3461,3 +3461,18 @@ shoot needs none), then 10% off the whole quotation.
 - "Today's updates" is created SNOOZED until 18:00 Dubai (`notifications.digest_slot`, `DIGEST_HOUR`) and collects
   every for-information item while it waits; it appears in the Inbox once at 18:00. Items after 18:00 go into the
   next day's digest. Change the hour in `DIGEST_HOUR`.
+
+## "Which opportunity?" is answerable; invites never ask; a booked meeting holds chases (owner, 14 Oct 2026)
+- CAUSE: the 13 Oct "never guess which deal" card (`events.ask_which_deal`) shipped with no answer UI: it rendered as a
+  generic card (Approve refused; the only route was Type -> "Send correction"); Farheen's calendar invite and its
+  update raised TWO cards; and the Shama #164 chase was re-armed the day before a booked meeting.
+- CARD: request.kind `deal_pick` renders as `dealPickCard`: one button per candidate + "None of these", or his words
+  (Tap to talk / Type) -> `POST /api/tasks/{id}/deal-pick {deal_id | text}` -> `events.answer_which_deal(task, text,
+  pick_id)`. `_resolve_pick`: code first (the card's option number, any open deal number, 'none', 'a new job: X' which
+  creates the opportunity with the sender as contact), else ONE Haiku match of his words against EVERY open opportunity
+  of the company (ids checked by code): one -> filed; several -> the card re-asks with only those; none -> stays open
+  with the reason. The answer binds every thread on the card (`thread_deal:<id>`).
+- ONE QUESTION PER PERSON: an open deal_pick for the same person (request.who, direction) takes their next messages
+  (`request.messages`); one answer files them all. INVITES NEVER ASK (`engine._no_reply_mail`).
+- GATE: `calendar.next_meeting_with(email)` (the week's events, cached 10 min) -> no automatic email to someone with a
+  meeting booked in the next 7 days; the meeting notes take over after it. sw/APP_BUILD cortex-v69.
