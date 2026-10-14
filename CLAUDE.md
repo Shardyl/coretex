@@ -3515,3 +3515,17 @@ shoot needs none), then 10% off the whole quotation.
   turns it into an email.
 - SAFETY NET: invariant `duplicate_obligations` -> `obligations.merge_twins` each morning (keeps the owner's own or the
   earliest due, cancels the rest, logged on the deal). Invariant fixes may now name any `module.function`.
+
+## An identical quotation is never reissued; a new quotation replaces only quotation files (card 1246, 14 Oct 2026)
+- CAUSE: a correction fixing the EMAIL ("the quotation includes set dressing... casting is priced in it") was read by
+  `_quote_intent` as a quotation decision; `build_quote_from_words` rebuilt SEN-2026-0043 line for line and issued it
+  as v5 (card 1247, identical to v4, AED 76,850). Approving it ran `_quote_to_email`, which dropped every attachment
+  whose NAME held the number, so "Shamal Holding - Proposal SEN-2026-0043 v4" left the email with the old quotation.
+- `_same_quotation(prev_entry, sections, payment, rounds, other)`: same lines (count, qty, price, in order),
+  descriptions differing only in wording (`_near`, 80% words shared), same split, rounds, preset, and note /
+  deliverables / title near-equal -> NOT issued (`{"unchanged": True}`); `apply_correction` then treats the words as an
+  email correction and redrafts. Options, scrap and new-number builds are never short-circuited. `_quote_intent` is
+  also told that describing what the quotation contains is not a decision (the guard, not the prompt, is what we rely on).
+- `_replaced_attachments(existing, refs, nums)`: an attachment leaves only when the library files it as the SAME KIND as
+  one coming in (quotation, terms) and it carries the number; decks and everything else stay. The email card shows
+  `request.attach_changes` ("Added: ... · Removed (replaced): ...") until he changes the files himself. v70.

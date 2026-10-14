@@ -754,6 +754,28 @@ def _cases():
          lambda: _ob.working_days_before(_dtw(2026, 10, 16, 12, tzinfo=_tzw.utc), 2).day == 14
          and _ob.working_days_before(_dtw(2026, 10, 19, 12, tzinfo=_tzw.utc), 2).day == 15)
 
+    # --- an identical quotation is never reissued; a new quotation replaces only quotation files (card 1246, 14 Oct)
+    _qe = {"spec": {"sections": [{"items": [{"desc": "Ideation, storyboard and shot list", "qty": 1, "unit": 7500.0},
+                                            {"desc": "Shoot day, crew of four", "qty": 1, "unit": 20000.0}]}]},
+           "payment": ["50% on confirmation", "50% on delivery"]}
+    _sec = lambda d, u: [{"items": [{"desc": d, "qty": 1, "unit": 7500.0}, {"desc": "Shoot day, crew of four", "qty": 1, "unit": u}]}]  # noqa: E731
+    case("a rebuild with the same lines and prices is the same quotation; a changed price or a new line is not",
+         "SEN-2026-0043 v5 = v4",
+         lambda: engine._same_quotation(_qe, _sec("Ideation, storyboard and the shot list", 20000.0), None, None)
+         and not engine._same_quotation(_qe, _sec("Ideation, storyboard and shot list", 18000.0), None, None)
+         and not engine._same_quotation(_qe, _sec("Ideation, storyboard and shot list", 20000.0), ["70% now", "30% later"], None)
+         and not engine._same_quotation(_qe, _sec("Drone aerial package with licensed pilot", 20000.0), None, None)
+         and not engine._same_quotation({**_qe, "spec": {**_qe["spec"], "note": "Usage 12 months GCC online."}},
+                                        _sec("Ideation, storyboard and shot list", 20000.0), None, None,
+                                        {"note": "Usage in perpetuity, worldwide, all media."})
+         and "unchanged" in inspect.getsource(engine.apply_correction))
+    _db = __import__("cortex.db", fromlist=["x"])
+    _qd = _db.one("select id, filename from company_documents where kind='quotation' and filename ~ 'SEN-2026-0043 v4'")
+    _pd = _db.one("select id, filename from company_documents where kind='proposal' and filename ~ 'SEN-2026-0043 v4'")
+    _qn = _db.one("select id, filename from company_documents where kind='quotation' and filename ~ 'SEN-2026-0043 v5'")
+    case("approving a new quotation takes off the old quotation, never the proposal deck", "Shamal 1246",
+         lambda: not (_qd and _pd and _qn) or engine._replaced_attachments([_qd, _pd], [_qn], ["SEN-2026-0043"]) == [_qd])
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

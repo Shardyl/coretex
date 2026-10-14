@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v69';
+const APP_BUILD = 'cortex-v70';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -1939,6 +1939,7 @@ function actionCard(t){
         : (body?`<div class="body"${isEmail?' style="white-space:pre-wrap"':''}>${isEmail?'<div class="meta" style="margin-bottom:5px;white-space:normal">'+ic('file',14)+' '+(isOutbound?'your email draft':'the email that will send')+' (signature included)</div>':''}${body}</div>`:'')}
       ${wp&&wp.preview?`<div class="meta">${ic('file',14)} draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
       ${attachmentStrip(t)}
+      ${(isEmail&&t.request&&t.request.attach_changes&&t.request.attach_changes.length)?`<div class="meta" style="margin-bottom:8px">${ic('clip',13)} ${esc(t.request.attach_changes.join(' · '))}</div>`:''}
       ${t.card_problem?`<div class="row" style="margin-bottom:8px;padding:7px 10px;border-radius:9px;border:1px solid #F43F5E55;color:#F43F5E;font-size:13px">${ic('alert',14)} ${esc(t.card_problem)}</div>`:''}
       ${(t.request&&t.request.correction_actions&&t.request.correction_actions.length)?`<div class="meta" style="margin-bottom:8px;opacity:.85">${ic('check',13)} From your corrections: ${esc(t.request.correction_actions.join('; '))}</div>`:''}
       <div class="row" style="margin-bottom:9px"><button class="btn" onclick="speakCard(${t.id})">${ic('volume',16)} Read aloud</button>${isEmail?`<button class="btn" onclick="openAttachPanel(${t.id},${t.company_id})">${ic('clip',16)} Attach</button>`:''}</div>

@@ -268,7 +268,9 @@ def _release_gate(company_id=None, key: str | None = None) -> None:
 _EMAIL_KEYS = {"brief", "inquiry", "triage", "qual_suggest", "thread", "thread_reply", "meeting",
                "from_email", "mailbox_rt", "gmail_id", "deal_id", "followup", "lead_chase", "outbound",
                "attachments", "attachment_names", "attach_docs", "inbound_attachments", "cc_extra",
-               "cc_remove", "system_note", "serialize_key", "context_manifest", "title", "owner_links", "owed", "on_sent_stage", "on_sent_note", "proposal_card", "new_thread", "deal_cc", "card_problem", "waiting_email"}
+               "cc_remove", "system_note", "serialize_key", "context_manifest", "title", "owner_links", "owed", "on_sent_stage", "on_sent_note", "proposal_card", "new_thread", "deal_cc", "card_problem", "waiting_email",
+               "attach_changes", "correction_actions", "mail_ref", "thread_cc", "cancelled_reason", "waiting_quote",
+               "pending_instruction", "updated_for", "new_notes", "card_corrections"}
 
 
 _NEWSLETTER_KINDS = ("newsletter_idea", "newsletter_review", "newsletter_send")

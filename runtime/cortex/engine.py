@@ -2130,6 +2130,9 @@ def apply_correction(task: dict, text: str, _quote_checked: bool = False, infer:
             _skill0, _co0 = store.get_skill(task["skill_id"]), store.get_company(task["company_id"])
             _for = task["id"] if task["kind"] in EMAIL_RENDER_KINDS else _rq0.get("for_email")
             r = build_quote_from_words(_co0, _did0, text, _qi, for_email=_for)
+            if r.get("unchanged"):
+                _qi = None     # the quotation already says it: these words are about the email, redraft it below
+        if _qi:
             if task["kind"] in EMAIL_RENDER_KINDS:
                 rq = dict((store.get_task(task["id"]) or task).get("request") or {})
                 if r.get("ok"):
@@ -2658,6 +2661,7 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
             created.append(f"detached '{refs.pop(rid)['filename']}'")
     if len(refs) != n_refs0 or any(c.startswith("detached") for c in created):
         req["attach_docs"] = list(refs.values())
+        req.pop("attach_changes", None)     # he has changed the files himself: the last swap note is history
         changed = True
     for r in (u.get("reminders") or [])[:3]:
         try:
@@ -7362,7 +7366,7 @@ def _quote_intent(text: str) -> dict | None:
         r = provider.think_json(
             "The owner wrote this about a sales opportunity. Does HE decide something for the QUOTATION: a new price, "
             "a change of scope, the number of revision rounds, how it is paid, or scrapping it for a new one? A figure "
-            "the client asked for that he has not accepted is NOT a decision; saying he will go ahead at it IS. Return "
+            "the client asked for that he has not accepted is NOT a decision; words that DESCRIBE what the quotation already contains (to correct an email so it matches the quotation) are NOT a decision; saying he will go ahead at it IS. Return "
             '{"quotation": true|false, "mode": "revise" (change the current quotation) | "scrap" (scrap it and build '
             'a new one from his words) | "new_number" (a separate quotation under a new number) | "option" (an '
             'ADDITIONAL price option offered alongside the current one: a second option, option B, an alternative), '
@@ -7543,6 +7547,56 @@ def _spec_from_words(company: dict, deal: dict, customer: str, text: str, intent
     return {"error": f"Not built: {last_err}"}
 
 
+def _quote_lines(spec: dict) -> list:
+    return [(str(i.get("desc") or ""), float(i.get("qty") or 1), round(float(i.get("unit") or 0), 2))
+            for s in (spec or {}).get("sections") or [] for i in (s.get("items") or [])]
+
+
+def _near(a, b) -> bool:
+    """Two texts that differ only in wording: most of their words shared (empty and empty are the same)."""
+    def words(x):
+        t = " ".join(str(v) for v in x) if isinstance(x, list) else str(x or "")
+        return set(re.findall(r"[a-z0-9]{3,}", t.lower()))
+    wa, wb = words(a), words(b)
+    if not wa and not wb:
+        return True
+    if not wa or not wb:
+        return False
+    return len(wa & wb) / max(len(wa), len(wb)) >= 0.8
+
+
+def _same_quotation(prev_entry: dict | None, sections: list, payment, rounds, other: dict | None = None) -> bool:
+    """NOTHING IDENTICAL IS REISSUED (14 Oct 2026, card 1246): an email correction that described what the quotation
+    already says ("casting is priced in it") was read as a quotation decision, rebuilt line for line and issued as
+    SEN-2026-0043 v5, identical to v4 (AED 76,850). The same lines (count, quantities and prices, in order), the same
+    payment split and revision rounds, and descriptions that differ only in wording (most words shared) = the same
+    quotation. A real wording change to a line (most words different) still counts as a change."""
+    if not prev_entry or not prev_entry.get("spec"):
+        return False
+    a, b = _quote_lines(prev_entry["spec"]), _quote_lines({"sections": sections})
+    if len(a) != len(b) or any((x[1], x[2]) != (y[1], y[2]) for x, y in zip(a, b)):
+        return False
+    for x, y in zip(a, b):
+        wa = set(re.findall(r"[a-z0-9]{3,}", x[0].lower()))
+        wb = set(re.findall(r"[a-z0-9]{3,}", y[0].lower()))
+        if wa and wb and len(wa & wb) / max(len(wa), len(wb)) < 0.8:
+            return False
+    old_pay = prev_entry.get("payment") or prev_entry["spec"].get("payment")
+    if payment and [str(p).strip().lower() for p in payment] != [str(p).strip().lower() for p in (old_pay or [])]:
+        return False
+    if rounds and int(rounds) != int(prev_entry["spec"].get("revision_rounds") or 0):
+        return False
+    # ...and the rest of what prints: the preset (its terms), the title, the note, the deliverables. A change asked for
+    # there ("add usage in perpetuity to the note") is a real change and is issued.
+    ps = prev_entry["spec"]
+    for k in ("note", "deliverables", "title"):
+        if (other or {}).get(k) and not _near((other or {}).get(k), ps.get(k)):
+            return False
+    if (other or {}).get("preset") and (other or {}).get("preset") != ps.get("preset"):
+        return False
+    return True
+
+
 def build_quote_from_words(company: dict, deal_id, text: str, intent: dict, for_email: int | None = None) -> dict:
     """Build the quotation his words decide (see the flow note above). Returns {ok, card, number, msg}."""
     from . import quotation as _q
@@ -7592,6 +7646,9 @@ def build_quote_from_words(company: dict, deal_id, text: str, intent: dict, for_
     try:
         if prev and number and not target and not intent.get("changes"):
             # only the terms change (rounds, split): every line copies exactly, by code
+            if _same_quotation(cur["entry"], (prev or {}).get("sections") or [], pay, intent.get("rounds")):
+                return {"ok": False, "unchanged": True, "number": number,
+                        "msg": f"Quotation {number} already says this: nothing reissued."}
             t = reissue_quotation(company["slug"], number, deal_id=did, payment_lines=pay,
                                   revision_rounds=intent.get("rounds"), for_email=for_email)
             notes = []
@@ -7599,6 +7656,11 @@ def build_quote_from_words(company: dict, deal_id, text: str, intent: dict, for_
             spec = _spec_from_words(company, deal, customer, text, intent, prev, target)
             if spec.get("error"):
                 return {"ok": False, "msg": spec["error"]}
+            if (intent.get("mode") == "revise" and number and not letter
+                    and _same_quotation(cur["entry"], spec.get("sections") or [], pay, intent.get("rounds"),
+                                        {k: spec.get(k) for k in ("note", "deliverables", "title", "preset")})):
+                return {"ok": False, "unchanged": True, "number": number,
+                        "msg": f"Quotation {number} already says this: nothing reissued."}
             notes = []
             # what was trimmed is SCOPE: a claim about prices, tiers or discounts is code's to state, never the model's
             _trim = [str(x) for x in (spec.get("trimmed") or [])
@@ -7640,6 +7702,18 @@ def build_quote_from_words(company: dict, deal_id, text: str, intent: dict, for_
                                    f"#{t['id']}, awaiting his approval.")
     return {"ok": True, "card": t["id"], "number": rq.get("number"),
             "msg": f"Quotation {rq.get('number')} is ready to check on card #{t['id']}: {rq.get('summary', '')}"}
+
+
+def _replaced_attachments(existing: list, refs: list, nums: list) -> list:
+    """The attachments a new quotation replaces: filed in the library as the SAME KIND as one coming in (quotation,
+    its terms copy) and carrying its number. Never a proposal, brief or anything else, whatever its name."""
+    ids = [int(a["id"]) for a in list(existing) + list(refs) if str(a.get("id") or "").isdigit()]
+    kind = {int(r["id"]): r.get("kind") for r in db.query("select id, kind from company_documents where id = any(%s)",
+                                                           (ids,))} if ids else {}
+    incoming = {kind.get(int(r["id"])) for r in refs if str(r.get("id") or "").isdigit()} & {"quotation", "terms"}
+    keep_ids = {r.get("id") for r in refs}
+    return [a for a in existing if a.get("id") not in keep_ids and str(a.get("id") or "").isdigit()
+            and kind.get(int(a["id"])) in incoming and any(n in str(a.get("filename") or "") for n in nums)]
 
 
 def _quote_to_email(task: dict, company: dict, actor: str) -> dict:
@@ -7692,9 +7766,15 @@ def _quote_to_email(task: dict, company: dict, actor: str) -> dict:
     if em:
         ereq = dict(em.get("request") or {})
         _nums = re.findall(r"SEN-\d{4}-\d{4}", str(number))
+        # ONLY WHAT IS BEING REPLACED GOES (14 Oct 2026, card 1246): the old filter dropped every file whose NAME held
+        # the quotation number, which took "Proposal SEN-2026-0043 v4" off the email with the old quotation. A file
+        # leaves only when the library files it as the SAME KIND as one coming in (a quotation, its terms copy) and
+        # it carries that number; a proposal deck, a brief or any other file stays whatever it is called.
+        _gone = _replaced_attachments(ereq.get("attach_docs") or [], refs, _nums)
         ereq["attach_docs"] = refs + [a for a in (ereq.get("attach_docs") or [])
-                                      if not any(n in str(a.get("filename") or "") for n in _nums)
-                                      and a.get("id") not in {r["id"] for r in refs}]
+                                      if a not in _gone and a.get("id") not in {r["id"] for r in refs}]
+        ereq["attach_changes"] = ([f"Added: {r['filename']}" for r in refs]
+                                  + [f"Removed (replaced): {a['filename']}" for a in _gone])
         instr = ereq.pop("pending_instruction", "") or ""
         ereq.pop("waiting_quote", None)
         ereq.pop("card_problem", None)
@@ -7757,6 +7837,8 @@ def note_redirect(deal_id, note: str) -> str:
                 p = db.one("select company from crm_projects where id=%s", (int(deal_id),)) or {}
                 co = store.get_company_by_slug(touch._slug_for(p.get("company") or "") or "sensa")
                 r = build_quote_from_words(co, int(deal_id), note, intent)
+                if r.get("unchanged"):
+                    return
                 notifications.notify(("Quotation built from your note" if r.get("ok") else "Quotation not built from your note"),
                                      r.get("msg") or "", priority="high", category="approval",
                                      company_id=(co or {}).get("id"), target_type="task" if r.get("card") else "deal",
