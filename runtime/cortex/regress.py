@@ -609,6 +609,8 @@ def _cases():
     case("his reply on the same thread is the same conversation; a new subject is not", "DSO 1219/1222",
          lambda: _cv.same_thread(_c1219, _alex) and not _cv.same_thread(_c1219, _other)
          and _cv.is_inbound(_alex) and not _cv.is_inbound({"inquiry": {"email": "a@b.com"}, "followup": "chase"}))
+    case("a folded reply keeps the card's own thread id and takes their reply headers", "DSO 1219",
+         lambda: "THREAD IDS ARE MAILBOX-LOCAL" in inspect.getsource(_cv.absorb))
     case("two conversations with one person get two queues; one conversation one", "two threads",
          lambda: _cv.thread_key(_alex) == _cv.thread_key({"inquiry": {"email": "CON_anoronha@dso.ae",
                                                                       "subject": "Re: Re: Dubai Silicon Oasis - Video production enquiry"}})

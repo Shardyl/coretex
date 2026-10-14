@@ -81,7 +81,8 @@ def _same_matter(card: dict, new_req: dict) -> bool:
 
 
 def _when(new_req: dict) -> str:
-    return datetime.now(timezone.utc).astimezone(timezone.utc).strftime("%d %b %H:%M UTC")
+    """The day the message was folded in (the request carries no sent time, so no clock time is claimed)."""
+    return datetime.now(timezone.utc).strftime("%d %b")
 
 
 def absorb(company_id, request: dict, deal_id=None) -> dict | None:
@@ -107,9 +108,17 @@ def absorb(company_id, request: dict, deal_id=None) -> dict | None:
         merged = dict(cr)
         # their newest message is what this email now answers; the card keeps WHO sends it (adoption re-runs and
         # pins the thread inside that mailbox, since thread ids are mailbox-local)
-        for k in ("thread", "thread_cc", "gmail_id", "mail_ref", "inbound_attachments"):
+        for k in ("thread_cc", "gmail_id", "mail_ref", "inbound_attachments"):
             if request.get(k):
                 merged[k] = request[k]
+        # THREAD IDS ARE MAILBOX-LOCAL: the card keeps its own thread (it sends from its own mailbox) and takes only the
+        # GLOBAL reply headers from their message, so the reply lands on the thread in every mailbox. A card with no
+        # thread takes theirs only when it was read in the mailbox the card sends from (DSO 1219, 14 Oct 2026).
+        nt, ot = dict(request.get("thread") or {}), dict(cr.get("thread") or {})
+        same_box = (request.get("mailbox_rt") or "") == (cr.get("mailbox_rt") or "") and request.get("mailbox_rt")
+        merged["thread"] = {"id": ot.get("id") or (nt.get("id") if same_box else ""),
+                            "msg_id": nt.get("msg_id") or ot.get("msg_id") or "",
+                            "references": nt.get("references") or ot.get("references") or ""}
         if not merged.get("from_email"):
             merged["from_email"], merged["mailbox_rt"] = request.get("from_email"), request.get("mailbox_rt")
         inq = dict(cr.get("inquiry") or {})
