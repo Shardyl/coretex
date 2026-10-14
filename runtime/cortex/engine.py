@@ -1684,6 +1684,14 @@ def _skip(task: dict, skill: dict, company: dict) -> None:
         # email went; dismissed a minute later from a stale Inbox it became "rejected" and broke the streak.
         return
     store.update_task(task["id"], status="rejected")
+    if task.get("kind") == "quotation" and (task.get("request") or {}).get("for_email"):
+        _em = store.get_task(int(task["request"]["for_email"]))
+        if _em and (_em.get("request") or {}).get("waiting_quote") == task["id"]:
+            _er = dict(_em.get("request") or {})
+            _er.pop("waiting_quote", None)
+            _er["card_problem"] = (f"The quotation on card #{task['id']} was dismissed. Tell this card what to do "
+                                   "instead, or approve it as it stands.")
+            store.update_task(_em["id"], request=_er)
     mt = (task.get("request") or {}).get("meeting") or {}
     # A card may only delete an event IT created. Two guards, both learned the hard way on 1 Sep 2026:
     # dismissing the ECBD pre-meeting BRIEF deleted the real client meeting it was briefing, because the
@@ -2108,10 +2116,38 @@ def _keep_team_names(company: dict, old: str, new: str) -> str:
     return new
 
 
-def apply_correction(task: dict, text: str) -> None:
-    """Redraft a task from the owner's correction (works from Telegram OR the cockpit API)."""
+def apply_correction(task: dict, text: str, _quote_checked: bool = False, infer: bool = True) -> None:
+    """Redraft a task from the owner's correction (works from Telegram OR the cockpit API). `infer=False` for a
+    redraft that is not him teaching a rule (a note on the deal, a quotation now attached)."""
     # a link in his words is REAL: kept on the card before anything else reads or rewrites the text
     task = _remember_owner_links(task, text)
+    _rq0 = task.get("request") or {}
+    _did0 = _rq0.get("deal_id") or task.get("deal_id")
+    if not _quote_checked and _did0 and (task["kind"] in EMAIL_RENDER_KINDS or (
+            task["kind"] == "quotation" and not _rq0.get("proposal_card"))):
+        _qi = _quote_intent(text)
+        if _qi:
+            _skill0, _co0 = store.get_skill(task["skill_id"]), store.get_company(task["company_id"])
+            _for = task["id"] if task["kind"] in EMAIL_RENDER_KINDS else _rq0.get("for_email")
+            r = build_quote_from_words(_co0, _did0, text, _qi, for_email=_for)
+            if task["kind"] in EMAIL_RENDER_KINDS:
+                rq = dict((store.get_task(task["id"]) or task).get("request") or {})
+                if r.get("ok"):
+                    rq.update({"waiting_quote": r["card"], "pending_instruction": text,
+                               "card_problem": f"Waiting for quotation {r['number']} on card #{r['card']}: approve it "
+                                               "and this email is redrafted with it attached."})
+                    store.update_task(task["id"], request=rq, status="awaiting_correction")
+                else:
+                    rq["card_problem"] = r.get("msg")
+                    store.update_task(task["id"], request=rq)
+            store.log_decision(task["id"], (_skill0 or {}).get("id"), "owner", "correct", note=text,
+                               snapshot={"quotation": r.get("number"), "quotation_card": r.get("card")})
+            notifications.notify(("Quotation ready to approve" if r.get("ok") else "Quotation not built"),
+                                 r.get("msg") or "", priority="high", category="approval",
+                                 company_id=task.get("company_id"), target_type="task",
+                                 target_id=str(r.get("card") or task["id"]))
+            tg.send(f"Card #{task['id']}: {r.get('msg')}")
+            return
     if (task.get("request") or {}).get("kind") == "deal_pick":      # "which deal is this?" answered
         from . import events
         events.answer_which_deal(task, text)
@@ -2350,7 +2386,8 @@ def apply_correction(task: dict, text: str) -> None:
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text, snapshot={"old": old, "new": new})
     msg2 = tg.send(_fmt(task, skill, company, None), _approval_buttons(task["id"]))
     store.update_task(task["id"], tg_message_id=msg2["message_id"])
-    _maybe_propose_rule(task, skill, text, old or "", new or "")
+    if infer:
+        _maybe_propose_rule(task, skill, text, old or "", new or "")
 
 
 def _deal_participants(company_id: int, deal_id, to_email: str) -> list:
@@ -3450,6 +3487,12 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
         return {"ok": False, "error": "no such task"}
     if task["status"] not in ("awaiting_approval", "awaiting_correction"):
         return {"ok": False, "error": f"task is '{task['status']}', not awaiting approval"}
+    _wq = (task.get("request") or {}).get("waiting_quote")
+    if _wq and task["kind"] in EMAIL_RENDER_KINDS:
+        _q = db.one("select status from tasks where id=%s", (int(_wq),)) or {}
+        if _q.get("status") in ("new", "drafting", "awaiting_approval", "awaiting_correction"):
+            return {"ok": False, "error": f"Approve the quotation on card #{_wq} first: this email is then redrafted "
+                                          "with it attached."}
     # SAFEGUARD: a newsletter that touches the real list NEVER goes on a plain approve. Stage 2
     # (newsletter_review) SCHEDULES for the 1st; Stage 3 (newsletter_send) SENDS. Both require the
     # operator to echo the exact recipient count first.
@@ -7175,6 +7218,314 @@ def _deal_quote_number(deal_id, customer: str | None) -> str | None:
     return r["n"] if r and (r.get("c") or "").strip().lower() == (customer or "").strip().lower() else None
 
 
+# ============ THE QUOTATION FLOW FROM ANY CARD OR NOTE (owner, 14 Oct 2026) ============
+# "I would be able to talk directly to the draft, and then the next stage would be a quotation for me to look at
+# ... once that quotation's approved, it just automatically redrafts ... and if he comes back and wants two rounds
+# and 50/50 I can speak to the next draft and the same process can happen ... and scrap the old quotation and build
+# a brand new one directly from talking to the cards."
+#   1. His words on an email card, a quotation card, or a note on the deal decide something for the quotation
+#      (a price, scope, revision rounds, the payment split, scrap it): `_quote_intent` (Haiku only extracts; code
+#      checks every figure is one he wrote).
+#   2. `build_quote_from_words`: the next VERSION of the deal's quotation (or a new number on request), priced by
+#      code from the rate card and re-scoped to reach his figure (`_spec_from_words` + `ratecard.price_lines`), never
+#      a discount line; rounds and split by code (quotation.set_rounds / split_lines). Only rounds/split -> the
+#      stored lines are copied exactly (reissue). The card records which email it is for (`for_email`).
+#   3. That email waits (`waiting_quote`, approve blocked); APPROVING THE QUOTATION makes it live
+#      (`_quote_to_email`): attached to that email (or the deal's open email, or a new cover email), older versions
+#      of the number retired from the library, and the email redrafted around it with his instruction.
+_QUOTE_HINT = re.compile(
+    r"\b(?:quot\w*|price[sd]?|pricing|aed|dirhams?|budget|discount|deposit|split|scrap|new number|"
+    r"revision rounds?|rounds? of revisions?|\d{2}\s*/\s*\d{2})\b|\b\d{1,3}(?:[,.]\d{3})+\b|\b\d+(?:\.\d+)?\s*k\b",
+    re.I)
+_ROUND_WORD = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+
+
+def _quote_intent(text: str) -> dict | None:
+    """What the owner decided for the QUOTATION in these words, or None. The model only reads; every figure must be
+    one he wrote (`_stated_numbers`), a split must add to 100 (its last part may be the remainder)."""
+    if not _QUOTE_HINT.search(text or ""):
+        return None
+    try:
+        r = provider.think_json(
+            "The owner wrote this about a sales opportunity. Does HE decide something for the QUOTATION: a new price, "
+            "a change of scope, the number of revision rounds, how it is paid, or scrapping it for a new one? A figure "
+            "the client asked for that he has not accepted is NOT a decision; saying he will go ahead at it IS. Return "
+            '{"quotation": true|false, "mode": "revise" (change the current quotation) | "scrap" (scrap it and build '
+            'a new one from his words) | "new_number" (a separate quotation under a new number), "target_net": <the '
+            'price he decided, a number, else null>, "vat_inclusive": <true only if he said the figure includes VAT>, '
+            '"revision_rounds": <int if he set the number of revision rounds, else null>, "payment": [{"pct": <int>, '
+            '"when": "<his words for when it is paid, or empty>"}] or null, "changes": "<what to change in the scope, '
+            'in his words, or empty>"}.',
+            (text or "")[:2500], model=provider.MODEL_ROUTER, max_tokens=300, purpose="quote-intent")
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(r, dict) or not r.get("quotation"):
+        return None
+    said = _stated_numbers(text)
+    out = {"mode": r.get("mode") if r.get("mode") in ("revise", "scrap", "new_number") else "revise",
+           "changes": str(r.get("changes") or "").strip()[:1500]}
+    t = r.get("target_net")
+    try:
+        if t not in (None, "") and round(float(t), 2) in said:
+            out["target"], out["inclusive"] = float(t), bool(r.get("vat_inclusive"))
+    except (TypeError, ValueError):
+        pass
+    rr = r.get("revision_rounds")
+    if isinstance(rr, (int, float)) and 1 <= int(rr) <= 5 and (
+            re.search(rf"\b{int(rr)}\b", text or "") or any(re.search(rf"\b{w}\b", text or "", re.I)
+                                                          for w, v in _ROUND_WORD.items() if v == int(rr))):
+        out["rounds"] = int(rr)
+    pay = r.get("payment")
+    if isinstance(pay, list) and len(pay) >= 2:
+        try:
+            pcts = [int(round(float(p.get("pct")))) for p in pay]
+            stated = all(re.search(rf"\b{p}\s*%?", text or "") for p in pcts[:-1])
+            if stated and sum(pcts[:-1]) < 100:
+                pcts[-1] = 100 - sum(pcts[:-1])         # the remainder is arithmetic, not a figure to invent
+                out["payment"] = [{"pct": p, "when": str((pay[i] or {}).get("when") or "")} for i, p in enumerate(pcts)]
+        except (TypeError, ValueError, AttributeError):
+            pass
+    if not (out.get("target") or out.get("rounds") or out.get("payment") or out["changes"] or out["mode"] != "revise"):
+        return None
+    return out
+
+
+def _deal_quote(deal_id) -> dict:
+    """The deal's current quotation: {number, customer, entry (last priced stored version)}; any card status, since
+    a rejected card's number is still the quotation the client knows."""
+    r = db.one("select request->>'number' n, request->>'customer' c from tasks where kind='quotation' and deal_id=%s "
+               "and request->>'number' is not null order by id desc limit 1", (int(deal_id),)) or {}
+    n = r.get("n")
+    reg = db.setting_get(f"quote_versions:{n}") or [] if n else []
+    entry = next((e for e in reversed(reg) if _version_is_priced(e)), None)
+    return {"number": n, "customer": r.get("c") or ((entry or {}).get("spec") or {}).get("customer") or "", "entry": entry}
+
+
+def _spec_from_words(company: dict, deal: dict, customer: str, text: str, intent: dict, prev: dict | None,
+                     target: float | None) -> dict:
+    """The quotation his words describe, re-scoped to reach his figure. The model structures scope and says what it
+    trimmed; CODE prices every line (`price_lines`), and when the scope cannot reach the figure inside the band the
+    model is told the priced total once and tries again. Never a discount line."""
+    import copy as _copy
+    from . import pipeline as _pl, profile as _prof, quotation as _q, ratecard as _rc
+    slug = company.get("slug") or ""
+    try:
+        timeline = _pl.deal_context(int(deal["id"]))[:5000]
+    except Exception:  # noqa: BLE001
+        timeline = ""
+    presets = sorted((_q.presets() or {}).keys())
+    prev_txt = json.dumps({k: (prev or {}).get(k) for k in ("preset", "title", "sections", "deliverables", "note")},
+                          ensure_ascii=False)[:6000] if prev else "(none: build it from scratch)"
+    allowed = _stated_numbers(text) | _rc.rates(slug)
+    flex = (_prof.get(company["id"]) or {}).get("quote_target_flex_pct")
+    feedback, last_err = "", ""
+    for _attempt in range(2):
+        spec = provider.think_json(
+            worker._now_line() + " You write the arguments for a quotation from the OWNER'S decision. JSON: "
+            '{"preset": "<one of ' + ", ".join(presets) + '>", "title": "<document title or empty>", "sections": '
+            '[{"header": "A ·  SECTION NAME", "items": [{"desc": "<what is delivered>", "components": [{"item": '
+            '"<rate card [key]>", "qty": <n>}], "unit": <a price ONLY if he wrote that exact figure, else null>, '
+            '"qty": <n>}]}], "deliverables": ["<short bullet>"], "note": "<one line or empty>", '
+            '"trimmed": ["<each thing removed or reduced against the previous version, for the owner>"], '
+            '"assumptions": ["<each default you chose that he did not state>"]}. '
+            "RULES: never price a line yourself: list its rate-card components and code prices it. "
+            + (f"The owner decided the price: AED {target:,.0f} before VAT. Re-scope the job so its rate-card price "
+               f"lands at or a little above that figure (code then moves every line to exactly {target:,.0f}); trim "
+               "by reducing quantities or removing the least essential parts, keep what the client cares about, and "
+               "list every trim in 'trimmed'. Never add a discount line. " if target else "")
+            + ("Start from the PREVIOUS VERSION below and change only what his words change. " if prev else "")
+            + "Never invent counts, dates or deliverables beyond his words, the previous version and the deal record. "
+            "Headers in the house style 'A ·  STUDIO & FACILITIES'. No em dashes." + feedback,
+            f"OWNER'S DECISION:\n{text}\n\nCHANGES HE ASKED FOR: {intent.get('changes') or '(none stated)'}\n\n"
+            f"PREVIOUS VERSION:\n{prev_txt}\n\nOPPORTUNITY: #{deal['id']} {deal.get('title')} (client: {customer})"
+            f"\n\nDEAL RECORD:\n{timeline or '(none)'}\n\nRATE CARD:\n{_rc.render(slug) or '(none)'}",
+            model=provider.MODEL_FAST, max_tokens=6000, purpose="quote-from-words", company=slug) or {}
+        secs = _copy.deepcopy(spec.get("sections") or [])
+        if not secs:
+            return {"error": "Not built: the instruction did not describe any lines to quote."}
+        for s in secs:
+            for it in s.get("items") or []:
+                if not it.get("components") and it.get("unit") not in (None, "") and \
+                        round(float(it["unit"]), 2) not in allowed:
+                    it["unit"] = None             # a figure he did not write is never printed
+        res = _rc.price_lines(slug, secs, allowed=allowed, target=target, flex_pct=flex)
+        blank = [str(i.get("desc") or "a line")[:60] for s in secs for i in (s.get("items") or [])
+                 if i.get("unit") in (None, "")]
+        if not res.get("error") and not blank:
+            spec["sections"] = secs
+            if spec.get("preset") not in presets:
+                spec["preset"] = (prev or {}).get("preset") or "ai-production"
+            spec["tier"] = res.get("tier")
+            return spec
+        last_err = res.get("error") or f"no price for {'; '.join(blank[:4])}"
+        feedback = (f" YOUR LAST ATTEMPT priced at AED {float(res.get('lines_total') or 0):,.0f} on the rate card"
+                    + (f" and could not reach AED {target:,.0f}: {last_err}." if target else f": {last_err}.")
+                    + " Fix that: trim further (or restore scope) so it lands just above the figure, and use only "
+                      "rate-card keys.")
+    return {"error": f"Not built: {last_err}"}
+
+
+def build_quote_from_words(company: dict, deal_id, text: str, intent: dict, for_email: int | None = None) -> dict:
+    """Build the quotation his words decide (see the flow note above). Returns {ok, card, number, msg}."""
+    from . import quotation as _q
+    did = int(deal_id)
+    deal = db.one("select id, title, contact_email, account_id from crm_projects where id=%s", (did,))
+    if not deal:
+        return {"ok": False, "msg": f"Not built: no opportunity #{did}."}
+    cur = _deal_quote(did)
+    acct = (db.one("select name from crm_accounts where id=%s", (deal["account_id"],)) or {}).get("name") \
+        if deal.get("account_id") else ""
+    customer = cur["customer"] or acct or re.split(r"\s*(?::|\s-\s)", deal.get("title") or "")[0].strip()
+    number = None if intent.get("mode") == "new_number" else cur["number"]
+    prev = (cur["entry"] or {}).get("spec") if cur["entry"] and intent.get("mode") == "revise" else None
+    try:
+        pay = _q.split_lines(intent["payment"]) if intent.get("payment") else None
+    except ValueError as e:
+        return {"ok": False, "msg": f"Not built: {e}."}
+    target = intent.get("target")
+    if target and intent.get("inclusive"):
+        target = round(target / (1 + _q._vat_rate(_q._profile(company["id"]))), 2)
+    try:
+        if prev and number and not target and not intent.get("changes"):
+            # only the terms change (rounds, split): every line copies exactly, by code
+            t = reissue_quotation(company["slug"], number, deal_id=did, payment_lines=pay,
+                                  revision_rounds=intent.get("rounds"), for_email=for_email)
+            notes = []
+        else:
+            spec = _spec_from_words(company, deal, customer, text, intent, prev, target)
+            if spec.get("error"):
+                return {"ok": False, "msg": spec["error"]}
+            notes = []
+            if spec.get("trimmed"):
+                notes.append("Trimmed to reach your figure: " + "; ".join(str(x) for x in spec["trimmed"][:10]) + ".")
+            if spec.get("tier") == "budget":
+                notes.append("Priced on the Budget tier of the rate card to reach your figure.")
+            if spec.get("assumptions"):
+                notes.append("Assumed: " + "; ".join(str(x) for x in spec["assumptions"][:8]) + ".")
+            t = deliver_quotation(company["slug"], preset=spec.get("preset") or "ai-production", customer=customer,
+                                  sections=spec["sections"], title=spec.get("title") or None,
+                                  note=spec.get("note") or None, contact_email=deal.get("contact_email"),
+                                  deliverables=spec.get("deliverables") or None, deal_id=did, number=number,
+                                  payment_lines=pay or ((prev or {}).get("payment")),
+                                  revision_rounds=intent.get("rounds") or (prev or {}).get("revision_rounds"),
+                                  for_email=for_email, owner_notes=notes)
+    except ValueError as e:
+        return {"ok": False, "msg": f"Not built: {e}"}
+    if not t:
+        return {"ok": False, "msg": "Not built: the quotation could not be rendered."}
+    db.execute("update tasks set deal_id=%s where id=%s", (did, t["id"]))
+    rq = t.get("request") or {}
+    if intent.get("mode") != "revise" and cur["number"] and rq.get("number") != cur["number"]:
+        # a separate quotation replaces the old one: its open card stands down
+        db.execute("update tasks set status='cancelled', updated_at=now(), request = request || "
+                   "jsonb_build_object('superseded_by', %s::bigint) where kind='quotation' and deal_id=%s and "
+                   "status='awaiting_approval' and request->>'number'=%s", (t["id"], did, cur["number"]))
+    try:
+        restamp_proposal_price(did, rq.get("number"), t["id"])
+    except Exception:  # noqa: BLE001
+        pass
+    pipeline.log_deal(did, "note", f"Quotation {rq.get('number')} built from the owner's words "
+                                   f"({'scrapped and rebuilt' if intent.get('mode') != 'revise' else 'revised'}), card "
+                                   f"#{t['id']}, awaiting his approval.")
+    return {"ok": True, "card": t["id"], "number": rq.get("number"),
+            "msg": f"Quotation {rq.get('number')} is ready to check on card #{t['id']}: {rq.get('summary', '')}"}
+
+
+def _quote_to_email(task: dict, company: dict, actor: str) -> dict:
+    """APPROVING A QUOTATION MAKES IT LIVE: attached to the email it is for (else the deal's open email, else a new
+    cover email to the deal's contact), every older version of the number retired from the library, and the email
+    redrafted around it, with the instruction he gave on that email when there was one."""
+    from . import documents
+    rq = task.get("request") or {}
+    number, did = rq.get("number"), task.get("deal_id") or rq.get("deal_id")
+    refs = [documents.card_ref(d) for d in (documents.get(int(a["id"]), company["id"])
+                                            for a in (rq.get("attach_docs") or []) if a.get("id")) if d]
+    if not refs:
+        return {"approved": True, "note": f"Quotation {number} approved, but its PDF is not in the library; attach it by hand."}
+    try:        # older versions of this number are never offered for an email again
+        olds = [d["id"] for d in db.query("select id from company_documents where superseded_by is null and "
+                                          "filename ilike %s and id <> all(%s)", (f"%Quotation {number} v%", [r["id"] for r in refs]))]
+        if olds:
+            documents.supersede(olds, refs[0]["id"])
+    except Exception as _se:  # noqa: BLE001
+        print(f"[quotation] supersede on approve: {type(_se).__name__}: {_se}", flush=True)
+    em = store.get_task(int(rq["for_email"])) if rq.get("for_email") else None
+    if (not em or em.get("status") not in _OPEN_CARD) and did:
+        em = db.one("select * from tasks where deal_id=%s and kind in ('email_reply','email_draft') and status = any(%s) "
+                    "order by id desc limit 1", (int(did), list(_OPEN_CARD)))
+    if em:
+        ereq = dict(em.get("request") or {})
+        ereq["attach_docs"] = refs + [a for a in (ereq.get("attach_docs") or [])
+                                      if number not in str(a.get("filename") or "") and a.get("id") not in {r["id"] for r in refs}]
+        instr = ereq.pop("pending_instruction", "") or ""
+        ereq.pop("waiting_quote", None)
+        ereq.pop("card_problem", None)
+        store.update_task(em["id"], request=ereq, status="awaiting_approval")
+        note = (f"Quotation {number} is now attached to this email ({refs[0]['filename']}). Write the email around it: "
+                "say it is attached, reflect what was decided, and state no figure that the quotation does not print.")
+        if instr:
+            apply_correction(store.get_task(em["id"]), instr + "\n\n" + note, _quote_checked=True, infer=False)
+        else:
+            reconcile_attachments(em["id"])
+        if did:
+            pipeline.log_deal(int(did), "note", f"Quotation {number} approved; email card #{em['id']} redrafted with it attached.")
+        return {"approved": True, "email_card": em["id"],
+                "note": f"Quotation {number} approved. Email card #{em['id']} is redrafted with it attached; approve that to send."}
+    if not did:
+        return {"approved": True, "note": f"Quotation {number} approved. It is not on an opportunity, so no email was "
+                                          "drafted; ask Talk to send it."}
+    deal = db.one("select title, contact_email from crm_projects where id=%s", (int(did),)) or {}
+    to = (deal.get("contact_email") or "").strip().lower()
+    if not to:
+        return {"approved": True, "note": f"Quotation {number} approved, but the opportunity has no contact to email."}
+    sk = store.get_skill_by_key(company["id"], "email-handling") or store.get_skill(task.get("skill_id"))
+    ereq = {"outbound": True, "deal_id": int(did), "attach_docs": refs,
+            "brief": (f"Send our quotation {number} for \"{deal.get('title')}\". It is attached to this email. Continue "
+                      "the conversation we already have with them and answer anything still open."),
+            "inquiry": {"name": crm._name_of(to) or "", "email": to, "message": "",
+                        "subject": f"Quotation {number}, {deal.get('title')}"}}
+    t = store.create_task(company["id"], sk["id"], "email_draft", ereq)
+    db.execute("update tasks set deal_id=%s where id=%s", (int(did), t["id"]))
+    pipeline.log_deal(int(did), "note", f"Quotation {number} approved; cover email drafted as card #{t['id']}.")
+    return {"approved": True, "email_card": t["id"],
+            "note": f"Quotation {number} approved. The cover email is being drafted as card #{t['id']}; approve that to send."}
+
+
+def note_redirect(deal_id, note: str) -> str:
+    """A NOTE ON THE DEAL REDIRECTS IT (owner, 14 Oct 2026: "if I update the notes with the information ... what would
+    be the way to re-trigger the next flow"). The newest open email card on the deal is redrafted from the note (and
+    when the note decides the quotation, the quotation is built first: the same path as saying it on the card);
+    with no open email, a quotation decision still builds the quotation. Runs on a thread; returns a line to say."""
+    if not str(deal_id or "").isdigit() or not (note or "").strip():
+        return ""
+    em = db.one("select * from tasks where deal_id=%s and kind in ('email_reply','email_draft') and status in "
+                "('awaiting_approval','awaiting_correction') and coalesce(request->>'waiting_quote','')='' "
+                "order by id desc limit 1", (int(deal_id),))
+    intent = None if em else _quote_intent(note)
+    if not em and not intent:
+        return ""
+
+    def _run():
+        try:
+            if em:
+                apply_correction(store.get_task(em["id"]), "NEW NOTE ON THE OPPORTUNITY (the owner's own): " + note
+                                 + "\n\nRecheck the opportunity's notes and redraft this email accordingly.", infer=False)
+            else:
+                from . import touch
+                p = db.one("select company from crm_projects where id=%s", (int(deal_id),)) or {}
+                co = store.get_company_by_slug(touch._slug_for(p.get("company") or "") or "sensa")
+                r = build_quote_from_words(co, int(deal_id), note, intent)
+                notifications.notify(("Quotation built from your note" if r.get("ok") else "Quotation not built from your note"),
+                                     r.get("msg") or "", priority="high", category="approval",
+                                     company_id=(co or {}).get("id"), target_type="task" if r.get("card") else "deal",
+                                     target_id=str(r.get("card") or deal_id))
+        except Exception as e:  # noqa: BLE001
+            print(f"[note-redirect] deal {deal_id}: {type(e).__name__}: {e}", flush=True)
+    threading.Thread(target=_run, daemon=True).start()
+    return (f"Redrafting email card #{em['id']} from this note." if em
+            else "Building the quotation this note decides; it lands in the Inbox for approval.")
+
+
 def _quote_card_feedback(task: dict, skill: dict, company: dict, text: str) -> bool:
     """FEEDBACK ON A QUOTATION CARD NEVER LEAVES THE PROPOSAL CONTRADICTING IT, AND NEVER BUYS NEW IMAGES
     (owner, 29 Sep 2026). Haiku only CLASSIFIES his words; code does the rest:
@@ -7580,8 +7931,8 @@ def _approve_quotation_card(task: dict, skill: dict, company: dict, actor: str) 
     store.log_decision(task["id"], skill["id"] if skill else None, actor, "approve",
                        snapshot={"quotation": rq.get("number")})
     pid = rq.get("proposal_card")
-    if not pid:
-        return {"approved": True, "note": f"Quotation {rq.get('number') or ''} approved."}
+    if not pid:      # EVERY QUOTATION'S APPROVAL MAKES IT LIVE (owner, 14 Oct 2026), not only a proposal's
+        return _quote_to_email(store.get_task(task["id"]) or task, company, actor)
     p = store.get_task(int(pid))
     if not p:
         return {"approved": True, "note": "Quotation approved."}
@@ -7821,7 +8172,9 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
                       title: str | None = None, note: str | None = None, fmt: str = "both",
                       contact_email: str | None = None, number: str | None = None,
                       deliverables: list | None = None, deal_id: int | None = None,
-                      discount_pct: float | None = None) -> dict:
+                      discount_pct: float | None = None, payment_lines: list | None = None,
+                      revision_rounds: int | None = None, for_email: int | None = None,
+                      owner_notes: list | None = None) -> dict:
     """Render a quotation and drop it in the Inbox as a downloadable card (kind='quotation'). `fmt` = 'both'
     (default: editable .xlsx + ready-to-send .pdf), 'xlsx', or 'pdf'; both share one quote number. Delivery
     copies stored in R2 under <slug>/quotations/draft/. Prices come from the request (a stated total split by
@@ -7849,7 +8202,8 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
                 "deliverables list), use reissue_quotation: code copies the stored version exactly.")
     kw = dict(customer=customer, total=total, total_inclusive=total_inclusive, sections=sections,
               title=title, note=note, contact_email=contact_email, number=number,
-              deliverables=deliverables, out_dir=QUOTES_DIR, discount_pct=discount_pct)
+              deliverables=deliverables, out_dir=QUOTES_DIR, discount_pct=discount_pct,
+              payment_lines=payment_lines or None, revision_rounds=revision_rounds or None)
     want_pdf = fmt in ("both", "pdf")
     want_xlsx = fmt in ("both", "xlsx")
     # The house-format .xlsx is the single source of truth; the PDF is that same sheet converted by
@@ -7918,13 +8272,18 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
            "xlsx_file": xlsx_path, "xlsx_r2_url": _r2(xlsx_path, "xlsx"),
            "number": number, "title": x["title"], "summary": x["summary"], "customer": customer,
            "preset": preset, "total": x["total"], "currency": x["currency"], "blanks": x["blanks"],
-           "master_terms": x.get("master_terms")}
+           "master_terms": x.get("master_terms"),
+           **({"for_email": int(for_email)} if for_email else {}),
+           **({"payment_lines": list(payment_lines)} if payment_lines else {}),
+           **({"revision_rounds": int(revision_rounds)} if revision_rounds else {})}
     _att = [d for d in (_doc, terms_doc) if d]
     if _att:
         req["attach_docs"] = [{"id": d["id"], "filename": d["filename"], "mime": d["mime"],
                                "size": d["size"]} for d in _att]
     _draft = x["summary"] + (f" The Terms and Conditions issued with it: {terms_doc['filename']}."
                              if terms_doc else "")
+    for _n in (owner_notes or []):      # what was trimmed or assumed: for the OWNER on the card, never on the document
+        _draft += "\n\n" + str(_n)
     t = db.execute(
         "insert into tasks (company_id,skill_id,kind,request,draft,status,origin,title) "
         "values (%s,%s,'quotation',%s,%s,'awaiting_approval','talk',%s) returning *",
@@ -7952,7 +8311,8 @@ def reissue_quotation(company: str, number: str, *, version: int | None = None, 
                       contact_email: str | None = None, deal_id: int | None = None,
                       add_sections: list | None = None, discount_pct: float | None = None,
                       preset: str | None = None, title: str | None = None, note: str | None = None,
-                      said: str = "") -> dict:
+                      said: str = "", payment_lines: list | None = None, revision_rounds: int | None = None,
+                      for_email: int | None = None) -> dict:
     """THE SAME QUOTATION AGAIN, BY CODE (owner, 21 Sep 2026). Cloudlink's contact was renamed and he asked for
     the same quotation with the new name: Talk's only tool builds a quotation from scratch, its typed prices
     were blanked by the price guard, and five broken versions were issued. A reissue copies a STORED version's
@@ -8020,7 +8380,10 @@ def reissue_quotation(company: str, number: str, *, version: int | None = None, 
                           title=title or sp.get("title"), note=note if note is not None else sp.get("note"),
                           contact_email=contact_email or sp.get("contact_email"), number=number,
                           deliverables=deliverables or sp.get("deliverables"),
-                          deal_id=int(deal_id) if deal_id else None, discount_pct=discount_pct)
+                          deal_id=int(deal_id) if deal_id else None, discount_pct=discount_pct,
+                          # an agreed split and revision rounds stay with the quotation until changed again
+                          payment_lines=payment_lines or sp.get("payment"),
+                          revision_rounds=revision_rounds or sp.get("revision_rounds"), for_email=for_email)
     if deal_id and t:
         db.execute("update tasks set deal_id=%s where id=%s", (int(deal_id), t["id"]))
     try:   # the broken versions' library rows: kept on record, never offered for an email again

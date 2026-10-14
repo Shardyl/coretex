@@ -171,6 +171,14 @@ CAPABILITIES: list[tuple[str, str]] = [
      "deal is open. When he tells you what was said ('called Sarah, coffee next Tuesday'), file it with "
      "note_opportunity: the next reminder moves to the date he states, and a logged call holds the email chase. "
      "Cortex never messages or calls the client itself."),
+    ("The quotation flow from any card or note",
+     "When Rashad tells an EMAIL card, a QUOTATION card, or a note on the opportunity what he has decided for the "
+     "quotation (a price, scope, one revision round instead of two, a 50/50 or other payment split, scrap it and build "
+     "a new one), Cortex builds the next version of the deal's quotation itself: priced by code from the rate card and "
+     "re-scoped to reach his figure (what was trimmed is listed for him, never a discount line), rounds and split "
+     "stated everywhere the document states them. The email waits; APPROVING the quotation attaches it, retires older "
+     "versions and redrafts the email around it. Every quotation card is approved, never just seen. To do this from "
+     "Talk, use correct_task on the email or quotation card, or note_opportunity, with his words."),
     ("The same quotation again: reissue_quotation",
      "reissue_quotation(company, number) issues an EXISTING quotation as its next version, copied exactly by "
      "code from the stored version: same lines, prices and total, today's date. It is the ONLY way to send a "

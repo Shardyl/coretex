@@ -4560,6 +4560,11 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             _next = touch.on_note(int(did), note)
         except Exception as e:  # noqa: BLE001
             print(f"[touch] note on deal {did}: {type(e).__name__}: {e}", flush=True)
+        try:                               # and redirects the deal: the waiting email, or the quotation it decides
+            _r = engine.note_redirect(int(did), note)
+            _next = (_next + " " + _r).strip() if _r else _next
+        except Exception as e:  # noqa: BLE001
+            print(f"[note-redirect] deal {did}: {type(e).__name__}: {e}", flush=True)
         return (f"Noted on opportunity #{d['id']} '{d['title']}': {note}. Every future email on it will carry this."
                 + (f" {_next}" if _next else ""))
     if name == "reissue_quotation":

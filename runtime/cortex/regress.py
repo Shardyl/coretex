@@ -535,6 +535,49 @@ def _cases():
         return all(c.get("offer") for c in cs)
     case("the MENA email owes nothing", "card 1221", _mena_extract, model=True)
 
+    # --- the quotation flow from any card or note (owner, 14 Oct: Heidar at 25,000, one round, 50/50)
+    from . import quotation as _qq
+    case("revision rounds are restated everywhere, in good grammar", "quotation flow",
+         lambda: _qq.set_rounds("Revisions: Two revision rounds are included per project", 1)
+         == "Revisions: One revision round is included per project"
+         and _qq.set_rounds("Rounds beyond the two included", 1) == "Rounds beyond the one included"
+         and _qq.set_rounds("two rounds of revisions are included per Contract", 3)
+         == "three rounds of revisions are included per Contract")
+    def _split():
+        ok = _qq.split_lines([{"pct": 50}, {"pct": 50}])[0].startswith("50% on confirmation")
+        try:
+            _qq.split_lines([{"pct": 60}, {"pct": 30}])
+            return False
+        except ValueError:
+            return ok and "50% down payment" in str(_qq.set_split_terms({"a": "70% down payment is required"}, 50))
+    case("a payment split must make 100%, and the terms' deposit follows it", "quotation flow", _split)
+    case("words with nothing for the quotation never cost a model call", "quotation flow",
+         lambda: not engine._QUOTE_HINT.search("Make the opening warmer and drop the last line")
+         and engine._QUOTE_HINT.search("go ahead at 25,000 + VAT") and engine._QUOTE_HINT.search("50/50 split"))
+    case("every quotation card is approved, and approval makes it live", "quotation flow",
+         lambda: "_quote_to_email(" in inspect.getsource(engine._approve_quotation_card)
+         and "'Mark as seen'" not in open(__import__("os").path.join(__import__("os").path.dirname(__file__), "..", "..",
+                                                                      "web", "index.html"), encoding="utf-8").read()
+         .split("function quotationCard")[1].split("function ")[0])
+    case("a decision on an email card builds the quotation; the email waits for it", "quotation flow",
+         lambda: "build_quote_from_words(" in inspect.getsource(engine.apply_correction)
+         and '"waiting_quote"' in inspect.getsource(engine.apply_correction)
+         and "_wq" in inspect.getsource(engine.approve_task))
+    case("a note on the deal redirects it", "quotation flow",
+         lambda: "note_redirect(" in inspect.getsource(__import__("cortex.crm", fromlist=["x"]).add_project_note))
+    case("a reissue keeps an agreed split and the revision rounds", "quotation flow",
+         lambda: 'sp.get("payment")' in inspect.getsource(engine.reissue_quotation)
+         and 'sp.get("revision_rounds")' in inspect.getsource(engine.reissue_quotation))
+
+    def _intent():
+        i = engine._quote_intent("He's sticking hard at 25,000. We'll go ahead at 25,000 + VAT with a 70% deposit "
+                                 "and one revision round.")
+        n = engine._quote_intent("He asked for 20,000 but I haven't agreed to anything yet, just acknowledge it.")
+        return bool(i) and i.get("target") == 25000 and i.get("rounds") == 1 and \
+            [p["pct"] for p in i.get("payment") or []] == [70, 30] and not (n and n.get("target"))
+    case("his decision is read: 25,000, one round, 70/30; a client's ask is not a decision", "quotation flow",
+         _intent, model=True)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

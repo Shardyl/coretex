@@ -3318,3 +3318,33 @@ shoot needs none), then 10% off the whole quotation.
   shared words. Called from: `_skip` on a prep card (`_cancel_owed_work`); "cancel / not needed / we didn't commit"
   on a prep card (`_cancels_work`: words, then one narrow Haiku yes/no, so "no need for the VO line" still builds the
   quote); and the new `retract` channel of `_understand_correction` on any email card.
+
+## The quotation flow from any card or note (owner, 14 Oct 2026)
+- OWNER: "talk directly to the draft, and the next stage is a quotation for me to look at ... once it's approved it
+  automatically redrafts ... if he wants two rounds and 50/50 I speak to the next draft and the same process happens
+  ... scrap the old quotation and build a brand new one directly from talking to the cards." Also: every quotation
+  card must be APPROVED (stand-alone ones only said "Mark as seen", and approving controlled nothing).
+- `engine._quote_intent(text)`: `_QUOTE_HINT` regex first (no model call for ordinary corrections), then Haiku reads
+  {mode revise|scrap|new_number, target_net, vat_inclusive, revision_rounds, payment [{pct, when}], changes}; CODE
+  keeps a figure only if he wrote it (`_stated_numbers`), rounds 1-5 only if said, a split's last part is the
+  remainder. A client's ask he has not accepted is not a decision.
+- `build_quote_from_words(company, deal, text, intent, for_email)`: the deal's quotation (`_deal_quote`: latest card's
+  number, any status) gets its next VERSION (a new number only for new_number). Only rounds/split -> `reissue_quotation`
+  copies the lines exactly. Otherwise `_spec_from_words`: the model re-scopes from the previous version + deal record
+  and lists `trimmed`; CODE prices every line (`ratecard.price_lines`, his figure as the target, Budget tier when
+  needed) and, if it cannot reach the figure, the model is told the priced total once and tries again. Never a
+  discount line. What was trimmed / assumed is shown to him on the card (`owner_notes`), never on the document.
+- `quotation.set_rounds` / `split_lines` / `set_split_terms`: revision rounds restated on every line, deliverable,
+  note and terms clause (grammar fixed for one round); an agreed split printed as the payment lines (must add to 100)
+  and the terms' "70% down payment" restated. Both recorded on the version spec (`revision_rounds`, `payment`) so a
+  reissue keeps them; the pro forma reads the printed lines as before.
+- Hooks: `apply_correction` on an EMAIL card with a deal, or a QUOTATION card not from a proposal, runs `_quote_intent`
+  first; a decision builds the quotation, the email card waits (`waiting_quote`, `pending_instruction`, card_problem
+  says so, `approve_task` refuses it). `_approve_quotation_card` -> `_quote_to_email` for every quotation not from a
+  proposal: attach to `for_email` (else the deal's open email, else a NEW cover email to the deal contact), supersede
+  older library versions of the number, redraft the email with his pending instruction (`apply_correction(...,
+  _quote_checked=True, infer=False)`). Skipping a quotation releases the email waiting for it.
+- NOTES REDIRECT THE DEAL: `crm.add_project_note` and Talk `note_opportunity` call `engine.note_redirect` (on a
+  thread): the newest open email card on the deal is redrafted from the note (and a quotation decision in it builds the
+  quotation first), else a quotation decision builds the quotation on its own. `apply_correction(infer=False)` = a
+  redraft that is not him teaching a rule. Cockpit: every quotation card shows "Approve quotation" (sw cortex-v66).

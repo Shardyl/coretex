@@ -302,8 +302,72 @@ def is_discount(it: dict) -> bool:
     return isinstance(it, dict) and it.get("discount_pct") not in (None, "")
 
 
+# REVISION ROUNDS AND THE PAYMENT SPLIT ARE OPTIONS ON ANY QUOTATION (owner, 14 Oct 2026: "is there a possibility to
+# remove the two revision requests and make it one ... on any quotation, I need the option to agree to a 50-50 split
+# because it is often the case that that's how people will negotiate"). Both are set by CODE on every place the
+# document states them, so the line descriptions, the deliverables and the printed terms never disagree, and the
+# pro forma reads the stages from the payment lines this version printed.
+_NUM_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five"}
+
+
+def _walk(obj, fn):
+    if isinstance(obj, str):
+        return fn(obj)
+    if isinstance(obj, list):
+        return [_walk(x, fn) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _walk(v, fn) for k, v in obj.items()}
+    return obj
+
+
+def set_rounds(obj, n: int):
+    """Every 'two revision rounds' wording in a string, list or dict, restated for `n` rounds."""
+    n = int(n)
+    w, pl = _NUM_WORDS.get(n, str(n)), ("" if n == 1 else "s")
+
+    def cap(m, out):
+        return out[0].upper() + out[1:] if m.group(0)[:1].isupper() else out
+
+    def fix(t):
+        t = re.sub(r"\b(?:two|2)\s+(consolidated\s+)?revision rounds\b",
+                   lambda m: cap(m, f"{w} {m.group(1) or ''}revision round{pl}"), t, flags=re.I)
+        t = re.sub(r"\b(?:two|2)\s+rounds of revisions?\b", lambda m: cap(m, f"{w} round{pl} of revisions"), t, flags=re.I)
+        t = re.sub(r"\bbeyond the (?:two|2) included\b", lambda m: cap(m, f"beyond the {w} included"), t, flags=re.I)
+        t = re.sub(r"\b(?:two|2)\s+(consolidated\s+)?rounds\b",
+                   lambda m: cap(m, f"{w} {m.group(1) or ''}round{pl}"), t, flags=re.I)
+        if n == 1:
+            t = re.sub(r"\b(revision round|round of revisions|consolidated round|round) are\b", r"\1 is", t)
+        return t
+    return _walk(obj, fix)
+
+
+_SPLIT_WHEN = {
+    2: ["on confirmation, to commence the project.", "on approval of the work, before the final files are released."],
+    3: ["on confirmation, to commence the project.", "at the first cut.", "on delivery of the final files."],
+}
+
+
+def split_lines(split: list) -> list[str]:
+    """The payment lines for an agreed split, e.g. [{"pct": 50}, {"pct": 50}] or with his own 'when' words.
+    The percentages must make 100; nothing else is accepted."""
+    pcts = [int(round(float(x.get("pct")))) for x in (split or []) if str(x.get("pct") or "").strip()]
+    if len(pcts) < 2 or sum(pcts) != 100 or any(p <= 0 for p in pcts):
+        raise ValueError(f"a payment split must be two or more parts that add up to 100% (got {pcts})")
+    labels = _SPLIT_WHEN.get(len(pcts)) or [f"instalment {i + 1}." for i in range(len(pcts))]
+    out = []
+    for i, (p, x) in enumerate(zip(pcts, split)):
+        when = str(x.get("when") or "").strip().rstrip(".")
+        out.append(f"{p}% {when}." if when else f"{p}% {labels[i]}")
+    return out
+
+
+def set_split_terms(terms, deposit_pct: int):
+    """The AI terms state the 70% down payment in words: restate it for the agreed deposit."""
+    return _walk(terms, lambda t: re.sub(r"\b70%\s+down payment", f"{int(deposit_pct)}% down payment", t))
+
+
 def _resolve(company: str, preset: str, *, customer: str, sections, total, total_inclusive, title, note,
-             agency_fee, terms, deliverables, number=None, discount_pct=None) -> dict:
+             agency_fee, terms, deliverables, number=None, discount_pct=None, revision_rounds=None) -> dict:
     """Resolve house data + preset + priced line items into one model dict, stamping every figure in code.
 
     Pricing modes: `total` given -> "fair rates" split by per-item weight; `sections` with unit/qty ->
@@ -382,6 +446,14 @@ def _resolve(company: str, preset: str, *, customer: str, sections, total, total
         _mt = master_terms_ref(data, subtotal)
         if _mt:
             terms = {"incorporated": _mt}
+    if revision_rounds:       # stated by code everywhere the document states it
+        terms = set_rounds(terms, revision_rounds)
+        deliverables = set_rounds(deliverables, revision_rounds)
+        note = set_rounds(note, revision_rounds)
+        for s in sections:
+            for it in s.get("items", []):
+                if isinstance(it.get("desc"), str):
+                    it["desc"] = set_rounds(it["desc"], revision_rounds)
     vat = round((subtotal + fee) * vat_rate, 2)
     grand = round(subtotal + fee + vat, 2)
     if number:
@@ -401,7 +473,7 @@ def _resolve(company: str, preset: str, *, customer: str, sections, total, total
             "agency_fee": agency_fee, "terms": terms, "deliverables": deliverables, "customer": customer,
             "cur": cur, "vat_rate": vat_rate, "sections": sections, "subtotal": subtotal, "fee": fee,
             "vat": vat, "grand": grand, "number": number, "stated": stated, "blanks": blanks,
-            "summary": summary}
+            "summary": summary, "revision_rounds": int(revision_rounds) if revision_rounds else None}
 
 
 def _return(m: dict, path: str) -> dict:
@@ -419,13 +491,14 @@ def generate(company: str, preset: str = "ai-production", *, customer: str = "",
              total: float | None = None, total_inclusive: bool = False, title: str | None = None,
              note: str | None = None, agency_fee: bool | None = None, terms: dict | None = None,
              deliverables: list | None = None, number: str | None = None, out_dir: str = "/tmp",
-             discount_pct: float | None = None) -> dict:
+             discount_pct: float | None = None, revision_rounds: int | None = None) -> dict:
     """Build the house-format quotation PDF for `company`. See `_resolve` for the pricing modes.
     Returns {path, number, title, summary, company, customer, total, currency, blanks, stated, preset}.
     """
     m = _resolve(company, preset, customer=customer, sections=sections, total=total,
                  total_inclusive=total_inclusive, title=title, note=note, agency_fee=agency_fee,
-                 terms=terms, deliverables=deliverables, number=number, discount_pct=discount_pct)
+                 terms=terms, deliverables=deliverables, number=number, discount_pct=discount_pct,
+                 revision_rounds=revision_rounds)
     company, co, data, title, note = m["company"], m["co"], m["data"], m["title"], m["note"]
     agency_fee, terms, deliverables = m["agency_fee"], m["terms"], m["deliverables"]
     cur, vat_rate, sections = m["cur"], m["vat_rate"], m["sections"]
@@ -696,7 +769,8 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
                   terms: dict | None = None, deliverables: list | None = None, number: str | None = None,
                   contact: dict | None = None, contact_email: str | None = None,
                   payment_lines: list | None = None, discount_pct: float | None = None,
-                  out_dir: str = "/tmp", wb=None, sheet_title: str | None = None) -> dict:
+                  out_dir: str = "/tmp", wb=None, sheet_title: str | None = None,
+                  revision_rounds: int | None = None) -> dict:
     """Build the quotation as the Sensa house-format .xlsx (single sheet, brand band, optional Deliverables
     block, line-item table with =IF(D="",...) auto-totals, payment + bank, acceptance, then Terms directly
     underneath). Same model + pricing modes as the PDF (see `_resolve`).
@@ -715,7 +789,12 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
             raise ValueError(f"{number} is {_who}'s quotation; it cannot carry one for {customer}.")
     m = _resolve(company, preset, customer=customer, sections=sections, total=total,
                  total_inclusive=total_inclusive, title=title, note=note, agency_fee=agency_fee,
-                 terms=terms, deliverables=deliverables, number=number, discount_pct=discount_pct)
+                 terms=terms, deliverables=deliverables, number=number, discount_pct=discount_pct,
+                 revision_rounds=revision_rounds)
+    if payment_lines:         # an agreed split: the terms' own "70% down payment" follows the first line
+        _dep = re.match(r"\s*(\d{1,3})\s*%", str(payment_lines[0]))
+        if _dep:
+            m["terms"] = set_split_terms(m["terms"], int(_dep.group(1)))
     hb = _house_bits(m)
     cur, vat_rate = m["cur"], m["vat_rate"]
     fee_on = m["agency_fee"]
@@ -983,12 +1062,13 @@ def generate_xlsx(company: str, preset: str = "ai-production", *, customer: str 
     path = os.path.join(out_dir, f"quotation-{m['company']}-{m['number']}.xlsx")
     wb.save(path)
     _record_version(m, preset, customer, sections, contact_email, contact_name=ct.get("name") or "",
-                    payment=printed_pay)
+                    payment=printed_pay, payment_explicit=bool(payment_lines))
     return _return(m, path)
 
 
 def _record_version(m: dict, preset: str, customer: str, sections: list | None,
-                    contact_email: str | None, contact_name: str = "", payment: list | None = None) -> None:
+                    contact_email: str | None, contact_name: str = "", payment: list | None = None,
+                    payment_explicit: bool = False) -> None:
     """Version registry (`quote_versions:<number>` setting): every distinct generated iteration of a
     quote number is recorded with its full spec, so `build_versions_workbook` can rebuild the whole
     history as one tabbed spreadsheet. Regenerating identical content refreshes the last entry's date
@@ -1000,6 +1080,11 @@ def _record_version(m: dict, preset: str, customer: str, sections: list | None,
         spec = {"company": m["company"], "preset": preset, "customer": customer,
                 "title": m["title"], "note": m["note"], "deliverables": m["deliverables"],
                 "terms": m["terms"], "sections": sections, "contact_email": contact_email}
+        # an agreed split or revision rounds make a different document (a new version); recorded so a reissue keeps them
+        if payment_explicit and payment:
+            spec["payment"] = list(payment)
+        if m.get("revision_rounds"):
+            spec["revision_rounds"] = m["revision_rounds"]
         sig_bare = _json.dumps(spec, sort_keys=True, default=str)
         # THE PRINTED CONTACT PERSON IS PART OF THE DOCUMENT (21 Sep 2026): the name is read from the CRM at
         # render time, so a quotation reissued after a contact was renamed (Cloudlink: Yousif Alalawi -> Farah

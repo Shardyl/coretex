@@ -1025,6 +1025,11 @@ def add_project_note(project_id: int, note: str, by: str = "") -> dict | None:
         touch.on_note(project_id, note)
     except Exception as e:  # noqa: BLE001
         print(f"[touch] note on deal {project_id}: {type(e).__name__}: {e}", flush=True)
+    try:                                   # and redirects the deal: the waiting email, or the quotation it decides
+        from . import engine
+        engine.note_redirect(project_id, note)
+    except Exception as e:  # noqa: BLE001
+        print(f"[note-redirect] deal {project_id}: {type(e).__name__}: {e}", flush=True)
     return db.one("select * from crm_projects where id=%s", (project_id,))
 
 
