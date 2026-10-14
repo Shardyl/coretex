@@ -5116,6 +5116,64 @@ def classify_email(company: dict, email: dict, channel_note: str = "") -> dict:
 _DELIVERY_STAGES = set(stages.DELIVERY)   # stages.py: Booked, Production, Delivered, Final Payment, Recurring
 
 
+def manual_people(co: dict) -> set[str]:
+    """People who deal with their own email by hand (owner, 14 Oct 2026: "anything Ayresh is dealing with, let her
+    deal with it manually"). Profile key `manual_people` = [emails]; editable, no deploy."""
+    try:
+        return {str(a).strip().lower() for a in (profile.get(co["id"]) or {}).get("manual_people") or [] if a}
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def handled_manually(co: dict, e: dict, rt_key: str | None = None, client: str | None = None) -> str:
+    """The manual person an inbound email belongs to, or "". It is theirs when they are on its To line, when they
+    were the last of us to write on its thread, or when they own the deal. Header and thread facts, no model.
+    WHY: mail Ayresh handles kept coming back as Gino's draft (card 1233, the D-Marin permit thread: the reply took
+    the last sender to that CONTACT, Gino, not the person on that thread)."""
+    manual = manual_people(co)
+    if not manual or not e:
+        return ""
+    to = {a.lower() for a in re.findall(r"[\w.+-]+@[\w.-]+\.\w+", e.get("to") or "")}
+    hit = next((a for a in to if a in manual), "")
+    if hit:
+        return hit
+    tid = e.get("thread_id")
+    if tid and rt_key:
+        try:
+            for mid, frm in reversed(gmail.thread_from_lines(rt_key, tid, client)):
+                if mid == e.get("gmail_id"):
+                    continue
+                a = _bare_email(frm)
+                if a and _is_internal(a, "", _internal_index()):
+                    if a in manual:
+                        return a
+                    break                     # the last of us on this thread is someone else
+        except Exception as x:  # noqa: BLE001
+            print(f"[manual] thread read failed: {type(x).__name__}: {x}", flush=True)
+    try:
+        for d in crm.active_deals_for_email(e.get("email") or "", co.get("slug")) or []:
+            own = str((db.one("select owner from crm_projects where id=%s", (d["id"],)) or {}).get("owner") or "").lower()
+            if own in manual:
+                return own
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def _manual_hold(co: dict, e: dict, person: str, deals: list | None = None) -> None:
+    """Their email reaches the deal (clock paused, scheduled emails held, logged) but no card is drafted."""
+    from . import events
+    try:
+        deals = deals if deals is not None else crm.active_deals_for_email(e.get("email") or "", co.get("slug"))
+        if deals:
+            events.they_wrote(co, e, deals)
+            d = deals[0] if len(deals) == 1 else (_deal_for_thread(e, deals) or deals[0])
+            pipeline.log_deal(int(d["id"]), "note", f"{(e.get('subject') or '(no subject)')[:80]} from {e.get('email')}: "
+                              f"handled by {person.split('@')[0].title()} by hand, no draft.")
+    except Exception as x:  # noqa: BLE001
+        print(f"[manual] {type(x).__name__}: {x}", flush=True)
+
+
 def _addressed_person(co: dict, e: dict, mailbox: str | None) -> dict | None:
     """The one person on OUR team an email is addressed TO, when the mailbox it was read from is only
     cc'd. Returns that sender ({email, rt_key}), or None when the swept mailbox IS on the To line, or
@@ -6566,6 +6624,15 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                     _draft_direct_reply(co, e, cls, rt_key=rt_key, address=address, ack_only=True)
                 seen.add(gid)
                 continue
+            _mp = handled_manually(co, e, rt_key, company)
+            if _mp:                       # hers by hand: on the deal, never a card
+                _record_contact()
+                _manual_hold(co, e, _mp, _cdeals or None)
+                seen.add(gid)
+                results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
+                                "category": cls["category"], "to_crm": cls.get("to_crm"),
+                                "reason": f"handled manually by {_mp}"})
+                continue
             # THE CONTACT EXISTS BEFORE THE REPLY IS DRAFTED (7 Oct 2026). `_draft_direct_reply` qualifies a new
             # lead and `crm.auto_opportunity` needs their crm_master row; the row was written AFTER the draft, so
             # every brand-new sender qualified "high" got no opportunity, silently (Al Hamra, Liebherr, Accor,
@@ -6759,6 +6826,10 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
             continue
         if not _claim_mail(co["id"], gmail.mail_ref(m), m.get("id") or m.get("gmail_id") or "", handler="sales"):
             continue    # ONE EMAIL, ONE HANDLING (audit step 2e): the inbox sweep already took this message
+        _mp = handled_manually(co, m, send_rt, client)
+        if _mp:
+            _manual_hold(co, m, _mp)
+            continue
         c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (frm,))
         nm = ((((c or {}).get("first_name")) or "") + " " + (((c or {}).get("last_name")) or "")).strip()
         name = nm if re.search(r"[A-Za-z]", nm) else frm.split("@")[0]

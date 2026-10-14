@@ -5289,11 +5289,24 @@ def _image_blocks(data_urls: list[str], names: list[str] | None = None) -> list[
         head, b64 = u.split(";base64,", 1)
         media = (head[5:] or "image/jpeg").split(";")[0].lower()
         name = (names[i] if names and i < len(names) else "") or ""
-        if (len(b64) * 3) // 4 > _IMG_LIMIT:   # decoded-size estimate over the limit -> drop it, don't 400
+        is_pdf = media == "application/pdf" or name.lower().endswith(".pdf")
+        size = (len(b64) * 3) // 4
+        if is_pdf and (size > _IMG_LIMIT or _pdf_pages(b64) > 100):
+            # TOO BIG TO SEE AS PAGES IS NOT UNREADABLE (14 Oct 2026: a 21MB brief forwarded on WhatsApp was dropped
+            # here without a word and Talk said it could not read it). Its text is read instead, and said so.
+            txt = _pdf_text(b64, name)
+            blocks.append({"type": "text", "text": f"ATTACHED FILE {name or 'PDF'} ({size // 1_000_000} MB, too large "
+                           "to view as pages, so its TEXT follows; pictures in it are not seen):\n"
+                           + (txt[:80000] or "(no text could be extracted: it is probably scanned images. Say so "
+                                             "plainly and ask for a smaller copy or the key pages as pictures.)")})
+            continue
+        if size > _IMG_LIMIT:   # an image over the model's limit: say so, never drop it silently
+            blocks.append({"type": "text", "text": f"ATTACHED FILE {name or media}: {size // 1_000_000} MB, too large "
+                           "to view. Say so plainly and ask for a smaller copy."})
             continue
         if media.startswith("image/"):
             blocks.append({"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}})
-        elif media == "application/pdf" or name.lower().endswith(".pdf"):
+        elif is_pdf:
             blocks.append({"type": "document", "source": {"type": "base64", "media_type": "application/pdf",
                                                           "data": b64}})
         elif _dt.kind_for(media, name):
@@ -5304,6 +5317,22 @@ def _image_blocks(data_urls: list[str], names: list[str] | None = None) -> list[
             blocks.append({"type": "text", "text": f"ATTACHED FILE {name or media}:\n"
                                                     + (txt or "(this file could not be read; say so)")})
     return blocks
+
+
+def _pdf_pages(b64: str) -> int:
+    try:
+        import io
+        from pypdf import PdfReader
+        return len(PdfReader(io.BytesIO(base64.b64decode(b64))).pages)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _pdf_text(b64: str, name: str) -> str:
+    try:
+        return documents.extract_text("application/pdf", name or "file.pdf", base64.b64decode(b64)) or ""
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _said_text(content) -> str:
@@ -5416,11 +5445,16 @@ def talk_from_whatsapp(text: str, images: list | None = None, names: list | None
             continue
         try:
             co = store.get_company_by_slug("sensa")
+            # a client's brief is often 20MB+ (the 21MB PDF of 13 Oct was refused at the 15MB email cap and
+            # vanished): a file sent to Cortex is a client document, up to the 40MB deal-document limit
             doc = documents.save_data_url(co["id"], "sensa", nm or "whatsapp-file", url, kind="client-document",
-                                          uploaded_by=f"{(user or {}).get('email') or 'owner'} (WhatsApp)")
+                                          uploaded_by=f"{(user or {}).get('email') or 'owner'} (WhatsApp)",
+                                          cap=documents.MAX_DEAL_BYTES)
             kept.append(f"#{doc['id']} '{doc['filename']}'")
         except Exception as e:  # noqa: BLE001
             print(f"[whatsapp-talk] file not kept: {type(e).__name__}: {e}", flush=True)
+            said += (f"\n[The file '{nm or 'attachment'}' could NOT be saved ({e}). Say so plainly and ask for a "
+                     "smaller copy or a link.]")
     if kept:
         said += ("\n[Saved to the document library: " + ", ".join(kept) + ". To put it on an opportunity, pass the id "
                  "in update_opportunity documents.]")

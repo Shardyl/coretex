@@ -49,6 +49,32 @@ def _ts(v) -> datetime | None:
         return None
 
 
+def _manual_owner(company_id, deal_id, email: str, request: dict | None) -> str:
+    """A manual person (profile `manual_people`, owner 14 Oct 2026) owns this: the deal's owner, the card's own
+    sender, or the last of our people to send to this contact. No automatic email goes out on their work."""
+    try:
+        from . import profile
+        manual = {str(a).lower() for a in (profile.get(company_id) or {}).get("manual_people") or []}
+        if not manual:
+            return ""
+        if str(deal_id or "").isdigit():
+            own = str((db.one("select owner from crm_projects where id=%s", (int(deal_id),)) or {}).get("owner") or "").lower()
+            if own in manual:
+                return own
+        fe = str((request or {}).get("from_email") or "").lower()
+        if fe in manual:
+            return fe
+        if email:
+            last = db.one("select lower(d.snapshot->>'from') f from decisions d join tasks t on t.id=d.task_id where "
+                          "t.company_id=%s and d.action='send' and lower(d.snapshot->>'to')=%s order by d.id desc limit 1",
+                          (company_id, email.lower()))
+            if (last or {}).get("f") in manual:
+                return last["f"]
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
 def check(company_id: int, email: str, deal_id, request: dict | None) -> str | None:
     """None = may contact. Otherwise the reason it is held, in words for the owner."""
     why = purpose(request)
@@ -67,6 +93,9 @@ def check(company_id: int, email: str, deal_id, request: dict | None) -> str | N
 
     # 2. the deal's stage (stages.py decides what each stage allows)
     deal = db.one("select id, stage, history from crm_projects where id=%s", (int(deal_id),)) if str(deal_id or "").isdigit() else None
+    held = _manual_owner(company_id, deal_id, email, request)
+    if held:
+        return f"{held.split('@')[0].title()} handles this by hand"
     hist = (deal or {}).get("history") or []
     if deal:
         st = deal.get("stage")

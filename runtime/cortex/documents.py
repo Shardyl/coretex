@@ -230,14 +230,14 @@ def _safe_name(name: str) -> str:
 
 def save(company_id: int, slug: str, filename: str, mime: str, data: bytes,
          kind: str = "document", uploaded_by: str | None = None, push: bool = True,
-         deal_id: int | None = None, text: str | None = None) -> dict:
+         deal_id: int | None = None, text: str | None = None, cap: int | None = None) -> dict:
     """Store the file on disk + register it. A byte-identical re-upload returns the existing row
     (idempotent — 'checking if it has the trade licence' never creates duplicates). `deal_id` files it
     ON a deal (a brief, a clarification record); a re-upload of a deal-less copy adopts the deal."""
     ensure_schema()
     if not data:
         raise ValueError("empty file")
-    _cap = MAX_DEAL_BYTES if (deal_id and kind == "client-document") else MAX_BYTES
+    _cap = cap or (MAX_DEAL_BYTES if (deal_id and kind == "client-document") else MAX_BYTES)
     if len(data) > _cap:
         raise ValueError(f"file too large ({len(data)} bytes; max {_cap})")
     sha = hashlib.sha256(data).hexdigest()
@@ -268,12 +268,12 @@ def save(company_id: int, slug: str, filename: str, mime: str, data: bytes,
 
 
 def save_data_url(company_id: int, slug: str, filename: str, data_url: str,
-                  kind: str = "document", uploaded_by: str | None = None) -> dict:
+                  kind: str = "document", uploaded_by: str | None = None, cap: int | None = None) -> dict:
     if not isinstance(data_url, str) or ";base64," not in data_url:
         raise ValueError("expected a data: URL")
     head, b64 = data_url.split(";base64,", 1)
     return save(company_id, slug, filename, head[5:] or "application/octet-stream",
-                base64.b64decode(b64), kind=kind, uploaded_by=uploaded_by)
+                base64.b64decode(b64), kind=kind, uploaded_by=uploaded_by, cap=cap)
 
 
 # The STANDING company papers - the only documents offered by default when attaching to a card

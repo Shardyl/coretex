@@ -675,6 +675,28 @@ def _cases():
          and "user if team else owner" in inspect.getsource(__import__("cortex.api", fromlist=["x"]).talk_from_whatsapp)
          and _wa.team_member("") is None)
 
+    # --- Ayresh's mail is hers by hand (owner, 14 Oct 2026)
+    _co3 = {"id": -1, "slug": "x"}
+    _orig_mp = engine.manual_people
+    engine.manual_people = lambda co: {"ayresh@sensa.digital"}
+    try:
+        _hm = engine.handled_manually(_co3, {"to": "Ayresh <ayresh@sensa.digital>", "email": "jlion@d-marin.com"})
+        _hn = engine.handled_manually(_co3, {"to": "gino@sensa.digital", "email": "nobody@example.invalid"})
+    finally:
+        engine.manual_people = _orig_mp
+    case("an email to a manual person never becomes a card; their deals are never auto-chased", "D-Marin 1233",
+         lambda: _hm == "ayresh@sensa.digital" and _hn == ""
+         and "handled_manually(" in inspect.getsource(engine.poll_inbox)
+         and "handled_manually(" in inspect.getsource(engine.poll_sales_replies)
+         and "_manual_owner(" in inspect.getsource(__import__("cortex.gate", fromlist=["x"]).check))
+    # --- a big PDF sent to Talk is read as text, never dropped (13 Oct, 21MB brief on WhatsApp)
+    import base64 as _b64
+    _big = "data:application/pdf;base64," + _b64.b64encode(b"%PDF-1.4 " + b"0" * (11 * 1024 * 1024)).decode()
+    _blk = __import__("cortex.api", fromlist=["x"])._image_blocks([_big], ["brief.pdf"])
+    case("a PDF over the page limit becomes a text block saying so", "21MB brief",
+         lambda: len(_blk) == 1 and _blk[0]["type"] == "text" and "too large" in _blk[0]["text"]
+         and "cap=documents.MAX_DEAL_BYTES" in inspect.getsource(__import__("cortex.api", fromlist=["x"]).talk_from_whatsapp))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

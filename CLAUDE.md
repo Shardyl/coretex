@@ -3438,3 +3438,17 @@ shoot needs none), then 10% off the whole quotation.
   answer goes back to their phone (`_tell(to=)`). Talk buffers are per sender (`_TALK_BUFS`), so two people's turns
   never merge. Approve / Edit / Skip buttons stay the owner's: a team member tapping one is told to use the app.
   Add a person = add their number to the setting; no deploy.
+
+## Ayresh handles her own mail by hand; big files sent to Talk are read, never dropped (owner, 14 Oct 2026)
+- MANUAL PEOPLE: profile key `manual_people` = [emails] (Sensa + Sky Vision: ayresh@sensa.digital). CAUSE: mail she
+  deals with kept coming back as Gino's draft (card 1233, D-Marin permit thread: the reply took the last sender to
+  that CONTACT, Gino). `engine.handled_manually(co, e, rt_key, client)`: the email is theirs when they are on its To
+  line, when they were the last of us to write on its thread (`gmail.thread_from_lines`, metadata only), or when
+  they own the deal (`crm_projects.owner`). `poll_inbox` and `poll_sales_replies` then run `_manual_hold`: the deal
+  still hears it (`events.they_wrote`: clock paused, scheduled emails held, logged) and a note says it is handled by
+  hand; NO card. `gate.check` -> `_manual_owner`: no automatic email (chase, reminder email) on a deal they own,
+  from them, or to a contact they last emailed. Remove the address from the profile to hand it back to Cortex.
+- FILES TO TALK: `_image_blocks` used to DROP anything over 10MB without a word (a 21MB brief forwarded on WhatsApp,
+  13 Oct: Talk said it could not read it). A PDF over 10MB or 100 pages now goes in as its extracted TEXT, labelled
+  as such (scans: told plainly, ask for a smaller copy); an oversized image is named as too large. WhatsApp files
+  save to the library up to 40MB (`documents.save(cap=)`), and a file that cannot be saved is said so in the turn.

@@ -330,6 +330,17 @@ def _links(payload: dict, plain: str) -> list[list[str]]:
     return out[:40]
 
 
+def thread_from_lines(rt_key: str, thread_id: str, company: str | None = None) -> list[tuple[str, str]]:
+    """[(message id, From header)] for every message on a thread, oldest first (metadata only, no bodies)."""
+    tok = _token_for(rt_key, "gmail", company)
+    t = _get(tok, f"threads/{thread_id}", {"format": "metadata", "metadataHeaders": ["From"]})
+    out = []
+    for m in t.get("messages") or []:
+        h = {x["name"].lower(): x["value"] for x in (m.get("payload") or {}).get("headers", [])}
+        out.append((m.get("id") or "", h.get("from", "")))
+    return out
+
+
 def _parse_generic(msg: dict) -> dict:
     """Light parse of ANY email (sender, subject, body) — for the inbox classifier, no form assumptions."""
     h = {x["name"].lower(): x["value"] for x in msg.get("payload", {}).get("headers", [])}
