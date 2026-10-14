@@ -234,15 +234,11 @@ def working_days_before(dt, n: int):
     return d
 
 
-def check_new(title: str, due_at, company_id, deal_id) -> dict:
-    """{"same": <open reminder row> | None, "replaces": bool, "deliverable": bool}. One narrow model question, only
-    when there is something to compare with or the new item is a promise; code keeps only real ids."""
-    rows = _open_on_deal(deal_id) if str(deal_id or "").isdigit() else []
-    owed = (title or "").startswith(OWED_PREFIXES)
-    if not rows and not owed:
-        return {}
+def _judge(title: str, due_at, rows: list) -> dict:
+    """The one question, asked the same way at creation and in the morning merge."""
     from . import provider
-    listing = "\n".join(f"R{r['id']} [{'set by the owner' if not str(r.get('created_by') or '').startswith('cortex') else 'cortex'}] "
+    listing = "
+".join(f"R{r['id']} [{'set by the owner' if not str(r.get('created_by') or '').startswith('cortex') else 'cortex'}] "
                         f"{r['title'][:220]} (due {r['due_at']:%d %b})" for r in rows[:30])
     try:
         out = provider.think_json(
@@ -253,47 +249,48 @@ def check_new(title: str, due_at, company_id, deal_id) -> dict:
             "old one? (3) Is the new item a piece of work WE must produce and deliver (a treatment, proposal, "
             "quotation, deck, script, edit, document), rather than a reply, a call or an update? Return "
             '{"same": "R<id>" or null, "replaces": true|false, "deliverable": true|false}.',
-            f"OPEN:\n{listing or '(nothing open)'}\n\nNEW: {title[:300]} (due {due_at:%d %b})",
+            f"OPEN:
+{listing or '(nothing open)'}
+
+NEW: {title[:300]} (due {due_at:%d %b})",
             model=provider.MODEL_ROUTER, max_tokens=60, purpose="owed-dedup") or {}
     except Exception:  # noqa: BLE001
         return {}
     sid = str(out.get("same") or "").lstrip("Rr")
     same = next((r for r in rows if sid.isdigit() and int(sid) == r["id"]), None)
-    return {"same": same, "replaces": bool(out.get("replaces")), "deliverable": bool(out.get("deliverable")) and owed}
+    return {"same": same, "replaces": bool(out.get("replaces")), "deliverable": bool(out.get("deliverable"))}
+
+
+def check_new(title: str, due_at, company_id, deal_id) -> dict:
+    """{"same": <open reminder row> | None, "replaces": bool, "deliverable": bool}. One narrow model question, only
+    when there is something to compare with or the new item is a promise; code keeps only real ids."""
+    rows = _open_on_deal(deal_id) if str(deal_id or "").isdigit() else []
+    owed = (title or "").startswith(OWED_PREFIXES)
+    if not rows and not owed:
+        return {}
+    v = _judge(title, due_at, rows)
+    v["deliverable"] = v.get("deliverable", False) and owed
+    return v
 
 
 def merge_twins(rows: list) -> list:
-    """Safety net (invariant duplicate_obligations): per deal, group the open reminders that are the same obligation and
-    keep ONE (the owner's own if one is in the group, else the earliest due); the rest are cancelled, never deleted."""
-    from . import pipeline, provider
+    """Safety net (invariant duplicate_obligations): the SAME question as at creation (_judge), asked of each open
+    reminder against the ones before it on the deal. A twin is cancelled (never deleted) and the kept one takes the
+    earlier date; the owner's own reminders are never cancelled."""
+    from . import pipeline
     merged = []
     for row in rows or []:
         did = row.get("deal_id")
-        items = _open_on_deal(did)
-        if len(items) < 2:
-            continue
-        listing = "\n".join(f"R{r['id']} {r['title'][:220]} (due {r['due_at']:%d %b})" for r in items[:30])
-        try:
-            out = provider.think_json(
-                "These reminders are open on one sales opportunity. Group the ones that are the SAME obligation (the "
-                "same thing owed or due, whatever the wording). A different deliverable, a later stage or a different "
-                'person is not the same. Return {"groups": [["R<id>", "R<id>", ...], ...]} listing only groups of two '
-                "or more.", listing, model=provider.MODEL_ROUTER, max_tokens=200, purpose="owed-merge") or {}
-        except Exception:  # noqa: BLE001
-            continue
-        by_id = {r["id"]: r for r in items}
-        for g in out.get("groups") or []:
-            ids = [int(str(x).lstrip("Rr")) for x in g if str(x).lstrip("Rr").isdigit() and int(str(x).lstrip("Rr")) in by_id]
-            if len(ids) < 2:
-                continue
-            grp = [by_id[i] for i in ids]
-            keep = next((r for r in grp if not str(r.get("created_by") or "").startswith("cortex")), None) \
-                or min(grp, key=lambda r: r["due_at"])
-            for r in grp:
-                if r["id"] == keep["id"] or not str(r.get("created_by") or "").startswith("cortex"):
-                    continue
+        kept = []
+        for r in _open_on_deal(did):
+            same = _judge(r["title"], r["due_at"], kept).get("same") if kept else None
+            if same and str(r.get("created_by") or "").startswith("cortex"):
                 db.execute("update reminders set status='cancelled' where id=%s", (r["id"],))
-                pipeline.log_deal(int(did), "note", f"Reminder #{r['id']} merged into #{keep['id']} (same thing owed): "
+                if r["due_at"] < same["due_at"]:
+                    db.execute("update reminders set due_at=%s where id=%s", (r["due_at"], same["id"]))
+                pipeline.log_deal(int(did), "note", f"Reminder #{r['id']} merged into #{same['id']} (same thing owed): "
                                   f"{r['title'][:140]}")
                 merged.append(r["id"])
+            else:
+                kept.append(r)
     return merged
