@@ -174,6 +174,13 @@ def create_card(company_id, skill_id, kind, request, contact: str | None = None,
             print(f"[gate] held {gate.purpose(request)} to {contact}: {_why}", flush=True)
             return None
     _did = deal_id or (request.get("deal_id") if isinstance(request, dict) else None)
+    if kind in ("email_reply", "email_draft") and isinstance(request, dict):
+        # ONE CONVERSATION, ONE DRAFT (conversation.py, owner 14 Oct 2026): their new message becomes the reply in the
+        # draft already waiting for them on the same conversation, never a second card
+        from . import conversation
+        _abs = conversation.absorb(company_id, request, _did)
+        if _abs:
+            return _abs
     if isinstance(request, dict) and request.get("prep_action") and str(_did or "").isdigit():
         # ONE OPEN PREP CARD PER DEAL AND PURPOSE (audit step 2e): a quotation prep was raised both by an owner
         # correction and by the next-step reader, and a balance invoice on every move into Delivered, each without
@@ -186,6 +193,10 @@ def create_card(company_id, skill_id, kind, request, contact: str | None = None,
             print(f"[card] prep '{request['prep_action']}' already open on deal {_did}: card {_ex['id']}", flush=True)
             return _ex
     key = (contact or "").strip().lower() or (f"deal:{deal_id}" if deal_id else None)
+    if key and kind in ("email_reply", "email_draft") and isinstance(request, dict):
+        from . import conversation
+        if conversation.is_inbound(request):      # a separate conversation with the same person is its own queue
+            key = conversation.thread_key(request) or key
     if not key:
         return create_task(company_id, skill_id, kind, request)
     request = {**request, "serialize_key": key}

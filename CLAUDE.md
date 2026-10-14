@@ -3363,3 +3363,26 @@ shoot needs none), then 10% off the whole quotation.
   create the opportunity first (with its contact); a deal with a quotation -> the next VERSION of that number.
   `update_opportunity(documents=)` filing a quotation PDF also puts that quotation's CARD on the deal.
 - Health check `opportunity_without_contact` (report). sw cortex-v67.
+
+## One conversation, one draft, kept current: `conversation.py` (owner, 14 Oct 2026)
+- CAUSE: card 1219 (our DSO submission to Alex) was waiting when Alex replied on the same thread; the reply became TWO
+  cards (1222 from the inbox sweep, 1223 from the sales-reply sweep), both queued behind 1219 and both about to answer
+  "looking forward to your proposal" after he had it. Every event made its own card and nothing reconciled the
+  opportunity's waiting cards; the old supersede only covered reply cards, not outbound drafts, queued cards or other
+  people on the deal. Owner: "when new things come in classified against an opportunity, readjust the entire inbox".
+- A CONVERSATION = PERSON + THREAD. `conversation.absorb(company, request, deal)` runs in `store.create_card` for every
+  inbound reply card: the same person's open draft (reply OR outbound, waiting, queued or new) on the same conversation
+  (`same_thread`: thread id, our message in their References, or the same subject; else `_same_matter`, one Haiku
+  question for a NEW thread) becomes the reply to the new message: their message lands in the brief as THEIR NEWEST
+  MESSAGE, the thread moves to it, sender stays sticky, the card goes back to drafting (corrections in force) and shows
+  `updated_for`. No second card. `_draft_direct_reply`'s reply-only supersede is gone (identical-copy check kept).
+- `conversation.thread_key` = person|subject is the queue key for inbound cards, so two genuinely separate
+  conversations with one person are both live; chases keep the person key (they wait behind any open conversation).
+- `conversation.recheck_deal` (from `events.they_wrote`, every channel, on a thread): every OTHER open card on the
+  opportunity (emails to other people, quotation and prep cards), judged once (Haiku, conservative): cancel (covered,
+  reason logged) / redraft (emails: back to drafting with the new message as NEW ON THE OPPORTUNITY) / for quotation and
+  prep cards a card_problem + notice instead of a rebuild / keep.
+- THE DUPLICATE: `_claim_mail` let "the claimant retrying" through on the mailbox copy alone, so the sales-reply sweep
+  reading the same copy passed. Claims now carry a `handler` (inbox / sales) and only the same sweep retries;
+  `poll_sales_replies`' open-card check counts queued cards and email_draft; `_rejudge_pending_replies` (after a send)
+  judges queued cards too.

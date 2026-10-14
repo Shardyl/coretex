@@ -595,6 +595,33 @@ def _cases():
          lambda: "designated contact" in inspect.getsource(__import__("cortex.api", fromlist=["x"])._exec_skill_tool)
          and "which opportunity is it for" in inspect.getsource(__import__("cortex.api", fromlist=["x"])._exec_skill_tool))
 
+    # --- one conversation, one draft, kept current (DSO cards 1219 / 1222 / 1223, 14 Oct)
+    _cv = __import__("cortex.conversation", fromlist=["x"])
+    _c1219 = {"inquiry": {"email": "con_anoronha@dso.ae", "subject": "Dubai Silicon Oasis - Video production enquiry"},
+              "thread": {"id": "1a11aec4096dfe7a", "msg_id": "<ours@mail.gmail.com>"}}
+    _alex = {"inquiry": {"email": "con_anoronha@dso.ae", "subject": "RE: Dubai Silicon Oasis - Video production enquiry",
+                         "message": "Thank you for the update and looking forward to your proposal."},
+             "thread": {"id": "1a11ad664699b526", "msg_id": "<theirs@outlook.com>", "references": "<x> <ours@mail.gmail.com>"},
+             "gmail_id": "1a13893336e93c7e", "thread_reply": True}
+    _other = {"inquiry": {"email": "con_anoronha@dso.ae", "subject": "Invoice query for September",
+                          "message": "Can you resend the September invoice?"}, "thread": {"id": "zz", "references": ""},
+              "gmail_id": "x", "thread_reply": True}
+    case("his reply on the same thread is the same conversation; a new subject is not", "DSO 1219/1222",
+         lambda: _cv.same_thread(_c1219, _alex) and not _cv.same_thread(_c1219, _other)
+         and _cv.is_inbound(_alex) and not _cv.is_inbound({"inquiry": {"email": "a@b.com"}, "followup": "chase"}))
+    case("two conversations with one person get two queues; one conversation one", "two threads",
+         lambda: _cv.thread_key(_alex) == _cv.thread_key({"inquiry": {"email": "CON_anoronha@dso.ae",
+                                                                      "subject": "Re: Re: Dubai Silicon Oasis - Video production enquiry"}})
+         and _cv.thread_key(_alex) != _cv.thread_key(_other))
+    case("every card creation folds into the waiting conversation", "DSO 1219/1222",
+         lambda: "conversation.absorb(" in inspect.getsource(store.create_card)
+         and "conversation.thread_key(" in inspect.getsource(store.create_card)
+         and "recheck_deal(" in inspect.getsource(__import__("cortex.events", fromlist=["x"]).they_wrote))
+    case("only the same sweep may retry its claim; queued cards count as open", "DSO 1222/1223",
+         lambda: 'handler="sales"' in inspect.getsource(engine.poll_sales_replies)
+         and "('queued','new','drafting'" in inspect.getsource(engine.poll_sales_replies)
+         and "'queued'" in inspect.getsource(engine._rejudge_pending_replies))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

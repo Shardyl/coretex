@@ -4883,7 +4883,7 @@ def _rejudge_pending_replies(task: dict, env: dict, company: dict) -> None:
         if not sent:
             return
         for t in db.query("select * from tasks where company_id=%s and kind in ('email_reply','email_draft') and id<>%s "
-                          "and status in ('new','drafting','awaiting_approval','awaiting_correction') and "
+                          "and status in ('queued','new','drafting','awaiting_approval','awaiting_correction') and "
                           "lower(request->'inquiry'->>'email')=%s and created_at < now() order by id",
                           (task.get("company_id"), task.get("id"), to)):
             req = t.get("request") or {}
@@ -4905,7 +4905,7 @@ def _rejudge_pending_replies(task: dict, env: dict, company: dict) -> None:
             cov = str(out.get("covered") or "none").lower()
             if cov == "full":
                 db.execute("update tasks set status='cancelled', updated_at=now(), request = request || %s::jsonb where id=%s "
-                           "and status in ('new','drafting','awaiting_approval','awaiting_correction')",
+                           "and status in ('queued','new','drafting','awaiting_approval','awaiting_correction')",
                            (json.dumps({"cancelled_reason": f"superseded by card {task.get('id')} sent "
                                         f"{datetime.now(_GST):%d %b %H:%M}: {out.get('why') or ''}"}), t["id"]))
                 store.log_decision(t["id"], t.get("skill_id"), "cortex", "superseded",
@@ -6202,27 +6202,12 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
                      "status in ('new','drafting','awaiting_approval','awaiting_correction') and "
                      "lower(request->'inquiry'->>'email')=lower(%s) order by id desc limit 1",
                      (co["id"], sender))
-        if dup:                                 # supersede the stale open card with their latest email
-            oldreq = dup.get("request") or {}
-            old = (oldreq.get("inquiry") or {}).get("message") or ""
+        if dup:
             norm = lambda s: re.sub(r"\s+", " ", s or "").strip()[:600]   # noqa: E731
-            if norm(old) == norm(inq["message"]):
+            if norm(((dup.get("request") or {}).get("inquiry") or {}).get("message")) == norm(inq["message"]):
                 return                          # same email, another team mailbox's copy — keep the first card
-            _base = lambda s: re.sub(r"^\s*((re|fwd|fw)\s*:\s*)+", "", (s or "").lower()).strip()  # noqa: E731
-            same_conv = _base((oldreq.get("inquiry") or {}).get("subject")) == _base(inq.get("subject"))
-            if same_conv and oldreq.get("mailbox_rt") and oldreq.get("mailbox_rt") != rt_key:
-                # same conversation seen via another team mailbox: the card's sending mailbox is STICKY to
-                # first receipt — threadIds are mailbox-local, so its thread/gmail ids stay from THAT mailbox
-                req["from_email"] = oldreq.get("from_email") or req.get("from_email")
-                req["mailbox_rt"] = oldreq["mailbox_rt"]
-                req["gmail_id"] = oldreq.get("gmail_id") or req.get("gmail_id")
-                if oldreq.get("thread"):
-                    req["thread"] = oldreq["thread"]
-            if old and old[:200] not in inq["message"]:
-                req["brief"] += " Their EARLIER message in this thread (already on a card, reply to BOTH): " \
-                                + old[:1500]
-            store.update_task(dup["id"], status="new", draft=None, request=req)
-            return
+        # ONE CONVERSATION, ONE DRAFT: create_card folds this into the person's waiting draft on the same conversation
+        # (reply OR outbound, waiting or queued; conversation.absorb), or opens it as its own conversation
         store.create_card(co["id"], skill["id"], "email_reply", req, contact=sender)
     except Exception as ex:  # noqa: BLE001 — NEVER silent (audit: a swallowed failure here loses a client
         # email forever once it is marked seen). Alert + tell the caller NOT to mark it seen, so it retries.
@@ -6242,6 +6227,7 @@ create table if not exists inbox_mail_claims (
   claimed_at timestamptz not null default now(),
   primary key (company_id, mail_ref)
 );
+alter table inbox_mail_claims add column if not exists handler text not null default 'inbox';
 """
 _mail_claims_ready = False
 
@@ -6290,7 +6276,7 @@ def _seen_original(company_id: int, fw: dict) -> bool:
         "lower(ev->>'text') like %s and lower(ev->>'text') like %s limit 1", (f"%{fw.get('email')}%", f"%{subj[:60]}%")))
 
 
-def _claim_mail(company_id, ref: str, gid: str) -> bool:
+def _claim_mail(company_id, ref: str, gid: str, handler: str = "inbox") -> bool:
     """ONE EMAIL, ONE HANDLING (14 Sep 2026). The team is cc'd on everything, so one client email sits in
     several of our mailboxes and every mailbox's sweep met it again. Guards were added one step at a time
     (the timeline 4 Sep, cards and tender notices 7 Sep) and each step without one repeated: HONOR's reply
@@ -6305,14 +6291,16 @@ def _claim_mail(company_id, ref: str, gid: str) -> bool:
             c.execute(_MAIL_CLAIMS_SCHEMA)
         _mail_claims_ready = True
     for _ in range(2):   # a claim released between the insert and the read is simply claimed again
-        if db.execute("insert into inbox_mail_claims (company_id, mail_ref, gmail_id) values (%s,%s,%s) "
+        if db.execute("insert into inbox_mail_claims (company_id, mail_ref, gmail_id, handler) values (%s,%s,%s,%s) "
                       "on conflict (company_id, mail_ref) do nothing returning gmail_id",
-                      (company_id, ref, gid or "")):
+                      (company_id, ref, gid or "", handler)):
             return True
-        held = db.one("select gmail_id from inbox_mail_claims where company_id=%s and mail_ref=%s",
+        held = db.one("select gmail_id, handler from inbox_mail_claims where company_id=%s and mail_ref=%s",
                       (company_id, ref))
         if held:
-            return held["gmail_id"] == (gid or "")
+            # ONLY THE SAME SWEEP RETRIES ITS OWN CLAIM (14 Oct 2026): the reply sweep read the same mailbox copy as the
+            # inbox sweep, passed as "the claimant retrying", and Alex's one email became cards 1222 and 1223
+            return held["gmail_id"] == (gid or "") and (held.get("handler") or "inbox") == handler
     return False
 
 
@@ -6761,15 +6749,15 @@ def poll_sales_replies(slug: str = "sensa") -> dict:
         prior = db.setting_get(f"qual:email:{frm}")                  # ONLY continue threads with leads from OUR
         if not prior or prior.get("company_id") != co["id"]:         # sales funnel (came through enquiry intake) —
             continue                                                 # never cold mail / vendors pitching us
-        if db.one("select id from tasks where company_id=%s and kind='email_reply' and "
-                  "status in ('new','drafting','awaiting_approval','awaiting_correction') and "
+        if db.one("select id from tasks where company_id=%s and kind in ('email_reply','email_draft') and "
+                  "status in ('queued','new','drafting','awaiting_approval','awaiting_correction') and "
                   "lower(request->'inquiry'->>'email')=lower(%s) limit 1", (co["id"], frm)):
-            continue    # an open reply card for this sender already exists (the inbox sweep got there) — never double up
+            continue    # an open card for this sender already exists (queued counts) — never double up
         _ph = _phishing(m, send_rt, client)   # a hacked lead's mailbox replying on a real thread is the classic lure
         if _ph:
             _flag_phishing(co, m, _ph)
             continue
-        if not _claim_mail(co["id"], gmail.mail_ref(m), m.get("id") or m.get("gmail_id") or ""):
+        if not _claim_mail(co["id"], gmail.mail_ref(m), m.get("id") or m.get("gmail_id") or "", handler="sales"):
             continue    # ONE EMAIL, ONE HANDLING (audit step 2e): the inbox sweep already took this message
         c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (frm,))
         nm = ((((c or {}).get("first_name")) or "") + " " + (((c or {}).get("last_name")) or "")).strip()

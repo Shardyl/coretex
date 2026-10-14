@@ -115,6 +115,12 @@ def they_wrote(company: dict, message: dict, deals: list | None = None, channel:
                                          f" on {channel}"))
     except Exception as e:  # noqa: BLE001 - the message itself must never be lost over bookkeeping
         print(f"[events] {type(e).__name__}: {e}", flush=True)
+    if deal:
+        try:   # ONE CONVERSATION, ONE DRAFT: every OTHER open card on the opportunity is judged against this message
+            from . import conversation
+            conversation.recheck_deal(company, deal["id"], sender or who, body)
+        except Exception as e:  # noqa: BLE001
+            print(f"[events] recheck {type(e).__name__}: {e}", flush=True)
     if log and deal:
         try:
             if channel == "email":
