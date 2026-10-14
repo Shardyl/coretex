@@ -355,7 +355,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 <script>
 // ---- config ----
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
-// never post an old form to a server that has moved on (Gino's New deal form had no contact fields). Keep equal to
+// never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
 const APP_BUILD = 'cortex-v68';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
