@@ -553,7 +553,9 @@ def _cases():
     case("a payment split must make 100%, and the terms' deposit follows it", "quotation flow", _split)
     case("words with nothing for the quotation never cost a model call", "quotation flow",
          lambda: not engine._QUOTE_HINT.search("Make the opening warmer and drop the last line")
-         and engine._QUOTE_HINT.search("go ahead at 25,000 + VAT") and engine._QUOTE_HINT.search("50/50 split"))
+         and engine._QUOTE_HINT.search("go ahead at 25,000 + VAT") and engine._QUOTE_HINT.search("50/50 split")
+         and engine._QUOTE_HINT.search("On option B, drop the vertical cut-down")
+         and engine._QUOTE_HINT.search("add another option without the voice over"))
     case("every quotation card is approved, and approval makes it live", "quotation flow",
          lambda: "_quote_to_email(" in inspect.getsource(engine._approve_quotation_card)
          and "'Mark as seen'" not in open(__import__("os").path.join(__import__("os").path.dirname(__file__), "..", "..",

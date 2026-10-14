@@ -7224,7 +7224,7 @@ def _deal_quote_number(deal_id, customer: str | None) -> str | None:
 #      of the number retired from the library, and the email redrafted around it with his instruction.
 _QUOTE_HINT = re.compile(
     r"\b(?:quot\w*|price[sd]?|pricing|aed|dirhams?|budget|discount|deposit|split|scrap|new number|"
-    r"revision rounds?|rounds? of revisions?|\d{2}\s*/\s*\d{2})\b|\b\d{1,3}(?:[,.]\d{3})+\b|\b\d+(?:\.\d+)?\s*k\b",
+    r"revision rounds?|rounds? of revisions?|options?\s+[a-f]|(?:second|another|alternative)\s+option|\d{2}\s*/\s*\d{2})\b|\b\d{1,3}(?:[,.]\d{3})+\b|\b\d+(?:\.\d+)?\s*k\b",
     re.I)
 _ROUND_WORD = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
 
