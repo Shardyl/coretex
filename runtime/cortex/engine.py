@@ -5116,6 +5116,20 @@ def classify_email(company: dict, email: dict, channel_note: str = "") -> dict:
 _DELIVERY_STAGES = set(stages.DELIVERY)   # stages.py: Booked, Production, Delivered, Final Payment, Recurring
 
 
+_CAL_SUBJECT = re.compile(r"^\s*(invitation|updated invitation|accepted|declined|tentatively accepted|"
+                          r"invitation from google calendar|canceled event|cancelled event|new event)\b", re.I)
+
+
+def _no_reply_mail(e: dict) -> bool:
+    """A calendar invitation/response or a machine-sent message: nothing in it is waiting for our reply."""
+    if (e or {}).get("auto_marker"):
+        return True
+    if _CAL_SUBJECT.search((e or {}).get("subject") or ""):
+        return True
+    return any((a.get("mime") or "").lower() == "text/calendar" or (a.get("filename") or "").lower().endswith(".ics")
+               for a in ((e or {}).get("attachments") or []))
+
+
 def manual_people(co: dict) -> set[str]:
     """People who deal with their own email by hand (owner, 14 Oct 2026: "anything Ayresh is dealing with, let her
     deal with it manually"). Profile key `manual_people` = [emails]; editable, no deploy."""
@@ -6605,12 +6619,16 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                         events.they_wrote(co, e, _sk_deals)       # pause, hold, log + deadlines: same as any reply
                         pipeline.log_deal(int(_sd["id"]), "note", f"No reply drafted to {e.get('email')} "
                                           f"({(e.get('subject') or '(no subject)')[:80]}): {_skip['reason']}.")
-                        notifications.notify(
-                            f"Not drafted: {e.get('name') or e.get('email')} ({(e.get('subject') or '')[:60]})",
-                            f"An email from a client on '{_sd['title']}' got no draft because of the rule: {_skip['reason']}. "
-                            f"It is on the deal's timeline. If it needs your reply, ask Talk to draft one.",
-                            priority="high", category="client", company_id=co.get("id"),
-                            target_type="deal", target_id=str(_sd["id"]), dedup_key=f"skipped-client:{mref or gid}")
+                        # A CALENDAR INVITE OR AN AUTOMATED MESSAGE NEEDS NO REPLY, SO NO NOTICE (14 Oct 2026: Farheen's
+                        # invitation and its update raised two "Not drafted" notices); a real email notifies once a day
+                        if not _no_reply_mail(e):
+                            notifications.notify(
+                                f"Not drafted: {e.get('name') or e.get('email')} ({(e.get('subject') or '')[:60]})",
+                                f"An email from a client on '{_sd['title']}' got no draft because of the rule: {_skip['reason']}. "
+                                f"It is on the deal's timeline. If it needs your reply, ask Talk to draft one.",
+                                priority="high", category="client", company_id=co.get("id"),
+                                target_type="deal", target_id=str(_sd["id"]),
+                                dedup_key=f"skipped-client:{_sd['id']}:{datetime.now(timezone.utc).date().isoformat()}")
                 except Exception as _ske:  # noqa: BLE001
                     print(f"[skip-log] {type(_ske).__name__}: {_ske}", flush=True)
                 results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],

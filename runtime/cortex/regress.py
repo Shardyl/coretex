@@ -697,6 +697,19 @@ def _cases():
          lambda: len(_blk) == 1 and _blk[0]["type"] == "text" and "too large" in _blk[0]["text"]
          and "cap=documents.MAX_DEAL_BYTES" in inspect.getsource(__import__("cortex.api", fromlist=["x"]).talk_from_whatsapp))
 
+    # --- invites raise no notice; the digest arrives at the end of the day (owner, 14 Oct 2026)
+    from datetime import datetime as _dtn, timezone as _tzn
+    _nt = __import__("cortex.notifications", fromlist=["x"])
+    _d1, _due1 = _nt.digest_slot(_dtn(2026, 10, 14, 10, 0, tzinfo=_tzn.utc))    # 14:00 Dubai
+    _d2, _due2 = _nt.digest_slot(_dtn(2026, 10, 14, 15, 0, tzinfo=_tzn.utc))    # 19:00 Dubai
+    case("a calendar invitation is not mail that waits for a reply; a client's question is", "Farheen invite x2",
+         lambda: engine._no_reply_mail({"subject": "Updated invitation: Shama x Sensa @ Thu Oct 15, 2026"})
+         and engine._no_reply_mail({"subject": "Hello", "attachments": [{"mime": "text/calendar"}]})
+         and not engine._no_reply_mail({"subject": "Re: the quotation", "attachments": []}))
+    case("the digest is delivered at 18:00 Dubai; later items go to the next day's", "digest end of day",
+         lambda: _d1 == "2026-10-14" and _due1.hour == 14 and _d2 == "2026-10-15" and _due2.day == 15
+         and "'snoozed'" in inspect.getsource(_nt.notify))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

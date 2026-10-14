@@ -74,6 +74,22 @@ def _topic(title: str) -> str:
     return _re.sub(r"[^a-z]+", "-", head.lower()).strip("-")[:40] or "notice"
 
 
+DIGEST_HOUR = 18   # Dubai: the day's for-information updates arrive ONCE, at the end of the day (owner, 14 Oct 2026)
+
+
+def digest_slot(now=None):
+    """(day the digest belongs to, when it is delivered). Before 18:00 Dubai: today's, delivered today 18:00;
+    after it: tomorrow's, delivered tomorrow 18:00."""
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo("Asia/Dubai")
+    local = (now or datetime.now(timezone.utc)).astimezone(tz)
+    due = local.replace(hour=DIGEST_HOUR, minute=0, second=0, microsecond=0)
+    if local >= due:
+        due += timedelta(days=1)
+    return due.date().isoformat(), due.astimezone(timezone.utc)
+
+
 def _treatment(title: str, priority: str, category: str, target_type, target_id) -> str:
     if priority == "critical" or category in ("security",):
         return "keep"
@@ -99,9 +115,9 @@ def notify(title: str, body: str = "", *, priority: str = "normal", category: st
     if how == "covered":     # the card is already in the Inbox: ping the phone, no second row to drift
         push_only(title, body, url=f"/#task/{tid}", category=category)
         return {"id": None, "title": title, "treatment": "covered"}
+    digest_due = None
     if how == "digest":      # one daily summary per company; this notice becomes a line inside it
-        from datetime import datetime, timezone
-        day = datetime.now(timezone.utc).date().isoformat()
+        day, digest_due = digest_slot()
         item = {"cat": category, "name": (title + (f": {body}" if body else ""))[:220],
                 **({k: v for k, v in (item or {}).items() if k in ("email", "phone")})}
         dedup_key = f"digest:{company_id or 0}:{day}"
@@ -112,8 +128,9 @@ def notify(title: str, body: str = "", *, priority: str = "normal", category: st
         dedup_key = f"deal:{tid}:{_topic(title)}"     # one live notice per deal and topic
 
     if dedup_key:
-        existing = db.one("select * from notifications where dedup_key=%s and state='unread' "
-                          "order by id desc limit 1", (dedup_key,))
+        # a digest collects while it waits (snoozed until 18:00), so the waiting row is the one to add to
+        existing = db.one("select * from notifications where dedup_key=%s and (state='unread' or (%s and "
+                          "state='snoozed')) order by id desc limit 1", (dedup_key, bool(digest_due)))
         if existing:
             items = (existing.get("items") or [])
             if not item and existing.get("title") != title and not dedup_key.startswith("digest:"):
@@ -131,6 +148,13 @@ def notify(title: str, body: str = "", *, priority: str = "normal", category: st
             _route(row, priority)
             return row
 
+    if digest_due:           # held back, shown in the Inbox when the end of the day comes
+        row = db.execute(
+            "insert into notifications (title, body, priority, category, company_id, target_type, target_id, "
+            "dedup_key, items, state, snooze_until) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,'snoozed',%s) returning *",
+            (title, body, priority, category, company_id, target_type, tid, dedup_key, Json([item] if item else []),
+             digest_due))
+        return row
     row = db.execute(
         "insert into notifications (title, body, priority, category, company_id, target_type, target_id, "
         "dedup_key, items) values (%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *",

@@ -3452,3 +3452,12 @@ shoot needs none), then 10% off the whole quotation.
   13 Oct: Talk said it could not read it). A PDF over 10MB or 100 pages now goes in as its extracted TEXT, labelled
   as such (scans: told plainly, ask for a smaller copy); an oversized image is named as too large. WhatsApp files
   save to the library up to 40MB (`documents.save(cap=)`), and a file that cannot be saved is said so in the turn.
+
+## Invites raise no notice; the digest arrives at 18:00 (owner, 14 Oct 2026)
+- Farheen's calendar invitation and its update each raised "Not drafted" (keyed per message). `engine._no_reply_mail`
+  (calendar subjects, a text/calendar or .ics attachment, the bulk/auto markers) -> a skipped client email of that
+  kind is logged on the deal with NO notice; a real skipped client email notifies once per deal per day
+  (`skipped-client:<deal>:<day>`).
+- "Today's updates" is created SNOOZED until 18:00 Dubai (`notifications.digest_slot`, `DIGEST_HOUR`) and collects
+  every for-information item while it waits; it appears in the Inbox once at 18:00. Items after 18:00 go into the
+  next day's digest. Change the hour in `DIGEST_HOUR`.
