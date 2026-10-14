@@ -7344,7 +7344,7 @@ def _spec_from_words(company: dict, deal: dict, customer: str, text: str, intent
             f"OWNER'S DECISION:\n{text}\n\nCHANGES HE ASKED FOR: {intent.get('changes') or '(none stated)'}\n\n"
             f"PREVIOUS VERSION:\n{prev_txt}\n\nOPPORTUNITY: #{deal['id']} {deal.get('title')} (client: {customer})"
             f"\n\nDEAL RECORD:\n{timeline or '(none)'}\n\nRATE CARD:\n{_rc.render(slug) or '(none)'}",
-            model=provider.MODEL_FAST, max_tokens=6000, purpose="quote-from-words", company=slug) or {}
+            model=provider.MODEL_FAST, max_tokens=12000, purpose="quote-from-words", company=slug) or {}
         secs = _copy.deepcopy(spec.get("sections") or [])
         if not secs:
             return {"error": "Not built: the instruction did not describe any lines to quote."}
