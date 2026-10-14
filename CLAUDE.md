@@ -3348,3 +3348,18 @@ shoot needs none), then 10% off the whole quotation.
   thread): the newest open email card on the deal is redrafted from the note (and a quotation decision in it builds the
   quotation first), else a quotation decision builds the quotation on its own. `apply_correction(infer=False)` = a
   redraft that is not him teaching a rule. Cockpit: every quotation card shows "Approve quotation" (sw cortex-v66).
+
+## No opportunity without a contact; a quotation always belongs to one (owner, 14 Oct 2026)
+- CAUSE: Gino asked Talk for the Merck Abu Dhabi Future Health Summit quotation. Deal 161 was opened with NO contact
+  (approving its quotation could email nobody, nothing could chase it) and a second quotation came out under a NEW
+  number (SEN-2026-0039 beside SEN-2026-0037 v3). Owner: "without a contact on an opportunity, it's pointless ... you
+  shouldn't be able to save an opportunity without a contact"; Talk must ask "who is the designated contact".
+- `crm.create_deal(..., contact={name, email | phone, role})` refuses without a valid one (`crm.valid_contact`: an
+  email address, or a phone of 8+ digits for WhatsApp-only leads) with `DealNeedsContact`, and puts the person on the
+  deal itself (primary; a phone-only person by name and number). Every path passes it: qualify, tenders (the issuer),
+  WhatsApp (name + number), the cockpit form (new Contact name / email / WhatsApp fields, checked before saving),
+  Talk `create_deal` (contact_name/email/phone; without them it returns "ask who the designated contact is").
+- Talk `create_quotation`: no deal_id -> the client account's one open opportunity, else it refuses and says to
+  create the opportunity first (with its contact); a deal with a quotation -> the next VERSION of that number.
+  `update_opportunity(documents=)` filing a quotation PDF also puts that quotation's CARD on the deal.
+- Health check `opportunity_without_contact` (report). sw cortex-v67.

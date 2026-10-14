@@ -106,6 +106,13 @@ CHECKS = [
                "and coalesce(cadence->>'name','') <> 'revival'",
     },
     {
+        "key": "opportunity_without_contact",
+        "what": "An open opportunity has no designated contact (no email and no phone)",
+        "sql": "select id, title, stage from crm_projects where stage in ('Opportunity','Quote') and "
+               "coalesce(contact_email,'') = '' and not exists (select 1 from jsonb_array_elements(coalesce(contacts,"
+               "'[]'::jsonb)) c where coalesce(c->>'email','') <> '' or coalesce(c->>'phone','') <> '')",
+    },
+    {
         "key": "quote_deal_off_closing_rhythm",
         "what": "A deal at Quote on auto chases on a slower rhythm than the closing one",
         "sql": "select id, title, cadence->>'name' cadence, next_followup from crm_projects where stage='Quote' and "

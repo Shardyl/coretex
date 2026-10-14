@@ -271,6 +271,19 @@ class DealNeedsCompany(ValueError):
     """Raised when a deal/opportunity is created without one of YOUR businesses set."""
 
 
+class DealNeedsContact(ValueError):
+    """NO OPPORTUNITY WITHOUT A CONTACT (owner, 14 Oct 2026: "without a contact on an opportunity, it's pointless ...
+    you shouldn't be able to save an opportunity without a contact"). Merck's Future Health Summit deal (161) was
+    opened through Talk with no one on it, so approving its quotation could email nobody and nothing could chase it."""
+
+
+def valid_contact(contact: dict | None) -> bool:
+    """A designated contact: an email address, or a phone number (WhatsApp-only leads have no email)."""
+    c = contact or {}
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", (c.get("email") or "").strip())) or \
+        len(re.sub(r"\D", "", c.get("phone") or "")) >= 8
+
+
 def _require_business(company: str | None) -> str:
     """A deal/opportunity MUST belong to one of YOUR businesses. Returns the canonical org name, else raises.
     Accepts a slug (sensa) or display name (Sensa); rejects empty, 'all', or any non-business (e.g. a client name)."""
@@ -1641,8 +1654,8 @@ def qualify_opportunity(email: str, company_slug: str, title: str | None = None)
     if not c:
         return None
     title = (title or _deal_name_from_inquiry(c)).strip()
-    d = create_deal(company_slug, title, stage="Opportunity", account_id=c.get("account_id"))
-    add_deal_contact(d["id"], email, primary=True)
+    d = create_deal(company_slug, title, stage="Opportunity", account_id=c.get("account_id"),
+                    contact={"email": email})
     if (c.get("classification") or "") == "not_qualified":
         set_classification(email, "lead")        # re-qualifying clears a prior not-qualified flag
     db.execute("delete from settings where key like %s", (f"lead_fu:%:{email.lower()}",))  # the lead is now an opportunity
@@ -1960,13 +1973,17 @@ def open_opportunity_for_account(account_id, company: str | None) -> dict | None
 
 
 def create_deal(company: str, title: str, value=None, currency: str = "AED", stage: str = "Opportunity",
-                account_id=None, owner: str | None = None, second_job: bool = False, arm: bool = True) -> dict:
+                account_id=None, owner: str | None = None, second_job: bool = False, arm: bool = True,
+                contact: dict | None = None) -> dict:
     """A deal belongs to one of YOUR businesses (company) and one CLIENT company (account). Its people are
     that account's contacts (company-mediated — no per-deal contact list). Blocks an active same-name
     duplicate, and (17 Sep 2026) a second open opportunity for the same client account unless the caller
     says it is genuinely a second job (`second_job=True`, after the owner confirms)."""
     org = _require_business(company)
     title = (title or "").strip()
+    if not valid_contact(contact):
+        raise DealNeedsContact("An opportunity needs a designated contact: a name with an email address, or a "
+                               "WhatsApp number. Who is the contact for this one?")
     dup = db.one("select id from crm_projects where company=%s and lower(title)=lower(%s) and stage <> %s limit 1",
                  (org, title, LOST_STAGE))
     if dup:
@@ -1983,6 +2000,21 @@ def create_deal(company: str, title: str, value=None, currency: str = "AED", sta
         "values (%s,%s,%s,%s,%s,%s,%s,%s) returning id",
         (org, title, value, currency, stage, owner, account_id,
          Json([{"ts": _now(), "event": "deal_created", "text": f"{title} ({stage})"}])))
+    _em = (contact.get("email") or "").strip().lower()
+    if _em:
+        add_deal_contact(row["id"], _em, contact.get("role") or "", primary=True)
+        if contact.get("name") and not db.one("select 1 from crm_master where lower(email)=%s and "
+                                               "coalesce(first_name,'')<>''", (_em,)):
+            _nm = str(contact["name"]).split()
+            try:
+                db.execute("update crm_master set first_name=%s, last_name=%s where lower(email)=%s and "
+                           "coalesce(first_name,'')=''", (_nm[0], " ".join(_nm[1:]), _em))
+            except Exception:  # noqa: BLE001
+                pass
+    else:                       # a WhatsApp-only person: on the deal by name and number
+        db.execute("update crm_projects set contacts=%s where id=%s",
+                   (Json([{"name": contact.get("name") or contact.get("phone"), "email": "",
+                           "phone": contact.get("phone"), "primary": True}]), row["id"]))
     if account_id and stage in WON_STAGES:
         flag_clients_for_deal(db.one("select * from crm_projects where id=%s", (row["id"],)))
     if arm:   # a tender deal gets its contact a moment later: no chase, no "no contact" notice

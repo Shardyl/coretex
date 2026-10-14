@@ -2951,7 +2951,8 @@ def _track_tender(co: dict, e: dict, what: str, rt_key: str | None = None, clien
                 pass
     if not d:
         try:
-            d = crm.create_deal(slug, title, stage="Opportunity", arm=False)
+            d = crm.create_deal(slug, title, stage="Opportunity", arm=False,
+                                contact={"email": email, "role": "issuer"})
             fresh = True
         except crm.DuplicateDeal:
             d = db.one("select * from crm_projects where company=%s and lower(title)=lower(%s) limit 1",

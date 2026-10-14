@@ -1132,6 +1132,9 @@ async function openNewDeal(accountId){
       <label>Your business</label><select id="nd_biz" class="fsel">${biz}</select>
       <label>Deal name</label><input id="nd_title" class="fsel">
       <label>Organisation</label><select id="nd_acc" class="fsel">${accountOptions(accountId)}</select>
+      <label>Contact name</label><input id="nd_cname" class="fsel" autocomplete="off">
+      <label>Contact email</label><input id="nd_cemail" class="fsel" type="email" autocomplete="off">
+      <label>Contact WhatsApp / phone (if no email)</label><input id="nd_cphone" class="fsel" type="tel" autocomplete="off">
       <label>Value</label><input id="nd_value" class="fsel" type="number" inputmode="decimal">
       <label>Currency</label><select id="nd_cur" class="fsel"><option>AED</option><option>USD</option><option>GBP</option><option>EUR</option></select>
       <label>Stage</label><select id="nd_stage" class="fsel">${stages}</select>
@@ -1140,10 +1143,13 @@ async function openNewDeal(accountId){
 async function saveNewDeal(){
   const title=fval('nd_title').trim(); if(!title){ toast('Deal name is required'); return; }
   if(!fval('nd_biz')){ toast('Pick which of your businesses this opportunity is for'); return; }
+  // NO OPPORTUNITY WITHOUT A CONTACT (owner, 14 Oct 2026)
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(fval('nd_cemail').trim()) && fval('nd_cphone').replace(/\D/g,'').length<8){
+    toast('Add the contact: an email address, or a WhatsApp number'); return; }
   if(_saving) return; _saving=true;
   try{ let acc=fval('nd_acc'); if(acc==='__new'){ const name=prompt('New organisation name:'); if(name){ const a=await api('/api/crm/accounts/new',{method:'POST',body:JSON.stringify({name})}); await accountsCache(true); acc=a.id; } else acc=''; }
     const value=parseFloat(fval('nd_value'))||null;
-    const d=await api('/api/crm/deals/new',{method:'POST',body:JSON.stringify({company:fval('nd_biz'),title,value,currency:fval('nd_cur'),stage:fval('nd_stage'),account_id:acc?+acc:null})});
+    const d=await api('/api/crm/deals/new',{method:'POST',body:JSON.stringify({company:fval('nd_biz'),title,value,currency:fval('nd_cur'),stage:fval('nd_stage'),account_id:acc?+acc:null,contact_name:fval('nd_cname').trim(),contact_email:fval('nd_cemail').trim(),contact_phone:fval('nd_cphone').trim()})});
     toast('Deal created'); openProject(d.id); }
   catch(e){ toast('Could not create ('+e.message+')'); }
   finally{ _saving=false; }

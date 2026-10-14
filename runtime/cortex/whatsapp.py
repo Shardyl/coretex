@@ -219,7 +219,8 @@ def _ensure_opportunity(co: dict, phone: str, who: str, summary: str, src: dict 
     from . import crm, pipeline
     title = f"WhatsApp enquiry: {who or phone}"
     try:
-        deal = crm.create_deal(co.get("slug") or "sensa", title, stage="Opportunity", arm=False)
+        deal = crm.create_deal(co.get("slug") or "sensa", title, stage="Opportunity", arm=False,
+                               contact={"name": who or phone, "phone": phone})
     except Exception as e:  # noqa: BLE001 - DuplicateDeal included: an existing deal is the right answer
         print(f"[whatsapp] no opportunity for {phone}: {str(e)[:160]}", flush=True)
         return None

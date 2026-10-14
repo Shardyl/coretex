@@ -1925,6 +1925,9 @@ class NewDealBody(BaseModel):
     currency: str = "AED"
     stage: str = "Opportunity"
     account_id: int | None = None
+    contact_name: str = ""
+    contact_email: str = ""
+    contact_phone: str = ""
 
 
 @app.post("/api/crm/deals/new")
@@ -1935,9 +1938,13 @@ def crm_create_deal(body: NewDealBody, _: None = Depends(auth)) -> dict:
         raise HTTPException(status_code=400, detail=f"stage must be one of {crm.DEAL_STAGES}")
     try:
         return crm.create_deal(body.company, body.title, body.value, body.currency, body.stage, body.account_id,
-                               second_job=True)   # the cockpit form is the owner's own hand: his call
+                               second_job=True,   # the cockpit form is the owner's own hand: his call
+                               contact={"name": body.contact_name.strip(), "email": body.contact_email.strip(),
+                                        "phone": body.contact_phone.strip()})
     except crm.DuplicateDeal as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except crm.DealNeedsContact as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except crm.DealNeedsCompany as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -3420,8 +3427,10 @@ SKILL_TOOLS = [
      "description": "Create a contact (a person). 'company' = the client company they work at (linked/created automatically). 'business' = which of YOUR businesses (slug) it relates to.",
      "input_schema": {"type": "object", "properties": {"first_name": {"type": "string"}, "last_name": {"type": "string"}, "email": {"type": "string"}, "company": {"type": "string", "description": "client company name"}, "business": {"type": "string", "description": "your business slug"}, "phone": {"type": "string"}, "job_title": {"type": "string"}}, "required": ["email"]}},
     {"name": "create_deal",
-     "description": "Create a deal. 'business' = which of YOUR businesses (slug). 'company' = the CLIENT ORGANISATION name — a real company, NEVER the deal/project title. The deal links to that organisation (its people come from there). If you don't know the client organisation, OMIT company (the deal is created unlinked) — do NOT pass the deal title as the company, or invent an org. Defaults to the Opportunity stage.",
-     "input_schema": {"type": "object", "properties": {"business": {"type": "string"}, "title": {"type": "string", "description": "the deal/project name"}, "value": {"type": "number"}, "currency": {"type": "string"}, "stage": {"type": "string"}, "company": {"type": "string", "description": "the CLIENT ORGANISATION (real company), distinct from the deal title; omit if unknown"}, "second_job": {"type": "boolean", "description": "ONLY after Rashad has been told this client already has an open opportunity and has confirmed this is a genuinely separate job"}}, "required": ["business", "title"]}},
+     "description": "Create a deal. EVERY OPPORTUNITY NEEDS A DESIGNATED CONTACT: before calling this, ask who the contact "
+                    "is (their name and email, or a WhatsApp number if they have no email) unless you were already told; "
+                    "never guess or invent one. 'business' = which of YOUR businesses (slug). 'company' = the CLIENT ORGANISATION name — a real company, NEVER the deal/project title. The deal links to that organisation (its people come from there). If you don't know the client organisation, OMIT company (the deal is created unlinked) — do NOT pass the deal title as the company, or invent an org. Defaults to the Opportunity stage.",
+     "input_schema": {"type": "object", "properties": {"business": {"type": "string"}, "title": {"type": "string", "description": "the deal/project name"}, "value": {"type": "number"}, "currency": {"type": "string"}, "stage": {"type": "string"}, "company": {"type": "string", "description": "the CLIENT ORGANISATION (real company), distinct from the deal title; omit if unknown"}, "second_job": {"type": "boolean", "description": "ONLY after Rashad has been told this client already has an open opportunity and has confirmed this is a genuinely separate job"}, "contact_name": {"type": "string", "description": "the designated contact's name"}, "contact_email": {"type": "string", "description": "the designated contact's email"}, "contact_phone": {"type": "string", "description": "their WhatsApp/phone number, when they have no email"}}, "required": ["business", "title"]}},
     {"name": "schedule_report",
      "description": "Schedule the per-business SEO & traffic report to run on a cadence; it lands in the Inbox. weekday 0=Mon..6=Sun.",
      "input_schema": {"type": "object", "properties": {"company": {"type": "string", "description": "your business slug"}, "cadence": {"type": "string", "enum": ["daily", "weekly", "monthly"]}, "weekday": {"type": "integer"}, "hour": {"type": "integer"}}, "required": ["company"]}},
@@ -4049,6 +4058,9 @@ def _update_opportunity(inp: dict) -> str:
             done.append(f"document '{ref}' NOT found")
             continue
         db.execute("update company_documents set deal_id=%s where id=%s", (did, doc["id"]))
+        _qn = re.search(r"\b(SEN-\d{4}-\d{4})\b", doc["filename"] or "")
+        if _qn:          # a quotation's CARD goes on the deal too: its approval is what emails the client
+            db.execute("update tasks set deal_id=%s where kind='quotation' and request->>'number'=%s", (did, _qn.group(1)))
         _pl.log_deal(did, "document_filed", f"Filed: {doc['filename']} (owner, via Talk).", ref=f"doc:{doc['id']}")
         done.append(f"filed {doc['filename']}")
     if (inp.get("next_chase") or "").strip() or inp.get("chase_every_days"):
@@ -4475,12 +4487,19 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                              "A deal links to a client ORGANISATION, never to its own title. Pick or create the "
                              "client organisation, then link the deal to it.")
         stage = inp.get("stage") if inp.get("stage") in crm.DEAL_STAGES else "Opportunity"
+        _contact = {"name": (inp.get("contact_name") or "").strip(), "email": (inp.get("contact_email") or "").strip(),
+                    "phone": (inp.get("contact_phone") or "").strip()}
+        if not crm.valid_contact(_contact):
+            return ("NOT created: an opportunity needs a designated contact. Ask who the contact is for this "
+                    "opportunity (their name and email, or a WhatsApp number), then call create_deal again with it.")
         try:
             d = crm.create_deal(inp.get("business", "sensa"), title, value=inp.get("value"),
                                 currency=inp.get("currency", "AED"), stage=stage, account_id=aid,
-                                second_job=bool(inp.get("second_job")))
+                                second_job=bool(inp.get("second_job")), contact=_contact)
         except crm.DuplicateDeal as e:
             return str(e) + " Tell Rashad, and ask before creating a second one."
+        except crm.DealNeedsContact as e:
+            return "NOT created: " + str(e)
         return (f"created deal '{d['title']}' ({d['stage']}, {d.get('value') or 'no value'} {d['currency']})"
                 + (f" for {comp}" if comp and aid else "") + link_note)
     if name == "schedule_report":
@@ -4602,6 +4621,22 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         _co = store.get_company_by_slug(slug) if slug else None
         if not _co:
             return f"unknown business '{slug}' — tell me which of your businesses this quote is for"
+        # A QUOTATION BELONGS TO AN OPPORTUNITY (owner, 14 Oct 2026): Gino asked Talk for the Future Health Summit
+        # quotation with no deal named, and a second one came out under a new number (SEN-2026-0039 beside 0037 v3).
+        # No deal named -> the client's one open opportunity, else ask; a deal with a quotation -> its NEXT VERSION.
+        if not inp.get("deal_id"):
+            _acc = db.one("select id from crm_accounts where lower(name)=lower(%s)", ((inp.get("customer") or "").strip(),)) \
+                if (inp.get("customer") or "").strip() else None
+            _opp = crm.open_opportunity_for_account(_acc["id"], slug) if _acc else None
+            if not _opp:
+                return ("Quotation NOT built: which opportunity is it for? A quotation always belongs to an opportunity. "
+                        "If there is none yet, create it first with create_deal (ask who the designated contact is), "
+                        "then build the quotation with its deal_id.")
+            inp["deal_id"] = _opp["id"]
+        if not inp.get("number"):
+            _cur = engine._deal_quote(int(inp["deal_id"]))
+            if _cur.get("number") and (_cur.get("customer") or "").strip().lower() == (inp.get("customer") or "").strip().lower():
+                inp["number"] = _cur["number"]       # the next version of the deal's quotation, never a new number
         # CODE PRICES EVERY LINE (owner, 11 Sep 2026). A line priced by `components` is costed from the rate
         # card; a typed price survives only if it is a card rate or a figure the owner wrote in this
         # conversation; a total counts only if he wrote it. The model decides what a line contains, never

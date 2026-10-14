@@ -581,6 +581,20 @@ def _cases():
     case("his decision is read: 25,000, one round, 70/30; a client's ask is not a decision", "quotation flow",
          _intent, model=True)
 
+    # --- no opportunity without a contact; a quotation always belongs to one (Merck 161, 14 Oct)
+    _cr = __import__("cortex.crm", fromlist=["x"])
+    case("an opportunity cannot be created without a contact", "Merck Future Health Summit",
+         lambda: not _cr.valid_contact({}) and not _cr.valid_contact({"name": "Ricola"})
+         and _cr.valid_contact({"email": "a@b.com"}) and _cr.valid_contact({"phone": "+971 50 123 4567"})
+         and "DealNeedsContact" in inspect.getsource(_cr.create_deal))
+    case("every creation path passes its contact", "Merck Future Health Summit",
+         lambda: "contact=" in inspect.getsource(_cr.qualify_opportunity)
+         and 'contact={"email": email, "role": "issuer"}' in inspect.getsource(engine)
+         and "contact=" in inspect.getsource(__import__("cortex.whatsapp", fromlist=["x"])))
+    case("Talk asks for the designated contact and ties a quotation to its opportunity", "Merck Future Health Summit",
+         lambda: "designated contact" in inspect.getsource(__import__("cortex.api", fromlist=["x"])._exec_skill_tool)
+         and "which opportunity is it for" in inspect.getsource(__import__("cortex.api", fromlist=["x"])._exec_skill_tool))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
