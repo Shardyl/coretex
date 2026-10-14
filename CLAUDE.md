@@ -3428,3 +3428,13 @@ shoot needs none), then 10% off the whole quotation.
 - Wording: New opportunity / Opportunity name / Create opportunity (New project on the Projects screen, stage Booked);
   Talk's tool is `create_opportunity` (old `create_deal` still executes for old conversations) and Talk says
   opportunity, never deal.
+
+## The team talks to Cortex on WhatsApp too (owner, 14 Oct 2026)
+- Setting `wa_team_numbers` = {number: user email} (Gino: +971588300854 -> gino@sensa.digital). `whatsapp.team_member`
+  matches on the last 9 digits and returns the active `users` row; a message from that number is never triaged as an
+  enquiry: `_team_message` sends it (typed, voice note, picture, file, forwards) to Talk via
+  `api.talk_from_whatsapp(user=)`, which runs with THAT user's scope (same as their cockpit: their companies, no
+  universal rules, money owner-only), on their own rolling chat (`wa_talk_conv:<email>`, "WhatsApp (Gino)"), and the
+  answer goes back to their phone (`_tell(to=)`). Talk buffers are per sender (`_TALK_BUFS`), so two people's turns
+  never merge. Approve / Edit / Skip buttons stay the owner's: a team member tapping one is told to use the app.
+  Add a person = add their number to the setting; no deploy.

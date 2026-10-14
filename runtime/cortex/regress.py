@@ -667,6 +667,14 @@ def _cases():
          and any(t["name"] == "create_opportunity" for t in _api.SKILL_TOOLS)
          and not any(t["name"] == "create_deal" for t in _api.SKILL_TOOLS))
 
+    # --- a team member talks to Cortex on WhatsApp as themselves (owner, 14 Oct 2026: Gino)
+    _wa = __import__("cortex.whatsapp", fromlist=["x"])
+    case("a team member's number goes to Talk as them, with their scope, answered on their phone", "Gino WhatsApp",
+         lambda: "_team_message(" in inspect.getsource(_wa.ingest_cloud)
+         and "user=" in inspect.getsource(_wa._talk_turn) and "to=to" in inspect.getsource(_wa._talk_turn)
+         and "user if team else owner" in inspect.getsource(__import__("cortex.api", fromlist=["x"]).talk_from_whatsapp)
+         and _wa.team_member("") is None)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
