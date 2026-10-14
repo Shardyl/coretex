@@ -7276,13 +7276,16 @@ def _quote_intent(text: str) -> dict | None:
                                                           for w, v in _ROUND_WORD.items() if v == int(rr))):
         out["rounds"] = int(rr)
     pay = r.get("payment")
-    if isinstance(pay, list) and len(pay) >= 2:
+    if isinstance(pay, list) and pay:
         try:
-            pcts = [int(round(float(p.get("pct")))) for p in pay]
+            parts = [{"pct": int(round(float(p.get("pct")))), "when": str(p.get("when") or "")} for p in pay]
+            if len(parts) == 1:        # "a 70% deposit": the balance is the rest, arithmetic not a figure to invent
+                parts.append({"pct": 100 - parts[0]["pct"], "when": ""})
+            pcts = [p["pct"] for p in parts]
             stated = all(re.search(rf"\b{p}\s*%?", text or "") for p in pcts[:-1])
-            if stated and sum(pcts[:-1]) < 100:
-                pcts[-1] = 100 - sum(pcts[:-1])         # the remainder is arithmetic, not a figure to invent
-                out["payment"] = [{"pct": p, "when": str((pay[i] or {}).get("when") or "")} for i, p in enumerate(pcts)]
+            if stated and 0 < sum(pcts[:-1]) < 100:
+                parts[-1]["pct"] = 100 - sum(pcts[:-1])
+                out["payment"] = parts
         except (TypeError, ValueError, AttributeError):
             pass
     if not (out.get("target") or out.get("rounds") or out.get("payment") or out["changes"] or out["mode"] != "revise"):
