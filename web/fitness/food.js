@@ -1809,16 +1809,46 @@ window.foodPhotoPicked=async function(inp){
       <button class="fd-btn" onclick="foodPhotoAdd()">Add to log</button>`;
   }catch(e){out.innerHTML='<div class="fd-note">Photo analysis failed. Check your connection and try again.</div>';}
 };
+// Photo items logged before 15 Oct 2026 had no saved food: give each name one (from its newest entry) and link them.
+function photoFoodsBackfill(){
+  const byName={};
+  foodLog.forEach(e=>{if(e.notes==='photo estimate'&&!e.foodId&&e.qtyG>0&&e.kcal!=null){const k=(e.name||'').trim().toLowerCase();if(!byName[k]||tWhen(e)>tWhen(byName[k]))byName[k]=e;}});
+  let nf=0,nl=0;
+  Object.keys(byName).forEach(k=>{
+    const e=byName[k];let f=foods.find(x=>!x.deleted&&(x.name||'').trim().toLowerCase()===k);
+    if(!f){const per=x=>x==null?null:Math.round(x/e.qtyG*1000)/10;
+      f={id:newId('food'),name:e.name,brand:null,barcode:null,kcal100:per(e.kcal),protein100:per(e.protein),carbs100:per(e.carbs),fat100:per(e.fat),
+        fibre100:null,servingLabel:'portion',servingG:r1(e.qtyG),units:[{label:'portion',g:r1(e.qtyG)}],source:'photo',favourite:false};
+      foods.push(f);nf++;}
+    foodLog.forEach(x=>{if(x.notes==='photo estimate'&&!x.foodId&&(x.name||'').trim().toLowerCase()===k){x.foodId=f.id;nl++;}});
+  });
+  if(nf)saveFoods();if(nl)saveFoodLog();
+}
+setTimeout(()=>{try{photoFoodsBackfill();}catch(e){}},5000);
 window.foodPhotoAdd=function(){
-  const items=window._fdPhoto||[];let n=0;
+  const items=window._fdPhoto||[];let n=0,newFoods=0;
   const v=(k,i)=>{const x=document.getElementById(`fp_${k}_${i}`).value;return x===''?null:+x;};
   items.forEach((it,i)=>{
     if(!document.getElementById('fpK'+i).checked)return;
-    foodLog.push({id:newId('fl'),date:foodDay,at:nowAt(),meal:mealFor(nowAt()),foodId:null,name:it.name,qtyG:v('grams',i),
-      kcal:r0(v('kcal',i)),protein:r1(v('protein',i)),carbs:r1(v('carbs',i)),fat:r1(v('fat',i)),notes:'photo estimate'});
+    const g=v('grams',i), kc=v('kcal',i);
+    // Every photo item is also kept in My foods (owner, 15 Oct 2026), so typing its name finds it and it opens at the
+    // portion in the photo. Per-100 g values are worked out from the estimate; a name already in My foods is reused.
+    let f=foods.find(x=>!x.deleted&&(x.name||'').trim().toLowerCase()===String(it.name||'').trim().toLowerCase());
+    if(!f&&g>0&&kc!=null){
+      const per=x=>x==null?null:Math.round(x/g*1000)/10;
+      f={id:newId('food'),name:it.name,brand:null,barcode:null,kcal100:per(kc),protein100:per(v('protein',i)),carbs100:per(v('carbs',i)),
+        fat100:per(v('fat',i)),fibre100:null,servingLabel:'portion',servingG:r1(g),units:[{label:'portion',g:r1(g)}],
+        source:'photo',favourite:false};
+      foods.push(f);newFoods++;
+    }
+    const un=f&&(f.units||[]).find(u=>u.label==='portion'&&Math.abs(u.g-g)<0.5);
+    foodLog.push({id:newId('fl'),date:foodDay,at:nowAt(),meal:mealFor(nowAt()),foodId:f?f.id:null,name:it.name,qtyG:g,
+      kcal:r0(kc),protein:r1(v('protein',i)),carbs:r1(v('carbs',i)),fat:r1(v('fat',i)),notes:'photo estimate',
+      unitLabel:un?'portion':null,unitCount:un?1:null});
     n++;
   });
   if(!n){toast('Nothing ticked');return;}
+  if(newFoods)saveFoods();
   saveFoodLog();closeSheet();renderToday();toast(n+' item'+(n===1?'':'s')+' added (photo estimate)');
 };
 
@@ -1862,7 +1892,7 @@ function renderFoodsPage(){
     <div class="fd-note" style="margin-top:0">Starred foods sit at the top of the add list. Values are per 100 g.</div>
     ${list.map(f=>`<div class="fd-item" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
       <div onclick="foodEditFood('${f.id}')" style="flex:1"><div class="n">${esc(f.name)}${f.brand?` <span class="fd-chip">${esc(f.brand)}</span>`:''}</div>
-      <div class="m">${fmtN(f.kcal100)} kcal &middot; ${r1(f.protein100)??'—'} g P${used[f.id]?' &middot; last eaten '+fmtDate(used[f.id]):''}</div></div>
+      <div class="m">${f.source==='photo'?'<span style="color:var(--amber)">photo estimate</span> &middot; ':''}${fmtN(f.kcal100)} kcal &middot; ${r1(f.protein100)??'—'} g P${used[f.id]?' &middot; last eaten '+fmtDate(used[f.id]):''}</div></div>
       <button class="btn-sm" onclick="foodToggleFav('${f.id}')" aria-label="Favourite" style="font-size:16px;color:${f.favourite?'var(--amber)':'var(--ink3)'}">${f.favourite?'&#9733;':'&#9734;'}</button></div>`).join('')}
     <button class="btn-add" onclick="foodEditFood(null)">+ New food</button>
     <div class="section-label" style="margin-top:18px">Saved meals (${savedMeals.length})</div>
