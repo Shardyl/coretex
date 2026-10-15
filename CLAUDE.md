@@ -3431,7 +3431,8 @@ shoot needs none), then 10% off the whole quotation.
   opportunity, never deal.
 
 ## The team talks to Cortex on WhatsApp too (owner, 14 Oct 2026)
-- Setting `wa_team_numbers` = {number: user email} (Gino: +971588300854 -> gino@sensa.digital). `whatsapp.team_member`
+- Setting `wa_team_numbers` = {number: user email} (Gino: +971588300854 -> gino@sensa.digital; Ayresh: +971547886009 ->
+  ayresh@sensa.digital, added 15 Oct 2026). `whatsapp.team_member`
   matches on the last 9 digits and returns the active `users` row; a message from that number is never triaged as an
   enquiry: `_team_message` sends it (typed, voice note, picture, file, forwards) to Talk via
   `api.talk_from_whatsapp(user=)`, which runs with THAT user's scope (same as their cockpit: their companies, no
