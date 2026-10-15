@@ -209,8 +209,14 @@ def _rules(deal: dict, items: dict) -> list[str]:
             _cancel_rem(r, did, "waits on the client")
             pipeline.log_deal(did, "context", f"Waiting on the client (no reminder): {r['title'][:200]}")
             done.append(f"cancelled reminder #{r['id']} (waits on the client)")
-    if stage not in stages.SALES and stage not in stages.WON:
-        return done
+    # a chase raised before a full rhythm step after our last email is too soon (Massar 1262: two days after the last)
+    from . import gate
+    floor = gate._rhythm_floor(db.one("select id, stage, history, cadence, followup_step, company from crm_projects "
+                                      "where id=%s", (did,)) or {}, hist) if stage in stages.SALES else None
+    for t in items["cards"]:
+        if (t.get("request") or {}).get("followup") in _AUTO_FOLLOW and floor and t["created_at"] < floor - timedelta(hours=6):
+            _cancel_card(t, f"Inbox tidy: too soon after our last email; the next chase is due from {floor:%a %d %b}")
+            done.append(f"cancelled chase card #{t['id']} (too soon; next chase from {floor:%a %d %b})")
     return done
 
 
@@ -221,7 +227,9 @@ _JUDGE = (
     "- close: already done, overtaken by later activity, a duplicate of another item, about something that no longer "
     "applies, or waiting on the CLIENT rather than on us;\n"
     "- move: still right but too early; give `when` as words (e.g. 'next Tuesday', '20 October').\n"
-    "Be conservative: close only when the activity clearly shows it. Then read the CLIENT'S POSTURE from their own words "
+    "Be conservative: close only when the activity clearly shows it. Entries named not_pursued, Inbox tidy or a note "
+    "are OUR internal decisions and bookkeeping, never the client's answer: 'not pursued' means we chose not to answer one "
+    "particular message, and says nothing about this opportunity. Then read the CLIENT'S POSTURE from their own words "
     "and our exchange: engaged (talking, asking), weighing (has our quote, deciding), on_hold (they said it is paused or "
     "gave a later time), quiet (no answer to our recent emails), declined (they said no), won (they said yes).\n"
     'Return {"posture": "...", "posture_why": "<one line>", "items": [{"id": "<id as given>", "verdict": '
