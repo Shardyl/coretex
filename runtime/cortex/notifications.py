@@ -149,6 +149,10 @@ def notify(title: str, body: str = "", *, priority: str = "normal", category: st
             return row
 
     if digest_due:           # held back, shown in the Inbox when the end of the day comes
+        # ONE DAY'S DIGEST AT A TIME (15 Oct 2026): a delivered digest from an earlier day goes once the next starts
+        db.execute("update notifications set state='dismissed' where category='digest' and company_id is not distinct "
+                   "from %s and dedup_key <> %s and state in ('unread','snoozed') and snooze_until <= now()",
+                   (company_id, dedup_key))
         row = db.execute(
             "insert into notifications (title, body, priority, category, company_id, target_type, target_id, "
             "dedup_key, items, state, snooze_until) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,'snoozed',%s) returning *",
