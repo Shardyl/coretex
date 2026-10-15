@@ -87,7 +87,7 @@ function nowAt(){
 // Every entry on `day` with no time, or a time before that day's break-fast, moves to the break-fast time.
 const EATEN_FIX_FROM='2026-10-04';   // owner: data is accurate from 4 Oct 2026; older days are left as they were
 function settleEatenTimes(day){
-  const f=fastDay(day);if(!f||!f.brokeAt||day<EATEN_FIX_FROM)return false;
+  const f=fastDay(day);if(!f||!f.brokeAt||day<EATEN_FIX_FROM||day>=AUTO_FAST_FROM)return false;
   const b=new Date(f.brokeAt);let n=0;
   foodLog.forEach(e=>{if(e.date===day&&(!e.at||new Date(e.at)<b)){e.at=f.brokeAt;e.meal=mealFor(e.at);n++;}});
   return n>0;
@@ -296,6 +296,38 @@ function renderTodayInner(){
   `;
 }
 // ---------- fasting (break-fast / close eating window) ----------
+// AUTOMATIC from 15 Oct 2026 (owner): he logs at the first bite, so the food log IS the eating window. The first food
+// with calories breaks the fast, the last one closes the window once the day is over (04:00 next morning: a snack after
+// midnight still belongs to the evening before). Zero-calorie items (black coffee, water, creatine) never count.
+// Days before AUTO_FAST_FROM keep the times he set by hand. To correct a time, edit the food's time.
+const AUTO_FAST_FROM='2026-10-15', LATE_HOUR=4;
+function eatDay(e){
+  if(!e.at)return e.date;const d=new Date(e.at);
+  return d.getHours()<LATE_HOUR&&localDay(d)===e.date?shiftDay(e.date,-1):e.date;
+}
+function foodTimes(day){return foodLog.filter(e=>e.at&&+e.kcal>0&&eatDay(e)===day).map(e=>new Date(e.at).getTime()).sort((a,b)=>a-b);}
+function lastFoodBefore(t){let b=null;foodLog.forEach(e=>{if(!e.at||!(+e.kcal>0))return;const x=new Date(e.at).getTime();if(x<t&&(b==null||x>b))b=x;});return b==null?null:new Date(b);}
+function autoFasts(){
+  const today=localDay(new Date()), late=new Date().getHours()<LATE_HOUR, days=new Set();
+  foodLog.forEach(e=>{if(e.at&&+e.kcal>0){const d=eatDay(e);if(d>=AUTO_FAST_FROM)days.add(d);}});
+  fastDays.forEach(f=>{if(f.date>=AUTO_FAST_FROM)days.add(f.date);});
+  const same=(a,b)=>(a?new Date(a).getTime():null)===(b?new Date(b).getTime():null);
+  let changed=false;
+  days.forEach(d=>{
+    const ts=foodTimes(d), over=d<today&&!(late&&d===shiftDay(today,-1));
+    const broke=ts.length?new Date(ts[0]).toISOString():null, closed=ts.length&&over?new Date(ts[ts.length-1]).toISOString():null;
+    let f=fastDay(d);
+    if(!f){if(!broke)return;f={date:d,brokeAt:null,closedAt:null};fastDays.push(f);}
+    if(same(f.brokeAt,broke)&&same(f.closedAt,closed))return;
+    f.brokeAt=broke;f.closedAt=closed;f.auto=true;
+    // the server coalesces nulls, so an emptied time is sent as cleared
+    f.cleared=['brokeAt','closedAt'].filter(k=>!f[k]);
+    changed=true;
+  });
+  if(changed)saveFasts();
+  return changed;
+}
+window.autoFasts=autoFasts;
 function fastDay(day){return fastDays.find(f=>f.date===day)||null;}
 // Free day: the Today button was removed 7 Oct 2026 at the owner's request (the data shows such days anyway);
 // tags still render for any day flagged earlier. Originally: one tap on Today, stored on the day's fast_days row with the time it
@@ -329,27 +361,28 @@ function longHM(ms){const h=ms/3600000;return h>=24?Math.floor(h/24)+'d '+Math.f
 function atTime(day,hhmm){const [h,m]=(hhmm||'').split(':').map(Number);const d=new Date(day+'T00:00:00');d.setHours(h||0,m||0,0,0);return d.toISOString();}
 function nowHM(){const n=new Date();return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');}
 function fastCard(){
-  const f=fastDay(foodDay), prev=fastDay(shiftDay(foodDay,-1)), isToday=foodDay===localDay(new Date());
+  try{autoFasts();}catch(e){}
+  const f=fastDay(foodDay), isToday=foodDay===localDay(new Date()), auto=foodDay>=AUTO_FAST_FROM;
   if(!f||!f.brokeAt){
-    const since=isToday?lastCloseBefore(new Date()):(prev&&prev.closedAt?new Date(prev.closedAt):null);
+    const since=isToday?(lastCloseBefore(new Date())||lastFoodBefore(Date.now())):null;
     const sinceTxt=since?(localDay(since)===shiftDay(localDay(new Date()),-1)?tOf(since.toISOString())+' yesterday':since.toLocaleString('en-GB',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})):'';
     return `<div class="card" style="padding:12px 16px">
-      <div class="fd-sub">Fasting${since&&isToday?' &middot; since '+sinceTxt:''}</div>
-      ${since&&isToday?`<div class="fd-big" style="font-size:28px;color:${ragFast(Date.now()-since)}" id="fdFastLive" data-since="${since.toISOString()}">${longHM(Date.now()-since)}</div>
-        <div style="font-size:12px;color:var(--ink3);margin-top:2px">${(Math.floor((Date.now()-since)/360000)/10).toFixed(1)} hours total</div>`:`<div class="fd-note" style="margin:4px 0">${since?'':'Tap &quot;Close eating window&quot; tonight so tomorrow&#39;s fast length is known.'}</div>`}
-      <div style="display:flex;gap:8px;margin-top:8px">${timePick('fdBreakT',nowHM())}
-      <button class="fd-btn" style="width:auto;margin:0;padding:0 16px" onclick="foodFastSet('brokeAt','fdBreakT')">Break fast</button></div></div>`;
+      <div class="fd-sub">Fasting${since?' &middot; since '+sinceTxt:''}</div>
+      ${since?`<div class="fd-big" style="font-size:28px;color:${ragFast(Date.now()-since)}" id="fdFastLive" data-since="${since.toISOString()}">${longHM(Date.now()-since)}</div>
+        <div style="font-size:12px;color:var(--ink3);margin-top:2px">${(Math.floor((Date.now()-since)/360000)/10).toFixed(1)} hours total</div>`:''}
+      <div class="fd-note" style="margin:6px 0 0">${isToday?'Your first food with calories breaks the fast.':'No food logged this day.'}</div></div>`;
   }
   const len=fastLength(foodDay);
-  if(!f.closedAt)return `<div class="card" style="padding:12px 16px">
+  if(!f.closedAt){
+    const ts=foodTimes(foodDay), last=ts.length?ts[ts.length-1]:null;
+    return `<div class="card" style="padding:12px 16px">
     <div class="fd-sub">Fast ${len!=null?'&middot; '+ragSpan(longHM(len),ragFast(len)):''} &middot; broken at ${tOf(f.brokeAt)}</div>
-    <div style="display:flex;gap:8px;margin-top:8px">${timePick('fdCloseT',nowHM())}
-    <button class="fd-btn sec" style="width:auto;margin:0;padding:0 16px" onclick="foodFastSet('closedAt','fdCloseT')">Close eating window</button>
-    <button class="btn-sm" onclick="foodFastClear('brokeAt')">Undo</button></div></div>`;
-  return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
-    <div><div class="fd-sub">Fast ${len!=null?ragSpan(longHM(len),ragFast(len)):''}</div>
-    <div style="font-size:13px;font-weight:700">Eating window ${tOf(f.brokeAt)} to ${tOf(f.closedAt)} ${ragSpan('('+hm(new Date(f.closedAt)-new Date(f.brokeAt))+')',ragWindow(new Date(f.closedAt)-new Date(f.brokeAt)))}</div></div>
-    <button class="btn-sm" onclick="foodFastClear('closedAt')">Reopen</button></div>`;
+    <div style="font-size:13px;font-weight:700;margin-top:4px">Eating window open${last?` &middot; last food ${tOf(new Date(last).toISOString())} so far ${ragSpan('('+hm(last-new Date(f.brokeAt))+')',ragWindow(last-new Date(f.brokeAt)))}`:''}</div>
+    ${auto?'<div class="fd-note" style="margin:4px 0 0">Closes on its own at your last food once the day is over.</div>':''}</div>`;
+  }
+  return `<div class="card" style="padding:12px 16px">
+    <div class="fd-sub">Fast ${len!=null?ragSpan(longHM(len),ragFast(len)):''}</div>
+    <div style="font-size:13px;font-weight:700">Eating window ${tOf(f.brokeAt)} to ${tOf(f.closedAt)} ${ragSpan('('+hm(new Date(f.closedAt)-new Date(f.brokeAt))+')',ragWindow(new Date(f.closedAt)-new Date(f.brokeAt)))}</div></div>`;
 }
 window.foodFastSet=function(field,inputId){
   const v=document.getElementById(inputId).value;if(!v){toast('Pick a time');return;}

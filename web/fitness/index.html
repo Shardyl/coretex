@@ -972,7 +972,7 @@ function saveCardio(){store(CARDIO_SESS_KEY,cardioSessions);if(typeof queueSync=
 function saveCardioExercises(){store(CARDIO_EX_KEY,cardioExercises);if(typeof queueSync==='function')queueSync();}
 function saveVO2(){try{localStorage.setItem(VO2_KEY,JSON.stringify(vo2Records));}catch(e){}if(typeof queueSync==='function')queueSync();}
 function saveFoods(){store(FOODS_KEY,foods);if(typeof queueSync==='function')queueSync();}
-function saveFoodLog(){store(FOODLOG_KEY,foodLog);if(typeof queueSync==='function')queueSync();}
+function saveFoodLog(){store(FOODLOG_KEY,foodLog);try{if(typeof window.autoFasts==='function')window.autoFasts();}catch(e){}if(typeof queueSync==='function')queueSync();}
 function saveMeals(){store(MEALS_KEY,savedMeals);if(typeof queueSync==='function')queueSync();}
 function saveSupplements(){store(SUPP_KEY,supplements);if(typeof queueSync==='function')queueSync();}
 function saveFasts(){store(FAST_KEY,fastDays);if(typeof queueSync==='function')queueSync();}
@@ -993,7 +993,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='102';                         // keep in step with CACHE in sw.js
+const APP_VERSION='103';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -3102,6 +3102,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=102"></script>
+<script src="food.js?v=103"></script>
 </body>
 </html>
