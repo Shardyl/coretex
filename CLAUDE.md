@@ -3582,3 +3582,9 @@ shoot needs none), then 10% off the whole quotation.
   card per company per day (`touch-day:<company>:<date>`, category `calls`), not a notice per person.
 - COCKPIT: `GET /api/inbox/rev`; the Inbox reloads itself when the rev moves (every 12 s while open, never while typing).
   v72.
+- Hardened before the one-off run (15 Oct): a Cortex chase raised before `_rhythm_floor` is cancelled by RULE, not
+  judgement (Massar 1262, and 1259/1260/1261/1269 from the same 13 Oct migration); `not_pursued` is never the client's
+  answer, and a judged `declined` raises "move to Lost?" only when the client's own newest message matches `_NO_RX`
+  (Unified Robotics #149 was read as declined from our own not-pursued note). One-off over 59 deals: the Inbox went
+  from 23 notices to 4 (one of them the daily calls card); every change is on its deal as "Inbox tidy: ...".
+- DIGESTS: a delivered digest from an earlier day is dismissed as soon as the next day's starts collecting.
