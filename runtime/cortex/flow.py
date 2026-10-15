@@ -330,10 +330,10 @@ def _apply(deal: dict, items: dict, out: dict) -> list[str]:
     return done
 
 
-_NO_RX = re.compile(r"(?:not (?:be )?(?:proceed\w*|going ahead|moving forward|interested)|decided (?:not|to go with)|"
+_NO_RX = re.compile(r"\b(?:not (?:be )?(?:proceed\w*|going ahead|moving forward|interested)|decided (?:not|to go with)|"
                     r"another (?:supplier|vendor|agency|company|production)|went with|awarded to|"
                     r"no longer (?:required|needed)|cancel(?:led|ling)? (?:the|this) (?:project|requirement|request)|"
-                    r"will not be (?:proceeding|moving))", re.I)
+                    r"will not be (?:proceeding|moving))\b", re.I)
 
 
 def _client_said_no(deal: dict) -> bool:
