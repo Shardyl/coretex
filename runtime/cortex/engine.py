@@ -1776,7 +1776,7 @@ def not_interested(task_id: int, actor: str = "owner") -> dict:
     sender = (req.get("inquiry") or {}).get("email") or next(
         ((m or {}).get("email") for m in (req.get("messages") or [req.get("message")]) if m), "") or ""
     if did:
-        pipeline.log_deal(did, "not_pursued", f"Not pursued: \"{subj or 'their email'}\" from {sender or 'them'}. "
+        pipeline.log_deal(did, "not_pursued", f"We chose not to pursue one message: \"{subj or 'their email'}\" from {sender or 'them'}; this opportunity is unaffected. "
                           "No reply, no further action (owner).")
         try:
             crm.resume_followups(did)          # their email is dealt with: the deal's own chase carries on

@@ -231,7 +231,7 @@ _JUDGE = (
     "are OUR internal decisions and bookkeeping, never the client's answer: 'not pursued' means we chose not to answer one "
     "particular message, and says nothing about this opportunity. Then read the CLIENT'S POSTURE from their own words "
     "and our exchange: engaged (talking, asking), weighing (has our quote, deciding), on_hold (they said it is paused or "
-    "gave a later time), quiet (no answer to our recent emails), declined (they said no), won (they said yes).\n"
+    "gave a later time), quiet (no answer to our recent emails), declined (the CLIENT wrote that they do not want THIS work), won (they said yes).\n"
     'Return {"posture": "...", "posture_why": "<one line>", "items": [{"id": "<id as given>", "verdict": '
     '"keep|close|move", "why": "<one short line>", "when": "<words, for move only>"}]}.')
 
