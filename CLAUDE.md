@@ -3538,3 +3538,9 @@ shoot needs none), then 10% off the whole quotation.
 - `whatsapp.their_words(msg)` removes the pre-fill (setting `wa_prefills`, default the Sensa LP text) and the ref
   before any judgement; with nothing of their own, no qualification runs. A ref matched to a click on record
   (`lead_source.click`) opens the opportunity whatever the verdict. The qualifier is told no email is expected.
+
+## Client accepts a quotation: signed first, then the invoice (owner, 15 Oct 2026)
+- Rule on Sensa + Sky Vision `email-handling` (company scope, live DB): on a client's yes, ask for the SIGNED AND
+  STAMPED quotation plus their legal name, address and TRN; the pro forma for the first payment follows once it is
+  back. Bank details never go in an email: they travel only on the pro forma (proforma.py flow, see "Signed quotation
+  back -> pro forma invoice"). First live case: Heidar / Workspace, deal 122, SEN-2026-0027 v2 (card 1257 corrected).
