@@ -405,8 +405,8 @@ function kpiGlucose(mg,at){if(mg==null)return '';
   if(cx==='settling')return Math.round(mg)>130?'var(--amber)':'var(--teal)';
   if(typeof gUnit==='function'&&gUnit()!=='mgdl'){const m=Math.round(mg/18.0182*10)/10;return m>=7.3?'var(--red)':m>5.0?'var(--amber)':'var(--teal)';}   // shown in mmol/L
   mg=Math.round(mg);return mg>=131?'var(--red)':mg>90?'var(--amber)':'var(--teal)';}
-// Sleep score (owner, 10 Oct 2026): 85+ green, 70-84 amber, under 70 red.
-function kpiSleepScore(v){if(v==null)return '';v=Math.round(v);return v>=85?'var(--teal)':v>=70?'var(--amber)':'var(--red)';}
+// Sleep score (owner, 15 Oct 2026, matching Eight Sleep's own green): 80+ green, 70-79 amber, under 70 red.
+function kpiSleepScore(v){if(v==null)return '';v=Math.round(v);return v>=80?'var(--teal)':v>=70?'var(--amber)':'var(--red)';}
 // HRV vs his own 14-night average (full nights only, before this day): at/above green, up to 10% below amber, worse red.
 function hrvBaseline(day){
   const v=[];for(let i=1;i<=14;i++){const sl=nightFor(shiftDay(day,-i));if(sl&&sl.hrv!=null)v.push(+sl.hrv);}
