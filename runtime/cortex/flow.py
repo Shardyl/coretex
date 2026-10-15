@@ -322,12 +322,25 @@ def _apply(deal: dict, items: dict, out: dict) -> list[str]:
             if not p.get("next_followup") or p["next_followup"] < floor:
                 db.execute("update crm_projects set next_followup=%s where id=%s", (floor, did))
                 done.append(f"client on hold ({out.get('posture_why') or ''}): next chase {floor:%a %d %b}")
-    elif posture == "declined":
+    elif posture == "declined" and _client_said_no(deal):
         from . import notifications
         notifications.notify(f"{deal.get('title')}: they said no, move it to Lost?",
                              str(out.get("posture_why") or "")[:300], priority="normal", category="approval",
                              target_type="deal", target_id=did, dedup_key=f"declined:{did}")
     return done
+
+
+_NO_RX = re.compile(r"(?:not (?:be )?(?:proceed\w*|going ahead|moving forward|interested)|decided (?:not|to go with)|"
+                    r"another (?:supplier|vendor|agency|company|production)|went with|awarded to|"
+                    r"no longer (?:required|needed)|cancel(?:led|ling)? (?:the|this) (?:project|requirement|request)|"
+                    r"will not be (?:proceeding|moving))", re.I)
+
+
+def _client_said_no(deal: dict) -> bool:
+    """A 'declined' read is only acted on when the client's OWN newest message says no (Unified Robotics #149: the
+    owner declining a different request was read as the client declining this one)."""
+    ins = [e for e in (deal.get("history") or []) if e.get("event") in ("email_in", "whatsapp_in") and not e.get("voided")]
+    return bool(ins) and bool(_NO_RX.search(str(ins[-1].get("text") or "")))
 
 
 def reconcile(deal_id: int, why: str = "", judge: bool = True) -> list[str]:

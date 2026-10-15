@@ -813,6 +813,11 @@ def _cases():
          lambda: "touch-day:" in inspect.getsource(__import__("cortex.touch", fromlist=["x"]).fire)
          and "checkInboxRev" in open(_web + "/index.html", encoding="utf-8").read())
 
+    case("a 'declined' read needs the client's own no; our decision not to pursue a message is not it", "Unified Robotics 149",
+         lambda: _fl._client_said_no({"history": [{"event": "email_in", "text": "We have decided to go with another supplier."}]})
+         and not _fl._client_said_no({"history": [{"event": "email_in", "text": "Dear Supplier, please quote for the below"},
+                                                  {"event": "not_pursued", "text": "We chose not to pursue one message"}]}))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
