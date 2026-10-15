@@ -783,6 +783,14 @@ def _cases():
          and _wam.their_words("Hi Sensa, I need a video produced in Dubai. My project: (ref NFFQ5) a hotel launch film") == "a hotel launch film"
          and "verified or (sug or {}).get" in inspect.getsource(_wam._process_message))
 
+    # --- "not interested" closes everything an email raised and counts as our answer (owner, 15 Oct 2026)
+    case("one tap closes the reply, its question and its next step; the deal's chase carries on", "1276-1279",
+         lambda: "not_pursued" in inspect.getsource(engine.not_interested)
+         and "resume_followups(" in inspect.getsource(engine.not_interested)
+         and "not_pursued" in inspect.getsource(__import__("cortex.gate", fromlist=["x"]).check)
+         and "not_pursued" in inspect.getsource(engine._rearm_stalled_chases)
+         and "notInterested(" in open(_web + "/index.html", encoding="utf-8").read())
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

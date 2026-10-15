@@ -3547,3 +3547,13 @@ shoot needs none), then 10% off the whole quotation.
   STAMPED quotation plus their legal name, address and TRN; the pro forma for the first payment follows once it is
   back. Bank details never go in an email: they travel only on the pro forma (proforma.py flow, see "Signed quotation
   back -> pro forma invoice"). First live case: Heidar / Workspace, deal 122, SEN-2026-0027 v2 (card 1257 corrected).
+
+## "Not interested": one tap, nothing sent (owner, 15 Oct 2026)
+- Skipping a reply card left its siblings behind (the "Next step: quote for..." prep card, the "which opportunity?"
+  question) and left the deal's chase paused with an "Unanswered" notice to come (Ahmed's AccessAbilities Expo RFQ on
+  #149, Dubai Police's sustainability-certificate request). `engine.not_interested(task_id)` (POST
+  `/api/tasks/{id}/not-interested`, a "Not interested" button on reply, next-step and which-opportunity cards): closes
+  every open card the same email raised (same Message-Id or subject, or a next-step card on the same deal, created
+  within 3 minutes), status CANCELLED (no streak hit), cancels their owed work (`_cancel_owed_work`), logs
+  `not_pursued` on the deal and resumes its chase. `not_pursued` counts as our answer in `gate.check` and
+  `_rearm_stalled_chases`. Nothing is ever sent. v71.

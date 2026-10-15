@@ -2831,6 +2831,13 @@ def menu_pick(task_id: int, body: MenuPicks, u: dict = Depends(current_user)) ->
     return engine.menu_pick(task_id, body.picks)
 
 
+@app.post("/api/tasks/{task_id}/not-interested")
+def task_not_interested(task_id: int, u: dict = Depends(current_user)) -> dict:
+    """Close a card about an incoming email, and every card that email raised, with nothing sent."""
+    _guard_task(u, task_id)
+    return engine.not_interested(task_id, actor=(u or {}).get("email") or "owner")
+
+
 class DealPick(BaseModel):
     deal_id: int | None = None      # a button (0 = none of these)
     text: str = ""                  # or his own words

@@ -1732,6 +1732,60 @@ def _cancel_owed_work(task: dict, why: str) -> list:
         return []
 
 
+_OPEN_CARD = ("queued", "new", "drafting", "awaiting_approval", "awaiting_correction")
+
+
+def _card_refs(req: dict) -> tuple[set, str]:
+    """The message a card is about: its Message-Id refs and its subject (without Re:/Fwd:)."""
+    from . import conversation
+    msgs = [m for m in ((req.get("messages") or []) + [req.get("message")]) if isinstance(m, dict)]
+    refs = {str(x) for x in [req.get("mail_ref"), *[m.get("ref") for m in msgs], *[m.get("mail_ref") for m in msgs]] if x}
+    subj = ((req.get("inquiry") or {}).get("subject") or next((m.get("subject") for m in msgs if m.get("subject")), "")
+            or re.sub(r"^Which opportunity:\s*", "", str(req.get("title") or "")))
+    return refs, conversation.subject_base(subj)
+
+
+def not_interested(task_id: int, actor: str = "owner") -> dict:
+    """NOT INTERESTED (owner, 15 Oct 2026: "a simple way to say no, we're not interested ... no further actions").
+    One tap on a card about an incoming email closes EVERY card that email raised (the reply, the "which
+    opportunity?" question, the "Next step: quote for ..." prep card), cancels what Cortex logged as owed for it, and
+    records on the opportunity that it was not pursued, which counts as our answer: no "Unanswered" notice, and the
+    deal's own chase carries on. Nothing is sent. Cards are CANCELLED, not rejected: declining work is not a verdict
+    on the draft, so no skill loses its streak."""
+    t = store.get_task(int(task_id))
+    if not t:
+        return {"ok": False, "error": "no such card"}
+    req = t.get("request") or {}
+    refs, subj = _card_refs(req)
+    group = [t] if t.get("status") in _OPEN_CARD else []
+    near = db.query("select * from tasks where company_id=%s and id<>%s and status = any(%s) and created_at between "
+                    "%s - interval '3 minutes' and %s + interval '3 minutes'",
+                    (t["company_id"], t["id"], list(_OPEN_CARD), t["created_at"], t["created_at"]))
+    for c in near:
+        cr = c.get("request") or {}
+        crefs, csubj = _card_refs(cr)
+        prep = bool(cr.get("prep_action") or str(cr.get("title") or "").startswith("Next step"))
+        if (refs & crefs) or (subj and csubj == subj) or (t.get("deal_id") and c.get("deal_id") == t.get("deal_id") and prep):
+            group.append(c)
+    why = "Not interested (owner): no reply, nothing pursued"
+    did = next((int(c["deal_id"]) for c in group if c.get("deal_id")), None)
+    for c in group:
+        store.update_task(c["id"], status="cancelled", request={**(c.get("request") or {}), "cancelled_reason": why})
+        store.log_decision(c["id"], c.get("skill_id"), actor, "not_interested", note=why)
+        _cancel_owed_work(c, why)
+    sender = (req.get("inquiry") or {}).get("email") or next(
+        ((m or {}).get("email") for m in (req.get("messages") or [req.get("message")]) if m), "") or ""
+    if did:
+        pipeline.log_deal(did, "not_pursued", f"Not pursued: \"{subj or 'their email'}\" from {sender or 'them'}. "
+                          "No reply, no further action (owner).")
+        try:
+            crm.resume_followups(did)          # their email is dealt with: the deal's own chase carries on
+        except Exception:  # noqa: BLE001
+            pass
+    return {"ok": True, "closed": [c["id"] for c in group], "deal_id": did,
+            "note": f"Not interested: {len(group)} card(s) closed, nothing sent."}
+
+
 _CANCEL_HINT = re.compile(r"\b(?:cancel|not needed|no need|don'?t need|didn'?t (?:commit|promise|agree)|did not "
                           r"(?:commit|promise|agree)|never (?:committed|promised|agreed)|not (?:requested|asked)|"
                           r"wasn'?t (?:requested|asked)|scrap|drop (?:this|it)|ignore (?:this|it)|not required)\b", re.I)
@@ -4435,7 +4489,8 @@ def _rearm_stalled_chases() -> list:
     try:
         rows = db.query(
             "select p.id, p.title, p.contact_email, p.company, "
-            "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event' like 'email_out%%') lo, "
+            "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event' like 'email_out%%' "
+            "or e->>'event'='not_pursued') lo, "
             "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event'='email_in') li, "
             "(select max(e->>'ts') from jsonb_array_elements(p.history) e where e->>'event' in ('chase_stopped','chase_paused')) cs "
             "from crm_projects p where p.automation='auto' and p.next_followup is null "

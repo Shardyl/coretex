@@ -124,7 +124,10 @@ def check(company_id: int, email: str, deal_id, request: dict | None) -> str | N
                    "and lower(t.request->'inquiry'->>'email')=%s", (email,)) or {}
         ours.append(_ts(s.get("at")))
         last_out = max((t for t in ours if t), default=None)
-        if last_in and (not last_out or last_in > last_out):
+        # a message the owner chose not to pursue is answered, though nothing was sent (engine.not_interested)
+        declined = max((_ts(e.get("ts")) for e in hist if e.get("event") == "not_pursued"), default=None)
+        last_answer = max((t for t in (last_out, declined) if t), default=None)
+        if last_in and (not last_answer or last_in > last_answer):
             return f"they wrote to us last ({last_in:%d %b}), so a reply is owed, not a nudge"
         quiet = QUIET_DAYS.get(why, 2)
         # a quoted deal's own rhythm decides its gaps (receipt check the next working day, then weekly); the closing
