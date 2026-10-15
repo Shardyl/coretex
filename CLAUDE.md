@@ -3558,3 +3558,27 @@ shoot needs none), then 10% off the whole quotation.
   within 3 minutes), status CANCELLED (no streak hit), cancels their owed work (`_cancel_owed_work`), logs
   `not_pursued` on the deal and resumes its chase. `not_pursued` counts as our answer in `gate.check` and
   `_rearm_stalled_chases`. Nothing is ever sent. v71.
+
+## One flow per opportunity: every event re-checks the Inbox (owner, 15 Oct 2026)
+- CAUSE: about half the Inbox on 15 Oct was stale: notices for reminders already done or cancelled, "task could not be
+  created" for a deliberate gate hold, a 12 Oct next step on a booked project, a promise that waits on the client,
+  seven separate call nudges, and a Massar chase two days after the last one (the 13 Oct rhythm migration set Thu 15
+  Oct without seeing the chase that went that morning; the closing quiet window was 0.8 days). Each mechanism cleaned
+  up only after its own event; nothing looked at the opportunity as a whole.
+- `flow.py`: `pipeline.log_deal` (every timeline event) and `store.update_task` (a card closing) call `flow.mark(deal)`
+  -> table `flow_queue` (settles 15 s) -> the engine's `inbox-flow` thread (`flow.start_thread`, 10 s) -> `reconcile`:
+  RULES first (notice of a finished reminder, closed deal, "Unanswered"/"Not drafted" answered by our email or
+  `not_pursued`, a manual person's deal, a promise matching `pipeline._CONDITIONAL`), then ONE Haiku judgement over what
+  is still open (Cortex reminders, deal notices, Cortex-raised cards via `_cortex_card`): keep / close / move, plus the
+  client's posture (on_hold -> next chase no sooner than 14 days after our last email; declined -> one "move to Lost?"
+  question). Never touches his own reminders, replies to their email, cards he corrected, quotations or proposals.
+  Every change is logged on the deal ("Inbox tidy: ...") and moves setting `inbox_rev`. `flow.preview(deal)` shows the
+  judgement without changing anything. Morning safety net: invariant `stale_inbox_items` -> `flow.reconcile_rows`.
+- GATE: `gate._rhythm_floor` = the deal's current cadence step counted from OUR LAST email; an automatic chase before it
+  is held and `next_followup` moved there. `gate.last_hold()` (thread-local) tells `reminders.fire` a None from
+  `_spawn_task` was a deliberate hold: the reminder waits a day, no notice; a real failure carries the deal and
+  `reminder-fail:<id>`.
+- CALLS: `touch.fire` adds a line (with WhatsApp / Call buttons and the opportunity) to ONE "Calls and WhatsApps today"
+  card per company per day (`touch-day:<company>:<date>`, category `calls`), not a notice per person.
+- COCKPIT: `GET /api/inbox/rev`; the Inbox reloads itself when the rev moves (every 12 s while open, never while typing).
+  v72.

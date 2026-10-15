@@ -206,11 +206,20 @@ def fire(r: dict) -> dict:
     note_id, task_id = None, None
     try:
         if action:                               # ACTION reminder -> spawn a normal task
+            from . import gate
             task_id = _spawn_task(r, action)
-            if task_id is None and action:       # spawn failed -> the owner must know the work didn't start
+            held = gate.last_hold() if task_id is None else ""
+            if task_id is None and held:
+                # A HOLD IS NOT A FAILURE (15 Oct 2026): the gate decided this email may not go yet (we wrote to
+                # them days ago, a meeting is booked...). The reminder waits a day and asks again; no notice.
+                db.execute("update reminders set status='pending', due_at=now() + interval '1 day' where id=%s "
+                           "and recurrence='none'", (r["id"],))
+            elif task_id is None and action:     # spawn failed -> the owner must know the work didn't start
                 notifications.notify(f"Reminder \"{r['title']}\" fired but its task could not be created - "
                                      "set it again or run it by hand.", "Reminder action failed",
-                                     priority="high", category="reminder", company_id=r.get("company_id"))
+                                     priority="high", category="reminder", company_id=r.get("company_id"),
+                                     target_type=r.get("target_type"), target_id=r.get("target_id"),
+                                     dedup_key=f"reminder-fail:{r['id']}")
         else:                                    # NUDGE -> drop an info card pointing at the target
             n = notifications.notify(
                 r["title"], "Reminder", priority=r.get("priority") or "normal", category="reminder",

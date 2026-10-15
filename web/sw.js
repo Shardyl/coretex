@@ -1,6 +1,6 @@
 // Cortex service worker — makes the cockpit installable + keeps the shell working offline.
 // Network-first for everything; the API is never cached; the app shell falls back to cache.
-const CACHE = 'cortex-v71';   // KEEP EQUAL to APP_BUILD in index.html (the server reads it from there)
+const CACHE = 'cortex-v72';   // KEEP EQUAL to APP_BUILD in index.html (the server reads it from there)
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (e) => {

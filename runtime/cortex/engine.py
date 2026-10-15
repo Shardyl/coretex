@@ -9858,6 +9858,11 @@ def run(poll_idle: float = 1.0) -> None:
             pass
     _beat("start")
     _start_drip_thread()   # the newsletter drip ticks on its own clock, never behind a slow model call
+    try:
+        from . import flow
+        flow.start_thread()   # every event on a deal re-checks its open items (flow.py)
+    except Exception as _fe:  # noqa: BLE001
+        print(f"[flow] not started: {_fe}", flush=True)
     while True:
         _beat("tasks")
         try:

@@ -226,9 +226,17 @@ def fire(r: dict) -> int | None:
     else:
         lines.append("No number on file: add one to the contact, or reply by email only.")
     lines.append("Log what was said as a note on the opportunity; the next touch follows it.")
-    n = notifications.notify(r["title"], "\n".join(lines), priority="normal", category="reminder",
-                             company_id=r.get("company_id"), target_type="deal", target_id=deal_id,
-                             dedup_key=f"touch:{deal_id}")
+    # ONE CARD FOR THE DAY'S CALLS (owner, 15 Oct 2026: seven separate "WhatsApp or call" notices was noise): each
+    # touch is a line on "Calls and WhatsApps today", with its own call and WhatsApp buttons and the opportunity.
+    day = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=4))).date().isoformat()
+    item = {"name": r["title"].replace("WhatsApp or call ", "").replace("Call ", ""), "cat": "call",
+            "deal_id": deal_id, "deal": deal["title"][:80],
+            **({"wa": f"https://wa.me/{digits}"} if digits and st.get("mobile") else {}),
+            **({"tel": f"tel:+{digits}"} if digits else {})}
+    n = notifications.notify("Calls and WhatsApps today",
+                             "Log what was said as a note on each opportunity; the next touch follows it.",
+                             priority="normal", category="calls", company_id=r.get("company_id"),
+                             dedup_key=f"touch-day:{r.get('company_id')}:{day}", item=item)
     st["step"] = int(st.get("step") or 0) + 1
     db.setting_set(f"touch:{deal_id}", st)
     _schedule(r.get("company_id"), deal_id, datetime.now(timezone.utc) + timedelta(days=_gap(r.get("company_id"), st["step"] - 1)), st)

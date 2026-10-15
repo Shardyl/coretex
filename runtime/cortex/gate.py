@@ -75,7 +75,37 @@ def _manual_owner(company_id, deal_id, email: str, request: dict | None) -> str:
     return ""
 
 
+def _rhythm_floor(deal: dict, hist: list):
+    """When the next chase may go: the deal's current rhythm step, counted from the last email we sent."""
+    try:
+        from . import crm
+        outs = [_ts(e.get("ts")) for e in hist if str(e.get("event", "")).startswith("email_out")]
+        last_out = max((t for t in outs if t), default=None)
+        if not last_out:
+            return None
+        cad = deal.get("cadence") if isinstance(deal.get("cadence"), dict) and deal["cadence"].get("steps") \
+            else crm.get_cadence(deal.get("company"))
+        return crm._schedule_point(cad, int(deal.get("followup_step") or 0), base=last_out)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+_LAST = __import__("threading").local()
+
+
+def last_hold() -> str:
+    """The reason the most recent check on this thread held an email ('' if it did not)."""
+    return getattr(_LAST, "why", "") or ""
+
+
 def check(company_id: int, email: str, deal_id, request: dict | None) -> str | None:
+    _LAST.why = ""
+    r = _check(company_id, email, deal_id, request)
+    _LAST.why = r or ""
+    return r
+
+
+def _check(company_id: int, email: str, deal_id, request: dict | None) -> str | None:
     """None = may contact. Otherwise the reason it is held, in words for the owner."""
     why = purpose(request)
     if not why:
@@ -92,7 +122,8 @@ def check(company_id: int, email: str, deal_id, request: dict | None) -> str | N
             return f"{email} is marked not qualified"
 
     # 2. the deal's stage (stages.py decides what each stage allows)
-    deal = db.one("select id, stage, history from crm_projects where id=%s", (int(deal_id),)) if str(deal_id or "").isdigit() else None
+    deal = db.one("select id, stage, history, cadence, followup_step, company, automation from crm_projects where id=%s",
+                  (int(deal_id),)) if str(deal_id or "").isdigit() else None
     held = _manual_owner(company_id, deal_id, email, request)
     if held:
         return f"{held.split('@')[0].title()} handles this by hand"
@@ -112,6 +143,16 @@ def check(company_id: int, email: str, deal_id, request: dict | None) -> str | N
                         default=None)
         if why in CHASE_TYPES and stopped and (not last_mail or stopped >= last_mail):
             return "chasing is stopped or paused on this deal until they or we write again"
+        # THE RHYTHM COUNTS FROM OUR LAST EMAIL (15 Oct 2026, Massar #117): the 13 Oct migration set the next chase
+        # for Thu 15 Oct without seeing the chase that went that morning, and the 0.8-day quiet window let a second
+        # chase through two days later. A chase waits its step's full gap from the last email we actually sent.
+        if why in CHASE_TYPES:
+            nxt = _rhythm_floor(deal, hist)
+            if nxt and now < nxt - timedelta(hours=6):
+                if deal.get("automation") == "auto":
+                    db.execute("update crm_projects set next_followup=%s where id=%s and (next_followup is null or "
+                               "next_followup < %s)", (nxt, deal["id"], nxt))
+                return f"the next chase is due from {nxt:%a %d %b}, a full rhythm step after our last email"
 
     # 3. who spoke last, on any channel we can see
     if email and why != "post-meeting":

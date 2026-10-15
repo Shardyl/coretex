@@ -791,6 +791,28 @@ def _cases():
          and "not_pursued" in inspect.getsource(engine._rearm_stalled_chases)
          and "notInterested(" in open(_web + "/index.html", encoding="utf-8").read())
 
+    # --- one flow per opportunity: every event re-checks its open items (owner, 15 Oct 2026)
+    _fl = __import__("cortex.flow", fromlist=["x"])
+    _gt = __import__("cortex.gate", fromlist=["x"])
+    from datetime import datetime as _dtf, timezone as _tzf
+    _deal_m = {"cadence": {"name": "closing", "working_days": True, "steps": [{"after_days": 1, "repeat": 1},
+                                                                             {"after_days": 5, "repeat": 8}]},
+               "followup_step": 1, "company": "Sensa"}
+    _fl_floor = _gt._rhythm_floor(_deal_m, [{"event": "email_out", "ts": "2026-10-13T05:36:18Z"}])
+    case("every timeline event and every closed card queues the deal for a re-check", "Inbox 15 Oct",
+         lambda: "flow.mark(" in inspect.getsource(__import__("cortex.pipeline", fromlist=["x"]).log_deal)
+         and "flow.mark(" in inspect.getsource(store.update_task)
+         and "reconcile_rows" in inspect.getsource(_fl))
+    case("a chase waits its full step from our last email (Massar: 13 Oct -> 20 Oct, not 15 Oct)", "Massar 1262",
+         lambda: _fl_floor is not None and _fl_floor.date().isoformat() == "2026-10-20"
+         and "_rhythm_floor(" in inspect.getsource(_gt._check))
+    case("a held reminder waits silently; a real failure names its deal", "Shamal reminder 363",
+         lambda: "gate.last_hold()" in inspect.getsource(__import__("cortex.reminders", fromlist=["x"]).fire)
+         and "reminder-fail:" in inspect.getsource(__import__("cortex.reminders", fromlist=["x"]).fire))
+    case("the day's calls are one card; the cockpit reloads when the flow changes the Inbox", "7 call notices",
+         lambda: "touch-day:" in inspect.getsource(__import__("cortex.touch", fromlist=["x"]).fire)
+         and "checkInboxRev" in open(_web + "/index.html", encoding="utf-8").read())
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

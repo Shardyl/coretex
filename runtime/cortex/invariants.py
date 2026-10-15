@@ -114,6 +114,16 @@ CHECKS = [
                "'[]'::jsonb)) c where coalesce(c->>'email','') <> '' or coalesce(c->>'phone','') <> '')",
     },
     {
+        "key": "stale_inbox_items",
+        "what": "Open Cortex items on a deal re-checked against its latest activity (stale ones closed, see flow.py)",
+        "sql": "select distinct target_id::bigint deal_id from reminders where status in ('pending','snoozed','fired') "
+               "and target_type='deal' and coalesce(created_by,'') like 'cortex%%' and created_by <> 'cortex-touch' "
+               "union select distinct target_id::bigint from notifications where state in ('unread','snoozed') and "
+               "target_type='deal' and category <> 'digest' and target_id ~ '^[0-9]+$'",
+        "fix": "flow.reconcile_rows",
+        "judged": True,
+    },
+    {
         "key": "duplicate_obligations",
         "what": "A deal carries two open reminders for the same thing owed (merged into one, the rest cancelled)",
         "sql": "select target_id deal_id, count(*) n from reminders where status in ('pending','snoozed') and "

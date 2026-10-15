@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v71';
+const APP_BUILD = 'cortex-v72';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -411,6 +411,20 @@ function showUpdate(blocked){
   _updateShown=true;
 }
 setInterval(()=>{ if(document.visibilityState==='visible') checkBuild(false); }, 180000);
+// THE INBOX REFRESHES ITSELF (owner, 15 Oct 2026): an action on one card makes Cortex re-check the whole opportunity
+// a few seconds later (flow.py); when that changes anything the server's inbox_rev moves and the list reloads, unless
+// something is being typed.
+let _inboxRev=null;
+async function checkInboxRev(){
+  if(demo||!token||tab!=='inbox'||document.visibilityState!=='visible') return;
+  let r; try{ r=(await api('/api/inbox/rev')).rev; }catch(e){ return; }
+  if(_inboxRev!==null && r!==_inboxRev){
+    const typing=[...document.querySelectorAll('#view input, #view textarea')].some(x=>x===document.activeElement||(x.tagName==='TEXTAREA'&&(x.value||'').trim()));
+    if(!typing) render();
+  }
+  _inboxRev=r;
+}
+setInterval(checkInboxRev, 12000);
 
 // ---- auth: the 4-digit PIN keypad IS the login (issues the session); biometric on mobile; passcode = recovery ----
 async function startup(){
@@ -1733,7 +1747,7 @@ function inboxCard(id){
 function infoCard(t){
   // A DIGEST ALWAYS SHOWS ITS ITEMS (13 Oct 2026): with one item the card hid it behind the generic
   // "For information..." line, so "Today's updates" read as empty. The items ARE the digest.
-  const items=t.items||[], isDigest=t.category==='digest', grouped=items.length>1||(isDigest&&items.length>0);
+  const items=t.items||[], isDigest=(t.category==='digest'||t.category==='calls'), grouped=items.length>1||(isDigest&&items.length>0);
   const cnt=t.count>1?` <span class="chip">×${t.count}</span>`:'';
   const coChip=t.company?`<span class="chip cy">${esc(t.company)}</span>`:'';
   // grouped items are not always contacts (a tender circular groups its copies): only the contact
@@ -1746,7 +1760,7 @@ function infoCard(t){
     <div id="${did}" class="${(isDigest&&items.length<4)?'':'hidden'}" style="margin-top:8px;display:flex;flex-direction:column;gap:7px">
       ${items.slice().reverse().map(it=>`<div ${it.email?`onclick="inboxContact('${esc(it.email)}')" style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:2px 0"`:'style="display:flex;align-items:center;gap:8px;font-size:13px"'} title="${it.email?'Open this contact in the CRM':''}">
         <span class="chip" style="opacity:.85">${esc(it.cat||'')}</span>
-        <span style="flex:1;min-width:0"><b>${esc(it.name||it.email||'')}</b>${(it.email&&it.name)?` <span style="color:var(--mut)">${esc(it.email)}</span>`:''}</span>${it.email?ic('arrow',13):''}</div>`).join('')}
+        <span style="flex:1;min-width:0"><b>${esc(it.name||it.email||'')}</b>${(it.email&&it.name)?` <span style="color:var(--mut)">${esc(it.email)}</span>`:''}${it.deal?`<div class="csub" style="cursor:pointer" onclick="event.stopPropagation();go('crm');setTimeout(()=>openProject(${+it.deal_id}),50)">${esc(it.deal)}</div>`:''}</span>${it.wa?`<a class="btn sm" href="${esc(it.wa)}" target="_blank" onclick="event.stopPropagation()">WhatsApp</a>`:''}${it.tel?`<a class="btn sm" href="${esc(it.tel)}" onclick="event.stopPropagation()">Call</a>`:''}${it.email?ic('arrow',13):''}</div>`).join('')}
     </div>`:'';
   return `<div class="card" id="n${t.id}" style="border-left:3px solid var(--accent)">
     <div class="meta">${coChip}<span class="chip">${esc(t.category||'update')}</span>${cnt}<span style="margin-left:auto;color:var(--mut)">${timeTag(t.ts)}</span></div>

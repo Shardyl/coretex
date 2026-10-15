@@ -2831,6 +2831,13 @@ def menu_pick(task_id: int, body: MenuPicks, u: dict = Depends(current_user)) ->
     return engine.menu_pick(task_id, body.picks)
 
 
+@app.get("/api/inbox/rev")
+def inbox_rev(_: None = Depends(auth)) -> dict:
+    """A counter the flow moves whenever it changes the Inbox; the cockpit reloads when it moves."""
+    from . import flow
+    return {"rev": flow.rev()}
+
+
 @app.post("/api/tasks/{task_id}/not-interested")
 def task_not_interested(task_id: int, u: dict = Depends(current_user)) -> dict:
     """Close a card about an incoming email, and every card that email raised, with nothing sent."""

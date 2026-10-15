@@ -39,6 +39,9 @@ def log_deal(deal_id: int, event: str, text: str, ref: str = "") -> None:
         ev["ref"] = ref
     db.execute("update crm_projects set history = history || %s::jsonb, updated_at=now() where id=%s",
                (Json([ev]), int(deal_id)))
+    if not str(text or "").startswith(("Inbox tidy", "No ")):   # its own bookkeeping never re-triggers it
+        from . import flow
+        flow.mark(deal_id, f"{event}")
 
 
 def deal_context(deal_id: int, limit: int = 12) -> str:

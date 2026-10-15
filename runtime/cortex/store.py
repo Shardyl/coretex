@@ -353,6 +353,13 @@ def update_task(tid: int, **fields) -> dict | None:
             obligations.on_task_closed(tid)
         except Exception:  # noqa: BLE001
             pass
+        try:   # ...and the rest of its opportunity is re-checked (flow.py)
+            if (row or {}).get("deal_id"):
+                from . import flow
+                flow.mark(row["deal_id"], f"card {tid} {fields['status']}")
+                flow.bump_rev()
+        except Exception:  # noqa: BLE001
+            pass
     return row
 
 
