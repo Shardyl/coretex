@@ -626,17 +626,19 @@ window.foodToggleManualReadings=function(){try{localStorage.setItem('fitness_man
 function readingsCard(){
   const list=readingsOn(foodDay), f=fastDay(foodDay), g=gki(list), u=gUnit();
   const manual=manualReadingsOn()||list.length>0;
-  if(!manual&&!cgmOn(foodDay).length)return '';
+  // one-tap ketone entry (owner, 15 Oct 2026): just the number, time and date stamped automatically
+  const ketBtn=foodDay===localDay(new Date())?`<button class="btn-sm" style="float:right" onclick="foodQuickKetones()">+ Ketones</button>`:'';
+  if(!manual&&!cgmOn(foodDay).length)return ketBtn?`<div class="card" style="padding:10px 16px;display:flex;justify-content:space-between;align-items:center"><div class="fd-sub">Ketones</div>${ketBtn}</div>`:'';
   const ctx=!f||!f.brokeAt?'pre break-fast':'after eating';
   const cg=cgmOn(foodDay), last=cg.length?cg[cg.length-1]:null;
   return `<div class="card" style="padding:12px 16px">
     ${last?`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-      <div class="fd-sub">Libre sensor</div><div style="font-size:12px;color:var(--ink3)">${tOf(last.at)}${foodDay===localDay(new Date())?' &middot; '+Math.round((Date.now()-new Date(last.at))/60000)+' min ago':''}</div></div>
+      <div class="fd-sub">Libre sensor</div><div style="font-size:12px;color:var(--ink3)">${ketBtn} ${tOf(last.at)}${foodDay===localDay(new Date())?' &middot; '+Math.round((Date.now()-new Date(last.at))/60000)+' min ago':''}</div></div>
       <div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px"><div class="fd-big" style="font-size:28px;color:${kpiGlucose(Math.round(last.mmol*18.0182),last.at)}">${gShow(last.mmol)} <span style="font-size:13px;color:var(--ink3)">${u==='mgdl'?'mg/dL':'mmol/L'}</span></div>
       <div style="font-size:12px;color:var(--ink3)">day ${gShow(Math.min(...cg.map(x=>x.mmol)))} to ${ragSpan(gShow(Math.max(...cg.map(x=>x.mmol))),(()=>{const hi=cg.reduce((a,x)=>x.mmol>a.mmol?x:a);return kpiGlucose(Math.round(hi.mmol*18.0182),hi.at);})())}, avg ${ragSpan(gShow(cg.reduce((a,x)=>a+x.mmol,0)/cg.length),kpiGlucose(Math.round(cg.reduce((a,x)=>a+x.mmol,0)/cg.length*18.0182)))}</div></div>
       <div style="position:relative;height:90px;margin-bottom:10px"><canvas id="fdCgmChart" role="img" aria-label="Glucose today"></canvas></div>`:''}
     ${!manual?'</div>':''}${!manual?'':`
-    <div class="fd-sub" style="margin-bottom:6px">Ketones and glucose${g!=null?` &middot; GKI ${g}`:''}</div>
+    <div class="fd-sub" style="margin-bottom:6px">Ketones and glucose${g!=null?` &middot; GKI ${g}`:''}${last?'':ketBtn}</div>
     ${list.map(x=>`<div class="fd-entry" style="cursor:default;padding:5px 0"><div class="n" style="font-size:13px">${x.kind==='ketones'?'Ketones '+r1(x.value)+' mmol/L':'Glucose '+gShow(x.value)+(u==='mgdl'?' mg/dL':' mmol/L')}</div>
       <div class="q">${tOf(x.at)} &middot; ${esc(readingState(x).label)}${x.notes?' &middot; '+esc(x.notes):''} <button class="hist-del" onclick="foodDelReading('${x.id}')">&times;</button></div></div>`).join('')}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
@@ -651,6 +653,21 @@ function readingsCard(){
       <select id="fdCtx" class="fd-input" style="font-size:14px">${['pre break-fast','after eating','random'].map(c=>`<option ${c===ctx?'selected':''}>${c}</option>`).join('')}</select>
       <button class="fd-btn" style="width:auto;margin:0;padding:0 18px" onclick="foodSaveReadings()">Save</button></div></div>`}`;
 }
+window.foodQuickKetones=function(){
+  openModal('Ketones',`<div class="form-group"><label class="form-label">Ketones (mmol/L)</label>
+    <input type="number" step="0.1" inputmode="decimal" id="fdQK" style="font-size:22px" autofocus/></div>
+    <div class="form-group"><label class="form-label">Note (optional)</label><input type="text" id="fdQKN" placeholder="e.g. after the 4x4"/></div>
+    <div class="fd-note" style="margin:0">Saved with today's date and the time now.</div>`,
+  function(){
+    const v=+document.getElementById('fdQK').value;
+    if(document.getElementById('fdQK').value===''||!(v>=0&&v<15)){toast('Enter ketones in mmol/L');return;}
+    const f=fastDay(localDay(new Date()));
+    readings.push({id:newId('rd'),at:new Date().toISOString(),kind:'ketones',value:r1(v),
+      context:!f||!f.brokeAt?'pre break-fast':'after eating',notes:(document.getElementById('fdQKN').value||'').trim()||null});
+    saveReadings();closeModal();renderToday();toast('Ketones '+r1(v)+' saved');
+  });
+  setTimeout(()=>{const el=document.getElementById('fdQK');if(el)el.focus();},150);
+};
 window.foodToggleGUnit=function(){try{localStorage.setItem('fitness_glucose_unit',gUnit()==='mgdl'?'mmol':'mgdl');}catch(e){}renderToday();};
 window.foodSaveReadings=function(){
   const k=document.getElementById('fdKet').value, g=document.getElementById('fdGlu').value, ctx=document.getElementById('fdCtx').value;
