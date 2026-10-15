@@ -295,7 +295,7 @@ def _cases():
 
     # --- remaining map items (13 Oct)
     case("a meeting counts as contact in the gate", "audit map: chase the day after a call",
-         lambda: "A MEETING IS CONTACT" in inspect.getsource(gate.check)
+         lambda: "A MEETING IS CONTACT" in inspect.getsource(gate._check)
          and "_meeting_touches_clock(" in inspect.getsource(__import__("cortex.pipeline", fromlist=["x"]).record_meeting))
     case("a scheduled email re-checks its recipient when it fires", "audit map",
          lambda: "left-company" in inspect.getsource(engine.promote_due_tasks))
@@ -418,7 +418,7 @@ def _cases():
          lambda: (_t.normalise("+971 4 366 1688") or {}).get("mobile") is False)
     case("touch reminders fire their own notice and move on", "personal touch",
          lambda: "touch.fire(" in inspect.getsource(reminders.fire)
-         and "touch_made" in inspect.getsource(__import__("cortex.gate", fromlist=["x"]).check)
+         and "touch_made" in inspect.getsource(__import__("cortex.gate", fromlist=["x"])._check)
          and "cortex-touch" in inspect.getsource(__import__("cortex.obligations", fromlist=["x"]).on_stage))
     case("every door a lead comes in by starts the track", "personal touch",
          lambda: inspect.getsource(engine).count("_start_touch(") >= 5
@@ -494,7 +494,7 @@ def _cases():
          and 'was == "owner"' in inspect.getsource(_crm.enter_closing))
     case("the receipt check is not held by the two-day waits", "owner, follow-up audit",
          lambda: "_need = 1 if not (opp.get(\"followup_step\") or 0) else 2" in inspect.getsource(engine._closing_gate)
-         and "quiet = 0.8" in inspect.getsource(__import__("cortex.gate", fromlist=["x"]).check))
+         and "quiet = 0.8" in inspect.getsource(__import__("cortex.gate", fromlist=["x"])._check))
     case("he can set the next chase: deal page, note, Talk", "owner, follow-up audit",
          lambda: callable(getattr(_crm, "set_next_chase", None))
          and "set_next_chase(" in inspect.getsource(_t.on_note)
@@ -688,7 +688,7 @@ def _cases():
          lambda: _hm == "ayresh@sensa.digital" and _hn == ""
          and "handled_manually(" in inspect.getsource(engine.poll_inbox)
          and "handled_manually(" in inspect.getsource(engine.poll_sales_replies)
-         and "_manual_owner(" in inspect.getsource(__import__("cortex.gate", fromlist=["x"]).check))
+         and "_manual_owner(" in inspect.getsource(__import__("cortex.gate", fromlist=["x"])._check))
     # --- a big PDF sent to Talk is read as text, never dropped (13 Oct, 21MB brief on WhatsApp)
     import base64 as _b64
     _big = "data:application/pdf;base64," + _b64.b64encode(b"%PDF-1.4 " + b"0" * (11 * 1024 * 1024)).decode()
@@ -725,7 +725,7 @@ def _cases():
          lambda: "_no_reply_mail(message)" in inspect.getsource(_evm.ask_which_deal)
          and "ONE QUESTION PER PERSON" in inspect.getsource(_evm.ask_which_deal))
     case("an automatic email is held when a meeting with them is booked", "Shama #164 chase",
-         lambda: "next_meeting_with(" in inspect.getsource(__import__("cortex.gate", fromlist=["x"]).check))
+         lambda: "next_meeting_with(" in inspect.getsource(__import__("cortex.gate", fromlist=["x"])._check))
 
     # --- uploaded files count as attached; a new job opens its own thread; one copy of a core document (14 Oct)
     case("the read-through sees files uploaded onto the card", "Merck 1239",
@@ -787,7 +787,7 @@ def _cases():
     case("one tap closes the reply, its question and its next step; the deal's chase carries on", "1276-1279",
          lambda: "not_pursued" in inspect.getsource(engine.not_interested)
          and "resume_followups(" in inspect.getsource(engine.not_interested)
-         and "not_pursued" in inspect.getsource(__import__("cortex.gate", fromlist=["x"]).check)
+         and "not_pursued" in inspect.getsource(__import__("cortex.gate", fromlist=["x"])._check)
          and "not_pursued" in inspect.getsource(engine._rearm_stalled_chases)
          and "notInterested(" in open(_web + "/index.html", encoding="utf-8").read())
 
