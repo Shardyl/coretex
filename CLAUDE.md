@@ -3615,3 +3615,33 @@ shoot needs none), then 10% off the whole quotation.
   reminders still pending, never cancels a quotation or proposal card, never moves a stage (it says so), logs
   "Pipeline review: ..." on the deal and marks the flow. The weekly touch reminder is kept when he says he spoke to them.
 - API: `GET /api/pipeline/review?company=`, `GET /api/pipeline/review/{id}`, `POST /api/pipeline/review/{id}/note`.
+
+## Talk audit and fixes (16 Oct 2026)
+- AUDIT (read-only, every assistant turn 16 Sep to 16 Oct, 168): 15 find failures, ~35 stuck turns, median reply 220
+  words (p90 365). Causes were mostly code: a false "you claimed something" guard (36 replies), every tool round's
+  narration glued into the reply (75), and a "speak naturally, no bullets" prompt. Lookups were all substring matches.
+- GUARD (`provider.py`): a turn counts as having made something when a creating tool ran (the list now includes
+  proposals, reissue, correct_task, update_opportunity, notes, documents, rules) OR a tool result names a card
+  (`_CARD_IN_RESULT`). `_CLAIM_RE` is past-tense claims only ("I've drafted"), never "card #N is in your Inbox". The
+  leftover note is one line, "(Nothing was saved this turn.)".
+- ONLY THE ANSWER IS KEPT: `chat_tools_stream` keeps the final round's text as the reply; tool rounds are painted
+  live and cleared (`tool` / `reset` events, cockpit v74).
+- ANSWER STYLE is the first always-on rule (`_shared_behaviour`): bottom line first, ~60 words for a simple question,
+  at most five short lines otherwise, digits, no recap / narration / unasked strategy / rule offers; "deep dive"
+  lifts it. `personas.VOICE`, the Chief ("strategy only when asked") and the Manager (scope question only when
+  saving a rule) follow it. Measured after: 70, 71 and 18 words on the audit's failing questions.
+- `runtime/cortex/find.py`: ONE fuzzy finder. Word by word: exact/prefix, sound (Postgres `fuzzystrmatch`
+  dmetaphone, installed 16 Oct with `pg_trgm`), spelling (trigram, computed in Python), adjacent words joined
+  ("Al Hammad" = "Alhamad"); ranked up for open deals, recent activity, clients; only results within 0.2 of the best.
+  Aliases: seeded team names + setting `talk_aliases` (Talk `remember_alias`). Used by crm_lookup (adds
+  `closest_matches`, phone search, matching `opportunities`), deal_timeline(search=), draft_email name resolution,
+  list_tasks(search=, company=, deal_id=), and company names in `_talk_company` (`find.company`). Email-less WhatsApp
+  contacts are included; CSV-blob import rows (name 70+ chars) are not.
+- New Talk tools: `update_contact` (by email, phone or fuzzy name; rename, number, email, title, organisation),
+  `remember_alias`, `pipeline_review`, `update_proposal_pricing`.
+- FILES: a document attached in Talk is saved to the library on arrival (`kind client-document`, 40MB) and Talk is
+  told its id and to state what it read, because an attachment is only visible on the turn it came with.
+- QUOTATION GUARD: unit prices already on the stored versions of the quotation number count as the owner's figures.
+- KEPT ON THE SERVER: every tool call -> table `talk_tool_log` (who, tool, input, output); the last finished reply
+  per person -> setting `chat_last:<email>`, which the cockpit fetches (`/api/chat/last`) when its stream drops.
+- NOT BUILT (from the audit's gap list): a non-destructive deal merge, xlsx -> PDF export.
