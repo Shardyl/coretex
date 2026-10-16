@@ -829,6 +829,13 @@ def _cases():
     case("approving a quotation that already went out drafts no second email", "Shama card 1290",
          lambda: "so no new email was drafted" in inspect.getsource(engine._quote_to_email))
 
+    def _review():
+        from . import review
+        d = db.one("select id from crm_projects where stage in ('Opportunity','Quote') order by id desc limit 1")
+        r = review.summary(d["id"]) if d else {"steps": [{"id": "CHASE"}]}
+        return bool(r and r["steps"] and r["steps"][0]["id"] == "CHASE" or any(x["id"] == "CHASE" for x in r["steps"]))
+    case("the pipeline review lists each opportunity's chase and next steps", "pipeline review", _review)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

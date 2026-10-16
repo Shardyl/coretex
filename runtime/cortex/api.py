@@ -2601,6 +2601,35 @@ def crm_account(id: int, _: None = Depends(auth)) -> dict:
     return a
 
 
+@app.get("/api/pipeline/review")
+def pipeline_review(company: str | None = None, u: dict = Depends(current_user)) -> dict:
+    """Every open opportunity with its next steps and when (review.py): the owner's run-through screen."""
+    from . import review
+    slugs = _scoped_companies(u, company)
+    labels = [_CRM_ORG.get(s, str(s).title()) for s in slugs] if slugs else None
+    return {"rows": review.rows(labels)}
+
+
+@app.get("/api/pipeline/review/{id}")
+def pipeline_review_one(id: int, u: dict = Depends(current_user)) -> dict:
+    from . import review
+    _guard_deal(u, id)
+    r = review.summary(id)
+    if not r:
+        raise HTTPException(status_code=404, detail="opportunity not found")
+    return r
+
+
+@app.post("/api/pipeline/review/{id}/note")
+def pipeline_review_note(id: int, body: NoteBody, u: dict = Depends(current_user)) -> dict:
+    """His note on a review row: filed on the opportunity and applied to the listed next steps."""
+    from . import review
+    _guard_deal(u, id)
+    if not (body.note or "").strip():
+        raise HTTPException(status_code=400, detail="note required")
+    return review.apply_note(id, body.note.strip(), by=(u or {}).get("name") or (u or {}).get("email") or "")
+
+
 @app.post("/api/crm/account/{id}/note")
 def crm_account_note(id: int, body: NoteBody, _: None = Depends(auth)) -> dict:
     if not (body.note or "").strip():

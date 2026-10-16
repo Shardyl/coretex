@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v72';
+const APP_BUILD = 'cortex-v73';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -1292,7 +1292,7 @@ async function renderOpps(b,co){
   const allco=!co;
   let h=`<div class="mrow"><div class="mcard"><div class="ml">Forecast value</div><div class="mv">${valueHeadline(d.currencies)}</div></div>
     <div class="mcard"><div class="ml">Open opportunities</div><div class="mv">${d.count}</div></div></div>`;
-  h+=`<div class="row" style="margin:2px 0 8px"><button class="btn go sm" onclick="openNewDeal(null)">${ic('plus',15)} New opportunity</button></div>`;
+  h+=`<div class="row" style="margin:2px 0 8px;gap:8px"><button class="btn go sm" onclick="openNewDeal(null)">${ic('plus',15)} New opportunity</button><button class="btn sm" onclick="openReview()">${ic('check',15)} Review next steps</button></div>`;
   if(!d.opportunities.length){ h+='<div class="empty">No open opportunities</div>'; }
   else if(allco){ const g=byCompany(d.opportunities); Object.keys(g).sort().forEach(cn=>{ const it=g[cn], s=it.reduce((a,o)=>a+(+o.value||0),0);
     h+=`<div class="h">${esc(cn)} · ${it.length}${s?' · '+dmoney(s):''}</div>`+it.map(dealCard).join(''); }); }
@@ -1342,6 +1342,48 @@ function renderNurtOnly(){
   const rows=Object.values(NURT);
   document.getElementById('clcount').textContent=rows.length+' nurtured';
   list.innerHTML = rows.length? rows.map(r=>accountCard({id:r.account_id,name:r.account_name,contacts:r.contacts,deals:r.won_projects,won_value:r.won_value})).join('') : '<div class="empty">No clients being nurtured yet — open an organisation and press Start nurturing</div>';
+}
+// PIPELINE REVIEW (owner, 16 Oct 2026): every open opportunity, what Cortex will do next and when; a note corrects it
+const rvOkKey=r=>'rv_ok:'+r.id+':'+(r.steps||[]).map(s=>s.id+s.date).join('|');
+function rvOkGet(r){ try{ return localStorage.getItem(rvOkKey(r))==='1'; }catch(e){ return false; } }
+function rvSteps(r){ return (r.steps||[]).map(s=>`<div class="rvs" style="display:flex;gap:10px;padding:3px 0;font-size:13px"><span style="min-width:74px;color:var(--mut)">${esc(s.date||'—')}</span><span style="flex:1;min-width:0">${esc(s.text)}${s.card?` <a href="#" onclick="event.preventDefault();go('inbox')" style="color:var(--mut)">#${s.card}</a>`:''}</span></div>`).join(''); }
+function rvRow(r){
+  const ok=rvOkGet(r), lt=r.last_them, lu=r.last_us;
+  return `<div class="card" id="rv${r.id}" style="margin-bottom:10px;${ok?'opacity:.55':''}">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:8px"><div style="flex:1;min-width:0;cursor:pointer" onclick="openProject(${r.id})"><div class="cname">${esc(r.title||'Untitled')}</div><div class="csub">#${r.id} · ${esc(r.contact||'no contact')}${r.value?' · '+dmoney(r.value)+' '+esc(r.currency||''):''}</div></div>${stageChip(r.stage)}</div>
+    <div class="csub" style="margin:4px 0 6px">Them: ${lt?esc(lt.when):'never'} · Us: ${lu?esc(lu.when):'never'}${r.last_note?' · Your note '+esc(r.last_note.when)+': '+esc(r.last_note.text.slice(0,90)):''}</div>
+    <div id="rvs${r.id}">${rvSteps(r)}</div>
+    <div class="row" style="margin-top:8px;gap:8px"><button class="btn sm" onclick="rvOpen(${r.id})">${ic('edit',14)} Not right</button><button class="btn sm${ok?' go':''}" onclick="rvOk(${r.id})">${ic('check',14)} ${ok?'Checked':'Looks right'}</button></div>
+    <div id="rvn${r.id}" hidden style="margin-top:8px"><textarea id="rvt${r.id}" rows="3" style="width:100%" placeholder="What is wrong, and what should happen instead (for example: they are away until 3 Nov, chase then; cancel the call reminder)"></textarea>
+      <div class="row" style="margin-top:6px;gap:8px"><button class="btn warn sm" onclick="dictate(this,'rvt${r.id}')">${ic('mic',15)} Tap to talk</button><button class="btn go sm" onclick="rvSave(${r.id},this)">Save note</button></div></div>
+    <div id="rvr${r.id}" class="csub" style="margin-top:6px"></div></div>`; }
+let RV={};
+async function openReview(){
+  const v=document.getElementById('view'); v.innerHTML='<div class="empty">Loading the pipeline…</div>';
+  const co=(document.getElementById('coSel')||{}).value||'all';
+  let d; try{ d=await api('/api/pipeline/review?company='+encodeURIComponent(co)); }catch(e){ d={rows:[]}; }
+  RV={}; (d.rows||[]).forEach(r=>RV[r.id]=r);
+  const head=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>Review next steps</b><span class="csub" style="margin-left:auto">${(d.rows||[]).length} open</span></div>`;
+  if(!(d.rows||[]).length){ v.innerHTML=head+'<div class="empty">No open opportunities.</div>'; return; }
+  const g={}; d.rows.forEach(r=>{ (g[r.company||'Other']=g[r.company||'Other']||[]).push(r); });
+  v.innerHTML=head+'<div class="csub" style="margin:0 2px 10px">What Cortex will do next on each opportunity, and when. Tap Not right, say what should happen, and Cortex updates it.</div>'
+    +Object.keys(g).sort().map(c=>`<div class="h">${esc(c)} · ${g[c].length}</div>`+g[c].map(rvRow).join('')).join('');
+}
+function rvOpen(id){ const n=document.getElementById('rvn'+id); if(n){ n.hidden=!n.hidden; if(!n.hidden) document.getElementById('rvt'+id).focus(); } }
+function rvOk(id){ const r=RV[id]; if(!r) return; try{ const k=rvOkKey(r); localStorage.getItem(k)==='1'?localStorage.removeItem(k):localStorage.setItem(k,'1'); }catch(e){}
+  const el=document.getElementById('rv'+id); if(el) el.outerHTML=rvRow(r); }
+async function rvRefresh(id){ try{ const r=await api('/api/pipeline/review/'+id); RV[id]=r; const s=document.getElementById('rvs'+id); if(s) s.innerHTML=rvSteps(r); }catch(e){} }
+async function rvSave(id,btn){
+  const ta=document.getElementById('rvt'+id); const note=(ta&&ta.value||'').trim(); if(!note){ toast('Say what is wrong first'); return; }
+  btn.disabled=true; btn.textContent='Saving…';
+  try{ const r=await api('/api/pipeline/review/'+id+'/note',{method:'POST',body:JSON.stringify({note})});
+    const out=document.getElementById('rvr'+id);
+    if(out) out.innerHTML=(r.understood?esc(r.understood)+'<br>':'')+((r.done||[]).length?(r.done||[]).map(x=>'· '+esc(x)).join('<br>'):'Note saved on the opportunity. Drafts and timings that depend on it update in the next minute.');
+    if(r.summary){ RV[id]=r.summary; const s=document.getElementById('rvs'+id); if(s) s.innerHTML=rvSteps(r.summary); }
+    ta.value=''; document.getElementById('rvn'+id).hidden=true;
+    setTimeout(()=>rvRefresh(id),25000);
+  }catch(e){ toast((e&&e.message)||'Could not save'); }
+  btn.disabled=false; btn.textContent='Save note';
 }
 async function openDupes(){
   const v=document.getElementById('view'); v.innerHTML='<div class="empty">Finding duplicate organisations…</div>';
