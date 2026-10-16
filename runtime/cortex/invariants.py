@@ -53,11 +53,11 @@ CHECKS = [
     },
     {
         "key": "owed_notice_hidden",
-        "what": "Owed work is open but the notice it raised was dismissed, so it is invisible",
-        "sql": "select r.id, r.title from reminders r join notifications n on n.id=r.last_notification_id where r.owed "
-               "and r.status='fired' and n.state='dismissed'",
-        "fix": "update notifications n set state='unread' from reminders r where n.id=r.last_notification_id and r.owed "
-               "and r.status='fired' and n.state='dismissed' returning n.id",
+        "what": "Owed work is open but its notice was dismissed BY THE INBOX TIDY (his own dismissals are his call)",
+        "sql": "select r.id, r.title from reminders r join notifications n on n.id=r.last_notification_id join crm_projects p "
+               "on r.target_type='deal' and p.id::text=r.target_id where r.owed and r.status='fired' and n.state='dismissed' "
+               "and exists (select 1 from jsonb_array_elements(p.history) h where h->>'text' like 'Inbox tidy:%%' "
+               "and h->>'text' like '%%N' || n.id || ':%%')",
     },
     {
         "key": "owed_closed_without_proof",
