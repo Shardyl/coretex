@@ -210,14 +210,20 @@ def chat(system: str, messages: list[dict], *, max_tokens: int = 1000,
 # helpers let chat_tools / chat_tools_stream detect a creation CLAIM with no creating-tool call, force one
 # real corrective attempt, and never let a false confirmation stand.
 _CREATING_TOOLS = {"create_task", "draft_email", "run_report", "schedule_report", "create_quotation",
-                   "set_reminder", "create_contact", "create_deal", "create_opportunity"}
-_CLAIM_RE = re.compile(
-    r"(?:task\s*#?\s*\d+"
-    r"|in your inbox"
-    r"|drafting (?:it|this|that|now)"
+                   "set_reminder", "create_contact", "create_deal", "create_opportunity", "create_proposal",
+                   "create_creative_proposal", "reissue_quotation", "correct_task", "update_opportunity",
+                   "note_opportunity", "update_contact", "save_document", "attach_document", "issue_proforma",
+                   "quotation_signed", "agency_rates_deck", "update_proposal_pricing", "add_rule", "update_craft",
+                   "remember_preference", "remember_alias"}
+# A tool result that names a card is proof something exists (16 Oct 2026 audit: the guard fired on 36 of 168 Talk
+# replies, nearly all false, because it only knew a fixed list of tools and read "in your Inbox" or "task #N" in a
+# reply that was only READING a card as a claim).
+_CARD_IN_RESULT = re.compile(r"\b(?:task|card)\s*#\s*\d+", re.I)
+_CLAIM_RE = re.compile(          # past-tense claims only: reading a card, or saying one will come, is not a claim
+    r"(?:drafting (?:it|this|that) now"
     r"|i'?ve (?:created|drafted|queued|added|staged|scheduled|set up|put)"
     r"|i have (?:created|drafted|queued|added|staged|scheduled|set up|put)"
-    r"|ready (?:to (?:read|review)|in your inbox))",
+    r"|(?:it'?s|is) now in your inbox)",
     re.I)
 
 
@@ -234,8 +240,7 @@ _ACT_DONT_CLAIM = (
     "actually meant to be created, reply honestly and do NOT claim anything was created or name any task number."
 )
 
-_GUARD_NOTE = ("\n\n(Cortex note: I could not confirm a new task was created this turn — if you asked me to "
-               "create or draft something, please re-send it so it's saved to your Inbox.)")
+_GUARD_NOTE = "\n\n(Nothing was saved this turn.)"
 
 
 # A Talk round that runs out of output room mid-answer is re-run once with this much room. The first cut
@@ -286,7 +291,7 @@ def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
         if resp.stop_reason != "tool_use":
             text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
             # GUARD: it claims it created/queued something but never called a tool that does -> force one real attempt
-            if not nudged and _claims_action(text) and not (called & _CREATING_TOOLS):
+            if not nudged and _claims_action(text) and not (called & (_CREATING_TOOLS | {"_card"})):
                 nudged = True
                 msgs.append({"role": "assistant", "content": resp.content})
                 msgs.append({"role": "user", "content": [{"type": "text", "text": _ACT_DONT_CLAIM}]})
@@ -301,6 +306,8 @@ def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
                     out = executor(b.name, b.input or {})
                 except Exception as e:  # noqa: BLE001
                     out = f"error: {e}"
+                if _CARD_IN_RESULT.search(str(out)):
+                    called.add("_card")
                 results.append({"type": "tool_result", "tool_use_id": b.id, "content": str(out)})
         msgs.append({"role": "user", "content": results})
     if resp is not None and resp.stop_reason == "tool_use":
@@ -317,7 +324,7 @@ def chat_tools(system: str, messages: list[dict], tools: list[dict], executor,
         return ""
     text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
     # FINAL SAFETY NET: never hand back a false confirmation
-    if _claims_action(text) and not (called & _CREATING_TOOLS):
+    if _claims_action(text) and not (called & (_CREATING_TOOLS | {"_card"})):
         text += _GUARD_NOTE
     return text
 
@@ -349,13 +356,16 @@ def chat_tools_stream(system: str, messages: list[dict], tools: list[dict], exec
             _log_usage(MODEL, getattr(final, "usage", None), purpose, company)
             if final.stop_reason != "max_tokens":
                 break
-        final_text += round_text
+        # ONLY THE ANSWER IS KEPT (16 Oct 2026 audit: 75 of 168 replies carried every round's narration glued
+        # together, "I'll look them up first.Found it..."). A tool round's text is shown live, then replaced.
+        final_text = round_text
         if final.stop_reason != "tool_use":
             # GUARD: claimed an action but no creating tool ran -> force one real corrective round (live)
-            if not nudged and _claims_action(final_text) and not (called & _CREATING_TOOLS):
+            if not nudged and _claims_action(final_text) and not (called & (_CREATING_TOOLS | {"_card"})):
                 nudged = True
                 msgs.append({"role": "assistant", "content": final.content})
                 msgs.append({"role": "user", "content": [{"type": "text", "text": _ACT_DONT_CLAIM}]})
+                yield ("reset", {})
                 continue
             break
         msgs.append({"role": "assistant", "content": final.content})
@@ -368,9 +378,13 @@ def chat_tools_stream(system: str, messages: list[dict], tools: list[dict], exec
                     out = executor(b.name, b.input or {})
                 except Exception as e:  # noqa: BLE001
                     out = f"error: {e}"
+                if _CARD_IN_RESULT.search(str(out)):
+                    called.add("_card")
                 results.append({"type": "tool_result", "tool_use_id": b.id, "content": str(out)})
         msgs.append({"role": "user", "content": results})
     if final is not None and final.stop_reason == "tool_use":      # out of rounds mid-task: say so, never ""
+        final_text = ""
+        yield ("reset", {})
         try:
             with client.with_options(timeout=600.0).messages.stream(
                     model=MODEL, max_tokens=max_tokens, system=sys_blocks, tools=cached_tools,
@@ -385,7 +399,7 @@ def chat_tools_stream(system: str, messages: list[dict], tools: list[dict], exec
             yield ("delta", {"text": _OUT_OF_ROUNDS_NOTE})
     reply = final_text.strip()
     # FINAL SAFETY NET: never end the stream on a false confirmation
-    if _claims_action(reply) and not (called & _CREATING_TOOLS):
+    if _claims_action(reply) and not (called & (_CREATING_TOOLS | {"_card"})):
         yield ("delta", {"text": _GUARD_NOTE})
         reply += _GUARD_NOTE
     yield ("done", {"reply": reply})

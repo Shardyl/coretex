@@ -3318,14 +3318,12 @@ CHAT_SYSTEM_BASE = (
     "You are Cortex, Rashad's voice-first AI operations partner. You help him run his businesses: "
     "Tabscanner (receipt-OCR / data-extraction API), Sensa (AI video production), SkyVision, and "
     "FilmSpoke. "
-    "You are warm, sharp and concise. Your replies are usually read aloud, so write the "
-    "way you'd speak: natural sentences, no markdown, no bullet lists, no headings, and keep it brief "
-    "unless he asks for depth. "
+    "You are sharp and direct. Follow ANSWER STYLE in the always-on rules on every reply. "
     "You manage Cortex's SKILLS and their standing rules. A skill is how a job gets done well plus "
     "rules the worker always follows. Use your tools to view skills (list_skills), add a rule "
     "(add_rule), create a skill (create_skill), or rewrite a skill's craft (update_craft). When Rashad "
     "asks to add a rule, create a skill, or change how something is handled, ACTUALLY DO IT with the "
-    "tools, then confirm in one short spoken sentence what you changed. When he describes a case that "
+    "tools, then confirm in one short sentence what you changed. When he describes a case that "
     "went wrong (e.g. a misjudged lead), turn the lesson into one or more concise standing rules and "
     "add them to the right skill. If unsure which skill or company he means, ask. "
     "RULES HAVE A SCOPE: 'universal' (applies to EVERY company) or 'company' (just one). This matters a "
@@ -5232,6 +5230,14 @@ def _shared_behaviour() -> str:
     Manager persona — so behaviour is consistent no matter who answers (identity, attachments, drafting→Inbox,
     proactive CRM lookup, self-learning, and the operator preferences Rashad has taught)."""
     rules = [
+        "ANSWER STYLE (owner, absolute; 16 Oct 2026: 'cut down to the direct facts, not some big over-bloated "
+        "response'): bottom line first. A simple question gets one to three short sentences, about 60 words at "
+        "most. A bigger answer: a one-line answer, then at most five short lines, each a fact, no headings, no "
+        "markdown. Numbers as digits (card 1287, AED 39,600, Fri 16 Oct). Never: recap what he said, narrate "
+        "searches ('let me check', 'I'll look that up'), explain your reasoning, list options he did not ask "
+        "for, add strategy or suggestions, or offer to save a standing rule unless he is teaching one. When you "
+        "did something, say what and the card number, nothing else. When blocked, one line: what stopped it and "
+        "the one thing you need. 'Deep dive', 'explain' or 'tell me more' lifts the limit for that answer.",
         "You are ALWAYS talking to Rashad Al-Safar, owner of every business. Voice-to-text often mis-hears "
         "'Rashad' as 'Richard' — same person; 'Richard' / 'Richard at Tabscanner' means Rashad, and "
         "rashad@tabscanner.com is his Tabscanner business email.",
@@ -5241,8 +5247,7 @@ def _shared_behaviour() -> str:
         "does not exist unless a search returned ZERO total matches on the broadest sensible query. A result "
         "marked 'truncated' is incomplete — refine and search again before drawing ANY conclusion. If asked "
         "about someone by name, search the NAME (and again with spelling variants), not just a company or "
-        "domain. He builds real business decisions on your answers: a slow, verified answer always beats a "
-        "fast guess, and a false 'doesn't exist' is the worst answer you can give.",
+        "domain. Verify silently (never narrate it): a false 'doesn't exist' is the worst answer you can give.",
         "FILES / ATTACHMENTS WORK: when he attaches an image or PDF, it IS attached to whatever you draft — saved "
         "on the task, used by the worker, and shown on the Inbox approval card. Just attach it and confirm 'your "
         "screenshot is attached to the draft'. NEVER say you can't attach files, that it won't be included, or hedge.",
@@ -5444,6 +5449,20 @@ _TURN_SAID: _cv.ContextVar[str] = _cv.ContextVar("_TURN_SAID", default="")
 _TURN_LINKS: _cv.ContextVar[tuple] = _cv.ContextVar("_TURN_LINKS", default=())
 
 
+def _log_tool(user: dict | None, name: str, inp: dict, out) -> None:
+    """EVERY TALK TOOL CALL IS KEPT (16 Oct 2026 audit: tool calls were logged nowhere, so a failure could only be
+    guessed from the reply text). Table talk_tool_log, bounded text, never fails the turn."""
+    try:
+        db.execute("create table if not exists talk_tool_log (id bigserial primary key, at timestamptz default now(), "
+                   "who text, tool text, input jsonb, output text)")
+        clean = {k: (v if len(str(v)) < 1500 else str(v)[:1500] + "...") for k, v in (inp or {}).items()
+                 if not str(k).startswith("_")}
+        db.execute("insert into talk_tool_log (who, tool, input, output) values (%s,%s,%s,%s)",
+                   ((user or {}).get("email") or "owner", name, json.dumps(clean, default=str), str(out)[:3000]))
+    except Exception as e:  # noqa: BLE001
+        print(f"[talk-log] {type(e).__name__}: {e}", flush=True)
+
+
 def _chat_prepare(body: ChatTurn, user: dict | None = None):
     """Shared prep for /api/chat and /api/chat/stream: build the working-memory window, route to a persona,
     attach images, resolve (system, tools), and build the tool executor. Returns (msgs, chosen, system, tools, exec)."""
@@ -5492,6 +5511,7 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
                         "Change what caused the refusal, or tell Rashad plainly what is missing and ask him. "
                         "Never send it unchanged again, and never say it was done.")
         out = _exec_skill_tool(name, inp, u=user)
+        _log_tool(user, name, inp, out)
         if _qkey and isinstance(out, str) and re.match(r"\s*(Quotation NOT built|NOT issued|NOT RUN|unknown business)",
                                                        out, re.I):
             _refused[_qkey] = out
@@ -5589,11 +5609,24 @@ def chat_stream(body: ChatTurn, u: dict = Depends(current_user)) -> StreamingRes
         yield _sse("meta", {"persona": chosen, "persona_label": personas.label(chosen)})
         out: _q.Queue = _q.Queue()
 
+        _who = (u or {}).get("email") or "owner"
+        _asked = _said_text(msgs[-1]["content"])[:300]
+
         def _produce():
             try:
                 for kind, data in provider.chat_tools_stream(
                         system, msgs, tools, _exec,
                         purpose=f"chat:{chosen}" if chosen else "chat", company=body.company):
+                    if kind == "done":
+                        # THE REPLY OUTLIVES THE CONNECTION (16 Oct 2026 audit: nine replies lost to a dropped
+                        # stream). The cockpit fetches it from /api/chat/last when its stream breaks.
+                        try:
+                            db.setting_set(f"chat_last:{_who}", {"at": datetime.utcnow().isoformat() + "Z",
+                                                                 "asked": _asked, "reply": data.get("reply") or "",
+                                                                 "persona": chosen,
+                                                                 "persona_label": personas.label(chosen)})
+                        except Exception:  # noqa: BLE001
+                            pass
                     out.put((kind, data))
             except Exception as e:  # noqa: BLE001 — surface a clean error event, never a broken stream
                 out.put(("error", {"error": str(e)[:200]}))
@@ -5613,6 +5646,12 @@ def chat_stream(body: ChatTurn, u: dict = Depends(current_user)) -> StreamingRes
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/chat/last")
+def chat_last(u: dict = Depends(current_user)) -> dict:
+    """The last Talk reply finished for this person, for a cockpit whose stream dropped before it arrived."""
+    return db.setting_get(f"chat_last:{(u or {}).get('email') or 'owner'}") or {}
 
 
 class TitleReq(BaseModel):

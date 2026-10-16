@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v73';
+const APP_BUILD = 'cortex-v74';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -2925,7 +2925,7 @@ async function sendChat(text, viaVoice){
   chatMsgs.push({role:'assistant',content:'…'}); paintChat();
   if(demo){ chatMsgs[chatMsgs.length-1]={role:'assistant',content:'(demo) Log in with your passcode to chat for real.'}; paintChat(); return ''; }
   saveConv(true);   // persist the user's turn NOW so a slow/dropped reply can never lose the conversation
-  const idx=chatMsgs.length-1;
+  const idx=chatMsgs.length-1, sentAt=Date.now();
   try{
     const hist=chatMsgs.filter(m=>m.content!=='…').map(m=>({role:m.role,content:m.content}));
     const fco=(document.getElementById('coSel')||{}).value||'';
@@ -2945,6 +2945,7 @@ async function sendChat(text, viaVoice){
         const ev=parseSSE(blk); if(!ev) continue;
         if(ev.event==='meta'){ persona=ev.data.persona||''; plabel=ev.data.persona_label||'Cortex'; }
         else if(ev.event==='delta'){ reply+=(ev.data.text||''); chatMsgs[idx]={role:'assistant',content:reply||'…',who:plabel,pk:talkingTo||persona}; paintChat(); }
+        else if(ev.event==='tool'||ev.event==='reset'){ reply=''; chatMsgs[idx]={role:'assistant',content:'…',who:plabel,pk:talkingTo||persona}; paintChat(); }
         else if(ev.event==='done'){ if(ev.data.reply) reply=ev.data.reply; }
         else if(ev.event==='error'){ throw new Error(ev.data.error||'stream error'); }
       }
@@ -2964,12 +2965,23 @@ async function sendChat(text, viaVoice){
     // A dropped connection throws a TypeError 'Failed to fetch'. The user's turn is already saved, so don't scare them.
     const netDrop=(e instanceof TypeError)||/failed to fetch|networkerror|load failed|aborted|timed? ?out/i.test(m);
     if(netDrop){
-      chatMsgs[idx]={role:'assistant',who:'Cortex',content:'Network hiccup — the connection dropped before my reply finished. Your message is saved; give it a moment and check your Inbox. No need to resend unless it’s missing.'};
+      chatMsgs[idx]={role:'assistant',who:'Cortex',content:'Connection dropped. Cortex is still working on it; the reply appears here when it is done.'};
       try{ refreshBadge(); }catch(_){}
+      recoverReply(idx, msg, sentAt);
     } else {
       chatMsgs[idx]={role:'assistant',content:'Error: '+m};
     }
     paintChat(); saveConv(); return '';
+  }
+}
+// A DROPPED STREAM DOES NOT LOSE THE REPLY (16 Oct 2026): the server keeps the last finished reply per person
+async function recoverReply(idx, asked, sentAt){
+  for(let i=0;i<36;i++){
+    await new Promise(r=>setTimeout(r,5000));
+    try{ const r=await api('/api/chat/last');
+      if(r&&r.reply&&r.at&&Date.parse(r.at)>=sentAt-2000&&(r.asked||'').slice(0,120)===(asked||'').slice(0,120)){
+        if(chatMsgs[idx]){ chatMsgs[idx]={role:'assistant',content:r.reply,who:r.persona_label||'Cortex',pk:r.persona||''}; paintChat(); saveConv(); }
+        return; } }catch(e){}
   }
 }
 function speakAndWait(text){

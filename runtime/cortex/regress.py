@@ -836,6 +836,16 @@ def _cases():
         return bool(r and r["steps"] and r["steps"][0]["id"] == "CHASE" or any(x["id"] == "CHASE" for x in r["steps"]))
     case("the pipeline review lists each opportunity's chase and next steps", "pipeline review", _review)
 
+    from . import provider, api
+    case("Talk: reading a card is not a creation claim; a tool result naming a card is proof", "Talk audit 16 Oct",
+         lambda: not provider._claims_action("Card #1287 is in your Inbox waiting for you.")
+         and provider._claims_action("I've drafted the email for you.")
+         and bool(provider._CARD_IN_RESULT.search("Drafting an email ... as task #1287")))
+    case("Talk: only the final round's text is the reply", "Talk audit 16 Oct",
+         lambda: "final_text = round_text" in inspect.getsource(provider.chat_tools_stream))
+    case("Talk: answer style rule is first in the always-on rules", "Talk audit 16 Oct",
+         lambda: "ANSWER STYLE (owner, absolute" in api._shared_behaviour())
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
