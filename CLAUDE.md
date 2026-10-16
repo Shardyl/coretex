@@ -3589,3 +3589,29 @@ shoot needs none), then 10% off the whole quotation.
   (Unified Robotics #149 was read as declined from our own not-pursued note). One-off over 59 deals: the Inbox went
   from 23 notices to 4 (one of them the daily calls card); every change is on its deal as "Inbox tidy: ...".
 - DIGESTS: a delivered digest from an earlier day is dismissed as soon as the next day's starts collecting.
+
+## A sent proposal stays as sent; one cover email per quotation (16 Oct 2026)
+- CAUSE: Shama (deal 130). A note asking for a 35,000 budget built quotation v5, and `restamp_proposal_price` re-opened
+  the 21 Sep proposal card 815 (approved and emailed long before) and, through `creative.adopt_quotation`, re-ran the
+  COPY WRITER over the whole deck ("keep every page as it is" still rewrote it). The owner then approved quotation v6
+  after its email had gone, and `_quote_to_email` drafted a second cover email (card 1290).
+- `engine._proposal_sent(p)`: a sent email on the deal carried this proposal (its `proposal_card`, or a "Proposal
+  <number>" file). `restamp_proposal_price` then changes nothing and raises one notice (`deal:<id>:proposal-sent-<n>`);
+  Talk `update_proposal_pricing(deal_id)` forces it (`force=True`) when he asks.
+- `creative.adopt_quotation` runs NO copy stage: the investment page is code from the live quotation; only investment
+  copy that could contradict it is cleared (details for blocks that no longer exist, a blurb stating a figure).
+- `_quote_to_email`: a quotation whose PDF already went out on a sent email on the deal is approved with no new email.
+
+## Pipeline review (owner, 16 Oct 2026)
+- Opportunities screen -> "Review next steps" (`openReview`, sw cortex-v73). One row per Opportunity/Quote deal:
+  contact, value, last contact each way, last owner note, and every next step with its date: the email chase clock
+  (or why there is none), every pending reminder on the deal (his own marked "Your reminder"), open and scheduled cards.
+  "Looks right" is a per-viewer tick (localStorage, cleared when the steps change); "Not right" takes typed or spoken
+  words.
+- `runtime/cortex/review.py`: `summary(deal)` / `rows(labels)` are code only. `apply_note(deal, note, by)` files the
+  note through `crm.add_project_note` (context + chase/touch timing + the waiting email or quotation), then ONE Haiku
+  reading (`pipeline-review`) returns verdicts by step id (cancel / move with HIS words / keep, stop or resume the
+  chase, add a reminder); code resolves dates (`reminders.parse_when`, then `_resolve_their_date`), acts only on
+  reminders still pending, never cancels a quotation or proposal card, never moves a stage (it says so), logs
+  "Pipeline review: ..." on the deal and marks the flow. The weekly touch reminder is kept when he says he spoke to them.
+- API: `GET /api/pipeline/review?company=`, `GET /api/pipeline/review/{id}`, `POST /api/pipeline/review/{id}/note`.
