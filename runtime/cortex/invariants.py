@@ -46,9 +46,16 @@ CHECKS = [
         "sql": f"select r.id, r.title, p.stage from reminders r join crm_projects p on r.target_type='deal' "
                f"and p.id::text=r.target_id where r.status in ('pending','snoozed') and "
                f"coalesce(r.created_by,'') like 'cortex%%' and p.stage in {CLOSED}",
-        "fix": f"update reminders r set status='cancelled' from crm_projects p where r.target_type='deal' and "
+        "fix": f"update reminders r set status='cancelled', closed_evidence=jsonb_build_object('kind','deal_closed','stage',p.stage), "
+               f"closed_why='health check: the deal has closed' from crm_projects p where r.target_type='deal' and "
                f"p.id::text=r.target_id and r.status in ('pending','snoozed') and "
                f"coalesce(r.created_by,'') like 'cortex%%' and p.stage in {CLOSED} returning r.id",
+    },
+    {
+        "key": "owed_closed_without_proof",
+        "what": "Owed work was closed with no proof recorded (the database guard should make this impossible)",
+        "sql": "select id, title, status from reminders where owed and status in ('done','cancelled') and "
+               "closed_evidence is null and created_at > '2026-10-16'",
     },
     {
         "key": "chase_clock_on_lost_deal",
@@ -65,7 +72,8 @@ CHECKS = [
                "p.id::text=r.target_id where r.status in ('pending','snoozed','fired') and r.title like "
                "'Prepare and send the proposal%%' and (p.stage <> 'Opportunity' or exists (select 1 from "
                "jsonb_array_elements(p.history) e where e->>'event' = 'quotation_sent'))",
-        "fix": "with d as (update reminders r set status='done' from crm_projects p where r.target_type='deal' and "
+        "fix": "with d as (update reminders r set status='done', closed_evidence=jsonb_build_object('kind','stage','stage',p.stage), "
+               "closed_why='health check: a quotation or proposal went out' from crm_projects p where r.target_type='deal' and "
                "p.id::text=r.target_id and r.status in ('pending','snoozed','fired') and r.title like "
                "'Prepare and send the proposal%%' and (p.stage <> 'Opportunity' or exists (select 1 from "
                "jsonb_array_elements(p.history) e where e->>'event' = 'quotation_sent')) returning r.id, "

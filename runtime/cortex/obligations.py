@@ -37,6 +37,125 @@ KINDS = [
      "done_on": "the deal moving to won work or Lost"},
 ]
 JUDGED = ("commitment", "meeting_commitment", "client_deadline", "next_step", "conversation_commitment")
+
+# ---------------------------------------------------------------------------------------------------------------------
+# OWED WORK CLOSES ONLY WITH PROOF (owner, 16 Oct 2026: "make sure this is fundamentally fixed and not a patch job").
+# The Inbox tidy closed Shama's Ramadan creative options (R350) on a guess ("the meeting was the deliverable
+# checkpoint"), and five more owed items with it. Any part of Cortex could close any reminder with one UPDATE, so the
+# only protection was each caller's good judgement. Now the DATABASE refuses: a reminder for something we owe
+# (`owed`, set on insert by trigger from KINDS below, never by a caller) can move to done or cancelled only when the
+# same UPDATE carries `closed_evidence` of a kind below, with its reference. A guess has no proof to give, so it can
+# only FLAG (`suspect`), which the owner confirms on Review next steps. Reopening clears the evidence.
+EVIDENCE = {                       # kind -> the key it must carry
+    "owner": "who",                # a person closed it: the cockpit, Talk, his review note, his "not needed"
+    "sent_email": "ref",           # an email we sent delivered it (the card or the message), quote verified by code
+    "client_words": "quote",       # the client wrote that it is done or not needed, quote verified by code
+    "thread": "quote",             # the thread shows it kept (our message or theirs), quote verified by code
+    "deal_closed": "stage",        # the deal moved to a stage that owes nothing
+    "stage": "stage",              # the stage itself completes it (proposal owed -> left Opportunity)
+    "duplicate": "kept",           # merged into another open reminder for the same thing
+    "rule": "ref",                 # a deterministic owner rule (a promise that waits on the client)
+}
+_CLOSED = ("done", "cancelled")
+
+
+def _owed_sql() -> str:
+    """The SQL test for 'owed', built from KINDS so the trigger and the Python agree by construction."""
+    parts = []
+    for k in KINDS:
+        if k.get("prefix"):
+            parts.append("NEW.title like " + "'" + k["prefix"].replace("'", "''") + "%'")
+        if k.get("created_by"):
+            parts.append("NEW.created_by = '" + k["created_by"] + "'")
+    return ("coalesce(NEW.created_by,'') like 'cortex%' and coalesce(NEW.created_by,'') <> 'cortex-touch' and ("
+            + " or ".join(parts) + ")")
+
+
+_GUARDED = False
+
+
+def ensure_guard(force: bool = False) -> None:
+    """Columns, the insert trigger that marks owed work, the update trigger that refuses a close without proof, and
+    a backfill of `owed`. Idempotent; once per process (reminders.ensure_schema runs every minute)."""
+    global _GUARDED
+    if _GUARDED and not force:
+        return
+    kinds = ", ".join("'" + k + "'" for k in EVIDENCE)
+    with db.connect() as c:
+        c.execute("alter table reminders add column if not exists owed boolean not null default false")
+        c.execute("alter table reminders add column if not exists closed_evidence jsonb")
+        c.execute("alter table reminders add column if not exists closed_why text")
+        c.execute("alter table reminders add column if not exists suspect jsonb")
+        c.execute(f"""
+create or replace function reminders_owed_mark() returns trigger language plpgsql as $f$
+begin
+  NEW.owed := ({_owed_sql()});
+  return NEW;
+end $f$;""")
+        c.execute(f"""
+create or replace function reminders_owed_guard() returns trigger language plpgsql as $f$
+begin
+  if NEW.status not in ('done','cancelled') then
+    NEW.closed_evidence := null;
+    NEW.closed_why := null;
+    return NEW;
+  end if;
+  if OLD.owed and OLD.status not in ('done','cancelled') then
+    if NEW.closed_evidence is null or NEW.closed_evidence->>'kind' is null
+       or NEW.closed_evidence->>'kind' not in ({kinds}) then
+      raise exception 'OWED_GUARD: reminder % is owed work; close it through obligations.close with evidence', OLD.id;
+    end if;
+  end if;
+  return NEW;
+end $f$;""")
+        c.execute("drop trigger if exists reminders_owed_mark on reminders")
+        c.execute("create trigger reminders_owed_mark before insert on reminders for each row "
+                  "execute function reminders_owed_mark()")
+        c.execute("drop trigger if exists reminders_owed_guard on reminders")
+        c.execute("create trigger reminders_owed_guard before update on reminders for each row "
+                  "execute function reminders_owed_guard()")
+        c.execute("update reminders set owed = (" + _owed_sql().replace("NEW.", "") + ") where owed is distinct from ("
+                  + _owed_sql().replace("NEW.", "") + ")")
+    _GUARDED = True
+
+
+def evidence(kind: str, **ref) -> dict:
+    from datetime import datetime, timezone
+    if kind not in EVIDENCE or not str(ref.get(EVIDENCE[kind]) or "").strip():
+        raise ValueError(f"evidence '{kind}' needs '{EVIDENCE.get(kind)}'")
+    return {"kind": kind, **{k: str(v)[:400] for k, v in ref.items()}, "at": datetime.now(timezone.utc).isoformat()}
+
+
+def close(rid: int, status: str, ev: dict, why: str = "") -> dict | None:
+    """THE way a reminder is closed. `ev` from evidence(). Returns the row, or None when it was already closed."""
+    from psycopg.types.json import Json
+    if status not in _CLOSED:
+        raise ValueError(status)
+    return db.execute("update reminders set status=%s, closed_evidence=%s, closed_why=%s where id=%s and "
+                      "status not in ('done','cancelled') returning *", (status, Json(ev), (why or "")[:300], int(rid)))
+
+
+def close_where(where: str, params: tuple, status: str, ev: dict, why: str = "") -> list[dict]:
+    """Bulk close (a deal closing, a stage rule). `where` is the SQL after WHERE; open rows only."""
+    from psycopg.types.json import Json
+    return db.query(f"update reminders set status=%s, closed_evidence=%s, closed_why=%s where ({where}) and "
+                    "status not in ('done','cancelled') returning id, title",
+                    (status, Json(ev), (why or "")[:300]) + tuple(params))
+
+
+def flag(rid: int, why: str, by: str = "inbox-tidy") -> None:
+    """A guess that owed work is done or can wait: shown to the owner to confirm, never acted on."""
+    from datetime import datetime, timezone
+    from psycopg.types.json import Json
+    db.execute("update reminders set suspect=%s where id=%s and status not in ('done','cancelled')",
+               (Json({"why": (why or "")[:300], "by": by, "at": datetime.now(timezone.utc).isoformat()}), int(rid)))
+
+
+def quote_in(quote: str, text: str) -> bool:
+    """Code checks a model's proof: the quoted words really are in the message (spacing and case ignored)."""
+    norm = lambda x: re.sub(r"[^a-z0-9]+", " ", (x or "").lower()).strip()     # noqa: E731
+    q = norm(quote)
+    return len(q.split()) >= 4 and q in norm(text)
 _QUOTE_RX = re.compile(r"quotation|proposal|\bSEN-\d{4}-\d{4}\b", re.I)
 
 
@@ -56,9 +175,10 @@ def kind_of(r: dict) -> str | None:
     return None
 
 
-def _done(deal_id: int, r: dict, why: str) -> None:
-    from . import pipeline, reminders
-    reminders.mark_done(int(r["id"]))
+def _done(deal_id: int, r: dict, why: str, ev: dict) -> None:
+    from . import pipeline
+    if not close(int(r["id"]), "done", ev, why):
+        return
     db.execute("update notifications set state='dismissed' where state in ('unread','read','snoozed') and id = "
                "(select last_notification_id from reminders where id=%s)", (int(r["id"]),))   # its nudge is answered too
     pipeline.log_deal(int(deal_id), "commitment_done", f"{r['title'][:160]} ({why})")
@@ -72,10 +192,11 @@ def on_sent(deal_id: int, body: str, to: str, subject: str = "", attachment_name
     if not rows:
         return settled
     names = " ".join(str(a) for a in (attachment_names or []))
+    _sent_ref = (subject or "(no subject)") + (f" | {names}" if names else "")
     if _QUOTE_RX.search(names) or _QUOTE_RX.search(subject or ""):
         for r in rows:
             if kind_of(r) == "proposal_owed":
-                _done(deal_id, r, "the quotation or proposal went out")
+                _done(deal_id, r, "the quotation or proposal went out", evidence("sent_email", ref=_sent_ref))
                 settled.append(r["id"])
     judged = [r for r in rows if kind_of(r) in JUDGED and r["id"] not in settled]
     if judged and (body or "").strip():
@@ -85,16 +206,22 @@ def on_sent(deal_id: int, body: str, to: str, subject: str = "", attachment_name
             out = provider.think_json(
                 "An email was just sent on a deal. Below are things we OWE this client (promises we made, deadlines "
                 "they set, next steps). Decide which THIS email genuinely completes: the promised or requested thing is "
-                "actually delivered, attached or answered in it, not merely mentioned or promised again. Return "
-                '{"done_ids": [<int>...]}. Conservative: when unclear, leave it open.',
+                "actually delivered, attached or answered in it, not merely mentioned or promised again. For each, "
+                "quote the exact words of the email (at least six words, copied character for character) that "
+                'deliver it. Return {"done": [{"id": <int>, "quote": "<exact words>"}]}. Conservative: when '
+                "unclear, leave it open.",
                 f"OWED:\n{listing}\n\nEMAIL JUST SENT (to {to}, subject {subject}, attachments: {names or 'none'}):\n"
                 f"{(body or '')[:3000]}", model=provider.MODEL_ROUTER, purpose="obligation-settle")
-            ids = {int(i) for i in (out or {}).get("done_ids", []) if str(i).isdigit()}
+            # the model's proof is checked by code: the words it quotes must be in the email (or its file names)
+            ids = {int(d.get("id")): d.get("quote") for d in ((out or {}).get("done") or [])
+                   if isinstance(d, dict) and str(d.get("id")).isdigit()
+                   and quote_in(str(d.get("quote") or ""), f"{body}\n{names}")}
         except Exception:  # noqa: BLE001
-            ids = set()
+            ids = {}
         for r in judged:
             if r["id"] in ids:
-                _done(deal_id, r, "delivered in the email that went out")
+                _done(deal_id, r, "delivered in the email that went out",
+                      evidence("sent_email", ref=_sent_ref, quote=ids[r["id"]]))
                 settled.append(r["id"])
     return settled
 
@@ -113,9 +240,9 @@ def on_stage(deal_id: int, old: str | None, new: str) -> None:
     for r in _open(deal_id):
         k = kind_of(r)
         if k == "proposal_owed" and new != "Opportunity":
-            _done(deal_id, r, f"the deal moved to {new}")
+            _done(deal_id, r, f"the deal moved to {new}", evidence("stage", stage=new))
         elif k == "tender_close" and (new in stages.WON or new == "Lost"):
-            _done(deal_id, r, f"the deal moved to {new}")
+            _done(deal_id, r, f"the deal moved to {new}", evidence("stage", stage=new))
     if old in stages.SALES and new not in stages.SALES:      # won, lost or parked: the personal touch track ends
         db.execute("update reminders set status='cancelled' where status in ('pending','snoozed') and "
                    "created_by='cortex-touch' and target_type='deal' and target_id=%s", (str(int(deal_id)),))
@@ -152,8 +279,9 @@ def cancel_matching(deal_id: int, words: str, why: str, except_task: int | None 
     did, done = int(deal_id), []
     for r in _open(did):
         if kind_of(r) in JUDGED and _same(r.get("title") or "", words):
-            db.execute("update reminders set status='cancelled' where id=%s", (r["id"],))
-            done.append(f"reminder #{r['id']}")
+            # only the owner's own decision reaches here (he skipped its prep card, or said it is not needed)
+            if close(r["id"], "cancelled", evidence("owner", who="owner: not needed", quote=words[:300]), why):
+                done.append(f"reminder #{r['id']}")
     p = db.one("select history from crm_projects where id=%s", (did,)) or {}
     hist, n = p.get("history") or [], 0
     for e in hist:
@@ -281,7 +409,7 @@ def merge_twins(rows: list) -> list:
         for r in _open_on_deal(did):
             same = _judge(r["title"], r["due_at"], kept).get("same") if kept else None
             if same and str(r.get("created_by") or "").startswith("cortex"):
-                db.execute("update reminders set status='cancelled' where id=%s", (r["id"],))
+                close(r["id"], "cancelled", evidence("duplicate", kept=same["id"]), f"same thing owed as #{same['id']}")
                 if r["due_at"] < same["due_at"]:
                     db.execute("update reminders set due_at=%s where id=%s", (r["due_at"], same["id"]))
                 pipeline.log_deal(int(did), "note", f"Reminder #{r['id']} merged into #{same['id']} (same thing owed): "

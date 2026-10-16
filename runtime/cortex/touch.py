@@ -237,6 +237,23 @@ def fire(r: dict) -> int | None:
                              "Log what was said as a note on each opportunity; the next touch follows it.",
                              priority="normal", category="calls", company_id=r.get("company_id"),
                              dedup_key=f"touch-day:{r.get('company_id')}:{day}", item=item)
+    # ONE CALLS CARD, ALWAYS TODAY'S (16 Oct 2026: the 15 Oct card was still in the Inbox on the 16th). Calls not yet
+    # made on an earlier day's card carry over onto today's, then the old card is dismissed (kept, not deleted).
+    try:
+        for old in db.query("select id, items from notifications where category='calls' and company_id=%s and "
+                            "state in ('unread','read','snoozed') and dedup_key like 'touch-day:%%' and dedup_key <> %s",
+                            (r.get("company_id"), f"touch-day:{r.get('company_id')}:{day}")):
+            for it in (old.get("items") or []):
+                if isinstance(it, dict) and it.get("deal_id") != deal_id:
+                    notifications.notify("Calls and WhatsApps today",
+                                         "Log what was said as a note on each opportunity; the next touch follows it.",
+                                         priority="normal", category="calls", company_id=r.get("company_id"),
+                                         dedup_key=f"touch-day:{r.get('company_id')}:{day}",
+                                         item={**it, "name": str(it.get("name") or "").replace(" (carried over)", "")
+                                               + " (carried over)"})
+            db.execute("update notifications set state='dismissed' where id=%s", (old["id"],))
+    except Exception as e:  # noqa: BLE001
+        print(f"[touch] calls card rollover: {type(e).__name__}: {e}", flush=True)
     st["step"] = int(st.get("step") or 0) + 1
     db.setting_set(f"touch:{deal_id}", st)
     _schedule(r.get("company_id"), deal_id, datetime.now(timezone.utc) + timedelta(days=_gap(r.get("company_id"), st["step"] - 1)), st)

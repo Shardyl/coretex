@@ -1184,13 +1184,13 @@ def reminder_snooze(rid: int, body: SnoozeBody, u: dict = Depends(current_user))
 @app.post("/api/reminders/{rid}/done")
 def reminder_done(rid: int, u: dict = Depends(current_user)) -> dict:
     _guard_reminder(u, rid)
-    return {"ok": True, "reminder": reminders.mark_done(rid)}
+    return {"ok": True, "reminder": reminders.mark_done(rid, (u or {}).get("email") or "owner")}
 
 
 @app.post("/api/reminders/{rid}/cancel")
 def reminder_cancel(rid: int, u: dict = Depends(current_user)) -> dict:
     _guard_reminder(u, rid)
-    return {"ok": True, "reminder": reminders.cancel(rid)}
+    return {"ok": True, "reminder": reminders.cancel(rid, (u or {}).get("email") or "owner")}
 
 
 # ---------- web push (phone lock screen) ----------
@@ -2618,6 +2618,18 @@ def pipeline_review_one(id: int, u: dict = Depends(current_user)) -> dict:
     if not r:
         raise HTTPException(status_code=404, detail="opportunity not found")
     return r
+
+
+class FlagBody(BaseModel):
+    done: bool
+
+
+@app.post("/api/pipeline/review/{id}/owed/{rid}")
+def pipeline_review_flag(id: int, rid: int, body: FlagBody, u: dict = Depends(current_user)) -> dict:
+    """His answer on an owed item the tidy thought was done: Done closes it (he is the proof), Still owed keeps it."""
+    from . import review
+    _guard_deal(u, id)
+    return review.settle_flag(id, rid, body.done, (u or {}).get("email") or "owner")
 
 
 @app.post("/api/pipeline/review/{id}/note")

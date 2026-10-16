@@ -1209,8 +1209,9 @@ def _stage_patterns(p: dict, old: str, new: str) -> None:
                 pass
     if new == COMPLETED_STAGE:
         try:   # SILENT terminal: no loops, no touches, no asks - kill every pending clock on the deal
-            db.execute("update reminders set status='cancelled' where target_type='deal' and target_id=%s "
-                       "and status in ('pending','snoozed')", (str(did),))
+            from . import obligations as _ob
+            _ob.close_where("target_type='deal' and target_id=%s and status in ('pending','snoozed')", (str(did),),
+                            "cancelled", _ob.evidence("deal_closed", stage=COMPLETED_STAGE), "the project is completed")
             pass   # the clock is already off: stages.py gives Completed no rhythm (_apply_stage_rhythm)
         except Exception:  # noqa: BLE001
             pass
@@ -1268,9 +1269,10 @@ NO_CHASE_STAGES = stages.NO_RHYTHM            # no automatic contact from the de
 def _cancel_cortex_reminders(p: dict, stage: str) -> list:
     """Cancel the reminders CORTEX set on a deal that has just closed, and say so on its timeline. The
     owner's own reminders (created_by a person) are left alone: he set those on purpose."""
-    rows = db.query("update reminders set status='cancelled' where target_type='deal' and target_id=%s "
-                    "and status in ('pending','snoozed') and coalesce(created_by,'') like 'cortex%%' "
-                    "returning id, title", (str(p["id"]),))
+    from . import obligations as _ob
+    rows = _ob.close_where("target_type='deal' and target_id=%s and status in ('pending','snoozed') and "
+                           "coalesce(created_by,'') like 'cortex%%'", (str(p["id"]),), "cancelled",
+                           _ob.evidence("deal_closed", stage=stage), f"the deal moved to {stage}")
     if rows:
         db.execute("update crm_projects set history = history || %s::jsonb where id=%s",
                    (Json([{"ts": _now(), "event": "reminders_cancelled",

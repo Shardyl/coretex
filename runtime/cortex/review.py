@@ -102,14 +102,16 @@ def summary(deal_id: int) -> dict | None:
         why = ("stopped: " + str(stopped.get("text") or "")[:90]) if stopped else (
             "starts when we next email them" if p.get("automation") == "auto" else f"automation {p.get('automation') or 'off'}")
         steps.append({"id": "CHASE", "type": "chase", "when": None, "text": f"No email chase scheduled ({why})"})
-    for r in db.query("select id, title, due_at, status, created_by, deliver_by, snooze_until from reminders where "
-                      "target_type='deal' and target_id=%s and status in ('pending','snoozed') order by due_at",
-                      (str(int(deal_id)),)):
+    for r in db.query("select id, title, due_at, status, created_by, deliver_by, snooze_until, owed, suspect from "
+                      "reminders where target_type='deal' and target_id=%s and status in ('pending','snoozed','fired') "
+                      "order by due_at", (str(int(deal_id)),)):
         when = r.get("snooze_until") if r.get("status") == "snoozed" and r.get("snooze_until") else r["due_at"]
         extra = f" (deliver by {_d(r['deliver_by'])})" if r.get("deliver_by") and "deliver by" not in r["title"] else ""
         steps.append({"id": f"R{r['id']}", "type": "reminder", "when": when.isoformat(), "kind": _rem_kind(r),
                       "text": f"{_rem_kind(r)}: {re.sub(r'\\s+', ' ', r['title'])[:140]}{extra}",
-                      "mine": not str(r.get("created_by") or "").startswith("cortex")})
+                      "mine": not str(r.get("created_by") or "").startswith("cortex"), "owed": bool(r.get("owed")),
+                      "fired": r.get("status") == "fired",
+                      "suspect": (r.get("suspect") or {}).get("why") if r.get("suspect") else None})
     for t in db.query("select id, kind, status, title, request, run_at, created_at from tasks where deal_id=%s and "
                       "(status = any(%s) or (status='scheduled' and run_at > now())) order by id", (int(deal_id), list(_OPEN))):
         steps.append({"id": f"C{t['id']}", "type": "card", "card": t["id"],
@@ -163,7 +165,7 @@ Rules:
 
 def apply_note(deal_id: int, note: str, by: str = "") -> dict:
     """File his note on the deal and apply what it says about the listed steps. Returns {done, understood, summary}."""
-    from . import crm, engine, flow, pipeline, provider, reminders
+    from . import crm, engine, flow, obligations, pipeline, provider, reminders
     before = summary(deal_id)
     if not before:
         return {"done": [], "understood": "", "summary": None}
@@ -205,7 +207,7 @@ def apply_note(deal_id: int, note: str, by: str = "") -> dict:
         if s["type"] == "reminder":
             rid = int(key[1:])
             if verdict == "cancel":
-                db.execute("update reminders set status='cancelled' where id=%s and status in ('pending','snoozed')", (rid,))
+                obligations.close(rid, "cancelled", obligations.evidence("owner", who=by or "owner", quote=note[:300]), why)
                 done.append(f"Cancelled: {s['text'][:90]}")
             elif verdict == "move" and it.get("when") and (w := when_of(str(it["when"]))):
                 # only a reminder still waiting: the note path may already have replaced it (the touch track)
@@ -249,3 +251,19 @@ def apply_note(deal_id: int, note: str, by: str = "") -> dict:
     except Exception:  # noqa: BLE001
         pass
     return {"done": done, "understood": str(out.get("understood") or "")[:300], "summary": summary(deal_id)}
+
+
+def settle_flag(deal_id: int, rid: int, done: bool, by: str) -> dict:
+    """His answer to 'Cortex thinks this may be done': done closes it with HIM as the proof; not done clears the flag."""
+    from . import obligations, pipeline
+    r = db.one("select id, title, suspect from reminders where id=%s and target_type='deal' and target_id=%s",
+               (int(rid), str(int(deal_id))))
+    if not r:
+        return {"ok": False, "error": "not on this opportunity"}
+    if done:
+        obligations.close(rid, "done", obligations.evidence("owner", who=by or "owner"), "confirmed done on review")
+        pipeline.log_deal(int(deal_id), "commitment_done", f"{r['title'][:160]} (confirmed done by {by or 'owner'})")
+    else:
+        db.execute("update reminders set suspect=null where id=%s", (int(rid),))
+        pipeline.log_deal(int(deal_id), "note", f"Pipeline review: still owed, kept: {r['title'][:160]}")
+    return {"ok": True, "summary": summary(deal_id)}

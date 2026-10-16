@@ -855,6 +855,46 @@ def _cases():
     case("a sound-alike needs some shared spelling: 'form' is not 'farheen'", "Talk audit 16 Oct",
          lambda: (_fd._phon(["form", "farheen"]) or True) and _fd.word_score("farheen", "form") < 0.6)
 
+    def _owed_guard():
+        """The database refuses to close owed work without proof (Shama R350). Run inside a rolled-back transaction."""
+        from psycopg.types.json import Json as _J
+        from . import obligations
+        obligations.ensure_guard()
+
+        class _Back(Exception):
+            pass
+        got = {}
+        try:
+            with db.connect() as c:
+                with c.transaction():
+                    r = c.execute("insert into reminders (title, due_at, created_by, target_type) values "
+                                  "('Meeting commitment: regress guard test', now() + interval '9 days', "
+                                  "'cortex-pipeline', 'none') returning id, owed").fetchone()
+                    got["owed"] = r["owed"]
+                    try:
+                        with c.transaction():
+                            c.execute("update reminders set status='cancelled' where id=%s", (r["id"],))
+                        got["blocked"] = False
+                    except Exception as e:  # noqa: BLE001
+                        got["blocked"] = "OWED_GUARD" in str(e)
+                    c.execute("update reminders set status='done', closed_evidence=%s where id=%s",
+                              (_J({"kind": "owner", "who": "regress"}), r["id"]))
+                    got["closed"] = True
+                    raise _Back
+        except _Back:
+            pass
+        return bool(got.get("owed") and got.get("blocked") and got.get("closed"))
+    case("owed work cannot be closed without proof; with proof it can", "Shama R350, 16 Oct", _owed_guard)
+    from . import flow as _flw
+    case("the Inbox tidy only flags owed work, never closes or moves it", "Shama R350, 16 Oct",
+         lambda: "obligations.flag(r[\"id\"], why)" in inspect.getsource(_flw._cancel_rem)
+         and "could wait until" in inspect.getsource(_flw._apply))
+    case("a model's 'it was delivered' must quote words really in the email", "Shama R350, 16 Oct",
+         lambda: __import__("cortex.obligations", fromlist=["x"]).quote_in("please find attached the three creative options",
+                                                                            "Hi, please find attached the three creative options.")
+         and not __import__("cortex.obligations", fromlist=["x"]).quote_in("the meeting was the deliverable checkpoint",
+                                                                           "We met on Thursday."))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

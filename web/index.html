@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v74';
+const APP_BUILD = 'cortex-v75';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -1346,7 +1346,8 @@ function renderNurtOnly(){
 // PIPELINE REVIEW (owner, 16 Oct 2026): every open opportunity, what Cortex will do next and when; a note corrects it
 const rvOkKey=r=>'rv_ok:'+r.id+':'+(r.steps||[]).map(s=>s.id+s.date).join('|');
 function rvOkGet(r){ try{ return localStorage.getItem(rvOkKey(r))==='1'; }catch(e){ return false; } }
-function rvSteps(r){ return (r.steps||[]).map(s=>`<div class="rvs" style="display:flex;gap:10px;padding:3px 0;font-size:13px"><span style="min-width:74px;color:var(--mut)">${esc(s.date||'—')}</span><span style="flex:1;min-width:0">${esc(s.text)}${s.card?` <a href="#" onclick="event.preventDefault();go('inbox')" style="color:var(--mut)">#${s.card}</a>`:''}</span></div>`).join(''); }
+function rvSteps(r){ return (r.steps||[]).map(s=>`<div class="rvs" style="display:flex;gap:10px;padding:3px 0;font-size:13px"><span style="min-width:74px;color:var(--mut)">${esc(s.date||'—')}</span><span style="flex:1;min-width:0">${esc(s.text)}${s.fired?' <span class="chip" style="font-size:10px">due now</span>':''}${s.card?` <a href="#" onclick="event.preventDefault();go('inbox')" style="color:var(--mut)">#${s.card}</a>`:''}${s.suspect?`<div class="csub" style="margin-top:3px;color:#FBBF24">Cortex thinks this may be done or can wait: ${esc(s.suspect)}</div><div class="row" style="gap:6px;margin-top:4px"><button class="btn sm go" onclick="rvFlag(${r.id},${String(s.id).slice(1)},true)">Done</button><button class="btn sm" onclick="rvFlag(${r.id},${String(s.id).slice(1)},false)">Still owed</button></div>`:''}</span></div>`).join(''); }
+async function rvFlag(id,rid,done){ try{ const r=await api(`/api/pipeline/review/${id}/owed/${rid}`,{method:'POST',body:JSON.stringify({done})}); if(r.summary){ RV[id]=r.summary; const s=document.getElementById('rvs'+id); if(s) s.innerHTML=rvSteps(r.summary); } toast(done?'Marked done':'Kept as owed'); }catch(e){ toast((e&&e.message)||'Could not save'); } }
 function rvRow(r){
   const ok=rvOkGet(r), lt=r.last_them, lu=r.last_us;
   return `<div class="card" id="rv${r.id}" style="margin-bottom:10px;${ok?'opacity:.55':''}">

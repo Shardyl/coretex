@@ -46,6 +46,8 @@ alter table reminders add column if not exists deliver_by timestamptz;   -- a de
 def ensure_schema() -> None:
     with db.connect() as c:
         c.execute(_SCHEMA)
+    from . import obligations
+    obligations.ensure_guard()
 
 
 def _add_month(d: datetime) -> datetime:
@@ -305,11 +307,15 @@ def _commitment_action(r: dict) -> dict | None:
                 "We promised a client something in an email. Below are the newest messages on that thread, either way. "
                 "Decide: has the promise ALREADY been kept by us (the thing was sent, arranged or answered), or has it "
                 "been OVERTAKEN by the client (they did it themselves, cancelled it, or moved on so it no longer "
-                'applies)? Return {"kept_or_moot": true|false, "why": "<one line>"}. Be conservative: unclear = false.',
+                'applies)? Return {"kept_or_moot": true|false, "why": "<one line>", "quote": "<the exact words, at least '
+                'six, copied character for character from the message that shows it>"}. Be conservative: unclear = false.',
                 f"PROMISE: {what}\n\nNEWEST MESSAGES:\n" + "\n---\n".join(recent),
                 model=_pv.MODEL_ROUTER, purpose="commitment-still-due", company=co.get("slug"))
-            if isinstance(out, dict) and out.get("kept_or_moot"):
-                db.execute("update reminders set status='done' where id=%s", (r["id"],))
+            from . import obligations as _ob
+            # PROOF, NOT A FEELING (16 Oct 2026): the words it quotes must really be in the thread, checked by code
+            if (isinstance(out, dict) and out.get("kept_or_moot")
+                    and _ob.quote_in(str(out.get("quote") or ""), " ".join(recent))):
+                _ob.close(r["id"], "done", _ob.evidence("thread", quote=str(out["quote"])[:300]), out.get("why") or "")
                 _pl.log_deal(int(m.group(3)), "commitment_done",
                              f"{r.get('title')} : closed when due, already kept or overtaken ({out.get('why') or ''})")
                 return {"noop": True}
@@ -409,7 +415,8 @@ def fire_due() -> dict:
     for r in due():
         try:
             if _closed_deal(r):          # dropped quietly: a closed deal owes nothing
-                db.execute("update reminders set status='cancelled' where id=%s", (r["id"],))
+                from . import obligations as _ob
+                _ob.close(r["id"], "cancelled", _ob.evidence("deal_closed", stage="closed"), "the deal has closed")
                 continue
             fire(r)
             fired.append(r["id"])
@@ -438,9 +445,12 @@ def snooze(rid: int, until: datetime) -> dict | None:
                       (until, until, rid))
 
 
-def mark_done(rid: int) -> dict | None:
-    return db.execute("update reminders set status='done' where id=%s returning *", (rid,))
+def mark_done(rid: int, who: str) -> dict | None:
+    """A PERSON marks it done (cockpit, Talk). Code paths close through obligations.close with their own proof."""
+    from . import obligations
+    return obligations.close(rid, "done", obligations.evidence("owner", who=who or "owner"))
 
 
-def cancel(rid: int) -> dict | None:
-    return db.execute("update reminders set status='cancelled' where id=%s returning *", (rid,))
+def cancel(rid: int, who: str) -> dict | None:
+    from . import obligations
+    return obligations.close(rid, "cancelled", obligations.evidence("owner", who=who or "owner"))

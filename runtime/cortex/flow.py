@@ -137,7 +137,7 @@ def _cortex_card(t: dict) -> bool:
 
 def _open_items(deal_id: int) -> dict:
     did = str(int(deal_id))
-    rems = db.query("select id, title, due_at, status, created_by, last_notification_id, deliver_by from reminders "
+    rems = db.query("select id, title, due_at, status, created_by, last_notification_id, deliver_by, owed from reminders "
                     "where target_type='deal' and target_id=%s and status in ('pending','snoozed','fired') and "
                     "coalesce(created_by,'') like 'cortex%%' and coalesce(created_by,'') <> 'cortex-touch' and "
                     "recurrence='none' order by id", (did,))
@@ -152,12 +152,24 @@ def _dismiss(nid, deal_id, why: str) -> None:
     db.execute("update notifications set state='dismissed' where id=%s and state in ('unread','read','snoozed')", (nid,))
 
 
-def _cancel_rem(r: dict, deal_id: int, why: str) -> None:
-    db.execute("update reminders set status='cancelled' where id=%s and status in ('pending','snoozed','fired')", (r["id"],))
+def _cancel_rem(r: dict, deal_id: int, why: str, ev: dict | None = None) -> bool:
+    """Close a reminder. OWED WORK NEEDS PROOF (16 Oct 2026, Shama R350): without `ev` an owed reminder is only
+    FLAGGED for the owner to confirm (obligations.flag), never closed; the database refuses it anyway."""
+    from . import obligations
+    if r.get("owed") and not ev:
+        obligations.flag(r["id"], why)
+        return False
+    if r.get("owed"):
+        if not obligations.close(r["id"], "cancelled", ev, why):
+            return False
+    else:
+        db.execute("update reminders set status='cancelled', closed_why=%s where id=%s and status in "
+                   "('pending','snoozed','fired')", (why[:300], r["id"]))
     if r.get("last_notification_id"):
         _dismiss(r["last_notification_id"], deal_id, why)
     db.execute("update notifications set state='dismissed' where state in ('unread','read','snoozed') and "
                "dedup_key = %s", (f"reminder-fail:{r['id']}",))
+    return True
 
 
 def _cancel_card(t: dict, why: str) -> None:
@@ -174,9 +186,10 @@ def _rules(deal: dict, items: dict) -> list[str]:
     stage = deal.get("stage") or ""
     # a closed deal owes nothing and needs nothing from him
     if stage in ("Lost", "Completed", "Dormant"):
+        from . import obligations
         for r in items["reminders"]:
-            _cancel_rem(r, did, f"the opportunity is {stage}")
-            done.append(f"cancelled reminder #{r['id']} ({stage})")
+            if _cancel_rem(r, did, f"the opportunity is {stage}", obligations.evidence("deal_closed", stage=stage)):
+                done.append(f"cancelled reminder #{r['id']} ({stage})")
         for n in items["notices"]:
             if not n.get("title", "").startswith("Reminder action"):
                 _dismiss(n["id"], did, stage)
@@ -205,10 +218,12 @@ def _rules(deal: dict, items: dict) -> list[str]:
     # a promise that waits on THEM is not ours to chase (it is logged as context instead)
     from . import pipeline
     for r in items["reminders"]:
-        if r["status"] in ("pending", "snoozed", "fired") and pipeline._CONDITIONAL.search(r.get("title") or ""):
-            _cancel_rem(r, did, "waits on the client")
-            pipeline.log_deal(did, "context", f"Waiting on the client (no reminder): {r['title'][:200]}")
-            done.append(f"cancelled reminder #{r['id']} (waits on the client)")
+        _m = pipeline._CONDITIONAL.search(r.get("title") or "") if r["status"] in ("pending", "snoozed", "fired") else None
+        if _m:   # the owner's 1 Oct rule, applied to the words of our own promise: deterministic, so it is proof
+            from . import obligations
+            if _cancel_rem(r, did, "waits on the client", obligations.evidence("rule", ref=f"conditional: {_m.group(0)}")):
+                pipeline.log_deal(did, "context", f"Waiting on the client (no reminder): {r['title'][:200]}")
+                done.append(f"cancelled reminder #{r['id']} (waits on the client)")
     # a chase raised before a full rhythm step after our last email is too soon (Massar 1262: two days after the last)
     from . import gate
     floor = gate._rhythm_floor(db.one("select id, stage, history, cadence, followup_step, company from crm_projects "
@@ -292,12 +307,18 @@ def _apply(deal: dict, items: dict, out: dict) -> list[str]:
         verdict, why = str(it.get("verdict") or "keep"), str(it.get("why") or "")[:200]
         if verdict == "close":
             if kind == "r":
-                _cancel_rem(obj, did, why)
+                if not _cancel_rem(obj, did, why):        # owed work: a guess is a flag for him, never a close
+                    done.append(f"flagged {key} for you to confirm: {why}")
+                    continue
             elif kind == "n":
                 _dismiss(obj["id"], did, why)
             else:
                 _cancel_card(obj, f"Inbox tidy: {why}")
             done.append(f"closed {key}: {why}")
+        elif verdict == "move" and kind == "r" and it.get("when") and obj.get("owed"):
+            from . import obligations
+            obligations.flag(obj["id"], f"could wait until {it['when']}: {why}")
+            done.append(f"flagged {key} for you to confirm (could wait until {it['when']})")
         elif verdict == "move" and kind == "r" and it.get("when"):
             try:
                 when = engine._resolve_their_date({"slug": _slug(deal.get("company"))}, str(it["when"]),
