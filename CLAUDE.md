@@ -3675,3 +3675,12 @@ shoot needs none), then 10% off the whole quotation.
 - STILL OPEN: 86 owed reminders the tidy closed on a guess before the guard (mostly September, open deals) carry no
   proof; listed by `closed_evidence is null and status='cancelled' and owed`. Owner to decide whether to reopen them
   as flagged items on the review screen.
+- COMING UP ON THE OPPORTUNITY PAGE (16 Oct 2026, sw cortex-v76): `comingUp(id)` fills `#cuBox` at the top of
+  `openProject` from `GET /api/pipeline/review/{id}`: the same dated list, flags with Done / Still owed, and "Change
+  what's coming up" (typed or Tap to talk) -> `POST /api/pipeline/review/{id}/note` -> `review.apply_note`.
+- OWED WORK WITH A HELD EMAIL STILL SHOWS: when the gate holds a commitment reminder's email (`reminders.fire` hold
+  branch), an owed reminder also raises ONE notice ("Still owed. Cortex did not draft the email: <why>",
+  `owed-held:<id>`); the email is retried the next day. D-Marin R336 had fired into silence.
+- SEVERAL DUE ITEMS ON ONE DEAL CARD: a per-deal notice that coalesces different titles is retitled
+  "N things due on <deal>" (`notifications.notify`), each item a line; the Ramadan creative options had sat inside a
+  card titled with the brainstorm reminder.
