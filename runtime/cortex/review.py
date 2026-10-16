@@ -20,7 +20,7 @@ from . import db
 _GST = timezone(timedelta(hours=4))
 _OPEN = ("queued", "new", "drafting", "awaiting_approval", "awaiting_correction")
 _THEM = ("email_in", "whatsapp_in")
-_US = ("email_out", "email_out_manual", "touch_made", "whatsapp_out")
+_US = ("email_out", "email_out_manual", "touch_made", "whatsapp_out", "meeting")
 _REVIEW_STAGES = ("Opportunity", "Quote")
 
 
@@ -153,6 +153,9 @@ Rules:
   copy HIS words into "when" ("next Thursday", "after Eid", "1 November"), never compute a date.
 - CHASE timing he states (e.g. "chase them Monday", "every 2 weeks") is applied elsewhere: use "move" on CHASE only
   when he names a new time for it; "stop" when he says stop chasing; "resume" when he says start chasing again.
+- A "WhatsApp or call" reminder is his weekly personal touch: cancel it only when he says not to call or WhatsApp them.
+  When he says he spoke to them, KEEP it (the next touch moves by itself).
+- Move a step only when his note gives a time for that step, or says what it waits on will not happen before a date.
 - "add" only for a new action he explicitly asks to be reminded of. "stage" only when he says the deal is lost,
   dead, on hold for months (Dormant) or won (Booked).
 - A fact without an instruction (a call happened, their budget) changes nothing here: return no items."""
@@ -202,10 +205,12 @@ def apply_note(deal_id: int, note: str, by: str = "") -> dict:
         if s["type"] == "reminder":
             rid = int(key[1:])
             if verdict == "cancel":
-                db.execute("update reminders set status='cancelled' where id=%s", (rid,))
+                db.execute("update reminders set status='cancelled' where id=%s and status in ('pending','snoozed')", (rid,))
                 done.append(f"Cancelled: {s['text'][:90]}")
             elif verdict == "move" and it.get("when") and (w := when_of(str(it["when"]))):
-                db.execute("update reminders set due_at=%s, status='pending', snooze_until=null where id=%s", (w, rid))
+                # only a reminder still waiting: the note path may already have replaced it (the touch track)
+                db.execute("update reminders set due_at=%s, status='pending', snooze_until=null where id=%s and "
+                           "status in ('pending','snoozed')", (w, rid))
                 done.append(f"Moved to {_d(w)}: {s['text'][:90]}")
         elif s["type"] == "card" and verdict == "cancel":
             t = db.one("select id, kind, request from tasks where id=%s", (s["card"],))
@@ -217,6 +222,10 @@ def apply_note(deal_id: int, note: str, by: str = "") -> dict:
             else:
                 done.append(f"Left card #{s['card']} for you to skip (quotations and proposals are never cancelled here)")
     chase = str(out.get("chase") or "keep")
+    if chase == "move" and out.get("when") and not any(d.startswith("Email chase moved") for d in done):
+        if (w := when_of(str(out["when"]))):     # the model put the chase move at the top level
+            crm.set_next_chase(int(deal_id), w, None, by="owner's review", why=note[:120])
+            done.append(f"Email chase moved to {_d(w)}")
     if chase == "stop":
         db.execute("update crm_projects set next_followup=null where id=%s", (int(deal_id),))
         pipeline.log_deal(int(deal_id), "chase_stopped", f"Owner's review: stop chasing ({note[:140]})")
