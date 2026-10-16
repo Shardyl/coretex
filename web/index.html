@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v75';
+const APP_BUILD = 'cortex-v76';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -1210,6 +1210,7 @@ async function openProject(id){
       <div class="cname" style="font-size:17px">${esc(p.title||'Untitled')}</div>
       <div class="csub" style="margin-bottom:10px">${esc(p.company||'')} <span class="dnum" style="display:inline">#${p.id}</span></div>
       <div class="row" style="margin-bottom:12px">${stageChip(p.stage)}<span class="chip cy">${money(p.value)} ${esc(p.currency||'')}</span></div>
+      <div class="dsec" id="cuBox"><div class="dlbl">Coming up</div><div class="csub">Loading…</div></div>
       ${projStagePicker(p)}
       ${dealPeople(p)}
       ${dealCompany(p)}
@@ -1219,6 +1220,21 @@ async function openProject(id){
       ${p.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${linky(p.note)}</div></div>`:''}
       ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b>${histWhen(h.ts)}<div class="csub">${histText(h.text)}</div></div></div>`).join('')}</div>`:''}
     </div>`;
+  comingUp(p.id);
+}
+// COMING UP ON THE OPPORTUNITY (owner, 16 Oct 2026): the same dated list as Review next steps, at the top of the page,
+// changed by talking to it (the note is filed on the opportunity and applied to these steps)
+async function comingUp(id){
+  const box=document.getElementById('cuBox'); if(!box) return;
+  let r; try{ r=await api('/api/pipeline/review/'+id); }catch(e){ box.innerHTML='<div class="dlbl">Coming up</div><div class="csub">Could not load.</div>'; return; }
+  RV[id]=r;
+  box.innerHTML=`<div class="dlbl">Coming up</div>
+    <div class="csub" style="margin:0 0 4px">Them: ${r.last_them?esc(r.last_them.when):'never'} · Us: ${r.last_us?esc(r.last_us.when):'never'}</div>
+    <div id="rvs${id}">${rvSteps(r)}</div>
+    <div class="row" style="margin-top:8px;gap:8px"><button class="btn sm" onclick="rvOpen(${id})">${ic('mic',14)} Change what's coming up</button></div>
+    <div id="rvn${id}" hidden style="margin-top:8px"><textarea id="rvt${id}" rows="3" style="width:100%" placeholder="What should happen instead (for example: they are away until 3 Nov, chase then; cancel the call reminder; remind me to send the treatment Thursday)"></textarea>
+      <div class="row" style="margin-top:6px;gap:8px"><button class="btn warn sm" onclick="dictate(this,'rvt${id}')">${ic('mic',15)} Tap to talk</button><button class="btn go sm" onclick="rvSave(${id},this)">Save</button></div></div>
+    <div id="rvr${id}" class="csub" style="margin-top:6px"></div>`;
 }
 function dealAutomation(p){
   const mode = p.automation || 'off';
