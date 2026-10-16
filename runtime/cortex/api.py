@@ -3394,8 +3394,12 @@ SKILL_TOOLS = [
         "company": {"type": "string"}, "skill": {"type": "string"}, "craft": {"type": "string"}},
         "required": ["company", "skill", "craft"]}},
     {"name": "list_tasks",
-     "description": "List recent tasks / Inbox items (newest first). Optional status filter (awaiting_approval, done, rejected).",
-     "input_schema": {"type": "object", "properties": {"status": {"type": "string"}}}},
+     "description": "Find Inbox cards. search = who, company, subject, deal or quotation number as he said it "
+                    "(spelling may be off; matching is fuzzy). Without search: the newest 15. Optional status "
+                    "filter (awaiting_approval, done, rejected, any), company, deal_id. A card he names by number: "
+                    "use get_task, never conclude it does not exist from this list.",
+     "input_schema": {"type": "object", "properties": {"status": {"type": "string"}, "search": {"type": "string"},
+                                                       "company": {"type": "string"}, "deal_id": {"type": "integer"}}}},
     {"name": "get_task",
      "description": "Full detail of one task, including its current draft and the manager's verdict.",
      "input_schema": {"type": "object", "properties": {"task_id": {"type": "integer"}}, "required": ["task_id"]}},
@@ -3492,7 +3496,10 @@ SKILL_TOOLS = [
      "description": "Skip / discard a pending task.",
      "input_schema": {"type": "object", "properties": {"task_id": {"type": "integer"}}, "required": ["task_id"]}},
     {"name": "crm_lookup",
-     "description": "Search the CRM for contacts and client companies by name, email or company. Use this to FIND someone or a company before acting on them.",
+     "description": "Search the CRM for contacts and client companies by name, email, company or PHONE number, "
+                    "plus the opportunities that match. Names may be mis-heard (voice): it matches spelling and "
+                    "sound, so search what he said and take the best of closest_matches / opportunities when one "
+                    "clearly fits; list two or three in one line only when it is genuinely unclear.",
      "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}},
     {"name": "crm_pipeline",
      "description": "The deal pipeline: open opportunities + forecast value, and won projects + value. Use to answer 'what's in the pipeline / the forecast / what have we won'. Optional business slug to scope it.",
@@ -3518,6 +3525,28 @@ SKILL_TOOLS = [
     {"name": "create_company",
      "description": "Create a CLIENT company (account) in the CRM.",
      "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "website": {"type": "string"}, "phone": {"type": "string"}}, "required": ["name"]}},
+    {"name": "update_contact",
+     "description": "EDIT an existing CRM contact (16 Oct 2026: Talk could only create, never fix one). Identify them "
+                    "by `email`, or by `phone` for a WhatsApp contact with no email, or by `name` (fuzzy; must match "
+                    "one person). Set any of: first_name, last_name, new_email, phone, job_title, company_name, and "
+                    "`account` (the client organisation's name, to file them under it). Renames reach every deal "
+                    "and open card that carries them.",
+     "input_schema": {"type": "object", "properties": {
+         "email": {"type": "string"}, "phone": {"type": "string"}, "name": {"type": "string"},
+         "first_name": {"type": "string"}, "last_name": {"type": "string"}, "new_email": {"type": "string"},
+         "new_phone": {"type": "string"}, "job_title": {"type": "string"}, "company_name": {"type": "string"},
+         "account": {"type": "string"}}}},
+    {"name": "pipeline_review",
+     "description": "Every open opportunity (Opportunity/Quote) with its next steps and their dates: the email chase, "
+                    "reminders, waiting cards. For 'run me through the pipeline' or 'what's coming up'. Optional "
+                    "company; optional deal_id for one.",
+     "input_schema": {"type": "object", "properties": {"company": {"type": "string"}, "deal_id": {"type": "integer"}}}},
+    {"name": "remember_alias",
+     "description": "When Rashad corrects a name you mis-heard or could not find ('Kabila means Qabilah', 'Irish is "
+                    "Ayresh'), save it so every later lookup understands it. `heard` = the word as it came through, "
+                    "`means` = the real word. One word each side.",
+     "input_schema": {"type": "object", "properties": {"heard": {"type": "string"}, "means": {"type": "string"}},
+                      "required": ["heard", "means"]}},
     {"name": "create_contact",
      "description": "Create a contact (a person). 'company' = the client company they work at (linked/created automatically). 'business' = which of YOUR businesses (slug) it relates to.",
      "input_schema": {"type": "object", "properties": {"first_name": {"type": "string"}, "last_name": {"type": "string"}, "email": {"type": "string"}, "company": {"type": "string", "description": "client company name"}, "business": {"type": "string", "description": "your business slug"}, "phone": {"type": "string"}, "job_title": {"type": "string"}}, "required": ["email"]}},
@@ -4220,6 +4249,26 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
     if name == "company_profile":
         co = _talk_company(inp.get("company"), u)
         return (_company_profile_text(co) if co else "") or f"no profile available for '{inp.get('company')}'"
+    if name == "list_tasks" and (inp.get("search") or inp.get("deal_id") or inp.get("company")):
+        from . import find as _find
+        _cids = _user_cids(u) if u else None
+        _fs = _find.company(inp.get("company") or "") if inp.get("company") else None
+        if _fs:
+            _c1 = store.get_company_by_slug(_fs)
+            _cids = [_c1["id"]] if _c1 and (_cids is None or _c1["id"] in _cids) else (_cids or [-1])
+        if inp.get("deal_id"):
+            rows = db.query("select t.id, t.kind, t.status, t.title, c.slug company, t.deal_id, "
+                            "t.request->'inquiry'->>'name' who, t.request->'inquiry'->>'subject' subject "
+                            "from tasks t join companies c on c.id=t.company_id where t.deal_id=%s "
+                            + ("and t.company_id = any(%s) " if _cids is not None else "")
+                            + "order by t.id desc limit 20",
+                            (int(inp["deal_id"]), _cids) if _cids is not None else (int(inp["deal_id"]),))
+        else:
+            rows = _find.cards(inp.get("search") or "", _cids, limit=10,
+                               open_only=(inp.get("status") or "open") not in ("done", "rejected", "any", "cancelled"))
+        if not rows:
+            return f"No card matches {inp.get('search') or inp.get('deal_id')!r}. Try get_task if he gave a number."
+        return json.dumps(rows[:12], default=str)
     if name == "list_tasks":
         status = inp.get("status")
         rows = db.query(
@@ -4268,6 +4317,21 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         n_a = (db.one(f"select count(*) n from crm_accounts where {awhere}", params) or {}).get("n", len(accs))
         out = {"contacts": cons, "companies": accs,
                "total_contact_matches": n_c, "total_company_matches": n_a}
+        # SPOKEN NAMES (16 Oct 2026 audit): "Rhonda Alhamad" never found Randa Al Hammad, "Sharma" never found Shama.
+        # The fuzzy finder adds the closest people (incl. a phone number search) and the opportunities that match.
+        from . import find as _find
+        if len(cons) < 3:
+            _have = {(x.get("email") or "").lower() for x in cons}
+            _close = [c for c in _find.contacts(q, limit=6) if not c.get("email") or c["email"].lower() not in _have]
+            if _close:
+                out["closest_matches"] = _close
+        _labels = None
+        if u and u.get("companies") is not None:
+            _labels = [_CRM_ORG.get(x, str(x).title()) for x in (u.get("companies") or [])]
+        _ops = _find.deals(q, _labels, limit=4)
+        if _ops:
+            out["opportunities"] = [{"deal_id": d["id"], "title": d["title"], "stage": d["stage"],
+                                     "company": d["company"]} for d in _ops]
         if n_c > len(cons) or n_a > len(accs):
             out["truncated"] = (f"showing {len(cons)} of {n_c} contacts / {len(accs)} of {n_a} companies - "
                                 "the list is INCOMPLETE. Refine the query before concluding anything about "
@@ -4318,6 +4382,15 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                 "like %s order by (p.stage in ('Lost','Dormant')), p.id desc limit 6", (_k, _k, _k)) if len(_k) > 4 else []
         else:
             return "Give me the deal number or words from its title."
+        if not rows and words:
+            from . import find as _find
+            _hits = _find.deals(words, None, limit=4, include_closed=True)
+            if _hits and (len(_hits) == 1 or _hits[0]["score"] - _hits[1]["score"] >= 0.1):
+                rows = db.query("select * from crm_projects where id=%s", (_hits[0]["id"],))
+            elif _hits:
+                return ("Closest opportunities (spelling may differ from what he said): " + json.dumps(
+                    [{"deal_id": h["id"], "title": h["title"], "stage": h["stage"]} for h in _hits])
+                        + ". If one plainly fits what he said, open it with deal_id; otherwise ask in one line.")
         if not rows:
             return f"No opportunity found for {did or words!r}."
         if len(rows) > 1:
@@ -4563,6 +4636,75 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
     if name == "create_company":
         a = crm.create_account(inp["name"], website=inp.get("website"), phone=inp.get("phone"))
         return f"created client company '{a['name']}' (id {a['id']})"
+    if name == "pipeline_review":
+        from . import review as _rv
+        if inp.get("deal_id"):
+            _r = _rv.summary(int(inp["deal_id"]))
+            return json.dumps(_r, default=str) if _r else "No such opportunity."
+        _slugs = _scoped_companies(u or {"companies": None}, (_find_slug(inp.get("company")) or inp.get("company") or "all"))
+        _rows = _rv.rows([_CRM_ORG.get(x, str(x).title()) for x in _slugs] if _slugs else None)
+        return json.dumps([{"deal_id": r["id"], "title": r["title"][:60], "stage": r["stage"],
+                            "last_them": (r.get("last_them") or {}).get("when"), "last_us": (r.get("last_us") or {}).get("when"),
+                            "next": [f"{x['date'] or 'no date'}: {x['text'][:90]}" for x in r["steps"][:3]]}
+                           for r in _rows], default=str)
+    if name == "remember_alias":
+        from . import find as _find
+        _h, _m = str(inp.get("heard") or "").strip(), str(inp.get("means") or "").strip()
+        if not _h or not _m or " " in _h:
+            return "Give one heard word and what it means."
+        _find.remember_alias(_h, _m)
+        return f"Saved: '{_h}' means '{_m}' in every lookup from now on."
+    if name == "update_contact":
+        from . import find as _find
+        row = None
+        if inp.get("email"):
+            row = db.one("select * from crm_master where lower(email)=lower(%s)", (inp["email"].strip(),))
+        elif inp.get("phone"):
+            _d = re.sub(r"\D", "", inp["phone"])[-9:]
+            _rs = db.query("select * from crm_master where regexp_replace(coalesce(phone,''), '\\D', '', 'g') like %s "
+                           "limit 3", (f"%{_d}",)) if len(_d) >= 7 else []
+            if len(_rs) > 1:
+                return "That number is on more than one contact: " + ", ".join(
+                    f"{r.get('first_name') or ''} {r.get('last_name') or ''} <{r.get('email') or 'no email'}>" for r in _rs)
+            row = _rs[0] if _rs else None
+        elif inp.get("name"):
+            _hits = _find.contacts(inp["name"], limit=4)
+            if len(_hits) > 1 and _hits[0]["score"] - _hits[1]["score"] < 0.1:
+                return "Which one? " + "; ".join(f"{h.get('first_name') or ''} {h.get('last_name') or ''} "
+                                                 f"<{h.get('email') or h.get('phone') or ''}>" for h in _hits)
+            if _hits:
+                h = _hits[0]
+                row = db.one("select * from crm_master where " + ("lower(email)=lower(%s)" if h.get("email") else
+                             "first_name is not distinct from %s and last_name is not distinct from %s and "
+                             "phone is not distinct from %s") + " limit 1",
+                             (h["email"],) if h.get("email") else (h.get("first_name"), h.get("last_name"), h.get("phone")))
+        if not row:
+            return "No such contact found. Search with crm_lookup first, then pass their email or phone."
+        if u and u.get("companies") is not None:
+            _orgs = {x.strip().lower() for x in (row.get("organisation") or "").split(",") if x.strip()}
+            if not (_orgs & _company_labels(u)):
+                return "That contact is outside your companies."
+        sets = {k: str(inp[src]).strip() for k, src in (("first_name", "first_name"), ("last_name", "last_name"),
+                                                           ("email", "new_email"), ("phone", "new_phone"),
+                                                           ("job_title", "job_title"), ("company_name", "company_name"))
+                if inp.get(src)}
+        if inp.get("account"):       # the organisation as he says it: the closest existing one, else a new one
+            _an = str(inp["account"]).strip()
+            _ex = db.one("select id, name, similarity(lower(name), lower(%s)) s from crm_accounts "
+                         "order by s desc limit 1", (_an,))
+            sets["account_id"] = _ex["id"] if _ex and _ex["s"] >= 0.5 else crm.get_or_create_account(_an)
+        if not sets:
+            return "Nothing to change: say which field and its new value."
+        db.execute("update crm_master set " + ", ".join(f"{k}=%s" for k in sets) + ", updated_at=now() where id=%s",
+                   tuple(sets.values()) + (row["id"],))
+        if row.get("email"):
+            crm.sync_contact_everywhere(row["email"], sets.get("email") or row["email"])
+        try:
+            crm.log_event_id(row["id"], "note", "Edited through Talk: " + ", ".join(f"{k} -> {v}" for k, v in sets.items()))
+        except Exception:  # noqa: BLE001
+            pass
+        return ("Updated " + f"{row.get('first_name') or ''} {row.get('last_name') or ''}".strip() + ": "
+                + ", ".join(f"{k} = {v}" for k, v in sets.items()) + ".")
     if name == "create_contact":
         aid = crm.get_or_create_account(inp["company"].strip()) if inp.get("company") else None
         c = crm.create_contact(inp.get("first_name", ""), inp.get("last_name", ""), inp["email"],
@@ -4765,6 +4907,17 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         # what it costs. Before this, Talk passed its own figures straight through.
         from . import profile as _prof, quotation as _q, ratecard as _rc
         _said = engine._stated_numbers(_TURN_SAID.get())
+        # A FIGURE ALREADY ON THIS QUOTATION IS HIS (16 Oct 2026 audit: Qabilah, Cloudlink and the SAR partner quote
+        # were refused again and again because a price from v1 had not been said again in this conversation).
+        for _n in {inp.get("number")} - {None, ""}:
+            for _e in db.setting_get(f"quote_versions:{_n}") or []:
+                for _sec in ((_e.get("spec") or {}).get("sections") or []):
+                    for _it in _sec.get("items") or []:
+                        try:
+                            if _it.get("unit") not in (None, ""):
+                                _said.add(round(float(_it["unit"]), 2))
+                        except (TypeError, ValueError):
+                            pass
         sections, total, _notes = inp.get("sections"), inp.get("total"), []
         if total not in (None, ""):
             try:
@@ -5040,15 +5193,18 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             elif len(ms) > 1:
                 return (f"There's more than one '{to_name}' in the CRM: {_fmt(ms)}. Ask Rashad which one, then "
                         "call draft_email again with that exact to_email.")
-            else:   # no exact match — offer the closest (any-word) matches as options instead of giving up
-                or_w = " or ".join([f"{hay} ilike %s"] * len(toks))
-                near = db.query(f"select first_name,last_name,email,organisation from crm_master where "
-                                f"coalesce(email,'')<>'' and ({or_w}) order by is_client desc nulls last limit 6", params)
+            else:   # no exact match: the closest people by spelling and sound (voice mis-hears names)
+                from . import find as _find
+                near = [c for c in _find.contacts(to_name, limit=6) if c.get("email")]
+                if len(near) == 1 or (len(near) > 1 and near[0]["score"] - near[1]["score"] >= 0.1
+                                      and near[0]["score"] >= 0.9):
+                    to_email, near = near[0]["email"], []
                 if near:
                     return (f"No exact '{to_name}' in the CRM, but the closest matches are: {_fmt(near)}. Ask Rashad "
                             "which one he means (or for the right email), then call draft_email with that to_email.")
-                return (f"'{to_name}' isn't in the CRM. Ask Rashad for {to_name}'s email address, then call "
-                        "draft_email with it.")
+                if not to_email:
+                    return (f"'{to_name}' isn't in the CRM. Ask Rashad for {to_name}'s email address, then call "
+                            "draft_email with it.")
         sk = (store.get_skill_by_key(co["id"], "email-handling")
               or store.get_skill_by_key(co["id"], "general-operations")
               or db.one("select * from skills where company_id=%s order by id limit 1", (co["id"],)))
@@ -5305,12 +5461,23 @@ _NO_FOCUS_NOTE = ("No company is in focus, so no company's profile or rules are 
                   "list_skills for the company he means.")
 
 
+def _find_slug(name: str | None) -> str | None:
+    if not name or name == "all":
+        return None
+    from . import find as _find
+    return name if store.get_company_by_slug(name) else _find.company(name)
+
+
 def _talk_company(slug: str | None, u: dict | None) -> dict | None:
     """The company Talk may load for this user: None when none is in focus, it is unknown, or it is outside
     a scoped user's access (Gino and Ayresh only ever see Sensa)."""
     if not slug or slug == "all":
         return None
     co = store.get_company_by_slug(slug)
+    if not co:          # 'Sky Vision', 'Sensa Productions', 'tab scanner': the name as he says it
+        from . import find as _find
+        _s = _find.company(slug)
+        co = store.get_company_by_slug(_s) if _s else None
     if not co:
         return None
     cids = _user_cids(u) if u else None
@@ -5476,7 +5643,28 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
     # attach any images to the last user turn so Cortex can actually see them (Claude is multimodal).
     blocks = _image_blocks(body.images or [], body.image_names or [])
     if blocks:
-        msgs[-1]["content"] = blocks + [{"type": "text", "text": msgs[-1]["content"]}]
+        # A FILE OUTLIVES ITS TURN (16 Oct 2026 audit: an attachment is only ever seen on the turn it came with, so
+        # Talk later disowned figures it had really read). A document is saved to the library the moment it arrives
+        # and Talk is told its id and to state what it read, so both stay in the conversation.
+        _kept = []
+        _sco = _talk_company(body.company, user) or store.get_company_by_slug(
+            ((user or {}).get("companies") or ["sensa"])[0])
+        for _i, _url in enumerate(body.images or []):
+            if not isinstance(_url, str) or _url.startswith("data:image/") or ";base64," not in _url or not _sco:
+                continue
+            _nm = (body.image_names or [None] * len(body.images))[_i] if body.image_names and _i < len(body.image_names) else None
+            try:
+                _d = documents.save_data_url(_sco["id"], _sco["slug"], _nm or "talk-file", _url, kind="client-document",
+                                             uploaded_by=f"{(user or {}).get('email') or 'owner'} (Talk)",
+                                             cap=documents.MAX_DEAL_BYTES)
+                _kept.append(f"#{_d['id']} '{_d['filename']}'")
+            except Exception as _e:  # noqa: BLE001
+                print(f"[talk] file not kept: {type(_e).__name__}: {_e}", flush=True)
+        _note = ("\n[Files with this message are visible to you on THIS turn only. State in your reply, briefly, the "
+                 "figures and facts you read from them that matter here, so they stay in the conversation."
+                 + (" Saved to the library: " + ", ".join(_kept) + "; say the id in your reply, and use it later "
+                    "(read_document, update_opportunity documents)." if _kept else "") + "]")
+        msgs[-1]["content"] = blocks + [{"type": "text", "text": msgs[-1]["content"] + _note}]
     # every voice gets the full toolset: a persona is a tone and a focus, never a limit (14 Sep 2026)
     system, tools = _chat_system(), SKILL_TOOLS
     if chosen:

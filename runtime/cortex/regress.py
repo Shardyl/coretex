@@ -846,6 +846,15 @@ def _cases():
     case("Talk: answer style rule is first in the always-on rules", "Talk audit 16 Oct",
          lambda: "ANSWER STYLE (owner, absolute" in api._shared_behaviour())
 
+    from . import find as _fd
+    case("Talk finds what he says aloud: Kabila -> Qabilah, Wealth -> WELF, ticky -> Tikkie", "Talk audit 16 Oct",
+         lambda: (_fd.deals("Kabila") or [{}])[0].get("id") == 130 and (_fd.deals("Alexander at Wealth") or [{}])[0].get("id") == 167
+         and (_fd.deals("ticky") or [{}])[0].get("id") == 108)
+    case("Talk finds an email-less WhatsApp contact by a mis-heard name", "Rhonda Alhamad / Randa Al Hammad",
+         lambda: any((c.get("first_name") or "").lower() == "randa" for c in _fd.contacts("Rhonda Alhamad")))
+    case("a sound-alike needs some shared spelling: 'form' is not 'farheen'", "Talk audit 16 Oct",
+         lambda: (_fd._phon(["form", "farheen"]) or True) and _fd.word_score("farheen", "form") < 0.6)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

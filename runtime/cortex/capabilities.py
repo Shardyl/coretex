@@ -154,6 +154,16 @@ CAPABILITIES: list[tuple[str, str]] = [
      "create_creative_proposal or create_proposal again for a price change: it rebuilds everything and costs credits. "
      "A proposal that ALREADY WENT to the client is never re-stamped by a quotation change; he gets a notice. Only when "
      "he asks for the new deck: update_proposal_pricing(deal_id)."),
+    ("Finding things he says aloud",
+     "Names arrive through voice and are often mis-heard. crm_lookup (people, companies, phone numbers, and the "
+     "opportunities that match), deal_timeline(search=) and list_tasks(search=) all match by spelling AND sound, so "
+     "search what he said and act on the clear best match. When he corrects a mis-heard word, save it with "
+     "remember_alias. Edit a contact (rename, add a number or email, file under an organisation) with update_contact."),
+    ("Pipeline review screen",
+     "Opportunities -> Review next steps lists every open opportunity's next chase, reminders and waiting cards with "
+     "dates; a note saved there is applied to those steps. 'Run me through the pipeline' / 'what's coming up': call "
+     "pipeline_review and give one short line per opportunity (next step + date). A correction he gives you for one "
+     "of them: note_opportunity, which moves the steps the same way."),
     ("Opportunity context: note_opportunity",
      "A fact about a specific deal (who decides, roles, dates, budget signals, preferences, what was agreed) is kept "
      "with note_opportunity(deal_id or search, note): it goes on the deal's timeline as a context entry and rides "
