@@ -2422,6 +2422,7 @@ could not find the deal (title typed 'Cloud lInk') and attach_document died on '
   no model near a figure. The contact person prints from the CRM at render time, so a rename needs nothing else.
   Broken later versions are withdrawn to `quote_versions_withdrawn:<n>`, their library rows superseded; Drive is
   handled by the normal filing step (same-name upsert + archive_superseded).
+- A VERSION HE NAMES IS COPIED (16 Oct 2026, Shama SEN-2026-0021): `reissue_quotation(version=N)` copies vN even when a later priced version exists (only an UNNAMED reissue is refused then), and only BROKEN later versions are withdrawn, so v4 copied over a priced v5 issues v6.
 - `deliver_quotation`: a NEW VERSION of a number that has versions is refused (ValueError, nothing rendered or
   filed) when any line has no price and no total is given.
 - `quotation._record_version` records `contact_name`, so a changed contact is a new version; old tabs in the ALL
