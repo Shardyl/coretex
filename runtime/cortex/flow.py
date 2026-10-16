@@ -143,8 +143,14 @@ def _open_items(deal_id: int) -> dict:
                     "where target_type='deal' and target_id=%s and status in ('pending','snoozed','fired') and "
                     "coalesce(created_by,'') like 'cortex%%' and coalesce(created_by,'') <> 'cortex-touch' and "
                     "recurrence='none' order by id", (did,))
-    notes = db.query("select id, title, body, created_at, dedup_key from notifications where target_type='deal' and "
-                     "target_id=%s and state in ('unread','snoozed') and category <> 'digest' order by id", (did,))
+    # A REMINDER'S OWN NOTICE IS NOT A DUPLICATE OF IT (16 Oct 2026: iTellu N1164 and Shama N1163 were dismissed as
+    # "duplicate of R360 / R353", their own reminders, so owed work fired into nothing). While the reminder is open
+    # its notice is how he sees it: it is never put to the judge; it clears when the reminder closes (rules below).
+    notes = db.query("select n.id, n.title, n.body, n.created_at, n.dedup_key from notifications n where "
+                     "n.target_type='deal' and n.target_id=%s and n.state in ('unread','snoozed') and "
+                     "n.category <> 'digest' and not exists (select 1 from reminders r where r.last_notification_id=n.id "
+                     "and r.status not in ('done','cancelled')) and coalesce(n.dedup_key,'') not like 'owed-held:%%' "
+                     "order by n.id", (did,))
     cards = [t for t in db.query("select * from tasks where deal_id=%s and status = any(%s) order by id",
                                  (int(deal_id), list(_OPEN))) if _cortex_card(t)]
     return {"reminders": rems, "notices": notes, "cards": cards}

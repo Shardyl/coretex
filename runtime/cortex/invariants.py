@@ -52,6 +52,14 @@ CHECKS = [
                f"coalesce(r.created_by,'') like 'cortex%%' and p.stage in {CLOSED} returning r.id",
     },
     {
+        "key": "owed_notice_hidden",
+        "what": "Owed work is open but the notice it raised was dismissed, so it is invisible",
+        "sql": "select r.id, r.title from reminders r join notifications n on n.id=r.last_notification_id where r.owed "
+               "and r.status='fired' and n.state='dismissed'",
+        "fix": "update notifications n set state='unread' from reminders r where n.id=r.last_notification_id and r.owed "
+               "and r.status='fired' and n.state='dismissed' returning n.id",
+    },
+    {
         "key": "owed_closed_without_proof",
         "what": "Owed work was closed with no proof recorded (the database guard should make this impossible)",
         "sql": "select id, title, status from reminders where owed and status in ('done','cancelled') and "

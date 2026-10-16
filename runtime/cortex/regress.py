@@ -900,6 +900,9 @@ def _cases():
     case("a card holding several due items says how many", "Shama 1200, 16 Oct",
          lambda: "things due" in inspect.getsource(__import__("cortex.notifications", fromlist=["x"]).notify))
 
+    case("the tidy never judges a reminder's own notice while the reminder is open", "iTellu N1164, 16 Oct",
+         lambda: "r.last_notification_id=n.id" in inspect.getsource(_flw._open_items))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
