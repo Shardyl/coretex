@@ -83,6 +83,8 @@ def _card_line(t: dict) -> str:
 
 
 def summary(deal_id: int) -> dict | None:
+    from . import obligations
+    obligations.ensure_guard()      # the owed / suspect columns exist before anything reads them
     p = db.one("select id, company, title, stage, value, currency, contact_email, automation, next_followup, cadence, "
                "followup_step, history, contacts, owner from crm_projects where id=%s", (int(deal_id),))
     if not p:

@@ -136,6 +136,8 @@ def _cortex_card(t: dict) -> bool:
 
 
 def _open_items(deal_id: int) -> dict:
+    from . import obligations
+    obligations.ensure_guard()
     did = str(int(deal_id))
     rems = db.query("select id, title, due_at, status, created_by, last_notification_id, deliver_by, owed from reminders "
                     "where target_type='deal' and target_id=%s and status in ('pending','snoozed','fired') and "
