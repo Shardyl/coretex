@@ -895,6 +895,11 @@ def _cases():
          and not __import__("cortex.obligations", fromlist=["x"]).quote_in("the meeting was the deliverable checkpoint",
                                                                            "We met on Thursday."))
 
+    case("owed work whose email is held still shows as a notice", "D-Marin R336, 16 Oct",
+         lambda: "owed-held:" in inspect.getsource(reminders.fire))
+    case("a card holding several due items says how many", "Shama 1200, 16 Oct",
+         lambda: "things due" in inspect.getsource(__import__("cortex.notifications", fromlist=["x"]).notify))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

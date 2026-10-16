@@ -213,9 +213,19 @@ def fire(r: dict) -> dict:
             held = gate.last_hold() if task_id is None else ""
             if task_id is None and held:
                 # A HOLD IS NOT A FAILURE (15 Oct 2026): the gate decided this email may not go yet (we wrote to
-                # them days ago, a meeting is booked...). The reminder waits a day and asks again; no notice.
+                # them days ago, a meeting is booked...). The reminder waits a day and asks again.
                 db.execute("update reminders set status='pending', due_at=now() + interval '1 day' where id=%s "
                            "and recurrence='none'", (r["id"],))
+                if r.get("owed"):
+                    # ...BUT OWED WORK IS STILL SHOWN TO HIM (16 Oct 2026: D-Marin's commissioning letter fired, its
+                    # email was held because the thread is Ayresh's, and nothing appeared anywhere). Holding the EMAIL
+                    # never hides the THING: one notice per reminder, the email retried tomorrow.
+                    note_id = (notifications.notify(r["title"], f"Still owed. Cortex did not draft the email: {held}.",
+                                                    priority="normal", category="reminder",
+                                                    company_id=r.get("company_id"),
+                                                    target_type=r.get("target_type"), target_id=r.get("target_id"),
+                                                    dedup_key=f"owed-held:{r['id']}") or {}).get("id")
+                    db.execute("update reminders set last_notification_id=%s where id=%s", (note_id, r["id"]))
             elif task_id is None and action:     # spawn failed -> the owner must know the work didn't start
                 notifications.notify(f"Reminder \"{r['title']}\" fired but its task could not be created - "
                                      "set it again or run it by hand.", "Reminder action failed",

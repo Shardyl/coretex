@@ -142,6 +142,11 @@ def notify(title: str, body: str = "", *, priority: str = "normal", category: st
                 items = (items + [item])[-50:]   # keep the most recent 50 in one rolling card
             if dedup_key.startswith("digest:"):
                 title = f"Today's updates ({len(items)})"
+            elif dedup_key.startswith("deal:") and len(items) > 1:
+                # SEVERAL THINGS ON ONE CARD SAY SO (16 Oct 2026: the Ramadan creative options sat inside a card titled
+                # with the brainstorm reminder, so it looked missing). The title counts them; each is a line below.
+                _dt = (db.one("select title from crm_projects where id=%s", (int(tid),)) or {}).get("title")                     if str(tid or "").isdigit() else None
+                title = f"{len(items)} things due" + (f" on {_dt[:70]}" if _dt else "")
             row = db.execute("update notifications set count=count+1, title=%s, body=%s, items=%s::jsonb, "
                              "fired_at=now() where id=%s returning *",
                              (title, body, Json(items), existing["id"]))
