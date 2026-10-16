@@ -3645,3 +3645,33 @@ shoot needs none), then 10% off the whole quotation.
 - KEPT ON THE SERVER: every tool call -> table `talk_tool_log` (who, tool, input, output); the last finished reply
   per person -> setting `chat_last:<email>`, which the cockpit fetches (`/api/chat/last`) when its stream drops.
 - NOT BUILT (from the audit's gap list): a non-destructive deal merge, xlsx -> PDF export.
+
+## Owed work closes only with proof: a database guard (owner, 16 Oct 2026)
+- CAUSE: the Inbox tidy (`flow._judge`, Haiku) closed Shama's Ramadan creative options (R350, deliver by 16 Oct) on
+  a guess ("the meeting was the deliverable checkpoint"), plus Shama's 20 Oct final-content deadline, two D-Marin
+  documents and two HBMSU concept items. Any code could close any reminder with one UPDATE; protection was each
+  caller's judgement. Restored (R350, 353, 241, 336, 337, 342, 343).
+- THE GUARD IS IN POSTGRES (`obligations.ensure_guard`, once per process from `reminders.ensure_schema`, also from
+  `review.summary` / `flow._open_items`): column `reminders.owed`, set by INSERT trigger `reminders_owed_mark` from
+  `obligations.KINDS` (Cortex-created proposal owed / commitment / meeting commitment / client deadline / next step /
+  conversation commitment / tender close; never touch reminders, never the owner's own) and backfilled. UPDATE trigger
+  `reminders_owed_guard` RAISES (`OWED_GUARD`) when an owed reminder moves to done/cancelled without
+  `closed_evidence` whose `kind` is in `obligations.EVIDENCE`: owner (who), sent_email (ref + code-verified quote),
+  client_words / thread (code-verified quote), deal_closed / stage (stage), duplicate (kept id), rule (a deterministic
+  owner rule, e.g. a promise that waits on the client). Reopening clears the evidence. Proven live: a raw
+  `update reminders set status='cancelled' where id=350` is refused.
+- ONE WAY TO CLOSE: `obligations.close(rid, status, evidence(kind, ...), why)` / `close_where(...)` for bulk (a deal
+  closing). Every writer goes through it: crm deal-close and Completed, obligations on_sent / on_stage /
+  cancel_matching (owner) / merge_twins (duplicate), reminders fire on a closed deal, the commitment-kept check, the
+  cockpit done/cancel buttons (`reminders.mark_done(rid, who)` / `cancel(rid, who)`), the review note, invariant fixes.
+- A MODEL'S "IT WAS DONE" MUST QUOTE ITS PROOF: `obligations.on_sent` and `reminders._commitment_action` ask for the
+  exact words that deliver it; `obligations.quote_in` checks they are really in the email / thread (6+ words).
+- THE TIDY CAN ONLY FLAG: `flow._cancel_rem` on an owed reminder without evidence calls `obligations.flag` (column
+  `suspect` {why, by, at}); a judged "move" of owed work is a flag too ("could wait until ..."). Review next steps
+  shows the flag with Done (closes, the owner is the proof) / Still owed (clears it):
+  `POST /api/pipeline/review/{deal}/owed/{rid}`, `review.settle_flag`. sw cortex-v75.
+- Health check `owed_closed_without_proof` (report). Calls card: an earlier day's "Calls and WhatsApps today" is
+  dismissed when today's starts, its unmade calls carried over ("carried over").
+- STILL OPEN: 86 owed reminders the tidy closed on a guess before the guard (mostly September, open deals) carry no
+  proof; listed by `closed_evidence is null and status='cancelled' and owed`. Owner to decide whether to reopen them
+  as flagged items on the review screen.
