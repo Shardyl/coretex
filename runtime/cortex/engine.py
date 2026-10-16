@@ -8739,15 +8739,21 @@ def reissue_quotation(company: str, number: str, *, version: int | None = None, 
             raise ValueError(f"No fully priced version of {number} is on record.")
     idx = reg.index(entry)
     later = reg[idx + 1:]
-    if any(_version_is_priced(e) for e in later):
+    # A VERSION HE NAMES IS COPIED (16 Oct 2026, Shama SEN-2026-0021: "put it back to the 44,000 and add 10%" was
+    # refused four times because v5 existed, though the message itself said "say which version by number"). The guard
+    # only stops an UNNAMED reissue from silently picking an older version.
+    if not version and any(_version_is_priced(e) for e in later):
         raise ValueError(f"{number} has a later priced version than v{entry.get('v')}; reissue that one, or "
                          "say which version by number.")
-    if later:   # only broken versions follow: withdraw them
+    # Only BROKEN later versions are withdrawn. A priced later version stays on record, so copying v4 over a priced
+    # v5 issues v6, never a second v5.
+    broken = [e for e in later if not _version_is_priced(e)]
+    if broken:
         gone = (db.setting_get(f"quote_versions_withdrawn:{number}") or []) + [
             {**e, "withdrawn": datetime.now(timezone.utc).isoformat(), "reason": "issued with blank lines"}
-            for e in later]
+            for e in broken]
         db.setting_set(f"quote_versions_withdrawn:{number}", gone)
-        db.setting_set(key, reg[:idx + 1])
+        db.setting_set(key, [e for e in reg if e not in broken])
     sp = entry.get("spec") or {}
     sections = _copy.deepcopy(sp.get("sections") or [])
     if add_sections:

@@ -818,6 +818,10 @@ def _cases():
          and not _fl._client_said_no({"history": [{"event": "email_in", "text": "Dear Supplier, please quote for the below"},
                                                   {"event": "not_pursued", "text": "We chose not to pursue one message"}]}))
 
+    case("a version he names is copied even when a later version exists", "Shama SEN-2026-0021 v4",
+         lambda: "if not version and any(_version_is_priced(e) for e in later)" in inspect.getsource(engine.reissue_quotation)
+         and "broken = [e for e in later if not _version_is_priced(e)]" in inspect.getsource(engine.reissue_quotation))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
