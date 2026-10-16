@@ -3778,6 +3778,15 @@ SKILL_TOOLS = [
         "next_chase": {"type": "string", "description": "when the next email chase goes, in his words ('Thursday "
                        "10am', 'tomorrow', 'in 3 days')"},
         "chase_every_days": {"type": "integer", "description": "his own chase rhythm from then on, in days"}}}},
+    {"name": "update_proposal_pricing",
+     "description": "Re-stamp the pricing page of the proposal deck on an opportunity from its quotation's live "
+                    "version, ONLY when Rashad asks for it. A proposal that already went to the client is never "
+                    "changed by a quotation change on its own (he gets a notice instead); this is how he asks for the "
+                    "new deck anyway. Only the investment page changes; the card returns for approval.",
+     "input_schema": {"type": "object", "properties": {
+         "deal_id": {"type": "integer"},
+         "quotation_number": {"type": "string", "description": "SEN-YYYY-NNNN; omit to use the deck's own number"}},
+         "required": ["deal_id"]}},
     {"name": "reissue_quotation",
      "description": "Issue an EXISTING quotation again as its next version, copied EXACTLY by code from the stored "
                     "version: same lines, same prices, same total. Use this, never create_quotation, whenever "
@@ -4655,6 +4664,18 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             print(f"[note-redirect] deal {did}: {type(e).__name__}: {e}", flush=True)
         return (f"Noted on opportunity #{d['id']} '{d['title']}': {note}. Every future email on it will carry this."
                 + (f" {_next}" if _next else ""))
+    if name == "update_proposal_pricing":
+        _p = db.one("select id, company_id, request->>'quotation_number' q from tasks where deal_id=%s and request->>'kind' "
+                    "in ('creative_proposal','proposal') and status not in ('rejected','cancelled') order by id desc limit 1",
+                    (int(inp["deal_id"]),))
+        if not _p:
+            return f"No proposal deck on opportunity #{inp['deal_id']}."
+        if u and _user_cids(u) is not None and _p["company_id"] not in _user_cids(u):
+            return "That opportunity is not in your companies."
+        _num = inp.get("quotation_number") or _p["q"]
+        _r = engine.restamp_proposal_price(int(inp["deal_id"]), _num, None, force=True)
+        return (f"Updating the pricing page of proposal card #{_r} from {_num}; it returns to the Inbox for approval."
+                if _r else f"Could not find the proposal for {_num} on opportunity #{inp['deal_id']}.")
     if name == "reissue_quotation":
         _co = _talk_company(inp.get("company"), u)
         if not _co:

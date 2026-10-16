@@ -7814,6 +7814,14 @@ def _quote_to_email(task: dict, company: dict, actor: str) -> dict:
             documents.supersede(olds, refs[0]["id"])
     except Exception as _se:  # noqa: BLE001
         print(f"[quotation] supersede on approve: {type(_se).__name__}: {_se}", flush=True)
+    if did:     # ALREADY SENT (16 Oct 2026, Shama card 1290): the quotation went out on an email before it was approved
+        _ids = [r["id"] for r in refs]
+        _sent = db.one("select id from tasks where deal_id=%s and kind in ('email_reply','email_draft') and status='done' "
+                       "and exists (select 1 from jsonb_array_elements(coalesce(request->'attach_docs','[]'::jsonb)) a "
+                       "where (a->>'id')::bigint = any(%s)) order by id desc limit 1", (int(did), _ids))
+        if _sent:
+            return {"approved": True, "note": f"Quotation {number} approved. It already went to the client on card "
+                                              f"#{_sent['id']}, so no new email was drafted."}
     em = store.get_task(int(rq["for_email"])) if rq.get("for_email") else None
     if (not em or em.get("status") not in _OPEN_CARD) and did:
         em = db.one("select * from tasks where deal_id=%s and kind in ('email_reply','email_draft') and status = any(%s) "
@@ -7996,7 +8004,18 @@ def _quote_card_feedback(task: dict, skill: dict, company: dict, text: str) -> b
     return False
 
 
-def restamp_proposal_price(deal_id, number: str, quote_card: int | None = None) -> int | None:
+def _proposal_sent(p: dict) -> dict | None:
+    """The sent email that carried this proposal card's deck (any version of it), or None."""
+    rq = p.get("request") or {}
+    num = rq.get("quotation_number") or ""
+    return db.one("select id from tasks where deal_id=%s and kind in ('email_reply','email_draft') and status='done' "
+                  "and (request->>'proposal_card' = %s or exists (select 1 from jsonb_array_elements("
+                  "coalesce(request->'attach_docs','[]'::jsonb)) a where a->>'filename' ilike %s)) "
+                  "order by id desc limit 1", (p.get("deal_id") or rq.get("deal_id"), str(p["id"]),
+                                                f"%Proposal%{num}%" if num else "%Proposal%"))
+
+
+def restamp_proposal_price(deal_id, number: str, quote_card: int | None = None, force: bool = False) -> int | None:
     """The proposal on this deal that carries `number` gets its pricing page re-stamped from the live version, off
     the request path. Creative decks: creative.adopt_quotation (no new images). Words-led decks: the spec is
     re-rendered with deck.investment_from_quotation. Returns the proposal card id, or None."""
@@ -8010,6 +8029,20 @@ def restamp_proposal_price(deal_id, number: str, quote_card: int | None = None) 
         p = db.one("select * from tasks where deal_id=%s and request->>'kind' in ('creative_proposal','proposal') and "
                    "status not in ('rejected','cancelled') order by id desc limit 1", (int(deal_id),))
     if not p:
+        return None
+    # A PROPOSAL THAT WENT OUT IS LEFT ALONE (owner, 16 Oct 2026, Shama card 815): a later price change re-opened the
+    # approved, sent Qabilah deck and re-wrote it. A sent deck is the client's record; the owner is asked instead.
+    _sent = None if force else _proposal_sent(p)
+    if _sent:
+        try:
+            notifications.notify(f"Proposal not changed: {number} moved on after it was sent",
+                                 f"The proposal on card #{p['id']} went to the client on email #{_sent['id']}. Quotation "
+                                 f"{number} has changed since, and the proposal was left as sent. If a new deck should go, "
+                                 f"ask Talk to update the proposal pricing on opportunity #{deal_id}.",
+                                 company_id=p["company_id"], target_type="deal", target_id=int(deal_id),
+                                 dedup_key=f"deal:{int(deal_id)}:proposal-sent-{number}")
+        except Exception:  # noqa: BLE001
+            pass
         return None
 
     def _go():

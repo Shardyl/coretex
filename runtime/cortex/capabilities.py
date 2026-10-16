@@ -151,7 +151,9 @@ CAPABILITIES: list[tuple[str, str]] = [
      "A discount, a new total or a removed line on a proposal is a QUOTATION change: issue it with reissue_quotation "
      "(discount_pct) or create_quotation on the proposal's number, and code re-stamps ONLY the deck's pricing page from "
      "the new version (no new images, concept or copy), returning the proposal card for approval. Never run "
-     "create_creative_proposal or create_proposal again for a price change: it rebuilds everything and costs credits."),
+     "create_creative_proposal or create_proposal again for a price change: it rebuilds everything and costs credits. "
+     "A proposal that ALREADY WENT to the client is never re-stamped by a quotation change; he gets a notice. Only when "
+     "he asks for the new deck: update_proposal_pricing(deal_id)."),
     ("Opportunity context: note_opportunity",
      "A fact about a specific deal (who decides, roles, dates, budget signals, preferences, what was agreed) is kept "
      "with note_opportunity(deal_id or search, note): it goes on the deal's timeline as a context entry and rides "

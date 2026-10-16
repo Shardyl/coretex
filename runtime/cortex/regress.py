@@ -822,6 +822,13 @@ def _cases():
          lambda: "if not version and any(_version_is_priced(e) for e in later)" in inspect.getsource(engine.reissue_quotation)
          and "broken = [e for e in later if not _version_is_priced(e)]" in inspect.getsource(engine.reissue_quotation))
 
+    case("a proposal that went to the client is never re-stamped by a quotation change", "Shama card 815",
+         lambda: "_sent = None if force else _proposal_sent(p)" in inspect.getsource(engine.restamp_proposal_price))
+    case("a price re-stamp of a creative deck runs no copy writer", "Shama card 815",
+         lambda: "stage_copy" not in inspect.getsource(__import__("cortex.creative", fromlist=["x"]).adopt_quotation))
+    case("approving a quotation that already went out drafts no second email", "Shama card 1290",
+         lambda: "so no new email was drafted" in inspect.getsource(engine._quote_to_email))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

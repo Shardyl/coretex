@@ -1068,12 +1068,18 @@ def adopt_quotation(task_id: int, number: str, quote_card: int | None = None) ->
     job.s["quote"] = {**(job.s.get("quote") or {}), "spec": live.get("spec") or {}, "number": number, "card": qc,
                       "version": int(live.get("v") or 1), "summary": ((qrow or {}).get("request") or {}).get("summary"),
                       "blanked": [], "missing": [], "target": None, "scaled": None, "options": options}
-    job.stage_copy(feedback=(f"The client is now offered {len(options)} price options ("
-                             + ", ".join(f"Option {o['letter']}" for o in options) + "). Keep every page as it is; only "
-                             "wording that refers to the investment may change, and it must present them as options."
-                             if options else
-                             f"The quotation is now {number} v{live.get('v')}. Keep every page as it is; only wording "
-                             "that refers to the investment may change."))
+    # NO COPY WRITER HERE (owner, 16 Oct 2026, Shama card 815): a re-run "keep every page as it is" still rewrote the
+    # approved deck. The investment page is laid out by code from the quotation; only the investment copy that could
+    # contradict it is cleared: details for blocks the quotation no longer has, and a blurb that states a figure.
+    cp = job.s.get("copy") or {}
+    inv = dict(cp.get("investment") or {})
+    _blocks = {r["item"] for r in job.quote_rows()[0]}
+    inv["details"] = {k: v for k, v in (inv.get("details") or {}).items() if k in _blocks}
+    if re.search(r"\d[\d,.]{2,}|AED|USD|%", str(inv.get("blurb") or "")):
+        inv["blurb"] = ""
+    if cp:
+        cp["investment"] = inv
+        job.s["copy"] = cp
     job.stage_render(int(job.s["deck"]["version"]) + 1)
     job.stage_file(t)
     job.save()
