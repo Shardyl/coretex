@@ -1584,6 +1584,14 @@ window.foodLogWeight=function(day,inputId){
   if(currentSubpage.food==='weight')renderWeight();else renderToday();
   try{renderMission();}catch(e){}            // the strip's NOW + checkpoints move with every weigh-in (12 Oct 2026: it didn't)
 };
+// Tap a weigh-in to correct it (owner, 17 Oct 2026: the date box would not let him fix the day before).
+window.foodEditWeight=function(d,kg){
+  const v=prompt('Weight for '+fmtDate(d)+' (kg)',kg);if(v==null)return;
+  const n=+String(v).replace(',','.');if(!(n>30&&n<250)){toast('Enter your weight in kg');return;}
+  const i=bodyweightLog.findIndex(b=>b.date===d), row={id:'bw_'+d,date:d,kg:Math.round(n*10)/10,notes:null};
+  if(i>=0)bodyweightLog[i]=row;else bodyweightLog.push(row);
+  saveBodyweight();renderWeight();try{renderMission();}catch(e){}toast(fmtDate(d)+' updated to '+row.kg+' kg');
+};
 window.foodDelWeight=function(d){
   const i=bodyweightLog.findIndex(b=>b.date===d);if(i<0)return;
   if(!confirm('Delete the weigh-in for '+fmtDate(d)+'?'))return;
@@ -1765,8 +1773,8 @@ function renderWeight(){
       <div style="position:relative;width:100%;height:210px"><canvas id="fdWtChart" role="img" aria-label="Weight trend"></canvas></div>
     </div>
     <div class="card" style="padding:8px 12px">
-      ${all.slice().reverse().slice(0,30).map(w=>`<div class="fd-entry" style="cursor:default"><div><div class="n">${w.kg} kg</div><div class="q">${fmtDate(w.date)}${isFree(shiftDay(w.date,-1))?' &middot; after a free day':''} ${new Date(w.date+'T12:00:00').getFullYear()!==new Date().getFullYear()?new Date(w.date+'T12:00:00').getFullYear():''}${w.src==='watch'?' &middot; from Health Connect':''}</div></div>
-        ${w.src==='log'?`<button class="hist-del" onclick="foodDelWeight('${w.date}')">&times;</button>`:''}</div>`).join('')||'<div class="fd-note">No weigh-ins yet.</div>'}
+      ${all.slice().reverse().slice(0,30).map(w=>`<div class="fd-entry" style="cursor:pointer" onclick="foodEditWeight('${w.date}',${w.kg})"><div><div class="n">${w.kg} kg</div><div class="q">${fmtDate(w.date)}${isFree(shiftDay(w.date,-1))?' &middot; after a free day':''} ${new Date(w.date+'T12:00:00').getFullYear()!==new Date().getFullYear()?new Date(w.date+'T12:00:00').getFullYear():''}${w.src==='watch'?' &middot; from Health Connect':''}</div></div>
+        ${w.src==='log'?`<button class="hist-del" onclick="event.stopPropagation();foodDelWeight('${w.date}')">&times;</button>`:''}</div>`).join('')||'<div class="fd-note">No weigh-ins yet.</div>'}
     </div>`;
   try{photoCard();}catch(e){}
   refreshBadges();
