@@ -1751,15 +1751,18 @@ function renderWeight(){
   const a30=avgBetween(all,shiftDay(today,-36),shiftDay(today,-30));
   const diff=(x,y)=>x!=null&&y!=null?r1(x-y):null;
   const chip=v=>v==null?'—':`<span style="color:${ragWeekChange(v)};font-weight:800">${v>0?'+':''}${v} kg</span>`;
+  // The day being entered survives the page redrawing (owner, 17 Oct 2026: a refresh snapped the date back to today).
+  const pick=window._wtPick&&window._wtPick<=today?window._wtPick:today, picked=all.find(w=>w.date===pick);
+  const draft=window._wtDraft&&window._wtDraft.day===pick?window._wtDraft.kg:(picked?picked.kg:'');
   el.innerHTML=`
     <div class="card">
-      <div class="fd-sub">${todays?'Today':'Morning weigh-in'}</div>
-      ${todays?`<div class="fd-big">${todays.kg} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kg</span></div>`:''}
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <input class="fd-input" type="number" step="0.1" inputmode="decimal" id="fdWtIn" placeholder="${last?last.kg:'kg'}" value="${todays?todays.kg:''}"/>
-        <button class="fd-btn" style="width:auto;margin:0;padding:0 18px" onclick="foodLogWeight(document.getElementById('fdWtDay').value,'fdWtIn')">${todays?'Update':'Save'}</button>
+      <div class="fd-sub">${pick===today?(todays?'Today':'Morning weigh-in'):'Weigh-in for '+fmtDate(pick)}</div>
+      ${picked?`<div class="fd-big">${picked.kg} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kg</span></div>`:''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+        <div><label class="form-label">Date</label><input type="date" id="fdWtDay" value="${pick}" max="${today}" class="fd-input" style="font-size:15px" onchange="window._wtPick=this.value||null;window._wtDraft=null;renderWeight()"/></div>
+        <div><label class="form-label">Weight (kg)</label><input class="fd-input" type="number" step="0.1" inputmode="decimal" id="fdWtIn" placeholder="${last?last.kg:'kg'}" value="${draft}" oninput="window._wtDraft={day:'${pick}',kg:this.value}"/></div>
       </div>
-      <input type="date" id="fdWtDay" value="${today}" max="${today}" class="fd-input" style="margin-top:8px;font-size:14px"/>
+      <button class="fd-btn" style="margin-top:8px" onclick="foodLogWeight(document.getElementById('fdWtDay').value,'fdWtIn');window._wtPick=null;window._wtDraft=null">${picked?'Update':'Save'}${pick===today?'':' '+fmtDate(pick)}</button>
     </div>
     <div class="card"><div class="fd-row" style="margin-top:0">
       <div class="fd-cell"><div class="v">${a7!=null?ragSpan(r1(a7),(()=>{const m=foodTargets.mission;if(!m||!m.startDate)return '';const cw=missionWeeks(m).find(w=>w.current);if(!cw)return '';const v=r1(a7);return v<=cw.target?RAG.g:v-cw.target<=0.3?RAG.a:RAG.r;})()):'—'}</div><div class="l">7-day avg</div></div>
