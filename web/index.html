@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v76';
+const APP_BUILD = 'cortex-v77';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -1230,9 +1230,10 @@ async function comingUp(id){
   RV[id]=r;
   box.innerHTML=`<div class="dlbl">Coming up</div>
     <div class="csub" style="margin:0 0 4px">Them: ${r.last_them?esc(r.last_them.when):'never'} · Us: ${r.last_us?esc(r.last_us.when):'never'}</div>
+    ${rvWho(r)}
     <div id="rvs${id}">${rvSteps(r)}</div>
     <div class="row" style="margin-top:8px;gap:8px"><button class="btn sm" onclick="rvOpen(${id})">${ic('mic',14)} Change what's coming up</button></div>
-    <div id="rvn${id}" hidden style="margin-top:8px"><textarea id="rvt${id}" rows="3" style="width:100%" placeholder="What should happen instead (for example: they are away until 3 Nov, chase then; cancel the call reminder; remind me to send the treatment Thursday)"></textarea>
+    <div id="rvn${id}" hidden style="margin-top:8px"><textarea id="rvt${id}" rows="3" style="width:100%" placeholder="What should happen instead (for example: they are away until 3 Nov, chase then; Abraham leads, copy Balazs; Gino leads this one)"></textarea>
       <div class="row" style="margin-top:6px;gap:8px"><button class="btn warn sm" onclick="dictate(this,'rvt${id}')">${ic('mic',15)} Tap to talk</button><button class="btn go sm" onclick="rvSave(${id},this)">Save</button></div></div>
     <div id="rvr${id}" class="csub" style="margin-top:6px"></div>`;
 }
@@ -1362,6 +1363,10 @@ function renderNurtOnly(){
 // PIPELINE REVIEW (owner, 16 Oct 2026): every open opportunity, what Cortex will do next and when; a note corrects it
 const rvOkKey=r=>'rv_ok:'+r.id+':'+(r.steps||[]).map(s=>s.id+s.date).join('|');
 function rvOkGet(r){ try{ return localStorage.getItem(rvOkKey(r))==='1'; }catch(e){ return false; } }
+const RV_ROLE={lead:'lead',decision:'decision maker',member:'on the team',cc:'copied',support:'support, copied',left:'left'};
+function rvWho(r){ const w=(r.who||[]).filter(x=>x.role!=='left'), gone=(r.who||[]).filter(x=>x.role==='left');
+  if(!w.length&&!r.our_lead) return '';
+  return `<div class="csub" style="margin:2px 0 6px">Who's who: ${w.map(x=>`<span title="${esc(x.why||'')}">${esc(x.name)} <span style="color:var(--mut)">(${esc(RV_ROLE[x.role]||x.role)}${x.pinned?', set by you':''})</span></span>`).join(' · ')}${gone.length?` · <span style="color:var(--mut)">left: ${gone.map(x=>esc(x.name)).join(', ')}</span>`:''}${r.our_lead?` · Our lead: <b>${esc(r.our_lead.name)}</b>`:''}</div>`; }
 function rvSteps(r){ return (r.steps||[]).map(s=>`<div class="rvs" style="display:flex;gap:10px;padding:3px 0;font-size:13px"><span style="min-width:74px;color:var(--mut)">${esc(s.date||'—')}</span><span style="flex:1;min-width:0">${esc(s.text)}${s.fired?' <span class="chip" style="font-size:10px">due now</span>':''}${s.card?` <a href="#" onclick="event.preventDefault();go('inbox')" style="color:var(--mut)">#${s.card}</a>`:''}${s.suspect?`<div class="csub" style="margin-top:3px;color:#FBBF24">Cortex thinks this may be done or can wait: ${esc(s.suspect)}</div><div class="row" style="gap:6px;margin-top:4px"><button class="btn sm go" onclick="rvFlag(${r.id},${String(s.id).slice(1)},true)">Done</button><button class="btn sm" onclick="rvFlag(${r.id},${String(s.id).slice(1)},false)">Still owed</button></div>`:''}</span></div>`).join(''); }
 async function rvFlag(id,rid,done){ try{ const r=await api(`/api/pipeline/review/${id}/owed/${rid}`,{method:'POST',body:JSON.stringify({done})}); if(r.summary){ RV[id]=r.summary; const s=document.getElementById('rvs'+id); if(s) s.innerHTML=rvSteps(r.summary); } toast(done?'Marked done':'Kept as owed'); }catch(e){ toast((e&&e.message)||'Could not save'); } }
 function rvRow(r){
@@ -1369,6 +1374,7 @@ function rvRow(r){
   return `<div class="card" id="rv${r.id}" style="margin-bottom:10px;${ok?'opacity:.55':''}">
     <div class="row" style="justify-content:space-between;align-items:flex-start;gap:8px"><div style="flex:1;min-width:0;cursor:pointer" onclick="openProject(${r.id})"><div class="cname">${esc(r.title||'Untitled')}</div><div class="csub">#${r.id} · ${esc(r.contact||'no contact')}${r.value?' · '+dmoney(r.value)+' '+esc(r.currency||''):''}</div></div>${stageChip(r.stage)}</div>
     <div class="csub" style="margin:4px 0 6px">Them: ${lt?esc(lt.when):'never'} · Us: ${lu?esc(lu.when):'never'}${r.last_note?' · Your note '+esc(r.last_note.when)+': '+esc(r.last_note.text.slice(0,90)):''}</div>
+    ${rvWho(r)}
     <div id="rvs${r.id}">${rvSteps(r)}</div>
     <div class="row" style="margin-top:8px;gap:8px"><button class="btn sm" onclick="rvOpen(${r.id})">${ic('edit',14)} Not right</button><button class="btn sm${ok?' go':''}" onclick="rvOk(${r.id})">${ic('check',14)} ${ok?'Checked':'Looks right'}</button></div>
     <div id="rvn${r.id}" hidden style="margin-top:8px"><textarea id="rvt${r.id}" rows="3" style="width:100%" placeholder="What is wrong, and what should happen instead (for example: they are away until 3 Nov, chase then; cancel the call reminder)"></textarea>

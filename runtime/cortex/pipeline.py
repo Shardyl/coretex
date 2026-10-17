@@ -220,6 +220,15 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
     # once: the Message-Id makes the timeline entry idempotent (this call passed no ref at all before).
     log_deal(did, "email_out_manual" if manual else "email_out",
              f"{who} from {frm or 'company mailbox'} to {to}: {subj or '(no subject)'}", ref=ref)
+    try:   # WHO'S WHO (cast.py): one of us writing BY HAND leads for us now; any email out may add or hand over people
+        from . import cast
+        _frm = (re.findall(r"[\w.+-]+@[\w.-]+", frm) or [""])[0].lower()
+        if manual and _frm:
+            cast.we_spoke(int(did), _frm, f"email by hand: {subj[:60]}")
+        cast.read_async(int(did), f"From: {frm}\nTo: {to}\nCc: {env.get('cc') or ''}\nSubject: {subj}\n\n{body[:6000]}",
+                        kind="email", source=f"our email: {subj[:60]}", ours=manual)
+    except Exception as _ce:  # noqa: BLE001
+        print(f"[cast] send {did}: {type(_ce).__name__}: {_ce}", flush=True)
     try:   # FIRST settle what this email completes (obligations.py, audit 2d), THEN track the new promises it makes
         from . import obligations
         _names = [str((a or {}).get("filename") or "") for a in (req.get("attach_docs") or [])] \
@@ -884,6 +893,16 @@ def record_meeting(deal_id: int, company_id: int | None, title: str, summary: st
     log_deal(deal_id, "meeting", f"{title}: {(summary or '')[:900]}")
     if not commitments:
         return          # a backfilled old meeting is history only: it never moves today's clock
+    try:   # WHO'S WHO, READ FROM THE WHOLE MEETING (cast.py, 17 Oct 2026): the full notes and transcript, never the brief
+        from . import cast
+        _mn = db.one("select full_text, summary, attendees from meeting_notes where deal_id=%s order by created_at desc "
+                     "limit 1", (int(deal_id),)) or {}
+        _att = _mn.get("attendees") or []
+        cast.read_async(int(deal_id), _mn.get("full_text") or _mn.get("summary") or summary, kind="meeting",
+                        source=f"meeting: {title[:60]}",
+                        people={a.lower(): "" for a in (_att if isinstance(_att, list) else []) if "@" in str(a)})
+    except Exception as _ce:  # noqa: BLE001
+        print(f"[cast] meeting {deal_id}: {type(_ce).__name__}: {_ce}", flush=True)
     _meeting_touches_clock(deal_id)
     try:
         out = provider.think_json(

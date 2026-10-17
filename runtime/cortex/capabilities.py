@@ -164,6 +164,11 @@ CAPABILITIES: list[tuple[str, str]] = [
      "dates; a note saved there is applied to those steps. 'Run me through the pipeline' / 'what's coming up': call "
      "pipeline_review and give one short line per opportunity (next step + date). A correction he gives you for one "
      "of them: note_opportunity, which moves the steps the same way."),
+    ("Who's who on an opportunity",
+     "Every opportunity keeps a cast list: the client's people with roles (lead, decision maker, team, copied, support, "
+     "left) and which of us leads. It is re-read from every email, meeting (full transcript) and note, and the To line, "
+     "copies and sender follow it. When he says who to address, copy or who leads ('Abraham leads, copy Balazs', 'Gino "
+     "leads this'), file it with note_opportunity: it is pinned. deal_timeline and pipeline_review show it."),
     ("Opportunity context: note_opportunity",
      "A fact about a specific deal (who decides, roles, dates, budget signals, preferences, what was agreed) is kept "
      "with note_opportunity(deal_id or search, note): it goes on the deal's timeline as a context entry and rides "

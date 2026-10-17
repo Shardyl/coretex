@@ -903,6 +903,16 @@ def _cases():
     case("the tidy never judges a reminder's own notice while the reminder is open", "iTellu N1164, 16 Oct",
          lambda: "r.last_notification_id=n.id" in inspect.getsource(_flw._open_items))
 
+    from . import cast as _cst
+    case("a follow-up goes to the opportunity's lead, whoever the thread was with", "Heaven card 1297, 17 Oct",
+         lambda: "addressed_to_lead" in inspect.getsource(engine._adopt_existing_thread)
+         and "cast.our_lead" in inspect.getsource(engine._deal_sender))
+    case("an owner's word on who's who is pinned; a read never invents a person or role", "cast list, 17 Oct",
+         lambda: "his word stands" in inspect.getsource(_cst._apply) and "never invented" in inspect.getsource(_cst._apply)
+         and set(_cst.ROLES) == {"lead", "decision", "member", "cc", "support", "left"})
+    case("a post-meeting email reads the full meeting, not the brief", "Heaven card 1297, 17 Oct",
+         lambda: "meeting_full" in inspect.getsource(engine._draft_context_for_reply))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

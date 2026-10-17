@@ -201,7 +201,7 @@ def _identity_block(company: dict, request: dict, author: str | None):
 
 
 _CONTEXT_FIELDS = ("brief", "system_note", "deal_timeline", "contact_notes", "owner_feedback",
-                   "meeting_notes", "owed", "card_corrections", "new_notes")
+                   "meeting_notes", "owed", "card_corrections", "new_notes", "cast", "meeting_full")
 
 
 def _colleagues_named(company: dict, request: dict, me: str) -> list:
@@ -394,6 +394,17 @@ def draft(skill: dict, company: dict, request: dict,
     _ow = (request.get("owed") or "").strip() if isinstance(request, dict) else ""
     if _ow:   # promises already made to this person: this email keeps them, never re-promises (17 Sep 2026)
         user.append(_ow)
+    _cast = (request.get("cast") or "").strip() if isinstance(request, dict) else ""
+    if _cast:
+        user.append("WHO'S WHO ON THIS OPPORTUNITY (kept up to date from every email, meeting and the owner's notes; "
+                    "the To line already follows it). Greet and address the LEAD; never ask someone marked support or "
+                    "copy only to pass a message on; never write to or about someone marked LEFT as if involved:\n"
+                    + _cast[:3000])
+    _mf = (request.get("meeting_full") or "").strip() if isinstance(request, dict) else ""
+    if _mf:
+        user.append("THE FULL MEETING NOTES AND TRANSCRIPT (the meeting this email follows). Read it whole: who ran the "
+                    "call, what they asked for at its close, what was agreed and in what order. Where it differs from "
+                    "the short brief below, THIS wins:\n" + _mf)
     _mn = (request.get("meeting_notes") or "").strip() if isinstance(request, dict) else ""
     if _mn:
         user.append("NOTES FROM OUR LAST MEETING with this contact (distilled from the real meeting notes — "
@@ -457,6 +468,17 @@ def draft(skill: dict, company: dict, request: dict,
                 _mdl = provider.resolve_model(_fm) or _fm
         except Exception:  # noqa: BLE001 — a settings hiccup never blocks a draft
             pass
+    # JUDGEMENT-HEAVY EMAILS ON THE TOP MODEL (owner, 17 Oct 2026: "if it's because we're using a cheaper model, I'd rather
+    # spend a bit more and get it right"). Data, not code: setting `purpose_models` {followup kind: model}, e.g.
+    # {"post-meeting": "claude-opus-5"}; corrections on that card use it too.
+    try:
+        from . import db as _db2
+        _pk = (request.get("followup") or "") if isinstance(request, dict) else ""
+        _pm = (_db2.setting_get("purpose_models") or {}).get(_pk) if _pk else None
+        if _pm:
+            _mdl = provider.resolve_model(_pm) or _pm
+    except Exception:  # noqa: BLE001
+        pass
     # 16,000, not 6,000: max_tokens is a ceiling the model cannot see, and adaptive thinking spends from
     # it before a word is written. At 6,000 a hard brief exhausted it in thought (card 545). This streams,
     # so the cap costs nothing unless it is actually used.

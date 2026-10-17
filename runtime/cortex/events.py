@@ -224,6 +224,19 @@ def they_wrote(company: dict, message: dict, deals: list | None = None, channel:
     except Exception as e:  # noqa: BLE001 - the message itself must never be lost over bookkeeping
         print(f"[events] {type(e).__name__}: {e}", flush=True)
     if deal:
+        try:   # WHO'S WHO (cast.py, 17 Oct 2026): "I'm taking over this project" must move the lead, by reading their words
+            from . import cast
+            from . import gmail as _gm
+            _new = _gm.new_part(body) if channel == "email" else body
+            cast.read_async(int(deal["id"]),
+                            f"From: {message.get('name') or ''} <{sender or message.get('phone') or ''}>\n"
+                            f"To: {message.get('to') or ''}\nCc: {message.get('cc') or ''}\n"
+                            f"Subject: {message.get('subject') or ''}\n\n{_new[:6000]}",
+                            kind="email", source=f"their {channel}: {(message.get('subject') or '')[:60]}",
+                            people={sender: message.get("name") or ""} if sender else None)
+        except Exception as e:  # noqa: BLE001
+            print(f"[events] cast {type(e).__name__}: {e}", flush=True)
+    if deal:
         try:   # ONE CONVERSATION, ONE DRAFT: every OTHER open card on the opportunity is judged against this message
             from . import conversation
             conversation.recheck_deal(company, deal["id"], sender or who, body)

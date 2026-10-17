@@ -4833,6 +4833,13 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             return f"no opportunity #{did}"
         _pl.log_deal(int(did), "context", f"{note} (owner, via Talk)")
         _next = ""
+        try:                               # his word on who's who is PINNED (cast.py)
+            from . import cast
+            _cr = cast.read(int(did), note, kind="note", source="note via Talk", pin=True)
+            if _cr.get("applied"):
+                _next = "Who's who: " + "; ".join(_cr["applied"]) + "."
+        except Exception as e:  # noqa: BLE001
+            print(f"[cast] Talk note {did}: {type(e).__name__}: {e}", flush=True)
         try:                               # a call or WhatsApp he logged moves the next personal touch (touch.py)
             from . import touch
             _next = touch.on_note(int(did), note)

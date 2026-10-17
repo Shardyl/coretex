@@ -2473,6 +2473,12 @@ def _deal_participants(company_id: int, deal_id, to_email: str) -> list:
         for d in db.query("select snapshot from decisions where task_id=%s and action='send'", (t["id"],)):
             sn = d.get("snapshot") or {}
             blob += [str(sn.get("to") or ""), str(sn.get("cc") or "")]
+    try:   # the cast: everyone still involved is copied, anyone who left never is (cast.py, 17 Oct 2026)
+        from . import cast
+        blob += cast.copied(deal_id, to_email)
+        seen |= cast.left(deal_id)
+    except Exception:  # noqa: BLE001
+        pass
     for a in re.findall(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", " ".join(str(x) for x in blob)):
         al = a.lower().strip(".")
         if al in seen or al.split("@")[-1] in OWN_COMPANY_DOMAINS:
@@ -5289,6 +5295,10 @@ def _deal_sender(company_id, deal_id) -> str:
         own = str((row or {}).get("owner") or "").strip().lower()
         if own in senders:
             return own
+        from . import cast        # WHO LEADS FOR US (cast.py, 17 Oct 2026): before any count of who sent most
+        _ol = cast.our_lead(deal_id)
+        if _ol and _ol in senders:
+            return _ol
         counts: dict[str, list] = {}
         for r in db.query("select request->>'from_email' f from tasks where deal_id=%s and status='done' "
                           "and coalesce(request->>'from_email','') <> '' order by id desc limit 25",
@@ -5687,7 +5697,22 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
     # On a follow-up, the person this thread is actually with is the recipient, provided the deal lists
     # them. If the deal does not, this thread is not continued at all.
     _rekey = {}
+    _lead = None
     if req.get("followup"):
+        try:
+            from . import cast
+            _lead = cast.lead(req.get("deal_id") or task.get("deal_id"))
+        except Exception:  # noqa: BLE001
+            _lead = None
+    if _lead and _lead != email.lower():
+        # THE CAST DECIDES WHO A FOLLOW-UP GOES TO (17 Oct 2026, Heaven card 1297): the thread was with Balazs, who
+        # only made the introduction; Abraham leads. The thread is still continued, the To is the lead.
+        on_deal = _deal_contact(req.get("deal_id") or task.get("deal_id"), _lead) or {"email": _lead, "name": ""}
+        req["inquiry"] = {**(req.get("inquiry") or {}), "email": on_deal["email"], "name": on_deal.get("name") or ""}
+        email = on_deal["email"]
+        _rekey = {"serialize_key": email}
+        manifest.append(f"addressed_to_lead({email})")
+    elif req.get("followup") and not _lead:
         cp = _thread_counterpart(m, ours)
         if cp and cp != email.lower():
             on_deal = _deal_contact(req.get("deal_id") or task.get("deal_id"), cp)
@@ -5864,11 +5889,30 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
     except Exception:  # noqa: BLE001
         pass
     try:
+        _cdid = req.get("deal_id") or task.get("deal_id")
+        if _cdid:
+            from . import cast
+            _who = cast.describe(_cdid)
+            if _who:
+                req["cast"] = _who
+                manifest.append("cast")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
         mn = meetnotes.latest_for_contact(task["company_id"], email)
+        _mdid = req.get("deal_id") or task.get("deal_id")
+        if _mdid:     # the opportunity's own newest meeting, whoever the email is to
+            mn = db.one("select title, starts_at, summary, full_text, created_at from meeting_notes where deal_id=%s "
+                        "order by created_at desc limit 1", (int(_mdid),)) or mn
         if mn and mn.get("summary"):
             when = mn["starts_at"].strftime("%d %b %Y") if mn.get("starts_at") else ""
             req["meeting_notes"] = (mn.get("title") or "Meeting") + f" ({when}):\n" + mn["summary"]
             manifest.append("meeting_notes")
+            # A POST-MEETING EMAIL READS THE WHOLE MEETING (17 Oct 2026): the brief had dropped who ran the call and what
+            # they asked for at its close. The full notes and transcript ride with it, within a sensible budget.
+            if req.get("followup") == "post-meeting" and mn.get("full_text"):
+                req["meeting_full"] = mn["full_text"][:45000]
+                manifest.append("meeting_full")
     except Exception:  # noqa: BLE001
         pass
     try:

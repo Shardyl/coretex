@@ -124,7 +124,17 @@ def summary(deal_id: int) -> dict | None:
                     if (c.get("email") or "").lower() == (p.get("contact_email") or "").lower()), None) \
         or p.get("contact_email") or ""
     note = next((e for e in reversed(hist) if e.get("event") == "context"), None)
-    return {"id": p["id"], "title": p["title"], "company": p["company"], "stage": p["stage"],
+    try:
+        from . import cast
+        _c = cast.get(p["id"])
+        team = cast._team()
+        who = [{"name": t.get("name") or t["email"], "email": t["email"], "role": t.get("role"),
+                "pinned": bool(t.get("pinned")), "why": t.get("why") or ""} for t in _c.get("their") or []]
+        ours = (_c.get("ours") or {}).get("email")
+        ours = {"name": team.get(ours, ours), "email": ours, "why": (_c.get("ours") or {}).get("why") or ""} if ours else None
+    except Exception:  # noqa: BLE001
+        who, ours = [], None
+    return {"id": p["id"], "title": p["title"], "company": p["company"], "stage": p["stage"], "who": who, "our_lead": ours,
             "value": float(p["value"]) if p.get("value") is not None else None, "currency": p.get("currency") or "AED",
             "contact": contact, "owner": p.get("owner"),
             "last_them": last_them and {"when": _d(last_them.get("ts")), "text": str(last_them.get("text") or "")[:140]},

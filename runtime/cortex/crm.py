@@ -1033,6 +1033,11 @@ def add_project_note(project_id: int, note: str, by: str = "") -> dict | None:
                (Json([ev]), project_id))
     if p.get("contact_email"):
         log_event(p["contact_email"], "note", f"[{p['title']}] {note}")
+    try:                                   # his word on who's who is PINNED (cast.py): "copy Balazs", "Gino leads this"
+        from . import cast
+        cast.read_async(int(project_id), note, kind="note", source=f"note by {by or 'owner'}", pin=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[cast] note on deal {project_id}: {type(e).__name__}: {e}", flush=True)
     try:                                   # a call or WhatsApp he logged moves the next personal touch (touch.py)
         from . import touch
         touch.on_note(project_id, note)
