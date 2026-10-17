@@ -8758,6 +8758,14 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
         "insert into tasks (company_id,skill_id,kind,request,draft,status,origin,title) "
         "values (%s,%s,'quotation',%s,%s,'awaiting_approval','talk',%s) returning *",
         (co["id"], skill["id"] if skill else None, Json(req), _draft, x["title"]))
+    # THE CARD BELONGS TO THE DEAL IT WAS BUILT FOR (17 Oct 2026). deal_id was used for the library
+    # row and the Drive filing but never written to the card, so every one of the five callers
+    # patched it with its own `update tasks set deal_id` afterwards and a direct call produced a
+    # quotation card detached from its deal: invisible on the deal page, and missed by
+    # proforma.deal_quotations, deal_options and _quote_to_email, which all look it up by deal.
+    if t and deal_id:
+        db.execute("update tasks set deal_id=%s where id=%s", (int(deal_id), t["id"]))
+        t["deal_id"] = int(deal_id)
     # ONE OPEN CARD PER QUOTATION NUMBER. A new version closes the older open cards for the same number
     # as 'cancelled', never 'rejected': nobody rejected them, and a rejection reads as a judgement on
     # the skill. They stay on record, pointing at the card that replaced them (11 Sep 2026: SEN-2026-0011

@@ -1107,6 +1107,9 @@ def _cases():
     case("a mono label's style attribute survives the font stack",
          "every deck kicker rendered plain, 17 Oct", _mono_style_is_well_formed)
 
+    case("a quotation card carries the deal it was built for", "Heaven SEN-2026-0048, 17 Oct",
+         lambda: "update tasks set deal_id=%s where id=%s" in inspect.getsource(engine.deliver_quotation))
+
     def _caption_keeps_its_casing():
         # .capitalize() lowercases the rest: "AI production" printed "Ai production" on every
         # Heaven sample caption. Same fault as creative._label() on 23 Sep.
