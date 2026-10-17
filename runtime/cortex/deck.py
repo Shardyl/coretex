@@ -1652,6 +1652,22 @@ def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
         elif t == "investment":
             d.investment(pg.get("kicker", ""), pg.get("headline", ""), pg.get("blurb", ""),
                          pg.get("rows") or [], pg.get("cards"), pg.get("section", ""))
+        elif t == "photos":
+            # A GRID OF PICTURES IS A PAGE TYPE (17 Oct 2026). _Deck.photos and .samples existed but
+            # render_spec could not reach them, so a hand-written deck could only show one image per
+            # page and came out as columns of type on black. A deck selling content has to show the
+            # content.
+            d.photos(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""),
+                     pg.get("images") or [], pg.get("section", ""))
+        elif t == "samples":
+            # films are named by id and resolved BY CODE, never described by the caller: an id the
+            # library does not hold is dropped rather than substituted
+            films = [{**f, "thumb": thumbnail(f["youtube_video_id"], out_dir),
+                      "label": f["title"], "caption": film_caption(f)}
+                     for f in films_by_ids(co["id"], pg.get("video_ids") or [])]
+            if films:
+                d.samples(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""), films,
+                          pg.get("section", ""), pg.get("playlist"))
         else:
             raise ValueError(f"unknown page type '{t}'")
         # A WORDS-ONLY PAGE CAN CARRY A DARKENED FRAME BEHIND IT (owner, 1 Oct 2026). CreativeDeck already

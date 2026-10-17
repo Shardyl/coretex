@@ -913,6 +913,15 @@ def _cases():
     case("a post-meeting email reads the full meeting, not the brief", "Heaven card 1297, 17 Oct",
          lambda: "meeting_full" in inspect.getsource(engine._draft_context_for_reply))
 
+    # --- a deck that sells content has to be able to show it (Heaven retainer deck, 17 Oct)
+    def _spec_pages():
+        src = inspect.getsource(deck.render_spec)
+        return 'elif t == "photos"' in src and 'elif t == "samples"' in src
+    case("render_spec can lay out a picture grid and a films page", "Heaven retainer deck, 17 Oct",
+         _spec_pages)
+    case("render_spec still refuses a page type it does not know", "Heaven retainer deck, 17 Oct",
+         lambda: 'unknown page type' in inspect.getsource(deck.render_spec))
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

@@ -3711,3 +3711,13 @@ shoot needs none), then 10% off the whole quotation.
   who" (hover = why). Correct it by saying so in the Change box or Talk ("Abraham leads, copy Balazs"): pinned. v77.
 - Proven 17 Oct on Heaven: the meeting read gave Abraham lead, Balazs support, Barbara decision, Miklos team, Rashad
   our lead; card 1297 redrafted on Opus to Abraham with the full meeting.
+
+## A deck that sells content can show it: render_spec page types (17 Oct 2026)
+- CAUSE: the Heaven Properties retainer deck came out as columns of type on black. `_Deck.photos` (a 3x2 picture
+  grid) and `_Deck.samples` (clickable film thumbnails) existed but `render_spec` had no branch for either, so a
+  hand-written deck could show one image per page at most. A deck whose product IS content has to show the content.
+- `render_spec` now accepts `photos` ({kicker, heading, intro, images: [paths], section}) and `samples`
+  ({kicker, heading, intro, video_ids: [...], playlist, section}). Films are named by ID and resolved BY CODE
+  (`films_by_ids` + `thumbnail` + `film_caption`), so an id the library does not hold is dropped, never substituted.
+- Any page may already carry `bg` (a darkened photograph behind the type). The `strip` type leaves the lower half of
+  a page empty, so a tier/comparison page wants one.
