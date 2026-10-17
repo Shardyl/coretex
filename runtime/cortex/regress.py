@@ -928,6 +928,18 @@ def _cases():
     case("the pricing, flow and faq pages build; showcase needs a real image",
          "Heaven retainer deck, 17 Oct", _saas_pages)
 
+    def _faq_icon_inline():
+        d = deck._Deck(_co("sensa"), "Test", "#2BB3E8", "", "")
+        d.faq("K", "H", [{"q": "q", "a": "a", "icon": "clock"}], "", "s")
+        pg = d.pages[0]
+        # the icon sits on the question's own line; stacked above it overflowed a 720px page
+        return "display:flex;gap:12px;align-items:center" in pg and "<svg" in pg
+    case("a Q&A icon sits beside its question, not above it", "Heaven Q&A overflow, 17 Oct",
+         _faq_icon_inline)
+
+    case("render_spec reports a page that overflowed", "Heaven Q&A overflow, 17 Oct",
+         lambda: "has overflowed" in inspect.getsource(deck.render_spec))
+
     def _icons():
         return (len(deck.ICONS) >= 16 and deck.icon("bulb").startswith("<svg")
                 and deck.icon("nope") == "" and deck.icon("") == ""

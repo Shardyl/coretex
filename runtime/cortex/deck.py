@@ -971,12 +971,13 @@ class _Deck:
         def col(rows):
             return "".join(
                 f'<div style="margin-bottom:{gap}px">'
-                + (f'<div style="color:{self.accent};margin-bottom:9px">'
-                   f'{globals()["icon"](x.get("icon"), 24)}</div>'
+                f'<div style="display:flex;gap:12px;align-items:center;margin-bottom:10px">'
+                + (f'<span style="color:{self.accent};flex:0 0 auto;line-height:0">'
+                   f'{globals()["icon"](x.get("icon"), 22)}</span>'
                    if globals()["icon"](x.get("icon")) else "")
-                + f'<b style="display:block;font-family:Poppins,sans-serif;font-size:{qs}px;'
-                f'font-weight:600;color:#FFFFFF;margin-bottom:10px;line-height:1.25">'
-                f'{_esc(x.get("q"))}</b>'
+                + f'<b style="font-family:Poppins,sans-serif;font-size:{qs}px;'
+                f'font-weight:600;color:#FFFFFF;line-height:1.25">'
+                f'{_esc(x.get("q"))}</b></div>'
                 f'<p style="font-size:{asz}px;color:#C4C4CC;line-height:1.55;margin:0;'
                 f'max-width:{"1000px" if wide else "none"}">'
                 f'{_esc(x.get("a"))}</p></div>' for x in rows)
@@ -1876,7 +1877,20 @@ def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
         # pages of type on flat black. Any page may now name a `bg` image.
         if pg.get("bg"):
             d.with_bg(pg["bg"])
-    return {"path": to_pdf(d.html(), os.path.join(out_dir, filename)), "pages": len(d.pages)}
+    res = {"path": to_pdf(d.html(), os.path.join(out_dir, filename)), "pages": len(d.pages)}
+    # A PAGE THAT OUTGROWS 720px SPLITS IN TWO, and the orphan carries no heading (the Heaven Q&A,
+    # 17 Oct 2026, where per-question icons pushed it over). Say so rather than ship it unnoticed.
+    try:
+        import pypdf
+        real = len(pypdf.PdfReader(res["path"]).pages)
+        res["rendered"] = real
+        if real != res["pages"]:
+            res["overflow"] = real - res["pages"]
+            print(f"[deck] render_spec: {res['pages']} pages laid out, {real} rendered "
+                  f"- a page has overflowed", flush=True)
+    except Exception as _e:  # noqa: BLE001
+        print(f"[deck] page-count check skipped: {type(_e).__name__}", flush=True)
+    return res
 
 
 # --------------------------------------------------------------------------- rebranding a deck
