@@ -1074,6 +1074,17 @@ def _cases():
     case("a split panel hugs its content instead of stretching",
          "Heaven deck v6 p2, 17 Oct", _split_panel_hugs)
 
+    def _caption_keeps_its_casing():
+        # .capitalize() lowercases the rest: "AI production" printed "Ai production" on every
+        # Heaven sample caption. Same fault as creative._label() on 23 Sep.
+        cap = deck.film_caption({"categories": ["ai", "social-cut", "presenter"],
+                                 "client": "Jumeirah Golf Estates"})
+        return (cap == "AI production, social cut, presenter-led for Jumeirah Golf Estates"
+                and deck.film_caption({"categories": ["2d-animation"]}) == "2D animation"
+                and deck.film_caption({"categories": ["interviews"]}) == "Interviews")
+    case("a film caption keeps the casing of its own labels",
+         "Heaven deck p5, 17 Oct", _caption_keeps_its_casing)
+
     def _cta_icon_reads_on_a_photo():
         d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
         d.cta("K", "H", "s", [{"title": "t", "body": "b", "icon": "check"}], {}, "", "Next")

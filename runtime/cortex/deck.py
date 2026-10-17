@@ -329,7 +329,11 @@ def film_caption(f: dict) -> str:
     cats = [str(c).lower() for c in (f.get("categories") or [])
             if str(c).lower() not in ("version-variant", "internal-test", "dubai-police")]
     words = [_CAT_LABELS.get(c, c.replace("-", " ")) for c in cats[:3]]
-    what = ", ".join(words).capitalize() if words else "Film"
+    # .capitalize() LOWERCASES THE REST, so "AI production" printed "Ai production" on every
+    # Heaven sample caption (17 Oct 2026). Same fault as creative._label() on 23 Sep: only the
+    # first letter is ours to change, the labels already carry their own casing.
+    joined = ", ".join(words)
+    what = (joined[:1].upper() + joined[1:]) if joined else "Film"
     return f"{what} for {f['client']}" if f.get("client") else what
 
 
@@ -484,7 +488,7 @@ table.sched td, table.sched th { padding:5px 10px; font-size:13px; }
 .gcell.hasimg .cimg { display:block; width:100%; height:118px; object-fit:cover; margin-bottom:8px; }
 .icap { font-size:10px; color:#7A7A84; letter-spacing:.3px; margin:-8px 0 10px; }
 a.imglink { text-decoration:none; color:inherit; display:block; }
-.thumbcap { font-size:12.5px; margin-top:8px; color:#C4C4CC; }
+.thumbcap { font-size:14px; line-height:1.55; margin-top:10px; color:#C4C4CC; }
 .thumbcap b { color:#EDEDF2; font-weight:600; }
 """.replace("ACCENT", accent)
 
@@ -882,7 +886,9 @@ class _Deck:
         clickable line to the category's full YouTube playlist (owner, 17 Sep 2026: "we've covered over 50
         events, link the playlist"); code supplies it from media_playlists, never the writer."""
         n = max(1, len(films))
-        w = {1: 566, 2: 470, 3: 352}.get(n, 352)
+        # wider than they were: three 352px thumbnails left the bottom third of the page empty
+        # (Heaven p5, owner 17 Oct 2026 on the dead space)
+        w = {1: 760, 2: 548, 3: 362}.get(n, 362)
         h = int(w * 9 / 16)
         items = []
         for f in films:
