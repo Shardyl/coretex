@@ -644,7 +644,7 @@ class _Deck:
                     f'<p>{_esc(x.get("body"))}</p></div>' for x in cs)
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2>'
+            f'<h2>{_hl(heading, self.accent)}</h2>'
             + (f'<p style="max-width:1060px;margin-bottom:20px">{_esc(intro)}</p>' if intro else "")
             + f'<div class="strip" style="grid-template-columns:repeat({len(cs) or 1},1fr)">{c}</div>'
             + (f'<p class="note">{_esc(note)}</p>' if note else "")
@@ -666,7 +666,7 @@ class _Deck:
                 f'<div class="psub">{_esc(pf.get("body"))}</div></div>') if pf else ""
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2>'
+            f'<h2>{_hl(heading, self.accent)}</h2>'
             f'<div style="display:flex;gap:40px;margin-top:16px">'
             f'<div style="width:520px">{b}</div>'
             f'<div class="panel"><h3 style="margin-bottom:14px">{_esc(p.get("title"))}</h3>'
@@ -722,7 +722,7 @@ class _Deck:
                  f'<b>{_esc(tot.get("amount"))}</b></div>') if tot else ""
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2>'
+            f'<h2>{_hl(heading, self.accent)}</h2>'
             f'<div style="display:flex;gap:44px;margin-top:14px">'
             f'<div style="width:640px">{"".join(out)}</div>'
             f'<div style="width:452px">{irows}{total}'
@@ -756,7 +756,7 @@ class _Deck:
                     for i, x in enumerate((steps or [])[:3]))
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2>'
+            f'<h2>{_hl(heading, self.accent)}</h2>'
             + (f'<p style="margin-bottom:18px">{_esc(sub)}</p>' if sub else "")
             + f'<div class="cols">{c}</div>'
             + (f'<h3 style="margin:30px 0 12px">Next steps</h3><div class="cols">{s}</div>' if s else "")
@@ -882,8 +882,7 @@ class _Deck:
                 f'<div style="position:relative;width:{w}px;border:1px solid {edge};border-radius:10px;'
                 f'padding:26px 24px 22px;background:{"rgba(255,255,255,.035)" if hi else "rgba(255,255,255,.015)"}">'
                 f'{badge}'
-                f'<div style="font-size:11px;letter-spacing:2.2px;text-transform:uppercase;'
-                f'color:#9A9AA4;font-weight:600">{_esc(p.get("name"))}</div>'
+                + _mono(p.get("name"), SITE["muted"], 10.5, 2.2) + '<br>'
                 f'<div style="margin:12px 0 2px;font-family:Poppins,sans-serif;font-size:34px;'
                 f'font-weight:600;color:{self.accent};letter-spacing:-.5px">{_esc(p.get("price"))}</div>'
                 f'<div style="font-size:11.5px;color:#7A7A84;margin-bottom:14px">'
@@ -916,9 +915,11 @@ class _Deck:
                     f'{_sv}</div>') if _sv else ""
             items.append(
                 f'<div style="flex:1;border:1px solid #23232A;border-radius:10px;padding:26px 22px;'
-                f'background:rgba(13,13,15,.55);min-height:268px">{icon}'
-                f'<div style="font-size:9.5px;letter-spacing:2px;text-transform:uppercase;'
-                f'color:{self.accent};font-weight:700;margin-bottom:7px">{_esc(s.get("label"))}</div>'
+                f'background:rgba(13,13,15,.55);min-height:268px;position:relative">'
+                f'<span style="position:absolute;top:16px;right:16px;width:7px;height:7px;'
+                f'border-radius:4px;background:{SITE["accent2"] if s.get("alt") else self.accent}'
+                f'"></span>{icon}'
+                f'<div style="margin-bottom:8px">' + _mono(s.get("label"), self.accent, 9.5, 2) + '</div>'
                 f'<b style="display:block;font-size:15.5px;color:#FFFFFF;margin-bottom:10px;'
                 f'line-height:1.3;font-family:Poppins,sans-serif;font-weight:600">'
                 f'{_esc(s.get("title"))}</b>'
@@ -946,12 +947,13 @@ class _Deck:
             f'<img src="{_b64(x["image"])}" style="width:{w}px;height:{h}px;object-fit:cover;'
             f'border-radius:8px;display:block;flex:0 0 {w}px">'
             f'<div style="flex:1;padding-top:2px">'
-            f'<div style="font-size:9.5px;letter-spacing:2px;text-transform:uppercase;'
-            f'color:{self.accent};font-weight:700;margin-bottom:6px">{_esc(x.get("label"))}</div>'
+            f'<div style="margin-bottom:7px">' + _mono(x.get("label"), self.accent, 9.5, 2) + '</div>'
             f'<b style="display:block;font-size:15px;color:#FFFFFF;margin-bottom:6px;'
             f'font-family:Poppins,sans-serif;font-weight:600">{_esc(x.get("title"))}</b>'
             f'<p style="font-size:13.5px;color:#C4C4CC;line-height:1.55;margin:0">'
-            f'{_esc(x.get("body"))}</p></div></div>' for x in got)
+            f'{_esc(x.get("body"))}</p>'
+            + _bars(x.get("bars"), self.accent, SITE["accent2"])
+            + '</div></div>' for x in got)
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_esc(heading)}</h2>'
@@ -1014,6 +1016,56 @@ class _Deck:
     def html(self) -> str:
         return ('<html><head><meta charset="utf-8"><style>' + _css(self.accent) + "</style></head><body>"
                 + "".join(self.pages) + "</body></html>")
+
+
+# --------------------------------------------------------- sensa.digital visual language (17 Oct 2026)
+
+SITE = {"accent": "#00DAFF", "accent2": "#FF6A2C", "text": "#F4F4F5", "muted": "#9A9AA0",
+        "panel": "#242424", "bg": "#0A0A0A"}
+MONO = '"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace'
+
+
+def _mono(text: str, colour: str, size: float = 9.5, ls: float = 1.8) -> str:
+    """The site's label: mono, letterspaced, upper case. Used for every small label on the SaaS
+    page types so the deck and the website read as one thing."""
+    if not text:
+        return ""
+    return (f'<span style="font-family:{MONO};font-size:{size}px;letter-spacing:{ls}px;'
+            f'text-transform:uppercase;color:{colour};font-weight:500">{_esc(text)}</span>')
+
+
+def _hl(text: str, accent: str) -> str:
+    """A headline may accent ONE phrase, the way the site does: "We give you *control*." Escaped
+    either side of the marker, so the copy can never inject markup."""
+    s = str(text or "")
+    if "*" not in s:
+        return _esc(s)
+    parts = s.split("*")
+    out = []
+    for i, p in enumerate(parts):
+        out.append(f'<span style="color:{accent}">{_esc(p)}</span>' if i % 2 else _esc(p))
+    return "".join(out)
+
+
+def _bars(rows: list, accent: str, accent2: str) -> str:
+    """The module card's spec rows: a mono label and a thin bar filled to `pct`."""
+    got = [r for r in (rows or []) if r.get("label")][:3]
+    if not got:
+        return ""
+    out = []
+    for i, r in enumerate(got):
+        try:
+            pct = max(6, min(100, int(r.get("pct", 70))))
+        except (TypeError, ValueError):
+            pct = 70
+        col = accent2 if r.get("alt") else accent
+        out.append(
+            f'<div style="display:flex;align-items:center;gap:10px;margin-top:7px">'
+            + _mono(r["label"], SITE["muted"], 8.5, 1.4)
+            + f'<span style="flex:1;height:2px;background:#1C1C20;border-radius:1px;display:block">'
+              f'<span style="display:block;width:{pct}%;height:2px;background:{col};'
+              f'border-radius:1px"></span></span></div>')
+    return '<div style="margin-top:12px">' + "".join(out) + "</div>"
 
 
 # --------------------------------------------------------------------------- the house icon set

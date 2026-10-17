@@ -928,6 +928,31 @@ def _cases():
     case("the pricing, flow and faq pages build; showcase needs a real image",
          "Heaven retainer deck, 17 Oct", _saas_pages)
 
+    def _site_style():
+        # tokens read off sensa.digital/ai-video-production, 17 Oct 2026
+        ok = (deck.SITE["accent"] == "#00DAFF" and deck.SITE["accent2"] == "#FF6A2C"
+              and "JetBrains Mono" in deck.MONO)
+        # a headline accents one phrase, and the copy either side is still escaped
+        hl = deck._hl("We give you *control* & more", "#00DAFF")
+        ok = ok and '<span style="color:#00DAFF">control</span>' in hl and "&amp;" in hl
+        ok = ok and deck._hl("plain <b>", "#00DAFF") == "plain &lt;b&gt;"
+        # spec bars clamp a silly percentage rather than drawing off the card
+        bars = deck._bars([{"label": "WARDROBE", "pct": 400}], "#00DAFF", "#FF6A2C")
+        return ok and "width:100%" in bars and "WARDROBE" in bars
+    case("the deck speaks the website's visual language", "sensa.digital styling, 17 Oct",
+         _site_style)
+
+    def _showcase_bars():
+        d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        import os as _os
+        p = _os.path.join("/tmp", "_rg_bar.jpg")
+        open(p, "wb").write(b"ÿØÿ" + b"0" * 64)
+        d.showcase("K", "H", "", [{"image": p, "label": "L", "title": "t", "body": "b",
+                                   "bars": [{"label": "DETAIL", "pct": 60}]}], "s")
+        return "DETAIL" in d.pages[0] and "width:60%" in d.pages[0]
+    case("a showcase card can carry the module spec bars", "sensa.digital styling, 17 Oct",
+         _showcase_bars)
+
     def _faq_icon_inline():
         d = deck._Deck(_co("sensa"), "Test", "#2BB3E8", "", "")
         d.faq("K", "H", [{"q": "q", "a": "a", "icon": "clock"}], "", "s")
