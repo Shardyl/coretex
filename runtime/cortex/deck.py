@@ -591,7 +591,7 @@ class _Deck:
                  + "".join(f"<li>{_esc(x)}</li>" for x in bullets[:cap]) + "</ul>")
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2><div class="cols" style="margin-top:4px">{c}</div>{b}</div>'
+            f'<h2>{_hl(heading, self.accent)}</h2><div class="cols" style="margin-top:4px">{c}</div>{b}</div>'
             f'{self._foot(section or kicker)}</div>')
 
     def phases(self, kicker: str, heading: str, phases: list, cards: list | None = None, section: str = "",
@@ -609,7 +609,7 @@ class _Deck:
                            for x in cards[:3]) + "</div>")
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2><div class="cols" style="margin-top:4px">{p}</div>{c}</div>'
+            f'<h2>{_hl(heading, self.accent)}</h2><div class="cols" style="margin-top:4px">{p}</div>{c}</div>'
             f'{self._foot(section or kicker)}</div>')
 
     def covermeta(self, kicker: str, title: str, title2: str, standfirst: str, meta: list,
@@ -693,7 +693,7 @@ class _Deck:
             f'<div class="pg">{img}{cap}'
             f'<div style="position:absolute;top:58px;left:72px;width:566px">'
             f'<h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2 style="margin-bottom:6px">{_esc(heading)}</h2>'
+            f'<h2 style="margin-bottom:6px">{_hl(heading, self.accent)}</h2>'
             + (f'<div class="psub" style="margin-bottom:14px">{_esc(sub)}</div>' if sub else "")
             + f'<p>{_esc(body)}</p><div style="margin-top:26px">{st}</div></div>'
             + (f'<div class="note" style="position:absolute;bottom:52px;left:72px;width:560px">'
@@ -742,7 +742,7 @@ class _Deck:
                     for i, x in enumerate((items or [])[:8]))
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2><div class="qgrid">{c}</div>'
+            f'<h2>{_hl(heading, self.accent)}</h2><div class="qgrid">{c}</div>'
             + (f'<p class="note">{_esc(note)}</p>' if note else "")
             + f'</div>{self._foot(section or kicker)}</div>')
 
@@ -777,7 +777,7 @@ class _Deck:
         if any(ims):
             intro = ""
         h = (f'<h1 style="font-size:40px;margin-bottom:18px">{_esc(heading)}</h1>' if big
-             else f'<h2>{_esc(heading)}</h2>')
+             else f'<h2>{_hl(heading, self.accent)}</h2>')
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'{h}'
@@ -808,7 +808,7 @@ class _Deck:
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<div style="display:flex;align-items:baseline;gap:18px;margin-bottom:10px">'
-            f'<span class="csclient">{_esc(client)}</span><h2 style="margin:0">{_esc(heading)}</h2></div>'
+            f'<span class="csclient">{_esc(client)}</span><h2 style="margin:0">{_hl(heading, self.accent)}</h2></div>'
             f'<p style="max-width:1060px">{_esc(body)}</p>{b}'
             f'<div style="display:flex;gap:24px;margin-top:20px">{"".join(items)}</div></div>'
             f'{self._foot(section or "Case study")}</div>')
@@ -833,7 +833,7 @@ class _Deck:
                 f'{_esc(_sentence(f.get("caption")))} Click to watch.</p></a>')
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2>'
+            f'<h2>{_hl(heading, self.accent)}</h2>'
             + (f'<p style="max-width:1060px;margin-bottom:16px">{_esc(intro)}</p>' if intro else "")
             + f'<div style="display:flex;gap:24px;margin-top:6px">{"".join(items)}</div>'
             + (f'<p style="margin-top:22px"><a href="{_esc(playlist["url"])}" style="color:{self.accent};'
@@ -853,7 +853,7 @@ class _Deck:
             for p in imgs)
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2>'
+            f'<h2>{_hl(heading, self.accent)}</h2>'
             + (f'<p style="max-width:1060px;margin-bottom:14px">{_esc(intro)}</p>' if intro else "")
             + f'<div style="display:grid;grid-template-columns:repeat(3,{w}px);gap:16px 24px;margin-top:4px">{cells}</div>'
             f'</div>{self._foot(section or "Photography")}</div>')
@@ -893,7 +893,7 @@ class _Deck:
                   f'line-height:1.45">{feats}</ul></div>')
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2>'
+            f'<h2>{_hl(heading, self.accent)}</h2>'
             + (f'<p style="max-width:1080px;margin-bottom:20px">{_esc(intro)}</p>' if intro else "")
             + f'<div style="display:flex;gap:24px;align-items:stretch;margin-top:6px">'
               f'{"".join(cards)}</div>'
@@ -927,7 +927,7 @@ class _Deck:
                 f'{_esc(s.get("body"))}</p></div>')
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2>'
+            f'<h2>{_hl(heading, self.accent)}</h2>'
             + (f'<p style="max-width:1080px;margin-bottom:20px">{_esc(intro)}</p>' if intro else "")
             + f'<div style="display:flex;gap:4px;align-items:stretch;margin-top:52px">'
               f'{"".join(items)}</div>'
@@ -941,7 +941,7 @@ class _Deck:
         got = [x for x in (items or []) if x.get("image") and os.path.isfile(x["image"])][:4]
         if not got:
             return
-        w, h = 362, 186
+        w, h = 352, 170
         cells = "".join(
             f'<div style="display:flex;gap:18px;align-items:flex-start">'
             f'<img src="{_b64(x["image"])}" style="width:{w}px;height:{h}px;object-fit:cover;'
@@ -956,9 +956,9 @@ class _Deck:
             + '</div></div>' for x in got)
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2>'
+            f'<h2>{_hl(heading, self.accent)}</h2>'
             + (f'<p style="max-width:1080px;margin-bottom:18px">{_esc(intro)}</p>' if intro else "")
-            + f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:22px 30px;margin-top:4px">'
+            + f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px 28px;margin-top:2px">'
               f'{cells}</div></div>{self._foot(section or kicker)}</div>')
 
     def faq(self, kicker: str, heading: str, items: list, note: str = "", section: str = ""):
@@ -987,7 +987,7 @@ class _Deck:
         grid = ("1fr" if wide else "1fr 1fr")
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_esc(heading)}</h2>'
+            f'<h2>{_hl(heading, self.accent)}</h2>'
             f'<div style="display:grid;grid-template-columns:{grid};gap:0 46px;margin-top:24px">'
             f'<div>{col(got[:half])}</div>'
             + ("" if wide else f'<div>{col(got[half:])}</div>') + '</div>'
@@ -1239,7 +1239,7 @@ class CreativeDeck(_Deck):
         self.pages.append(
             f'<div class="pg"><div class="pad" style="padding-top:40px"><h3>{_esc(kicker)}</h3>'
             f'<div class="rule" style="margin-bottom:9px"></div>'
-            f'<h2 style="font-size:23px;margin-bottom:5px">{_esc(heading)}</h2>'
+            f'<h2 style="font-size:23px;margin-bottom:5px">{_hl(heading, self.accent)}</h2>'
             + (f'<p class="csnote" style="margin:0 0 6px">{_esc(sub)}</p>' if sub else "")
             + f'<div class="vos">{r}</div>'
             + (f'<p class="csnote" style="margin-top:12px">{_esc(note)}</p>' if note else "")
@@ -1252,7 +1252,7 @@ class CreativeDeck(_Deck):
         self.pages.append(
             f'<div class="pg"><div class="pad" style="padding-top:44px"><h3>{_esc(kicker)}</h3>'
             f'<div class="rule" style="margin-bottom:10px"></div><h2 style="font-size:23px;margin-bottom:12px">'
-            f'{_esc(heading)}</h2>' + (f'<p class="csnote">{_esc(note)}</p>' if note else "")
+            f'{_hl(heading, self.accent)}</h2>' + (f'<p class="csnote">{_esc(note)}</p>' if note else "")
             + f'<div class="cs">{c}</div></div>{self._foot(section or kicker)}</div>')
 
     def tiles(self, kicker, heading, body, tiles, note="", section="", width: int = 150):
@@ -1266,7 +1266,7 @@ class CreativeDeck(_Deck):
         t = "".join(one(x) for x in (tiles or [])[:7])
         self.pages.append(
             f'<div class="pg"><div class="pad" style="padding-top:48px"><h3>{_esc(kicker)}</h3>'
-            f'<div class="rule"></div><h2 style="margin-bottom:8px">{_esc(heading)}</h2>'
+            f'<div class="rule"></div><h2 style="margin-bottom:8px">{_hl(heading, self.accent)}</h2>'
             f'<p style="max-width:1080px">{_esc(body)}</p><div class="tiles">{t}</div>'
             + (f'<p class="csnote" style="margin-top:16px">{_esc(note)}</p>' if note else "")
             + f'</div>{self._foot(section or kicker)}</div>')
@@ -1286,7 +1286,7 @@ class CreativeDeck(_Deck):
             cells.append(f'<div style="width:{w}px">{img}{cap}</div>')
         self.pages.append(
             f'<div class="pg"><div class="pad" style="padding-top:44px"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2 style="margin-bottom:14px">{_esc(heading)}</h2>'
+            f'<h2 style="margin-bottom:14px">{_hl(heading, self.accent)}</h2>'
             f'<div style="display:grid;grid-template-columns:repeat(3,{w}px);gap:18px 28px">{"".join(cells)}</div>'
             f'</div>{self._foot(section or "Our work")}</div>')
 

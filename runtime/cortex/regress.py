@@ -942,6 +942,17 @@ def _cases():
     case("the deck speaks the website's visual language", "sensa.digital styling, 17 Oct",
          _site_style)
 
+    def _hl_everywhere():
+        # the accent word reached four OLD builders and missed the new ones on the first pass
+        src = inspect.getsource(deck)
+        import re as _re
+        plain = _re.findall(r"\{_esc\(heading\)\}</h2>", src)
+        for fn in (deck._Deck.pricing, deck._Deck.flow, deck._Deck.showcase, deck._Deck.faq):
+            if "_hl(heading, self.accent)" not in inspect.getsource(fn):
+                return False
+        return not plain
+    case("every page heading can accent a word", "sensa.digital styling, 17 Oct", _hl_everywhere)
+
     def _showcase_bars():
         d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
         import os as _os
