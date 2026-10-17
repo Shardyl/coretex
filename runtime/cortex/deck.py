@@ -962,20 +962,28 @@ class _Deck:
         """The Q&A page at a size you can read across a room: two columns, type that fills the page.
         `qa` sets small numbered rows and leaves most of a 720px page black."""
         got = items[:6]
-        half = (len(got) + 1) // 2
+        # FEW QUESTIONS GO IN ONE COLUMN, BIG (owner, 17 Oct 2026: "a massive amount of black space
+        # on that page ... make the text a bit bigger and fill up the page"). Two columns of four
+        # short answers filled a third of a 720px page.
+        wide = len(got) <= 4
+        qs, asz, gap = (23, 16, 34) if wide else (18, 15, 28)
         def col(rows):
             return "".join(
-                f'<div style="margin-bottom:28px">'
-                f'<b style="display:block;font-family:Poppins,sans-serif;font-size:18px;'
-                f'font-weight:600;color:#FFFFFF;margin-bottom:9px;line-height:1.25">'
+                f'<div style="margin-bottom:{gap}px">'
+                f'<b style="display:block;font-family:Poppins,sans-serif;font-size:{qs}px;'
+                f'font-weight:600;color:#FFFFFF;margin-bottom:10px;line-height:1.25">'
                 f'{_esc(x.get("q"))}</b>'
-                f'<p style="font-size:15px;color:#C4C4CC;line-height:1.55;margin:0">'
+                f'<p style="font-size:{asz}px;color:#C4C4CC;line-height:1.55;margin:0;'
+                f'max-width:{"1000px" if wide else "none"}">'
                 f'{_esc(x.get("a"))}</p></div>' for x in rows)
+        half = len(got) if wide else (len(got) + 1) // 2
+        grid = ("1fr" if wide else "1fr 1fr")
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_esc(heading)}</h2>'
-            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 46px;margin-top:20px">'
-            f'<div>{col(got[:half])}</div><div>{col(got[half:])}</div></div>'
+            f'<div style="display:grid;grid-template-columns:{grid};gap:0 46px;margin-top:24px">'
+            f'<div>{col(got[:half])}</div>'
+            + ("" if wide else f'<div>{col(got[half:])}</div>') + '</div>'
             + (f'<p style="margin-top:6px;font-size:11.5px;color:#7A7A84">{_esc(note)}</p>'
                if note else "")
             + f'</div>{self._foot(section or kicker)}</div>')

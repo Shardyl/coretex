@@ -928,6 +928,14 @@ def _cases():
     case("the pricing, flow and faq pages build; showcase needs a real image",
          "Heaven retainer deck, 17 Oct", _saas_pages)
 
+    def _faq_fills():
+        d = deck._Deck(_co("sensa"), "Test", "#2BB3E8", "", "")
+        d.faq("K", "H", [{"q": "q%d" % i, "a": "a"} for i in range(4)], "", "s")   # one column, big
+        d.faq("K", "H", [{"q": "q%d" % i, "a": "a"} for i in range(6)], "", "s")   # two columns
+        return ("grid-template-columns:1fr;" in d.pages[0] and "font-size:23px" in d.pages[0]
+                and "grid-template-columns:1fr 1fr;" in d.pages[1])
+    case("a short Q&A fills the page in one column", "Heaven deck black space, 17 Oct", _faq_fills)
+
     def _lead_play():
         d = deck._Deck(_co("sensa"), "Test", "#2BB3E8", "", "")
         d.lead("K", "T", "c", None, "", "s", play=True)
