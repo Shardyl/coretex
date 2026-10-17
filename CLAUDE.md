@@ -3742,3 +3742,42 @@ shoot needs none), then 10% off the whole quotation.
   and only ever filled the top half of its page. `band` = {label, title, body, items} draws a full-width
   block under the two columns, so the answer sits on the same page as the problem. First use: the Heaven
   retainer deck's "content as a service" block under "Four days, inside fourteen".
+
+## The AI content retainer: its own preset, its own terms (owner, 17 Oct 2026)
+
+- `content-retainer` in `settings.quotation_presets` is the MONTHLY CONTENT PROGRAMME. It is NOT the
+  `retainer` preset, which is media CUSTODY (archive plus a minor revision service) and has nothing to do
+  with producing content. Both are named in sales-quotation rule 1 and in the placement rule, so the two
+  can never be confused again.
+- Priced by TIER from the rate card (`AI content retainer packages`, owner-approved 17 Oct 2026):
+  retainer-tier-1/2/3 at AED 10,000 / 20,000 / 36,000 a month. A tier is a PACKAGE price, not the sum of
+  the per-video items in the `AI content retainer` group, which is why the per-film figure inside a tier
+  sits below the per-video rate for the same volume: the tier absorbs the language versions, the avatars,
+  the planning cycle and the photography.
+- EVERY TIER STATES ITS RUNNING TIME AND ITS RESOLUTION (owner: "it can't be 30 or 60 seconds, we have to
+  pick one or the other"). Running time is the biggest single driver of what a film costs, so a tier
+  without one is not a price. Tiers are up to 30 seconds, delivered in 1080p.
+  `retainer-tier-60s-uplift` and `retainer-4k-uplift` are on the card UNPRICED, OWNER TO CONFIRM.
+- Payment is 50% on signature and 50% at the start of month four. The term is a fixed six months that
+  AUTO-RENEWS for successive six month terms; 30 days notice before the end of a term, or at any time
+  during a renewal with a pro rata refund. A month-to-month tail cannot coexist with billing in two
+  instalments, and monthly billing is not workable with UAE clients.
+- THE AVATAR CLAUSES ARE A LICENCE, NEVER AN ASSIGNMENT (owner, 17 Oct 2026, after asking whether an AI
+  character can be licensed at all). Copyright needs human authorship: purely machine-generated output is
+  unprotected in the US (Zarya of the Dawn 2023, Thaler) and UAE Federal Decree-Law 38 of 2021 has no
+  carve-out for it, so "Sensa owns the character" was an untested assertion and selling an assignment of
+  it would be selling something we may not have. What we hold is the BUILD (reference sheets, trained
+  models, voice model, prompt chains) as confidential information, plus what the contract binds the
+  client to. Clause 19 is therefore an AVATAR RELEASE: the build assets delivered under a perpetual
+  exclusive licence, the restriction lifted, and an undertaking not to reuse the character.
+  AED 12,000 custom / AED 20,000 likeness (`retainer-avatar-buyout-*` on the card). The terms state
+  openly that rights in AI-generated material are unsettled and that neither party warrants a monopoly in
+  a look, because nobody can stop an independently generated lookalike. A LIKENESS avatar's control point
+  is consent and data protection (a trained face or voice model is biometric personal data under the
+  PDPL), not copyright, which is why those models are held rather than circulated.
+- Rate card v2.4; v2.0 to v2.3 kept as `rate_card:sensa:vN`. Preset backups:
+  `quotation_presets:backup-2026-10-17{,b,c,d}`; rules backup `sales_quotation_rules_backup_2026_10_17`.
+  `python -m cortex._export_templates sensa` was re-run, so the Drive terms folder carries
+  `Sensa - Quotation Template - content-retainer.docx` and `Sensa - Rate Card v2.4.xlsx`.
+- First use: Heaven Properties deal 150, SEN-2026-0048 (v5 is the live draft). The terms are a v1 and will
+  move when the client comes back with scope.
