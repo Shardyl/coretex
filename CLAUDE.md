@@ -3727,3 +3727,14 @@ shoot needs none), then 10% off the whole quotation.
   out in the accent), `flow` (a process left to right with arrows, optional inline-SVG `icon` per step), `showcase`
   (four captioned stills, 2 x 2: the picture, what the format is, what it does, where `photos` shows pictures with
   no words) and `faq` (the Q&A in two columns at a size you can read, where `qa` leaves most of a 720px page black).
+- CHUNKY HEADINGS, BIG ICONS, AND AN ASK THAT LOOKS LIKE ONE (owner, 17 Oct 2026: on the website "the titles
+  are a lot more chunkier"; "these dots ... they're crap, let's have proper icons, something big and chunky";
+  "we need to make the last page stand out, that last call to action"). The deck's h2 is 27px at weight 600
+  against the site's Poppins 800, which is the whole difference. `spec["chunky"] = True` opts ONE deck into
+  `_CHUNKY_CSS` (h1 58/800, h2 44/800, mono kickers, 15.5px body) through `_Deck.extra_css`. DELIBERATELY NOT
+  GLOBAL: a deck already laid out against 27px headings would overflow at 44px, and render_spec only reports
+  an overflow after the fact. A `flow` step's icon is now 40px inside its own 72px panel and the meaningless
+  corner node dot is gone; `flow(arrows=False)`, on render_spec too, lets a page be a row of capability cards
+  rather than a sequence. New page type `cta`: a 72px headline that may accent a phrase, one line under it,
+  the next three steps in a row with the house icons, and a bordered reply-to panel. `closing` summarises a
+  proposal, `cta` asks for the decision.
