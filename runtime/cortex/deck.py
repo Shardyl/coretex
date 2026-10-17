@@ -916,19 +916,19 @@ class _Deck:
                     f'{_sv}</div>') if _sv else ""
             items.append(
                 f'<div style="flex:1;border:1px solid #23232A;border-radius:10px;padding:26px 22px;'
-                f'background:rgba(255,255,255,.02);min-height:196px">{icon}'
+                f'background:rgba(13,13,15,.55);min-height:268px">{icon}'
                 f'<div style="font-size:9.5px;letter-spacing:2px;text-transform:uppercase;'
                 f'color:{self.accent};font-weight:700;margin-bottom:7px">{_esc(s.get("label"))}</div>'
                 f'<b style="display:block;font-size:15.5px;color:#FFFFFF;margin-bottom:10px;'
                 f'line-height:1.3;font-family:Poppins,sans-serif;font-weight:600">'
                 f'{_esc(s.get("title"))}</b>'
-                f'<p style="font-size:13.5px;color:#C4C4CC;line-height:1.55;margin:0">'
+                f'<p style="font-size:14px;color:#D4D4DC;line-height:1.6;margin:0">'
                 f'{_esc(s.get("body"))}</p></div>')
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_esc(heading)}</h2>'
             + (f'<p style="max-width:1080px;margin-bottom:20px">{_esc(intro)}</p>' if intro else "")
-            + f'<div style="display:flex;gap:4px;align-items:stretch;margin-top:30px">'
+            + f'<div style="display:flex;gap:4px;align-items:stretch;margin-top:52px">'
               f'{"".join(items)}</div>'
             + (f'<p style="margin-top:22px;font-size:11.5px;color:#7A7A84">{_esc(note)}</p>'
                if note else "")
