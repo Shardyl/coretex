@@ -1078,9 +1078,11 @@ def _cases():
         d.flow("K", "H", "", [{"label": "BUILD", "title": "The month in one run",
                                "body": "Every film produced together.", "icon": "layers"}], "", "s")
         pg = d.pages[0]
-        # the overlap on Heaven p9 was a two-line title with no line-height. The card is back
-        # to 300px because the icon panel is 72px tall; the title still cannot collide.
-        return "line-height:1.3" in pg and "<svg" in pg and "min-height:300px" in pg
+        # the overlap on Heaven p9 was a two-line title with no line-height. The card floor
+        # must also clear the 72px icon panel, so read it rather than pin a number here.
+        import re as _re_fl
+        m = _re_fl.search(r"min-height:(\d+)px", pg)
+        return "line-height:1.3" in pg and "<svg" in pg and m and int(m.group(1)) >= 300
     case("a wrapping step title cannot overlap its body", "Heaven deck p9 overlap, 17 Oct",
          _flow_title_wraps)
 
