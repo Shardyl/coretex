@@ -975,22 +975,23 @@ class _Deck:
                     f'margin-bottom:20px">{_sv}</div>') if _sv else ""
             items.append(
                 f'<div style="flex:1;border:1px solid #23232A;border-radius:10px;padding:26px 22px;'
-                f'background:rgba(13,13,15,.55);min-height:300px">{icon}'
+                f'background:rgba(13,13,15,.55);min-height:380px">{icon}'
                 f'<div style="margin-bottom:8px">' + _mono(s.get("label"), self.accent, 9.5, 2) + '</div>'
                 f'<b style="display:block;font-size:15.5px;color:#FFFFFF;margin-bottom:10px;'
                 f'line-height:1.3;font-family:Poppins,sans-serif;font-weight:600">'
                 f'{_esc(s.get("title"))}</b>'
                 f'<p style="font-size:14px;color:#D4D4DC;line-height:1.6;margin:0">'
                 f'{_esc(s.get("body"))}</p></div>')
-        # THE CARDS FILL THE PAGE. Short steps in fixed-height boxes left a dead band above the
-        # footer on both Heaven flow pages (owner, 17 Oct 2026: "there's a lot of dead space").
-        # The pad becomes a flex column and the row takes whatever the heading leaves.
+        # THE CARDS REACH THE FOOT OF THE PAGE. Short steps in 300px boxes left a dead band above
+        # the footer on both Heaven flow pages (owner, 17 Oct 2026: "there's a lot of dead space").
+        # A flex column was tried first and is WRONG: WeasyPrint hands the free space to the
+        # heading rather than to a flex:1 row, so the page got worse, not better. The card floor
+        # is simply taller, which is deterministic.
         self.pages.append(
-            f'<div class="pg"><div class="pad" style="height:604px;display:flex;'
-            f'flex-direction:column"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_hl(heading, self.accent)}</h2>'
             + (f'<p style="max-width:1080px;margin-bottom:20px">{_esc(intro)}</p>' if intro else "")
-            + f'<div style="display:flex;gap:10px;align-items:stretch;margin-top:34px;flex:1">'
+            + f'<div style="display:flex;gap:10px;align-items:stretch;margin-top:34px">'
               f'{"".join(items)}</div>'
             + (f'<p style="margin-top:22px;font-size:11.5px;color:#7A7A84">{_esc(note)}</p>'
                if note else "")

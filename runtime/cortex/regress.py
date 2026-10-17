@@ -1032,10 +1032,13 @@ def _cases():
     def _flow_fills_page():
         d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
         d.flow("K", "H", "", [{"label": "a", "title": "t", "body": "b"}], "", "s")
-        # short steps in fixed boxes left a dead band above the footer on both Heaven flow pages
-        return "height:604px;display:flex;flex-direction:column" in d.pages[0] and "flex:1" in d.pages[0]
-    case("a flow page fills its frame instead of leaving dead space",
-         "Heaven deck v6 p3 and p10, 17 Oct", _flow_fills_page)
+        # short steps in 300px boxes left a dead band above the footer on both Heaven flow pages.
+        # A flex column is NOT the fix: WeasyPrint gives the free space to the heading, not to a
+        # flex:1 row, so the page came out worse. The card floor is taller instead.
+        return ("min-height:380px" in d.pages[0]
+                and "flex-direction:column" not in d.pages[0])
+    case("a flow page reaches the foot of its frame", "Heaven deck v6 p3 and p10, 17 Oct",
+         _flow_fills_page)
 
     def _cta_icon_reads_on_a_photo():
         d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
