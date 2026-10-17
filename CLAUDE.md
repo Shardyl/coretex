@@ -3738,3 +3738,7 @@ shoot needs none), then 10% off the whole quotation.
   rather than a sequence. New page type `cta`: a 72px headline that may accent a phrase, one line under it,
   the next three steps in a row with the house icons, and a bordered reply-to panel. `closing` summarises a
   proposal, `cta` asks for the decision.
+- A SPLIT PAGE CAN ANSWER ITS OWN PROBLEM (owner, 17 Oct 2026). `split` states the client's situation
+  and only ever filled the top half of its page. `band` = {label, title, body, items} draws a full-width
+  block under the two columns, so the answer sits on the same page as the problem. First use: the Heaven
+  retainer deck's "content as a service" block under "Four days, inside fourteen".

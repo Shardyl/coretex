@@ -656,8 +656,12 @@ class _Deck:
             + f'</div>{self._foot(section or kicker)}</div>')
 
     def split(self, kicker: str, heading: str, blocks: list, panel: dict, note: str = "",
-              section: str = ""):
-        """The argument on the left, a diagram or facility panel on the right."""
+              section: str = "", band: dict | None = None):
+        """The argument on the left, a diagram or facility panel on the right.
+
+        `band` = {label, title, body, items:[{title, body}]}: a full-width block UNDER the two
+        columns. The split page only ever filled its top half, and the answer to a client's
+        problem belongs on the same page as the problem (owner, 17 Oct 2026)."""
         b = "".join(f'<div class="sblock"><b>{_esc(x.get("title"))}</b><p>{_esc(x.get("body"))}</p></div>'
                     for x in (blocks or [])[:5])
         p = panel or {}
@@ -682,8 +686,34 @@ class _Deck:
             f'<div class="panel" style="display:inline-block;vertical-align:top;width:576px">'
             f'<h3 style="margin-bottom:14px">{_esc(p.get("title"))}</h3>'
             f'<div class="pgrid">{cells}</div>{foot}</div></div>'
+            + self._band(band)
             + (f'<p class="note">{_esc(note)}</p>' if note else "")
             + f'</div>{self._foot(section or kicker)}</div>')
+
+    def _band(self, band: dict | None) -> str:
+        """The full-width block under a split page's two columns."""
+        bd = band or {}
+        if not bd.get("title"):
+            return ""
+        cells = "".join(
+            f'<div style="flex:1;border-top:2px solid {self.accent};padding-top:15px">'
+            f'<b style="display:block;font-family:Poppins,sans-serif;font-size:15px;'
+            f'font-weight:600;color:#FFFFFF;line-height:1.3;margin-bottom:7px">'
+            f'{_esc(x.get("title"))}</b>'
+            f'<p style="font-size:13.5px;color:#C4C4CC;line-height:1.55;margin:0">'
+            f'{_esc(x.get("body"))}</p></div>'
+            for x in (bd.get("items") or [])[:4])
+        return (f'<div style="margin-top:32px;border-top:1px solid #23232A;padding-top:22px">'
+                + (f'<div style="margin-bottom:9px">'
+                   + _mono(bd.get("label"), self.accent, 9.5, 2) + '</div>' if bd.get("label") else "")
+                + f'<b style="display:block;font-family:Poppins,sans-serif;font-size:24px;'
+                  f'font-weight:700;color:#FFFFFF;letter-spacing:-.4px;line-height:1.2;'
+                  f'margin-bottom:10px">{_hl(bd.get("title"), self.accent)}</b>'
+                + (f'<p style="font-size:14px;color:#C4C4CC;line-height:1.55;max-width:1000px;'
+                   f'margin-bottom:22px">{_esc(bd.get("body"))}</p>' if bd.get("body") else "")
+                + (f'<div style="display:flex;gap:24px;align-items:flex-start">{cells}</div>'
+                   if cells else "")
+                + '</div>')
 
     def photo(self, kicker: str, heading: str, sub: str, body: str, stats: list,
               image: str | None, caption: str = "", note: str = "", section: str = "",
@@ -1964,7 +1994,8 @@ def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
                     pg.get("cols") or [], pg.get("note", ""), pg.get("section", ""))
         elif t == "split":
             d.split(pg.get("kicker", ""), pg.get("heading", ""), pg.get("blocks") or [],
-                    pg.get("panel") or {}, pg.get("note", ""), pg.get("section", ""))
+                    pg.get("panel") or {}, pg.get("note", ""), pg.get("section", ""),
+                    pg.get("band"))
         elif t == "photo":
             d.photo(pg.get("kicker", ""), pg.get("heading", ""), pg.get("sub", ""),
                     pg.get("body", ""), pg.get("stats") or [], pg.get("image"),

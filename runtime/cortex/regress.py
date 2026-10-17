@@ -1080,6 +1080,23 @@ def _cases():
     case("a split panel hugs its content instead of stretching",
          "Heaven deck v6 p2, 17 Oct", _split_panel_hugs)
 
+    def _split_band():
+        d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        d.split("K", "H", [{"title": "t", "body": "b"}], {"title": "p", "cells": []}, "",
+                "s", {"label": "CONTENT AS A SERVICE", "title": "A platform, not a *company*",
+                      "body": "b", "items": [{"title": "one", "body": "b"},
+                                             {"title": "two", "body": "b"}]})
+        pg = d.pages[0]
+        # a split with no band is exactly what it was
+        plain = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        plain.split("K", "H", [{"title": "t", "body": "b"}], {"title": "p", "cells": []}, "", "s")
+        return ("CONTENT AS A SERVICE" in pg and "A platform, not a" in pg
+                and '<span style="color:#00DAFF">company</span>' in pg
+                and "one" in pg and "two" in pg
+                and "border-top:1px solid #23232A" not in plain.pages[0])
+    case("a split page can carry a full-width band under its columns",
+         "Heaven deck p2, 17 Oct", _split_band)
+
     def _caption_keeps_its_casing():
         # .capitalize() lowercases the rest: "AI production" printed "Ai production" on every
         # Heaven sample caption. Same fault as creative._label() on 23 Sep.
