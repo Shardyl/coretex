@@ -1045,6 +1045,23 @@ def _cases():
     case("a cta step icon stays legible over a background photograph",
          "Heaven deck v6 p12, 17 Oct", _cta_icon_reads_on_a_photo)
 
+    def _icons_are_not_black():
+        # stroke="currentColor" is NOT resolved by the PDF renderer: every icon in the Heaven
+        # v5 and v6 decks rendered black on black, and the tinted panel behind it hid the fault.
+        got = deck.icon("bulb", 40, "#00DAFF")
+        if 'stroke="#00DAFF"' not in got or "currentColor" in got or 'width="40"' not in got:
+            return False
+        if deck.icon("bulb") == "" or "currentColor" not in deck.icon("bulb"):
+            return False          # the attribute stays for anything rendering in a browser
+        d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        d.flow("K", "H", "", [{"label": "a", "title": "t", "body": "b", "icon": "bulb"}], "", "s")
+        d.faq("K", "H", [{"q": "q", "a": "a", "icon": "clock"}], "", "s")
+        d.cta("K", "H", "s", [{"title": "t", "body": "b", "icon": "check"}], {}, "", "N")
+        # every page builder that draws an icon names the colour it is drawn in
+        return all('stroke="#00DAFF"' in p and 'stroke="currentColor"' not in p for p in d.pages)
+    case("a deck icon is drawn in the accent, never left to currentColor",
+         "Heaven deck icons invisible, 17 Oct", _icons_are_not_black)
+
     def _icons():
         return (len(deck.ICONS) >= 16 and deck.icon("bulb").startswith("<svg")
                 and deck.icon("nope") == "" and deck.icon("") == ""

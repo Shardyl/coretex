@@ -774,7 +774,7 @@ class _Deck:
         if got:
             cells = []
             for i, x in enumerate(got):
-                _sv = globals()["icon"](x.get("icon"), 22)
+                _sv = globals()["icon"](x.get("icon"), 22, self.accent)
                 # a bare stroked icon disappeared over the bright half of a background
                 # photograph (Heaven p12, 17 Oct 2026): it gets its own solid chip
                 ic = (f'<div style="width:36px;height:36px;border-radius:9px;'
@@ -967,8 +967,8 @@ class _Deck:
                 items.append(
                     f'<div style="flex:0 0 26px;display:flex;align-items:center;justify-content:center;'
                     f'color:{self.accent};font-size:22px">&rarr;</div>')
-            _sv = globals()["icon"](s.get("icon"), 40)
             _c = SITE["accent2"] if s.get("alt") else self.accent
+            _sv = globals()["icon"](s.get("icon"), 40, _c)
             icon = (f'<div style="width:72px;height:72px;border-radius:14px;'
                     f'background:{_c}14;border:1px solid {_c}38;display:flex;'
                     f'align-items:center;justify-content:center;color:{_c};'
@@ -1036,7 +1036,7 @@ class _Deck:
                 f'<div style="margin-bottom:{gap}px">'
                 f'<div style="display:flex;gap:12px;align-items:center;margin-bottom:10px">'
                 + (f'<span style="color:{self.accent};flex:0 0 auto;line-height:0">'
-                   f'{globals()["icon"](x.get("icon"), 22)}</span>'
+                   f'{globals()["icon"](x.get("icon"), 22, self.accent)}</span>'
                    if globals()["icon"](x.get("icon")) else "")
                 + f'<b style="font-family:Poppins,sans-serif;font-size:{qs}px;'
                 f'font-weight:600;color:#FFFFFF;line-height:1.25">'
@@ -1175,9 +1175,14 @@ ICONS = {
 }
 
 
-def icon(name: str, size: int = 26) -> str:
+def icon(name: str, size: int = 26, colour: str = "") -> str:
     """The named icon, or nothing. A page spec may pass a name or raw SVG; an unknown name is
-    silently dropped rather than printing a placeholder on a client's deck."""
+    silently dropped rather than printing a placeholder on a client's deck.
+
+    ALWAYS PASS THE COLOUR. `stroke="currentColor"` is NOT resolved by the PDF renderer, so an
+    icon drawn without one comes out BLACK on a black page. Every icon in the Heaven v5 and v6
+    decks was invisible, and the tinted panel behind it made it look as though it had rendered
+    (17 Oct 2026). The attribute stays for anything that renders the SVG in a browser."""
     if not name:
         return ""
     n = str(name).strip()
@@ -1186,7 +1191,11 @@ def icon(name: str, size: int = 26) -> str:
     got = ICONS.get(n.lower())
     if not got:
         return ""
-    return got if size == 26 else got.replace('width="26" height="26"', f'width="{size}" height="{size}"')
+    if size != 26:
+        got = got.replace('width="26" height="26"', f'width="{size}" height="{size}"')
+    if colour:
+        got = got.replace('stroke="currentColor"', f'stroke="{colour}"')
+    return got
 
 
 # --------------------------------------------------------------------------- creative proposal pages
