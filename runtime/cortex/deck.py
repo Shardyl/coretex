@@ -550,12 +550,16 @@ class _Deck:
             f'{self._foot(section)}</div>')
 
     def lead(self, kicker: str, title: str, caption: str, image: str | None, href: str,
-             section: str = "Watch"):
+             section: str = "Watch", play: bool = True):
         """A film shown FULL FRAME before anything is explained: the whole page is the link. For the
-        one piece of work that says more than the deck does."""
+        one piece of work that says more than the deck does.
+
+        `play=False` is the same full-frame layout for a picture that is NOT a film: the play icon
+        said "video" over an avatar reference sheet on the Heaven deck (owner, 17 Oct 2026)."""
         img = (f'<img style="position:absolute;top:0;left:0;width:1280px;height:720px;object-fit:cover" '
                f'src="{_b64(image)}">') if image else ""
-        play = ('<div style="position:absolute;top:288px;left:568px;width:144px;height:144px;border-radius:72px;'
+        play = ('' if not play else
+                '<div style="position:absolute;top:288px;left:568px;width:144px;height:144px;border-radius:72px;'
                 'background:rgba(10,10,10,.55);border:3px solid rgba(255,255,255,.85)"></div>'
                 '<div style="position:absolute;top:318px;left:626px;width:0;height:0;border-top:42px solid transparent;'
                 'border-bottom:42px solid transparent;border-left:66px solid #FFFFFF"></div>')
@@ -1739,7 +1743,8 @@ def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
                     pg.get("section", "Proposal"))
         elif t == "lead":
             d.lead(pg.get("kicker", ""), pg.get("title", ""), pg.get("caption", ""), pg.get("image"),
-                   pg.get("href", ""), pg.get("section", "Watch"))
+                   pg.get("href", ""), pg.get("section", "Watch"),
+                   play=bool(pg.get("play", True)))
         elif t == "strip":
             d.strip(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""),
                     pg.get("cols") or [], pg.get("note", ""), pg.get("section", ""))

@@ -928,6 +928,14 @@ def _cases():
     case("the pricing, flow and faq pages build; showcase needs a real image",
          "Heaven retainer deck, 17 Oct", _saas_pages)
 
+    def _lead_play():
+        d = deck._Deck(_co("sensa"), "Test", "#2BB3E8", "", "")
+        d.lead("K", "T", "c", None, "", "s", play=True)
+        d.lead("K", "T", "c", None, "", "s", play=False)
+        return "border-left:66px solid #FFFFFF" in d.pages[0] and "66px solid" not in d.pages[1]
+    case("a lead page can show a picture that is not a film", "Heaven avatar sheet, 17 Oct",
+         _lead_play)
+
     case("render_spec can reach every SaaS page type", "Heaven retainer deck, 17 Oct",
          lambda: all('elif t == "%s"' % t in inspect.getsource(deck.render_spec)
                      for t in ("pricing", "flow", "showcase", "faq", "photos", "samples")))
