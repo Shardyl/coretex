@@ -946,7 +946,7 @@ def _cases():
         d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
         import os as _os
         p = _os.path.join("/tmp", "_rg_bar.jpg")
-        open(p, "wb").write(b"ÿØÿ" + b"0" * 64)
+        open(p, "wb").write(b"not-a-real-jpeg" * 8)   # only isfile + read are used
         d.showcase("K", "H", "", [{"image": p, "label": "L", "title": "t", "body": "b",
                                    "bars": [{"label": "DETAIL", "pct": 60}]}], "s")
         return "DETAIL" in d.pages[0] and "width:60%" in d.pages[0]
