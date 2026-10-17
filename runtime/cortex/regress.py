@@ -1029,6 +1029,22 @@ def _cases():
     case("the last page asks for the decision at the size of an ask",
          "Heaven deck v6 page 12, 17 Oct", _cta_page)
 
+    def _flow_fills_page():
+        d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        d.flow("K", "H", "", [{"label": "a", "title": "t", "body": "b"}], "", "s")
+        # short steps in fixed boxes left a dead band above the footer on both Heaven flow pages
+        return "height:604px;display:flex;flex-direction:column" in d.pages[0] and "flex:1" in d.pages[0]
+    case("a flow page fills its frame instead of leaving dead space",
+         "Heaven deck v6 p3 and p10, 17 Oct", _flow_fills_page)
+
+    def _cta_icon_reads_on_a_photo():
+        d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        d.cta("K", "H", "s", [{"title": "t", "body": "b", "icon": "check"}], {}, "", "Next")
+        # a bare stroked icon vanished over the bright half of the background photograph
+        return "background:rgba(10,10,12,.72)" in d.pages[0] and "<svg" in d.pages[0]
+    case("a cta step icon stays legible over a background photograph",
+         "Heaven deck v6 p12, 17 Oct", _cta_icon_reads_on_a_photo)
+
     def _icons():
         return (len(deck.ICONS) >= 16 and deck.icon("bulb").startswith("<svg")
                 and deck.icon("nope") == "" and deck.icon("") == ""

@@ -774,8 +774,13 @@ class _Deck:
         if got:
             cells = []
             for i, x in enumerate(got):
-                _sv = globals()["icon"](x.get("icon"), 28)
-                ic = (f'<div style="color:{self.accent};margin-bottom:12px">{_sv}</div>'
+                _sv = globals()["icon"](x.get("icon"), 22)
+                # a bare stroked icon disappeared over the bright half of a background
+                # photograph (Heaven p12, 17 Oct 2026): it gets its own solid chip
+                ic = (f'<div style="width:36px;height:36px;border-radius:9px;'
+                      f'background:rgba(10,10,12,.72);border:1px solid {self.accent}55;'
+                      f'display:flex;align-items:center;justify-content:center;'
+                      f'color:{self.accent};margin-bottom:12px">{_sv}</div>'
                       if _sv else "")
                 cells.append(
                     f'<div style="flex:1;border-top:2px solid {self.accent}44;padding-top:18px">'
@@ -977,11 +982,15 @@ class _Deck:
                 f'{_esc(s.get("title"))}</b>'
                 f'<p style="font-size:14px;color:#D4D4DC;line-height:1.6;margin:0">'
                 f'{_esc(s.get("body"))}</p></div>')
+        # THE CARDS FILL THE PAGE. Short steps in fixed-height boxes left a dead band above the
+        # footer on both Heaven flow pages (owner, 17 Oct 2026: "there's a lot of dead space").
+        # The pad becomes a flex column and the row takes whatever the heading leaves.
         self.pages.append(
-            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<div class="pg"><div class="pad" style="height:604px;display:flex;'
+            f'flex-direction:column"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_hl(heading, self.accent)}</h2>'
             + (f'<p style="max-width:1080px;margin-bottom:20px">{_esc(intro)}</p>' if intro else "")
-            + f'<div style="display:flex;gap:10px;align-items:stretch;margin-top:34px">'
+            + f'<div style="display:flex;gap:10px;align-items:stretch;margin-top:34px;flex:1">'
               f'{"".join(items)}</div>'
             + (f'<p style="margin-top:22px;font-size:11.5px;color:#7A7A84">{_esc(note)}</p>'
                if note else "")
