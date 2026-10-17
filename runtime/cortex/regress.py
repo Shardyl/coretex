@@ -976,6 +976,42 @@ def _cases():
     case("render_spec reports a page that overflowed", "Heaven Q&A overflow, 17 Oct",
          lambda: "has overflowed" in inspect.getsource(deck.render_spec))
 
+    def _chunky_optin():
+        # chunky is per deck: a deck that does not ask for it keeps the 27px headings it was laid out for
+        plain = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        plain.faq("K", "H", [{"q": "q", "a": "a"}], "", "s")
+        if "font-weight:800" in plain.html():
+            return False
+        big = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        big.extra_css = deck._CHUNKY_CSS.replace("MONOFAM", deck.MONO)
+        big.faq("K", "H", [{"q": "q", "a": "a"}], "", "s")
+        h = big.html()
+        return ("font-size:44px" in h and "font-weight:800" in h and "MONOFAM" not in h
+                and "JetBrains Mono" in h
+                and 'spec.get("chunky")' in inspect.getsource(deck.render_spec))
+    case("chunky website headings are opted into per deck, never global",
+         "Heaven deck v6, 17 Oct", _chunky_optin)
+
+    def _flow_icons_not_dots():
+        d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        d.flow("K", "H", "", [{"label": "01", "title": "t", "body": "b", "icon": "phone"},
+                              {"label": "02", "title": "t", "body": "b", "icon": "bulb"}], "", "s")
+        pg = d.pages[0]
+        # the meaningless corner dot is gone; a real 40px icon sits in its own panel
+        return ("width:7px;height:7px" not in pg and "width:72px;height:72px" in pg
+                and pg.count('width="40" height="40"') == 2 and "&rarr;" in pg)
+    case("a flow step carries a big framed icon, not a coloured dot",
+         "Heaven deck v6, 17 Oct", _flow_icons_not_dots)
+
+    def _flow_without_arrows():
+        d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        d.flow("K", "H", "", [{"label": "a", "title": "t", "body": "b"},
+                              {"label": "b", "title": "t", "body": "b"}], "", "s", arrows=False)
+        return ("&rarr;" not in d.pages[0]
+                and 'pg.get("arrows", True)' in inspect.getsource(deck.render_spec))
+    case("a row of cards that is not a sequence takes no arrows",
+         "Heaven deck v6 page 3, 17 Oct", _flow_without_arrows)
+
     def _icons():
         return (len(deck.ICONS) >= 16 and deck.icon("bulb").startswith("<svg")
                 and deck.icon("nope") == "" and deck.icon("") == ""

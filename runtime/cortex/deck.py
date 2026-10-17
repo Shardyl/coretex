@@ -518,6 +518,7 @@ class _Deck:
     def __init__(self, company: dict, customer: str, accent: str, logo: str, label: str):
         self.co, self.customer, self.accent, self.logo = company, customer, accent, logo
         self.label, self.pages = label, []
+        self.extra_css = ""
 
     def _foot(self, section: str, right: int = 72) -> str:
         """`right` narrows the footer so a full-bleed photograph cannot swallow the page number."""
@@ -902,23 +903,23 @@ class _Deck:
             + f'</div>{self._foot(section or kicker)}</div>')
 
     def flow(self, kicker: str, heading: str, intro: str, steps: list, note: str = "",
-             section: str = ""):
+             section: str = "", arrows: bool = True):
         """A process as a left-to-right flow with arrows. `icon` on a step is inline SVG."""
         items = []
         for i, s in enumerate(steps[:5]):
-            if i:
+            if i and arrows:
                 items.append(
                     f'<div style="flex:0 0 26px;display:flex;align-items:center;justify-content:center;'
                     f'color:{self.accent};font-size:22px">&rarr;</div>')
-            _sv = globals()["icon"](s.get("icon"))
-            icon = (f'<div style="height:30px;margin-bottom:14px;color:{self.accent}">'
-                    f'{_sv}</div>') if _sv else ""
+            _sv = globals()["icon"](s.get("icon"), 40)
+            _c = SITE["accent2"] if s.get("alt") else self.accent
+            icon = (f'<div style="width:72px;height:72px;border-radius:14px;'
+                    f'background:{_c}14;border:1px solid {_c}38;display:flex;'
+                    f'align-items:center;justify-content:center;color:{_c};'
+                    f'margin-bottom:20px">{_sv}</div>') if _sv else ""
             items.append(
                 f'<div style="flex:1;border:1px solid #23232A;border-radius:10px;padding:26px 22px;'
-                f'background:rgba(13,13,15,.55);min-height:268px;position:relative">'
-                f'<span style="position:absolute;top:16px;right:16px;width:7px;height:7px;'
-                f'border-radius:4px;background:{SITE["accent2"] if s.get("alt") else self.accent}'
-                f'"></span>{icon}'
+                f'background:rgba(13,13,15,.55);min-height:300px">{icon}'
                 f'<div style="margin-bottom:8px">' + _mono(s.get("label"), self.accent, 9.5, 2) + '</div>'
                 f'<b style="display:block;font-size:15.5px;color:#FFFFFF;margin-bottom:10px;'
                 f'line-height:1.3;font-family:Poppins,sans-serif;font-weight:600">'
@@ -929,7 +930,7 @@ class _Deck:
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_hl(heading, self.accent)}</h2>'
             + (f'<p style="max-width:1080px;margin-bottom:20px">{_esc(intro)}</p>' if intro else "")
-            + f'<div style="display:flex;gap:4px;align-items:stretch;margin-top:52px">'
+            + f'<div style="display:flex;gap:10px;align-items:stretch;margin-top:34px">'
               f'{"".join(items)}</div>'
             + (f'<p style="margin-top:22px;font-size:11.5px;color:#7A7A84">{_esc(note)}</p>'
                if note else "")
@@ -1014,9 +1015,19 @@ class _Deck:
             f'{self._foot(section or "Investment")}</div>')
 
     def html(self) -> str:
-        return ('<html><head><meta charset="utf-8"><style>' + _css(self.accent) + "</style></head><body>"
+        return ('<html><head><meta charset="utf-8"><style>' + _css(self.accent)
+                + (self.extra_css or "") + "</style></head><body>"
                 + "".join(self.pages) + "</body></html>")
 
+
+# The website's headline weight, opted into per deck with spec["chunky"] (owner, 17 Oct 2026).
+# Never global: a deck laid out against 27px headings would overflow at 44px.
+_CHUNKY_CSS = """
+h1 { font-size:58px; font-weight:800; letter-spacing:-1.6px; line-height:1.04; }
+h2 { font-size:44px; font-weight:800; letter-spacing:-1.3px; line-height:1.06; margin-bottom:20px; }
+h3 { font-family:MONOFAM; font-size:9.5px; font-weight:500; letter-spacing:2.2px; }
+.pad > p { font-size:15.5px; color:#C9C9D1; }
+"""
 
 # --------------------------------------------------------- sensa.digital visual language (17 Oct 2026)
 
@@ -1848,6 +1859,8 @@ def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
     if not re.match(r"^#[0-9A-Fa-f]{6}$", accent):
         accent = _ACCENT_DEFAULT
     d = _Deck(co, spec.get("customer") or co["name"], accent, _logo(co), spec.get("label") or "")
+    if spec.get("chunky"):
+        d.extra_css = _CHUNKY_CSS.replace("MONOFAM", MONO)
     for pg in (spec.get("pages") or []):
         t = (pg.get("type") or "").strip().lower()
         if t == "covermeta":
@@ -1899,7 +1912,8 @@ def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
                       pg.get("plans") or [], pg.get("note", ""), pg.get("section", ""))
         elif t == "flow":
             d.flow(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""),
-                   pg.get("steps") or [], pg.get("note", ""), pg.get("section", ""))
+                   pg.get("steps") or [], pg.get("note", ""), pg.get("section", ""),
+                   arrows=bool(pg.get("arrows", True)))
         elif t == "showcase":
             d.showcase(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""),
                        pg.get("items") or [], pg.get("section", ""))
