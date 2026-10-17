@@ -913,6 +913,25 @@ def _cases():
     case("a post-meeting email reads the full meeting, not the brief", "Heaven card 1297, 17 Oct",
          lambda: "meeting_full" in inspect.getsource(engine._draft_context_for_reply))
 
+    # --- the SaaS page builders (Heaven retainer deck, owner 17 Oct)
+    def _saas_pages():
+        d = deck._Deck(_co("sensa"), "Test", "#2BB3E8", "", "")
+        d.pricing("K", "H", "i", [{"name": "Tier 1", "price": "AED 10,000", "period": "per month",
+                                   "features": ["one", "two"], "highlight": True}], "n", "s")
+        d.flow("K", "H", "i", [{"label": "1", "title": "t", "body": "b"},
+                               {"label": "2", "title": "t", "body": "b"}], "", "s")
+        d.faq("K", "H", [{"q": "q", "a": "a"}], "", "s")
+        # a showcase with no readable image adds nothing rather than an empty page
+        d.showcase("K", "H", "i", [{"image": "/no/such/file.jpg", "title": "t"}], "s")
+        return (len(d.pages) == 3 and "Recommended" in d.pages[0]
+                and "AED 10,000" in d.pages[0] and "&rarr;" in d.pages[1])
+    case("the pricing, flow and faq pages build; showcase needs a real image",
+         "Heaven retainer deck, 17 Oct", _saas_pages)
+
+    case("render_spec can reach every SaaS page type", "Heaven retainer deck, 17 Oct",
+         lambda: all('elif t == "%s"' % t in inspect.getsource(deck.render_spec)
+                     for t in ("pricing", "flow", "showcase", "faq", "photos", "samples")))
+
     # --- a deck that sells content has to be able to show it (Heaven retainer deck, 17 Oct)
     def _spec_pages():
         src = inspect.getsource(deck.render_spec)

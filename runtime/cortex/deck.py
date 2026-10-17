@@ -854,6 +854,127 @@ class _Deck:
             + f'<div style="display:grid;grid-template-columns:repeat(3,{w}px);gap:16px 24px;margin-top:4px">{cells}</div>'
             f'</div>{self._foot(section or "Photography")}</div>')
 
+    # ---- SaaS-flavoured pages (owner, 17 Oct 2026: "lay that out like a SaaS company would")
+
+    def pricing(self, kicker: str, heading: str, intro: str, plans: list, note: str = "",
+                section: str = ""):
+        """Pricing cards with a feature list, the recommended one picked out in the accent. A deck
+        that sells a monthly service is read like a pricing page, not like a proposal."""
+        n = max(1, len(plans[:3]))
+        w = {1: 420, 2: 380, 3: 352}.get(n, 352)
+        cards = []
+        for p in plans[:3]:
+            hi = bool(p.get("highlight"))
+            edge = self.accent if hi else "#23232A"
+            feats = "".join(
+                f'<li style="display:flex;gap:9px;align-items:flex-start;margin-bottom:7px">'
+                f'<span style="color:{self.accent};font-size:12px;line-height:1.45">&#10003;</span>'
+                f'<span style="flex:1">{_esc(f)}</span></li>' for f in (p.get("features") or [])[:7])
+            badge = (f'<div style="position:absolute;top:-10px;left:22px;background:{self.accent};'
+                     f'color:#0A0A0A;font-size:9px;letter-spacing:1.6px;font-weight:700;'
+                     f'text-transform:uppercase;padding:4px 10px;border-radius:3px">'
+                     f'{_esc(p.get("badge") or "Recommended")}</div>') if hi else ""
+            cards.append(
+                f'<div style="position:relative;width:{w}px;border:1px solid {edge};border-radius:10px;'
+                f'padding:26px 24px 22px;background:{"rgba(255,255,255,.035)" if hi else "rgba(255,255,255,.015)"}">'
+                f'{badge}'
+                f'<div style="font-size:11px;letter-spacing:2.2px;text-transform:uppercase;'
+                f'color:#9A9AA4;font-weight:600">{_esc(p.get("name"))}</div>'
+                f'<div style="margin:12px 0 2px;font-family:Poppins,sans-serif;font-size:34px;'
+                f'font-weight:600;color:{self.accent};letter-spacing:-.5px">{_esc(p.get("price"))}</div>'
+                f'<div style="font-size:11.5px;color:#7A7A84;margin-bottom:14px">'
+                f'{_esc(p.get("period") or "")}</div>'
+                + (f'<p style="font-size:12.5px;color:#C4C4CC;line-height:1.45;margin:0 0 14px">'
+                   f'{_esc(p.get("blurb"))}</p>' if p.get("blurb") else "")
+                + f'<ul style="list-style:none;padding:0;margin:0;font-size:12.5px;color:#EDEDF2;'
+                  f'line-height:1.45">{feats}</ul></div>')
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2>{_esc(heading)}</h2>'
+            + (f'<p style="max-width:1080px;margin-bottom:20px">{_esc(intro)}</p>' if intro else "")
+            + f'<div style="display:flex;gap:24px;align-items:stretch;margin-top:6px">'
+              f'{"".join(cards)}</div>'
+            + (f'<p style="margin-top:20px;font-size:11.5px;color:#7A7A84;max-width:1080px">'
+               f'{_esc(note)}</p>' if note else "")
+            + f'</div>{self._foot(section or kicker)}</div>')
+
+    def flow(self, kicker: str, heading: str, intro: str, steps: list, note: str = "",
+             section: str = ""):
+        """A process as a left-to-right flow with arrows. `icon` on a step is inline SVG."""
+        items = []
+        for i, s in enumerate(steps[:5]):
+            if i:
+                items.append(
+                    f'<div style="flex:0 0 26px;display:flex;align-items:center;justify-content:center;'
+                    f'color:{self.accent};font-size:19px;padding-top:34px">&rarr;</div>')
+            icon = (f'<div style="height:30px;margin-bottom:12px;color:{self.accent}">'
+                    f'{s.get("icon")}</div>') if s.get("icon") else ""
+            items.append(
+                f'<div style="flex:1;border:1px solid #23232A;border-radius:10px;padding:20px 18px;'
+                f'background:rgba(255,255,255,.02)">{icon}'
+                f'<div style="font-size:9.5px;letter-spacing:2px;text-transform:uppercase;'
+                f'color:{self.accent};font-weight:700;margin-bottom:7px">{_esc(s.get("label"))}</div>'
+                f'<b style="display:block;font-size:15px;color:#FFFFFF;margin-bottom:7px;'
+                f'font-family:Poppins,sans-serif;font-weight:600">{_esc(s.get("title"))}</b>'
+                f'<p style="font-size:12.5px;color:#C4C4CC;line-height:1.45;margin:0">'
+                f'{_esc(s.get("body"))}</p></div>')
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2>{_esc(heading)}</h2>'
+            + (f'<p style="max-width:1080px;margin-bottom:20px">{_esc(intro)}</p>' if intro else "")
+            + f'<div style="display:flex;gap:4px;align-items:stretch;margin-top:6px">'
+              f'{"".join(items)}</div>'
+            + (f'<p style="margin-top:22px;font-size:11.5px;color:#7A7A84">{_esc(note)}</p>'
+               if note else "")
+            + f'</div>{self._foot(section or kicker)}</div>')
+
+    def showcase(self, kicker: str, heading: str, intro: str, items: list, section: str = ""):
+        """Captioned stills, four in a 2 x 2 grid: the still, what the format is, what it does.
+        `photos` shows pictures with no words, which cannot say what a client is being offered."""
+        got = [x for x in (items or []) if x.get("image") and os.path.isfile(x["image"])][:4]
+        if not got:
+            return
+        w, h = 352, 158
+        cells = "".join(
+            f'<div style="display:flex;gap:18px;align-items:flex-start">'
+            f'<img src="{_b64(x["image"])}" style="width:{w}px;height:{h}px;object-fit:cover;'
+            f'border-radius:8px;display:block;flex:0 0 {w}px">'
+            f'<div style="flex:1;padding-top:2px">'
+            f'<div style="font-size:9.5px;letter-spacing:2px;text-transform:uppercase;'
+            f'color:{self.accent};font-weight:700;margin-bottom:6px">{_esc(x.get("label"))}</div>'
+            f'<b style="display:block;font-size:15px;color:#FFFFFF;margin-bottom:6px;'
+            f'font-family:Poppins,sans-serif;font-weight:600">{_esc(x.get("title"))}</b>'
+            f'<p style="font-size:12.5px;color:#C4C4CC;line-height:1.45;margin:0">'
+            f'{_esc(x.get("body"))}</p></div></div>' for x in got)
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2>{_esc(heading)}</h2>'
+            + (f'<p style="max-width:1080px;margin-bottom:18px">{_esc(intro)}</p>' if intro else "")
+            + f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:22px 30px;margin-top:4px">'
+              f'{cells}</div></div>{self._foot(section or kicker)}</div>')
+
+    def faq(self, kicker: str, heading: str, items: list, note: str = "", section: str = ""):
+        """The Q&A page at a size you can read across a room: two columns, type that fills the page.
+        `qa` sets small numbered rows and leaves most of a 720px page black."""
+        got = items[:6]
+        half = (len(got) + 1) // 2
+        def col(rows):
+            return "".join(
+                f'<div style="margin-bottom:22px">'
+                f'<b style="display:block;font-family:Poppins,sans-serif;font-size:17px;'
+                f'font-weight:600;color:#FFFFFF;margin-bottom:8px;line-height:1.25">'
+                f'{_esc(x.get("q"))}</b>'
+                f'<p style="font-size:14px;color:#C4C4CC;line-height:1.5;margin:0">'
+                f'{_esc(x.get("a"))}</p></div>' for x in rows)
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2>{_esc(heading)}</h2>'
+            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 46px;margin-top:20px">'
+            f'<div>{col(got[:half])}</div><div>{col(got[half:])}</div></div>'
+            + (f'<p style="margin-top:6px;font-size:11.5px;color:#7A7A84">{_esc(note)}</p>'
+               if note else "")
+            + f'</div>{self._foot(section or kicker)}</div>')
+
     def investment(self, kicker: str, headline: str, blurb: str, rows: list, cards: list | None = None,
                    section: str = ""):
         r = "".join(f'<tr><td>{_esc(x.get("item"))}</td><td>{_esc(x.get("detail"))}</td>'
@@ -1652,6 +1773,18 @@ def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
         elif t == "investment":
             d.investment(pg.get("kicker", ""), pg.get("headline", ""), pg.get("blurb", ""),
                          pg.get("rows") or [], pg.get("cards"), pg.get("section", ""))
+        elif t == "pricing":
+            d.pricing(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""),
+                      pg.get("plans") or [], pg.get("note", ""), pg.get("section", ""))
+        elif t == "flow":
+            d.flow(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""),
+                   pg.get("steps") or [], pg.get("note", ""), pg.get("section", ""))
+        elif t == "showcase":
+            d.showcase(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""),
+                       pg.get("items") or [], pg.get("section", ""))
+        elif t == "faq":
+            d.faq(pg.get("kicker", ""), pg.get("heading", ""), pg.get("items") or [],
+                  pg.get("note", ""), pg.get("section", ""))
         elif t == "photos":
             # A GRID OF PICTURES IS A PAGE TYPE (17 Oct 2026). _Deck.photos and .samples existed but
             # render_spec could not reach them, so a hand-written deck could only show one image per

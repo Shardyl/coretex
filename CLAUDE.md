@@ -3721,3 +3721,9 @@ shoot needs none), then 10% off the whole quotation.
   (`films_by_ids` + `thumbnail` + `film_caption`), so an id the library does not hold is dropped, never substituted.
 - Any page may already carry `bg` (a darkened photograph behind the type). The `strip` type leaves the lower half of
   a page empty, so a tier/comparison page wants one.
+- SAAS PAGE TYPES (owner, 17 Oct 2026: "lay that out like a SaaS company would ... it should feel like an enterprise
+  SaaS service"). The house types were built for a film proposal, so a monthly-service deck laid out with them reads
+  dry. Four more on `_Deck`, all on `render_spec`: `pricing` (cards with a feature list, the recommended one picked
+  out in the accent), `flow` (a process left to right with arrows, optional inline-SVG `icon` per step), `showcase`
+  (four captioned stills, 2 x 2: the picture, what the format is, what it does, where `photos` shows pictures with
+  no words) and `faq` (the Q&A in two columns at a size you can read, where `qa` leaves most of a 720px page black).
