@@ -703,14 +703,14 @@ class _Deck:
             f'<p style="font-size:13.5px;color:#C4C4CC;line-height:1.55;margin:0">'
             f'{_esc(x.get("body"))}</p></div>'
             for x in (bd.get("items") or [])[:4])
-        return (f'<div style="margin-top:32px;border-top:1px solid #23232A;padding-top:22px">'
+        return (f'<div style="margin-top:26px;border-top:1px solid #23232A;padding-top:18px">'
                 + (f'<div style="margin-bottom:9px">'
                    + _mono(bd.get("label"), self.accent, 9.5, 2) + '</div>' if bd.get("label") else "")
                 + f'<b style="display:block;font-family:Poppins,sans-serif;font-size:24px;'
                   f'font-weight:700;color:#FFFFFF;letter-spacing:-.4px;line-height:1.2;'
-                  f'margin-bottom:10px">{_hl(bd.get("title"), self.accent)}</b>'
+                  f'margin-bottom:8px">{_hl(bd.get("title"), self.accent)}</b>'
                 + (f'<p style="font-size:14px;color:#C4C4CC;line-height:1.55;max-width:1000px;'
-                   f'margin-bottom:22px">{_esc(bd.get("body"))}</p>' if bd.get("body") else "")
+                   f'margin-bottom:18px">{_esc(bd.get("body"))}</p>' if bd.get("body") else "")
                 + (f'<div style="display:flex;gap:24px;align-items:flex-start">{cells}</div>'
                    if cells else "")
                 + '</div>')
@@ -1139,7 +1139,10 @@ h3 { font-family:MONOFAM; font-size:9.5px; font-weight:500; letter-spacing:2.2px
 
 SITE = {"accent": "#00DAFF", "accent2": "#FF6A2C", "text": "#F4F4F5", "muted": "#9A9AA0",
         "panel": "#242424", "bg": "#0A0A0A"}
-MONO = '"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace'
+# SINGLE QUOTES. This goes into a style="..." ATTRIBUTE as well as a stylesheet, and a double
+# quote inside one closes the attribute: every _mono label in every deck rendered as plain white
+# body text with the rest of its style discarded (17 Oct 2026). Single quotes are legal in both.
+MONO = "'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace"
 
 
 def _mono(text: str, colour: str, size: float = 9.5, ls: float = 1.8) -> str:

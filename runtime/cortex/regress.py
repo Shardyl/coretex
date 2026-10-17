@@ -1097,6 +1097,16 @@ def _cases():
     case("a split page can carry a full-width band under its columns",
          "Heaven deck p2, 17 Oct", _split_band)
 
+    def _mono_style_is_well_formed():
+        # MONO goes into a style="..." ATTRIBUTE: a double quote in the font stack closed the
+        # attribute, so every kicker rendered as plain white body text (17 Oct 2026).
+        out = deck._mono("Week 1", "#00DAFF")
+        return ('"' not in deck.MONO and "'JetBrains Mono'" in out
+                and out.count('"') == 2                      # only the attribute's own quotes
+                and "color:#00DAFF" in out and "letter-spacing" in out)
+    case("a mono label's style attribute survives the font stack",
+         "every deck kicker rendered plain, 17 Oct", _mono_style_is_well_formed)
+
     def _caption_keeps_its_casing():
         # .capitalize() lowercases the rest: "AI production" printed "Ai production" on every
         # Heaven sample caption. Same fault as creative._label() on 23 Sep.
