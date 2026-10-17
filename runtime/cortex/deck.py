@@ -668,11 +668,15 @@ class _Deck:
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_hl(heading, self.accent)}</h2>'
-            # align-items:flex-start, or the panel is stretched to the row and prints ~70px
-            # of empty box under its last cell (Heaven p2, 17 Oct 2026)
-            f'<div style="display:flex;gap:40px;margin-top:16px;align-items:flex-start">'
-            f'<div style="width:520px">{b}</div>'
-            f'<div class="panel"><h3 style="margin-bottom:14px">{_esc(p.get("title"))}</h3>'
+            # TWO INLINE-BLOCK COLUMNS, NOT FLEX. As a flex row the panel was stretched to the
+            # row height and printed ~70px of empty box under its last cell (Heaven p2, 17 Oct
+            # 2026); WeasyPrint honours neither align-items:flex-start nor a flex auto margin,
+            # so the fix is a layout it does implement.
+            f'<div style="margin-top:16px;font-size:0">'
+            f'<div style="display:inline-block;vertical-align:top;width:520px;'
+            f'margin-right:40px">{b}</div>'
+            f'<div class="panel" style="display:inline-block;vertical-align:top;width:576px">'
+            f'<h3 style="margin-bottom:14px">{_esc(p.get("title"))}</h3>'
             f'<div class="pgrid">{cells}</div>{foot}</div></div>'
             + (f'<p class="note">{_esc(note)}</p>' if note else "")
             + f'</div>{self._foot(section or kicker)}</div>')

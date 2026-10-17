@@ -1065,8 +1065,12 @@ def _cases():
         d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
         d.split("K", "H", [{"title": "t", "body": "b"}],
                 {"title": "p", "cells": [{"title": "c", "sub": "s"}]}, "n", "s")
-        # stretched to the row, the panel printed an empty box under its last cell
-        return "align-items:flex-start" in d.pages[0]
+        # Stretched to a flex row, the panel printed an empty box under its last cell.
+        # WeasyPrint honours neither align-items:flex-start nor a flex auto margin here, so the
+        # columns are inline-block. Keep it that way.
+        pg = d.pages[0]
+        return ("display:inline-block;vertical-align:top" in pg
+                and "display:flex;gap:40px" not in pg)
     case("a split panel hugs its content instead of stretching",
          "Heaven deck v6 p2, 17 Oct", _split_panel_hugs)
 
