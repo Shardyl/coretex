@@ -3685,3 +3685,29 @@ shoot needs none), then 10% off the whole quotation.
 - SEVERAL DUE ITEMS ON ONE DEAL CARD: a per-deal notice that coalesces different titles is retitled
   "N things due on <deal>" (`notifications.notify`), each item a line; the Ramadan creative options had sat inside a
   card titled with the brainstorm reminder.
+
+## Who's who: the cast list (owner, 17 Oct 2026)
+- CAUSE: Heaven card 1297 thanked Balazs and asked him to pass thanks on; Balazs only made the introduction and left in
+  minute one, Abraham ran the call and closed it asking for the proposal, and a 10 Oct note said Balazs asked to be
+  copied. CODE chose the recipient (`_adopt_existing_thread` re-addressed follow-ups to the thread counterpart) and the
+  sender (`_deal_sender`: whoever of us sent most); the writer saw a Haiku brief, not the meeting. Same rules kept Gino
+  as sender after the owner stepped in, and ignored "I'm taking over this project".
+- `runtime/cortex/cast.py`: column `crm_projects.cast_list` = {their: [{email, name, role, pinned, why, at}], ours:
+  {email, pinned, why}, log}. Roles: lead (written TO), decision, member, cc, support, left. `get` builds it from the
+  contacts the first time. `read(deal, material, kind, pin, ours)` asks one model whether the FULL material changes
+  who's who (models are data, setting `cast_models`: email/note Sonnet 5, meeting Opus 5); `_apply` (code) accepts
+  only enum roles and people the material or cast names, never our own team, never overrides a PIN, keeps one lead,
+  logs a `cast` event on the deal. `we_spoke(deal, our_email)`: one of us writing BY HAND leads for us (deterministic).
+  `_save` mirrors the lead to `contact_email` and puts every involved person on the deal's contacts.
+- HOOKS: `events.they_wrote` (their email / WhatsApp, new part), `pipeline.record_send` (our email; manual ->
+  `we_spoke`; a Cortex send never changes our lead, `ours=False`), `pipeline.record_meeting` (the meeting row's
+  `full_text`, Opus), `crm.add_project_note` and Talk `note_opportunity` (his words, `pin=True`). All async except Talk.
+- CONSUMERS: `_deal_sender` (cast our lead first), `_adopt_existing_thread` (a follow-up goes TO the cast lead whoever
+  the thread was with: manifest `addressed_to_lead`), `_deal_participants` (cast copied people in, `left` people out),
+  `_draft_context_for_reply` (`request.cast` = `describe()`; for `followup == 'post-meeting'` the deal's newest
+  meeting `full_text` as `request.meeting_full`, 45k chars), `worker.draft` (WHO'S WHO block + FULL MEETING block;
+  setting `purpose_models` {"post-meeting": "claude-opus-5"} picks the model by `request.followup`).
+- SCREENS: `review.summary` returns `who` + `our_lead`; the review rows and the opportunity's Coming up show "Who's
+  who" (hover = why). Correct it by saying so in the Change box or Talk ("Abraham leads, copy Balazs"): pinned. v77.
+- Proven 17 Oct on Heaven: the meeting read gave Abraham lead, Balazs support, Barbara decision, Miklos team, Rashad
+  our lead; card 1297 redrafted on Opus to Abraham with the full meeting.
