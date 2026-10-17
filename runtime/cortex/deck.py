@@ -911,23 +911,24 @@ class _Deck:
                 items.append(
                     f'<div style="flex:0 0 26px;display:flex;align-items:center;justify-content:center;'
                     f'color:{self.accent};font-size:22px">&rarr;</div>')
-            icon = (f'<div style="height:30px;margin-bottom:12px;color:{self.accent}">'
-                    f'{s.get("icon")}</div>') if s.get("icon") else ""
+            _sv = globals()["icon"](s.get("icon"))
+            icon = (f'<div style="height:30px;margin-bottom:14px;color:{self.accent}">'
+                    f'{_sv}</div>') if _sv else ""
             items.append(
                 f'<div style="flex:1;border:1px solid #23232A;border-radius:10px;padding:26px 22px;'
-                f'background:rgba(255,255,255,.02);min-height:300px;display:flex;'
-                f'flex-direction:column">{icon}'
+                f'background:rgba(255,255,255,.02);min-height:196px">{icon}'
                 f'<div style="font-size:9.5px;letter-spacing:2px;text-transform:uppercase;'
                 f'color:{self.accent};font-weight:700;margin-bottom:7px">{_esc(s.get("label"))}</div>'
-                f'<b style="display:block;font-size:15px;color:#FFFFFF;margin-bottom:7px;'
-                f'font-family:Poppins,sans-serif;font-weight:600">{_esc(s.get("title"))}</b>'
+                f'<b style="display:block;font-size:15.5px;color:#FFFFFF;margin-bottom:10px;'
+                f'line-height:1.3;font-family:Poppins,sans-serif;font-weight:600">'
+                f'{_esc(s.get("title"))}</b>'
                 f'<p style="font-size:13.5px;color:#C4C4CC;line-height:1.55;margin:0">'
                 f'{_esc(s.get("body"))}</p></div>')
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_esc(heading)}</h2>'
             + (f'<p style="max-width:1080px;margin-bottom:20px">{_esc(intro)}</p>' if intro else "")
-            + f'<div style="display:flex;gap:4px;align-items:stretch;margin-top:6px">'
+            + f'<div style="display:flex;gap:4px;align-items:stretch;margin-top:30px">'
               f'{"".join(items)}</div>'
             + (f'<p style="margin-top:22px;font-size:11.5px;color:#7A7A84">{_esc(note)}</p>'
                if note else "")
@@ -970,7 +971,10 @@ class _Deck:
         def col(rows):
             return "".join(
                 f'<div style="margin-bottom:{gap}px">'
-                f'<b style="display:block;font-family:Poppins,sans-serif;font-size:{qs}px;'
+                + (f'<div style="color:{self.accent};margin-bottom:9px">'
+                   f'{globals()["icon"](x.get("icon"), 24)}</div>'
+                   if globals()["icon"](x.get("icon")) else "")
+                + f'<b style="display:block;font-family:Poppins,sans-serif;font-size:{qs}px;'
                 f'font-weight:600;color:#FFFFFF;margin-bottom:10px;line-height:1.25">'
                 f'{_esc(x.get("q"))}</b>'
                 f'<p style="font-size:{asz}px;color:#C4C4CC;line-height:1.55;margin:0;'
@@ -1009,6 +1013,56 @@ class _Deck:
     def html(self) -> str:
         return ('<html><head><meta charset="utf-8"><style>' + _css(self.accent) + "</style></head><body>"
                 + "".join(self.pages) + "</body></html>")
+
+
+# --------------------------------------------------------------------------- the house icon set
+
+def _ic(body: str, w: int = 26) -> str:
+    return (f'<svg width="{w}" height="{w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+            f'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">{body}</svg>')
+
+
+# Monochrome line icons, one set for every deck (owner, 17 Oct 2026: branded graphical elements,
+# never emoji). Reference one by name from a page spec: {"icon": "bulb"}.
+ICONS = {
+    "phone": _ic('<rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="11" y1="18.5" x2="13" y2="18.5"/>'),
+    "person": _ic('<circle cx="12" cy="8" r="3.5"/><path d="M5 21c0-4 3.2-6.5 7-6.5s7 2.5 7 6.5"/>'),
+    "film": _ic('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M10 9.5l5 2.5-5 2.5z"/>'),
+    "camera": _ic('<path d="M3 7h3l1.5-2h9L18 7h3v12H3z"/><circle cx="12" cy="13" r="3.5"/>'),
+    "bulb": _ic('<path d="M9.5 18h5"/><path d="M10 21h4"/>'
+                '<path d="M8 13.5A5 5 0 1 1 16 13.5c-.9 1-1.5 1.8-1.5 3h-5c0-1.2-.6-2-1.5-3z"/>'),
+    "script": _ic('<path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4"/>'
+                  '<line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/>'),
+    "calendar": _ic('<rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>'
+                    '<line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/>'),
+    "check": _ic('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/>'),
+    "send": _ic('<path d="M21 3L10.5 13.5"/><path d="M21 3l-7 18-3.5-7.5L3 10z"/>'),
+    "refresh": _ic('<path d="M20 11a8 8 0 1 0-.6 4"/><path d="M20 4v7h-7"/>'),
+    "layers": _ic('<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>'),
+    "globe": _ic('<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/>'
+                 '<line x1="3" y1="12" x2="21" y2="12"/>'),
+    "spark": _ic('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>'),
+    "chart": _ic('<line x1="4" y1="20" x2="20" y2="20"/><rect x="6" y="11" width="3" height="6"/>'
+                 '<rect x="11" y="7" width="3" height="10"/><rect x="16" y="13" width="3" height="4"/>'),
+    "clock": _ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5.5l3.5 2"/>'),
+    "shield": _ic('<path d="M12 3l7 3v6c0 4.2-2.9 7.5-7 9-4.1-1.5-7-4.8-7-9V6z"/><path d="M9 12l2 2 4-4"/>'),
+    "pin": _ic('<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/>'),
+    "chat": _ic('<path d="M21 12a8 8 0 0 1-8 8H7l-4 2 1.3-4.3A8 8 0 1 1 21 12z"/>'),
+}
+
+
+def icon(name: str, size: int = 26) -> str:
+    """The named icon, or nothing. A page spec may pass a name or raw SVG; an unknown name is
+    silently dropped rather than printing a placeholder on a client's deck."""
+    if not name:
+        return ""
+    n = str(name).strip()
+    if n.startswith("<"):
+        return n
+    got = ICONS.get(n.lower())
+    if not got:
+        return ""
+    return got if size == 26 else got.replace('width="26" height="26"', f'width="{size}" height="{size}"')
 
 
 # --------------------------------------------------------------------------- creative proposal pages

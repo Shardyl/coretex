@@ -928,6 +928,24 @@ def _cases():
     case("the pricing, flow and faq pages build; showcase needs a real image",
          "Heaven retainer deck, 17 Oct", _saas_pages)
 
+    def _icons():
+        return (len(deck.ICONS) >= 16 and deck.icon("bulb").startswith("<svg")
+                and deck.icon("nope") == "" and deck.icon("") == ""
+                and deck.icon("<svg/>") == "<svg/>"
+                and all('stroke="currentColor"' in v for v in deck.ICONS.values()))
+    case("the house icon set is named, stroked and drops an unknown name",
+         "Sensa deck icons, 17 Oct", _icons)
+
+    def _flow_title_wraps():
+        d = deck._Deck(_co("sensa"), "Test", "#2BB3E8", "", "")
+        d.flow("K", "H", "", [{"label": "BUILD", "title": "The month in one run",
+                               "body": "Every film produced together.", "icon": "layers"}], "", "s")
+        pg = d.pages[0]
+        # the overlap on Heaven p9 was a two-line title with no line-height
+        return "line-height:1.3" in pg and "<svg" in pg and "min-height:300px" not in pg
+    case("a wrapping step title cannot overlap its body", "Heaven deck p9 overlap, 17 Oct",
+         _flow_title_wraps)
+
     def _faq_fills():
         d = deck._Deck(_co("sensa"), "Test", "#2BB3E8", "", "")
         d.faq("K", "H", [{"q": "q%d" % i, "a": "a"} for i in range(4)], "", "s")   # one column, big
