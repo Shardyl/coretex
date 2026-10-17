@@ -910,17 +910,18 @@ class _Deck:
             if i:
                 items.append(
                     f'<div style="flex:0 0 26px;display:flex;align-items:center;justify-content:center;'
-                    f'color:{self.accent};font-size:19px;padding-top:34px">&rarr;</div>')
+                    f'color:{self.accent};font-size:22px">&rarr;</div>')
             icon = (f'<div style="height:30px;margin-bottom:12px;color:{self.accent}">'
                     f'{s.get("icon")}</div>') if s.get("icon") else ""
             items.append(
-                f'<div style="flex:1;border:1px solid #23232A;border-radius:10px;padding:20px 18px;'
-                f'background:rgba(255,255,255,.02)">{icon}'
+                f'<div style="flex:1;border:1px solid #23232A;border-radius:10px;padding:26px 22px;'
+                f'background:rgba(255,255,255,.02);min-height:300px;display:flex;'
+                f'flex-direction:column">{icon}'
                 f'<div style="font-size:9.5px;letter-spacing:2px;text-transform:uppercase;'
                 f'color:{self.accent};font-weight:700;margin-bottom:7px">{_esc(s.get("label"))}</div>'
                 f'<b style="display:block;font-size:15px;color:#FFFFFF;margin-bottom:7px;'
                 f'font-family:Poppins,sans-serif;font-weight:600">{_esc(s.get("title"))}</b>'
-                f'<p style="font-size:12.5px;color:#C4C4CC;line-height:1.45;margin:0">'
+                f'<p style="font-size:13.5px;color:#C4C4CC;line-height:1.55;margin:0">'
                 f'{_esc(s.get("body"))}</p></div>')
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
@@ -938,7 +939,7 @@ class _Deck:
         got = [x for x in (items or []) if x.get("image") and os.path.isfile(x["image"])][:4]
         if not got:
             return
-        w, h = 352, 158
+        w, h = 362, 186
         cells = "".join(
             f'<div style="display:flex;gap:18px;align-items:flex-start">'
             f'<img src="{_b64(x["image"])}" style="width:{w}px;height:{h}px;object-fit:cover;'
@@ -948,7 +949,7 @@ class _Deck:
             f'color:{self.accent};font-weight:700;margin-bottom:6px">{_esc(x.get("label"))}</div>'
             f'<b style="display:block;font-size:15px;color:#FFFFFF;margin-bottom:6px;'
             f'font-family:Poppins,sans-serif;font-weight:600">{_esc(x.get("title"))}</b>'
-            f'<p style="font-size:12.5px;color:#C4C4CC;line-height:1.45;margin:0">'
+            f'<p style="font-size:13.5px;color:#C4C4CC;line-height:1.55;margin:0">'
             f'{_esc(x.get("body"))}</p></div></div>' for x in got)
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
@@ -964,11 +965,11 @@ class _Deck:
         half = (len(got) + 1) // 2
         def col(rows):
             return "".join(
-                f'<div style="margin-bottom:22px">'
-                f'<b style="display:block;font-family:Poppins,sans-serif;font-size:17px;'
-                f'font-weight:600;color:#FFFFFF;margin-bottom:8px;line-height:1.25">'
+                f'<div style="margin-bottom:28px">'
+                f'<b style="display:block;font-family:Poppins,sans-serif;font-size:18px;'
+                f'font-weight:600;color:#FFFFFF;margin-bottom:9px;line-height:1.25">'
                 f'{_esc(x.get("q"))}</b>'
-                f'<p style="font-size:14px;color:#C4C4CC;line-height:1.5;margin:0">'
+                f'<p style="font-size:15px;color:#C4C4CC;line-height:1.55;margin:0">'
                 f'{_esc(x.get("a"))}</p></div>' for x in rows)
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
