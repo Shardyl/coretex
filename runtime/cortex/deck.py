@@ -1015,16 +1015,19 @@ class _Deck:
         got = [x for x in (items or []) if x.get("image") and os.path.isfile(x["image"])][:4]
         if not got:
             return
-        w, h = 352, 170
+        # taller frames and a bigger caption: the page is selling the CONTENT, and without the
+        # spec bars the 170px stills left the bottom of it bare (owner, 17 Oct 2026)
+        w, h = 330, 200
         cells = "".join(
             f'<div style="display:flex;gap:18px;align-items:flex-start">'
             f'<img src="{_b64(x["image"])}" style="width:{w}px;height:{h}px;object-fit:cover;'
             f'border-radius:8px;display:block;flex:0 0 {w}px">'
             f'<div style="flex:1;padding-top:2px">'
             f'<div style="margin-bottom:7px">' + _mono(x.get("label"), self.accent, 9.5, 2) + '</div>'
-            f'<b style="display:block;font-size:15px;color:#FFFFFF;margin-bottom:6px;'
-            f'font-family:Poppins,sans-serif;font-weight:600">{_esc(x.get("title"))}</b>'
-            f'<p style="font-size:13.5px;color:#C4C4CC;line-height:1.55;margin:0">'
+            f'<b style="display:block;font-size:16px;color:#FFFFFF;margin-bottom:7px;'
+            f'line-height:1.3;font-family:Poppins,sans-serif;font-weight:600">'
+            f'{_esc(x.get("title"))}</b>'
+            f'<p style="font-size:14px;color:#C4C4CC;line-height:1.55;margin:0">'
             f'{_esc(x.get("body"))}</p>'
             + _bars(x.get("bars"), self.accent, SITE["accent2"])
             + '</div></div>' for x in got)
@@ -1032,7 +1035,7 @@ class _Deck:
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_hl(heading, self.accent)}</h2>'
             + (f'<p style="max-width:1080px;margin-bottom:18px">{_esc(intro)}</p>' if intro else "")
-            + f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px 28px;margin-top:2px">'
+            + f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px 28px;margin-top:2px">'
               f'{cells}</div></div>{self._foot(section or kicker)}</div>')
 
     def faq(self, kicker: str, heading: str, items: list, note: str = "", section: str = ""):

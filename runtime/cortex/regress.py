@@ -960,7 +960,13 @@ def _cases():
         open(p, "wb").write(b"not-a-real-jpeg" * 8)   # only isfile + read are used
         d.showcase("K", "H", "", [{"image": p, "label": "L", "title": "t", "body": "b",
                                    "bars": [{"label": "DETAIL", "pct": 60}]}], "s")
-        return "DETAIL" in d.pages[0] and "width:60%" in d.pages[0]
+        pg = d.pages[0]
+        # the frames carry the page, so the still is never smaller than it was when the spec
+        # bars were dropped from it (owner, 17 Oct 2026)
+        import re as _re_sc
+        m = _re_sc.search(r"width:(\d+)px;height:(\d+)px;object-fit:cover", pg)
+        return ("DETAIL" in pg and "width:60%" in pg
+                and m and int(m.group(2)) >= 200)
     case("a showcase card can carry the module spec bars", "sensa.digital styling, 17 Oct",
          _showcase_bars)
 
