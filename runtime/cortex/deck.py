@@ -929,7 +929,7 @@ class _Deck:
             edge = self.accent if hi else "#23232A"
             feats = "".join(
                 f'<li style="display:flex;gap:9px;align-items:flex-start;margin-bottom:7px">'
-                f'<span style="color:{self.accent};font-size:12px;line-height:1.45">&#10003;</span>'
+                f'<span style="color:{self.accent};font-size:13.5px;line-height:1.5">&#10003;</span>'
                 f'<span style="flex:1">{_esc(f)}</span></li>' for f in (p.get("features") or [])[:7])
             badge = (f'<div style="position:absolute;top:-10px;left:22px;background:{self.accent};'
                      f'color:#0A0A0A;font-size:9px;letter-spacing:1.6px;font-weight:700;'

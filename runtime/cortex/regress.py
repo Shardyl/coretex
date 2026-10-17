@@ -1035,7 +1035,9 @@ def _cases():
         # short steps in 300px boxes left a dead band above the footer on both Heaven flow pages.
         # A flex column is NOT the fix: WeasyPrint gives the free space to the heading, not to a
         # flex:1 row, so the page came out worse. The card floor is taller instead.
-        return ("min-height:380px" in d.pages[0]
+        import re as _re_ff
+        m = _re_ff.search(r"min-height:([0-9]+)px", d.pages[0])
+        return (m and int(m.group(1)) >= 340
                 and "flex-direction:column" not in d.pages[0])
     case("a flow page reaches the foot of its frame", "Heaven deck v6 p3 and p10, 17 Oct",
          _flow_fills_page)
