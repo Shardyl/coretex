@@ -668,7 +668,9 @@ class _Deck:
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_hl(heading, self.accent)}</h2>'
-            f'<div style="display:flex;gap:40px;margin-top:16px">'
+            # align-items:flex-start, or the panel is stretched to the row and prints ~70px
+            # of empty box under its last cell (Heaven p2, 17 Oct 2026)
+            f'<div style="display:flex;gap:40px;margin-top:16px;align-items:flex-start">'
             f'<div style="width:520px">{b}</div>'
             f'<div class="panel"><h3 style="margin-bottom:14px">{_esc(p.get("title"))}</h3>'
             f'<div class="pgrid">{cells}</div>{foot}</div></div>'

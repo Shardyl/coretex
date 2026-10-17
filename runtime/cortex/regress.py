@@ -1061,6 +1061,15 @@ def _cases():
     case("the body copy on a SaaS page is at least 13.5px",
          "Heaven deck v6, 17 Oct", _saas_type_is_readable)
 
+    def _split_panel_hugs():
+        d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        d.split("K", "H", [{"title": "t", "body": "b"}],
+                {"title": "p", "cells": [{"title": "c", "sub": "s"}]}, "n", "s")
+        # stretched to the row, the panel printed an empty box under its last cell
+        return "align-items:flex-start" in d.pages[0]
+    case("a split panel hugs its content instead of stretching",
+         "Heaven deck v6 p2, 17 Oct", _split_panel_hugs)
+
     def _cta_icon_reads_on_a_photo():
         d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
         d.cta("K", "H", "s", [{"title": "t", "body": "b", "icon": "check"}], {}, "", "Next")
