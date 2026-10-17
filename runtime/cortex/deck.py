@@ -764,6 +764,57 @@ class _Deck:
             + (f'<p class="note" style="margin-top:26px">{_esc(signoff)}</p>' if signoff else "")
             + f'</div>{self._foot(section or "Next")}</div>')
 
+    def cta(self, kicker: str, heading: str, sub: str, steps: list, contact: dict | None = None,
+            note: str = "", section: str = ""):
+        """The ask, at the size of an ask. One headline the width of the page, one line under it,
+        the three things that happen next in a row, and who to reply to. `closing` summarises a
+        proposal; this page asks for the decision (owner, 17 Oct 2026)."""
+        got = [x for x in (steps or []) if x.get("title")][:3]
+        row = ""
+        if got:
+            cells = []
+            for i, x in enumerate(got):
+                _sv = globals()["icon"](x.get("icon"), 28)
+                ic = (f'<div style="color:{self.accent};margin-bottom:12px">{_sv}</div>'
+                      if _sv else "")
+                cells.append(
+                    f'<div style="flex:1;border-top:2px solid {self.accent}44;padding-top:18px">'
+                    f'{ic}'
+                    + f'<div style="margin-bottom:7px">'
+                    + _mono("Step %d" % (i + 1), self.accent, 9, 2) + '</div>'
+                    + f'<b style="display:block;font-family:Poppins,sans-serif;font-size:16px;'
+                      f'font-weight:600;color:#FFFFFF;line-height:1.3;margin-bottom:7px">'
+                      f'{_esc(x.get("title"))}</b>'
+                    + f'<p style="font-size:13.5px;color:#C4C4CC;line-height:1.55;margin:0">'
+                      f'{_esc(x.get("body"))}</p></div>')
+            row = (f'<div style="display:flex;gap:30px;align-items:stretch;margin-top:34px">'
+                   f'{"".join(cells)}</div>')
+        box = ""
+        c = contact or {}
+        if c.get("line"):
+            box = (f'<div style="margin-top:32px;border:1px solid {self.accent}55;border-radius:12px;'
+                   f'background:{self.accent}0F;padding:22px 28px;display:flex;'
+                   f'align-items:center;justify-content:space-between;gap:24px">'
+                   + f'<div>'
+                   + (f'<div style="margin-bottom:6px">'
+                      + _mono(c.get("label") or "Reply to this", self.accent, 9, 2) + '</div>')
+                   + f'<b style="display:block;font-family:Poppins,sans-serif;font-size:21px;'
+                     f'font-weight:700;color:#FFFFFF;letter-spacing:-.3px">{_esc(c["line"])}</b>'
+                   + f'</div>'
+                   + (f'<p style="font-size:13px;color:#C4C4CC;margin:0;max-width:420px;'
+                      f'text-align:right">{_esc(c.get("sub"))}</p>' if c.get("sub") else "")
+                   + f'</div>')
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h1 style="font-size:72px;font-weight:800;letter-spacing:-2.2px;line-height:1.02;'
+            f'margin-bottom:16px">{_hl(heading, self.accent)}</h1>'
+            + (f'<p style="font-size:19px;color:#D9D9E1;max-width:900px;line-height:1.45">'
+               f'{_esc(sub)}</p>' if sub else "")
+            + row + box
+            + (f'<p style="margin-top:18px;font-size:11.5px;color:#7A7A84">{_esc(note)}</p>'
+               if note else "")
+            + f'</div>{self._foot(section or "Next")}</div>')
+
     def grid(self, kicker: str, heading: str, intro: str, cells: list, section: str = "",
              images: list | None = None, big: bool = False):
         """A four-across grid of up to eight cells - the capability modules. cards() holds only three.
@@ -1891,6 +1942,10 @@ def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
         elif t == "qa":
             d.qa(pg.get("kicker", ""), pg.get("heading", ""), pg.get("items") or [],
                  pg.get("note", ""), pg.get("section", ""))
+        elif t == "cta":
+            d.cta(pg.get("kicker", ""), pg.get("heading", ""), pg.get("sub", ""),
+                  pg.get("steps") or [], pg.get("contact") or {}, pg.get("note", ""),
+                  pg.get("section", ""))
         elif t == "closing":
             d.closing(pg.get("kicker", ""), pg.get("heading", ""), pg.get("sub", ""),
                       pg.get("cards") or [], pg.get("steps") or [], pg.get("signoff", ""),

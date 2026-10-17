@@ -1012,6 +1012,23 @@ def _cases():
     case("a row of cards that is not a sequence takes no arrows",
          "Heaven deck v6 page 3, 17 Oct", _flow_without_arrows)
 
+    def _cta_page():
+        d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        d.cta("NEXT", "Let's get your content *up and online*",
+              "Four markets, one pipeline.",
+              [{"title": "Choose a tier", "body": "b", "icon": "check"},
+               {"title": "Send the captures", "body": "b", "icon": "phone"}],
+              {"label": "REPLY TO THIS", "line": "hello@sensa.digital", "sub": "s"},
+              "n", "Next")
+        pg = d.pages[0]
+        # the ask is the size of an ask: a 72px headline, not the 27px h2 closing() uses
+        return ("font-size:72px" in pg and "up and online</span>" in pg
+                and "hello@sensa.digital" in pg and "Step 1" in pg and "Step 2" in pg
+                and "<svg" in pg
+                and 'elif t == "cta"' in inspect.getsource(deck.render_spec))
+    case("the last page asks for the decision at the size of an ask",
+         "Heaven deck v6 page 12, 17 Oct", _cta_page)
+
     def _icons():
         return (len(deck.ICONS) >= 16 and deck.icon("bulb").startswith("<svg")
                 and deck.icon("nope") == "" and deck.icon("") == ""
