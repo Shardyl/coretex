@@ -1040,6 +1040,25 @@ def _cases():
     case("a flow page reaches the foot of its frame", "Heaven deck v6 p3 and p10, 17 Oct",
          _flow_fills_page)
 
+    def _saas_type_is_readable():
+        # owner, 17 Oct 2026: "the writing just is a bit small". The body copy a client reads on
+        # the SaaS pages is at least 13.5px; the grey #7A7A84 footnotes may stay small.
+        d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        d.pricing("K", "H", "i", [{"name": "T", "price": "AED 1", "period": "p", "blurb": "b",
+                                   "features": ["one"]}], "n", "s")
+        d.flow("K", "H", "i", [{"label": "a", "title": "t", "body": "b"}], "n", "s")
+        import re as _re_rd
+        for pg in d.pages:
+            for style in _re_rd.findall(r'style="([^"]*)"', pg):
+                if "#7A7A84" in style:
+                    continue
+                m = _re_rd.search(r"font-size:([0-9.]+)px", style)
+                if m and 10.5 < float(m.group(1)) < 13.5:
+                    return False
+        return True
+    case("the body copy on a SaaS page is at least 13.5px",
+         "Heaven deck v6, 17 Oct", _saas_type_is_readable)
+
     def _cta_icon_reads_on_a_photo():
         d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
         d.cta("K", "H", "s", [{"title": "t", "body": "b", "icon": "check"}], {}, "", "Next")

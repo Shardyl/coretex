@@ -944,9 +944,9 @@ class _Deck:
                 f'font-weight:600;color:{self.accent};letter-spacing:-.5px">{_esc(p.get("price"))}</div>'
                 f'<div style="font-size:11.5px;color:#7A7A84;margin-bottom:14px">'
                 f'{_esc(p.get("period") or "")}</div>'
-                + (f'<p style="font-size:12.5px;color:#C4C4CC;line-height:1.45;margin:0 0 14px">'
+                + (f'<p style="font-size:13.5px;color:#C4C4CC;line-height:1.5;margin:0 0 14px">'
                    f'{_esc(p.get("blurb"))}</p>' if p.get("blurb") else "")
-                + f'<ul style="list-style:none;padding:0;margin:0;font-size:12.5px;color:#EDEDF2;'
+                + f'<ul style="list-style:none;padding:0;margin:0;font-size:13.5px;color:#EDEDF2;'
                   f'line-height:1.45">{feats}</ul></div>')
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
@@ -954,7 +954,7 @@ class _Deck:
             + (f'<p style="max-width:1080px;margin-bottom:20px">{_esc(intro)}</p>' if intro else "")
             + f'<div style="display:flex;gap:24px;align-items:stretch;margin-top:6px">'
               f'{"".join(cards)}</div>'
-            + (f'<p style="margin-top:20px;font-size:11.5px;color:#7A7A84;max-width:1080px">'
+            + (f'<p style="margin-top:16px;font-size:11.5px;color:#7A7A84;max-width:1080px">'
                f'{_esc(note)}</p>' if note else "")
             + f'</div>{self._foot(section or kicker)}</div>')
 
@@ -974,13 +974,13 @@ class _Deck:
                     f'align-items:center;justify-content:center;color:{_c};'
                     f'margin-bottom:20px">{_sv}</div>') if _sv else ""
             items.append(
-                f'<div style="flex:1;border:1px solid #23232A;border-radius:10px;padding:26px 22px;'
-                f'background:rgba(13,13,15,.55);min-height:380px">{icon}'
+                f'<div style="flex:1;border:1px solid #23232A;border-radius:10px;padding:28px 24px;'
+                f'background:rgba(13,13,15,.55);min-height:340px">{icon}'
                 f'<div style="margin-bottom:8px">' + _mono(s.get("label"), self.accent, 9.5, 2) + '</div>'
-                f'<b style="display:block;font-size:15.5px;color:#FFFFFF;margin-bottom:10px;'
+                f'<b style="display:block;font-size:18px;color:#FFFFFF;margin-bottom:11px;'
                 f'line-height:1.3;font-family:Poppins,sans-serif;font-weight:600">'
                 f'{_esc(s.get("title"))}</b>'
-                f'<p style="font-size:14px;color:#D4D4DC;line-height:1.6;margin:0">'
+                f'<p style="font-size:15.5px;color:#D4D4DC;line-height:1.6;margin:0">'
                 f'{_esc(s.get("body"))}</p></div>')
         # THE CARDS REACH THE FOOT OF THE PAGE. Short steps in 300px boxes left a dead band above
         # the footer on both Heaven flow pages (owner, 17 Oct 2026: "there's a lot of dead space").
