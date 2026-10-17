@@ -83,9 +83,14 @@ def _save(deal_id: int, c: dict) -> None:
     if lead:     # the opportunity's primary contact IS the lead: every older path that reads contact_email follows
         p = db.one("select contacts, contact_email from crm_projects where id=%s", (int(deal_id),)) or {}
         lst = [dict(x) for x in (p.get("contacts") or [])]
-        if not any((x.get("email") or "").lower() == lead for x in lst):
-            lst.append({"email": lead, "name": next((t.get("name") for t in c["their"] if t["email"] == lead), ""),
-                        "role": "", "primary": True})
+        for t in c.get("their") or []:
+            if t.get("role") == "left":
+                continue
+            x = next((x for x in lst if (x.get("email") or "").lower() == t["email"]), None)
+            if not x:
+                lst.append({"email": t["email"], "name": t.get("name") or "", "role": "", "primary": False})
+            elif not x.get("name") and t.get("name"):
+                x["name"] = t["name"]
         for x in lst:
             x["primary"] = (x.get("email") or "").lower() == lead
         db.execute("update crm_projects set contacts=%s::jsonb, contact_email=%s where id=%s",
@@ -163,6 +168,8 @@ def _apply(deal_id: int, c: dict, out: dict, source: str, pin: bool, known: dict
                 if t.get("role") == "lead" and t["email"] != em and not (t.get("pinned") and not pin):
                     t["role"] = "member"
         entry = cur or {"email": em, "name": known.get(em, "")}
+        if not entry.get("name") and str(ch.get("name") or "").strip():
+            entry["name"] = str(ch["name"]).strip()[:80]
         entry.update({"role": role, "why": f"{why} ({source})" if why else source, "at": _now(),
                       "pinned": bool(pin)})
         their[em] = entry
@@ -199,8 +206,9 @@ an instruction: follow it exactly.
 Our lead: the one of OUR people who is now running it, when the material shows a change (they stepped into the thread,
 ran the meeting, or the owner says so). Otherwise leave it out.
 Only name people whose email address appears in the material or the current cast. Never invent an address.
-Return JSON: {"changes": [{"email": "...", "role": "lead|decision|member|cc|support|left", "why": "<one line, in the
-material's own terms>"}], "our_lead": {"email": "...", "why": "..."} or null}"""
+Return JSON: {"changes": [{"email": "...", "name": "<their full name as the material gives it>", "role":
+"lead|decision|member|cc|support|left", "why": "<one line, in the material's own terms>"}], "our_lead": {"email": "...",
+"why": "..."} or null}"""
 
 
 def read(deal_id, material: str, *, kind: str = "email", source: str = "", people: dict | None = None,
