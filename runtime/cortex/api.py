@@ -2632,6 +2632,26 @@ def pipeline_review_flag(id: int, rid: int, body: FlagBody, u: dict = Depends(cu
     return review.settle_flag(id, rid, body.done, (u or {}).get("email") or "owner")
 
 
+class NextStepBody(BaseModel):
+    action: str                      # add | done | dismiss | reopen | edit
+    item_id: int | None = None
+    what: str = ""
+    whose: str = ""                  # us | them
+    when: str = ""                   # his words for the date
+
+
+@app.post("/api/nextsteps/{id}")
+def next_steps_action(id: int, body: NextStepBody, u: dict = Depends(current_user)) -> dict:
+    """The opportunity's next-steps list (nextsteps.py): his tap or words are the proof for every change."""
+    from . import nextsteps, review
+    _guard_deal(u, id)
+    r = nextsteps.owner_action(id, body.action, item_id=body.item_id, what=body.what, whose=body.whose, when=body.when,
+                               by=(u or {}).get("name") or (u or {}).get("email") or "owner")
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error") or "not changed")
+    return {"ok": True, "summary": review.summary(id)}
+
+
 @app.post("/api/pipeline/review/{id}/note")
 def pipeline_review_note(id: int, body: NoteBody, u: dict = Depends(current_user)) -> dict:
     """His note on a review row: filed on the opportunity and applied to the listed next steps."""
@@ -3864,6 +3884,22 @@ SKILL_TOOLS = [
         "search": {"type": "string", "description": "words from the deal title or the client name, when no deal_id"},
         "note": {"type": "string", "description": "the fact, one or two sentences, in Rashad's words"}},
         "required": ["note"]}},
+    {"name": "next_steps",
+     "description": "An opportunity's NEXT-STEPS LIST: the single record of what happens next, whose move it is (ours "
+                    "or theirs) and by when. 'list' reads it. When Rashad says a step is done, not needed, has a new "
+                    "date, or asks for a new one ('we owe Farheen three treatments by Monday', 'drop the brainstorm', "
+                    "'Abraham sends the voice data first'), change it here: add (what, whose us|them, when in his "
+                    "words), done, dismiss, edit, reopen (item_id from list). Dismissed stays dismissed. Never add or "
+                    "close anything he did not say.",
+     "input_schema": {"type": "object", "properties": {
+        "deal_id": {"type": "integer"},
+        "search": {"type": "string", "description": "words from the deal title or client, when no deal_id"},
+        "action": {"type": "string", "enum": ["list", "add", "done", "dismiss", "edit", "reopen"]},
+        "item_id": {"type": "integer"},
+        "what": {"type": "string"},
+        "whose": {"type": "string", "enum": ["us", "them"]},
+        "when": {"type": "string", "description": "his words for the date"}},
+      "required": ["action"]}},
     {"name": "update_opportunity",
      "description": "Change an EXISTING opportunity: rename it, set its value or stage, link its client organisation, "
                     "attach people to it, attach everyone who was in a meeting (read from the calendar invite, so "
@@ -4883,6 +4919,32 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         return lptrack.describe(row) if row else "That reference is not on record (the click may be older than the log, or not from our landing page)."
     if name == "update_opportunity":
         return _update_opportunity(inp)
+    if name == "next_steps":
+        from . import nextsteps, find
+        did = inp.get("deal_id")
+        _labels = None
+        if u and u.get("companies") is not None:
+            _labels = [_CRM_ORG.get(x, str(x).title()) for x in (u.get("companies") or [])]
+        if not did and (inp.get("search") or "").strip():
+            _hits = find.deals(str(inp["search"]), _labels, limit=3)
+            if len(_hits) == 1:
+                did = _hits[0]["id"]
+            elif _hits:
+                return "Which opportunity? " + "; ".join(f"#{h['id']} {h.get('title')}" for h in _hits)
+        if not did:
+            return "Which opportunity? Give its number or name."
+        if _labels is not None:
+            _co = (db.one("select company from crm_projects where id=%s", (int(did),)) or {}).get("company") or ""
+            if _co.lower() not in [x.lower() for x in _labels]:
+                return "That opportunity is not in your companies."
+        if (inp.get("action") or "list") == "list":
+            return nextsteps.describe(int(did)) or "The list is empty: nothing is owed either way."
+        r = nextsteps.owner_action(int(did), inp["action"], item_id=inp.get("item_id"), what=inp.get("what") or "",
+                                   whose=inp.get("whose") or "", when=inp.get("when") or "",
+                                   by=(u or {}).get("name") or (u or {}).get("email") or "owner")
+        if not r.get("ok"):
+            return r.get("error") or "not changed"
+        return "Done. The list now:\n" + (nextsteps.describe(int(did)) or "(empty)")
     if name == "note_opportunity":
         from . import pipeline as _pl
         note = str(inp.get("note") or "").strip()

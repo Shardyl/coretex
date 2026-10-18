@@ -946,6 +946,35 @@ def _cases():
     case("the internal meeting record (with the transcript) can never go on a card or be sent", "18 Oct",
          lambda: _private_refused() and "PRIVATE_KINDS" in inspect.getsource(_docs.find)
          and "PRIVATE_KINDS" in inspect.getsource(engine._send_email_reply))
+    # --- ONE next-steps list per opportunity (owner, 18 Oct: seven cases, Shama/Heaven/Workspace/HBMSU/Brent/Shamal/DSO)
+    from . import nextsteps as _ns, gate as _gt, reminders as _rm, pipeline
+
+    def _ns_rules():
+        same = _ns._same("Send Farheen three ideas and three treatments for the Ramadan film",
+                         "Send 3 ideas and 3 treatments for the Ramadan film to Farheen")
+        tools = (_ns.tool_for("3 ideas and 3 treatments for the Ramadan commercial") == "creative_treatments"
+                 and _ns.tool_for("Send the tailored proposal with packages and pricing") == "create_proposal"
+                 and _ns.tool_for("Issue the pro forma invoice") == "issue_proforma")
+        offer = pipeline._is_offer("We are happy to prepare sample extraction output if needed.")
+        theirs_no_date = _ns._due("none", whose="them") is None and _ns._due("none", whose="us") is not None
+        proof = _ns._in("We look forward to your consolidated feedback by 19 October",
+                        "Thanks. We look forward to your consolidated feedback by 19 October.") and not _ns._in(
+                            "they sent the signed quotation", "Lets do it. Send me bank details.")
+        return same and tools and offer and theirs_no_date and proof
+    case("next steps: a re-mention matches, work names its tool, an offer is never owed, theirs has no invented date",
+         "seven cases, 18 Oct", _ns_rules)
+    case("next steps change only on evidence: our email closes OURS, their email closes THEIRS, quotes checked by code",
+         "Heaven #150 'proposal filed = done', 18 Oct",
+         lambda: all(x in inspect.getsource(_ns.observe) for x in (
+             '_in(q, material)', 'source == "email_out" and it["whose"] != "us"',
+             'source == "email_in" and it["whose"] != "them"', "pipeline._is_offer(q)")))
+    case("no chase while WE owe the next step; no owed reminder is ever created again (it goes on the list)",
+         "Shama #164 chase armed while we owed her, 18 Oct",
+         lambda: "nextsteps.ours_open" in inspect.getsource(_gt._check)
+         and "nextsteps.add(int(tid)" in inspect.getsource(_rm.create)
+         and "for c in []:" in inspect.getsource(pipeline.record_send)
+         and "nextsteps.observe_async" in inspect.getsource(pipeline.record_meeting))
+
     # --- creative treatments as building blocks (owner, 18 Oct: "three treatments ... without a quotation", "a
     # quotation for this proposal or that proposal, or for all three")
     from . import creative as _crv

@@ -1,0 +1,558 @@
+"""ONE NEXT-STEPS LIST PER OPPORTUNITY: the single record of what happens next, whose move it is, by when, and the
+words it came from (owner, 18 Oct 2026).
+
+Why it exists. Before this, an opportunity had no "next step". It had a pile: an owed reminder minted by every meeting
+row and by every sent email that restated a promise, an independent chase clock, and an Inbox tidy guessing "probably
+done" from silence. Seven live cases in one morning (Shama #164, Heaven #150, Workspace #122, HBMSU #107, Brent #93,
+Shamal #157, DSO #148): the real step buried under internal tasks and post-signing work, four copies of "send the
+proposal", promises that wait on the CLIENT treated as ours, an offer ("if needed") treated as owed, our own words
+quoted back in their reply filed as their deadline for us, a chase armed while WE owed them something, and a notice
+"may already be done" on work nobody had started. The owner: "how do we stop this kind of hallucination and
+assumptions ... it's just simple, it's not being done, this is the next step."
+
+The rules, all enforced here:
+  - ONE LIST, several items. Each item: what, WHOSE MOVE (us | them), kind (email = Cortex can write it; work = a
+    proposal, quotation, treatments, a pilot...; theirs), due, the source QUOTE, and for theirs what we do after.
+  - IT CHANGES ONLY ON EVIDENCE: the owner's word (cockpit, a note, Talk), an email WE sent that carries the item, the
+    client's own new words, a meeting's notes. Every quote is checked by code against the material. Silence never
+    closes anything; nothing is ever "probably done".
+  - DISMISSED STAYS DISMISSED, DONE STAYS DONE: a later mention never re-adds an item that matches one already on the
+    list in any state (the model sees them all; code checks word overlap as the backstop).
+  - DO, DON'T REMIND: when an item of OURS falls due, an email item becomes the drafted email (approve to send); a work
+    item becomes ONE plain notice "To do: ..." pointing at the opportunity, with the Talk tool that starts it.
+  - THE CHASE FOLLOWS THE LIST: while any open item is OURS, no automatic chase goes (gate.check). When every open item
+    is theirs, the chase runs on its normal rhythm.
+Table `next_steps`; the old owed reminders were migrated into it on 18 Oct 2026 (migrate()).
+"""
+from __future__ import annotations
+
+import json
+import re
+from datetime import datetime, timedelta, timezone
+
+from . import db
+
+_GST = timezone(timedelta(hours=4))
+
+_MIGRATE = """
+create table if not exists next_steps (
+  id bigserial primary key,
+  deal_id bigint not null,
+  company_id bigint,
+  what text not null,
+  whose text not null default 'us',
+  kind text not null default 'work',
+  tool text,
+  due_at timestamptz,
+  status text not null default 'open',
+  source text,
+  quote text,
+  then_what text,
+  card_id bigint,
+  notified_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  closed_at timestamptz,
+  closed_by text,
+  closed_why text,
+  closed_quote text,
+  log jsonb not null default '[]'::jsonb
+);
+create index if not exists next_steps_deal on next_steps (deal_id, status);
+"""
+_READY = False
+
+# Talk tools a WORK item can start, matched by code on its words (first match wins)
+TOOLS = [
+    (re.compile(r"\btreatment|\bconcept|\bcreative (?:idea|option|route|direction)|\bstoryboard", re.I), "creative_treatments"),
+    (re.compile(r"\bpro ?forma|\binvoice", re.I), "issue_proforma"),
+    (re.compile(r"\bquot", re.I), "create_quotation"),
+    (re.compile(r"\bproposal|\bdeck\b|\bpitch", re.I), "create_proposal"),
+]
+TOOL_SAY = {"creative_treatments": "Say in Talk: \"build the treatments for this opportunity\"",
+            "issue_proforma": "Say in Talk: \"issue the pro forma\"",
+            "create_quotation": "Say in Talk: \"build the quotation\"",
+            "create_proposal": "Say in Talk: \"build the proposal\""}
+
+
+def ensure_schema() -> None:
+    global _READY
+    if _READY:
+        return
+    with db.connect() as c:
+        c.execute(_MIGRATE)
+    _READY = True
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _iso(x) -> str:
+    return x.isoformat() if hasattr(x, "isoformat") else str(x or "")
+
+
+def tool_for(what: str) -> str | None:
+    return next((t for rx, t in TOOLS if rx.search(what or "")), None)
+
+
+def items(deal_id: int, include_closed: bool = False) -> list[dict]:
+    ensure_schema()
+    q = "select * from next_steps where deal_id=%s" + ("" if include_closed else " and status='open'")
+    return db.query(q + " order by (whose='us') desc, due_at nulls last, id", (int(deal_id),))
+
+
+def ours_open(deal_id: int) -> list[dict]:
+    ensure_schema()
+    return db.query("select * from next_steps where deal_id=%s and status='open' and whose='us' order by due_at nulls last",
+                    (int(deal_id),))
+
+
+def _log(item_id: int, text: str) -> None:
+    db.execute("update next_steps set log = log || %s::jsonb, updated_at=now() where id=%s",
+               (json.dumps([{"at": _now().isoformat(), "text": text[:300]}]), int(item_id)))
+
+
+def _deal_log(deal_id: int, text: str) -> None:
+    try:
+        from . import pipeline
+        pipeline.log_deal(int(deal_id), "next_steps", text[:600])
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from . import flow
+        flow.bump_rev()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+_STOP = {"the", "a", "an", "to", "and", "of", "for", "with", "on", "in", "our", "their", "we", "will", "you", "your",
+         "them", "send", "share", "deal", "client", "by", "from", "this", "that", "they", "it"}
+
+
+def _words(s: str) -> set:
+    return {w for w in re.findall(r"[a-z]{3,}", (s or "").lower()) if w not in _STOP}
+
+
+def _same(a: str, b: str) -> bool:
+    x, y = _words(a), _words(b)
+    return bool(x and y) and len(x & y) / min(len(x), len(y)) >= 0.6
+
+
+def _in(quote: str, text: str) -> bool:
+    norm = lambda s: re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()     # noqa: E731
+    q = norm(quote)
+    return len(q.split()) >= 3 and q in norm(text)
+
+
+def _due(hint, *, whose: str) -> datetime | None:
+    """Code computes the date. An ISO date as stated; a vague hint maps to a window; none = no date for THEIR move,
+    three days for ours (something we owe always has a date to answer to)."""
+    from . import pipeline
+    h = str(hint or "none").strip().lower()
+    if h in ("", "none", "null") and whose == "them":
+        return None
+    return pipeline._commitment_due(h)
+
+
+# ------------------------------------------------------------------ writing to the list
+
+def add(deal_id: int, what: str, *, whose: str = "us", kind: str | None = None, due_at=None, source: str = "owner",
+        quote: str = "", then_what: str = "", company_id=None, by: str = "") -> dict | None:
+    """Put one item on the list. An item matching anything already on it (open, done or DISMISSED) is not added."""
+    ensure_schema()
+    what = re.sub(r"\s+", " ", (what or "").strip())[:300]
+    if not what:
+        return None
+    whose = "them" if whose == "them" else "us"
+    for it in items(deal_id, include_closed=True):
+        if not _same(it["what"], what):
+            continue
+        if source == "owner":        # HIS word: an item he asks for again is reopened, never refused
+            return edit(it["id"], due_at=due_at, by=by or "owner", reopen=it["status"] != "open")
+        if it["status"] != "done" or (it.get("closed_at") and it["closed_at"] > _now() - timedelta(days=30)):
+            return None              # already on the list, or dismissed: a later mention never re-adds it
+    if not company_id:
+        p = db.one("select company from crm_projects where id=%s", (int(deal_id),)) or {}
+        from . import crm
+        company_id = next((c["id"] for c in db.query("select id, slug from companies where kind='owned'")
+                           if crm._org(c["slug"]).lower() == (p.get("company") or "").lower()), None)
+    kind = kind or ("theirs" if whose == "them" else "work")
+    if whose == "them":
+        kind = "theirs"
+    row = db.execute(
+        "insert into next_steps (deal_id, company_id, what, whose, kind, tool, due_at, source, quote, then_what) "
+        "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *",
+        (int(deal_id), company_id, what, whose, kind, tool_for(what) if kind == "work" else None, due_at, source,
+         (quote or "")[:600], (then_what or "")[:300]))
+    _deal_log(deal_id, f"Next step added ({'ours' if whose == 'us' else 'theirs'}, from {source}): {what}"
+              + (f", due {due_at.astimezone(_GST):%a %d %b}" if due_at else ""))
+    return row
+
+
+def close(item_id: int, status: str, *, by: str, why: str = "", quote: str = "") -> dict | None:
+    """Done or dismissed. The proof is who said so (`by`) and, from an email or meeting, the words that show it."""
+    ensure_schema()
+    status = "dismissed" if status == "dismissed" else "done"
+    r = db.execute("update next_steps set status=%s, closed_at=now(), closed_by=%s, closed_why=%s, closed_quote=%s, "
+                   "updated_at=now() where id=%s and status='open' returning *",
+                   (status, by[:80], (why or "")[:300], (quote or "")[:600], int(item_id)))
+    if r:
+        _deal_log(r["deal_id"], f"Next step {status} ({by}): {r['what']}" + (f". \"{quote[:160]}\"" if quote else ""))
+        if r.get("notified_at"):
+            db.execute("update notifications set state='dismissed' where dedup_key=%s and state in ('unread','read','snoozed')",
+                       (f"nextstep:{r['id']}",))
+    return r
+
+
+def edit(item_id: int, *, what: str | None = None, whose: str | None = None, due_at=None, by: str = "owner",
+         reopen: bool = False) -> dict | None:
+    ensure_schema()
+    r = db.one("select * from next_steps where id=%s", (int(item_id),))
+    if not r:
+        return None
+    sets, vals, said = [], [], []
+    if what and what.strip() != r["what"]:
+        sets += ["what=%s", "tool=%s"]
+        vals += [what.strip()[:300], tool_for(what) if (whose or r["whose"]) == "us" else None]
+        said.append(f"now \"{what.strip()[:120]}\"")
+    if whose in ("us", "them") and whose != r["whose"]:
+        sets += ["whose=%s", "kind=%s"]
+        vals += [whose, "theirs" if whose == "them" else ("work" if r["kind"] == "theirs" else r["kind"])]
+        said.append("ours" if whose == "us" else "theirs")
+    if due_at is not None:
+        sets += ["due_at=%s", "notified_at=null", "card_id=null"]
+        vals += [due_at]
+        said.append(f"due {due_at.astimezone(_GST):%a %d %b}")
+    if reopen and r["status"] != "open":
+        sets += ["status='open'", "closed_at=null", "closed_by=null", "closed_why=null", "closed_quote=null"]
+        said.append("reopened")
+    if not sets:
+        return r
+    out = db.execute(f"update next_steps set {', '.join(sets)}, updated_at=now() where id=%s returning *",
+                     tuple(vals) + (int(item_id),))
+    _log(item_id, f"{by}: " + ", ".join(said))
+    _deal_log(r["deal_id"], f"Next step changed by {by}: {r['what'][:120]} -> " + ", ".join(said))
+    return out
+
+
+# ------------------------------------------------------------------ reading what happened
+
+_OBSERVE = """You keep ONE opportunity's NEXT-STEPS LIST for a production company: what happens next, and whose move
+it is. You are given the list (open, done and dismissed items, with ids) and ONE new piece of material: an email WE
+sent, an email THEY sent (their new words only), a meeting's notes, or the OWNER's own note. Return JSON only:
+{"close": [{"id": <id>, "status": "done" | "dismissed", "quote": "<the exact words from the material that show it,
+             copied character for character>"}],
+ "add": [{"what": "<short, concrete, in plain words>", "whose": "us" | "them", "kind": "email" | "work" | "theirs",
+          "due_hint": "<ISO date ONLY if the material states one; else today | tomorrow | week | days:N | none>",
+          "quote": "<the exact sentence it comes from>", "then": "<for THEIR item: what we do once they have, or ''>"}],
+ "due": [{"id": <id>, "due_hint": "<as above>", "quote": "<the exact words>"}]}
+RULES, in order of importance:
+1. Only what the material SAYS. Never infer, never assume, never close something because it is not mentioned.
+   Nothing is ever "probably done". When unsure, return nothing.
+2. CLOSE an item only when the material shows it happened (we sent it, they sent it, it was done in the meeting) or,
+   for the OWNER's note, when he says it is done, not needed, or not happening ("dismissed").
+3. ADD only real next steps that move THIS sale (or, on won work, the project) forward:
+   - OURS: something we said we WILL do (send, prepare, call on a stated day) or the client asked us for and we owe.
+     kind "email" when the whole step is an email Cortex can write (a follow-up, answering a question, sending
+     something we already have, proposing call times); kind "work" when it needs real work first (a proposal, a
+     quotation, treatments or concepts, a pilot, a deck, an edit).
+   - THEIRS: something THEY said they will do or must do before we can move (send data, confirm a cast size, return a
+     signed quotation, give feedback by a date). Put our follow-on, if any, in "then".
+   - NEVER: an OFFER ("happy to", "if needed", "if you would like", "we could"), politeness, internal tasks (a team
+     brainstorm, internal review), work that only happens after they sign while the deal is still being sold
+     ("finalize all visual assets", "begin production"), or a step that is already DONE in this material.
+   - A promise that waits on THEM ("once you send", "on receipt of", "after you confirm") is THEIR item, with ours in
+     "then". Our own words quoted back inside their reply are OURS, never their request to us.
+4. NEVER add something that matches ANY item already on the list, open, done or dismissed: use "due" to change an open
+   item's date instead. Dismissed means the owner does not want it: never bring it back.
+5. Plain words in "what": "Send Farheen 3 ideas and 3 treatments for the Ramadan film", not "Commitment owed to ...".
+"""
+
+
+def observe(deal_id: int, source: str, material: str, *, by: str = "", company_id=None, meeting: bool = False) -> list[str]:
+    """Read one piece of material and apply what it shows to the list. source: email_out | email_in | meeting | note.
+    Returns the changes made. Never raises."""
+    try:
+        ensure_schema()
+        material = (material or "").strip()
+        if len(material) < 12:
+            return []
+        d = db.one("select id, title, stage, company from crm_projects where id=%s", (int(deal_id),))
+        if not d:
+            return []
+        from . import provider, worker
+        allit = items(deal_id, include_closed=True)
+        listing = "\n".join(
+            f"#{i['id']} [{i['status']}] {'OURS' if i['whose'] == 'us' else 'THEIRS'}: {i['what']}"
+            + (f" (due {i['due_at'].astimezone(_GST):%a %d %b})" if i.get("due_at") else "")
+            for i in allit[-40:]) or "(empty)"
+        label = {"email_out": "AN EMAIL WE SENT", "email_in": "AN EMAIL THEY SENT (their new words only)",
+                 "meeting": "THE MEETING'S NOTES", "note": "THE OWNER'S OWN NOTE"}.get(source, source.upper())
+        out = provider.think_json(
+            _OBSERVE,
+            f"{worker._now_line()}\nOPPORTUNITY #{d['id']}: {d['title']} (stage {d['stage']})\n\nTHE LIST:\n{listing}\n\n"
+            f"{label}{(' (from ' + by + ')') if by else ''}:\n{material[:12000]}",
+            fast=True, max_tokens=2500, purpose="next-steps", company=None) or {}
+    except Exception as e:  # noqa: BLE001
+        print(f"[nextsteps] observe {deal_id}: {type(e).__name__}: {e}", flush=True)
+        return []
+    done = []
+    try:
+        byid = {i["id"]: i for i in allit}
+        who = by or {"email_out": "our email", "email_in": "their email", "meeting": "the meeting",
+                     "note": "owner"}.get(source, source)
+        for c in out.get("close") or []:
+            it = byid.get(int(c.get("id") or 0)) if str(c.get("id") or "").isdigit() else None
+            if not it or it["status"] != "open":
+                continue
+            q = str(c.get("quote") or "")
+            status = "dismissed" if (c.get("status") == "dismissed" and source == "note") else "done"
+            # PROOF BY CODE: the quote is really in the material; and who may close what
+            if source != "note" and not _in(q, material):
+                continue
+            if source == "email_out" and it["whose"] != "us":
+                continue
+            if source == "email_in" and it["whose"] != "them":
+                continue
+            if close(it["id"], status, by=who, why=f"from {source}", quote=q if source != "note" else ""):
+                done.append(f"{status}: {it['what']}")
+        from . import pipeline
+        for a in out.get("add") or []:
+            what, q = str(a.get("what") or "").strip(), str(a.get("quote") or "")
+            if not what or (source != "note" and not _in(q, material)):
+                continue
+            whose = "them" if a.get("whose") == "them" else "us"
+            if whose == "us" and source != "note" and pipeline._is_offer(q):
+                continue               # an offer leaves the next move with them: nothing is owed
+            kind = "theirs" if whose == "them" else ("email" if a.get("kind") == "email" else "work")
+            r = add(deal_id, what, whose=whose, kind=kind, due_at=_due(a.get("due_hint"), whose=whose), source=source,
+                    quote=q, then_what=str(a.get("then") or ""), company_id=company_id, by=who)
+            if r:
+                done.append(f"added ({'ours' if whose == 'us' else 'theirs'}): {what}")
+        for u in out.get("due") or []:
+            it = byid.get(int(u.get("id") or 0)) if str(u.get("id") or "").isdigit() else None
+            if not it or it["status"] != "open" or (source != "note" and not _in(str(u.get("quote") or ""), material)):
+                continue
+            w = _due(u.get("due_hint"), whose=it["whose"])
+            if w:
+                edit(it["id"], due_at=w, by=who)
+                done.append(f"new date {w.astimezone(_GST):%a %d %b}: {it['what']}")
+    except Exception as e:  # noqa: BLE001
+        print(f"[nextsteps] apply {deal_id}: {type(e).__name__}: {e}", flush=True)
+    return done
+
+
+def observe_async(*a, **k) -> None:
+    import threading
+    threading.Thread(target=observe, args=a, kwargs=k, daemon=True).start()
+
+
+def on_closed(deal_id: int, stage: str) -> None:
+    """A deal that is Lost, Dormant or Completed owes nothing and expects nothing."""
+    ensure_schema()
+    for it in items(deal_id):
+        close(it["id"], "dismissed", by=f"deal {stage}", why=f"the opportunity moved to {stage}")
+
+
+# ------------------------------------------------------------------ when something of ours falls due
+
+def tick() -> list[str]:
+    """Engine loop: an item of OURS that is due becomes the drafted email (kind email) or ONE plain notice (kind work).
+    Each item is raised once; editing its date raises it again."""
+    ensure_schema()
+    out = []
+    for it in db.query("select n.*, p.title deal_title, p.stage from next_steps n join crm_projects p on p.id=n.deal_id "
+                       "where n.status='open' and n.whose='us' and n.due_at <= now() and n.card_id is null "
+                       "and n.notified_at is null and p.stage not in ('Lost','Dormant','Completed') order by n.due_at limit 20"):
+        try:
+            if it["kind"] == "email" and _draft_email(it):
+                out.append(f"drafted: {it['what']}")
+                continue
+            from . import notifications
+            say = TOOL_SAY.get(it.get("tool") or "")
+            notifications.notify(
+                f"To do: {it['what']}"[:150],
+                f"{it['deal_title']}." + (f" Due {it['due_at'].astimezone(_GST):%a %d %b}." if it.get("due_at") else "")
+                + (f" From: \"{it['quote'][:200]}\"" if it.get("quote") else "") + (f" {say}." if say else "")
+                + " Tap Done or Dismiss on the opportunity's Coming up.",
+                priority="normal", category="approval", company_id=it.get("company_id"), target_type="deal",
+                target_id=it["deal_id"], dedup_key=f"nextstep:{it['id']}")
+            db.execute("update next_steps set notified_at=now() where id=%s", (it["id"],))
+            out.append(f"to do: {it['what']}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[nextsteps] tick {it['id']}: {type(e).__name__}: {e}", flush=True)
+    return out
+
+
+def _draft_email(it: dict) -> bool:
+    """The email that does this step, to the opportunity's lead, as an ordinary card for approval."""
+    from . import reminders, store
+    co = store.get_company(it["company_id"]) if it.get("company_id") else None
+    if not co:
+        return False
+    sk = store.get_skill_by_key(co["id"], "sales-followup") or store.get_skill_by_key(co["id"], "email-handling")
+    if not sk:
+        return False
+    lead = ""
+    try:
+        from . import cast
+        lead = cast.lead(it["deal_id"]) or ""
+    except Exception:  # noqa: BLE001
+        lead = ""
+    req = {"brief": (f"NEXT STEP ON THIS OPPORTUNITY, now due: {it['what']}. Write the email that does exactly this "
+                     "(a call: propose specific times from the availability list; a document we hold or an answer: give "
+                     "it). Do not re-promise it, do not apologise at length, do not add a chase."
+                     + (f" It comes from: \"{it['quote'][:300]}\"" if it.get("quote") else "")),
+           "next_step": it["id"], "system_note": f"From next step #{it['id']}.",
+           "inquiry": {"name": "", "email": lead, "subject": ""} if lead else {}}
+    req = reminders._with_deal({"target_type": "deal", "target_id": it["deal_id"], "title": it["what"]}, "email_reply", req)
+    if "@" not in ((req.get("inquiry") or {}).get("email") or ""):
+        return False
+    t = store.create_card(co["id"], sk["id"], "email_reply", req, contact=req["inquiry"]["email"], deal_id=it["deal_id"])
+    if not t:
+        return False
+    db.execute("update next_steps set card_id=%s, notified_at=now() where id=%s", (t["id"], it["id"]))
+    _log(it["id"], f"due: drafted as card #{t['id']}")
+    return True
+
+
+# ------------------------------------------------------------------ for the screens and Talk
+
+def when_from_words(words: str, deal_id: int | None = None) -> datetime | None:
+    """His words for a date ('Monday', 'after Eid', '1 Nov') -> a datetime, by code."""
+    if not (words or "").strip():
+        return None
+    from . import reminders
+    try:
+        w = reminders.parse_when(words)
+    except Exception:  # noqa: BLE001
+        w = None
+    if not w:
+        try:
+            from . import engine
+            w = engine._resolve_their_date({"slug": "sensa"}, words, _now().strftime("%a %d %b %Y"))
+        except Exception:  # noqa: BLE001
+            w = None
+    return w
+
+
+def owner_action(deal_id: int, action: str, *, item_id=None, what: str = "", whose: str = "", when: str = "",
+                 by: str = "owner") -> dict:
+    """The cockpit's and Talk's one door: add | done | dismiss | reopen | edit. His word is the proof."""
+    ensure_schema()
+    action = (action or "").lower()
+    due = when_from_words(when, deal_id) if when else None
+    if when and not due:
+        return {"ok": False, "error": f"could not read a date from '{when}'"}
+    if action == "add":
+        if not what.strip():
+            return {"ok": False, "error": "say what the step is"}
+        r = add(deal_id, what, whose="them" if whose == "them" else "us",
+                kind="email" if re.search(r"\b(email|reply|send (?:them|her|him) )", what, re.I) and whose != "them"
+                else None, due_at=due or (None if whose == "them" else _now() + timedelta(days=1)),
+                source="owner", by=by)
+        return {"ok": True, "item": r}
+    it = db.one("select * from next_steps where id=%s and deal_id=%s", (int(item_id or 0), int(deal_id)))
+    if not it:
+        return {"ok": False, "error": "that step is not on this opportunity"}
+    if action in ("done", "dismiss", "dismissed"):
+        return {"ok": True, "item": close(it["id"], "done" if action == "done" else "dismissed", by=by,
+                                          why="the owner said so")}
+    return {"ok": True, "item": edit(it["id"], what=what or None, whose=whose or None, due_at=due, by=by,
+                                     reopen=action == "reopen")}
+
+
+def view(deal_id: int) -> list[dict]:
+    now = _now()
+    out = []
+    for it in items(deal_id):
+        due = it.get("due_at")
+        out.append({"id": it["id"], "what": it["what"], "whose": it["whose"], "kind": it["kind"], "tool": it.get("tool"),
+                    "say": TOOL_SAY.get(it.get("tool") or ""), "quote": it.get("quote") or "", "then": it.get("then_what") or "",
+                    "source": it.get("source") or "", "card": it.get("card_id"),
+                    "due": due.isoformat() if due else None,
+                    "date": due.astimezone(_GST).strftime("%a %d %b") if due else "",
+                    "overdue_days": max(0, (now - due).days) if due and due < now and it["whose"] == "us" else 0})
+    return out
+
+
+def describe(deal_id: int) -> str:
+    """One line per open item, for Talk and the drafters."""
+    lines = []
+    for v in view(deal_id):
+        lines.append(f"#{v['id']} {'OURS' if v['whose'] == 'us' else 'THEIRS'}: {v['what']}"
+                     + (f" (due {v['date']}{', ' + str(v['overdue_days']) + ' days overdue' if v['overdue_days'] else ''})"
+                        if v["date"] else "") + (f"; then we {v['then']}" if v["then"] else ""))
+    return "\n".join(lines)
+
+
+# ------------------------------------------------------------------ the one-off move from owed reminders
+
+_MIGRATE_SYS = """You turn ONE opportunity's pile of owed reminders into its NEXT-STEPS LIST. The pile is full of
+duplicates (the same promise minted by several emails and meetings), internal tasks, post-signing work, offers, things
+already done, and promises that really wait on the CLIENT. Read the reminders and the deal timeline and return JSON:
+{"items": [{"what": "<plain words>", "whose": "us" | "them", "kind": "email" | "work" | "theirs",
+            "due": "<YYYY-MM-DD from a reminder or the timeline, or ''>", "then": "<for theirs: what we do after>",
+            "from": [<reminder ids it replaces>]}],
+ "drop": [{"id": <reminder id>, "why": "<done in the timeline / internal / post-signing / an offer / a duplicate>"}]}
+Every reminder id appears in exactly one item's "from" or in "drop". Merge duplicates into ONE item. Mark THEIRS what
+waits on the client (data to send, a cast size to confirm, a signed quotation to return, feedback by a date). Drop only
+with a reason from the timeline: never drop real owed work because it is old or overdue; overdue work stays, with
+its date. Plain words in "what"."""
+
+
+def migrate(apply: bool = False, deal_ids: list | None = None) -> list[dict]:
+    """Move every open owed reminder (Cortex-created) into the next-steps list, deal by deal. Dry run by default."""
+    from . import obligations, pipeline, provider, worker
+    ensure_schema()
+    obligations.ensure_guard()
+    rows = db.query("select r.*, r.target_id::bigint deal_id from reminders r where r.owed and r.status in "
+                    "('pending','snoozed','fired') and r.target_type='deal' and coalesce(r.created_by,'') like 'cortex%%' "
+                    "order by r.target_id, r.id")
+    by: dict = {}
+    for r in rows:
+        if deal_ids and int(r["deal_id"]) not in [int(x) for x in deal_ids]:
+            continue
+        by.setdefault(int(r["deal_id"]), []).append(r)
+    report = []
+    for did, rs in by.items():
+        d = db.one("select id, title, stage from crm_projects where id=%s", (did,)) or {}
+        pile = "\n".join(f"R{r['id']} (due {r['due_at']:%Y-%m-%d}, {r['status']}): {r['title']}" for r in rs)
+        try:
+            out = provider.think_json(_MIGRATE_SYS, f"{worker._now_line()}\nOPPORTUNITY #{did}: {d.get('title')} "
+                                      f"(stage {d.get('stage')})\n\nOWED REMINDERS:\n{pile}\n\nTIMELINE:\n"
+                                      + pipeline.deal_context(did, limit=40)[:14000],
+                                      fast=True, max_tokens=3000, purpose="next-steps-migrate") or {}
+        except Exception as e:  # noqa: BLE001
+            report.append({"deal": did, "error": f"{type(e).__name__}: {e}"})
+            continue
+        ids = {r["id"] for r in rs}
+        num = lambda x: int(str(x).strip().lstrip("Rr")) if str(x).strip().lstrip("Rr").isdigit() else None   # noqa: E731
+        covered = {num(x) for it in out.get("items") or [] for x in (it.get("from") or [])}
+        covered |= {num(x.get("id")) for x in out.get("drop") or []}
+        rep = {"deal": did, "title": d.get("title"), "items": out.get("items") or [], "drop": out.get("drop") or [],
+               "uncovered": sorted(ids - covered)}
+        report.append(rep)
+        if not apply or rep["uncovered"]:
+            continue
+        for it in rep["items"]:
+            due = None
+            if it.get("due"):
+                try:
+                    due = datetime.fromisoformat(str(it["due"])[:10]).replace(hour=6, tzinfo=timezone.utc)
+                except ValueError:
+                    due = None
+            if it.get("whose") != "them" and not due:
+                due = _now() + timedelta(days=1)
+            add(did, it.get("what") or "", whose="them" if it.get("whose") == "them" else "us",
+                kind=it.get("kind"), due_at=due, source="migration", then_what=it.get("then") or "",
+                quote="from reminders " + ", ".join(f"R{str(x).lstrip('R')}" for x in it.get("from") or []))
+        for r in rs:
+            obligations.close(r["id"], "cancelled", obligations.evidence("rule", ref=f"next-steps list, deal {did}"),
+                              "moved to the opportunity's next-steps list (18 Oct 2026)")
+            if r.get("last_notification_id"):
+                db.execute("update notifications set state='dismissed' where id=%s and state in ('unread','read','snoozed')",
+                           (r["last_notification_id"],))
+        _deal_log(did, f"Owed reminders R{', R'.join(str(r['id']) for r in rs)} moved to the next-steps list.")
+    return report

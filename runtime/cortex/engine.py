@@ -10041,6 +10041,11 @@ def run(poll_idle: float = 1.0) -> None:
             except Exception:  # noqa: BLE001
                 pass
             try:
+                from . import nextsteps
+                nextsteps.tick()        # an item of OURS falling due: the drafted email, or one "To do" notice
+            except Exception as _nte:  # noqa: BLE001
+                print(f"[nextsteps] tick: {type(_nte).__name__}: {_nte}", flush=True)
+            try:
                 from . import invariants
                 invariants.maybe_run()  # nightly: things that must never be true, safe repairs applied
             except Exception:  # noqa: BLE001

@@ -151,6 +151,7 @@ def _open_items(deal_id: int) -> dict:
                      "n.target_type='deal' and n.target_id=%s and n.state in ('unread','snoozed') and "
                      "n.category <> 'digest' and not exists (select 1 from reminders r where r.last_notification_id=n.id "
                      "and r.status not in ('done','cancelled')) and coalesce(n.dedup_key,'') not like 'owed-held:%%' "
+                     "and coalesce(n.dedup_key,'') not like 'nextstep:%%' and coalesce(n.dedup_key,'') not like 'health:%%' "
                      "order by n.id", (did,))
     cards = [t for t in db.query("select * from tasks where deal_id=%s and status = any(%s) order by id",
                                  (int(deal_id), list(_OPEN))) if _cortex_card(t)]

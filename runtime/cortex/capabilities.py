@@ -169,6 +169,12 @@ CAPABILITIES: list[tuple[str, str]] = [
      "left) and which of us leads. It is re-read from every email, meeting (full transcript) and note, and the To line, "
      "copies and sender follow it. When he says who to address, copy or who leads ('Abraham leads, copy Balazs', 'Gino "
      "leads this'), file it with note_opportunity: it is pinned. deal_timeline and pipeline_review show it."),
+    ("Next steps on an opportunity",
+     "Every opportunity has ONE next-steps list (nextsteps.py): each item says what, whose move (ours or theirs), by "
+     "when, and the words it came from. Emails, meetings and his notes update it only on evidence; nothing is closed "
+     "because it went quiet. An item of ours falling due becomes the drafted email (approve to send) or one 'To do' "
+     "notice; while anything is ours, no chase goes to the client. He changes it with next_steps (add, done, dismiss, "
+     "edit) or on the opportunity's Coming up; dismissed stays dismissed. deal_timeline and pipeline_review show it."),
     ("Creative treatments, flexibly",
      "Three building blocks instead of one fixed run: creative_routes (ideas only, A/B/C), creative_treatments (each "
      "chosen route developed into its own deck, by default with NO quotation and no price page) and creative_quote "

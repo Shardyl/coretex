@@ -1038,6 +1038,11 @@ def add_project_note(project_id: int, note: str, by: str = "") -> dict | None:
         cast.read_async(int(project_id), note, kind="note", source=f"note by {by or 'owner'}", pin=True)
     except Exception as e:  # noqa: BLE001
         print(f"[cast] note on deal {project_id}: {type(e).__name__}: {e}", flush=True)
+    try:                                   # his word changes the NEXT-STEPS LIST (done, dismissed, added, a new date)
+        from . import nextsteps
+        nextsteps.observe(int(project_id), "note", note, by=by or "owner")
+    except Exception as e:  # noqa: BLE001
+        print(f"[nextsteps] note on deal {project_id}: {type(e).__name__}: {e}", flush=True)
     try:                                   # a call or WhatsApp he logged moves the next personal touch (touch.py)
         from . import touch
         touch.on_note(project_id, note)
@@ -1275,6 +1280,11 @@ def _cancel_cortex_reminders(p: dict, stage: str) -> list:
     """Cancel the reminders CORTEX set on a deal that has just closed, and say so on its timeline. The
     owner's own reminders (created_by a person) are left alone: he set those on purpose."""
     from . import obligations as _ob
+    try:                                   # a closed deal owes nothing and expects nothing (nextsteps.py)
+        from . import nextsteps
+        nextsteps.on_closed(int(p["id"]), stage)
+    except Exception:  # noqa: BLE001
+        pass
     rows = _ob.close_where("target_type='deal' and target_id=%s and status in ('pending','snoozed') and "
                            "coalesce(created_by,'') like 'cortex%%'", (str(p["id"]),), "cancelled",
                            _ob.evidence("deal_closed", stage=stage), f"the deal moved to {stage}")

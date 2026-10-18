@@ -143,6 +143,16 @@ def _check(company_id: int, email: str, deal_id, request: dict | None) -> str | 
                         default=None)
         if why in CHASE_TYPES and stopped and (not last_mail or stopped >= last_mail):
             return "chasing is stopped or paused on this deal until they or we write again"
+        # THE CHASE FOLLOWS THE NEXT-STEPS LIST (18 Oct 2026, Shama #164: a chase was armed while WE owed her the
+        # treatments): while anything on the list is OUR move, nobody chases the client.
+        if why in CHASE_TYPES:
+            try:
+                from . import nextsteps
+                _ours = nextsteps.ours_open(int(deal["id"]))
+            except Exception:  # noqa: BLE001
+                _ours = []
+            if _ours:
+                return f"we owe them the next step: {_ours[0]['what'][:120]}"
         # THE RHYTHM COUNTS FROM OUR LAST EMAIL (15 Oct 2026, Massar #117): the 13 Oct migration set the next chase
         # for Thu 15 Oct without seeing the chase that went that morning, and the 0.8-day quiet window let a second
         # chase through two days later. A chase waits its step's full gap from the last email we actually sent.

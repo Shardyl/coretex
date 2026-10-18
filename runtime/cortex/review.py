@@ -134,7 +134,15 @@ def summary(deal_id: int) -> dict | None:
         ours = {"name": team.get(ours, ours), "email": ours, "why": (_c.get("ours") or {}).get("why") or ""} if ours else None
     except Exception:  # noqa: BLE001
         who, ours = [], None
+    try:
+        from . import nextsteps
+        nxt = nextsteps.view(p["id"])
+    except Exception:  # noqa: BLE001
+        nxt = []
+    if any(n["whose"] == "us" for n in nxt) and steps and steps[0]["id"] == "CHASE":
+        steps[0] = {**steps[0], "when": None, "text": "No email chase while we owe them the next step"}
     return {"id": p["id"], "title": p["title"], "company": p["company"], "stage": p["stage"], "who": who, "our_lead": ours,
+            "next": nxt,
             "value": float(p["value"]) if p.get("value") is not None else None, "currency": p.get("currency") or "AED",
             "contact": contact, "owner": p.get("owner"),
             "last_them": last_them and {"when": _d(last_them.get("ts")), "text": str(last_them.get("text") or "")[:140]},

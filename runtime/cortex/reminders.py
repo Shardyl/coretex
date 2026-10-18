@@ -110,6 +110,20 @@ def create(title: str, due_at: datetime, *, company_id: int | None = None, targe
         due_at = due_at.replace(tzinfo=timezone.utc)
     if (str(created_by or "").startswith("cortex") and created_by != "cortex-touch" and target_type == "deal"
             and recurrence == "none" and str(tid or "").isdigit() and not action):
+        # OWED WORK LIVES ON THE NEXT-STEPS LIST, NEVER AS A REMINDER (nextsteps.py, 18 Oct 2026). Any code path that
+        # still tries to set an owed reminder on a deal puts an item on the list instead (matched against what is
+        # already there, open or dismissed). Tender closing dates stay reminders: they close on the stage by rule.
+        try:
+            from . import nextsteps, obligations
+            _k = obligations.kind_of({"title": title, "created_by": created_by})
+            if _k and _k != "tender_close":
+                _what = re.sub(r"^(Commitment owed to \S+:|Meeting commitment:|Next step on [^:]+:|Prepare and send the "
+                               r"proposal\s*[-—]?|Client deadline \S+:)\s*", "", title).split(" (deal ")[0].strip() or title
+                _r = nextsteps.add(int(tid), _what, whose="us", kind="work", due_at=due_at, source=created_by,
+                                   quote=title, company_id=company_id)
+                return {"id": None, "next_step": (_r or {}).get("id"), "title": title, "diverted": True}
+        except Exception as _ne:  # noqa: BLE001
+            print(f"[nextsteps] divert '{title[:60]}': {type(_ne).__name__}: {_ne}", flush=True)
         # ONE RECORD OF WHAT IS OWED (obligations.check_new): compared by meaning with what is open on the deal
         try:
             from . import obligations

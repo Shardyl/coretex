@@ -57,6 +57,13 @@ def deal_context(deal_id: int, limit: int = 12) -> str:
     lines = [f"- {h.get('ts', '')[:16]} [{h.get('event', '')}] {h.get('text', '')}" for h in hist[-limit:]]
     out = (f"DEAL TIMELINE for '{d['title']}' (stage {d['stage']}"
            + (f", value {d['currency']} {d['value']}" if d.get("value") else "") + "):\n")
+    try:     # the opportunity's next-steps list: what is owed, and by whom (nextsteps.py)
+        from . import nextsteps
+        _ns = nextsteps.describe(int(deal_id))
+        if _ns:
+            out += "NEXT STEPS (the owner-kept list; OURS = we owe it, THEIRS = we are waiting on them):\n" + _ns + "\n"
+    except Exception:  # noqa: BLE001
+        pass
     if d.get("note"):
         out += f"Note: {d['note']}\n"
     ctx = [h for h in hist if h.get("event") == "context"]
@@ -245,12 +252,20 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
         maybe_advance_on_send(int(did), task, env)
     except Exception:  # noqa: BLE001
         pass
-    _stage = (db.one("select stage from crm_projects where id=%s", (int(did),)) or {}).get("stage") or ""
-    open_rs = db.query("select id, title from reminders where created_by='cortex-pipeline' and status in "
-                       "('pending','snoozed') and target_type='deal' and target_id=%s and title like %s",
-                       (str(int(did)), "Commitment owed%"))
+    # THE NEXT-STEPS LIST READS IT (nextsteps.py, 18 Oct 2026): what this email delivers is closed with its quote,
+    # what it promises is added, offers and promises that wait on the client are never owed by us. The owed-reminder
+    # extraction below is retired: every email that restated a promise minted another reminder (Heaven: four copies).
+    try:
+        from . import nextsteps
+        _att = [str((a or {}).get("filename") or "") for a in (req.get("attach_docs") or [])] \
+            + [str(x) for x in (env.get("attachment_names") or [])]
+        nextsteps.observe_async(int(did), "email_out",
+                                f"To: {to}\nSubject: {subj}\n" + (f"Attached: {', '.join(a for a in _att if a)}\n" if any(_att) else "")
+                                + f"\n{body[:8000]}", company_id=(company or {}).get("id"))
+    except Exception as _ne:  # noqa: BLE001
+        print(f"[nextsteps] send {did}: {type(_ne).__name__}: {_ne}", flush=True)
     dues = []
-    for c in extract_commitments(body, stage=_stage):
+    for c in []:      # retired 18 Oct 2026: the next-steps list owns what we owe (see above)
         if c.get("offer"):
             log_deal(did, "context", f"Offered, not promised (nothing owed, no reminder): \"{c.get('quote')}\"")
             continue
@@ -265,7 +280,7 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
         # THE SAME PROMISE MADE AGAIN IS ONE PROMISE (17 Sep 2026): Antoni's "schedule a call" was logged on
         # 14 Sep and again by the chase on the 17th. A new commitment whose words overlap an open one on the
         # deal extends that reminder to the new date instead of opening a twin.
-        twin = next((r for r in open_rs if _same_commitment(r["title"], c["text"])), None)
+        twin = None
         if twin:
             db.execute("update reminders set due_at=%s, snooze_until=null where id=%s", (due, twin["id"]))
             log_deal(did, "commitment", f"OWED to {to} (repeated, still open): {c['text']} (check-in {due.date().isoformat()})")
@@ -333,7 +348,13 @@ def record_inbound(e: dict, deal: dict | None, company: dict) -> None:
     after = db.one("select jsonb_array_length(history) n from crm_projects where id=%s", (did,)) or {}
     if gid and (after.get("n") == before.get("n")):
         return          # already logged from another mailbox: its deadlines were captured then too
-    for d in extract_deadlines(gmail.new_part(e.get("body") or "")):   # THEIR words, never ours quoted below
+    try:   # THE NEXT-STEPS LIST READS THEIR NEW WORDS (nextsteps.py, 18 Oct 2026); deadline reminders are retired
+        from . import nextsteps
+        nextsteps.observe_async(int(did), "email_in", f"From: {sender}\nSubject: {subj}\n\n"
+                                + gmail.new_part(e.get("body") or "")[:8000], company_id=(company or {}).get("id"))
+    except Exception as _ne:  # noqa: BLE001
+        print(f"[nextsteps] inbound {did}: {type(_ne).__name__}: {_ne}", flush=True)
+    for d in []:      # retired 18 Oct 2026 (the DSO case: our own words quoted back became "their deadline" for us)
         try:
             when = datetime.fromisoformat(d["when_iso"])
         except ValueError:
@@ -709,10 +730,7 @@ def suggest_next_step(e: dict, deal: dict, company: dict) -> None:
     # (approving it genuinely builds the quotation); everything else is a reminder on the deal, no approve.
     is_quote = act == "prepare_quotation" or bool(re.search(r"\bquot", what, re.I))
     if not is_quote:
-        reminders.create(f"Next step on {title[:60]}: {what[:160]}",
-                         datetime.now(timezone.utc) + timedelta(hours=2), company_id=company.get("id"),
-                         target_type="deal", target_id=did, priority="high", created_by="cortex-nextstep")
-        return      # announced once, when the reminder fires (it was also announced here: two notices, one step)
+        return      # the next-steps list holds it (read from the same email by nextsteps.observe)
     brief = (f"NEXT STEP for deal {did} ({title}) - the client latest email requires: {what} ({act}). "
              "Prepare it as a clear internal work-up the owner can approve and act on: exactly what "
              "changes/content is needed, based ONLY on the timeline below and the client's words. Any price "
@@ -904,6 +922,16 @@ def record_meeting(deal_id: int, company_id: int | None, title: str, summary: st
     except Exception as _ce:  # noqa: BLE001
         print(f"[cast] meeting {deal_id}: {type(_ce).__name__}: {_ce}", flush=True)
     _meeting_touches_clock(deal_id)
+    try:   # THE NEXT-STEPS LIST READS THE MEETING (nextsteps.py, 18 Oct 2026): Gemini's own summary and next steps
+        from . import meetnotes, nextsteps
+        _mn2 = db.one("select full_text, summary from meeting_notes where deal_id=%s order by created_at desc limit 1",
+                      (int(deal_id),)) or {}
+        _qs = "\n".join(meetnotes.summary_lines(_mn2.get("full_text") or "", title))
+        nextsteps.observe_async(int(deal_id), "meeting", f"Meeting: {title}\n\n{_qs or summary or ''}",
+                                company_id=company_id)
+    except Exception as _ne:  # noqa: BLE001
+        print(f"[nextsteps] meeting {deal_id}: {type(_ne).__name__}: {_ne}", flush=True)
+    return      # the per-action-item reminders below are retired (Shama: a brainstorm and post-signing work as owed)
     try:
         out = provider.think_json(
             "From this meeting summary, extract only the action items OUR side (the production company) "
