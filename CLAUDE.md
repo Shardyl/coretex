@@ -3956,3 +3956,18 @@ shoot needs none), then 10% off the whole quotation.
   tool in `_chat_prepare`): when creative_treatments / create_creative_proposal / creative_quote / create_quotation /
   reissue_quotation / create_proposal / issue_proforma starts the work, the item records the card and its To do card
   says "In progress: card #N". The item still closes only on evidence, via the re-plan. v81.
+
+## A queued blog post goes live with the publish day in its byline (owner, 18 Oct 2026)
+- Snap Rewards "Points vs Cashback vs Tiered Rewards" went live 17 Oct (WordPress date right, the blog list showed it)
+  but the author line inside the article said 2026-06-24: `blog.py` writes the byline ("Author · Role · YYYY-MM-DD ·
+  N min read") into the HTML when the post is BUILT, and a post can sit in the queue for months.
+- `WordPress.go_live` now reads the draft and rewrites the FIRST byline date (`restamp_byline`, regex
+  `_BYLINE_DATE` on the "&nbsp;&middot;&nbsp; date &nbsp;&middot;&nbsp;" form) to the publish day, in the same call that
+  publishes. Regress case "a queued post goes live with the publish day in its byline".
+- One-off 18 Oct: 17 live posts corrected to their real publish dates (tabscanner 4, sensa 3, skyvision 4, snaprewards 4,
+  filmspoke 2; log in setting `blog_byline_fix_2026_10_18`); Sensa "AI Video Production Is Liberating the Indie
+  Filmmaker" has no dated byline and was left. Each read back after the edit.
+- CACHE: an edit to a live post is invisible until the WP Engine cache is purged. Per install (Sensa account key):
+  `ssh <install>@<install>.ssh.wpengine.net 'bash -s'` with
+  `wp eval 'WpeCommon::purge_varnish_cache_all(); WpeCommon::clear_cdn_cache();'` (pipe the script on stdin: inline
+  quoting breaks). Installs: sensapro, skyvis, filmspoke, snaprewards, tabscanner.
