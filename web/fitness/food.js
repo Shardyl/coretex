@@ -887,16 +887,48 @@ function missionWeeks(m){
 }
 // NOW is judged against TODAY's point on the straight line (owner, 12 Oct 2026), not Sunday's checkpoint:
 // on or under pace green, up to 0.2 kg over amber, more red. Both sides rounded to the 1 decimal he sees.
+// Sunday recap (owner, 18 Oct 2026): once Sunday's weigh-in is in, the week is over. Show how it went and the next
+// target straight away. Verdict uses the checkpoint bands (hit by 0.3+ = smashed, on/under = done, 0.3 over = just short).
+// Deficit = Mon to Sat (Sunday's eating has not happened yet), days with both food and watch data only.
+function weekRecap(m,wk){
+  const today=localDay(new Date());
+  if(new Date(today+'T12:00:00').getDay()!==0)return null;
+  const i=wk.findIndex(w=>w.date===today);if(i<0)return null;
+  if(!weighIns().some(w=>w.date===today))return null;
+  try{if(localStorage.getItem('fitness_recap_seen')===today)return null;}catch(e){}
+  const w=wk[i], next=wk[i+1]||null;if(w.avg==null)return null;
+  const diff=Math.round((w.avg-w.target)*10)/10;
+  const v=diff<=-0.3?{t:'Smashed it',c:RAG.g}:diff<=0?{t:'Done it',c:RAG.g}:diff<=0.3?{t:'Just short',c:RAG.a}:{t:'Missed it',c:RAG.r};
+  let def=0,n=0;
+  for(let k=1;k<=6;k++){const d=shiftDay(today,-k),e=entriesFor(d),b=fullDayBurn(d);if(e.length&&b!=null){def+=b-totals(e).kcal;n++;}}
+  return {w,next,diff,v,def:n?Math.round(def):null,perDay:n?Math.round(def/n):null,n};
+}
+window.foodRecapSeen=function(ev){if(ev)ev.stopPropagation();try{localStorage.setItem('fitness_recap_seen',localDay(new Date()));}catch(e){}renderMission();};
+function recapCard(r){
+  const dTxt=r.diff===0?'right on target':(r.diff<0?r1(-r.diff)+' kg under':r1(r.diff)+' kg over');
+  return `<div onclick="event.stopPropagation()" style="margin-bottom:7px;padding:9px 11px;border-radius:8px;border:1px solid ${r.v.c};position:relative">
+    <button onclick="foodRecapSeen(event)" aria-label="Dismiss" style="position:absolute;top:4px;right:6px;background:none;border:0;font-size:18px;line-height:1;color:var(--ink3);cursor:pointer">&times;</button>
+    <div style="font-size:10px;font-weight:800;letter-spacing:0.12em;color:var(--ink3)">WEEK ENDING ${esc(fmtDate(r.w.date)).toUpperCase()}</div>
+    <div style="font-size:22px;font-weight:900;color:${r.v.c};line-height:1.15">${r.v.t}</div>
+    <div style="font-size:12px;color:var(--ink2);margin-top:3px">Week average <b>${r.w.avg} kg</b> vs target ${r.w.target} kg: <span style="color:${r.v.c};font-weight:800">${dTxt}</span></div>
+    ${r.def!=null?`<div style="font-size:12px;color:var(--ink2);margin-top:2px">Deficit Mon to Sat: <b style="color:${ragDeficit(r.perDay)}">${fmtN(r.def)} kcal</b> (${fmtN(r.perDay)} a day${r.n<6?', '+r.n+' days logged':''})</div>`:''}
+    ${r.next?`<div style="margin-top:6px;padding-top:6px;border-top:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:11px;font-weight:800;letter-spacing:0.08em;color:var(--ink3)">NEXT WEEK</span><span style="font-size:18px;font-weight:900;color:var(--teal)">${r.next.target} kg <span style="font-size:11px;font-weight:700;color:var(--ink3)">by Sun ${fmtDate(r.next.date)}</span></span></div>`:''}
+  </div>`;
+}
 function ragPace(s){if(s.cur==null||s.paceKg==null)return 'inherit';const d=Math.round((r1(s.cur)-r1(s.paceKg))*10)/10;return d<=0?RAG.g:d<=0.2?RAG.a:RAG.r;}
 window.renderMission=function(){
   const el=document.getElementById('missionStrip');if(!el)return;
   const s=missionStats();
   if(!s){el.innerHTML=`<button onclick="foodEditMission()" style="width:100%;margin:8px 0 2px;background:none;border:0.5px dashed var(--border2);border-radius:var(--radius);padding:8px;font-size:12px;font-weight:700;color:var(--ink3);cursor:pointer">Set your mission goal</button>`;return;}
   const m=s.m;
-  const wk=missionWeeks(m), cw=wk.find(w=>w.current)||wk.find(w=>w.state==='future')||null;
+  const wk=missionWeeks(m), recap=weekRecap(m,wk);
+  // once Sunday's weigh-in is in, "this week" is next week
+  const sunDone=new Date(s.today+'T12:00:00').getDay()===0&&weighIns().some(w=>w.date===s.today);
+  const cw=(sunDone?wk.find(w=>w.date>s.today):null)||wk.find(w=>w.current)||wk.find(w=>w.state==='future')||null;
   const cur1=s.cur!=null?r1(s.cur):null, pep=missionPep(s), wkTxt=cw&&cur1!=null?(cur1<=cw.target?'on target':r1(cur1-cw.target)+' kg to go'):'';
   const msg=pep||(s.eta?`On your current trend: ${r1(m.goalKg)} kg around ${fmtDate(s.eta)}.`:'');
   el.innerHTML=`<div onclick="foodEditMission()" style="cursor:pointer;margin:6px 0 2px;padding:8px 11px;border-radius:var(--radius);background:var(--bg,transparent);border:0.5px solid var(--border)">
+    ${recap?recapCard(recap):''}
     <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px">
       <div>
         <div style="display:flex;align-items:center;gap:5px;font-size:10px;font-weight:800;letter-spacing:0.12em;color:var(--teal)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>MISSION</div>
