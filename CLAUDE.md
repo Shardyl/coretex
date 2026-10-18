@@ -3857,3 +3857,41 @@ shoot needs none), then 10% off the whole quotation.
 - Revisions per treatment card work as before (`revise`), and never price a treatment that has no quotation.
 - Verified live 18 Oct on iTellu (deal 156, routes only, nothing saved): three distinct routes from the deal record.
   A full treatment set has not yet been run end to end (about USD 8-12 per treatment).
+
+## ONE next-steps list per opportunity (owner, 18 Oct 2026)
+- WHY: an opportunity had no "next step", only a pile: an owed reminder minted by every meeting row and every email
+  that restated a promise, an independent chase clock, and the Inbox tidy guessing "probably done" from silence.
+  Seven live cases the same morning (Shama #164, Heaven #150, Workspace #122, HBMSU #107, Brent #93, Shamal #157, DSO
+  #148): the real step buried, four copies of "send the proposal", client-dependent promises treated as ours, an offer
+  treated as owed, our own words quoted back filed as their deadline for us, a chase armed while WE owed, and "may
+  already be done" notices. Owner: "how do we stop this kind of hallucination and assumptions", and the earlier rule
+  patches were "a bodge job".
+- `nextsteps.py`, table `next_steps` {deal_id, what, whose us|them, kind email|work|theirs, tool, due_at, status
+  open|done|dismissed, source, quote, then_what, card_id, notified_at, closed_*, log}. One list, several items.
+- EVIDENCE ONLY: `observe(deal, source, material)` (Sonnet, one call) returns close/add/due ops; CODE checks every quote
+  is in the material (`_in`), our email (`email_out`) closes only OURS, their email (`email_in`, new words only)
+  closes only THEIRS, an offer is never owed (`pipeline._is_offer`), and an item matching anything on the list (open,
+  done in 30 days, or DISMISSED) is never added (`_same`). The owner's note (`note`) may close, dismiss or add.
+  Hooks: `pipeline.record_send` (with attachment names), `pipeline.record_inbound`, `pipeline.record_meeting` (Gemini's
+  Quick notes via `meetnotes.summary_lines`), `crm.add_project_note` (sync). `crm._cancel_cortex_reminders` ->
+  `on_closed` dismisses a closed deal's items.
+- RETIRED: commitment/deadline/meeting-commitment reminders and the next-step reader's reminder branch (the code
+  paths are left as `for c in []` with notes). `reminders.create` DIVERTS any owed kind (obligations.kind_of, except
+  tender_close) onto the list, so no owed reminder is created again.
+- DO, DON'T REMIND: `tick()` (engine loop): an OURS item falling due becomes the drafted email (kind email, card to the
+  cast lead via `reminders._with_deal`) or ONE notice "To do: ..." (kind work, `nextstep:<id>`, names the Talk tool:
+  creative_treatments, create_proposal, create_quotation, issue_proforma). A proposal, quotation or treatments is never
+  typed "email" (`tool_for`). Each item is raised once; a new date raises it again.
+- THE CHASE FOLLOWS THE LIST: `gate._check` holds any automatic chase while an OURS item is open ("we owe them the next
+  step: ..."). Review/Coming up shows "No email chase while we owe them the next step".
+- SCREENS AND TALK: `review.summary()["next"]` (`view()`); cockpit `nsBlock` on Coming up and Review next steps: Ours/
+  Theirs, date, days overdue, the quote, Done / Dismiss / Edit / Start (opens Talk with the step) / Add a step
+  (`POST /api/nextsteps/{deal}` {action add|done|dismiss|reopen|edit, item_id, what, whose, when}). Talk tool
+  `next_steps` (list/add/done/dismiss/edit/reopen). `pipeline.deal_context` puts the list at the top of every draft.
+  Build v78.
+- MIGRATION 18 Oct: `migrate(apply=True)` consolidated every open owed reminder (16 deals) into 21 items; dropped ones
+  (done, internal, post-signing, offers, chases of sent items) recorded as DISMISSED (`dismiss_record`) so they never
+  return; past-due migrated items marked notified (no burst). 0 owed reminders open after. Tender closing dates stay
+  reminders.
+- Replay checks (nothing saved): Heaven's 18 Oct email adds only "Theirs: send the Hungarian voice data"; a signed
+  quotation from Heidar closes Workspace's THEIRS item with its quote.
