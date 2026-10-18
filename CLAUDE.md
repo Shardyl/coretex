@@ -3949,3 +3949,10 @@ shoot needs none), then 10% off the whole quotation.
 - Server: uvicorn runs with `--ws-ping-interval 20 --ws-ping-timeout 60` (deploy/cortex-api.service, installed to
   /etc/systemd/system on 18 Oct; deploy.sh does NOT install units, copy + daemon-reload by hand when the unit changes);
   the Deepgram leg pings 20/60; every stream logs `[voice] stream ended after Ns, N KB up, N results: <reason>`.
+- TO DO CARDS DO THE JOB (owner, 18 Oct 2026): notices are category `todo` (chip "To do"; they had been filed as
+  `approval`, which read as if they needed approving). Each has Done / Not needed / Tap to talk / Type: his words go to
+  Talk as `About the To do on opportunity #N: "<step>". <his words>` (`todoTalk`), and the capability manifest tells
+  Talk to do that step with the matching tool and its deal_id. `nextsteps.started_from_tool` (called after every Talk
+  tool in `_chat_prepare`): when creative_treatments / create_creative_proposal / creative_quote / create_quotation /
+  reissue_quotation / create_proposal / issue_proforma starts the work, the item records the card and its To do card
+  says "In progress: card #N". The item still closes only on evidence, via the re-plan. v81.
