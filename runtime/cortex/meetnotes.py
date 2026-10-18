@@ -667,8 +667,9 @@ def _attach_summary_to_request(req: dict, deal_id=None, contact: str = "", meeti
                else ensure_summary_doc(deal_id=deal_id, contact=contact, meeting_id=meeting_id))
         if not doc:
             return None
-        refs = [r for r in (req.get("attach_docs") or [])
-                if not str(r.get("filename") or "").startswith("Meeting notes - ")]
+        refs = [r for r in (req.get("attach_docs") or [])      # one summary: same file, or an earlier summary
+                if int(r.get("id") or 0) != int(doc["id"])
+                and not str(r.get("filename") or "").startswith("Meeting notes - ")]
         refs.append(documents.card_ref(doc))
         req["attach_docs"] = refs
         line = f"ATTACHED: {doc['filename']} (the meeting notes, summary only).\n"
