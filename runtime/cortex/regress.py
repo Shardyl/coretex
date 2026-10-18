@@ -971,6 +971,16 @@ def _cases():
              "_in(q, corpus)", 'it.get("source") == "owner"', 'st == "dismissed"', "pipeline._is_offer(q)",
              "_timeline(deal_id)")) and "_deal_lock" in inspect.getsource(_ns.observe)
          and _ns.REPLAN_MODEL_DEFAULT == "claude-opus-5")
+    def _byline_day():
+        from .integrations import wordpress as _wpx
+        html = ('<div><a href="x">Ben Smith</a> &nbsp;&middot;&nbsp; CTO &nbsp;&middot;&nbsp; 2026-06-24 &nbsp;&middot;&nbsp; '
+                '7 min read</div><p>On 2026-05-01 we &nbsp;&middot;&nbsp; 2026-05-02 &nbsp;&middot;&nbsp;</p>')
+        out = _wpx.restamp_byline(html, "2026-10-17")
+        return ("CTO &nbsp;&middot;&nbsp; 2026-10-17 &nbsp;&middot;&nbsp; 7 min read" in out and "2026-05-02" in out
+                and "2026-05-01" in out and "restamp_byline(" in inspect.getsource(_wpx.WordPress.go_live))
+    case("a queued post goes live with the publish day in its byline, not the day it was built",
+         "Snap Rewards 'Points vs Cashback', 18 Oct", _byline_day)
+
     def _todo_talk():
         root = os.path.join(os.path.dirname(__file__), "..", "..")
         web = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()

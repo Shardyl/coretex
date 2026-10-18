@@ -8,6 +8,8 @@ will look, but it is not public and not indexed. The owner then approves to publ
 """
 from __future__ import annotations
 
+import re
+
 import base64
 from datetime import datetime, timezone
 from urllib.parse import quote
@@ -117,7 +119,18 @@ class WordPress:
         publish MOMENT (go_live runs on the scheduled publishing day), so the live post carries the day it
         actually goes out, not the day the draft was created."""
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-        p = self._req("POST", f"/posts/{post_id}", json={"status": "publish", "date_gmt": now})
+        body = {"status": "publish", "date_gmt": now}
+        # THE BYLINE CARRIES THE PUBLISH DAY TOO (18 Oct 2026, Snap Rewards "Points vs Cashback"): the author line
+        # inside the article is written when the post is BUILT, so a post that waited in the queue went live on 17 Oct
+        # saying 2026-06-24. Its date is restamped here, in the same call that publishes.
+        try:
+            raw = ((self._req("GET", f"/posts/{post_id}?context=edit") or {}).get("content") or {}).get("raw") or ""
+            fixed = restamp_byline(raw, datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+            if fixed != raw:
+                body["content"] = fixed
+        except Exception:   # noqa: BLE001 — a byline that cannot be read never blocks the publish
+            pass
+        p = self._req("POST", f"/posts/{post_id}", json=body)
         return {"id": p["id"], "link": p.get("link"), "status": p.get("status")}
 
     def trash(self, post_id: int) -> dict:
@@ -125,6 +138,14 @@ class WordPress:
 
     def get(self, post_id: int) -> dict:
         return self._req("GET", f"/posts/{post_id}?context=edit")
+
+
+_BYLINE_DATE = re.compile(r"(&nbsp;&middot;&nbsp;\s*)(\d{4}-\d{2}-\d{2})(\s*&nbsp;&middot;&nbsp;)")
+
+
+def restamp_byline(html: str, day: str) -> str:
+    """The FIRST date in the byline ("Author · Role · YYYY-MM-DD · N min read") becomes `day`; nothing else changes."""
+    return _BYLINE_DATE.sub(lambda m: m.group(1) + day + m.group(3), html or "", count=1)
 
 
 def configured() -> bool:
