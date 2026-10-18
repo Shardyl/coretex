@@ -360,32 +360,50 @@ def on_closed(deal_id: int, stage: str) -> None:
 
 # ------------------------------------------------------------------ when something of ours falls due
 
+TODO_AHEAD_DAYS = 7      # OUR work shows in the Inbox from a week before it is due, and stays until Done / Not needed
+
+
 def tick() -> list[str]:
-    """Engine loop: an item of OURS that is due becomes the drafted email (kind email) or ONE plain notice (kind work).
-    Each item is raised once; editing its date raises it again."""
+    """Engine loop. THE INBOX SHOWS WHAT WE OWE (owner, 18 Oct 2026: "where's all the stuff on the inbox that should
+    still be there"): every open item of OURS that is overdue or due within a week is ONE "To do" card in the Inbox,
+    with Done / Not needed on it, until it is closed. An EMAIL item that falls due is drafted instead (approve to send);
+    one already more than a day late is a To do card (a late email is worth a look before it is written)."""
     ensure_schema()
     out = []
+    now = _now()
     for it in db.query("select n.*, p.title deal_title, p.stage from next_steps n join crm_projects p on p.id=n.deal_id "
-                       "where n.status='open' and n.whose='us' and n.due_at <= now() and n.card_id is null "
-                       "and n.notified_at is null and p.stage not in ('Lost','Dormant','Completed') order by n.due_at limit 20"):
+                       "where n.status='open' and n.whose='us' and n.card_id is null and n.notified_at is null "
+                       "and p.stage not in ('Lost','Dormant','Completed') order by n.due_at nulls first limit 40"):
         try:
-            if it["kind"] == "email" and _draft_email(it):
+            due = it.get("due_at")
+            if due and due > now + timedelta(days=TODO_AHEAD_DAYS):
+                continue
+            if (it["kind"] == "email" and due and due <= now and due > now - timedelta(days=1)
+                    and it.get("source") != "migration" and _draft_email(it)):
                 out.append(f"drafted: {it['what']}")
                 continue
-            from . import notifications
-            say = TOOL_SAY.get(it.get("tool") or "")
-            notifications.notify(
-                f"To do: {it['what']}"[:150],
-                f"{it['deal_title']}." + (f" Due {it['due_at'].astimezone(_GST):%a %d %b}." if it.get("due_at") else "")
-                + (f" From: \"{it['quote'][:200]}\"" if it.get("quote") else "") + (f" {say}." if say else "")
-                + " Tap Done or Dismiss on the opportunity's Coming up.",
-                priority="normal", category="approval", company_id=it.get("company_id"), target_type="deal",
-                target_id=it["deal_id"], dedup_key=f"nextstep:{it['id']}")
-            db.execute("update next_steps set notified_at=now() where id=%s", (it["id"],))
+            if it["kind"] == "email" and due and due > now:
+                continue                       # an email waits for its day, then it is drafted
+            _todo_notice(it)
             out.append(f"to do: {it['what']}")
         except Exception as e:  # noqa: BLE001
             print(f"[nextsteps] tick {it['id']}: {type(e).__name__}: {e}", flush=True)
     return out
+
+
+def _todo_notice(it: dict) -> None:
+    from . import notifications
+    say = TOOL_SAY.get(it.get("tool") or "")
+    due, now = it.get("due_at"), _now()
+    late = (now - due).days if due and due < now else 0
+    when = (f"{late} day{'s' if late != 1 else ''} overdue (due {due.astimezone(_GST):%a %d %b})" if late
+            else (f"Due {due.astimezone(_GST):%a %d %b}" if due else "No date"))
+    notifications.notify(
+        f"To do: {it['what']}"[:150],
+        f"{it['deal_title']}. {when}." + (f" {say}." if say else ""),
+        priority="high" if late else "normal", category="approval", company_id=it.get("company_id"),
+        target_type="deal", target_id=it["deal_id"], dedup_key=f"nextstep:{it['id']}")
+    db.execute("update next_steps set notified_at=now() where id=%s", (it["id"],))
 
 
 def _draft_email(it: dict) -> bool:

@@ -597,6 +597,9 @@ def _info_card(n: dict) -> dict:
             "items": n.get("items") or [], "company": ((store.get_company(n["company_id"]) or {}).get("name", "") if n.get("company_id") else ""),
             "target_type": n.get("target_type"), "target_id": n.get("target_id"),
             **_target_hint(n),
+            # a "To do" card is an item on the opportunity's next-steps list: Done / Not needed act on the item
+            **({"next_step": int(str(n["dedup_key"]).split(":")[1])}
+               if str(n.get("dedup_key") or "").startswith("nextstep:") and str(n["dedup_key"]).split(":")[1].isdigit() else {}),
             "state": n["state"], "ts": n.get("fired_at")}
 
 

@@ -13,6 +13,7 @@ Exit code 0 = all passed, 1 = something failed (the deploy script stops on it).
 from __future__ import annotations
 
 import inspect
+import os
 import sys
 import traceback
 from datetime import datetime, timezone
@@ -974,6 +975,11 @@ def _cases():
          and "nextsteps.add(int(tid)" in inspect.getsource(_rm.create)
          and "for c in []:" in inspect.getsource(pipeline.record_send)
          and "nextsteps.observe_async" in inspect.getsource(pipeline.record_meeting))
+
+    case("everything WE owe that is overdue or due within a week is a To do card in the Inbox, with Done / Not needed",
+         "owner, 18 Oct: 'where's all the stuff on the inbox that should still be there'",
+         lambda: _ns.TODO_AHEAD_DAYS == 7 and "_todo_notice(it)" in inspect.getsource(_ns.tick)
+         and "todoAct(" in open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"), encoding="utf-8").read())
 
     # --- creative treatments as building blocks (owner, 18 Oct: "three treatments ... without a quotation", "a
     # quotation for this proposal or that proposal, or for all three")
