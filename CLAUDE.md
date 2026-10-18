@@ -33,6 +33,12 @@ Hetzner box `cortex-1`. Read this before touching anything.
   day-to-day, so remembered passwords drift (bit Gino 25 Aug 2026). Cockpit demo mode
   (passcode `demo`, sample data) was removed the same day — no unauthenticated entry.
 
+## Start of every session: the repeating-fault list (owner, 18 Oct 2026)
+
+Run `ssh cortex "cd /opt/coretex/runtime && sudo -u cortex /opt/coretex/.venv/bin/python -m cortex.invariants repeats"`.
+Anything listed is a fault the nightly health check found on 3+ of the last 7 days: the repair is a patch, so
+trace it to the code that keeps creating it and fix it there (with its regress case) before other work.
+
 ## Deploy (never scp code; push + pull) - THROUGH THE GATE (13 Oct 2026)
 
 **`bin/deploy.sh`** (from Git Bash): push, pull on the box, run the case library, restart ONLY if every case
@@ -3805,3 +3811,22 @@ shoot needs none), then 10% off the whole quotation.
 - BEHAVIOUR IS A RULE: universal "MEETING NOTES ATTACHED" on sales-followup and email-handling (thank them, the two or
   three next steps, notes attached; no retelling).
 - First use: card 1301, "Meeting notes - Heaven Global - 16 Oct 2026.pdf" (library 1071).
+
+## Health check: his notices are actionable, repairs are a log, repeats are root causes (owner, 18 Oct 2026)
+- The nightly card ("Health check: 4 to look at") listed every finding in our words; he could act on none of it.
+  `invariants.run(fix=True)` now: logs every finding to table `health_log` (day, key, found, fixed, sample) and raises
+  NO summary card. A check with an `owner` block ({deal, title, body} templates) raises ONE plain notice per row
+  (`health:<key>:<deal>`, category approval, linked to the opportunity), raised on what is LEFT after the repair, and
+  dismissed automatically when the row stops appearing. Owner-facing checks: opportunity_without_contact,
+  owed_waiting_for_owner (new: owed items flagged "may be done"; he confirms Done / Still owed on the opportunity),
+  same_contact_two_sales_deals_sister_brands, stalled_sales_deal, opportunity_from_stale_enquiry.
+- `"sweep": True` (stale_inbox_items, duplicate_obligations) marks a check that re-examines everything open: only its
+  real changes count as a fault; the rows it looks at are not "left to look at".
+- `invariants.repeats()` / `python -m cortex.invariants repeats`: faults on 3+ of the last 7 days. Read at session start.
+- ROOT CAUSE FOUND THE SAME DAY: the daily "fixed 6" was the Inbox tidy RE-FLAGGING the same owed items (Heaven R439,
+  R440, R461 flagged eight times in two days; R122, R342/R343, R298, R351, R437 likewise). `flow._awaiting_owner`: an
+  owed reminder already flagged (`suspect`) is not put to the judge again; "Still owed" (`review.settle_flag`) stamps
+  `reminders.owner_kept_at` and the judge leaves it alone until a newer email, meeting or context note on the deal.
+  The flags had never reached him (timeline only); they are now the owed_waiting_for_owner notices.
+- duplicate_obligations found deals with several Cortex reminders but merged none (they were different things): no
+  leak in `obligations.check_new`; its SQL counts any deal with 2+ reminders, so it stays a sweep.
