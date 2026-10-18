@@ -3895,3 +3895,8 @@ shoot needs none), then 10% off the whole quotation.
   reminders.
 - Replay checks (nothing saved): Heaven's 18 Oct email adds only "Theirs: send the Hungarian voice data"; a signed
   quotation from Heidar closes Workspace's THEIRS item with its quote.
+- THE INBOX SHOWS WHAT WE OWE (owner, same day: "where's all the stuff on the inbox that should still be there"; the
+  migration had dismissed the old notices and marked past-due items notified, so nothing showed): `tick()` raises ONE
+  "To do" card (`nextstep:<id>`) for every open OURS item overdue or due within `TODO_AHEAD_DAYS` (7), kept until the
+  item is closed. The Inbox card carries `next_step` and shows Done / Not needed (`todoAct` -> /api/nextsteps). An email
+  item due today is drafted instead; one more than a day late, or from the migration, is a To do card. v79.
