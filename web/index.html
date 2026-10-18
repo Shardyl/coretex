@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v79';
+const APP_BUILD = 'cortex-v80';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -2622,6 +2622,46 @@ function beep(kind){
     o.start(t); o.stop(t+dur+0.02);
   }catch(e){}
 }
+// A VOICE STREAM THAT SURVIVES A WOBBLE (owner, 18 Oct 2026: "it's detecting it for most of the time and then suddenly
+// stops"). The server log showed the socket cut ("keepalive ping timeout") on a patchy connection, and nothing here
+// noticed: the button kept saying recording while the audio went nowhere. Now the socket is watched: a drop reconnects
+// within a second, the audio since the last finished phrase is replayed so no words are lost, and after three failed
+// tries it stops and says so, keeping every word already transcribed.
+const VBUF_MAX=80;   // ~7 s of 4096-sample chunks at 48 kHz: the audio since the last final phrase
+let vrt={live:false, tries:0, buf:[], rate:48000, onmsg:null, ondead:null, back:false, onopen1:null};
+function vUrl(){ const proto=location.protocol==='https:'?'wss':'ws';
+  return `${proto}://${location.host}/api/voice/stream?token=${encodeURIComponent(token)}&rate=${vrt.rate}`; }
+function vOpen(){
+  const w=new WebSocket(vUrl()); w.binaryType='arraybuffer'; vws=w;
+  w.onopen=()=>{ if(vws!==w) return; const first=!!vrt.onopen1; vrt.tries=0;
+    if(vrt.back){ for(const b of vrt.buf){ try{ w.send(b); }catch(e){} } vrt.back=false; toast('Back. Keep talking'); }
+    if(first){ const f=vrt.onopen1; vrt.onopen1=null; f(); } };
+  w.onmessage=ev=>{ if(vws===w && vrt.onmsg) vrt.onmsg(ev); };
+  w.onerror=()=>{};                       // a close always follows; that is where it is handled
+  w.onclose=()=>{ if(vws!==w || !vrt.live) return; vRetry(); };
+}
+function vRetry(){
+  vrt.tries++;
+  if(vrt.tries>3){ vrt.live=false; const d=vrt.ondead; vrt.ondead=null; if(d) d(); return; }
+  vrt.back=true; toast('Connection wobbled, reconnecting…');
+  setTimeout(()=>{ if(vrt.live) vOpen(); }, 500*vrt.tries);
+}
+function vSend(buf){ vrt.buf.push(buf); if(vrt.buf.length>VBUF_MAX) vrt.buf.shift();
+  if(vws&&vws.readyState===1){ try{ vws.send(buf); }catch(e){} } }
+function vFinal(){ vrt.buf=[]; }          // a finished phrase is safe: only the audio after it is ever replayed
+function vStart(rate, onmsg, onfirstopen, ondead){ vrt={live:true, tries:0, buf:[], rate, onmsg, ondead, back:false, onopen1:onfirstopen}; vOpen(); }
+function vEnd(){ vrt.live=false; vrt.onmsg=null; vrt.ondead=null; }
+function vGraph(processFn){
+  vsrc=vctx.createMediaStreamSource(vstream);
+  vproc=vctx.createScriptProcessor(4096,1,1);
+  vproc.onaudioprocess=e=>{
+    const f=e.inputBuffer.getChannelData(0), n=f.length, i16=new Int16Array(n);
+    for(let i=0;i<n;i++){ let x=Math.max(-1,Math.min(1,f[i])); i16[i]=x<0?x*0x8000:x*0x7FFF; }
+    vSend(i16.buffer);
+  };
+  vmute=vctx.createGain(); vmute.gain.value=0;
+  vsrc.connect(vproc); vproc.connect(vmute); vmute.connect(vctx.destination);
+}
 async function dictate(btn, targetId){
   if(demo){ toast('Voice needs the live app (log in with your passcode)'); return; }
   if(recording){ stopDictation(btn); return; }
@@ -2640,35 +2680,21 @@ async function dictate(btn, targetId){
     vctx=new (window.AudioContext||window.webkitAudioContext)();
     if(vctx.state==='suspended') await vctx.resume();
     const rate=Math.round(vctx.sampleRate);
-    const proto=location.protocol==='https:'?'wss':'ws';
-    vws=new WebSocket(`${proto}://${location.host}/api/voice/stream?token=${encodeURIComponent(token)}&rate=${rate}`);
-    vws.binaryType='arraybuffer';
-    vws.onopen=()=>{
-      vsrc=vctx.createMediaStreamSource(vstream);
-      vproc=vctx.createScriptProcessor(4096,1,1);
-      vproc.onaudioprocess=e=>{
-        if(!vws||vws.readyState!==1) return;
-        const f=e.inputBuffer.getChannelData(0), n=f.length, i16=new Int16Array(n);
-        for(let i=0;i<n;i++){ let s=Math.max(-1,Math.min(1,f[i])); i16[i]=s<0?s*0x8000:s*0x7FFF; }
-        vws.send(i16.buffer);
-      };
-      vmute=vctx.createGain(); vmute.gain.value=0;
-      vsrc.connect(vproc); vproc.connect(vmute); vmute.connect(vctx.destination);
-      setTimeout(goReady,180);
-    };
-    vws.onmessage=ev=>{
+    const onmsg=ev=>{
       let d; try{ d=JSON.parse(ev.data); }catch(e){ return; }
       if(d.error){ toast('Voice: '+d.error); return; }
       if(!d.text) return;   // push-to-talk ends on Stop, so ignore utterance_end here
       const t=document.getElementById(dictTarget); if(!t) return;
-      if(d.final){ vfinal=(vfinal?vfinal+' ':'')+d.text; t.value=vfinal; }
+      if(d.final){ vfinal=(vfinal?vfinal+' ':'')+d.text; t.value=vfinal; vFinal(); }
       else { t.value=(vfinal?vfinal+' ':'')+d.text; }   // live interim, replaced as you speak
     };
-    vws.onerror=()=>{ toast('Voice stream error'); };
+    vStart(rate, onmsg, ()=>{ vGraph(); setTimeout(goReady,180); },
+           ()=>{ toast('The connection dropped. Your words so far are kept'); stopDictation(btn); });
     setTimeout(goReady,1500);  // fallback if onopen is slow
   }catch(e){ starting=false; recording=false; btn.classList.remove('rec'); btn.innerHTML=btn.dataset.idle||ic('mic',18); toast('Mic blocked: '+(e.message||e)); }
 }
 function stopDictation(btn){
+  vEnd();
   recording=false; starting=false; beep('stop'); toast('Done');
   try{ if(vproc){ vproc.onaudioprocess=null; vproc.disconnect(); } }catch(e){}
   try{ if(vsrc) vsrc.disconnect(); }catch(e){}
@@ -3063,23 +3089,7 @@ async function toggleFree(mode, onTurn){
     vctx=new (window.AudioContext||window.webkitAudioContext)();
     if(vctx.state==='suspended') await vctx.resume();
     const rate=Math.round(vctx.sampleRate);
-    const proto=location.protocol==='https:'?'wss':'ws';
-    vws=new WebSocket(`${proto}://${location.host}/api/voice/stream?token=${encodeURIComponent(token)}&rate=${rate}`);
-    vws.binaryType='arraybuffer';
-    vws.onopen=()=>{
-      vsrc=vctx.createMediaStreamSource(vstream);
-      vproc=vctx.createScriptProcessor(4096,1,1);
-      vproc.onaudioprocess=e=>{
-        if(!vws||vws.readyState!==1) return;
-        const f=e.inputBuffer.getChannelData(0), n=f.length, i16=new Int16Array(n);
-        for(let i=0;i<n;i++){ let s=Math.max(-1,Math.min(1,f[i])); i16[i]=s<0?s*0x8000:s*0x7FFF; }
-        vws.send(i16.buffer);   // always send real audio (AEC cancels Cortex's own voice) -> enables barge-in
-      };
-      vmute=vctx.createGain(); vmute.gain.value=0;
-      vsrc.connect(vproc); vproc.connect(vmute); vmute.connect(vctx.destination);
-      setTimeout(goReady,250);
-    };
-    vws.onmessage=ev=>{
+    const onmsg=ev=>{
       let d; try{ d=JSON.parse(ev.data);}catch(e){return;}
       if(d.error){ toast('Voice: '+d.error); return; }
       if(botSpeaking){   // barge-in: talk over Cortex (>=3 words past AEC) and it stops + listens
@@ -3089,13 +3099,15 @@ async function toggleFree(mode, onTurn){
       if(freeThinking) return;
       if(voiceMode==='go' && goPaused) return;   // On-the-go paused: ignore speech while you think
       if(d.text){
-        if(d.final){ freeUtt=(freeUtt?freeUtt+' ':'')+d.text; }
+        if(d.final){ freeUtt=(freeUtt?freeUtt+' ':'')+d.text; vFinal(); }
         freeLive = d.final ? freeUtt : ((freeUtt?freeUtt+' ':'')+d.text);   // show words live
         updateLivePanel();   // anchored transcript, auto-scrolls to the latest words
         if(voiceMode==='free') armTurn();   // Free auto-ends a turn on silence; On-the-go waits for your push
       }
     };
-    vws.onerror=()=>{ toast('Voice stream error'); };
+    // always send real audio (AEC cancels Cortex's own voice) -> enables barge-in
+    vStart(rate, onmsg, ()=>{ vGraph(); setTimeout(goReady,250); },
+           ()=>{ toast('The connection dropped. What you said so far is kept'); freeStop(); });
     setTimeout(goReady,1500);  // fallback if onopen is slow
   }catch(e){ freeOn=false; setVoiceButtons(); updateLivePanel(); toast('Mic blocked: '+(e.message||e)); }
 }
@@ -3111,6 +3123,7 @@ async function freeTurn(utterance){
   bargeInterrupted=false;
 }
 function freeStop(){
+  vEnd();
   freeOn=false; botSpeaking=false; freeThinking=false; freeLive=''; freeUtt=''; turnFn=null; clearTimeout(freeTimer);
   setVoiceButtons();
   const hint=document.getElementById('freehint'); if(hint) hint.classList.remove('on');

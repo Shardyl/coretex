@@ -971,6 +971,15 @@ def _cases():
              "_in(q, corpus)", 'it.get("source") == "owner"', 'st == "dismissed"', "pipeline._is_offer(q)",
              "_timeline(deal_id)")) and "_deal_lock" in inspect.getsource(_ns.observe)
          and _ns.REPLAN_MODEL_DEFAULT == "claude-opus-5")
+    def _voice_survives():
+        root = os.path.join(os.path.dirname(__file__), "..", "..")
+        web = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+        unit = open(os.path.join(root, "deploy", "cortex-api.service"), encoding="utf-8").read()
+        src = inspect.getsource(__import__("cortex.api", fromlist=["x"]).voice_stream)
+        return ("function vRetry()" in web and "w.onclose=" in web and "vFinal();" in web and "vEnd();" in web
+                and "ping_timeout=60" in src and "[voice] stream ended" in src and "--ws-ping-timeout 60" in unit)
+    case("a voice stream that drops reconnects and replays the audio since the last phrase; the server tolerates a stall",
+         "owner 18 Oct: 'detecting it ... then suddenly stops' (keepalive ping timeout)", _voice_survives)
     case("a sent email's history entry names what it carried, so a re-plan sees a quotation went out",
          "Merck #166, 18 Oct", lambda: "[attached:" in inspect.getsource(pipeline.record_send))
     case("a proposal step is never made from 'they asked for a proposal' alone; Quote needs an attached file",

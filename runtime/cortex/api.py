@@ -6064,12 +6064,15 @@ async def voice_stream(ws: WebSocket):
            "&endpointing=300"  # finalize words promptly; the cockpit ends the turn on a silence timer
            + "".join(f"&keyterm={k.replace(' ', '%20')}" for k in _STT_KEYTERMS))
     hdr = [("Authorization", f"Token {key}")]
+    import time as _t
+    stat = {"t0": _t.time(), "up": 0, "results": 0, "end": "?"}
     try:
-        try:
-            dg = await websockets.connect(url, additional_headers=hdr)
+        try:   # a brief stall must not kill the stream (18 Oct 2026: "keepalive ping timeout" on a patchy connection)
+            dg = await websockets.connect(url, additional_headers=hdr, ping_interval=20, ping_timeout=60)
         except TypeError:  # older websockets uses extra_headers
-            dg = await websockets.connect(url, extra_headers=hdr)
+            dg = await websockets.connect(url, extra_headers=hdr, ping_interval=20, ping_timeout=60)
     except Exception as e:  # noqa: BLE001
+        print(f"[voice] deepgram connect failed: {type(e).__name__}: {e}", flush=True)
         await ws.send_json({"error": f"deepgram connect failed: {e}"})
         await ws.close()
         return
@@ -6077,9 +6080,13 @@ async def voice_stream(ws: WebSocket):
     async def pump_up():
         try:
             while True:
-                await dg.send(await ws.receive_bytes())
-        except (WebSocketDisconnect, Exception):  # noqa: BLE001
-            pass
+                b = await ws.receive_bytes()
+                stat["up"] += len(b)
+                await dg.send(b)
+        except WebSocketDisconnect as e:
+            stat["end"] = stat["end"] if stat["end"] != "?" else f"client closed ({getattr(e, 'code', '')})"
+        except Exception as e:  # noqa: BLE001
+            stat["end"] = stat["end"] if stat["end"] != "?" else f"up: {type(e).__name__}: {str(e)[:120]}"
         finally:
             try:
                 await dg.send(json.dumps({"type": "CloseStream"}))
@@ -6098,13 +6105,17 @@ async def voice_stream(ws: WebSocket):
                     text = normalize_brand_names(alts[0].get("transcript", ""))
                     sf = bool(d.get("speech_final"))
                     if text or sf:
+                        stat["results"] += 1
                         await ws.send_json({"final": bool(d.get("is_final")), "speech_final": sf, "text": text})
-        except Exception:  # noqa: BLE001
-            pass
+            stat["end"] = stat["end"] if stat["end"] != "?" else "deepgram closed"
+        except Exception as e:  # noqa: BLE001
+            stat["end"] = stat["end"] if stat["end"] != "?" else f"down: {type(e).__name__}: {str(e)[:120]}"
 
     try:
         await asyncio.gather(pump_up(), pump_down())
     finally:
+        print(f"[voice] stream ended after {_t.time() - stat['t0']:.0f}s, {stat['up'] // 1024} KB up, "
+              f"{stat['results']} results: {stat['end']}", flush=True)
         try:
             await dg.close()
         except Exception:  # noqa: BLE001

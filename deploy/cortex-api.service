@@ -8,7 +8,7 @@ Type=simple
 User=cortex
 Group=cortex
 WorkingDirectory=/opt/coretex/runtime
-ExecStart=/opt/coretex/.venv/bin/uvicorn cortex.api:app --host 127.0.0.1 --port 8787
+ExecStart=/opt/coretex/.venv/bin/uvicorn cortex.api:app --host 127.0.0.1 --port 8787 --ws-ping-interval 20 --ws-ping-timeout 60
 Restart=on-failure
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
