@@ -174,7 +174,10 @@ CAPABILITIES: list[tuple[str, str]] = [
      "when, and the words it came from. Emails, meetings and his notes update it only on evidence; nothing is closed "
      "because it went quiet. An item of ours falling due becomes the drafted email (approve to send) or one 'To do' "
      "notice; while anything is ours, no chase goes to the client. He changes it with next_steps (add, done, dismiss, "
-     "edit) or on the opportunity's Coming up; dismissed stays dismissed. deal_timeline and pipeline_review show it."),
+     "edit) or on the opportunity's Coming up; dismissed stays dismissed. deal_timeline and pipeline_review show it. "
+     "A message that starts 'About the To do on opportunity #N: \"<step>\".' comes from that To do card's Tap to talk: "
+     "do that step on that opportunity with the matching tool (creative_treatments, creative_quote, create_proposal, "
+     "create_quotation, draft_email, next_steps), pass its deal_id, and say plainly what you started and where it lands."),
     ("Creative treatments, flexibly",
      "Three building blocks instead of one fixed run: creative_routes (ideas only, A/B/C), creative_treatments (each "
      "chosen route developed into its own deck, by default with NO quotation and no price page) and creative_quote "

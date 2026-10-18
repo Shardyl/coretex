@@ -5858,6 +5858,11 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
                         "Never send it unchanged again, and never say it was done.")
         out = _exec_skill_tool(name, inp, u=user)
         _log_tool(user, name, inp, out)
+        try:   # the work a To do card asked for has started: its card says so (nextsteps.started_from_tool)
+            from . import nextsteps as _nsx
+            _nsx.started_from_tool(name, inp, out)
+        except Exception:  # noqa: BLE001
+            pass
         if _qkey and isinstance(out, str) and re.match(r"\s*(Quotation NOT built|NOT issued|NOT RUN|unknown business)",
                                                        out, re.I):
             _refused[_qkey] = out

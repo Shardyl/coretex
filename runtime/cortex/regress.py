@@ -971,6 +971,15 @@ def _cases():
              "_in(q, corpus)", 'it.get("source") == "owner"', 'st == "dismissed"', "pipeline._is_offer(q)",
              "_timeline(deal_id)")) and "_deal_lock" in inspect.getsource(_ns.observe)
          and _ns.REPLAN_MODEL_DEFAULT == "claude-opus-5")
+    def _todo_talk():
+        root = os.path.join(os.path.dirname(__file__), "..", "..")
+        web = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
+        return ("function todoTalk(" in web and "About the To do on opportunity #" in web and "'To do'" in web
+                and 'category="todo"' in inspect.getsource(_ns._todo_notice)
+                and "_nsx.started_from_tool" in inspect.getsource(__import__("cortex.api", fromlist=["x"])._chat_prepare))
+    case("a To do card is labelled To do, and Tap to talk sends the step to Talk; a started job shows on the card",
+         "owner, 18 Oct", _todo_talk)
+
     def _voice_survives():
         root = os.path.join(os.path.dirname(__file__), "..", "..")
         web = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()

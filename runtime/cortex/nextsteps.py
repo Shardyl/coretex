@@ -446,9 +446,39 @@ def _todo_notice(it: dict) -> None:
     notifications.notify(
         f"To do: {it['what']}"[:150],
         f"{it['deal_title']}. {when}." + (f" {say}." if say else ""),
-        priority="normal", category="approval", company_id=it.get("company_id"),
+        priority="normal", category="todo", company_id=it.get("company_id"),
         target_type="deal", target_id=it["deal_id"], dedup_key=f"nextstep:{it['id']}")
     db.execute("update next_steps set notified_at=now() where id=%s", (it["id"],))
+
+
+# Talk tools that do an item's work, by the item's tool (owner, 18 Oct 2026: "tap to talk ... do the actual job")
+_TOOL_DOES = {"creative_treatments": "creative_treatments", "create_creative_proposal": "creative_treatments",
+              "creative_quote": "create_quotation", "create_quotation": "create_quotation",
+              "reissue_quotation": "create_quotation", "create_proposal": "create_proposal",
+              "issue_proforma": "issue_proforma"}
+
+
+def started_from_tool(name: str, inp: dict, out) -> None:
+    """A Talk tool has started an item's work: the item and its To do card say it is in progress, with the card. The
+    item still closes only on evidence (the work sent), through the re-plan. Never raises."""
+    try:
+        tool = _TOOL_DOES.get(name)
+        did = (inp or {}).get("deal_id")
+        if not tool or not str(did or "").isdigit() or not isinstance(out, str):
+            return
+        cards = re.findall(r"card #(\d{3,7})", out)
+        if not cards or re.match(r"\s*(NOT|Quotation NOT|unknown|no |There is no|Which)", out, re.I):
+            return
+        ensure_schema()
+        for it in db.query("select * from next_steps where deal_id=%s and status='open' and whose='us' and tool=%s",
+                           (int(did), tool)):
+            db.execute("update next_steps set card_id=%s, notified_at=coalesce(notified_at, now()) where id=%s",
+                       (int(cards[0]), it["id"]))
+            _log(it["id"], f"in progress: {name} started card #{cards[0]}")
+            db.execute("update notifications set body = %s || body where dedup_key=%s and state in ('unread','read','snoozed') "
+                       "and body not like 'In progress%%'", (f"In progress: card #{cards[0]}. ", f"nextstep:{it['id']}"))
+    except Exception as e:  # noqa: BLE001
+        print(f"[nextsteps] started_from_tool {name}: {type(e).__name__}: {e}", flush=True)
 
 
 def _draft_email(it: dict) -> bool:
