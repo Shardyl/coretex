@@ -3007,7 +3007,10 @@ def task_attach(task_id: int, body: TaskAttach, u: dict = Depends(current_user))
         raise HTTPException(status_code=400, detail="pass doc_id, or name + data")
     req = dict(t.get("request") or {})
     refs = [r for r in (req.get("attach_docs") or []) if int(r.get("id", 0)) != d["id"]]
-    refs.append(documents.card_ref(d))
+    try:
+        refs.append(documents.card_ref(d))
+    except ValueError as e:      # an internal record (the meeting transcript) is never attached
+        raise HTTPException(status_code=400, detail=str(e))
     req["attach_docs"] = refs
     store.update_task(task_id, request=req)
     engine.reconcile_attachments(task_id)   # draft wording follows reality ('attached' vs 'we will send')

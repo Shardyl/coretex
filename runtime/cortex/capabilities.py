@@ -169,6 +169,12 @@ CAPABILITIES: list[tuple[str, str]] = [
      "left) and which of us leads. It is re-read from every email, meeting (full transcript) and note, and the To line, "
      "copies and sender follow it. When he says who to address, copy or who leads ('Abraham leads, copy Balazs', 'Gino "
      "leads this'), file it with note_opportunity: it is pinned. deal_timeline and pipeline_review show it."),
+    ("Meeting notes to a client",
+     "After a Gemini-recorded meeting the post-meeting email carries 'Meeting notes, <client>, <date>.pdf': Gemini's "
+     "summary and next steps only, laid out by code, never the Details or the transcript. When he asks to send someone "
+     "the meeting notes, draft_email (or a correction on the card) with attach_documents ['meeting notes'] on that "
+     "opportunity: the summary is built if missing. The full record with the transcript is internal and cannot be "
+     "attached; read it with read_document."),
     ("Opportunity context: note_opportunity",
      "A fact about a specific deal (who decides, roles, dates, budget signals, preferences, what was agreed) is kept "
      "with note_opportunity(deal_id or search, note): it goes on the deal's timeline as a context entry and rides "

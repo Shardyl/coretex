@@ -60,6 +60,14 @@ CHECKS = [
                "and h->>'text' like '%%N' || n.id || ':%%')",
     },
     {
+        "key": "private_record_on_card",
+        "what": "An unsent email card carries an internal record (the meeting transcript) as an attachment",
+        "sql": "select t.id, t.status, d.filename from tasks t cross join lateral jsonb_array_elements("
+               "coalesce(t.request->'attach_docs', '[]'::jsonb)) a join company_documents d on d.id = (a->>'id')::bigint "
+               "where t.status in ('new','drafting','queued','awaiting_approval','awaiting_correction','scheduled') "
+               "and d.kind = 'meeting-notes'",
+    },
+    {
         "key": "owed_closed_without_proof",
         "what": "Owed work was closed with no proof recorded (the database guard should make this impossible)",
         "sql": "select id, title, status from reminders where owed and status in ('done','cancelled') and "

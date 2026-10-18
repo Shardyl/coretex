@@ -287,6 +287,11 @@ def save_data_url(company_id: int, slug: str, filename: str, data_url: str,
 # (owner, 30 Aug: everything else is project clutter and Cortex attaches what a draft needs itself).
 # our own standing documents: they belong to no client, so a deal's document scope never hides them
 CORE_KINDS = ("company-profile", "trade-licence", "vat-certificate", "capabilities-deck", "agency-deck")
+# INTERNAL RECORDS, NEVER ON A CARD (owner, 18 Oct 2026): a meeting's whole Gemini write-up (Details and the
+# transcript, kind meeting-notes) is read by Cortex, never sent. What a client gets is the summary PDF
+# (kind meeting-summary, meetnotes.summary_pdf). find() never offers these and card_ref() refuses them.
+PRIVATE_KINDS = ("meeting-notes",)
+_MEETING_ASK = re.compile(r"\b(meeting|call)\b.*\b(notes?|summary|minutes)\b|\bminutes\b", re.I)
 
 
 def retire_same_name(doc: dict) -> list:
@@ -410,6 +415,9 @@ def card_ref(doc: dict) -> dict:
     """The reference put on a card's attach_docs, carrying the Drive checksum PIN so the send can tell
     whether the canonical file changed after the owner approved it."""
     doc = _full(doc)
+    if (doc.get("kind") or "") in PRIVATE_KINDS:
+        raise ValueError(f"'{doc.get('filename')}' is the internal meeting record (it carries the transcript) and is "
+                         "never attached; attach the meeting notes summary instead")
     st = drive_state(doc) or {}
     return {"id": doc["id"], "filename": doc["filename"], "mime": doc["mime"], "size": doc["size"],
             **({"pin_md5": st["md5"]} if st.get("md5") else {})}
@@ -547,7 +555,13 @@ def find(company_id: int, query: str, scope: str = "", deal_id: int | None = Non
     card nearly went out with Property Finder's pricing attached (31 Aug 2026)."""
     ensure_schema()
     toks = [t for t in re.split(r"[^a-z0-9]+", (query or "").lower()) if len(t) > 2]
-    rows = listing(company_id)
+    if deal_id and _MEETING_ASK.search(query or ""):   # "attach the meeting notes": the summary, built if missing
+        try:
+            from . import meetnotes
+            meetnotes.ensure_summary_doc(deal_id=int(deal_id))
+        except Exception as e:  # noqa: BLE001
+            print(f"[documents] meeting summary for deal {deal_id}: {type(e).__name__}: {e}", flush=True)
+    rows = [r for r in listing(company_id) if r.get("kind") not in PRIVATE_KINDS]
     if not toks:
         return rows
     def score(r):

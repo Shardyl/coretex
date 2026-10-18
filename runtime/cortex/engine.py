@@ -757,6 +757,9 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         doc = documents.get(int(ref.get("id", 0)), company_id=task.get("company_id"))
         if not doc:
             raise RuntimeError(f"attached document #{ref.get('id')} not found — remove it from the card")
+        if (doc.get("kind") or "") in documents.PRIVATE_KINDS:   # the transcript record never leaves (18 Oct 2026)
+            raise RuntimeError(f"'{doc['filename']}' is the internal meeting record and is never sent; attach the "
+                               "meeting notes summary instead. Nothing was sent.")
         # APPROVAL PIN: Drive is the source of truth, so the canonical file can change between the
         # owner approving and this send. If it did, STOP - he must never send a document he did not
         # read (owner design, 31 Aug). The pin is taken when the document is put on the card.

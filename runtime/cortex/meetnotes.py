@@ -31,6 +31,7 @@ create table if not exists meeting_notes (
   created_at timestamptz not null default now()
 );
 alter table meeting_notes add column if not exists full_text text;   -- Gemini's whole write-up (17 Sep 2026)
+alter table meeting_notes add column if not exists summary_doc_id bigint;  -- the client-sendable summary PDF (18 Oct 2026)
 """
 
 
@@ -202,6 +203,8 @@ def _refresh_followup(row: dict, summary: str, why: str) -> int:
         brief = req.get("brief") or ""
         marker = "MEETING NOTES (distilled):\n"
         req["brief"] = (brief.split(marker)[0] if marker in brief else brief.rstrip() + "\n") + marker + summary[:3000]
+        if row.get("id"):   # fuller notes: the attached summary is rebuilt from them too
+            _attach_summary_to_request(req, deal_id=row.get("deal_id"), meeting_id=row["id"], rebuild=True)
         store.update_task(c["id"], request=req)
         if engine.refresh_from_notes(c["id"], why):
             n += 1
@@ -467,7 +470,238 @@ def _spawn_post_meeting_followup(event: dict, ext: list, company_id, deal_id, su
            "followup": "post-meeting"}
     if deal_id:
         req["deal_id"] = deal_id
+    _attach_summary_to_request(req, deal_id=deal_id, contact=contact)
     store.create_card(company_id, skill["id"], "email_reply", req, contact=contact, deal_id=deal_id)
+
+
+# ---------- THE MEETING SUMMARY A CLIENT CAN BE SENT (owner, 18 Oct 2026) ----------
+#
+# Clients ask for the meeting notes. Card 1301 (Heaven) retold the meeting inside the email instead. Gemini's own
+# doc has three parts: Quick notes (the summary and next steps), Full notes (Details, with internal asides such as
+# the AI models we use and per-video maths) and the Transcript. Owner: send the SUMMARY ONLY. It is cut from
+# Gemini's text by CODE (no model retells it, so nothing can be misquoted), laid out as a Sensa PDF, filed on the
+# deal and attached to the post-meeting email. The whole record (`_keep_full`, kind meeting-notes, transcript
+# included) stays internal: `documents.PRIVATE_KINDS` keeps it off every card.
+
+_QUICK_TAB = re.compile(r"^\W*quick notes\s*$", re.I)
+_SUMMARY_HEAD = re.compile(r"^summary\s*$", re.I)
+_SUMMARY_STOP = re.compile(
+    r"^\W*(?:(?:full notes|transcript|details)\s*$|meeting records\b|want to see more|you should review gemini"
+    r"|is the content of this email helpful|how is the quality)", re.I)
+_SUMMARY_JUNK = re.compile(
+    r"(take a short survey|^tip:|^please rate|^these notes have been sent|^open meeting notes"
+    r"|^the content was auto-generated|^may contain errors|^invited\b|^attachments\b)", re.I)
+_DATE_LINE = re.compile(r"^[A-Z][a-z]{2,8}\.? \d{1,2}, \d{4}$")
+_TIMESTAMP = re.compile(r"\s*\(\d{1,2}:\d{2}:\d{2}\)")
+
+
+def summary_lines(text: str, title: str = "") -> list:
+    """Gemini's summary and next steps, verbatim and in order: the Quick notes tab (or, in an email copy, the
+    Quick Notes section), else the Full notes' Summary and Next steps. Never Details, never the transcript."""
+    t = (text or "").replace("﻿", "").replace("\r", "")
+    t = re.sub(r"[ \t]{2}\n(?=\S)", " ", t)          # an email copy wraps long lines with a two-space break
+    lines = [ln.strip() for ln in t.split("\n")]
+    start = next((i for i, ln in enumerate(lines) if _QUICK_TAB.match(ln)), None)
+    if start is None:
+        start = next((i for i, ln in enumerate(lines) if _SUMMARY_HEAD.match(ln)), None)
+    if start is None:
+        return []
+    out = []
+    for ln in lines[start + 1:]:
+        if _SUMMARY_STOP.match(ln):
+            break
+        if not ln or not ln.strip("_-= ") or _SUMMARY_JUNK.search(ln) or _DATE_LINE.match(ln):
+            continue
+        if title and ln.lower() == title.strip().lower():
+            continue
+        if re.fullmatch(r"(?:[\w.+-]+@[\w.-]+\s*)+", ln):     # the attendee address line: we print names instead
+            continue
+        out.append(_TIMESTAMP.sub("", ln))
+    return out
+
+
+def _summary_html(company: dict, title: str, day: str, people: list, lines: list) -> str:
+    import html as _h
+    e = lambda s: _h.escape(str(s or ""))   # noqa: E731
+    data = (db.one("select data from company_profiles where company_id=%s", (company["id"],)) or {}).get("data") or {}
+    logo = ((data.get("brand") or {}).get("logo_dark_b64") or "")
+    if logo and not logo.startswith("data:"):
+        logo = "data:image/png;base64," + logo
+    body, in_list = [], False
+    for i, ln in enumerate(lines):
+        bullet = ln[:2] in ("* ", "• ", "- ") or ln.startswith("[")
+        if bullet:
+            item = ln.lstrip("*•- ").strip()
+            m = re.match(r"^\[([^\]]+)\]\s*([^:]{2,60}:)?\s*(.*)$", item)
+            li = (f"<b>{e(m.group(1))}</b>: " + (f"<b>{e(m.group(2))}</b> " if m.group(2) else "") + e(m.group(3))
+                  if m else e(item))
+            if not in_list:
+                body.append("<ul>")
+                in_list = True
+            body.append(f"<li>{li}</li>")
+            continue
+        if in_list:
+            body.append("</ul>")
+            in_list = False
+        nxt = lines[i + 1] if i + 1 < len(lines) else ""
+        if len(ln) <= 70 and not ln.endswith((".", ":", "?", "!")) and nxt:
+            body.append(f"<h2>{e(ln)}</h2>")
+        else:
+            body.append(f"<p>{e(ln)}</p>")
+    if in_list:
+        body.append("</ul>")
+    who = ", ".join(e(p) for p in people if p)
+    return f"""<!doctype html><html><head><meta charset="utf-8"><style>
+@page {{ size: A4; margin: 22mm 20mm 20mm; @bottom-right {{ content: counter(page) " / " counter(pages);
+  font: 9px Inter, sans-serif; color: #777; }} }}
+body {{ font: 11px/1.55 Inter, sans-serif; color: #111; }}
+.logo {{ background: #0A0A0A; padding: 12px 18px; display: inline-block; }}
+.logo img {{ height: 28px; display: block; }}
+.logo span {{ color: #fff; font-weight: 700; }}
+h1 {{ font: 800 24px/1.2 Poppins, Inter, sans-serif; margin: 26px 0 4px; }}
+.meta {{ color: #555; margin: 0 0 18px; }}
+h2 {{ font: 700 13px/1.3 Poppins, Inter, sans-serif; margin: 18px 0 6px; }}
+ul {{ margin: 4px 0 8px 16px; padding: 0; }} li {{ margin: 0 0 5px; }}
+.foot {{ margin-top: 26px; padding-top: 8px; border-top: 1px solid #ddd; color: #777; font-size: 9px; }}
+</style></head><body>
+<div class="logo">{f'<img src="{logo}">' if logo else f'<span>{e(company.get("name"))}</span>'}</div>
+<h1>Meeting notes</h1>
+<div class="meta">{e(title)}<br>{e(day)}{f'<br>With {who}' if who else ''}</div>
+{''.join(body)}
+<div class="foot">Summary of the meeting notes taken with Google Gemini.</div>
+</body></html>"""
+
+
+def summary_pdf(meeting_id: int) -> dict | None:
+    """Build (or rebuild) the summary PDF for one stored meeting, file it on the deal and record it on the row.
+    Returns the library document, or None when the notes carry no summary to send."""
+    import hashlib
+    import os
+    import tempfile
+    from . import deck, documents, engine
+    ensure_schema()
+    row = db.one("select * from meeting_notes where id=%s", (int(meeting_id),))
+    if not row:
+        return None
+    text = row.get("full_text") or ""
+    if not text and _is_doc_id(row.get("file_id") or ""):
+        try:
+            text = _doc_text(row["file_id"], _tok())
+        except Exception:  # noqa: BLE001
+            text = ""
+    lines = summary_lines(text, row.get("title") or "")
+    if len(" ".join(lines)) < 120:
+        return None
+    deal_id = row.get("deal_id")
+    co = store.get_company(row["company_id"]) if row.get("company_id") else None
+    if not co and deal_id:
+        p = db.one("select company from crm_projects where id=%s", (int(deal_id),)) or {}
+        for slug in ("sensa", "skyvision", "filmspoke", "tabscanner", "snaprewards"):
+            if (p.get("company") or "").lower() in (slug, crm._org(slug).lower()):
+                co = store.get_company_by_slug(slug)
+                break
+    if not co:
+        return None
+    when = row.get("starts_at")
+    day = (when.astimezone(timezone(timedelta(hours=4))).strftime("%-d %B %Y") if when else "")
+    people = []
+    for em in (row.get("attendees") or []):
+        c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (em,)) or {}
+        people.append(((c.get("first_name") or "") + " " + (c.get("last_name") or "")).strip() or em)
+    html_doc = _summary_html(co, row.get("title") or "Meeting", day, people, lines)
+    with tempfile.TemporaryDirectory() as tmp:
+        out = deck.to_pdf(html_doc, os.path.join(tmp, "notes.pdf"))
+        data = open(out, "rb").read()
+    client = (engine._deal_client_name(int(deal_id)) if deal_id else "") or (row.get("title") or "Meeting")
+    short = (when.astimezone(timezone(timedelta(hours=4))).strftime("%-d %b %Y") if when else "undated")
+    fname = re.sub(r"[^\w ,.&()'-]", "", f"Meeting notes, {client}, {short}")[:110].strip() + ".pdf"
+    sha = hashlib.sha256(data).hexdigest()[:10]
+    if deal_id:
+        doc = engine._file_deal_document(co, int(deal_id), fname, "application/pdf", data, kind="meeting-summary",
+                                         source="Gemini meeting notes, summary only", ref=f"meetsummary:{row['id']}:{sha}")
+    else:
+        doc = documents.save(co["id"], co.get("slug") or "", fname, "application/pdf", data, kind="meeting-summary",
+                             uploaded_by="Gemini meeting notes, summary only", push=False)
+    if not doc:
+        return None
+    old = row.get("summary_doc_id")
+    if old and int(old) != int(doc["id"]):
+        try:
+            documents.supersede([int(old)], int(doc["id"]))
+        except Exception:  # noqa: BLE001
+            pass
+    db.execute("update meeting_notes set summary_doc_id=%s where id=%s", (doc["id"], row["id"]))
+    return doc
+
+
+def ensure_summary_doc(deal_id=None, contact: str = "", meeting_id=None) -> dict | None:
+    """The live summary PDF for a deal's newest meeting (or a contact's, or one meeting), built when missing."""
+    from . import documents
+    ensure_schema()
+    if meeting_id:
+        row = db.one("select id, summary_doc_id from meeting_notes where id=%s", (int(meeting_id),))
+    elif deal_id:
+        row = db.one("select id, summary_doc_id from meeting_notes where deal_id=%s "
+                     "order by starts_at desc nulls last, id desc limit 1", (int(deal_id),))
+    elif contact:
+        row = db.one("select id, summary_doc_id from meeting_notes where attendees ? %s "
+                     "order by starts_at desc nulls last, id desc limit 1", ((contact or "").lower(),))
+    else:
+        row = None
+    if not row:
+        return None
+    if row.get("summary_doc_id"):
+        d = db.one("select * from company_documents where id=%s and superseded_by is null", (row["summary_doc_id"],))
+        if d:
+            return d
+    return summary_pdf(row["id"])
+
+
+def _attach_summary_to_request(req: dict, deal_id=None, contact: str = "", meeting_id=None,
+                               rebuild: bool = False) -> dict | None:
+    """Put the summary PDF on an email request (replacing an earlier summary) and say so in the brief, above the
+    notes marker so a refresh of the notes keeps it. Never fails the card."""
+    try:
+        from . import documents
+        doc = (summary_pdf(int(meeting_id)) if (rebuild and meeting_id)
+               else ensure_summary_doc(deal_id=deal_id, contact=contact, meeting_id=meeting_id))
+        if not doc:
+            return None
+        refs = [r for r in (req.get("attach_docs") or [])
+                if not str(r.get("filename") or "").startswith("Meeting notes,")]
+        refs.append(documents.card_ref(doc))
+        req["attach_docs"] = refs
+        line = f"ATTACHED: {doc['filename']} (the meeting notes, summary only).\n"
+        brief = req.get("brief") or ""
+        if "ATTACHED: Meeting notes," in brief:
+            brief = re.sub(r"ATTACHED: Meeting notes,[^\n]*\n", line, brief)
+        else:
+            marker = "MEETING NOTES (distilled):\n"
+            brief = brief.replace(marker, line + marker, 1) if marker in brief else brief.rstrip() + "\n" + line
+        req["brief"] = brief
+        return doc
+    except Exception as e:  # noqa: BLE001
+        print(f"[meetnotes] summary not attached: {type(e).__name__}: {e}", flush=True)
+        return None
+
+
+def attach_summary(task_id: int) -> dict | None:
+    """Attach the meeting summary to an existing email card and reconcile its wording (card 1301)."""
+    from . import engine
+    t = store.get_task(int(task_id))
+    if not t:
+        return None
+    req = dict(t.get("request") or {})
+    doc = _attach_summary_to_request(req, deal_id=t.get("deal_id") or req.get("deal_id"),
+                                     contact=((req.get("inquiry") or {}).get("email") or ""))
+    if not doc:
+        return None
+    store.update_task(int(task_id), request=req)
+    try:
+        engine.reconcile_attachments(int(task_id))
+    except Exception as e:  # noqa: BLE001
+        print(f"[meetnotes] reconcile {task_id}: {type(e).__name__}: {e}", flush=True)
+    return doc
 
 
 def latest_for_contact(company_id: int, email: str) -> dict | None:

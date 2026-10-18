@@ -913,6 +913,43 @@ def _cases():
     case("a post-meeting email reads the full meeting, not the brief", "Heaven card 1297, 17 Oct",
          lambda: "meeting_full" in inspect.getsource(engine._draft_context_for_reply))
 
+    # --- meeting notes to a client: the summary only (owner, 18 Oct, Heaven card 1301)
+    from . import meetnotes as _mn, documents as _docs
+    _TABBED = ("﻿✍️ Quick notes\nPlease rate the new Quick notes tab by taking a short survey.\nSensa and Heaven\n\n"
+               "Oct 16, 2026\nabraham@heavenproperties.com balazs@heavenproperties.com\n\n"
+               "Company introductions and AI production capabilities reviewed.\n\nPricing and service packages\n"
+               "* Packages include 30 second primary videos.\n\nNext steps\n"
+               "* [Abraham Kovacs] Provide Hungarian Data: Send the voice samples.\n\n"
+               "Want to see more? View the full notes\n📝 Full notes\nSummary\nLonger summary.\nDetails\n"
+               "Pricing: they utilize expensive top models like Kling 3 (00:32:42).\n📖 Transcript\n00:00:01\n"
+               "Balazs: Thank you very much.")
+    _EMAIL = ("Notes from “Call”\nThese notes have been sent to invited guests in your organization.\n"
+              "Quick Notes\nProject Parameters and Budget\nThe estimated project budget is 80,000 to 100,000 AED to  \n"
+              "cover 2 influencers.\nSuggested next steps\n[Shahnaz] Send Options: Compile and email a list.\n"
+              "Meeting records Document Notes by Gemini\nIs the content of this email helpful?")
+
+    def _summary_only():
+        a = " ".join(_mn.summary_lines(_TABBED, "Sensa and Heaven"))
+        b = _mn.summary_lines(_EMAIL)
+        return ("Provide Hungarian Data" in a and "30 second primary videos" in a and "Kling" not in a
+                and "Thank you very much" not in a and "survey" not in a and "@" not in a and "Sensa and Heaven" not in a
+                and "to cover 2 influencers." in " ".join(b) and "Is the content" not in " ".join(b))
+    case("meeting notes for a client are Gemini's summary and next steps, never Details or the transcript",
+         "Heaven card 1301, 18 Oct", _summary_only)
+
+    def _private_refused():
+        try:
+            _docs.card_ref({"id": 0, "kind": "meeting-notes", "filename": "x.txt", "path": "/x", "drive_id": None})
+            return False
+        except ValueError:
+            return True
+    case("the internal meeting record (with the transcript) can never go on a card or be sent", "18 Oct",
+         lambda: _private_refused() and "PRIVATE_KINDS" in inspect.getsource(_docs.find)
+         and "PRIVATE_KINDS" in inspect.getsource(engine._send_email_reply))
+    case("a post-meeting email carries the summary PDF, refreshed when fuller notes arrive", "Heaven card 1301, 18 Oct",
+         lambda: "_attach_summary_to_request" in inspect.getsource(_mn._spawn_post_meeting_followup)
+         and "rebuild=True" in inspect.getsource(_mn._refresh_followup))
+
     # --- the SaaS page builders (Heaven retainer deck, owner 17 Oct)
     def _saas_pages():
         d = deck._Deck(_co("sensa"), "Test", "#2BB3E8", "", "")
