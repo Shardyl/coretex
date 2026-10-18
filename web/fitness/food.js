@@ -895,7 +895,6 @@ function weekRecap(m,wk){
   if(new Date(today+'T12:00:00').getDay()!==0)return null;
   const i=wk.findIndex(w=>w.date===today);if(i<0)return null;
   if(!weighIns().some(w=>w.date===today))return null;
-  try{if(localStorage.getItem('fitness_recap_seen')===today)return null;}catch(e){}
   const w=wk[i], next=wk[i+1]||null;if(w.avg==null)return null;
   const diff=Math.round((w.avg-w.target)*10)/10;
   const v=diff<=-0.3?{t:'Smashed it',c:RAG.g}:diff<=0?{t:'Done it',c:RAG.g}:diff<=0.3?{t:'Just short',c:RAG.a}:{t:'Missed it',c:RAG.r};
@@ -903,17 +902,14 @@ function weekRecap(m,wk){
   for(let k=1;k<=7;k++){const d=shiftDay(today,-k),e=entriesFor(d),b=fullDayBurn(d);if(e.length&&b!=null){def+=b-totals(e).kcal;n++;}}
   return {w,next,diff,v,def:n?Math.round(def):null,perDay:n?Math.round(def/n):null,n};
 }
-window.foodRecapSeen=function(ev){if(ev)ev.stopPropagation();try{localStorage.setItem('fitness_recap_seen',localDay(new Date()));}catch(e){}renderMission();};
-function recapCard(r){
-  const dTxt=r.diff===0?'right on target':(r.diff<0?r1(-r.diff)+' kg under':r1(r.diff)+' kg over');
-  return `<div onclick="event.stopPropagation()" style="margin-bottom:7px;padding:9px 11px;border-radius:8px;border:1px solid ${r.v.c};position:relative">
-    <button onclick="foodRecapSeen(event)" aria-label="Dismiss" style="position:absolute;top:4px;right:6px;background:none;border:0;font-size:18px;line-height:1;color:var(--ink3);cursor:pointer">&times;</button>
-    <div style="font-size:10px;font-weight:800;letter-spacing:0.12em;color:var(--ink3)">WEEK ENDING ${esc(fmtDate(r.w.date)).toUpperCase()}</div>
-    <div style="font-size:22px;font-weight:900;color:${r.v.c};line-height:1.15">${r.v.t}</div>
-    <div style="font-size:12px;color:var(--ink2);margin-top:3px">Week average <b>${r.w.avg} kg</b> vs target ${r.w.target} kg: <span style="color:${r.v.c};font-weight:800">${dTxt}</span></div>
-    ${r.def!=null?`<div style="font-size:12px;color:var(--ink2);margin-top:2px">Deficit, 7 days to this weigh-in: <b style="color:${ragDeficit(r.perDay)}">${fmtN(r.def)} kcal</b> (${fmtN(r.perDay)} a day${r.n<7?', '+r.n+' days logged':''})</div>`:''}
-    ${r.next?`<div style="margin-top:6px;padding-top:6px;border-top:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:11px;font-weight:800;letter-spacing:0.08em;color:var(--ink3)">NEXT WEEK</span><span style="font-size:18px;font-weight:900;color:var(--teal)">${r.next.target} kg <span style="font-size:11px;font-weight:700;color:var(--ink3)">by Sun ${fmtDate(r.next.date)}</span></span></div>`:''}
-  </div>`;
+function recapLines(r){
+  const dTxt=r.diff===0?'on target':(r.diff<0?r1(-r.diff)+' under':r1(r.diff)+' over');
+  return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:7px;padding-top:6px;border-top:0.5px solid var(--border)">
+      <span style="font-size:15px;font-weight:900;font-style:italic;letter-spacing:0.06em;text-transform:uppercase;color:${r.v.c}">${r.v.t}</span>
+      <span style="font-size:11px;color:var(--ink2);text-align:right">week avg <b>${r.w.avg}</b> vs ${r.w.target} &middot; <b style="color:${r.v.c}">${dTxt}</b></span></div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:3px;font-size:11px">
+      <span style="color:var(--ink2)">${r.def!=null?`7-day deficit <b style="color:${ragDeficit(r.perDay)}">${fmtN(r.def)} kcal</b>${r.n<7?' ('+r.n+' days)':''}`:''}</span>
+      ${r.next?`<span>Next <b style="color:var(--teal);font-size:13px">${r.next.target} kg</b> by Sun ${fmtDate(r.next.date)}</span>`:''}</div>`;
 }
 function ragPace(s){if(s.cur==null||s.paceKg==null)return 'inherit';const d=Math.round((r1(s.cur)-r1(s.paceKg))*10)/10;return d<=0?RAG.g:d<=0.2?RAG.a:RAG.r;}
 window.renderMission=function(){
@@ -928,7 +924,6 @@ window.renderMission=function(){
   const cur1=s.cur!=null?r1(s.cur):null, pep=missionPep(s), wkTxt=cw&&cur1!=null?(cur1<=cw.target?'on target':r1(cur1-cw.target)+' kg to go'):'';
   const msg=pep||(s.eta?`On your current trend: ${r1(m.goalKg)} kg around ${fmtDate(s.eta)}.`:'');
   el.innerHTML=`<div onclick="foodEditMission()" style="cursor:pointer;margin:6px 0 2px;padding:8px 11px;border-radius:var(--radius);background:var(--bg,transparent);border:0.5px solid var(--border)">
-    ${recap?recapCard(recap):''}
     <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px">
       <div>
         <div style="display:flex;align-items:center;gap:5px;font-size:10px;font-weight:800;letter-spacing:0.12em;color:var(--teal)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>MISSION</div>
@@ -950,10 +945,11 @@ window.renderMission=function(){
       ${wk.map(w=>`<div title="Sun ${fmtDate(w.date)}: target ${w.target} kg${w.avg!=null&&w.state!=='future'?', 7-day avg '+w.avg+' kg':''}" style="flex:1;height:8px;border-radius:4px;background:${w.state==='hit'?'var(--teal)':w.state==='close'?'var(--amber)':w.state==='miss'?'var(--red)':'var(--border)'};${w.current?'outline:1.5px solid var(--ink);outline-offset:1px':''}"></div>`).join('')}
       <div style="font-size:10px;color:var(--ink3);white-space:nowrap;margin-left:4px">${s.left>0?s.left+'d left':'deadline'}</div>
     </div>
-    ${cw?`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;font-size:11px">
+    ${recap?recapLines(recap):''}
+    ${!recap&&cw?`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;font-size:11px">
       <span>This week <b>${cw.target} kg</b> by Sun ${fmtDate(cw.date)}</span>
       <span style="font-weight:800;color:${cur1!=null&&cur1<=cw.target?'var(--teal)':'var(--amber)'}">${wkTxt}</span></div>`:''}
-    ${msg?`<div style="margin-top:4px;font-size:11px;font-weight:700;color:var(--teal)">${esc(msg)}</div>`:''}
+    ${!recap&&msg?`<div style="margin-top:4px;font-size:11px;font-weight:700;color:var(--teal)">${esc(msg)}</div>`:''}
   </div>`;
 };
 window.foodEditMission=function(){
