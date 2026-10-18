@@ -261,6 +261,7 @@ RULES, in order of importance:
      quotation, treatments or concepts, a pilot, a deck, an edit).
    - THEIRS: something THEY said they will do or must do before we can move (send data, confirm a cast size, return a
      signed quotation, give feedback by a date). Put our follow-on, if any, in "then".
+   - NEVER: a follow-up or chase about something we ALREADY sent (questions, a proposal): the chase clock does that.
    - NEVER: an OFFER ("happy to", "if needed", "if you would like", "we could"), politeness, internal tasks (a team
      brainstorm, internal review), work that only happens after they sign while the deal is still being sold
      ("finalize all visual assets", "begin production"), or a step that is already DONE in this material.
@@ -513,6 +514,16 @@ kind: "work" whenever it needs real work first (a proposal, quotation, treatment
 edit, a shoot); "email" only when the whole step is an email we can write now. Plain words in "what"."""
 
 
+def dismiss_record(deal_id: int, title: str, why: str) -> None:
+    """A dropped owed item recorded as DISMISSED (never shown, never raised), so a re-mention is matched and ignored."""
+    what = re.sub(r"^(Commitment owed to \S+:|Meeting commitment:|Next step on [^:]+:|Client deadline \S+:)\s*", "",
+                  title or "").split(" (deal ")[0].strip()[:300]
+    if what:
+        db.execute("insert into next_steps (deal_id, what, whose, kind, status, source, quote, closed_at, closed_by, "
+                   "closed_why) values (%s,%s,'us','work','dismissed','migration',%s,now(),'migration',%s)",
+                   (int(deal_id), what, (title or "")[:600], (why or "")[:300]))
+
+
 def migrate(apply: bool = False, deal_ids: list | None = None) -> list[dict]:
     """Move every open owed reminder (Cortex-created) into the next-steps list, deal by deal. Dry run by default."""
     from . import obligations, pipeline, provider, worker
@@ -561,6 +572,10 @@ def migrate(apply: bool = False, deal_ids: list | None = None) -> list[dict]:
                 quote="from reminders " + ", ".join(f"R{str(x).lstrip('R')}" for x in it.get("from") or []))
             if _new and due and due < _now():      # moved, not new: an overdue item shows as overdue, no burst of drafts
                 db.execute("update next_steps set notified_at=now() where id=%s", (_new["id"],))
+        for x in rep["drop"]:         # kept as DISMISSED, so a later mention never brings it back
+            rr = next((r for r in rs if r["id"] == num(x.get("id"))), None)
+            if rr:
+                dismiss_record(did, rr["title"], f"moved: {x.get('why') or 'dropped'}")
         for r in rs:
             obligations.close(r["id"], "cancelled", obligations.evidence("rule", ref=f"next-steps list, deal {did}"),
                               "moved to the opportunity's next-steps list (18 Oct 2026)")
