@@ -139,7 +139,8 @@ def _open_items(deal_id: int) -> dict:
     from . import obligations
     obligations.ensure_guard()
     did = str(int(deal_id))
-    rems = db.query("select id, title, due_at, status, created_by, last_notification_id, deliver_by, owed from reminders "
+    rems = db.query("select id, title, due_at, status, created_by, last_notification_id, deliver_by, owed, suspect, "
+                    "owner_kept_at from reminders "
                     "where target_type='deal' and target_id=%s and status in ('pending','snoozed','fired') and "
                     "coalesce(created_by,'') like 'cortex%%' and coalesce(created_by,'') <> 'cortex-touch' and "
                     "recurrence='none' order by id", (did,))
@@ -372,6 +373,22 @@ def _client_said_no(deal: dict) -> bool:
     return bool(ins) and bool(_NO_RX.search(str(ins[-1].get("text") or "")))
 
 
+def _awaiting_owner(r: dict, deal: dict) -> bool:
+    """A FLAG WAITS FOR HIS ANSWER (18 Oct 2026). Owed work already flagged 'may be done' is his to confirm; the judge
+    re-flagged the same Heaven items (R439, R440, R461) on every pass, eight times in two days, and the morning
+    health check counted each re-flag as a repair. And once he answers 'still owed' it is not put to the judge again
+    until something new happens on the deal (an email, a meeting, a note)."""
+    if r.get("suspect"):
+        return True
+    kept = r.get("owner_kept_at")
+    if not kept:
+        return False
+    newest = max((str(e.get("ts") or "") for e in (deal.get("history") or [])
+                  if e.get("event") in ("email_in", "email_out", "email_out_manual", "whatsapp_in", "meeting", "context")),
+                 default="")
+    return newest <= kept.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def reconcile(deal_id: int, why: str = "", judge: bool = True) -> list[str]:
     """One pass over everything open on the opportunity (see the module note)."""
     deal = db.one("select id, title, stage, company, owner, history from crm_projects where id=%s", (int(deal_id),))
@@ -379,6 +396,7 @@ def reconcile(deal_id: int, why: str = "", judge: bool = True) -> list[str]:
         return []
     done = _rules(deal, _open_items(deal_id))
     items = _open_items(deal_id)
+    items["reminders"] = [r for r in items["reminders"] if not (r.get("owed") and _awaiting_owner(r, deal))]
     if judge and (items["reminders"] or items["notices"] or items["cards"]):
         out = _judge(deal, items)
         if out:

@@ -86,6 +86,7 @@ def ensure_guard(force: bool = False) -> None:
         c.execute("alter table reminders add column if not exists closed_evidence jsonb")
         c.execute("alter table reminders add column if not exists closed_why text")
         c.execute("alter table reminders add column if not exists suspect jsonb")
+        c.execute("alter table reminders add column if not exists owner_kept_at timestamptz")   # "still owed" (18 Oct)
         c.execute(f"""
 create or replace function reminders_owed_mark() returns trigger language plpgsql as $f$
 begin

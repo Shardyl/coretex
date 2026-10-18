@@ -20,6 +20,16 @@ from datetime import datetime, timezone
 
 from . import db
 
+_MIGRATE = """
+create table if not exists health_log (
+  day date not null,
+  key text not null,
+  found int not null default 0,
+  fixed int not null default 0,
+  sample jsonb,
+  primary key (day, key)
+)"""
+
 OPEN = "('new','drafting','queued','awaiting_approval','awaiting_correction')"
 OPEN_OR_SCHEDULED = "('new','drafting','queued','awaiting_approval','awaiting_correction','scheduled')"
 NO_CHASE = "('Lost','Completed')"          # Dormant deliberately absent: dormant deals get soft revivals
@@ -133,6 +143,10 @@ CHECKS = [
     {
         "key": "opportunity_without_contact",
         "what": "An open opportunity has no designated contact (no email and no phone)",
+        "owner": {"deal": "id",
+                  "title": "{title}: no contact",
+                  "body": "This opportunity has no email or phone, so Cortex cannot email or chase anyone on it. "
+                          "Open it and add the contact, or close it if it is not a live job."},
         "sql": "select id, title, stage from crm_projects where stage in ('Opportunity','Quote') and "
                "coalesce(contact_email,'') = '' and not exists (select 1 from jsonb_array_elements(coalesce(contacts,"
                "'[]'::jsonb)) c where coalesce(c->>'email','') <> '' or coalesce(c->>'phone','') <> '')",
@@ -146,6 +160,7 @@ CHECKS = [
                "target_type='deal' and category <> 'digest' and target_id ~ '^[0-9]+$'",
         "fix": "flow.reconcile_rows",
         "judged": True,
+        "sweep": True,
     },
     {
         "key": "duplicate_obligations",
@@ -155,6 +170,18 @@ CHECKS = [
                "created_by <> 'cortex-touch' group by 1 having count(*) > 1",
         "fix": "obligations.merge_twins",
         "judged": True,
+        "sweep": True,
+    },
+    {
+        "key": "owed_waiting_for_owner",
+        "what": "Owed work Cortex thinks may be done, waiting for the owner to confirm",
+        "sql": "select r.target_id::bigint deal_id, p.title, count(*) n, string_agg(r.title, ' | ' order by r.id) items "
+               "from reminders r join crm_projects p on r.target_type='deal' and p.id::text=r.target_id "
+               "where r.suspect is not null and r.status not in ('done','cancelled') group by 1, 2",
+        "owner": {"deal": "deal_id",
+                  "title": "{title}: {n} owed item(s) may already be done",
+                  "body": "Cortex thinks these may be done or no longer needed: {items}. Nothing has been closed. "
+                          "Open the opportunity and tap Done or Still owed on each."},
     },
     {
         "key": "quote_deal_off_closing_rhythm",
@@ -184,6 +211,9 @@ CHECKS = [
     {
         "key": "same_contact_two_sales_deals_sister_brands",
         "what": "One contact has open sales deals under two sister brands (Sensa / Sky Vision / FilmSpoke)",
+        "owner": {"title": "{who}: open under two brands",
+                  "body": "{who} has open opportunities {deals} under {brands}. If it is one job, close one of them; "
+                          "if they are two jobs, nothing to do."},
         "sql": "select lower(contact_email) who, array_agg(id) deals, array_agg(company) brands from crm_projects "
                "where stage in ('Opportunity','Quote') and coalesce(contact_email,'')<>'' and company in "
                "('Sensa','Sky Vision','FilmSpoke') group by 1 having count(distinct company) > 1",
@@ -232,6 +262,10 @@ CHECKS = [
     {
         "key": "stalled_sales_deal",
         "what": "An open sales deal on auto with no follow-up date, no open card, and our last email over 14 days ago",
+        "owner": {"deal": "id",
+                  "title": "{title}: nothing planned",
+                  "body": "No chase is set and our last email was over two weeks ago. Open it and set the next chase, "
+                          "or move it to Dormant or Lost."},
         "sql": f"select p.id, p.title from crm_projects p where p.automation='auto' and p.next_followup is null "
                f"and p.stage in ('Opportunity','Quote') and not exists (select 1 from tasks t where t.deal_id=p.id "
                f"and t.status in {OPEN}) and (select max(e->>'ts') from jsonb_array_elements(p.history) e where "
@@ -241,6 +275,10 @@ CHECKS = [
     {
         "key": "opportunity_from_stale_enquiry",
         "what": "An open opportunity opened in the last 14 days from an enquiry over 30 days old",
+        "owner": {"deal": "id",
+                  "title": "{title}: opened from an old enquiry",
+                  "body": "This opportunity was opened recently, but the person first wrote to us over a month ago. "
+                          "If it is a live job, nothing to do (dismiss this). If it was opened by mistake, close it."},
         "sql": "select p.id, p.title from crm_projects p where p.created_at > now()-interval '14 days' and "
                "p.stage not in ('Lost','Completed','Dormant') and coalesce(p.contact_email,'')<>'' and (select "
                "min(h->>'ts') from crm_master m, jsonb_array_elements(m.history) h where lower(m.email)="
@@ -296,25 +334,93 @@ def run(fix: bool = False) -> dict:
                 f["fix_error"] = f"{type(e).__name__}: {str(e)[:200]}"
         out["findings"][c["key"]] = f
     db.setting_set("invariants:last", out)
-    left = {k: v for k, v in out["findings"].items() if v.get("error") or v.get("count", 0) > v.get("fixed", 0)}
-    fixed = {k: v for k, v in out["findings"].items() if v.get("fixed")}
-    if left or fixed:
+    if fix:            # the nightly run: log it, and tell HIM only what he can act on (owner, 18 Oct 2026)
+        _log(out)
         try:
-            from . import notifications
-            body = []
-            if fixed:
-                body.append("Fixed automatically: " + "; ".join(f"{v['what']} ({v['fixed']})" for v in fixed.values()))
-            if left:
-                body.append("Needs a look: " + "; ".join(
-                    f"{v['what']} ({v.get('count', 0) - v.get('fixed', 0) if not v.get('error') else 'check failed'})"
-                    for v in left.values()))
-            notifications.notify(
-                f"Health check: {len(left)} to look at" if left else f"Health check: {sum(v['fixed'] for v in fixed.values())} fixed",
-                "\n".join(body), priority="normal" if not left else "high", category="system",
-                dedup_key=f"invariants:{out['checked_at'][:10]}")
-        except Exception:  # noqa: BLE001
-            pass
+            _owner_notices(out)
+        except Exception as e:  # noqa: BLE001
+            print(f"[invariants] owner notices: {type(e).__name__}: {e}", flush=True)
     return out
+
+
+# WHO SEES WHAT (owner, 18 Oct 2026: "I can't really understand from the information it's giving me what is going
+# on. Is there any real point showing it if I can't do anything based on it?"). The single "Health check: 4 to look
+# at" card listed every finding in our own words. Now:
+#  - a check with an `owner` block raises ONE plain notice PER ROW (per deal), saying what is wrong and what to do,
+#    linked to the opportunity; it clears itself when the row stops appearing;
+#  - everything else goes to `health_log` only (no notice): repairs are ours, not his;
+#  - REPEATS ARE ROOT CAUSES: `repeats()` lists any fault that showed up on 3+ of the last 7 days. That list is read at
+#    the start of every Cortex session and fixed at the source (`python -m cortex.invariants repeats`).
+
+def _fault(c: dict, f: dict) -> int:
+    """How much of a finding is a FAULT: a sweep's real changes, else every row found."""
+    if f.get("error"):
+        return 1
+    return int(f.get("fixed") or 0) if c.get("sweep") else int(f.get("count") or 0)
+
+
+def _log(out: dict) -> None:
+    from psycopg.types.json import Json
+    with db.connect() as c:
+        c.execute(_MIGRATE)
+    day = out["checked_at"][:10]
+    for c in CHECKS:
+        f = out["findings"].get(c["key"])
+        if not f:
+            continue
+        db.execute("insert into health_log (day, key, found, fixed, sample) values (%s,%s,%s,%s,%s) on conflict "
+                   "(day, key) do update set found=excluded.found, fixed=excluded.fixed, sample=excluded.sample",
+                   (day, c["key"], _fault(c, f), int(f.get("fixed") or 0),
+                    Json({"what": c["what"], "rows": (f.get("rows") or [])[:5], "error": f.get("error")})))
+
+
+class _Blank(dict):
+    def __missing__(self, k):
+        return ""
+
+
+def owner_lines(c: dict, rows: list) -> list:
+    """The plain notices a check raises: [(dedup_key, title, body, deal_id)]."""
+    o = c.get("owner") or {}
+    out = []
+    for r in rows or []:
+        vals = _Blank({k: ("" if v is None else str(v)) for k, v in r.items()})
+        deal = vals.get(o.get("deal") or "") or None
+        ident = deal or vals.get("who") or vals.get("id") or ""
+        out.append((f"health:{c['key']}:{ident}", o["title"].format_map(vals)[:150],
+                    o["body"].format_map(vals)[:600], int(deal) if str(deal or "").isdigit() else None))
+    return out
+
+
+def _owner_notices(out: dict) -> None:
+    from . import notifications
+    live = set()
+    for c in CHECKS:
+        if not c.get("owner"):
+            continue
+        f = out["findings"].get(c["key"]) or {}
+        rows = f.get("rows") or []
+        if c.get("fix") and f.get("fixed"):
+            rows = db.query(c["sql"])          # what is LEFT after the repair is what he is told about
+        for key, title, body, deal in owner_lines(c, rows):
+            live.add(key)
+            notifications.notify(title, body, priority="normal", category="approval",
+                                 target_type="deal" if deal else None, target_id=deal, dedup_key=key)
+    # a notice whose problem has gone clears itself; the old one-card summaries go too
+    for n in db.query("select id, dedup_key from notifications where state in ('unread','read','snoozed') and "
+                      "(dedup_key like 'health:%%' or dedup_key like 'invariants:%%')"):
+        if n["dedup_key"] not in live:
+            db.execute("update notifications set state='dismissed' where id=%s", (n["id"],))
+
+
+def repeats(days: int = 7, min_days: int = 3) -> list:
+    """Faults that keep coming back: the root-cause list (read at the start of every Cortex session)."""
+    with db.connect() as c:
+        c.execute(_MIGRATE)
+    return db.query("select key, count(*) days, sum(found) total, max(day) last, "
+                    "(array_agg(sample order by day desc))[1] sample from health_log "
+                    "where day > current_date - %s and found > 0 group by key having count(*) >= %s "
+                    "order by count(*) desc, sum(found) desc", (int(days), int(min_days)))
 
 
 _last = 0.0
@@ -336,6 +442,15 @@ def maybe_run() -> None:
 
 
 if __name__ == "__main__":
+    if "repeats" in sys.argv:
+        rs = repeats()
+        for r in rs:
+            print(f"- {r['key']}: on {r['days']} of the last 7 days ({r['total']} in all, last {r['last']}): "
+                  f"{(r['sample'] or {}).get('what')}")
+            for row in ((r["sample"] or {}).get("rows") or [])[:3]:
+                print("    ", row)
+        print("no repeating faults" if not rs else f"{len(rs)} repeating fault(s): fix each at the source")
+        sys.exit(0)
     res = run(fix="--fix" in sys.argv)
     for k, v in res["findings"].items():
         print(f"- {k}: {v.get('count', 0)} found, {v.get('fixed', 0)} fixed {v.get('error') or ''}")

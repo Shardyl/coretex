@@ -946,6 +946,31 @@ def _cases():
     case("the internal meeting record (with the transcript) can never go on a card or be sent", "18 Oct",
          lambda: _private_refused() and "PRIVATE_KINDS" in inspect.getsource(_docs.find)
          and "PRIVATE_KINDS" in inspect.getsource(engine._send_email_reply))
+    # --- health check: his notices are actionable, repairs are a log, repeats are root causes (owner, 18 Oct)
+    from . import invariants as _inv, flow as _flow
+
+    def _health_owner():
+        c = next(x for x in _inv.CHECKS if x["key"] == "opportunity_without_contact")
+        lines = _inv.owner_lines(c, [{"id": "124", "title": "Matt Brooke real estate agent AI social content",
+                                      "stage": "Opportunity"}])
+        key, title, body, deal = lines[0]
+        sweeps = [x["key"] for x in _inv.CHECKS if x.get("sweep")]
+        return (deal == 124 and key == "health:opportunity_without_contact:124" and "no contact" in title
+                and "add the contact" in body and set(sweeps) == {"stale_inbox_items", "duplicate_obligations"}
+                and "notifications.notify(\n                f\"Health check" not in inspect.getsource(_inv.run))
+    case("the health check tells the owner only what he can act on, per opportunity, in plain words",
+         "health card 1214, 18 Oct", _health_owner)
+
+    def _flag_waits():
+        deal = {"history": [{"event": "email_in", "ts": "2026-10-17T10:00:00Z"}]}
+        from datetime import datetime as _dt, timezone as _tz
+        return (_flow._awaiting_owner({"suspect": {"why": "x"}}, deal)
+                and _flow._awaiting_owner({"owner_kept_at": _dt(2026, 10, 18, tzinfo=_tz.utc)}, deal)
+                and not _flow._awaiting_owner({"owner_kept_at": _dt(2026, 10, 16, tzinfo=_tz.utc)}, deal)
+                and not _flow._awaiting_owner({}, deal))
+    case("a 'may be done' flag waits for his answer; 'still owed' holds until something new happens",
+         "Heaven R439/R440 re-flagged 8 times, 18 Oct", _flag_waits)
+
     case("a post-meeting email carries the summary PDF, refreshed when fuller notes arrive", "Heaven card 1301, 18 Oct",
          lambda: "_attach_summary_to_request" in inspect.getsource(_mn._spawn_post_meeting_followup)
          and "rebuild=True" in inspect.getsource(_mn._refresh_followup))

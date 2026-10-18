@@ -276,6 +276,6 @@ def settle_flag(deal_id: int, rid: int, done: bool, by: str) -> dict:
         obligations.close(rid, "done", obligations.evidence("owner", who=by or "owner"), "confirmed done on review")
         pipeline.log_deal(int(deal_id), "commitment_done", f"{r['title'][:160]} (confirmed done by {by or 'owner'})")
     else:
-        db.execute("update reminders set suspect=null where id=%s", (int(rid),))
+        db.execute("update reminders set suspect=null, owner_kept_at=now() where id=%s", (int(rid),))
         pipeline.log_deal(int(deal_id), "note", f"Pipeline review: still owed, kept: {r['title'][:160]}")
     return {"ok": True, "summary": summary(deal_id)}
