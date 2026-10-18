@@ -3913,4 +3913,6 @@ shoot needs none), then 10% off the whole quotation.
   first-response replies from Ayresh ...") is now "NEW ENQUIRIES ARE ANSWERED BY RASHAD"; sales-first-response[2]
   dropped "never from Gino"; email-handling[4] "Gino states plainly" -> "State plainly". Envelope and no-draft policy
   recompiled. The profile's `google_access` mailbox notes (which Talk reads) no longer say "Cortex sends replies AS Gino".
-- LEFT FOR THE OWNER: sales-quotation[4] "Quotation authority: Gino Palmes prepares, approves and sends quotations".
+- QUOTATIONS TOO (owner, same day): sales-quotation[4] is now "QUOTATION AUTHORITY": Rashad prepares and approves every
+  Sensa quotation and they are drafted as him (backup `quote_authority_backup_2026_10_18`). Permissions unchanged: Gino
+  and Ayresh keep `users.can_approve` and approve on his behalf. No code ever gave Gino quotation weight.
