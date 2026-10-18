@@ -889,7 +889,7 @@ function missionWeeks(m){
 // on or under pace green, up to 0.2 kg over amber, more red. Both sides rounded to the 1 decimal he sees.
 // Sunday recap (owner, 18 Oct 2026): once Sunday's weigh-in is in, the week is over. Show how it went and the next
 // target straight away. Verdict uses the checkpoint bands (hit by 0.3+ = smashed, on/under = done, 0.3 over = just short).
-// Deficit = Mon to Sat (Sunday's eating has not happened yet), days with both food and watch data only.
+// Deficit = the 7 days up to this morning's weigh-in (last Sunday to Saturday, owner 18 Oct 2026), days with both food and watch data only.
 function weekRecap(m,wk){
   const today=localDay(new Date());
   if(new Date(today+'T12:00:00').getDay()!==0)return null;
@@ -900,7 +900,7 @@ function weekRecap(m,wk){
   const diff=Math.round((w.avg-w.target)*10)/10;
   const v=diff<=-0.3?{t:'Smashed it',c:RAG.g}:diff<=0?{t:'Done it',c:RAG.g}:diff<=0.3?{t:'Just short',c:RAG.a}:{t:'Missed it',c:RAG.r};
   let def=0,n=0;
-  for(let k=1;k<=6;k++){const d=shiftDay(today,-k),e=entriesFor(d),b=fullDayBurn(d);if(e.length&&b!=null){def+=b-totals(e).kcal;n++;}}
+  for(let k=1;k<=7;k++){const d=shiftDay(today,-k),e=entriesFor(d),b=fullDayBurn(d);if(e.length&&b!=null){def+=b-totals(e).kcal;n++;}}
   return {w,next,diff,v,def:n?Math.round(def):null,perDay:n?Math.round(def/n):null,n};
 }
 window.foodRecapSeen=function(ev){if(ev)ev.stopPropagation();try{localStorage.setItem('fitness_recap_seen',localDay(new Date()));}catch(e){}renderMission();};
@@ -911,7 +911,7 @@ function recapCard(r){
     <div style="font-size:10px;font-weight:800;letter-spacing:0.12em;color:var(--ink3)">WEEK ENDING ${esc(fmtDate(r.w.date)).toUpperCase()}</div>
     <div style="font-size:22px;font-weight:900;color:${r.v.c};line-height:1.15">${r.v.t}</div>
     <div style="font-size:12px;color:var(--ink2);margin-top:3px">Week average <b>${r.w.avg} kg</b> vs target ${r.w.target} kg: <span style="color:${r.v.c};font-weight:800">${dTxt}</span></div>
-    ${r.def!=null?`<div style="font-size:12px;color:var(--ink2);margin-top:2px">Deficit Mon to Sat: <b style="color:${ragDeficit(r.perDay)}">${fmtN(r.def)} kcal</b> (${fmtN(r.perDay)} a day${r.n<6?', '+r.n+' days logged':''})</div>`:''}
+    ${r.def!=null?`<div style="font-size:12px;color:var(--ink2);margin-top:2px">Deficit, 7 days to this weigh-in: <b style="color:${ragDeficit(r.perDay)}">${fmtN(r.def)} kcal</b> (${fmtN(r.perDay)} a day${r.n<7?', '+r.n+' days logged':''})</div>`:''}
     ${r.next?`<div style="margin-top:6px;padding-top:6px;border-top:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:11px;font-weight:800;letter-spacing:0.08em;color:var(--ink3)">NEXT WEEK</span><span style="font-size:18px;font-weight:900;color:var(--teal)">${r.next.target} kg <span style="font-size:11px;font-weight:700;color:var(--ink3)">by Sun ${fmtDate(r.next.date)}</span></span></div>`:''}
   </div>`;
 }
