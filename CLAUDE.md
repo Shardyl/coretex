@@ -3784,3 +3784,24 @@ shoot needs none), then 10% off the whole quotation.
   `Sensa - Quotation Template - content-retainer.docx` and `Sensa - Rate Card v2.4.xlsx`.
 - First use: Heaven Properties deal 150, SEN-2026-0048 (v5 is the live draft). The terms are a v1 and will
   move when the client comes back with scope.
+
+## Meeting notes to a client: the summary only (owner, 18 Oct 2026)
+- Clients ask for the meeting notes; card 1301 (Heaven) retold the meeting in the email body. Gemini's doc has three
+  parts: Quick notes (summary + next steps), Full notes (Details, with internal asides: the AI models we use, per-video
+  maths, misheard names) and the Transcript. Owner: attach the SUMMARY ONLY.
+- `meetnotes.summary_lines(text, title)` cuts the Quick notes tab (an email copy's "Quick Notes", else the Full notes'
+  Summary + Next steps) BY CODE, verbatim; never Details or the transcript. `summary_pdf(meeting_id)` lays it out as a
+  Sensa PDF (logo, title, Dubai date, attendee names, bullets, "[Name] Step:" in bold) via `deck.to_pdf`, files it on
+  the deal as kind `meeting-summary` ("Meeting notes - <client> - <date>.pdf", client Drive folder) and records
+  `meeting_notes.summary_doc_id` (a rebuild supersedes the old one). `ensure_summary_doc(deal|contact|meeting)`.
+- ATTACHED AUTOMATICALLY: `_spawn_post_meeting_followup` puts it on the post-meeting card (`attach_docs`, plus an
+  "ATTACHED: ..." fact line above the notes marker); `_refresh_followup` rebuilds it when fuller notes arrive.
+  `attach_summary(task_id)` adds it to an existing card and reconciles the wording.
+- ON REQUEST: `documents.find` with a deal and a query like "meeting notes / summary / minutes" builds the summary if
+  missing, so Talk `draft_email(attach_documents=['meeting notes'])`, `attach_document` and a card correction all work.
+- THE TRANSCRIPT NEVER LEAVES: `documents.PRIVATE_KINDS` = ("meeting-notes",), the full .txt record from `_keep_full`.
+  `find` never offers it, `card_ref` raises, the send loop refuses it, the cockpit attach returns 400; health check
+  `private_record_on_card` (report).
+- BEHAVIOUR IS A RULE: universal "MEETING NOTES ATTACHED" on sales-followup and email-handling (thank them, the two or
+  three next steps, notes attached; no retelling).
+- First use: card 1301, "Meeting notes - Heaven Global - 16 Oct 2026.pdf" (library 1071).
