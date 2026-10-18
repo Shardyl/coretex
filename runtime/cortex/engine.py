@@ -1424,6 +1424,9 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
             store.update_task(task["id"], status="awaiting_approval")
             return {"blocked": True, "error": "the creative proposal has not finished building yet"}
         store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"version": rq.get("version")})
+        if rq.get("set_id"):     # one of several treatments: one email for the set once everything is approved
+            from . import creative
+            return creative.approve_in_set(task, company, actor)
         if rq.get("quotation_number"):
             return _proposal_approved(task, skill, company, actor, rq["quotation_number"])
         store.update_task(task["id"], status="done", request={**rq, "approved": True})
@@ -8165,7 +8168,7 @@ def _proposal_name(customer: str, quotation_number: str | None, version: int, st
 
 
 def _file_proposal_pdf(co: dict, customer: str, name: str, path: str, deal_id, quotation_number: str | None,
-                       supersede: list | None = None) -> tuple[dict, str | None]:
+                       supersede: list | None = None, archive_prefix: str | None = None) -> tuple[dict, str | None]:
     """Library row (on the deal) + the client's Drive folder, earlier versions of this proposal into the
     folder's Archive and retired in the library. Returns (doc, client folder name or None)."""
     data = open(path, "rb").read()
@@ -8186,7 +8189,7 @@ def _file_proposal_pdf(co: dict, customer: str, name: str, path: str, deal_id, q
                            (_fid, f["name"], doc["id"]))
                 try:      # latest at the top, earlier versions of THIS client's proposal in Archive
                     safe = re.sub(r"[^A-Za-z0-9 -]", "", customer or "")[:60].strip()
-                    _drive.archive_superseded(f["id"], f"{safe} - Proposal", {name}, token=tok)
+                    _drive.archive_superseded(f["id"], archive_prefix or f"{safe} - Proposal", {name}, token=tok)
                 except Exception:  # noqa: BLE001
                     pass
                 filed = f["name"]
@@ -8429,6 +8432,9 @@ def _draft_proposal_email(task: dict, skill: dict, company: dict, actor: str, nu
     it open, with the reason on its face."""
     from . import documents
     req = dict(task.get("request") or {})
+    if req.get("set_id"):        # a treatment's quotation was approved: the SET's email, never one per treatment
+        from . import creative
+        return creative.set_email(req["set_id"], company, actor)
     did = task.get("deal_id") or req.get("deal_id")
     def keep(note: str) -> dict:
         # THE REASON GOES ON THE CARD (19 Sep 2026): card 775 was approved several times and looked unchanged

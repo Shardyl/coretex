@@ -214,7 +214,7 @@ _CREATING_TOOLS = {"create_task", "draft_email", "run_report", "schedule_report"
                    "create_creative_proposal", "reissue_quotation", "correct_task", "update_opportunity",
                    "note_opportunity", "update_contact", "save_document", "attach_document", "issue_proforma",
                    "quotation_signed", "agency_rates_deck", "update_proposal_pricing", "add_rule", "update_craft",
-                   "remember_preference", "remember_alias"}
+                   "remember_preference", "remember_alias", "creative_routes", "creative_treatments", "creative_quote"}
 # A tool result that names a card is proof something exists (16 Oct 2026 audit: the guard fired on 36 of 168 Talk
 # replies, nearly all false, because it only knew a fixed list of tools and read "in your Inbox" or "task #N" in a
 # reply that was only READING a card as a claim).

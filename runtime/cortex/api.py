@@ -3702,7 +3702,9 @@ SKILL_TOOLS = [
                     "deck or pitch for a film we would create; create_proposal is the words-led proposal. Needs the "
                     "opportunity (deal_id). Put Rashad's direction in `direction` WORD FOR WORD: constraints (one "
                     "location, budget, talent), exclusions and any figure he states. Runs 10 to 15 minutes in the "
-                    "background and lands as a card; replies on the card (correct_task) revise only what they touch.",
+                    "background and lands as a card; replies on the card (correct_task) revise only what they touch. "
+                    "For SEVERAL treatments, or a treatment WITHOUT a quotation, use creative_routes / "
+                    "creative_treatments / creative_quote instead.",
      "input_schema": {"type": "object", "properties": {
         "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"},
         "deal_id": {"type": "integer", "description": "the opportunity it is for"},
@@ -3710,6 +3712,45 @@ SKILL_TOOLS = [
         "fresh": {"type": "boolean", "description": "true ONLY when Rashad explicitly asks for a brand-new concept on a "
                                                     "deal that already has a creative proposal"}},
       "required": ["company", "deal_id"]}},
+    {"name": "creative_routes",
+     "description": "Write N genuinely different creative ROUTES (ideas: title, logline, a short idea, why it suits) "
+                    "for an opportunity, from the deal record and Rashad's direction. No images, no quotation, about "
+                    "a minute. Use it when he wants to see ideas before anything is drawn, then read them back as "
+                    "A, B, C. Treatments are built from them with creative_treatments.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"},
+        "deal_id": {"type": "integer", "description": "the opportunity"},
+        "direction": {"type": "string", "description": "Rashad's direction, WORD FOR WORD"},
+        "count": {"type": "integer", "description": "how many routes (default 3, at most 5)"}},
+      "required": ["company", "deal_id"]}},
+    {"name": "creative_treatments",
+     "description": "Build creative TREATMENTS: each route developed into its own deck (concept, script, storyboard "
+                    "frames, deck), one card per treatment, about 15 minutes in the background. By DEFAULT there is "
+                    "NO quotation and no price page (quote=true only when he asks for the quotations in the same "
+                    "go). `routes`: letters of routes already written (['A','C']) or his own ideas in words; leave it "
+                    "out to build every route (when the opportunity has none yet, `count` routes are written first). "
+                    "When every treatment in the set is approved, ONE email is drafted with all of them attached.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"},
+        "deal_id": {"type": "integer", "description": "the opportunity"},
+        "routes": {"type": "array", "items": {"type": "string"},
+                   "description": "route letters, or ideas in his words; omit for all"},
+        "direction": {"type": "string", "description": "Rashad's direction, WORD FOR WORD"},
+        "quote": {"type": "boolean", "description": "true ONLY if he asks for quotations now"},
+        "count": {"type": "integer", "description": "routes to write when there are none yet (default 3)"},
+        "new_set": {"type": "boolean", "description": "true when he asks for a fresh set of ideas, not the last one"}},
+      "required": ["company", "deal_id"]}},
+    {"name": "creative_quote",
+     "description": "Build the QUOTATION for a treatment once Rashad has chosen: one treatment ('quote treatment B'), "
+                    "several, or all ('quotations for all three'). Several = one quotation each, titled Option A/B/C, a "
+                    "number each. Each treatment's deck is re-laid with its own price page (no new images, its words "
+                    "kept). Priced by code from the rate card; a figure he states goes in `direction` word for word.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug (sensa/skyvision/...)"},
+        "deal_id": {"type": "integer", "description": "the opportunity"},
+        "treatments": {"type": "array", "items": {"type": "string"}, "description": "letters, or ['all']"},
+        "direction": {"type": "string", "description": "his words on scope or price, WORD FOR WORD"}},
+      "required": ["company", "deal_id", "treatments"]}},
     {"name": "rate_card",
      "description": "Read a company's RATE CARD: the owner-approved per-unit prices every quotation is built "
                     "from, including the Budget tier and every item still marked OWNER TO CONFIRM. Use it "
@@ -4459,6 +4500,36 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             return str(_e)
         return (f"Built '{_r['name']}' ({_r['pages']} pages), library document #{_r['doc_id']}"
                 + (f", filed to {_r['filed_to']}" if _r.get("filed_to") else "") + ". Nothing has been sent.")
+    if name in ("creative_routes", "creative_treatments", "creative_quote"):
+        _filed = _file_turn_files_on_deal(inp)
+        from . import creative
+        _slug, _did = inp.get("company") or "sensa", int(inp["deal_id"])
+        try:
+            if name == "creative_routes":
+                _st = creative.routes(_slug, _did, direction=inp.get("direction", ""), said=_TURN_SAID.get(),
+                                      count=int(inp.get("count") or 3))
+                return ("Routes written (nothing drawn, nothing priced):\n" + "\n".join(
+                    f"{r['letter']}. {r['title']}: {r.get('logline')}" for r in _st["routes"])
+                    + "\nAsk which to develop; creative_treatments builds them.")
+            if name == "creative_treatments":
+                _r = creative.start_treatments(_slug, _did, picks=inp.get("routes") or None,
+                                               direction=inp.get("direction", ""), said=_TURN_SAID.get(),
+                                               quote=bool(inp.get("quote")), count=int(inp.get("count") or 3),
+                                               new_set=bool(inp.get("new_set")))
+                return ("Building " + ", ".join(f"treatment {L} on card #{c}" for L, c in _r["cards"].items())
+                        + (" WITH quotations" if inp.get("quote") else ", with no quotation and no price page")
+                        + ". About 15 minutes each, two at a time; the cards return to the Inbox when ready. Nothing "
+                          "is sent." + (f" Already built: {', '.join(f'{L} on card #{c}' for L, c in _r['already'].items())}."
+                                        if _r.get("already") else "")
+                        + (f" Filed on the deal first: {', '.join(_filed)}." if _filed else ""))
+            _r = creative.quote_treatments(_slug, _did, picks=inp.get("treatments") or None,
+                                           direction=inp.get("direction", ""), said=_TURN_SAID.get())
+            return ("Building the quotation for treatment" + ("s " if len(_r["treatments"]) > 1 else " ")
+                    + ", ".join(_r["treatments"]) + (", one each as Options" if _r["options"] else "")
+                    + ". Each deck gets its own price page; no new images. The quotation cards and the updated decks "
+                      "return to the Inbox in a few minutes.")
+        except (ValueError, KeyError) as _e:
+            return str(_e)
     if name == "create_creative_proposal":
         _filed = _file_turn_files_on_deal(inp)   # a brief attached in this turn joins the deal record first
         from . import creative

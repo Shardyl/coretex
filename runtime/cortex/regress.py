@@ -946,6 +946,33 @@ def _cases():
     case("the internal meeting record (with the transcript) can never go on a card or be sent", "18 Oct",
          lambda: _private_refused() and "PRIVATE_KINDS" in inspect.getsource(_docs.find)
          and "PRIVATE_KINDS" in inspect.getsource(engine._send_email_reply))
+    # --- creative treatments as building blocks (owner, 18 Oct: "three treatments ... without a quotation", "a
+    # quotation for this proposal or that proposal, or for all three")
+    from . import creative as _cr
+    import types as _types
+
+    def _treat_blocks():
+        a = _cr._treatment_name("Heaven Global", "A", "The Glass Villa", None, 1, "2026-10-18")
+        b = _cr._treatment_name("Heaven Global", "B", "Sky Tour", "SEN-2026-0050", 2, "2026-10-18")
+        names_ok = (a == "Heaven Global - Treatment A - The Glass Villa - 2026-10-18.pdf"
+                    and b.startswith(_cr._treatment_prefix("Heaven Global", "B")) and not a.startswith(
+                        _cr._treatment_prefix("Heaven Global", "B")) and "Proposal" not in a)
+        rows_ok = _cr.Job.quote_rows(_types.SimpleNamespace(s={"quote": {"skipped": True, "spec": {}}})) == ([], 0.0)
+        miss = _cr._set_missing([
+            {"letter": "A", "status": "done", "approved": True, "number": "SEN-1", "quote_approved": False},
+            {"letter": "B", "status": "awaiting_approval", "approved": False, "number": None},
+            {"letter": "C", "status": "cancelled", "approved": False, "number": None}])
+        return names_ok and rows_ok and miss == ["quotation SEN-1 (treatment A)", "treatment B"]
+    case("treatments: own file names, no price page without a quotation, the set waits for every approval",
+         "owner, 18 Oct", _treat_blocks)
+    case("a treatment never quotes unasked, files only over its own decks, and its set sends ONE email",
+         "owner, 18 Oct",
+         lambda: "skip_quote" in inspect.getsource(_cr._run)
+         and "not (job.s.get(\"quote\") or {}).get(\"skipped\")" in inspect.getsource(_cr.revise)
+         and "archive_prefix=prefix" in inspect.getsource(_cr.Job.stage_file)
+         and "creative.set_email" in inspect.getsource(engine._draft_proposal_email)
+         and "approve_in_set" in inspect.getsource(engine._execute))
+
     # --- health check: his notices are actionable, repairs are a log, repeats are root causes (owner, 18 Oct)
     from . import invariants as _inv, flow as _flow
 

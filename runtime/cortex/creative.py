@@ -401,13 +401,22 @@ class Job:
         loc = self.s.get("location") or {}
         refs = ((loc.get("pick") or {}).get("refs") or [])[:8]
         prev = self.s.get("concept") if feedback else None
+        fr = self.s.get("forced_route") or {}
+        opening = ((
+            "You are the CREATIVE DIRECTOR at a production company developing ONE chosen route into the concept for "
+            f"a pitch: \"{fr.get('title')}\": {fr.get('logline') or ''} {fr.get('idea') or ''} Develop exactly this "
+            "route (this idea, never a different one); return it as the only entry in routes, chosen 0. Simple beats "
+            "clever when the owner has set a budget or location limit: the idea must be makeable within every "
+            "constraint.") if fr.get("title") else (
+            "You are the CREATIVE DIRECTOR at a production company writing the concept for a pitch. Give "
+            "three genuinely different routes, choose the strongest for the owner's direction and the brief, "
+            "and develop it. Simple beats clever when the owner has set a budget or location limit: the "
+            "idea must be makeable within every constraint.")) + (
+            " The attached photographs are the REAL location: describe what is actually there, and say for each "
+            "photograph what it shows.")
         out = provider.think_json(
             "\n\n".join(filter(None, [
-                "You are the CREATIVE DIRECTOR at a production company writing the concept for a pitch. Give "
-                "three genuinely different routes, choose the strongest for the owner's direction and the brief, "
-                "and develop it. Simple beats clever when the owner has set a budget or location limit: the "
-                "idea must be makeable within every constraint. The attached photographs are the REAL location: "
-                "describe what is actually there, and say for each photograph what it shows.",
+                opening,
                 worker._now_line(), worker._company_context(co), _rules(co, "sales-proposal"),
                 "RULES: never invent a fact, figure, award, date or name; plain, specific language; no em dashes; "
                 "no superlatives. Asset descriptors are VERBATIM text pasted into every image prompt, 25 to 60 "
@@ -593,7 +602,8 @@ class Job:
         self.save()
 
     # ---------------------------------------------------------------- 6 quotation
-    def stage_quote(self, feedback: str = "", dry: bool = False):
+    def stage_quote(self, feedback: str = "", dry: bool = False, number: str | None = "auto",
+                    option: str | None = None):
         from . import engine
         from . import quotation as _q
         co, slug = self.co, self.s["company"]
@@ -655,14 +665,21 @@ class Job:
              "normal_total": res.get("normal_total")}
         if not dry:
             customer = self.s["customer"]
-            number = (self.s.get("quote") or {}).get("number") or self._deal_quote_number(customer)
+            if number == "auto":
+                number = (self.s.get("quote") or {}).get("number") or self._deal_quote_number(customer)
+            title = spec.get("title") or None
+            if option:          # one treatment among several, each with its own quotation (owner, 18 Oct 2026)
+                title = engine._option_title(option, title or (self.s.get("concept") or {}).get("title"))
             deal = db.one("select contact_email from crm_projects where id=%s", (int(self.s["deal_id"]),)) or {}
             t = engine.deliver_quotation(slug, preset=spec["preset"], customer=customer, sections=spec["sections"],
-                                         title=spec.get("title") or None, note=spec.get("note") or None,
+                                         title=title, note=spec.get("note") or None,
                                          contact_email=deal.get("contact_email"), number=number,
                                          deliverables=spec.get("deliverables") or None,
                                          deal_id=int(self.s["deal_id"]))
             db.execute("update tasks set deal_id=%s where id=%s", (int(self.s["deal_id"]), t["id"]))
+            if option:
+                db.execute("update tasks set request = request || %s::jsonb where id=%s",
+                           (json.dumps({"option": option}), t["id"]))
             rq = t.get("request") or {}
             q.update({"number": rq.get("number"), "card": t["id"], "summary": rq.get("summary"),
                       "version": len(db.setting_get(f"quote_versions:{rq.get('number')}") or [])})
@@ -679,6 +696,8 @@ class Job:
         """The investment rows, READ BACK from the issued quotation (or the dry-run spec): one row per block,
         the amount summed by code. The deck can never contradict the quotation."""
         q = self.s["quote"]
+        if q.get("skipped") and not q.get("number"):     # a treatment with no quotation (owner, 18 Oct 2026)
+            return [], 0.0
         opts = q.get("options") or []
         if len(opts) > 1:
             # OPTIONS (owner, 14 Oct 2026): one row per option, its blocks as the lines, each net summed by code from
@@ -911,6 +930,9 @@ class Job:
         from . import engine
         name = engine._proposal_name(self.s["customer"], q.get("number"), version,
                                      today.strftime("%Y-%m-%d"))
+        if self.s.get("letter"):     # "Heaven - Treatment B - The Glass Villa v2 - 2026-10-18.pdf"
+            name = _treatment_name(self.s["customer"], self.s["letter"], c.get("title"), q.get("number"), version,
+                                   today.strftime("%Y-%m-%d"))
         path = deck.to_pdf(d.html(), os.path.join(self.dir, name))
         from pypdf import PdfReader
         pages = len(PdfReader(path).pages)
@@ -931,11 +953,17 @@ class Job:
         from . import engine
         co, dk, q = self.co, self.s["deck"], self.s["quote"]
         did = int(self.s["deal_id"])
-        old = [r["id"] for r in db.query(
-            "select id from company_documents where deal_id=%s and kind='proposal' and superseded_by is null",
-            (did,))]
+        if self.s.get("set_id"):     # a treatment retires only its OWN earlier decks, never a sibling's
+            old = [int(i) for i in (self.s.get("doc_ids") or [])]
+            prefix = _treatment_prefix(self.s["customer"], self.s["letter"])
+        else:
+            old = [r["id"] for r in db.query(
+                "select id from company_documents where deal_id=%s and kind='proposal' and superseded_by is null",
+                (did,))]
+            prefix = None
         doc, filed = engine._file_proposal_pdf(co, self.s["customer"], dk["name"], dk["path"], did,
-                                               q.get("number"), supersede=old)
+                                               q.get("number"), supersede=old, archive_prefix=prefix)
+        self.s["doc_ids"] = [i for i in (self.s.get("doc_ids") or []) if i != doc["id"]] + [doc["id"]]
         att = {"id": doc["id"], "filename": doc["filename"], "mime": doc["mime"], "size": doc["size"]}
         if q.get("card"):      # the deck rides on the quotation card: one email sends both
             t = db.one("select request from tasks where id=%s", (q["card"],))
@@ -970,6 +998,9 @@ class Job:
         if q.get("number"):
             parts.append(f"Quotation {q['number']} v{q.get('version')}: AED {net:,.0f} + VAT, on card #{q.get('card')}, "
                          "and this deck is attached to it.")
+        elif q.get("skipped"):
+            parts.append("No quotation: this treatment carries no price page. Ask Talk to build the quotation for it "
+                         "(or for several treatments) once one is chosen.")
         else:
             parts.append(f"Priced (not issued): AED {net:,.0f} + VAT.")
         if q.get("target") is not None:         # stamped by code from the pricing result, never by the writer
@@ -982,18 +1013,24 @@ class Job:
                          + (" (" + "; ".join(how) + ")" if how else "") + ".")
         if q.get("blanked"):
             parts.append("Left BLANK, no approved price: " + "; ".join(q["blanked"][:6]))
-        if q["spec"].get("exclusions"):
+        if (q.get("spec") or {}).get("exclusions"):
             parts.append("Not included: " + "; ".join(q["spec"]["exclusions"][:5]))
-        if q["spec"].get("assumptions"):
+        if (q.get("spec") or {}).get("assumptions"):
             parts.append("Assumed: " + "; ".join(str(a) for a in q["spec"]["assumptions"][:8]))
         if weak:
             parts.append("Weak frames (both candidates rejected, worth regenerating): " + ", ".join(weak))
         if dk.get("overflow"):
             parts.append(f"CHECK: the PDF has {dk['pages']} pages for {dk['planned']} planned, a page overflows.")
-        parts.append(f"{self.images_used()} images generated on this proposal. Nothing has been sent. Reply on this card "
-                     "with any change (the concept, a beat, a frame, the copy, the location or the price) and only "
-                     "the parts it touches are redone. Approve when you are happy: the quotation then comes up as its own "
-                     "card to check and approve, and the email with both attached follows.")
+        if self.s.get("set_id"):
+            parts.append(f"{self.images_used()} images generated on this treatment. Nothing has been sent. Reply on this "
+                         "card with any change and only the parts it touches are redone. When every treatment in the set "
+                         "(and any quotation built for one) is approved, ONE email is drafted with all of them attached; "
+                         "skip a treatment you do not want to send.")
+        else:
+            parts.append(f"{self.images_used()} images generated on this proposal. Nothing has been sent. Reply on this card "
+                         "with any change (the concept, a beat, a frame, the copy, the location or the price) and only "
+                         "the parts it touches are redone. Approve when you are happy: the quotation then comes up as its own "
+                         "card to check and approve, and the email with both attached follows.")
         return "\n\n".join(parts)
 
 
@@ -1020,7 +1057,11 @@ def _run(job: Job, task: dict | None, dry: bool = False, start_at: str = "brief"
         elif st == "frames":
             job.stage_frames()
         elif st == "quote":
-            job.stage_quote(dry=dry)
+            if job.s.get("skip_quote"):      # a treatment only: no quotation, no price page (owner, 18 Oct 2026)
+                job.s["quote"] = {"spec": {}, "skipped": True, "blanked": [], "missing": []}
+                job.s["omit_investment"] = True
+            else:
+                job.stage_quote(dry=dry)
         elif st == "copy":
             job.stage_copy()
         elif st == "render":
@@ -1050,6 +1091,8 @@ def adopt_quotation(task_id: int, number: str, quote_card: int | None = None) ->
     job = Job(t["request"]["job"])
     options = None
     try:          # the deal offers OPTIONS: the deck carries Option A's number and its page lists every option
+        if job.s.get("set_id"):
+            raise LookupError("a treatment shows its own quotation only")
         from . import engine
         _opts = engine.deal_options(t.get("deal_id") or (t.get("request") or {}).get("deal_id"))
         if len(_opts) > 1:
@@ -1159,7 +1202,8 @@ def run_task(jid: str, task_id: int | None, dry: bool = False, start_at: str | N
         if (job.s.get("quote") or {}).get("card"):   # the quotation card is the other half of the approval gate
             db.execute("update tasks set request = request || %s::jsonb where id=%s",
                        (json.dumps({"proposal_card": task["id"]}), int(job.s["quote"]["card"])))
-        notifications.notify(f"Creative proposal ready: {job.s['customer']}",
+        notifications.notify((f"Treatment {job.s['letter']} ready: {job.s['customer']}" if job.s.get("letter")
+                              else f"Creative proposal ready: {job.s['customer']}"),
                              f"{job.s['deck']['pages']} pages, card #{task['id']}.", category="approval",
                              company_id=task.get("company_id"), target_type="task", target_id=str(task["id"]))
 
@@ -1209,7 +1253,7 @@ def revise(task: dict, text: str, force_plan: dict | None = None) -> bool:
                 job.stage_frames()
             elif regen:
                 job.stage_frames(only=regen)
-            if plan.get("quote") or plan.get("concept"):
+            if (plan.get("quote") or plan.get("concept")) and not (job.s.get("quote") or {}).get("skipped"):
                 job.stage_quote(feedback=text)
             job.stage_copy(feedback=text)
             job.stage_render(int(job.s["deck"]["version"]) + 1)
@@ -1242,6 +1286,391 @@ def revise(task: dict, text: str, force_plan: dict | None = None) -> bool:
 
     threading.Thread(target=_go, daemon=True).start()
     return True
+
+
+
+# --------------------------------------------------------------------------- treatments: the building blocks
+#
+# THE PIPELINE, TAKEN APART (owner, 18 Oct 2026: "give Cortex more flexibility ... to access the tools that it needs
+# to do what I tell it to"; "three treatments without a quotation if I don't want one ... build a quotation for this
+# proposal or that proposal, or for all three"). The one-shot run above stays for "a creative proposal". These are the
+# same stages as separate steps Talk combines:
+#   routes(deal)                     brief + location once, then N genuinely different routes (no images; cheap)
+#   start_treatments(deal, picks)    each picked route developed into its own deck: concept, script, frames, copy,
+#                                    deck; with no quotation and no price page unless quote=True
+#   quote_treatments(deal, picks)    the quotation for one treatment (or each of several, as Options A/B/C), and that
+#                                    treatment's deck re-laid with its own price page; the copy is never rewritten
+#   approve_in_set / set_email       approving every treatment in the set (and any quotation built for one) drafts
+#                                    ONE email with every deck and quotation attached; a skipped treatment drops out
+# A set is setting `creative_set:<id>`; `creative_set_latest:<deal>` points at the deal's newest.
+
+
+def _treatment_prefix(customer: str, letter: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9 -]", "", customer or "")[:60].strip() or "Proposal"
+    return f"{safe} - Treatment {letter}"
+
+
+def _treatment_name(customer: str, letter: str, title: str | None, number: str | None, version: int,
+                    stamp: str) -> str:
+    t = re.sub(r"[^A-Za-z0-9 ]", "", title or "")[:40].strip()
+    return (f"{_treatment_prefix(customer, letter)}{' - ' + t if t else ''}{' ' + number if number else ''}"
+            f"{' v' + str(version) if version > 1 else ''} - {stamp}.pdf")
+
+
+def get_set(set_id: str) -> dict | None:
+    return db.setting_get(f"creative_set:{set_id}")
+
+
+def latest_set(deal_id: int) -> dict | None:
+    sid = db.setting_get(f"creative_set_latest:{int(deal_id)}")
+    return get_set(sid) if sid else None
+
+
+def _save_set(st: dict) -> None:
+    db.setting_set(f"creative_set:{st['id']}", st)
+    db.setting_set(f"creative_set_latest:{int(st['deal_id'])}", st["id"])
+
+
+def _new_set(company_slug: str, deal_id: int, direction: str, said: str) -> tuple[dict, "Job"]:
+    from . import engine
+    co = store.get_company_by_slug(company_slug)
+    if not co:
+        raise ValueError(f"unknown company {company_slug}")
+    if not db.one("select id from crm_projects where id=%s", (int(deal_id),)):
+        raise ValueError(f"no opportunity #{deal_id}")
+    sid = f"{deal_id}-{datetime.now(timezone.utc):%Y%m%d%H%M}-{secrets.token_hex(2)}"
+    seed = Job(f"set-{sid}")
+    seed.s.update({"company": company_slug, "deal_id": int(deal_id), "words": direction, "said": said,
+                   "customer": engine._deal_client_name(int(deal_id)) or co["name"]})
+    seed.save()
+    st = {"id": sid, "deal_id": int(deal_id), "company": company_slug, "seed": seed.id, "direction": direction,
+          "routes": [], "treatments": {}, "created": datetime.now(timezone.utc).isoformat()}
+    _save_set(st)
+    return st, seed
+
+
+def _write_routes(seed: "Job", count: int) -> list:
+    """The brief and the location once (they are the same for every route), then N routes."""
+    if not seed.s.get("brief"):
+        seed.stage_brief()
+    if "location" not in seed.s:
+        seed.stage_location()
+    co = seed.co
+    loc = (seed.s.get("location") or {}).get("pick") or {}
+    out = provider.think_json(
+        "\n\n".join(filter(None, [
+            f"You are the CREATIVE DIRECTOR at a production company. Give {count} genuinely DIFFERENT creative routes "
+            "for this brief: a different idea each time, never the same idea reworded. Every route must be makeable "
+            "within every constraint the owner and the brief set; simple beats clever under a budget or location limit.",
+            worker._now_line(), worker._company_context(co), _rules(co, "sales-proposal"),
+            "RULES: never invent a fact, figure, award, date or name; plain, specific language; no em dashes; no "
+            "superlatives.",
+            'RETURN JSON: {"routes": [{"title": "under 6 words", "logline": "one sentence", "idea": "40 to 60 words", '
+            '"why": "one line: why it suits this client"}]}',
+        ])),
+        f"OWNER'S DIRECTION:\n{seed.s.get('words') or '(none)'}\n\nBRIEF:\n{json.dumps(seed.s['brief'], ensure_ascii=False)}"
+        + (f"\n\nLOCATION (researched):\n{json.dumps({k: v for k, v in loc.items() if k not in ('photos', 'refs')}, ensure_ascii=False)}"
+           if loc else ""),
+        fast=False, model=MODEL, max_tokens=12000, purpose="creative-routes", company=seed.s["company"]) or {}
+    routes = [_clean_text(r) for r in (out.get("routes") or []) if isinstance(r, dict) and r.get("title")][:count]
+    if not routes:
+        raise RuntimeError("no routes came back")
+    return [{**r, "letter": chr(ord("A") + i)} for i, r in enumerate(routes)]
+
+
+def routes(company_slug: str, deal_id: int, *, direction: str = "", said: str = "", count: int = 3) -> dict:
+    """Talk: N routes for the opportunity, nothing drawn yet. Synchronous (about a minute or two)."""
+    count = max(2, min(int(count or 3), 5))
+    st, seed = _new_set(company_slug, int(deal_id), direction, said)
+    st["routes"] = _write_routes(seed, count)
+    _save_set(st)
+    pipeline.log_deal(int(deal_id), "note", "Creative routes written: " + "; ".join(
+        f"{r['letter']}. {r['title']}: {r.get('logline')}" for r in st["routes"]))
+    return st
+
+
+def _pick(st: dict, picks: list) -> list:
+    """Letters ('A', 'route B') or his own idea in words; nothing named = every route."""
+    out, used = [], {r["letter"] for r in st["routes"]} | set(st.get("treatments") or {})
+    for p in (picks or [r["letter"] for r in st["routes"]]):
+        m = re.fullmatch(r"\s*(?:route|treatment|option)?\s*([A-Za-z])\s*", str(p))
+        if m:
+            r = next((x for x in st["routes"] if x["letter"] == m.group(1).upper()), None)
+            if r:
+                out.append(r)
+            continue
+        letter = next(chr(c) for c in range(ord("A"), ord("Z")) if chr(c) not in used)
+        used.add(letter)
+        r = {"letter": letter, "title": str(p)[:60], "logline": str(p), "idea": str(p)}
+        st["routes"].append(r)
+        out.append(r)
+    return out
+
+
+def start_treatments(company_slug: str, deal_id: int, *, picks: list | None = None, direction: str = "",
+                     said: str = "", quote: bool = False, count: int = 3, new_set: bool = False) -> dict:
+    """Talk: one card per treatment, built on a background thread (routes first when the set has none)."""
+    co = store.get_company_by_slug(company_slug)
+    if not co:
+        raise ValueError(f"unknown company {company_slug}")
+    st = None if new_set else latest_set(int(deal_id))
+    if st and picks is None and not st.get("routes"):
+        st = None
+    if not st:
+        st, _ = _new_set(company_slug, int(deal_id), direction, said)
+    elif direction:
+        st["direction"] = (st.get("direction") or "") + "\n" + direction
+    busy = db.one("select id from tasks where deal_id=%s and status='drafting' and request->>'kind'='creative_proposal' "
+                  "and updated_at > now() - interval '45 minutes' limit 1", (int(deal_id),))
+    if busy:
+        raise ValueError(f"a creative build is already running on this opportunity (card #{busy['id']})")
+    skill = store.get_skill_by_key(co["id"], "sales-proposal") or store.get_skill_by_key(co["id"], "sales-quotation")
+    _is_letter = lambda p: bool(re.fullmatch(r"\s*(?:route|treatment|option)?\s*[A-Za-z]\s*", str(p)))  # noqa: E731
+    if picks and not st["routes"] and all(_is_letter(p) for p in picks):
+        raise ValueError("there are no routes on this opportunity yet: ask for the routes first, or describe the ideas")
+    if picks or st["routes"]:
+        letters = [r["letter"] for r in _pick(st, picks)]       # his own ideas in words become routes here
+    else:
+        letters = [chr(ord("A") + i) for i in range(max(2, min(int(count or 3), 5)))]
+    already = {L: st["treatments"][L] for L in letters if st["treatments"].get(L) and (store.get_task(
+        int(st["treatments"][L])) or {}).get("status") not in (None, "cancelled", "rejected")}
+    letters = [L for L in letters if L not in already]
+    if not letters:
+        raise ValueError("every treatment asked for is already built: " + ", ".join(
+            f"{L} on card #{c}" for L, c in already.items()) + ". Revise one by replying on its card.")
+    cards = {}
+    for L in letters:
+        req = {"kind": "creative_proposal", "set_id": st["id"], "letter": L, "deal_id": int(deal_id),
+               "customer": "", "brief": f"Treatment {L} on opportunity #{deal_id}", "direction": direction,
+               "treatment_only": not quote}
+        t = db.execute("insert into tasks (company_id, skill_id, kind, request, draft, status, title, deal_id) "
+                       "values (%s,%s,'content',%s,%s,'drafting',%s,%s) returning id",
+                       (co["id"], skill["id"], Json(req),
+                        f"Building treatment {L}: concept, script, storyboard frames and deck"
+                        + ("" if quote else ", with no quotation") + ". About 15 minutes; the card returns when ready.",
+                        f"Treatment {L} (building)", int(deal_id)))
+        cards[L] = t["id"]
+        st["treatments"][L] = t["id"]
+    _save_set(st)
+    threading.Thread(target=_build_set, args=(st["id"], letters, cards, quote, int(count or 3)), daemon=True).start()
+    return {"set": st["id"], "cards": cards, "routes": st.get("routes") or [], "already": already}
+
+
+def _build_set(set_id: str, letters: list, cards: dict, quote: bool, count: int) -> None:
+    st = get_set(set_id)
+    seed = Job(st["seed"])
+    try:
+        if not st["routes"]:
+            st["routes"] = _write_routes(seed, len(letters) or count)
+            _save_set(st)
+    except Exception as e:  # noqa: BLE001
+        for L, tid in cards.items():
+            store.update_task(tid, status="awaiting_correction",
+                              draft=f"The routes could not be written ({e}). Ask Talk again for the treatments.")
+        return
+    by = {r["letter"]: r for r in st["routes"]}
+    jobs = []
+    for L in letters:
+        r = by.get(L) or {"letter": L, "title": f"Route {L}", "logline": ""}
+        job = Job(f"{set_id}-{L}")
+        job.s.update({k: seed.s.get(k) for k in ("company", "deal_id", "customer", "said", "brief", "facts", "location")})
+        job.s.update({"words": st.get("direction") or seed.s.get("words") or "",
+                      "forced_route": r, "letter": L, "set_id": set_id, "skip_quote": not quote,
+                      "omit_investment": not quote, "next_version": 1})
+        job.save()
+        db.execute("update tasks set title=%s, request = request || %s::jsonb where id=%s",
+                   (f"Treatment {L}: {r.get('title')} (building)",
+                    json.dumps({"job": job.id, "customer": seed.s.get("customer"), "route": r}), cards[L]))
+        jobs.append((job.id, cards[L]))
+    pipeline.log_deal(int(st["deal_id"]), "note", "Creative treatments started: " + "; ".join(
+        f"{L}. {(by.get(L) or {}).get('title')}" for L in letters) + ("" if quote else " (no quotation)."))
+    # two at a time: each run already generates its frames in parallel, and three together risks the image limits
+    with ThreadPoolExecutor(2) as ex:
+        list(ex.map(lambda a: run_task(a[0], a[1], start_at="concept"), jobs))
+
+
+def quote_treatments(company_slug: str, deal_id: int, *, picks: list | None = None, direction: str = "",
+                     said: str = "") -> dict:
+    """Talk: the quotation for one treatment, or one each for several (Options A/B/C, a number each). The deck is
+    re-laid with its own price page (no new images, the copy kept). Background thread; returns at once."""
+    st = latest_set(int(deal_id))
+    if not st or not st.get("treatments"):
+        raise ValueError("this opportunity has no treatments yet; build them first (creative_treatments)")
+    letters = sorted(st["treatments"]) if not picks or any(str(p).strip().lower() in ("all", "every", "each")
+                                                             for p in picks) else \
+        [m.group(1).upper() for p in picks for m in [re.search(r"\b([A-Za-z])\b", str(p))] if m]
+    rows = []
+    for L in letters:
+        t = store.get_task(int(st["treatments"].get(L) or 0)) if st["treatments"].get(L) else None
+        if not t or t["status"] in ("cancelled", "rejected"):
+            raise ValueError(f"there is no live treatment {L} on this opportunity")
+        if not (t.get("request") or {}).get("attach_docs"):
+            raise ValueError(f"treatment {L} has not finished building yet (card #{t['id']})")
+        rows.append((L, t))
+    quoted_elsewhere = any(L2 not in letters and (Job(f"{st['id']}-{L2}").s.get("quote") or {}).get("number")
+                           for L2 in st["treatments"])
+    as_options = len(rows) > 1 or quoted_elsewhere
+    for _, t in rows:
+        store.update_task(t["id"], status="drafting", draft="Building the quotation for this treatment and adding its "
+                                                            "price page (no new images).")
+    threading.Thread(target=_quote_rows, args=(rows, as_options, direction, said), daemon=True).start()
+    return {"set": st["id"], "treatments": [L for L, _ in rows], "options": as_options}
+
+
+def _quote_rows(rows: list, as_options: bool, direction: str, said: str) -> None:
+    for L, t in rows:          # one after another: quotation numbers are claimed in order
+        job = Job(t["request"]["job"])
+        try:
+            job.s["said"] = "\n".join(filter(None, [job.s.get("said"), said]))
+            prev = job.s.get("quote") or {}
+            job.s["skip_quote"] = False
+            job.s["omit_investment"] = False
+            if prev.get("skipped"):
+                job.s["quote"] = {}
+            if as_options:
+                job.stage_quote(feedback=direction, number=prev.get("number") or None, option=L)
+            else:
+                job.stage_quote(feedback=direction)
+            job.stage_render(int(job.s["deck"]["version"]) + 1)
+            job.stage_file(t)
+            job.save()
+            q = job.s["quote"]
+            r = dict(t.get("request") or {})
+            r.update({"title": job.s["deck"]["name"], "file": job.s["deck"]["path"], "version": job.s["deck"]["version"],
+                      "quotation_number": q.get("number"), "attach_docs": [job.s["filed"]["doc"]],
+                      "treatment_only": False})
+            r.pop("approved", None)
+            store.update_task(t["id"], request=r, title=job.s["deck"]["name"], status="awaiting_approval",
+                              draft=job.summary(changed=f"Quotation {q.get('number')} built for treatment {L}"
+                                                + (f" as Option {L}" if as_options else "") + "."))
+            if q.get("card"):
+                db.execute("update tasks set request = request || %s::jsonb where id=%s",
+                           (json.dumps({"proposal_card": t["id"], "set_id": job.s.get("set_id")}), int(q["card"])))
+            notifications.notify(f"Quotation ready for treatment {L}: {job.s['customer']}",
+                                 f"{q.get('number')} on card #{q.get('card')}; the deck on card #{t['id']} now carries it.",
+                                 category="approval", company_id=t.get("company_id"), target_type="task",
+                                 target_id=str(t["id"]))
+        except Exception as e:  # noqa: BLE001
+            job.log(f"QUOTE FAILED: {type(e).__name__}: {e}")
+            store.update_task(t["id"], status="awaiting_approval",
+                              draft=f"The quotation for treatment {L} was not built ({e}). The treatment is unchanged. "
+                                    + (job.summary() if job.s.get("deck") else ""))
+
+
+def _set_missing(items: list) -> list:
+    """What still waits before the set's email: [{letter, status, approved, number, quote_approved}] -> lines."""
+    out = []
+    for it in items:
+        if it.get("status") in ("cancelled", "rejected"):
+            continue
+        if not it.get("approved"):
+            out.append(f"treatment {it['letter']}")
+        if it.get("number") and not it.get("quote_approved"):
+            out.append(f"quotation {it['number']} (treatment {it['letter']})")
+    return out
+
+
+def _set_items(st: dict) -> list:
+    from . import engine
+    items = []
+    for L, tid in sorted((st.get("treatments") or {}).items()):
+        t = store.get_task(int(tid))
+        if not t:
+            continue
+        rq = t.get("request") or {}
+        n = rq.get("quotation_number")
+        qc = engine._quotation_card_for(n) if n else None
+        items.append({"letter": L, "card": t, "status": t["status"], "approved": bool(rq.get("approved")),
+                      "number": n, "quote_card": qc, "quote_approved": bool(((qc or {}).get("request") or {}).get("approved"))})
+    return items
+
+
+def approve_in_set(task: dict, company: dict, actor: str) -> dict:
+    """A treatment card approved: its own quotation (if it has one) is the next approval; the set's email waits for
+    every live treatment and quotation in the set."""
+    from . import engine
+    rq = dict(task.get("request") or {})
+    rq["approved"] = True
+    store.update_task(task["id"], request=rq, status="done")
+    n = rq.get("quotation_number")
+    if n:
+        q = engine._quotation_card_for(n)
+        if q and not (q.get("request") or {}).get("approved"):
+            db.execute("update tasks set status='awaiting_approval', updated_at=now(), request = request || %s::jsonb "
+                       "where id=%s", (json.dumps({"proposal_card": task["id"], "set_id": rq["set_id"]}), q["id"]))
+    return set_email(rq["set_id"], company, actor)
+
+
+def set_email(set_id: str, company: dict, actor: str) -> dict:
+    """Everything in the set approved -> ONE email to the opportunity's contact with every deck and quotation."""
+    from . import documents, engine
+    st = get_set(set_id)
+    if not st:
+        return {"approved": True, "note": "Approved."}
+    items = _set_items(st)
+    missing = _set_missing([{k: v for k, v in i.items() if k not in ("card", "quote_card")} for i in items])
+    if missing:
+        return {"approved": True, "note": "Approved. The email with the whole set is drafted once "
+                + ", ".join(missing) + (" is" if len(missing) == 1 else " are")
+                + " approved too (skip a treatment to leave it out)."}
+    live = [i for i in items if i["status"] not in ("cancelled", "rejected")]
+    if st.get("email_card") and db.one("select id from tasks where id=%s and status not in ('cancelled','rejected')",
+                                       (st["email_card"],)):
+        return {"approved": True, "note": f"Approved. The set's email is card #{st['email_card']}."}
+    did = int(st["deal_id"])
+    deal = db.one("select id, title, contact_email from crm_projects where id=%s", (did,)) or {}
+    to = (deal.get("contact_email") or "").strip().lower()
+    if not to:
+        return {"approved": True, "note": f"Approved, but opportunity #{did} has no contact to write to. Tell Talk who "
+                                          "the contact is, then ask it to draft the email with the treatments attached."}
+    refs, seen = [], set()
+    for i in live:
+        ids = [a.get("id") for a in ((i["card"].get("request") or {}).get("attach_docs") or [])[:1]]
+        ids += [a.get("id") for a in (((i.get("quote_card") or {}).get("request") or {}).get("attach_docs") or [])
+                if re.search(r"quotation", a.get("filename") or "", re.I)]
+        for d_id in ids:
+            d = documents.get(int(d_id), company["id"]) if d_id else None
+            if d and d["id"] not in seen:
+                seen.add(d["id"])
+                refs.append(documents.card_ref(d))
+    if not refs:
+        return {"approved": True, "note": "Approved, but the decks could not be found in the library to attach."}
+    _open = db.one("select id from tasks where company_id=%s and kind in ('email_reply','email_draft') and status in "
+                   "('queued','new','drafting','awaiting_approval','awaiting_correction') and "
+                   "lower(request->'inquiry'->>'email')=%s order by id desc limit 1", (company["id"], to))
+    if _open:
+        return {"approved": True, "note": f"Approved. There is already an open email to {to} (card #{_open['id']}): "
+                                          "correct or cancel it and approve again, or ask Talk to attach the set to it."}
+    routes = {r["letter"]: r for r in st.get("routes") or []}
+    lines = "; ".join(f"Treatment {i['letter']}: {(routes.get(i['letter']) or {}).get('title') or ''}"
+                      + (f" (quotation {i['number']})" if i.get("number") else "") for i in live)
+    quoted = any(i.get("number") for i in live)
+    sk = store.get_skill_by_key(company["id"], "email-handling") or store.get_skill_by_key(company["id"], "general-operations")
+    ereq = {"outbound": True, "deal_id": did, "attach_docs": refs, "creative_set": set_id,
+            "brief": (f"Send our {len(live)} creative treatment{'s' if len(live) > 1 else ''} for \"{deal.get('title')}\": "
+                      f"{lines}. Each is attached as its own deck"
+                      + (", with its own quotation" if quoted else ", with no pricing yet: the quotation follows once "
+                         "they choose a direction")
+                      + ". Present them as options for the client to choose from. Continue the conversation we already "
+                        "have with them and answer anything still open."),
+            "inquiry": {"name": crm_name(to), "email": to, "message": "",
+                        "subject": f"Creative treatments, {deal.get('title') or st.get('company')}"}}
+    t = store.create_task(company["id"], sk["id"], "email_draft", ereq)
+    db.execute("update tasks set deal_id=%s where id=%s", (did, t["id"]))
+    st["email_card"] = t["id"]
+    _save_set(st)
+    pipeline.log_deal(did, "note", f"Creative treatments approved ({lines}); cover email drafted as card {t['id']}.")
+    return {"approved": True, "email_card": t["id"],
+            "note": f"Every treatment is approved. The email to {to} is being drafted as card #{t['id']} with "
+                    f"{len(refs)} files attached. Approve that card to send."}
+
+
+def crm_name(email: str) -> str:
+    try:
+        from . import crm
+        return crm._name_of(email) or ""
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 if __name__ == "__main__":      # python -m cortex.creative dry <deal_id> "<direction>"  |  resume <job> [task_id]
