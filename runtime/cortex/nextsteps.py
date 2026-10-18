@@ -401,7 +401,7 @@ def _todo_notice(it: dict) -> None:
     notifications.notify(
         f"To do: {it['what']}"[:150],
         f"{it['deal_title']}. {when}." + (f" {say}." if say else ""),
-        priority="high" if late else "normal", category="approval", company_id=it.get("company_id"),
+        priority="normal", category="approval", company_id=it.get("company_id"),
         target_type="deal", target_id=it["deal_id"], dedup_key=f"nextstep:{it['id']}")
     db.execute("update next_steps set notified_at=now() where id=%s", (it["id"],))
 
