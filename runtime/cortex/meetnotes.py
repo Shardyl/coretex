@@ -614,7 +614,7 @@ def summary_pdf(meeting_id: int) -> dict | None:
         data = open(out, "rb").read()
     client = (engine._deal_client_name(int(deal_id)) if deal_id else "") or (row.get("title") or "Meeting")
     short = (when.astimezone(timezone(timedelta(hours=4))).strftime("%-d %b %Y") if when else "undated")
-    fname = re.sub(r"[^\w ,.&()'-]", "", f"Meeting notes, {client}, {short}")[:110].strip() + ".pdf"
+    fname = re.sub(r"[^A-Za-z0-9 .-]", "", f"Meeting notes - {client} - {short}")[:110].strip() + ".pdf"
     sha = hashlib.sha256(data).hexdigest()[:10]
     if deal_id:
         doc = engine._file_deal_document(co, int(deal_id), fname, "application/pdf", data, kind="meeting-summary",
@@ -668,13 +668,13 @@ def _attach_summary_to_request(req: dict, deal_id=None, contact: str = "", meeti
         if not doc:
             return None
         refs = [r for r in (req.get("attach_docs") or [])
-                if not str(r.get("filename") or "").startswith("Meeting notes,")]
+                if not str(r.get("filename") or "").startswith("Meeting notes - ")]
         refs.append(documents.card_ref(doc))
         req["attach_docs"] = refs
         line = f"ATTACHED: {doc['filename']} (the meeting notes, summary only).\n"
         brief = req.get("brief") or ""
-        if "ATTACHED: Meeting notes," in brief:
-            brief = re.sub(r"ATTACHED: Meeting notes,[^\n]*\n", line, brief)
+        if "ATTACHED: Meeting notes - " in brief:
+            brief = re.sub(r"ATTACHED: Meeting notes - [^\n]*\n", line, brief)
         else:
             marker = "MEETING NOTES (distilled):\n"
             brief = brief.replace(marker, line + marker, 1) if marker in brief else brief.rstrip() + "\n" + line
