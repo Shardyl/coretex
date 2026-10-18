@@ -599,7 +599,7 @@ so the email carries the genuine link instead of promising one separately. It re
 booked for the same person at the same slot rather than creating a second. The guest is added and
 invited only on approval. Needed because `_maybe_extract_meeting` reads `email_reply` cards only, so
 outbound drafts had no route to a link. NOTE the sender: an outbound card with no `from_email` falls
-back to the company `reply_from` (Sensa = gino@), which is right for the sales inbox and WRONG for a
+back to the company `reply_from` (Sensa = rashad@ since 18 Oct 2026; it was gino@), which is right for the sales inbox and WRONG for a
 conversation Rashad started himself, so pass `from_email` when it is his (card 498). Catch-all mailboxes (INBOXES values) can NEVER be the From: `_draft_direct_reply` routes
 catch-all-received replies via the company `reply_from` person, and `_email_envelope` hard-strips any
 catch-all From as a backstop. **THREAD CHOICE: the conversation THEY answered beats the one WE started (7 Sep 2026).**
@@ -3900,3 +3900,17 @@ shoot needs none), then 10% off the whole quotation.
   "To do" card (`nextstep:<id>`) for every open OURS item overdue or due within `TODO_AHEAD_DAYS` (7), kept until the
   item is closed. The Inbox card carries `next_step` and shows Done / Not needed (`todoAct` -> /api/nextsteps). An email
   item due today is drafted instead; one more than a day late, or from the migration, is a To do card. v79.
+
+## Sensa: Rashad answers new enquiries (owner, 18 Oct 2026)
+- The ONE place the default sender lives is the company profile's `reply_from` (Sensa: gino@ -> rashad@sensa.digital).
+  It is what a reply to mail received on the catch-all hello@ goes out as, what a new deal with no send history falls
+  back to (`_deal_sender` -> cast our lead -> thread-sticky -> `reply_from`), and Talk's `draft_email` default.
+  `high_value_from` was already rashad@. Rashad's mailbox token is `gmail_refresh_token:sensa:rashad`.
+- UNCHANGED ON PURPOSE: a conversation Gino or Ayresh is already having stays theirs (thread-sticky sender; mail
+  addressed To one of them is theirs, `_addressed_person`); Ayresh stays `manual_people`; `gmail_send_account:sensa`
+  stays gino@ because its token IS Gino's Google account (relabelling it would send as Gino under another name).
+- RULES (exact-text, before-state in setting `sender_switch_backup_2026_10_18`): sales-first-response[4] (was "Draft
+  first-response replies from Ayresh ...") is now "NEW ENQUIRIES ARE ANSWERED BY RASHAD"; sales-first-response[2]
+  dropped "never from Gino"; email-handling[4] "Gino states plainly" -> "State plainly". Envelope and no-draft policy
+  recompiled. The profile's `google_access` mailbox notes (which Talk reads) no longer say "Cortex sends replies AS Gino".
+- LEFT FOR THE OWNER: sales-quotation[4] "Quotation authority: Gino Palmes prepares, approves and sends quotations".
