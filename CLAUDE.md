@@ -3830,3 +3830,30 @@ shoot needs none), then 10% off the whole quotation.
   The flags had never reached him (timeline only); they are now the owed_waiting_for_owner notices.
 - duplicate_obligations found deals with several Cortex reminders but merged none (they were different things): no
   leak in `obligations.check_new`; its SQL counts any deal with 2+ reminders, so it stays a sweep.
+
+## Creative treatments as building blocks (owner, 18 Oct 2026)
+- Owner: Cortex's fixed flows are "a never-ending development project"; give Talk the tools and let it combine them.
+  First area: creative proposals. `create_creative_proposal` (the one-go run, one treatment with its quotation) stays;
+  three Talk tools take the same stages apart (`creative.py`, bottom section):
+  - `creative_routes` -> `creative.routes()`: brief + location ONCE in a seed job (`set-<id>`), then N different routes
+    (title, logline, idea, why), lettered A/B/C. No images, no price, about a minute. Set = setting
+    `creative_set:<id>` {deal_id, company, seed, direction, routes, treatments{letter: card}, email_card};
+    `creative_set_latest:<deal>` points at the newest.
+  - `creative_treatments` -> `start_treatments()`: one card per picked route (letters, or his ideas in words, which
+    become routes), job `<set>-<letter>` copied from the seed (no repeat research), `forced_route` makes the concept
+    stage develop THAT route, `skip_quote` makes `_run` skip the quotation and `omit_investment` drops the price page.
+    Two builds at a time (`_build_set`). A letter already built is skipped (revise it on its card).
+  - `creative_quote` -> `quote_treatments()`: one treatment = its quotation (the deal's number as the next version, or
+    new); several (or one when a sibling is already quoted) = one NEW number each, titled "Option <letter>: ...",
+    `request.option` = the treatment's letter. The deck is re-laid with its own price page (render + file only, copy
+    never rewritten, no images). `adopt_quotation` never puts other options on a treatment deck.
+- FILING: a treatment is named "<Client> - Treatment <L> - <title> [number] [vN] - date.pdf" (`_treatment_name`) and
+  archives/supersedes only ITS OWN earlier decks (`archive_prefix`, `job.s.doc_ids`): the deal-wide supersede and the
+  "<Client> - Proposal" Drive archive would otherwise retire its siblings.
+- ONE EMAIL PER SET: approving a treatment card goes to `creative.approve_in_set` (`_execute`); a set quotation's
+  approval reaches `creative.set_email` through `_draft_proposal_email`. When every live treatment (skipped/cancelled
+  ones drop out) and every quotation built for one is approved, ONE email_draft to the deal contact carries every deck
+  and quotation PDF (`request.creative_set`), else the note lists what still waits (`_set_missing`).
+- Revisions per treatment card work as before (`revise`), and never price a treatment that has no quotation.
+- Verified live 18 Oct on iTellu (deal 156, routes only, nothing saved): three distinct routes from the deal record.
+  A full treatment set has not yet been run end to end (about USD 8-12 per treatment).
