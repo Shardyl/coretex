@@ -971,6 +971,8 @@ def _cases():
              "_in(q, corpus)", 'it.get("source") == "owner"', 'st == "dismissed"', "pipeline._is_offer(q)",
              "_timeline(deal_id)")) and "_deal_lock" in inspect.getsource(_ns.observe)
          and _ns.REPLAN_MODEL_DEFAULT == "claude-opus-5")
+    case("a sent email's history entry names what it carried, so a re-plan sees a quotation went out",
+         "Merck #166, 18 Oct", lambda: "[attached:" in inspect.getsource(pipeline.record_send))
     case("a proposal step is never made from 'they asked for a proposal' alone; Quote needs an attached file",
          "Estithmar #172, 18 Oct",
          lambda: "Prepare and send the proposal" not in inspect.getsource(__import__("cortex.crm", fromlist=["x"]).qualify_opportunity)

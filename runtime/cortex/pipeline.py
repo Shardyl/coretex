@@ -225,8 +225,13 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
     who = "manually sent" if manual else "sent (Cortex-approved)"
     # One sent email is visible in every mailbox that was cc'd, so the sent sweep meets it more than
     # once: the Message-Id makes the timeline entry idempotent (this call passed no ref at all before).
+    # WHAT IT CARRIED IS PART OF THE RECORD (18 Oct 2026, Merck #166): the summit quotation went out on an old thread's
+    # subject, the entry showed only that subject, and the next-steps review re-added "send the quotation".
+    _carried = [str((a or {}).get("filename") or "") for a in (req.get("attach_docs") or [])]         + [str(x) for x in (req.get("attachment_names") or [])] + [str(x) for x in (env.get("attachment_names") or [])]
+    _carried = [x for x in dict.fromkeys(_carried) if x]
     log_deal(did, "email_out_manual" if manual else "email_out",
-             f"{who} from {frm or 'company mailbox'} to {to}: {subj or '(no subject)'}", ref=ref)
+             f"{who} from {frm or 'company mailbox'} to {to}: {subj or '(no subject)'}"
+             + (f" [attached: {'; '.join(_carried)[:400]}]" if _carried else ""), ref=ref)
     try:   # WHO'S WHO (cast.py): one of us writing BY HAND leads for us now; any email out may add or hand over people
         from . import cast
         _frm = (re.findall(r"[\w.+-]+@[\w.-]+", frm) or [""])[0].lower()
