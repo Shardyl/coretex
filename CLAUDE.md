@@ -3916,3 +3916,23 @@ shoot needs none), then 10% off the whole quotation.
 - QUOTATIONS TOO (owner, same day): sales-quotation[4] is now "QUOTATION AUTHORITY": Rashad prepares and approves every
   Sensa quotation and they are drafted as him (backup `quote_authority_backup_2026_10_18`). Permissions unchanged: Gino
   and Ayresh keep `users.can_approve` and approve on his behalf. No code ever gave Gino quotation weight.
+- RE-PLAN THE WHOLE OPPORTUNITY ON EVERY EVENT (owner, same day: "should Cortex not read it and then look at the entire
+  opportunity, clean up any inappropriate next steps and create the correct next step?"). `observe()` now runs
+  `_replan`: Opus 5 (`REPLAN_MODEL_DEFAULT`, setting `nextsteps_model`), serialised per deal (`_deal_lock`), reads the
+  timeline (`_timeline`, last 40 real events), the whole list and the event, and returns close (done | superseded |
+  dismissed) / add / due ops. Code: every quote must be in the event or the timeline (`_in(q, corpus)`); items the owner
+  made (`source='owner'`) are never touched except by his note; only his note dismisses; offers never owed.
+  `superseded` (the plan changed: the proposal step became "theirs: confirm the call") is its own status and never
+  blocks a later re-add. Every email (Cortex or by hand via the sent sweep), WhatsApp in (`events.they_wrote`), meeting
+  and note re-plans. Quiet: one history line per change. Measured: USD 0.03 a re-plan; the one-off `replan_all()` over 44
+  open opportunities cost USD 1.38.
+- THE CHASE (owner: "we might be doing a proposal ... but trying to confirm a meeting at the same time"): `gate._check`
+  holds a chase only when we owe something AND they owe nothing; any THEIRS item = the chase runs. Universal
+  sales-followup rule "CHASE FOLLOWS THE NEXT STEPS": a chase asks only about THEIRS items.
+- ONE EMAIL PER PERSON: a due email item joins the email already open to that person (`_draft_email`: brief "ALSO
+  COVER ...", system redraft via `engine.refresh_from_notes`), never a second card.
+- FIXES FROM ESTITHMAR #172: `crm.qualify_opportunity` no longer creates "Prepare and send the proposal" (an enquiry
+  that asks for a proposal with no scope is answered by the reply card; the re-plan after it sets the step);
+  `pipeline.maybe_advance_on_send` moves to Quote only on an ATTACHED quotation/proposal file, never the subject;
+  sent-email history entries name their attachments ("[attached: ...]") so a re-plan sees what went out (Merck #166:
+  the summit quotation went out on the National Day thread's subject and the review re-added "send the quotation").
