@@ -180,6 +180,8 @@ def add(deal_id: int, what: str, *, whose: str = "us", kind: str | None = None, 
     kind = kind or ("theirs" if whose == "them" else "work")
     if whose == "them":
         kind = "theirs"
+    elif kind == "email" and tool_for(what):      # a proposal, quotation or treatments is never "just an email"
+        kind = "work"
     row = db.execute(
         "insert into next_steps (deal_id, company_id, what, whose, kind, tool, due_at, source, quote, then_what) "
         "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *",
@@ -496,10 +498,19 @@ already done, and promises that really wait on the CLIENT. Read the reminders an
             "due": "<YYYY-MM-DD from a reminder or the timeline, or ''>", "then": "<for theirs: what we do after>",
             "from": [<reminder ids it replaces>]}],
  "drop": [{"id": <reminder id>, "why": "<done in the timeline / internal / post-signing / an offer / a duplicate>"}]}
-Every reminder id appears in exactly one item's "from" or in "drop". Merge duplicates into ONE item. Mark THEIRS what
-waits on the client (data to send, a cast size to confirm, a signed quotation to return, feedback by a date). Drop only
-with a reason from the timeline: never drop real owed work because it is old or overdue; overdue work stays, with
-its date. Plain words in "what"."""
+Every reminder id appears in exactly one item's "from" or in "drop". Merge duplicates into ONE item.
+THEIRS: what waits on the client (data to send, a cast size to confirm, a signed quotation to return, feedback by a
+date), with what we do after in "then".
+DROP, with the reason:
+- done: the timeline shows it happened (sent, presented in a meeting that took place, answered);
+- internal: our own team task the client never sees (a brainstorm, an internal review);
+- post-signing: production work while the deal is still being sold (Opportunity or Quote stage): "finalize all visual
+  assets", "have the final content ready", "begin production". It only starts once they sign, which is THEIR move;
+- offer: we only offered it ("if needed", "if you would like", "happy to");
+- a chase of something already sent ("follow up on the questions already sent") is not ours: drop it.
+Never drop real owed work because it is old or overdue: it stays, with its date.
+kind: "work" whenever it needs real work first (a proposal, quotation, treatments or concepts, a deck, a pilot, an
+edit, a shoot); "email" only when the whole step is an email we can write now. Plain words in "what"."""
 
 
 def migrate(apply: bool = False, deal_ids: list | None = None) -> list[dict]:
@@ -545,9 +556,11 @@ def migrate(apply: bool = False, deal_ids: list | None = None) -> list[dict]:
                     due = None
             if it.get("whose") != "them" and not due:
                 due = _now() + timedelta(days=1)
-            add(did, it.get("what") or "", whose="them" if it.get("whose") == "them" else "us",
+            _new = add(did, it.get("what") or "", whose="them" if it.get("whose") == "them" else "us",
                 kind=it.get("kind"), due_at=due, source="migration", then_what=it.get("then") or "",
                 quote="from reminders " + ", ".join(f"R{str(x).lstrip('R')}" for x in it.get("from") or []))
+            if _new and due and due < _now():      # moved, not new: an overdue item shows as overdue, no burst of drafts
+                db.execute("update next_steps set notified_at=now() where id=%s", (_new["id"],))
         for r in rs:
             obligations.close(r["id"], "cancelled", obligations.evidence("rule", ref=f"next-steps list, deal {did}"),
                               "moved to the opportunity's next-steps list (18 Oct 2026)")
