@@ -3937,3 +3937,15 @@ shoot needs none), then 10% off the whole quotation.
   `pipeline.maybe_advance_on_send` moves to Quote only on an ATTACHED quotation/proposal file, never the subject;
   sent-email history entries name their attachments ("[attached: ...]") so a re-plan sees what went out (Merck #166:
   the summit quotation went out on the National Day thread's subject and the review re-added "send the quotation").
+
+## Voice that survives a wobble (owner, 18 Oct 2026)
+- "It's detecting it for most of the time and then suddenly stops." The api log showed a stream cut with "keepalive
+  ping timeout" on a patchy connection, and the cockpit had no `onclose`: the button kept saying recording while the
+  audio went nowhere.
+- Cockpit (v80): ONE stream helper for tap-to-talk and hands-free (`vStart` / `vOpen` / `vRetry` / `vSend` / `vFinal`
+  / `vEnd`). A drop reconnects (up to 3 tries, 0.5 s x try); the audio since the last FINAL phrase (`vrt.buf`, up to ~7 s)
+  is replayed on the new socket so no words are lost or doubled; after 3 failures it stops and says the words so far
+  are kept. `stopDictation` / `freeStop` call `vEnd()` first so a deliberate stop never reconnects.
+- Server: uvicorn runs with `--ws-ping-interval 20 --ws-ping-timeout 60` (deploy/cortex-api.service, installed to
+  /etc/systemd/system on 18 Oct; deploy.sh does NOT install units, copy + daemon-reload by hand when the unit changes);
+  the Deepgram leg pings 20/60; every stream logs `[voice] stream ended after Ns, N KB up, N results: <reason>`.
