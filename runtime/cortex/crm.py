@@ -1679,15 +1679,10 @@ def qualify_opportunity(email: str, company_slug: str, title: str | None = None)
     q = db.setting_get(f"qual:email:{email.lower()}") or {}
     if q.get("ball_in_our_court"):                # they asked US for a proposal/quote -> we owe them: don't auto-chase
         hold_auto(d["id"])
-        try:
-            from . import reminders, store
-            cidx = (store.get_company_by_slug(company_slug) or {}).get("id")
-            reminders.create(f"Prepare and send the proposal — {title}",
-                             _roll_weekend(datetime.now(timezone.utc) + timedelta(days=1), True),
-                             company_id=cidx, target_type="deal", target_id=d["id"], priority="high",
-                             created_by="cortex-qualify")
-        except Exception:  # noqa: BLE001 — the reminder is a convenience; never fail the qualify
-            pass
+        # NO MECHANICAL "SEND THE PROPOSAL" STEP (18 Oct 2026, Estithmar #172): "they asked for a proposal" was turned
+        # into "we owe a proposal, due tomorrow" from an email with no scope at all. The reply card answers them; when
+        # it is sent, the next-steps re-plan reads the whole opportunity and sets the real next step.
+        pass
     else:                                          # we're waiting on THEM -> start the Auto chase cadence
         start_opportunity_followups(d["id"])
     log_event(email, "qualified", f"Qualified -> opportunity #{d['id']}: {title}")

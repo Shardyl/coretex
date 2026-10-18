@@ -236,6 +236,12 @@ def they_wrote(company: dict, message: dict, deals: list | None = None, channel:
                             people={sender: message.get("name") or ""} if sender else None)
         except Exception as e:  # noqa: BLE001
             print(f"[events] cast {type(e).__name__}: {e}", flush=True)
+    if deal and channel != "email":     # email re-plans in pipeline.record_inbound; WhatsApp here (nextsteps.py)
+        try:
+            from . import nextsteps
+            nextsteps.observe_async(int(deal["id"]), "whatsapp_in", f"From: {message.get('name') or sender or ''}\n\n{body[:6000]}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[events] nextsteps {type(e).__name__}: {e}", flush=True)
     if deal:
         try:   # ONE CONVERSATION, ONE DRAFT: every OTHER open card on the opportunity is judged against this message
             from . import conversation

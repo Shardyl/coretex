@@ -166,7 +166,7 @@ def add(deal_id: int, what: str, *, whose: str = "us", kind: str | None = None, 
         return None
     whose = "them" if whose == "them" else "us"
     for it in items(deal_id, include_closed=True):
-        if not _same(it["what"], what):
+        if it["status"] == "superseded" or not _same(it["what"], what):
             continue
         if source == "owner":        # HIS word: an item he asks for again is reopened, never refused
             return edit(it["id"], due_at=due_at, by=by or "owner", reopen=it["status"] != "open")
@@ -195,7 +195,7 @@ def add(deal_id: int, what: str, *, whose: str = "us", kind: str | None = None, 
 def close(item_id: int, status: str, *, by: str, why: str = "", quote: str = "") -> dict | None:
     """Done or dismissed. The proof is who said so (`by`) and, from an email or meeting, the words that show it."""
     ensure_schema()
-    status = "dismissed" if status == "dismissed" else "done"
+    status = status if status in ("dismissed", "superseded") else "done"
     r = db.execute("update next_steps set status=%s, closed_at=now(), closed_by=%s, closed_why=%s, closed_quote=%s, "
                    "updated_at=now() where id=%s and status='open' returning *",
                    (status, by[:80], (why or "")[:300], (quote or "")[:600], int(item_id)))
@@ -240,94 +240,122 @@ def edit(item_id: int, *, what: str | None = None, whose: str | None = None, due
 
 # ------------------------------------------------------------------ reading what happened
 
-_OBSERVE = """You keep ONE opportunity's NEXT-STEPS LIST for a production company: what happens next, and whose move
-it is. You are given the list (open, done and dismissed items, with ids) and ONE new piece of material: an email WE
-sent, an email THEY sent (their new words only), a meeting's notes, or the OWNER's own note. Return JSON only:
-{"close": [{"id": <id>, "status": "done" | "dismissed", "quote": "<the exact words from the material that show it,
-             copied character for character>"}],
- "add": [{"what": "<short, concrete, in plain words>", "whose": "us" | "them", "kind": "email" | "work" | "theirs",
-          "due_hint": "<ISO date ONLY if the material states one; else today | tomorrow | week | days:N | none>",
-          "quote": "<the exact sentence it comes from>", "then": "<for THEIR item: what we do once they have, or ''>"}],
- "due": [{"id": <id>, "due_hint": "<as above>", "quote": "<the exact words>"}]}
-RULES, in order of importance:
-1. Only what the material SAYS. Never infer, never assume, never close something because it is not mentioned.
-   Nothing is ever "probably done". When unsure, return nothing.
-2. CLOSE an item only when the material shows it happened (we sent it, they sent it, it was done in the meeting) or,
-   for the OWNER's note, when he says it is done, not needed, or not happening ("dismissed").
-3. ADD only real next steps that move THIS sale (or, on won work, the project) forward:
-   - OURS: something we said we WILL do (send, prepare, call on a stated day) or the client asked us for and we owe.
-     kind "email" when the whole step is an email Cortex can write (a follow-up, answering a question, sending
-     something we already have, proposing call times); kind "work" when it needs real work first (a proposal, a
-     quotation, treatments or concepts, a pilot, a deck, an edit).
-   - THEIRS: something THEY said they will do or must do before we can move (send data, confirm a cast size, return a
-     signed quotation, give feedback by a date). Put our follow-on, if any, in "then".
-   - NEVER: a follow-up or chase about something we ALREADY sent (questions, a proposal): the chase clock does that.
-   - NEVER: an OFFER ("happy to", "if needed", "if you would like", "we could"), politeness, internal tasks (a team
-     brainstorm, internal review), work that only happens after they sign while the deal is still being sold
-     ("finalize all visual assets", "begin production"), or a step that is already DONE in this material.
-   - A promise that waits on THEM ("once you send", "on receipt of", "after you confirm") is THEIR item, with ours in
-     "then". Our own words quoted back inside their reply are OURS, never their request to us.
-4. NEVER add something that matches ANY item already on the list, open, done or dismissed: use "due" to change an open
-   item's date instead. Dismissed means the owner does not want it: never bring it back.
-5. Plain words in "what": "Send Farheen 3 ideas and 3 treatments for the Ramadan film", not "Commitment owed to ...".
-"""
+REPLAN_MODEL_DEFAULT = "claude-opus-5"     # owner, 18 Oct 2026: the best model; setting `nextsteps_model` overrides
+
+_PLAN = """You RE-PLAN one sales opportunity for a production company after something has just happened (an email WE
+sent, an email or WhatsApp THEY sent, a meeting's notes, or the OWNER's note). You see the whole opportunity: its
+timeline, its current NEXT-STEPS LIST, and the new event. Decide what the next steps are NOW and return the changes.
+Return JSON only:
+{"close": [{"id": <id>, "status": "done" | "superseded" | "dismissed", "quote": "<exact words, copied character for
+             character from the NEW EVENT or the TIMELINE, that show it>"}],
+ "add": [{"what": "<short, concrete, plain words>", "whose": "us" | "them", "kind": "email" | "work" | "theirs",
+          "due_hint": "<ISO date ONLY if stated; else today | tomorrow | week | days:N | none>",
+          "quote": "<exact words from the NEW EVENT or the TIMELINE it comes from>",
+          "then": "<for THEIR item: what we do once they have, or ''>"}],
+ "due": [{"id": <id>, "due_hint": "<as above>", "quote": "<exact words>"}],
+ "why": "<one sentence: the state of the opportunity now>"}
+HOW TO DECIDE, in order:
+1. WHOSE MOVE IS IT NOW? Read the newest exchange. If our latest email asked them something, offered a meeting or call,
+   or sent them something for their decision, the next move is THEIRS: one THEIRS item ("confirm a time for the call to
+   discuss requirements", "decide on the proposal"), with the work we will do after it in "then". Our follow-up emails
+   are sent by the follow-up system: never make a chase, a follow-up or a reminder an item.
+2. OURS only for what we must do now that does not wait on them: something we promised to send, something they asked
+   for that we have everything to produce, a call we agreed to arrange. kind "email" when the whole step is an email
+   Cortex can write; kind "work" when it needs real work (a proposal, quotation, treatments, deck, pilot, edit).
+   A proposal or quotation is OURS only when we have the scope to write it: if we are still asking what they need, the
+   step is to get the requirements (theirs to answer), and the proposal goes in "then".
+3. The plan CHANGED? Close the overtaken item as "superseded" (with the words that changed it) and add the right one.
+   "done" only when the item actually happened. "dismissed" only on the OWNER's note saying it is not needed.
+4. Several items at once are normal (ours: the proposal; theirs: confirm the meeting). Keep every item that still stands.
+5. NEVER: an OFFER ("happy to", "if needed", "we could"); politeness; internal tasks (a team brainstorm); work that only
+   happens after they sign while the deal is still being sold; anything matching a DISMISSED item; an item marked
+   [owner] unless the event is the OWNER's note.
+6. Only what the material SAYS. Silence closes nothing, nothing is "probably done", nothing is assumed. Every change
+   carries its exact quote. When nothing changes, return empty lists.
+7. Plain words in "what": "Confirm a time for the call to discuss the filming requirements", not a title."""
+
+_LOCKS: dict = {}
+
+
+def _deal_lock(deal_id: int):
+    import threading
+    return _LOCKS.setdefault(int(deal_id), threading.Lock())
+
+
+def _timeline(deal_id: int, limit: int = 40) -> str:
+    d = db.one("select history from crm_projects where id=%s", (int(deal_id),)) or {}
+    hist = [h for h in (d.get("history") or []) if not h.get("voided")
+            and h.get("event") not in ("next_steps", "touch_started", "research", "cast")]
+    return "\n".join(f"- {str(h.get('ts', ''))[:16]} [{h.get('event', '')}] {str(h.get('text', ''))[:1500]}"
+                     for h in hist[-limit:])
 
 
 def observe(deal_id: int, source: str, material: str, *, by: str = "", company_id=None, meeting: bool = False) -> list[str]:
-    """Read one piece of material and apply what it shows to the list. source: email_out | email_in | meeting | note.
-    Returns the changes made. Never raises."""
+    """RE-PLAN THE WHOLE OPPORTUNITY after one event (owner, 18 Oct 2026: "when I've sent and approved that email, should
+    Cortex not read it and then look at the entire opportunity, clean up any inappropriate next steps and create the
+    correct next step"). source: email_out | email_in | whatsapp_in | meeting | note. Serialised per deal; never raises.
+    Returns the changes made."""
+    with _deal_lock(deal_id):
+        return _replan(deal_id, source, material, by=by, company_id=company_id)
+
+
+def _replan(deal_id: int, source: str, material: str, *, by: str = "", company_id=None) -> list[str]:
     try:
         ensure_schema()
         material = (material or "").strip()
         if len(material) < 12:
             return []
         d = db.one("select id, title, stage, company from crm_projects where id=%s", (int(deal_id),))
-        if not d:
+        if not d or d["stage"] in ("Lost", "Completed"):
             return []
         from . import provider, worker
-        allit = items(deal_id, include_closed=True)
+        allit = [i for i in items(deal_id, include_closed=True) if i["status"] != "superseded"]
         listing = "\n".join(
-            f"#{i['id']} [{i['status']}] {'OURS' if i['whose'] == 'us' else 'THEIRS'}: {i['what']}"
+            f"#{i['id']} [{i['status']}{', owner' if i.get('source') == 'owner' else ''}] "
+            f"{'OURS' if i['whose'] == 'us' else 'THEIRS'}: {i['what']}"
             + (f" (due {i['due_at'].astimezone(_GST):%a %d %b})" if i.get("due_at") else "")
+            + (f"; then {i['then_what']}" if i.get("then_what") else "")
             for i in allit[-40:]) or "(empty)"
+        timeline = _timeline(deal_id)
         label = {"email_out": "AN EMAIL WE SENT", "email_in": "AN EMAIL THEY SENT (their new words only)",
-                 "meeting": "THE MEETING'S NOTES", "note": "THE OWNER'S OWN NOTE"}.get(source, source.upper())
+                 "whatsapp_in": "A WHATSAPP THEY SENT", "meeting": "THE MEETING'S NOTES",
+                 "note": "THE OWNER'S OWN NOTE", "review": "A FULL REVIEW"}.get(source, source.upper())
+        model = str(db.setting_get("nextsteps_model") or REPLAN_MODEL_DEFAULT)
         out = provider.think_json(
-            _OBSERVE,
-            f"{worker._now_line()}\nOPPORTUNITY #{d['id']}: {d['title']} (stage {d['stage']})\n\nTHE LIST:\n{listing}\n\n"
-            f"{label}{(' (from ' + by + ')') if by else ''}:\n{material[:12000]}",
-            fast=True, max_tokens=2500, purpose="next-steps", company=None) or {}
+            _PLAN,
+            f"{worker._now_line()}\nOPPORTUNITY #{d['id']}: {d['title']} (stage {d['stage']})\n\nTIMELINE (oldest first):\n"
+            f"{timeline or '(none)'}\n\nCURRENT NEXT-STEPS LIST:\n{listing}\n\nTHE NEW EVENT, {label}"
+            f"{(' (from ' + by + ')') if by else ''}:\n{material[:12000]}",
+            fast=False, model=model, max_tokens=8000, purpose="next-steps-replan") or {}
     except Exception as e:  # noqa: BLE001
-        print(f"[nextsteps] observe {deal_id}: {type(e).__name__}: {e}", flush=True)
+        print(f"[nextsteps] replan {deal_id}: {type(e).__name__}: {e}", flush=True)
         return []
     done = []
+    corpus = material + "\n" + timeline          # every quote must be in what the model was shown, checked by code
     try:
         byid = {i["id"]: i for i in allit}
-        who = by or {"email_out": "our email", "email_in": "their email", "meeting": "the meeting",
-                     "note": "owner"}.get(source, source)
+        who = by or {"email_out": "our email", "email_in": "their email", "whatsapp_in": "their WhatsApp",
+                     "meeting": "the meeting", "note": "owner"}.get(source, source)
         for c in out.get("close") or []:
             it = byid.get(int(c.get("id") or 0)) if str(c.get("id") or "").isdigit() else None
             if not it or it["status"] != "open":
                 continue
             q = str(c.get("quote") or "")
-            status = "dismissed" if (c.get("status") == "dismissed" and source == "note") else "done"
-            # PROOF BY CODE: the quote is really in the material; and who may close what
-            if source != "note" and not _in(q, material):
-                continue
-            if source == "email_out" and it["whose"] != "us":
-                continue
-            if source == "email_in" and it["whose"] != "them":
-                continue
-            if close(it["id"], status, by=who, why=f"from {source}", quote=q if source != "note" else ""):
-                done.append(f"{status}: {it['what']}")
+            st = str(c.get("status") or "done")
+            st = st if st in ("done", "superseded", "dismissed") else "done"
+            if source != "note":
+                if it.get("source") == "owner" or st == "dismissed" or not _in(q, corpus):
+                    continue           # his items are his; only his note dismisses; no proof, no change
+            if close(it["id"], st, by=who, why=f"re-plan after {source}", quote=q if source != "note" else ""):
+                done.append(f"{st}: {it['what']}")
         from . import pipeline
         for a in out.get("add") or []:
             what, q = str(a.get("what") or "").strip(), str(a.get("quote") or "")
-            if not what or (source != "note" and not _in(q, material)):
+            if not what or (source != "note" and not _in(q, corpus)):
                 continue
             whose = "them" if a.get("whose") == "them" else "us"
             if whose == "us" and source != "note" and pipeline._is_offer(q):
-                continue               # an offer leaves the next move with them: nothing is owed
+                continue
             kind = "theirs" if whose == "them" else ("email" if a.get("kind") == "email" else "work")
             r = add(deal_id, what, whose=whose, kind=kind, due_at=_due(a.get("due_hint"), whose=whose), source=source,
                     quote=q, then_what=str(a.get("then") or ""), company_id=company_id, by=who)
@@ -335,12 +363,16 @@ def observe(deal_id: int, source: str, material: str, *, by: str = "", company_i
                 done.append(f"added ({'ours' if whose == 'us' else 'theirs'}): {what}")
         for u in out.get("due") or []:
             it = byid.get(int(u.get("id") or 0)) if str(u.get("id") or "").isdigit() else None
-            if not it or it["status"] != "open" or (source != "note" and not _in(str(u.get("quote") or ""), material)):
+            if not it or it["status"] != "open" or (source != "note" and (it.get("source") == "owner"
+                                                                          or not _in(str(u.get("quote") or ""), corpus))):
                 continue
             w = _due(u.get("due_hint"), whose=it["whose"])
             if w:
                 edit(it["id"], due_at=w, by=who)
                 done.append(f"new date {w.astimezone(_GST):%a %d %b}: {it['what']}")
+        if done:
+            _deal_log(deal_id, f"Next steps re-planned after {source}: " + "; ".join(done)[:500]
+                      + (f". {str(out.get('why') or '')[:200]}" if out.get("why") else ""))
     except Exception as e:  # noqa: BLE001
         print(f"[nextsteps] apply {deal_id}: {type(e).__name__}: {e}", flush=True)
     return done
@@ -349,6 +381,19 @@ def observe(deal_id: int, source: str, material: str, *, by: str = "", company_i
 def observe_async(*a, **k) -> None:
     import threading
     threading.Thread(target=observe, args=a, kwargs=k, daemon=True).start()
+
+
+def replan_all(stages: tuple = ("Opportunity", "Quote"), apply: bool = True) -> list:
+    """One pass over every open opportunity: re-planned from its whole timeline (the newest event as the trigger)."""
+    out = []
+    for d in db.query("select id, title from crm_projects where stage = any(%s) order by id", (list(stages),)):
+        tl = _timeline(d["id"], limit=6)
+        if not tl:
+            continue
+        ch = observe(d["id"], "review", "A FULL REVIEW, no new event: re-plan from the whole timeline. The newest "
+                     "entries:\n" + tl) if apply else []
+        out.append({"deal": d["id"], "title": d["title"], "changes": ch})
+    return out
 
 
 def on_closed(deal_id: int, stage: str) -> None:
@@ -430,6 +475,23 @@ def _draft_email(it: dict) -> bool:
     req = reminders._with_deal({"target_type": "deal", "target_id": it["deal_id"], "title": it["what"]}, "email_reply", req)
     if "@" not in ((req.get("inquiry") or {}).get("email") or ""):
         return False
+    # ONE EMAIL PER PERSON (owner, 18 Oct 2026): an email already open to them carries this step too, never a second card
+    to = req["inquiry"]["email"].lower()
+    open_card = db.one("select id, request from tasks where company_id=%s and kind in ('email_reply','email_draft') and "
+                       "status in ('new','drafting','queued','awaiting_approval','awaiting_correction') and "
+                       "lower(request->'inquiry'->>'email')=%s order by id desc limit 1", (co["id"], to))
+    if open_card:
+        from . import engine
+        r2 = dict(open_card.get("request") or {})
+        r2["brief"] = (r2.get("brief") or "").rstrip() + f"\n\nALSO COVER IN THIS EMAIL (a next step now due): {it['what']}."
+        store.update_task(open_card["id"], request=r2)
+        try:
+            engine.refresh_from_notes(open_card["id"], f"A next step is now due and belongs in this email: {it['what']}")
+        except Exception as _e:  # noqa: BLE001
+            print(f"[nextsteps] fold into #{open_card['id']}: {type(_e).__name__}: {_e}", flush=True)
+        db.execute("update next_steps set card_id=%s, notified_at=now() where id=%s", (open_card["id"], it["id"]))
+        _log(it["id"], f"due: folded into open email card #{open_card['id']}")
+        return True
     t = store.create_card(co["id"], sk["id"], "email_reply", req, contact=req["inquiry"]["email"], deal_id=it["deal_id"])
     if not t:
         return False

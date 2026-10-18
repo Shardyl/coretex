@@ -572,9 +572,11 @@ def maybe_advance_on_send(deal_id: int, task: dict, env: dict) -> None:
     if not d or d.get("stage") != "Opportunity":
         return
     req = (task or {}).get("request") or {}
+    # FILES ONLY (18 Oct 2026, Estithmar #172): the client's own subject "Request for ... Proposal" moved a deal to
+    # Quote when we had only sent our company profile and asked questions.
     names = " ".join([a.get("filename") or "" for a in req.get("attach_docs") or []]
                      + list(req.get("attachment_names") or [])
-                     + [(env or {}).get("subject") or ""]).lower()
+                     + list((env or {}).get("attachment_names") or [])).lower()
     if "quotation" in names or "proposal" in names:
         try:
             crm.set_project_stage(int(deal_id), "Quote")   # logs the stage_change on the timeline itself

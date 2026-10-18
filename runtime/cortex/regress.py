@@ -964,14 +964,20 @@ def _cases():
         return same and tools and offer and theirs_no_date and proof
     case("next steps: a re-mention matches, work names its tool, an offer is never owed, theirs has no invented date",
          "seven cases, 18 Oct", _ns_rules)
-    case("next steps change only on evidence: our email closes OURS, their email closes THEIRS, quotes checked by code",
-         "Heaven #150 'proposal filed = done', 18 Oct",
-         lambda: all(x in inspect.getsource(_ns.observe) for x in (
-             '_in(q, material)', 'source == "email_out" and it["whose"] != "us"',
-             'source == "email_in" and it["whose"] != "them"', "pipeline._is_offer(q)")))
+    case("every event RE-PLANS the whole opportunity: each change carries a quote checked by code, the owner's items "
+         "are his, only his note dismisses, an offer is never owed",
+         "owner 18 Oct: 'look at the entire opportunity ... create the correct next step' (Estithmar #172)",
+         lambda: all(x in inspect.getsource(_ns._replan) for x in (
+             "_in(q, corpus)", 'it.get("source") == "owner"', 'st == "dismissed"', "pipeline._is_offer(q)",
+             "_timeline(deal_id)")) and "_deal_lock" in inspect.getsource(_ns.observe)
+         and _ns.REPLAN_MODEL_DEFAULT == "claude-opus-5")
+    case("a proposal step is never made from 'they asked for a proposal' alone; Quote needs an attached file",
+         "Estithmar #172, 18 Oct",
+         lambda: "Prepare and send the proposal" not in inspect.getsource(__import__("cortex.crm", fromlist=["x"]).qualify_opportunity)
+         and "subject" not in inspect.getsource(pipeline.maybe_advance_on_send).split("names =")[1].split("if ")[0])
     case("no chase while WE owe the next step; no owed reminder is ever created again (it goes on the list)",
          "Shama #164 chase armed while we owed her, 18 Oct",
-         lambda: "nextsteps.ours_open" in inspect.getsource(_gt._check)
+         lambda: "_ours and not any(i[\"whose\"] == \"them\" for i in _open)" in inspect.getsource(_gt._check)
          and "nextsteps.add(int(tid)" in inspect.getsource(_rm.create)
          and "for c in []:" in inspect.getsource(pipeline.record_send)
          and "nextsteps.observe_async" in inspect.getsource(pipeline.record_meeting))
