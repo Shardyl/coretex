@@ -3986,3 +3986,27 @@ shoot needs none), then 10% off the whole quotation.
   can do"): Dismiss hides the card only; the step stays on the opportunity's list (Done closes it, Not needed dismisses
   it there). `nextsteps.tool_for` names no build tool for a meeting step ("Hold the call ... to run through the
   quotation" had said "build the quotation"), via `_MEETING_STEP`. v83.
+
+## Project files and handover is a priced option, not a refusal (owner, 19 Oct 2026)
+
+- CAUSE: iTellU's own production brief (deal 156, library doc 919, p2) asks us to state our
+  "project-file handover terms" alongside samples, pricing, turnaround, revision rounds, subtitles and
+  music licensing. The only answer we had was the terms clause "not included and charged separately if
+  required", with NO rate behind it: a drafter could not price it and a quotation could not offer it.
+- Rate card group **"Project files and handover"** (card v2.5; v2.4 kept). Every priced figure is the
+  owner's own, off MAH Gold SEN-2026-0008 v4, the quotation he approved for exactly this work (deal 112):
+  `handover-assignment-per-piece` AED 600 per delivered piece (the RIGHTS in the underlying material,
+  not the transfer), `handover-consolidation` AED 2,000 per job, `handover-drive-4tb` AED 1,800,
+  `handover-walkthrough` AED 500, `handover-checksum-index` AED 500.
+- UNPRICED BY DESIGN, OWNER TO CONFIRM: `handover-transfer-link` (the drive-less equivalent has never
+  been quoted; the nearest precedent is a superseded AED 1,000 line) and `handover-files-included-uplift`
+  (a monthly uplift for files to be included as delivered, which replaces the per-piece charge and has no
+  precedent at all). `price_lines` blanks any line using them and names the key, which is the point.
+- `content-retainer` clause 22 now OFFERS it: files available either as a handover at the end of the term
+  or piece by piece as delivered, assignment charged per delivered piece, retrieval and transfer charged
+  separately, rates quoted and agreed before any handover begins. Preset backup
+  `quotation_presets:backup-2026-10-19`.
+- STILL TERSE, deliberately: `ai-production` and the other presets keep "not included and are charged
+  separately if required". That clause is now TRUE and backed by real rates, so it was left alone rather
+  than editing terms carried by live, unsent quotations (changing them means regenerating those and
+  re-running `_export_templates`). Owner's call whether to align them.
