@@ -567,6 +567,10 @@ def record_quotation_sent(deal_id: int, task: dict, env: dict, company: dict | N
         text += "; deal value set from it" + (f" (was {cur} {float(old):,.0f})"
                                                if old not in (None, "") and float(old) != net else "")
     log_deal(int(deal_id), "quotation_sent", text, ref=f"quotation-sent:{num}:v{entry.get('v')}")
+    try:   # the receipt check is the next chase, counted from this send (crm.restart_after_quote)
+        crm.restart_after_quote(int(deal_id))
+    except Exception:  # noqa: BLE001
+        pass
     return {"number": num, "v": entry.get("v"), "net": net}
 
 

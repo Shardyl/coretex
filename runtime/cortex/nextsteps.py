@@ -420,6 +420,10 @@ def tick() -> list[str]:
     one already more than a day late is a To do card (a late email is worth a look before it is written)."""
     ensure_schema()
     out = []
+    try:
+        out += their_dates()
+    except Exception as e:  # noqa: BLE001
+        print(f"[nextsteps] their_dates: {type(e).__name__}: {e}", flush=True)
     now = _now()
     for it in db.query("select n.*, p.title deal_title, p.stage from next_steps n join crm_projects p on p.id=n.deal_id "
                        "where n.status='open' and n.whose='us' and n.card_id is null and n.notified_at is null "
@@ -438,6 +442,29 @@ def tick() -> list[str]:
             out.append(f"to do: {it['what']}")
         except Exception as e:  # noqa: BLE001
             print(f"[nextsteps] tick {it['id']}: {type(e).__name__}: {e}", flush=True)
+    return out
+
+
+def their_dates() -> list[str]:
+    """THEIR DATE WINS (owner, 19 Oct 2026, DSO: "feedback by 19 October", chase set for the 22nd). When something we
+    are waiting on from them passes its date and nothing has come, the chase goes the next working day at 09:00 Dubai
+    (or now, when that has passed too), never later. Each item pulls the clock once."""
+    out = []
+    for it in db.query("select n.id, n.deal_id, n.what, n.due_at, p.next_followup, p.automation, p.stage from next_steps n "
+                       "join crm_projects p on p.id=n.deal_id where n.status='open' and n.whose='them' and n.due_at is "
+                       "not null and n.due_at < now() and n.notified_at is null and p.automation='auto' and "
+                       "p.stage in ('Opportunity','Quote')"):
+        d = it["due_at"].astimezone(_GST)
+        nxt = (d + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+        while nxt.weekday() >= 5:
+            nxt += timedelta(days=1)
+        nxt = max(nxt, _now() + timedelta(minutes=2))
+        if not it["next_followup"] or it["next_followup"] > nxt:
+            db.execute("update crm_projects set next_followup=%s, updated_at=now() where id=%s", (nxt, it["deal_id"]))
+            _deal_log(it["deal_id"], f"Their date passed ({d:%a %d %b}) with nothing from them: the chase moves to "
+                                     f"{nxt:%a %d %b %H:%M} ({it['what'][:100]}).")
+            out.append(f"#{it['deal_id']} chase {nxt:%a %d %b}")
+        db.execute("update next_steps set notified_at=now() where id=%s", (it["id"],))
     return out
 
 

@@ -977,6 +977,20 @@ def _cases():
          and _ns.tool_for("Send the revised quotation") == "create_quotation"
          and "todoTalkOpen(${t.id},false)\">Type</button><button class=\"btn sm\" onclick=\"notifAct(${t.id},'dismiss')\">Dismiss"
          in open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"), encoding="utf-8").read())
+    def _push_rhythm():
+        from . import crm as _c
+        gaps = [p["after_days"] for p in _c.cadence_points(_c.CLOSING_CADENCE)][:7]
+        tg = [p["after_days"] for p in _c.cadence_points(_c.TENDER_CLOSING_CADENCE)][:3]
+        return (gaps == [1, 2, 3, 2, 3, 5, 5] and tg == [1, 5, 5]
+                and _c.is_formal_tender({"title": "Tender: Video Production Request for Proposal", "history": []})
+                and _c.is_formal_tender({"title": "Al Hamra RAK IN MOTION", "history": [
+                    {"event": "email_out", "text": "sent to kiran: RFP Invitation - RAK IN MOTION"}]})
+                and not _c.is_formal_tender({"title": "Dubai Silicon Oasis - brand film", "history": []})
+                and "restart_after_quote" in inspect.getsource(pipeline.record_quotation_sent)
+                and "their_dates()" in inspect.getsource(_ns.tick))
+    case("after a quote: receipt check, then every 2-3 working days for two weeks (weekly for a formal tender); "
+         "their date wins", "owner 19 Oct: DSO / Al Hamra 'too slow'", _push_rhythm)
+
     def _tender_job():
         from . import crm as _c
         d = {"title": "Wasl, Viya corporate festive video (RFQ 2026_1170)", "history": []}

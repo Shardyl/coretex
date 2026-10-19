@@ -1135,12 +1135,71 @@ CLOSING_CADENCE = {   # quotation with them AND they have engaged with it: push 
     # least, almost the next day or at the very latest the day after ... then five days or something, once a week ...
     # we won't let people go until they respond ... every two weeks." Step 0 is the RECEIPT CHECK and only runs when
     # the deal enters Quote (the submission); a reply from them restarts at step 1 (they have it).
+    # OWNER, 19 Oct 2026: "it's too slow ... they need pushing a little bit harder". The first two weeks after a
+    # quote are the push: a chase every 2 to 3 working days, then weekly, then every two weeks.
     "steps": [
         {"after_days": 1, "repeat": 1, "action": "chase"},       # did you receive it? (next working day)
+        {"after_days": 2, "repeat": 1, "action": "chase"},       # the push: every 2 to 3 working days, ~2 weeks
+        {"after_days": 3, "repeat": 1, "action": "chase"},
+        {"after_days": 2, "repeat": 1, "action": "chase"},
+        {"after_days": 3, "repeat": 1, "action": "chase"},
         {"after_days": 5, "repeat": 8, "action": "chase"},       # then weekly, about two months
         {"after_days": 10, "repeat": 26, "action": "checkin"},   # then every two weeks until they answer
     ],
 }
+
+# A FORMAL TENDER OR RFP UNDER EVALUATION stays weekly (owner, 19 Oct 2026: chasing a procurement panel every two
+# days can count against us). Same receipt check, then weekly, then every two weeks.
+TENDER_CLOSING_CADENCE = {
+    "name": "closing", "tender": True, "skip_weekends": True, "working_days": True,
+    "steps": [
+        {"after_days": 1, "repeat": 1, "action": "chase"},
+        {"after_days": 5, "repeat": 8, "action": "chase"},
+        {"after_days": 10, "repeat": 26, "action": "checkin"},
+    ],
+}
+_TENDER_WORDS = re.compile(r"\b(?:RFP|RFQ|tender|request for (?:proposal|quotation))\b", re.I)
+
+
+def is_formal_tender(p: dict) -> bool:
+    """A deal won through a formal tender / RFP process: its title, a tender circular on it, or the emails on it."""
+    if _TENDER_WORDS.search(p.get("title") or "") or tender_code(p.get("title") or ""):
+        return True
+    for h in (p.get("history") or []):
+        if h.get("event") == "tender":
+            return True
+        if h.get("event") in ("email_in", "email_out", "email_out_manual") and _TENDER_WORDS.search(str(h.get("text") or "")[:300]):
+            return True
+    return False
+
+
+def closing_cadence_for(p: dict) -> dict:
+    """The closing rhythm for THIS deal: weekly for a formal tender, the push otherwise (profile overrides kept)."""
+    if is_formal_tender(p):
+        try:
+            from . import profile, store
+            co = store.get_company_by_slug(_slug_for_org(p.get("company")))
+            cad = (profile.get(co["id"]) or {}).get("tender_closing_cadence") if co else None
+            if cad and cad.get("steps"):
+                return {"name": "closing", "tender": True, **cad}
+        except Exception:  # noqa: BLE001
+            pass
+        return TENDER_CLOSING_CADENCE
+    return get_closing_cadence(p.get("company"))
+
+
+def restart_after_quote(deal_id: int) -> bool:
+    """A QUOTATION OR PROPOSAL WENT OUT: the closing rhythm starts again from its RECEIPT CHECK (owner, 19 Oct 2026, DSO
+    #148: their reply that morning had set the deal to step 1, so the quote's receipt check was cancelled as 'too
+    soon' and nothing went for 8 days). The next send-driven clock (touch_followups) then counts from step 0."""
+    p = db.one("select * from crm_projects where id=%s", (int(deal_id),))
+    if not p or p.get("automation") != "auto" or p.get("stage") not in ("Opportunity", "Quote"):
+        return False
+    if ((p.get("cadence") or {}).get("name") if isinstance(p.get("cadence"), dict) else None) == "owner":
+        return False                      # his own rhythm for this deal stands
+    db.execute("update crm_projects set cadence=%s, followup_step=0, updated_at=now() where id=%s",
+               (Json(closing_cadence_for(p)), int(deal_id)))
+    return True
 
 RESTART_CADENCE = {   # a PARKED/paused project being restarted: patient, never salesy (owner, 30 Aug -
     # "that's almost like an aggressive sales follow-up, which is wrong"). The client already bought;
@@ -1368,7 +1427,7 @@ def _apply_stage_rhythm(p: dict, old: str | None, new: str) -> None:
             db.execute("update crm_projects set automation=null, next_followup=null, updated_at=now() where id=%s", (did,))
             note = f"Automatic follow-ups switched off: the deal moved to {new}."
     elif r == "closing" and p.get("automation") == "auto" and stages.rhythm(old) != "closing":
-        _cc = get_closing_cadence(p["company"])
+        _cc = closing_cadence_for(p)
         db.execute("update crm_projects set cadence=%s, followup_step=0, next_followup=%s where id=%s",
                    (Json(_cc), _schedule_point(_cc, 0), did))
     elif r == "won" and (old in stages.SALES or old is None or ((p.get("cadence") or {}).get("name") == "closing")):
@@ -1484,12 +1543,13 @@ def enter_closing(deal_id: int) -> bool:
         return False
     # step 1, not 0: they have written, so they have it; the receipt check is only for the submission itself
     db.execute("update crm_projects set cadence=%s, followup_step=1, updated_at=now() where id=%s",
-               (Json(get_closing_cadence(p["company"])), int(deal_id)))
+               (Json(closing_cadence_for(p)), int(deal_id)))
     if was != "closing":
         db.execute("update crm_projects set history = history || %s::jsonb where id=%s",
                    (Json([{"ts": _now(), "event": "note",
-                           "text": "Closing rhythm on: a chase every 5 working days while they weigh our quotation, "
-                                   "then every two weeks until they answer, restarting whenever they reply."}]),
+                           "text": "Closing rhythm on: a chase every 2 to 3 working days for two weeks while they weigh "
+                                   "our quotation (weekly for a formal tender), then weekly, then every two weeks until "
+                                   "they answer, restarting whenever they reply."}]),
                     int(deal_id)))
     return True
 
