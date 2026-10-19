@@ -3982,3 +3982,7 @@ shoot needs none), then 10% off the whole quotation.
 - EVERY NEWSLETTER CARD OPENS ITS ISSUE (owner, 19 Oct 2026): `_enrich_action_card` sets `issue_link` when the built
   issue exists (setting `newsletter:<id>` html, or the send job's copy); the cockpit's `pairBtn` shows "View issue"
   (`viewIssue`, the same `/api/content/preview/<id>` the Calendar uses, images inlined) on every newsletter kind. v82.
+- TO DO CARDS CAN BE DISMISSED (owner, 19 Oct 2026: a heads-up for tomorrow's Welf call "there's not really anything I
+  can do"): Dismiss hides the card only; the step stays on the opportunity's list (Done closes it, Not needed dismisses
+  it there). `nextsteps.tool_for` names no build tool for a meeting step ("Hold the call ... to run through the
+  quotation" had said "build the quotation"), via `_MEETING_STEP`. v83.
