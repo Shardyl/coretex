@@ -492,6 +492,11 @@ def _enrich_action_card(t: dict) -> dict:
     """Enrich a task row as an Inbox ACTION card (the existing approval-card shape)."""
     t["card"] = "action"
     t["wp"] = db.setting_get(f"wp:{t['id']}")   # preview/edit links for blog drafts
+    # EVERY NEWSLETTER CARD OPENS ITS ISSUE (owner, 19 Oct 2026: "include the newsletter content links when producing
+    # the card so I can click into them and have a quick look before I approve it")
+    if str(t.get("kind") or "").startswith("newsletter"):
+        t["issue_link"] = bool((db.setting_get(f"newsletter:{t['id']}") or {}).get("html")) or bool(db.one(
+            "select 1 from newsletter_send_jobs where task_id=%s and html is not null limit 1", (t["id"],)))
     if t["kind"] in engine.EMAIL_RENDER_KINDS:  # emails: show the envelope (to/from/subject) + logo HTML
         co = store.get_company(t["company_id"])
         env = engine._email_envelope(t, co)

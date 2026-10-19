@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v81';
+const APP_BUILD = 'cortex-v82';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -1682,9 +1682,18 @@ async function cancelReminderCal(rid){ try{ await api('/api/reminders/'+rid+'/ca
 async function runCal(id){ try{ toast('Running…'); await api('/api/calendar/'+id+'/run',{method:'POST'}); toast('Done — it is heading to your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
 // THE STANDARD PAIR (owner, 13 Sep 2026): every outbound card offers both "now" and "schedule". The primary
 // Approve button is whatever that kind does by default (label from the server); pairBtn adds the other half.
+async function viewIssue(id){   // the newsletter itself, rendered as the reader will see it
+  try{ const r=await fetch(API+'/api/content/preview/'+id,{headers:token?{Authorization:'Bearer '+token}:{}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const html=await r.text(); const w=window.open('','_blank');
+    if(w){ w.document.write(html); w.document.close(); } else toast('Allow popups to view it'); }
+  catch(e){ toast('Could not open the issue ('+e.message+')'); }
+}
 function pairBtn(t){
-  if(t.kind==='newsletter_review') return `<button class="btn go" onclick="sendNowNL(${t.id})">Approve &amp; send now</button>`;
-  if(t.kind==='newsletter_send')   return `<button class="btn" onclick="scheduleLaterNL(${t.id})">${ic('calendar',16)} Approve &amp; schedule</button>`;
+  const nv=(String(t.kind||'').startsWith('newsletter')&&t.issue_link)?`<button class="btn" onclick="viewIssue(${t.id})">${ic('file',16)} View issue</button>`:'';
+  if(t.kind==='newsletter_review') return nv+`<button class="btn go" onclick="sendNowNL(${t.id})">Approve &amp; send now</button>`;
+  if(t.kind==='newsletter_send')   return nv+`<button class="btn" onclick="scheduleLaterNL(${t.id})">${ic('calendar',16)} Approve &amp; schedule</button>`;
+  if(nv) return nv;
   if(t.kind==='blog')              return `<button class="btn go" onclick="publishNowBlog(${t.id})">Approve &amp; publish now</button>`;
   return '';
 }

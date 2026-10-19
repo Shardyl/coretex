@@ -971,6 +971,12 @@ def _cases():
              "_in(q, corpus)", 'it.get("source") == "owner"', 'st == "dismissed"', "pipeline._is_offer(q)",
              "_timeline(deal_id)")) and "_deal_lock" in inspect.getsource(_ns.observe)
          and _ns.REPLAN_MODEL_DEFAULT == "claude-opus-5")
+    case("every newsletter card in the Inbox opens its issue before approval",
+         "owner, 19 Oct (card 602)",
+         lambda: 'issue_link' in inspect.getsource(__import__("cortex.api", fromlist=["x"])._enrich_action_card)
+         and "function viewIssue(" in open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"),
+                                           encoding="utf-8").read())
+
     def _contact_card():
         from . import whatsapp as _wa, crm as _crm
         m = {"type": "contacts", "contacts": [{"name": {"formatted_name": "Matt Brooke"},
