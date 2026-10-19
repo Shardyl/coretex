@@ -3971,3 +3971,11 @@ shoot needs none), then 10% off the whole quotation.
   `ssh <install>@<install>.ssh.wpengine.net 'bash -s'` with
   `wp eval 'WpeCommon::purge_varnish_cache_all(); WpeCommon::clear_cdn_cache();'` (pipe the script on stdin: inline
   quoting breaks). Installs: sensapro, skyvis, filmspoke, snaprewards, tabscanner.
+
+## WhatsApp contact cards reach Talk (owner, 19 Oct 2026)
+- He shared Matt Brooke's contact card for opportunity 124; the owner/team WhatsApp path read only text, voice,
+  pictures and documents, so the card was dropped and Talk asked for the details. `whatsapp.contact_cards` turns a
+  `contacts` message into "[SHARED CONTACT CARD] Name: ...; Phone: ...; Email: ...; Company: ..." (via `_owner_text`,
+  so the owner and team paths both get it; never taken as a pending Edit). Talk `update_opportunity add_contacts`
+  accepts a person with a number only (`crm.add_deal_phone_contact`: on the deal by name and number, primary when the
+  deal has nobody, matched or added in the CRM by phone).
