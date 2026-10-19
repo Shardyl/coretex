@@ -4028,3 +4028,18 @@ shoot needs none), then 10% off the whole quotation.
 - Repair 19 Oct: opportunity #176 "Wasl / Viya - Digital Transformation hero photography (RFQ 2026_1165)" (Sensa,
   eproc@ issuer + Karyl Demerin, held off the chase), the two circulars + doc 1086 moved there (voided on #162 with a
   note, nothing deleted), reminder 536 retargeted, re-planned: two OURS items due Fri 23 Oct.
+
+## The push after a quote (owner, 19 Oct 2026: "too slow ... they need pushing a little bit harder")
+- `crm.CLOSING_CADENCE` (working days): receipt check 1, then the PUSH 2, 3, 2, 3 (about two weeks), then 5 x8 (weekly),
+  then 10 x26. `TENDER_CLOSING_CADENCE` for a formal tender / RFP under evaluation (`is_formal_tender`: title, a
+  `tender` event, or RFP/RFQ/tender in an email on the deal): receipt check, then weekly, then fortnightly (chasing a
+  procurement panel every two days can count against us). `closing_cadence_for(p)` picks; profile overrides
+  `closing_cadence` / `tender_closing_cadence`.
+- A QUOTATION SENT RESTARTS AT THE RECEIPT CHECK: `pipeline.record_quotation_sent` -> `crm.restart_after_quote` (step 0,
+  owner cadence untouched). DSO #148: their reply that morning had set step 1, so the quote's receipt check was
+  cancelled by the tidy as "too soon" and nothing went for 8 days.
+- THEIR DATE WINS: `nextsteps.their_dates()` (in `tick()`): a THEIRS item whose date passes with nothing from them pulls
+  the chase to the next working day 09:00 Dubai (or now), once per item.
+- One-off 19 Oct: every Quote deal on auto re-timed (scratch `rearm.py`); kept where the owner set the chase, the client
+  gave a date or is on hold, or the chase is paused; RAFED #136 skipped (split pending). Moved: DSO, Dubai Police,
+  ValuStrat (now), Orion, RFP #132 (Tue 20), SEF'27 (Mon 26).
