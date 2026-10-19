@@ -486,10 +486,13 @@ def _cases():
         pts = _crm.cadence_points(_crm.CLOSING_CADENCE)
         d = _crm.cadence_points(_crm.DEFAULT_CADENCE)
         rv = _crm.cadence_points(__import__("cortex.stages", fromlist=["x"]).REVIVAL_CADENCE)
-        return (pts[0]["after_days"] == 1 and pts[1]["after_days"] == 5 and pts[-1]["after_days"] == 10
+        # owner, 19 Oct: the push after a quote (2 to 3 working days for two weeks) before the weekly step
+        return (pts[0]["after_days"] == 1 and [p["after_days"] for p in pts[1:5]] == [2, 3, 2, 3]
+                and pts[5]["after_days"] == 5 and pts[-1]["after_days"] == 10
                 and len(pts) >= 30 and _crm.CLOSING_CADENCE.get("working_days")
                 and max(p["after_days"] for p in d) <= 14 and all(p["after_days"] <= 14 for p in rv))
-    case("submitted: receipt check next day, then weekly, then every two weeks", "owner, follow-up audit", _rhythm)
+    case("submitted: receipt check next day, the 2-3 day push, then weekly, then every two weeks",
+         "owner, follow-up audit + 19 Oct", _rhythm)
     case("a reply restarts at the weekly step; his own rhythm is never reset", "owner, follow-up audit",
          lambda: "followup_step=1" in inspect.getsource(_crm.enter_closing)
          and 'was == "owner"' in inspect.getsource(_crm.enter_closing))
