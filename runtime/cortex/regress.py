@@ -971,6 +971,12 @@ def _cases():
              "_in(q, corpus)", 'it.get("source") == "owner"', 'st == "dismissed"', "pipeline._is_offer(q)",
              "_timeline(deal_id)")) and "_deal_lock" in inspect.getsource(_ns.observe)
          and _ns.REPLAN_MODEL_DEFAULT == "claude-opus-5")
+    case("a To do card can be dismissed (the step stays on the list); a call about a quotation names no build tool",
+         "Welf #167, 19 Oct",
+         lambda: _ns.tool_for("Hold the call with Alexander tomorrow to run through the proposal and quotation") is None
+         and _ns.tool_for("Send the revised quotation") == "create_quotation"
+         and "todoTalkOpen(${t.id},false)\">Type</button><button class=\"btn sm\" onclick=\"notifAct(${t.id},'dismiss')\">Dismiss"
+         in open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"), encoding="utf-8").read())
     case("every newsletter card in the Inbox opens its issue before approval",
          "owner, 19 Oct (card 602)",
          lambda: 'issue_link' in inspect.getsource(__import__("cortex.api", fromlist=["x"])._enrich_action_card)

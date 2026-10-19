@@ -92,7 +92,12 @@ def _iso(x) -> str:
     return x.isoformat() if hasattr(x, "isoformat") else str(x or "")
 
 
+_MEETING_STEP = re.compile(r"^\s*(?:hold|have|attend|join|run|take)\b.{0,40}\b(?:call|meeting|catch-?up|session)\b", re.I)
+
+
 def tool_for(what: str) -> str | None:
+    if _MEETING_STEP.search(what or ""):      # "Hold the call to run through the quotation" builds nothing
+        return None
     return next((t for rx, t in TOOLS if rx.search(what or "")), None)
 
 

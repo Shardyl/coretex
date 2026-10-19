@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v82';
+const APP_BUILD = 'cortex-v83';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -1867,7 +1867,7 @@ function infoCard(t){
       ${(t.target_type==='contact'&&t.target_id&&!grouped)?`<button class="btn sm go" onclick="inboxContact('${esc(t.target_id)}')">${ic('arrow',13)} View contact</button>`:''}
       ${(t.target_type==='task'&&t.target_id&&t.target_open)?`<button class="btn sm go" onclick="inboxCard(${+t.target_id})">${ic('arrow',13)} Open card</button>`:''}
       ${(t.target_type==='deal'&&t.target_id&&t.target_open)?`<button class="btn sm go" onclick="openProject(${+t.target_id})">${ic('arrow',13)} View deal</button>`:''}
-      ${t.next_step?`<button class="btn sm go" onclick="todoAct(${t.id},${+t.target_id},${t.next_step},'done')">Done</button><button class="btn sm" onclick="todoAct(${t.id},${+t.target_id},${t.next_step},'dismiss')">Not needed</button><button class="btn warn sm" onclick="todoTalkOpen(${t.id},true)">${ic('mic',14)} Tap to talk</button><button class="btn sm" onclick="todoTalkOpen(${t.id},false)">Type</button>`:`<button class="btn sm" onclick="notifAct(${t.id},'dismiss')">Dismiss</button>`}
+      ${t.next_step?`<button class="btn sm go" onclick="todoAct(${t.id},${+t.target_id},${t.next_step},'done')">Done</button><button class="btn sm" onclick="todoAct(${t.id},${+t.target_id},${t.next_step},'dismiss')">Not needed</button><button class="btn warn sm" onclick="todoTalkOpen(${t.id},true)">${ic('mic',14)} Tap to talk</button><button class="btn sm" onclick="todoTalkOpen(${t.id},false)">Type</button><button class="btn sm" onclick="notifAct(${t.id},'dismiss')">Dismiss</button>`:`<button class="btn sm" onclick="notifAct(${t.id},'dismiss')">Dismiss</button>`}
       <button class="btn sm" onclick="notifAct(${t.id},'snooze')">Snooze 1h</button></div>
     ${t.next_step?`<div id="tt${t.id}w" hidden style="margin-top:8px"><textarea id="tt${t.id}" rows="3" style="width:100%" placeholder="Tell Cortex what to do (for example: build three treatments, no quote)"></textarea>
       <div class="row" style="margin-top:6px;gap:8px"><button class="btn warn sm" id="tt${t.id}m" onclick="dictate(this,'tt${t.id}')">${ic('mic',15)} Tap to talk</button><button class="btn go sm" onclick="todoTalk(${t.id},${+t.target_id},${JSON.stringify(String(t.title||'').replace(/^To do:\s*/,'')).replace(/"/g,'&quot;')})">Send to Talk</button></div></div>`:''}</div>`;
