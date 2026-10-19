@@ -3998,14 +3998,19 @@ shoot needs none), then 10% off the whole quotation.
   `handover-assignment-per-piece` AED 600 per delivered piece (the RIGHTS in the underlying material,
   not the transfer), `handover-consolidation` AED 2,000 per job, `handover-drive-4tb` AED 1,800,
   `handover-walkthrough` AED 500, `handover-checksum-index` AED 500.
-- UNPRICED BY DESIGN, OWNER TO CONFIRM: `handover-transfer-link` (the drive-less equivalent has never
-  been quoted; the nearest precedent is a superseded AED 1,000 line) and `handover-files-included-uplift`
-  (a monthly uplift for files to be included as delivered, which replaces the per-piece charge and has no
-  precedent at all). `price_lines` blanks any line using them and names the key, which is the point.
-- `content-retainer` clause 22 now OFFERS it: files available either as a handover at the end of the term
-  or piece by piece as delivered, assignment charged per delivered piece, retrieval and transfer charged
-  separately, rates quoted and agreed before any handover begins. Preset backup
-  `quotation_presets:backup-2026-10-19`.
+- PRICED THE SAME DAY (owner): `handover-transfer-link` AED 1,000 per release, "transfer by secured
+  link is the way to do it", and `handover-files-included-uplift` became **`handover-monthly-release`**
+  AED 1,000 a month: the same transfer taken monthly as each month's work is delivered, instead of one
+  handover at the end. Card v2.6 (v2.5 kept).
+- STILL OWNER TO CONFIRM, and the only thing that moves the total: whether a monthly release CARRIES the
+  assignment of rights, or whether that stays at AED 600 per delivered piece on top. The MAH Gold
+  precedent and clause 22 both keep the rights and the transfer as separate things, so they stay separate
+  until he says otherwise. At Tier 1 volumes over six months that is AED 6,000 of transfer against
+  AED 28,800 of rights, so it is not a rounding question.
+- `content-retainer` clause 22 names the monthly release: the month's material by secure link as it is
+  delivered where the quotation states one, otherwise one handover at the end by link or on a drive, the
+  assignment separate and per piece, all of it quoted before any release begins. Preset backups
+  `quotation_presets:backup-2026-10-19` and `-19b`.
 - STILL TERSE, deliberately: `ai-production` and the other presets keep "not included and are charged
   separately if required". That clause is now TRUE and backed by real rates, so it was left alone rather
   than editing terms carried by live, unsent quotations (changing them means regenerating those and
