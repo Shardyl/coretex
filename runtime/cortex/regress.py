@@ -1413,6 +1413,11 @@ def _cases():
         for c in invariants.CHECKS:
             db.query(c["sql"])
         return True
+    # --- fitness: a warm-up waits for the 4x4 after it to settle (19 Oct 2026)
+    _fit = __import__("cortex.fitness", fromlist=["x"])
+    case("a watch warm-up is held while the session after it is still running", "fitness warm-up 19 Oct",
+         lambda: "hold.add(" in inspect.getsource(_fit.reconcile_watch)
+         and "running" in inspect.getsource(_fit.reconcile_watch))
     case("every health check query runs", "invariants", _invariants)
     return C
 

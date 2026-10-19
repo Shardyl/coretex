@@ -1062,22 +1062,34 @@ def reconcile_watch(since: date | None = None) -> dict:
         q += " and day >= %s"
         params.append(since)
     sess = db.query(q + " order by start_at", tuple(params))
+    # every session of the day, settled or not: a warm-up must wait for the 4x4 after it to finish (19 Oct 2026:
+    # the warm-up settled while the 4x4 was still running, found nothing to pair with and was filed as a plain treadmill)
+    alls = db.query("select uid, start_at, end_at, type_name, max_hr, extract(epoch from end_at-start_at)/60 as mins, "
+                    "end_at >= now() - make_interval(mins => %s) as running from fitness.health_sessions "
+                    "where start_at > now() - interval '30 days' or day >= %s",
+                    (SETTLE_MIN, since or date.today()))
     presets = {p["uid"]: p for p in db.query("select uid, name, machine, is_hiit from fitness.cardio_presets")}
     n = {"linked": 0, "created_history": 0, "created_new": 0, "warmups": 0, "steam": 0, "skipped": 0}
 
     # warm-ups: a 10-20 min treadmill session ending within 15 min of a 4x4's start
     def is_4x4(s):
         return s["type_name"] == "TREADMILL" and 20 <= float(s["mins"]) <= 45 and (s["max_hr"] or 0) >= 160
-    warm = {}
-    for s in sess:
-        if is_4x4(s):
-            for w in sess:
-                if (w["type_name"] == "TREADMILL" and w["uid"] != s["uid"] and float(w["mins"]) <= 20
-                        and timedelta(0) <= s["start_at"] - w["end_at"] <= timedelta(minutes=15)):
-                    warm[w["uid"]] = "warmup"      # its own Zone 2 entry (owner, 11 Oct 2026), not folded into the 4x4
+    # Owner, 19 Oct 2026: a ~15 min treadmill is only ever his 4x4 warm-up, so 12-18 min on a treadmill is one on
+    # its own; 10-20 min still counts when a 4x4 follows within 15 min. Either way it is its own Zone 2 entry
+    # (owner, 11 Oct 2026), never folded into the 4x4.
+    warm, hold = {}, set()
+    for w in sess:
+        if w["type_name"] != "TREADMILL" or not 10 <= float(w["mins"]) <= 20:
+            continue
+        nxt = [s for s in alls if s["uid"] != w["uid"] and s["type_name"] == "TREADMILL"
+               and timedelta(0) <= s["start_at"] - w["end_at"] <= timedelta(minutes=15)]
+        if any(s["running"] for s in nxt):
+            hold.add(w["uid"])             # file it once the session after it has settled
+        elif 12 <= float(w["mins"]) <= 18 or any(is_4x4(s) for s in nxt):
+            warm[w["uid"]] = "warmup"
 
     for s in sess:
-        if s["uid"] in linked:
+        if s["uid"] in linked or s["uid"] in hold:
             continue
         tn, title = s["type_name"], (s["title"] or "")
         if "steam" in title.lower():
