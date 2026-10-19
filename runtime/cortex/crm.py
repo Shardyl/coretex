@@ -738,6 +738,31 @@ def _name_of(email: str) -> str:
     return " ".join(((c.get("first_name") or "") + " " + (c.get("last_name") or "")).split()) if c else ""
 
 
+def add_deal_phone_contact(deal_id: int, name: str, phone: str, role: str = "", primary: bool = False) -> dict | None:
+    """A person with a number and no email (a WhatsApp contact card) on the deal, by name and number, the same shape a
+    WhatsApp-born deal carries. Also matched or added in the CRM by phone. Primary when the deal has nobody else."""
+    if not phone_key(phone or ""):
+        return None
+    d = db.one("select id, company, contact_email, contacts from crm_projects where id=%s", (int(deal_id),))
+    if not d:
+        return None
+    contacts = list(d.get("contacts") or [])
+    if any(phone_key(str(c.get("phone") or "")) == phone_key(phone) for c in contacts):
+        return d
+    first = not (d.get("contact_email") or any(c.get("email") or c.get("phone") for c in contacts))
+    contacts.append({"name": (name or phone).strip(), "email": "", "phone": phone.strip(), "role": role or "",
+                     "primary": bool(primary or first)})
+    db.execute("update crm_projects set contacts=%s, updated_at=now(), history = history || %s::jsonb where id=%s",
+               (Json(contacts), Json([{"ts": _now(), "event": "contact_added",
+                                       "text": f"{name or phone} ({phone}) added to the deal" + (" as primary" if first else "")}]),
+                int(deal_id)))
+    try:
+        match_or_add_by_phone(phone, name or "", d.get("company") or "", source="owner")
+    except Exception:  # noqa: BLE001
+        pass
+    return db.one("select * from crm_projects where id=%s", (int(deal_id),))
+
+
 def add_deal_contact(deal_id: int, email: str, role: str = "", primary: bool = False) -> dict | None:
     """Attach a contact to a deal (primary or secondary). One primary is always kept; mirrored to contact_email."""
     ensure_deal_schema()

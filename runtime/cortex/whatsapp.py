@@ -1084,7 +1084,7 @@ def _owner_control(msg: dict, text: str) -> str:
         return "talk"
     pending = db.setting_get("wa_edit_pending") or {}
     task_id = pending.get("task_id")
-    if task_id and text.strip():
+    if task_id and text.strip() and msg.get("type") != "contacts":     # a contact card is never an Edit instruction
         db.setting_set("wa_edit_pending", {})
         t = store.get_task(int(task_id))
         if not t:
@@ -1241,11 +1241,31 @@ def _talk_turn(text: str, media: list, who: dict | None = None) -> None:
         _tell(reply[i:i + 3500], to=to)
 
 
+def contact_cards(m: dict) -> str:
+    """A CONTACT CARD shared on WhatsApp, as plain lines Talk can act on (owner, 19 Oct 2026: he shared Matt Brooke's
+    card for opportunity 124 and it was dropped, because only text, voice, pictures and documents were read)."""
+    out = []
+    for c in (m.get("contacts") or []):
+        nm = c.get("name") or {}
+        name = (nm.get("formatted_name") or " ".join(x for x in (nm.get("first_name"), nm.get("last_name")) if x)).strip()
+        phones = [str(p.get("phone") or p.get("wa_id") or "").strip() for p in (c.get("phones") or [])]
+        emails = [str(e.get("email") or "").strip() for e in (c.get("emails") or [])]
+        org = (c.get("org") or {}).get("company") or ""
+        title = (c.get("org") or {}).get("title") or ""
+        bits = [f"Name: {name or '(no name)'}"] + [f"Phone: {p}" for p in phones if p] + [f"Email: {e}" for e in emails if e]
+        if org or title:
+            bits.append("Company: " + ", ".join(x for x in (title, org) if x))
+        out.append("[SHARED CONTACT CARD] " + "; ".join(bits))
+    return "\n".join(out)
+
+
 def _owner_text(m: dict, to: str | None = None) -> str:
     """The owner's words out of one message: typed text, or a voice note transcribed. A voice note IS the
     natural way to correct a draft on a phone, so it is a first-class input, not a fallback."""
     if m.get("type") == "text":
         return ((m.get("text") or {}).get("body") or "").strip()
+    if m.get("type") == "contacts":                                  # a shared contact card: its details, as text
+        return contact_cards(m)
     if m.get("type") in ("image", "document"):                       # the caption is what he said with it
         return (((m.get(m["type"]) or {}).get("caption")) or "").strip()
     if m.get("type") in ("audio", "voice"):

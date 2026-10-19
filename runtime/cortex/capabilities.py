@@ -186,6 +186,10 @@ CAPABILITIES: list[tuple[str, str]] = [
      "'quotations for all three' = creative_quote. When every treatment in the set (and any quotation built for one) "
      "is approved, ONE email is drafted with everything attached; a skipped treatment is left out. "
      "create_creative_proposal stays the one-go version (one treatment with its quotation)."),
+    ("A contact card shared on WhatsApp",
+     "When Rashad, Gino or Ayresh share a contact card on WhatsApp, it reaches you as '[SHARED CONTACT CARD] Name: ...; "
+     "Phone: ...; Email: ...'. Put that person on the opportunity he names with update_opportunity add_contacts (name, "
+     "phone, and email when there is one); a number alone is enough. Say exactly who was added to which opportunity."),
     ("Meeting notes to a client",
      "After a Gemini-recorded meeting the post-meeting email carries 'Meeting notes - <client> - <date>.pdf': Gemini's "
      "summary and next steps only, laid out by code, never the Details or the transcript. When he asks to send someone "

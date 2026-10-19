@@ -3918,7 +3918,9 @@ SKILL_TOOLS = [
         "organisation": {"type": "string", "description": "the CLIENT organisation's real name"},
         "add_contacts": {"type": "array", "items": {"type": "object", "properties": {
             "email": {"type": "string"}, "name": {"type": "string"}, "role": {"type": "string"},
-            "phone": {"type": "string"}, "primary": {"type": "boolean"}}, "required": ["email"]}},
+            "phone": {"type": "string"}, "primary": {"type": "boolean"}},
+            "description": "each person: email, or for someone with only a number (a WhatsApp contact card) name + "
+                           "phone"}},
         "meeting": {"type": "object", "description": "a meeting whose external attendees join this opportunity and "
                     "whose notes file here", "properties": {
             "date": {"type": "string", "description": "YYYY-MM-DD, or 'today' / 'yesterday'"},
@@ -4262,6 +4264,11 @@ def _update_opportunity(inp: dict) -> str:
     added, seen = [], set()
     for p in people:
         em = (p.get("email") or "").strip().lower()
+        if "@" not in em and (p.get("phone") or "").strip():      # a number only: on the deal by name and number
+            if crm.add_deal_phone_contact(did, p.get("name") or "", str(p["phone"]), p.get("role") or "",
+                                          bool(p.get("primary"))):
+                added.append(f"{p.get('name') or ''} {p['phone']}".strip())
+            continue
         if "@" not in em or em in seen:
             continue
         seen.add(em)

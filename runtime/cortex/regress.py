@@ -971,6 +971,18 @@ def _cases():
              "_in(q, corpus)", 'it.get("source") == "owner"', 'st == "dismissed"', "pipeline._is_offer(q)",
              "_timeline(deal_id)")) and "_deal_lock" in inspect.getsource(_ns.observe)
          and _ns.REPLAN_MODEL_DEFAULT == "claude-opus-5")
+    def _contact_card():
+        from . import whatsapp as _wa, crm as _crm
+        m = {"type": "contacts", "contacts": [{"name": {"formatted_name": "Matt Brooke"},
+                                               "phones": [{"phone": "+971 50 123 4567", "wa_id": "971501234567"}],
+                                               "emails": [], "org": {"company": "White & Co"}}]}
+        t = _wa._owner_text(m)
+        return ("[SHARED CONTACT CARD] Name: Matt Brooke; Phone: +971 50 123 4567; Company: White & Co" == t
+                and "add_deal_phone_contact" in inspect.getsource(__import__("cortex.api", fromlist=["x"])._update_opportunity)
+                and "phone_key" in inspect.getsource(_crm.add_deal_phone_contact))
+    case("a contact card shared on WhatsApp reaches Talk, and a number alone can go on an opportunity",
+         "Matt Brooke #124, 19 Oct", _contact_card)
+
     def _byline_day():
         from .integrations import wordpress as _wpx
         html = ('<div><a href="x">Ben Smith</a> &nbsp;&middot;&nbsp; CTO &nbsp;&middot;&nbsp; 2026-06-24 &nbsp;&middot;&nbsp; '
