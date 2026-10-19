@@ -4010,3 +4010,16 @@ shoot needs none), then 10% off the whole quotation.
   separately if required". That clause is now TRUE and backed by real rates, so it was left alone rather
   than editing terms carried by live, unsent quotations (changing them means regenerating those and
   re-running `_export_templates`). Owner's call whether to align them.
+
+## A new RFQ from a client with an open RFQ is its own opportunity (owner, 19 Oct 2026)
+- Wasl's eproc@ sent the Viya "Digital Transformation" hero photography RFQ (2026_1165); `_track_tender` filed it,
+  the RFP PDF and its closing reminder on #162 (festive video RFQ 2026_1170) because `find_tender_deal` fell back to
+  "same sender" and `open_deal_for_email` / `_domain` had no notion of the job. `crm.create_deal` would also have
+  refused a second Wasl opportunity (one open opportunity per account).
+- `crm.same_job(deal, code, subject)`: a different reference is a different job; no reference on the email + a
+  referenced deal needs 2 real shared title words. `find_tender_deal(..., body)` reads the code from the body too and
+  applies it to the sender fallback; `_track_tender` applies it to the open-deal fallbacks and creates with
+  `second_job=True`. Same root cause as RAFED #136 (three RFQs on one deal), whose split is still waiting on the owner.
+- Repair 19 Oct: opportunity #176 "Wasl / Viya - Digital Transformation hero photography (RFQ 2026_1165)" (Sensa,
+  eproc@ issuer + Karyl Demerin, held off the chase), the two circulars + doc 1086 moved there (voided on #162 with a
+  note, nothing deleted), reminder 536 retargeted, re-planned: two OURS items due Fri 23 Oct.
