@@ -977,6 +977,16 @@ def _cases():
          and _ns.tool_for("Send the revised quotation") == "create_quotation"
          and "todoTalkOpen(${t.id},false)\">Type</button><button class=\"btn sm\" onclick=\"notifAct(${t.id},'dismiss')\">Dismiss"
          in open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"), encoding="utf-8").read())
+    def _tender_job():
+        from . import crm as _c
+        d = {"title": "Wasl, Viya corporate festive video (RFQ 2026_1170)", "history": []}
+        return (not _c.same_job(d, "2026_1165", "Invitation to RFQ 2026_1165")
+                and _c.same_job(d, "2026_1170", "RFQ 2026_1170 deadline extended")
+                and not _c.same_job(d, "", "Digital Transformation Content Creation Agency - Hero Photography for Viya Corporate")
+                and _c.same_job(d, "", "Viya festive video: clarification on the festive shoot")
+                and "second_job=True" in inspect.getsource(engine._track_tender))
+    case("a new RFQ from a client with an open RFQ is a new opportunity, never filed on the other job",
+         "Wasl 2026_1165 on 2026_1170, RAFED, 19 Oct", _tender_job)
     case("every newsletter card in the Inbox opens its issue before approval",
          "owner, 19 Oct (card 602)",
          lambda: 'issue_link' in inspect.getsource(__import__("cortex.api", fromlist=["x"])._enrich_action_card)

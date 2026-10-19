@@ -3007,9 +3007,13 @@ def _track_tender(co: dict, e: dict, what: str, rt_key: str | None = None, clien
         # THE SENDER'S OPEN OPPORTUNITY IS THE DEAL (17 Sep 2026): Pyxis's formal RFQ opened deal 129 next to
         # 128, which Rashad had opened from Maricris's WhatsApp an hour earlier. A circular from someone who
         # already has an open opportunity with us lands on that opportunity.
+        _code = crm.tender_code(subj) or crm.tender_code((e.get("body") or "")[:4000])
         try:   # across the sister brands: the same RFQ can reach Sensa and Sky Vision (Wasl, 13 Oct 2026)
-            d = crm.find_tender_deal(slug, email, subj) or crm.open_deal_for_email(email, slug) \
-                or crm.open_deal_for_domain(email, slug)
+            d = crm.find_tender_deal(slug, email, subj, e.get("body") or "")
+            if not d:   # the sender's open opportunity, ONLY when it is this job (a different RFQ is a new one)
+                d = crm.open_deal_for_email(email, slug) or crm.open_deal_for_domain(email, slug)
+                if d and not crm.same_job(d, _code, subj):
+                    d = None
         except Exception:  # noqa: BLE001
             d = None
         if d and d.get("stage") not in crm.OPEN_SALES_STAGES:
@@ -3021,8 +3025,9 @@ def _track_tender(co: dict, e: dict, what: str, rt_key: str | None = None, clien
                 pass
     if not d:
         try:
+            # a NEW RFQ from a client we already have open work with is a second job, by its reference
             d = crm.create_deal(slug, title, stage="Opportunity", arm=False,
-                                contact={"email": email, "role": "issuer"})
+                                contact={"email": email, "role": "issuer"}, second_job=True)
             fresh = True
         except crm.DuplicateDeal:
             d = db.one("select * from crm_projects where company=%s and lower(title)=lower(%s) limit 1",

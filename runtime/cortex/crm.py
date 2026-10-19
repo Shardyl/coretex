@@ -1868,21 +1868,45 @@ def tender_code(subject: str) -> str:
     return ""
 
 
-def find_tender_deal(slug: str, sender: str, subject: str) -> dict | None:
+_JOB_STOP = {"the", "and", "for", "with", "from", "request", "quotation", "rfq", "rfp", "tender", "invitation",
+             "code", "video", "production", "services", "service", "agency", "supplier", "suppliers", "corporate"}
+
+
+def same_job(deal: dict | None, code: str, subject: str) -> bool:
+    """Is this tender/RFQ email about THIS deal's job? (19 Oct 2026, Wasl: the Viya Digital Transformation RFQ was filed
+    on the festive video RFQ 2026_1170 because the same procurement address sent both; RAFED's three RFQs likewise).
+    A different reference is a different job. With no reference on the email, the deal's own reference stands unless
+    the subject shares real words with the deal's title."""
+    if not deal:
+        return False
+    title = deal.get("title") or ""
+    theirs = tender_code(title)
+    if code and theirs:
+        return code.lower() == theirs.lower()
+    if code and not theirs:
+        return True             # a deal opened without a reference (WhatsApp, by hand) takes its first RFQ
+    if theirs:                                  # no reference on the email, a referenced deal: need shared words
+        w = lambda s: {x for x in re.findall(r"[a-z]{4,}", (s or "").lower()) if x not in _JOB_STOP}   # noqa: E731
+        return len(w(subject) & w(title)) >= 2
+    return True
+
+
+def find_tender_deal(slug: str, sender: str, subject: str, body: str = "") -> dict | None:
     """THE open sales deal a tender or RFQ email belongs to, across the sister brands: one carrying the buyer's
     reference code in its title or record, else one whose contacts include the sender."""
     orgs = [_org(s) for s in sister_slugs(slug)]
     open_sales = stages.sql_list(stages.SALES)
-    code = tender_code(subject)
+    code = tender_code(subject) or tender_code((body or "")[:4000])
     if code:
         d = db.one("select * from crm_projects where company = any(%s) and stage in " + open_sales + " and "
                    "(title ilike %s or history::text ilike %s) order by id limit 1", (orgs, f"%{code}%", f"%{code}%"))
         if d:
             return d
     if sender:
-        return db.one("select * from crm_projects where company = any(%s) and stage in " + open_sales + " and "
-                      "(lower(coalesce(contact_email,''))=lower(%s) or contacts @> %s::jsonb) order by id limit 1",
-                      (orgs, sender, Json([{"email": sender.lower()}])))
+        d = db.one("select * from crm_projects where company = any(%s) and stage in " + open_sales + " and "
+                   "(lower(coalesce(contact_email,''))=lower(%s) or contacts @> %s::jsonb) order by id limit 1",
+                   (orgs, sender, Json([{"email": sender.lower()}])))
+        return d if same_job(d, code, subject) else None    # the same sender's OTHER RFQ is a different job
     return None
 
 
