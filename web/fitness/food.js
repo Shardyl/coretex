@@ -1896,7 +1896,11 @@ window.foodPhotoAdd=function(){
 // last session on that preset and wait here for the owner to confirm; history ones carry no settings.
 window.editWatchCardio=function(id){
   const r=cardioSessions.find(s=>s.id===id);if(!r)return;
-  const opts=cardioExercises.filter(e=>!e.deleted).map(e=>`<option value="${e.id}" ${e.id===r.exerciseId?'selected':''}>${esc(e.name)}</option>`).join('');
+  // A session's own preset is ALWAYS an option (19 Oct 2026: "Treadmill - from watch" was not in the list, so the
+  // select fell to its first entry, a Fly High 4x4, and saving re-filed a JGE warm-up there).
+  const own=cardioExercises.find(e=>e.id===r.exerciseId);
+  const opts=(own&&!own.deleted?'':`<option value="${esc(r.exerciseId)}" selected>${esc(r.exerciseName||'Choose a session')}</option>`)
+    +cardioExercises.filter(e=>!e.deleted).map(e=>`<option value="${e.id}" ${e.id===r.exerciseId?'selected':''}>${esc(e.name)}</option>`).join('');
   const fieldsFor=exId=>{
     const ex=getCardioExDef(exId), f=(ex&&ex.manualFields)||[];
     return f.map((x,i)=>/distance/i.test(x.label)?'':`<div class="form-group"><label class="form-label">${esc(x.label)}</label>
