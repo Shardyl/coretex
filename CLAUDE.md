@@ -3979,3 +3979,6 @@ shoot needs none), then 10% off the whole quotation.
   so the owner and team paths both get it; never taken as a pending Edit). Talk `update_opportunity add_contacts`
   accepts a person with a number only (`crm.add_deal_phone_contact`: on the deal by name and number, primary when the
   deal has nobody, matched or added in the CRM by phone).
+- EVERY NEWSLETTER CARD OPENS ITS ISSUE (owner, 19 Oct 2026): `_enrich_action_card` sets `issue_link` when the built
+  issue exists (setting `newsletter:<id>` html, or the send job's copy); the cockpit's `pairBtn` shows "View issue"
+  (`viewIssue`, the same `/api/content/preview/<id>` the Calendar uses, images inlined) on every newsletter kind. v82.
