@@ -963,16 +963,31 @@ class _Deck:
                 section: str = ""):
         """Pricing cards with a feature list, the recommended one picked out in the accent. A deck
         that sells a monthly service is read like a pricing page, not like a proposal."""
+        # ONE PLAN IS A PAGE, NOT A COLUMN (owner, 20 Oct 2026: "a single proposal ... we don't
+        # want to give them any options"). At 420px a lone card left two thirds of the page empty
+        # and its feature list ran so long the note collided with the footer. A single plan goes
+        # full width with its features in two columns, which halves the card's height.
         n = max(1, len(plans[:3]))
-        w = {1: 420, 2: 380, 3: 352}.get(n, 352)
+        solo = n == 1
+        w = 1136 if solo else {2: 380, 3: 352}.get(n, 352)
         cards = []
         for p in plans[:3]:
             hi = bool(p.get("highlight"))
             edge = self.accent if hi else "#23232A"
-            feats = "".join(
-                f'<li style="display:flex;gap:9px;align-items:flex-start;margin-bottom:7px">'
-                f'<span style="color:{self.accent};font-size:13.5px;line-height:1.5">&#10003;</span>'
-                f'<span style="flex:1">{_esc(f)}</span></li>' for f in (p.get("features") or [])[:7])
+            _fs = list(p.get("features") or [])[:12]      # was [:7], which silently dropped the rest
+            def _li(f):
+                return (f'<li style="display:flex;gap:9px;align-items:flex-start;margin-bottom:7px">'
+                        f'<span style="color:{self.accent};font-size:13.5px;line-height:1.5">'
+                        f'&#10003;</span><span style="flex:1">{_esc(f)}</span></li>')
+            if solo and len(_fs) > 3:
+                half = (len(_fs) + 1) // 2
+                feats = "".join(
+                    f'<ul style="list-style:none;padding:0;margin:0;display:inline-block;'
+                    f'vertical-align:top;width:48%;font-size:13.5px;color:#EDEDF2;line-height:1.45">'
+                    + "".join(_li(f) for f in col) + '</ul>'
+                    for col in (_fs[:half], _fs[half:]))
+            else:
+                feats = "".join(_li(f) for f in _fs)
             badge = (f'<div style="position:absolute;top:-10px;left:22px;background:{self.accent};'
                      f'color:#0A0A0A;font-size:9px;letter-spacing:1.6px;font-weight:700;'
                      f'text-transform:uppercase;padding:4px 10px;border-radius:3px">'
@@ -988,8 +1003,9 @@ class _Deck:
                 f'{_esc(p.get("period") or "")}</div>'
                 + (f'<p style="font-size:13.5px;color:#C4C4CC;line-height:1.5;margin:0 0 14px">'
                    f'{_esc(p.get("blurb"))}</p>' if p.get("blurb") else "")
-                + f'<ul style="list-style:none;padding:0;margin:0;font-size:13.5px;color:#EDEDF2;'
-                  f'line-height:1.45">{feats}</ul></div>')
+                + (f'<div style="font-size:0">{feats}</div>' if (solo and len(_fs) > 3) else
+                   f'<ul style="list-style:none;padding:0;margin:0;font-size:13.5px;color:#EDEDF2;'
+                   f'line-height:1.45">{feats}</ul>') + '</div>')
         self.pages.append(
             f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
             f'<h2>{_hl(heading, self.accent)}</h2>'

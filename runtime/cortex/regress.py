@@ -1255,6 +1255,23 @@ def _cases():
     case("the pricing, flow and faq pages build; showcase needs a real image",
          "Heaven retainer deck, 17 Oct", _saas_pages)
 
+    def _solo_pricing_fills_the_page():
+        d = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        d.pricing("K", "H", "i", [{"name": "One", "price": "AED 1", "period": "p", "blurb": "b",
+                                   "features": ["a", "b", "c", "d", "e", "f", "g", "h"],
+                                   "highlight": True}], "n", "s")
+        solo = d.pages[0]
+        # a lone card at 420px left two thirds of the page empty and pushed the note into the footer
+        ok = "width:1136px" in solo and solo.count("display:inline-block;vertical-align:top") == 2
+        # and the 8th feature is no longer silently dropped (the cap was [:7])
+        ok = ok and ">h</span>" in solo
+        three = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
+        three.pricing("K", "H", "i", [{"name": str(i), "price": "AED 1", "period": "p",
+                                       "features": ["a", "b"]} for i in range(3)], "", "s")
+        return ok and "width:352px" in three.pages[0] and "width:1136px" not in three.pages[0]
+    case("a single pricing plan fills the page and keeps every feature",
+         "iTellu one package, 20 Oct", _solo_pricing_fills_the_page)
+
     def _site_style():
         # tokens read off sensa.digital/ai-video-production, 17 Oct 2026
         ok = (deck.SITE["accent"] == "#00DAFF" and deck.SITE["accent2"] == "#FF6A2C"
