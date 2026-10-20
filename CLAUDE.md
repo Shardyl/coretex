@@ -4083,3 +4083,22 @@ shoot needs none), then 10% off the whole quotation.
   drops past times, checks `calendar.busy_blocks`. Stamped as `request.owner_times` INSTEAD of the slot list (manifest
   `owner_times(N)`); a clash goes on the card ("Kept as you said"), never a reason to change his time. The worker
   offers exactly those.
+
+## A meeting rides on an email only when the email carries it (Special Olympics card 1365, 20 Oct 2026)
+- CAUSE: Ahmed's RFQ gave the shoot's own date and time (Wed 21 Oct, 11:00 to 12:00). `_client_proposed_slot` (one
+  Haiku question: "does the sender propose a time to meet us?") read it as a meeting, and a guest-less Meet was booked
+  at draft time. The owner turned the card into a decline; a BOOKED meeting is never re-judged, the cockpit email card
+  never showed `request.meeting`, and the send path invited everyone on the email to whatever meeting the card held.
+  He approved a decline and a Meet invite went with it. The invite was a second outward action riding, unseen, on the
+  email approval.
+- `engine._email_carries_meeting(body, mt)`: the email carries the meeting when it contains its Meet link, or its
+  clock time (as stated, or in Dubai time) together with its day (weekday, date, today/tomorrow). Checked at approval
+  before an unbooked slot is booked, and at send before anyone is invited. Not carried -> `drop_meeting`: nobody
+  invited, the guest-less event deleted through `_delete_own_event` (the 1 Sep guards, now one helper, `_skip` uses it
+  too), `request.meeting_off` so neither reader stamps one back, the record kept as `request.meeting_dropped`.
+- THE CARD SHOWS IT: `api._enrich_action_card` -> `meeting_invite` {label, minutes, guests (`_invite_guests`), carried};
+  cockpit `meetingLine` ("Approving also sends a Google Meet invite: ... to ...", or amber "the email does not mention
+  it, so nobody will be invited") with "Don't invite" (`POST /api/tasks/{id}/meeting-off`). v84.
+- The client-slot reader is unchanged on purpose: a wrong guess now shows on the card and cannot reach the client.
+  Known edge: an email that restates THEIR event's day and time (not a meeting) would still pass the check; the card
+  line is what catches that.

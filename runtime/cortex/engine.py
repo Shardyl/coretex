@@ -696,6 +696,93 @@ def compose_reply_html(task: dict, company: dict, for_preview: bool = False) -> 
     return {"plain": compose_reply_body(task, company), "html": html_body, "inline": inline}
 
 
+# THE EMAIL IS WHAT HE APPROVES, SO THE EMAIL DECIDES THE INVITE (card 1365, 20 Oct 2026). Ahmed's RFQ named the
+# shoot's own date and time (Wed 21 Oct, 11:00 to 12:00); the client-slot reader took it for a meeting he proposed and
+# a guest-less Meet was booked at draft time. The owner then turned the card into a decline, the booking stayed on the
+# request, and approving the decline invited Ahmed and Anas to a Meet the email never mentioned. A meeting rides on
+# an email only when the email being sent carries it: its Meet link, or its clock time together with its day.
+_MONTH3 = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+
+
+def _email_carries_meeting(body: str, mt: dict) -> bool:
+    if not mt or not (body or "").strip():
+        return False
+    b = body or ""
+    if mt.get("meet") and mt["meet"] in b:
+        return True
+    try:
+        start = datetime.fromisoformat(str(mt.get("start")))
+    except Exception:  # noqa: BLE001
+        return False
+    for dt in (start, start.astimezone(_GST)):      # the time as the email states it, or in Dubai time
+        h, m = dt.hour, dt.minute
+        h12, ap = (h % 12 or 12), ("p" if h >= 12 else "a")
+        clock = [rf"\b0?{h}[:.]{m:02d}\b", rf"\b{h12}[:.]{m:02d}\s*{ap}\.?\s*m\b"]
+        if m == 0:
+            clock.append(rf"\b{h12}\s*{ap}\.?\s*m\b")
+        if not any(re.search(c, b, re.I) for c in clock):
+            continue
+        wd = dt.strftime("%A").lower()
+        mon = _MONTH3[dt.month - 1]
+        day = [rf"\b{wd[:3]}(?:{wd[3:]})?\b", rf"\b{dt.day}(?:st|nd|rd|th)?\s+{mon}", rf"\b{mon}[a-z]*\.?\s+{dt.day}\b"]
+        _today = datetime.now(dt.tzinfo).date()
+        if dt.date() == _today:
+            day.append(r"\btoday\b|\bthis (?:morning|afternoon|evening)\b|\btonight\b")
+        elif (dt.date() - _today).days == 1:
+            day.append(r"\btomorrow\b")
+        if any(re.search(d, b, re.I) for d in day):
+            return True
+    return False
+
+
+def _invite_guests(env: dict) -> list:
+    """Everyone outside our own domains on the email's To and cc lines: who an invite would go to."""
+    from .identity import OWN_COMPANY_DOMAINS
+    _g = [a.lower().strip(".") for a in re.findall(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}",
+                                                    f"{env.get('to') or ''} {env.get('cc') or ''}")]
+    return list(dict.fromkeys(g for g in _g if g.split("@")[-1] not in OWN_COMPANY_DOMAINS))
+
+
+def _delete_own_event(task: dict, company: dict | None, mt: dict) -> None:
+    """A card may only delete an event IT created. Two guards, both learned the hard way on 1 Sep 2026:
+    dismissing the ECBD pre-meeting BRIEF deleted the real client meeting it was briefing, because the
+    brief card carries the same `meeting` block and this code only asked "is there an event_id?".
+      1. only a card whose own draft pre-booked a guest-less slot owns that event
+      2. never delete an event that has GUESTS on it, whatever the card thinks: Google emails them a
+         cancellation, and the client is left believing the meeting is off (Sunwoo Yoo was)"""
+    if mt.get("event_id") and not mt.get("invited") and task.get("kind") in EMAIL_RENDER_KINDS:
+        try:
+            from . import calendar as gcal
+            cal_co = mt.get("calendar") or (company or {}).get("slug") or "sensa"
+            if gcal.event_has_guests(cal_co, mt["event_id"]):
+                print(f"[meeting] task {task['id']}: event {mt['event_id']} has guests, NOT deleted", flush=True)
+            else:
+                gcal.delete_event(cal_co, mt["event_id"])
+        except Exception as _de:  # noqa: BLE001
+            print(f"[meeting] task {task['id']}: event delete skipped: {_de}", flush=True)
+
+
+def drop_meeting(task_id: int, why: str, actor: str = "owner") -> dict:
+    """Take the meeting off an email card: nobody is invited, the guest-less slot Cortex booked is removed, and the
+    card is marked so no reader stamps one back on it (request.meeting_off). The record stays as meeting_dropped."""
+    t = store.get_task(task_id)
+    if not t:
+        return {"ok": False, "error": "card not found"}
+    req = dict(t.get("request") or {})
+    mt = req.get("meeting") or {}
+    if not mt:
+        return {"ok": True, "note": "No meeting on this card."}
+    if mt.get("invited"):
+        return {"ok": False, "error": "The invite has already gone out; change it on the calendar."}
+    _delete_own_event(t, store.get_company(t["company_id"]), mt)
+    req.pop("meeting", None)
+    req["meeting_off"] = True
+    req["meeting_dropped"] = {**mt, "why": why, "by": actor, "at": datetime.now(timezone.utc).isoformat()}
+    store.update_task(task_id, request=req)
+    print(f"[meeting] task {task_id}: meeting removed ({why})", flush=True)
+    return {"ok": True, "note": "Meeting removed: nobody will be invited."}
+
+
 def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: bool) -> dict:
     if db.setting_get("email_sending_paused"):   # global kill-switch — keep the card, don't send
         store.update_task(task["id"], status="awaiting_approval")
@@ -716,6 +803,10 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         return {"blocked": True, "error": "Refusing to send: the email body is empty. Nothing went out."}
     env = _email_envelope(task, company)
     mt = (task.get("request") or {}).get("meeting")
+    if mt and not mt.get("event_id") and not _email_carries_meeting(task.get("draft") or "", mt):
+        drop_meeting(task["id"], "the email being sent does not carry this meeting", actor)
+        task = store.get_task(task["id"]) or task
+        mt = None
     if mt and not mt.get("event_id"):   # confirmed slot -> the event + Meet room must exist (still guest-less)
         from . import calendar as gcal
         _slug = (company or {}).get("slug") or ""
@@ -832,16 +923,16 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     try:   # the guest joins the calendar event only AFTER the email genuinely went — never an invite
         # for an unsent mail (a blocked approve once invited Sunwoo to a meeting the email never confirmed)
         mt2 = (task.get("request") or {}).get("meeting")
+        if mt2 and mt2.get("event_id") and not mt2.get("invited") and not _email_carries_meeting(c["plain"], mt2):
+            drop_meeting(task["id"], "the email that went out does not carry this meeting", actor)
+            mt2 = None
         if mt2 and mt2.get("event_id"):
             # EVERYONE ON THE EMAIL IS ON THE INVITE (24 Sep 2026): Farheen asked to add Sarah Shaikh to the
             # meeting invite (card 904); the reply promised it, and only the To recipient was ever added. Every
             # external address on this email's To and cc lines joins the event (merged, never replacing).
             from . import calendar as gcal
-            from .identity import OWN_COMPANY_DOMAINS
             _cal = mt2.get("calendar") or (company or {}).get("slug") or "sensa"
-            _guests = [a.lower().strip(".") for a in re.findall(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}",
-                                                                 f"{env.get('to') or ''} {env.get('cc') or ''}")]
-            _guests = list(dict.fromkeys(g for g in _guests if g.split("@")[-1] not in OWN_COMPANY_DOMAINS))
+            _guests = _invite_guests(env)
             _done = {g.lower() for g in (mt2.get("guests") or [])}
             if mt2.get("invited") and env.get("to"):
                 _done.add(env["to"].lower())
@@ -1698,23 +1789,7 @@ def _skip(task: dict, skill: dict, company: dict) -> None:
             _er["card_problem"] = (f"The quotation on card #{task['id']} was dismissed. Tell this card what to do "
                                    "instead, or approve it as it stands.")
             store.update_task(_em["id"], request=_er)
-    mt = (task.get("request") or {}).get("meeting") or {}
-    # A card may only delete an event IT created. Two guards, both learned the hard way on 1 Sep 2026:
-    # dismissing the ECBD pre-meeting BRIEF deleted the real client meeting it was briefing, because the
-    # brief card carries the same `meeting` block and this code only asked "is there an event_id?".
-    #   1. only a card whose own draft pre-booked a guest-less slot owns that event
-    #   2. never delete an event that has GUESTS on it, whatever the card thinks — Google emails them a
-    #      cancellation, and the client is left believing the meeting is off (Sunwoo Yoo was)
-    if mt.get("event_id") and not mt.get("invited") and task.get("kind") in EMAIL_RENDER_KINDS:
-        try:
-            from . import calendar as gcal
-            cal_co = mt.get("calendar") or (company or {}).get("slug") or "sensa"
-            if gcal.event_has_guests(cal_co, mt["event_id"]):
-                print(f"[skip] task {task['id']}: event {mt['event_id']} has guests — NOT deleted", flush=True)
-            else:
-                gcal.delete_event(cal_co, mt["event_id"])
-        except Exception as _de:  # noqa: BLE001
-            print(f"[skip] task {task['id']}: event delete skipped: {_de}", flush=True)
+    _delete_own_event(task, company, (task.get("request") or {}).get("meeting") or {})
     store.reset_streak(skill["id"])   # a rejection breaks the clean-approval streak
     store.log_decision(task["id"], skill["id"], "owner", "reject", snapshot={"draft": task.get("draft")})
     _stop_chasing_on_skip(task, company)
@@ -3154,7 +3229,7 @@ def _client_proposed_slot(task: dict, req: dict, email: str) -> dict | None:
     normal path. Busy -> the writer is told so and offers the nearest free times instead. Card 890 (24 Sep 2026):
     Gheis wrote "Would 4:00 PM today work instead?" and the reply said "whenever suits you", twice."""
     try:
-        if task.get("kind") != "email_reply" or (req.get("meeting") or {}).get("event_id"):
+        if task.get("kind") != "email_reply" or (req.get("meeting") or {}).get("event_id") or req.get("meeting_off"):
             return None
         theirs = str((req.get("inquiry") or {}).get("message") or "")
         theirs = re.split(r"\n\s*(?:From:|On .{5,80} wrote:|-----Original)", theirs)[0]
@@ -3228,7 +3303,7 @@ def _maybe_extract_meeting(task: dict, draft: str) -> None:
     email at send). Haiku only reads what the draft states; code stamps and validates the datetime."""
     try:
         req = dict(task.get("request") or {})
-        if task.get("kind") != "email_reply" or (req.get("meeting") or {}).get("event_id"):
+        if task.get("kind") != "email_reply" or (req.get("meeting") or {}).get("event_id") or req.get("meeting_off"):
             return
         if not _TIME_HINT.search(draft or ""):
             if req.get("meeting"):      # an earlier version confirmed a slot; this one names no time: unstamp

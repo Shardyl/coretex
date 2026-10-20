@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v83';
+const APP_BUILD = 'cortex-v84';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -2060,6 +2060,7 @@ function actionCard(t){
         : (body?`<div class="body"${isEmail?' style="white-space:pre-wrap"':''}>${isEmail?'<div class="meta" style="margin-bottom:5px;white-space:normal">'+ic('file',14)+' '+(isOutbound?'your email draft':'the email that will send')+' (signature included)</div>':''}${body}</div>`:'')}
       ${wp&&wp.preview?`<div class="meta">${ic('file',14)} draft preview (open logged into wp-admin): <a href="${esc(wp.preview)}" target="_blank">view</a></div>`:''}
       ${attachmentStrip(t)}
+      ${(isEmail&&t.meeting_invite)?meetingLine(t):''}
       ${(isEmail&&t.request&&t.request.attach_changes&&t.request.attach_changes.length)?`<div class="meta" style="margin-bottom:8px">${ic('clip',13)} ${esc(t.request.attach_changes.join(' · '))}</div>`:''}
       ${t.card_problem?`<div class="row" style="margin-bottom:8px;padding:7px 10px;border-radius:9px;border:1px solid #F43F5E55;color:#F43F5E;font-size:13px">${ic('alert',14)} ${esc(t.card_problem)}</div>`:''}
       ${(t.request&&t.request.correction_actions&&t.request.correction_actions.length)?`<div class="meta" style="margin-bottom:8px;opacity:.85">${ic('check',13)} From your corrections: ${esc(t.request.correction_actions.join('; '))}</div>`:''}
@@ -2539,6 +2540,17 @@ function dealPickCard(t,co){
       <textarea id="corr${t.id}" rows="2" placeholder="e.g. the Ramadan one, deal 164, a new job: Ramadan billboard" style="width:100%;box-sizing:border-box;background:var(--bg2,#0e1620);color:var(--fg,#dfe7ef);border:1px solid var(--ln,#22303f);border-radius:11px;padding:9px 11px;font:inherit;font-size:14px;resize:vertical"></textarea>
       <div class="row" style="margin-top:7px"><button class="btn go" onclick="dealPickSay(${t.id})">Send</button><button class="btn" onclick="closeCorr(${t.id})">Cancel</button></div></div>
   </div>`;
+}
+// THE INVITE IS ON THE CARD (card 1365): what approving sends to the calendar, before he approves it
+function meetingLine(t){
+  const m=t.meeting_invite, who=(m.guests||[]).join(', ')||'nobody outside Sensa';
+  const txt=m.carried?`Approving also sends a Google Meet invite: ${m.label} (${m.minutes} min) to ${who}`
+    :`A meeting (${m.label}) is attached, but the email does not mention it, so nobody will be invited`;
+  return `<div class="row" style="margin-bottom:8px;padding:7px 10px;border-radius:9px;border:1px solid ${m.carried?'var(--line)':'#F59E0B55'};font-size:13px;gap:8px;align-items:center">${ic('calendar',14)} <span style="flex:1">${esc(txt)}</span><button class="btn sm" onclick="meetingOff(${t.id})">Don't invite</button></div>`;
+}
+async function meetingOff(id){
+  try{ const r=await api(`/api/tasks/${id}/meeting-off`,{method:'POST',body:'{}'}); toast(r&&(r.note||r.error)||'Removed'); render(); }
+  catch(e){ toast('Error: '+e.message); }
 }
 async function notInterested(id){
   if(!confirm('Not interested: close this and every card this email raised. Nothing is sent. Continue?')) return;

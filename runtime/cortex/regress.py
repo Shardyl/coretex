@@ -993,6 +993,29 @@ def _cases():
     case("an email with an RFQ reference goes to that RFQ's opportunity, or opens a new one; a quote step says quotation",
          "RAFED #136, 20 Oct", _ref_routing)
 
+    def _meet_1365():
+        from . import api as _api
+        mt = {"start": "2026-10-21T11:00:00+04:00", "minutes": 60, "event_id": "x",
+              "meet": "https://meet.google.com/tki-jykz-xvs"}
+        decline = ("Hello Ahmed,\n\nThank you for sending over the brief for the EuroLeague One Team Programme media "
+                   "coverage.\n\nPreparing a quotation takes us real time on each occasion, and having had no feedback "
+                   "or engagement so far on the proposals we have already submitted, including quotation SEN-2026-0033, "
+                   "we would like to respectfully step back from submitting on this one.\n\nBest regards,")
+        gheis = "Hello Gheis,\n\nYes, 4:00 PM today works well. Here is the link: https://meet.google.com/tki-jykz-xvs"
+        words = "Hello Mai,\n\nWednesday 21 October at 11:00 Dubai time works for us; the invitation follows."
+        twelve = "Hello Mai,\n\nWould Wed 21 Oct at 11am suit you?"
+        bare = {"start": "2026-10-21T11:00:00+04:00", "minutes": 30}
+        return (not engine._email_carries_meeting(decline, mt) and engine._email_carries_meeting(gheis, mt)
+                and engine._email_carries_meeting(words, bare) and engine._email_carries_meeting(twelve, bare)
+                and not engine._email_carries_meeting("Thanks, we will be in touch on the 21st.", bare)
+                and "_email_carries_meeting" in inspect.getsource(engine._send_email_reply)
+                and "meeting_invite" in inspect.getsource(_api._enrich_action_card)
+                and "meeting_off" in inspect.getsource(engine._client_proposed_slot)
+                and "meetingLine(t)" in open(os.path.join(os.path.dirname(__file__), "..", "..", "web",
+                                                          "index.html"), encoding="utf-8").read())
+    case("a meeting rides on an email only when the email carries it, and the card shows the invite before approval",
+         "Special Olympics card 1365, 20 Oct", _meet_1365)
+
     def _dso_1353():
         from . import documents as _docs
         later = ("In the second paragraph, tell him that I will send over the concepts and the quotation also today, "

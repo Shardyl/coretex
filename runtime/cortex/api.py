@@ -503,6 +503,18 @@ def _enrich_action_card(t: dict) -> dict:
         if not (env.get("to") or "").strip():     # visible on the card, not a surprise at approval
             t["card_problem"] = "No recipient set — this cannot send. Tell Cortex who it goes to."
         inq = (t.get("request") or {}).get("inquiry") or {}
+        # THE INVITE IS ON THE CARD (card 1365, 20 Oct 2026): a meeting rode on an email approval unseen. Whatever
+        # approving would send to the calendar is shown here, with who it invites and whether the email carries it.
+        _mt = (t.get("request") or {}).get("meeting") or {}
+        if _mt and not _mt.get("invited"):
+            try:
+                _st = datetime.fromisoformat(str(_mt.get("start"))).astimezone(engine._GST)
+                t["meeting_invite"] = {"label": _st.strftime("%a %-d %b, %H:%M") + " Dubai",
+                                       "minutes": int(_mt.get("minutes") or 30),
+                                       "guests": engine._invite_guests(env),
+                                       "carried": engine._email_carries_meeting(t.get("draft") or "", _mt)}
+            except Exception:  # noqa: BLE001
+                t["meeting_invite"] = {"label": str(_mt.get("start")), "minutes": 30, "guests": [], "carried": False}
         t["email"] = {**env, "preview": engine.compose_reply_body(t, co),  # plain fallback
                       "html": engine.compose_reply_html(t, co, for_preview=True)["html"],  # rendered, with logo
                       "inquiry": {"name": inq.get("name"), "email": inq.get("email"),
@@ -2905,6 +2917,13 @@ def inbox_rev(_: None = Depends(auth)) -> dict:
     """A counter the flow moves whenever it changes the Inbox; the cockpit reloads when it moves."""
     from . import flow
     return {"rev": flow.rev()}
+
+
+@app.post("/api/tasks/{task_id}/meeting-off")
+def task_meeting_off(task_id: int, u: dict = Depends(current_user)) -> dict:
+    """'Don't invite': take the meeting off an email card before it is approved (card 1365)."""
+    _guard_task(u, task_id)
+    return engine.drop_meeting(task_id, "the owner removed it on the card", actor=(u or {}).get("email") or "owner")
 
 
 @app.post("/api/tasks/{task_id}/not-interested")
