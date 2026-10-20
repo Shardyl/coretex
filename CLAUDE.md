@@ -1687,7 +1687,7 @@ while a local change is queued — a pull once erased a cardio session seconds a
   weight change never rewrites old records; cardio PR = Pareto frontier of lowest avg HR vs hardest
   settings, within one preset only. `fitness.py` mirrors the app's maths — change both together.
   ZONE 2 presets (non-HIIT, name contains "Zone 2"; owner, 18 Oct 2026, app v108): a tie on avg HR goes to the
-  LOWER MAX HR (it did not run away at the end), and the history/detail rows show avg HR on the right instead of max.
+  LOWER MAX HR (it did not run away at the end), and the history/detail rows show avg HR on the right instead of max. The peak (max HR) moves into the row's detail line (v113).
   4x4/HIIT unchanged. App-only: `fitness.py` has no cardio-PR function.
 - Bodyweight and VO2 tables exist but are deliberately EMPTY: the app was never set up for either
   and Rashad holds that data elsewhere. Until a bodyweight is logged, no bodyweight lift can be

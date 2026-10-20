@@ -993,7 +993,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='112';                         // keep in step with CACHE in sw.js
+const APP_VERSION='113';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -2177,7 +2177,7 @@ function renderCardioHistory(){
       <div><div class="hist-date-main">${d[0]}<br>${d[1]}</div><div class="hist-date-day">${dayStr(r.date)}</div></div>
       <div>
         <div class="hist-ex" style="color:var(--blue)">${r.exerciseName||r.exerciseId}</div>
-        <div class="hist-sets">${r.duration||'—'} · ${r.avgHR?r.avgHR+' bpm avg':''} ${r.calories?'· '+r.calories+' kcal':''}</div>
+        <div class="hist-sets">${r.duration||'—'} · ${isZone2(ex)?(r.maxHR?'peak '+r.maxHR+' bpm':''):(r.avgHR?r.avgHR+' bpm avg':'')} ${r.calories?'· '+r.calories+' kcal':''}</div>
         ${extraStr?`<div class="hist-sets" style="margin-top:2px">${extraStr}</div>`:''}
         ${r.notes&&!/^From watch/.test(r.notes)?`<div class="hist-note">${r.notes}</div>`:''}
         ${r.watch?`<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -2284,7 +2284,7 @@ window.showCardioDetail=function(exId){
           <div><div style="font-size:12px;font-weight:800;color:var(--ink)">${d[0]} ${d[1]}</div><div style="font-size:10px;color:var(--ink3);font-weight:600">${dayStr(r.date)}</div></div>
           <div>
             <div style="font-size:13px;font-weight:700;color:var(--ink)">${r.duration||'—'} ${r.avgHR?'· <span style="color:var(--blue)">'+r.avgHR+' bpm</span>':''}</div>
-            ${r.calories?`<div style="font-size:11px;color:var(--ink3);margin-top:1px">${r.calories} kcal ${r.maxHR?'· max '+r.maxHR+' bpm':''}${rEff!==null?' · '+rEff.toFixed(2)+' m/beat':''}</div>`:(rEff!==null?`<div style="font-size:11px;color:var(--ink3);margin-top:1px">${rEff.toFixed(2)} m/beat</div>`:'')}
+            ${r.calories||r.maxHR||rEff!==null?`<div style="font-size:11px;color:var(--ink3);margin-top:1px">${[r.calories?r.calories+' kcal':'',r.maxHR?(isZone2(ex)?'peak ':'max ')+r.maxHR+' bpm':'',rEff!==null?rEff.toFixed(2)+' m/beat':''].filter(Boolean).join(' · ')}</div>`:''}
             ${extraStr?`<div style="font-size:11px;color:var(--ink3);margin-top:2px">${extraStr}</div>`:''}
             ${r.notes?`<div style="font-size:11px;color:var(--ink3);font-style:italic;margin-top:2px">${r.notes}</div>`:''}
           </div>
@@ -3106,6 +3106,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=112"></script>
+<script src="food.js?v=113"></script>
 </body>
 </html>
