@@ -1593,6 +1593,8 @@ def _cases():
     case("a watch warm-up is held while the session after it is still running", "fitness warm-up 19 Oct",
          lambda: "hold.add(" in inspect.getsource(_fit.reconcile_watch)
          and "running" in inspect.getsource(_fit.reconcile_watch))
+    case("every cardio and lifting row carries its start time", "fitness times 20 Oct",
+         lambda: '"startAt"' in inspect.getsource(_fit.pull))
     case("every health check query runs", "invariants", _invariants)
     return C
 

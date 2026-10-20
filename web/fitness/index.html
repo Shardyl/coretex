@@ -993,7 +993,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='113';                         // keep in step with CACHE in sw.js
+const APP_VERSION='114';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1313,6 +1313,8 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
 function fmtDate(d){if(!d)return'—';return new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short'});}
 function fmtDateFull(d){if(!d)return'—';return new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});}
 function dayStr(d){return new Date(d).toLocaleDateString('en-GB',{weekday:'short'});}
+// Start time of a session (server-stamped from the watch, 20 Oct 2026). Blank when the session has no watch record.
+function sessTime(r){if(!r||!r.startAt)return'';const t=new Date(r.startAt);return isNaN(t)?'':t.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false});}
 function getLastLiftSession(exName){return liftSessions.filter(s=>s.exercise===exName).sort((a,b)=>new Date(b.date)-new Date(a.date))[0]||null;}
 function getPRReps(exName){const v=liftSessions.filter(s=>s.exercise===exName).map(s=>s.totalReps);return v.length?Math.max(...v):0;}
 
@@ -1774,7 +1776,7 @@ function renderLiftHistory(){
       ?exDef.manualFields.map((f,i)=>r.manualData[i]?`${r.manualData[i]}`:null).filter(Boolean).join(' / ')
       :'';
     return dayHdr+`<div class="hist-item" onclick="showExDetail('${r.exercise.replace(/'/g,"\\'")}')">
-      <div><div class="hist-date-main">${d[0]}<br>${d[1]}</div><div class="hist-date-day">${dayStr(r.date)}</div></div>
+      <div><div class="hist-date-main">${d[0]}<br>${d[1]}</div><div class="hist-date-day">${dayStr(r.date)}</div>${sessTime(r)?`<div class="hist-date-day">${sessTime(r)}</div>`:''}</div>
       <div>
         <div class="hist-ex">${r.exercise}</div>
         <div class="hist-sets">${isManual?manualSummary:(exDef&&exDef.range?(rangeUnit(exDef,r.weight)?rangeUnit(exDef,r.weight)+' · ':'')+rSets.filter(v=>v>0).join('/'):(r.weight+(r.weight!=='BW'?' kg':'')+' · '+rSets.filter(v=>v>0).join('/')))}${!isManual&&exDef&&exDef.range?(v=>v?` <span style="color:${RANGE_RAG[v.rag]};font-weight:700">· ${v.text}</span>`:'')(rangeVerdict(exDef,r)):''}</div>
@@ -1861,7 +1863,7 @@ window.showExDetail=function(exName){
         const isPRrow=!isManual&&rowLoad!==null&&prLoad!==null&&rowLoad>=prLoad;
         const mSummary=isManual&&r.manualData?manualFields.map((f,fi)=>r.manualData[fi]!==undefined?`<span style="font-size:11px;color:var(--ink2)">${f.label}:</span> <span style="font-weight:700">${r.manualData[fi]}</span>`:'').filter(Boolean).join('  ·  '):'';
         return`<div style="display:grid;grid-template-columns:48px 1fr auto;gap:10px;align-items:start;padding:10px 0;border-bottom:0.5px solid var(--border)">
-          <div><div style="font-size:12px;font-weight:800;color:var(--ink)">${d[0]} ${d[1]}</div><div style="font-size:10px;color:var(--ink3);font-weight:600">${dayStr(r.date)}</div></div>
+          <div><div style="font-size:12px;font-weight:800;color:var(--ink)">${d[0]} ${d[1]}</div><div style="font-size:10px;color:var(--ink3);font-weight:600">${dayStr(r.date)}</div>${sessTime(r)?`<div style="font-size:10px;color:var(--ink3);font-weight:600">${sessTime(r)}</div>`:''}</div>
           <div>
             ${isManual?`<div style="font-size:12px;line-height:1.6">${mSummary}</div>`:`<div style="font-size:13px;font-weight:700">${r.weight}${r.weight!=='BW'?' kg':''} · ${rSets.filter(v=>v>0).join(' / ')}</div>`}
             ${r.notes&&r.notes!=='—'?`<div style="font-size:11px;color:var(--ink3);font-style:italic;margin-top:2px">${r.notes}</div>`:''}
@@ -2174,7 +2176,7 @@ function renderCardioHistory(){
         :Object.entries(r.extra).filter(([,v])=>v).map(([k,v])=>`${k}: ${v}`).join(' · '))
       :'';
     return`<div class="hist-item" onclick="showCardioDetail('${r.exerciseId}')">
-      <div><div class="hist-date-main">${d[0]}<br>${d[1]}</div><div class="hist-date-day">${dayStr(r.date)}</div></div>
+      <div><div class="hist-date-main">${d[0]}<br>${d[1]}</div><div class="hist-date-day">${dayStr(r.date)}</div>${sessTime(r)?`<div class="hist-date-day">${sessTime(r)}</div>`:''}</div>
       <div>
         <div class="hist-ex" style="color:var(--blue)">${r.exerciseName||r.exerciseId}</div>
         <div class="hist-sets">${r.duration||'—'} · ${isZone2(ex)?(r.maxHR?'peak '+r.maxHR+' bpm':''):(r.avgHR?r.avgHR+' bpm avg':'')} ${r.calories?'· '+r.calories+' kcal':''}</div>
@@ -2281,7 +2283,7 @@ window.showCardioDetail=function(exId){
           ?fields.map((f,i)=>r.extra[i]?`${f.label}: ${r.extra[i]}`:'').filter(Boolean).join(' · ')
           :(r.extra?Object.entries(r.extra).filter(([,v])=>v).map(([k,v])=>`${k}: ${v}`).join(' · '):'');
         return`<div style="display:grid;grid-template-columns:48px 1fr auto;gap:10px;align-items:start;padding:10px 0;border-bottom:0.5px solid var(--border)">
-          <div><div style="font-size:12px;font-weight:800;color:var(--ink)">${d[0]} ${d[1]}</div><div style="font-size:10px;color:var(--ink3);font-weight:600">${dayStr(r.date)}</div></div>
+          <div><div style="font-size:12px;font-weight:800;color:var(--ink)">${d[0]} ${d[1]}</div><div style="font-size:10px;color:var(--ink3);font-weight:600">${dayStr(r.date)}</div>${sessTime(r)?`<div style="font-size:10px;color:var(--ink3);font-weight:600">${sessTime(r)}</div>`:''}</div>
           <div>
             <div style="font-size:13px;font-weight:700;color:var(--ink)">${r.duration||'—'} ${r.avgHR?'· <span style="color:var(--blue)">'+r.avgHR+' bpm</span>':''}</div>
             ${r.calories||r.maxHR||rEff!==null?`<div style="font-size:11px;color:var(--ink3);margin-top:1px">${[r.calories?r.calories+' kcal':'',r.maxHR?(isZone2(ex)?'peak ':'max ')+r.maxHR+' bpm':'',rEff!==null?rEff.toFixed(2)+' m/beat':''].filter(Boolean).join(' · ')}</div>`:''}
@@ -3106,6 +3108,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=113"></script>
+<script src="food.js?v=114"></script>
 </body>
 </html>

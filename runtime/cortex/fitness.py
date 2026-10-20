@@ -159,7 +159,13 @@ def pull() -> dict:
     plans = [{"id": r["uid"], "name": r["name"], "exercises": r["exercises"]}
              for r in db.query("select uid, name, exercises from fitness.plans "
                                "where not deleted order by name")]
-    lifts = [{"id": r["uid"], "exercise": r["exercise"], "date": r["day"].isoformat(),
+    # Start times (owner, 20 Oct 2026: "add a time to each session"): a cardio entry takes its watch session's start;
+    # a lifting entry takes the start of that day's watch weights session. Hand-logged cardio with no watch has none.
+    _hs = {r["uid"]: r["start_at"].isoformat() for r in db.query("select uid, start_at from fitness.health_sessions")}
+    _wt = {r["day"]: r["s"].isoformat() for r in db.query(
+        "select day, min(start_at) s from fitness.health_sessions where type_name ~* 'WEIGHT|STRENGTH' "
+        "and end_at - start_at >= interval '10 minutes' group by day")}
+    lifts = [{"id": r["uid"], "exercise": r["exercise"], "date": r["day"].isoformat(), "startAt": _wt.get(r["day"]),
               "workoutId": r["plan_uid"], "weight": r["weight"], "sets": r["sets"],
               "totalReps": _num(r["total_reps"]), "bestSet": _num(r["best_set"]),
               "rest": r["rest"], "target": r["target"], "nextTarget": r["next_target"],
@@ -174,7 +180,8 @@ def pull() -> dict:
     cardio = [{"id": r["uid"], "exerciseId": r["preset_uid"], "exerciseName": r["preset_name"],
                "date": r["day"].isoformat(), "duration": r["duration"], "avgHR": _num(r["avg_hr"]),
                "maxHR": _num(r["max_hr"]), "calories": _num(r["calories"]), "extra": r["extra"],
-               "nextTarget": r["next_target"], "notes": r["notes"], "watch": r.get("watch")}
+               "nextTarget": r["next_target"], "notes": r["notes"], "watch": r.get("watch"),
+               "startAt": _hs.get((r.get("watch") or {}).get("uid"))}
               for r in db.query("select * from fitness.cardio_sessions where not deleted order by day")]
     vo2 = [{"id": r["uid"], "date": r["day"].isoformat(), "value": float(r["value"]),
             "method": r["method"], "notes": r["notes"]}
