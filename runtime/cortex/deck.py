@@ -489,6 +489,7 @@ table.sched td, table.sched th { padding:5px 10px; font-size:13px; }
 .icap { font-size:10px; color:#7A7A84; letter-spacing:.3px; margin:-8px 0 10px; }
 a.imglink { text-decoration:none; color:inherit; display:block; }
 .thumbcap { font-size:14px; line-height:1.55; margin-top:10px; color:#C4C4CC; }
+.pg.six .thumbcap { font-size:12px; line-height:1.4; margin-top:7px; }
 .thumbcap b { color:#EDEDF2; font-weight:600; }
 """.replace("ACCENT", accent)
 
@@ -915,10 +916,15 @@ class _Deck:
         """Films shown at native 16:9, fixed width so the page never overflows. `playlist` = {title, url}: a
         clickable line to the category's full YouTube playlist (owner, 17 Sep 2026: "we've covered over 50
         events, link the playlist"); code supplies it from media_playlists, never the writer."""
+        # UP TO SIX FILMS, IN TWO ROWS (owner, 20 Oct 2026: "you can include 6 videos there").
+        # Four or more at 362px each ran off the side of the page: 6 x 362 is nearly twice the
+        # 1136px the pad allows. Four to six wrap three to a row; one to three are unchanged.
+        films = list(films)[:6]
         n = max(1, len(films))
+        rows = [films] if n <= 3 else [films[:(n + 1) // 2], films[(n + 1) // 2:]]
         # wider than they were: three 352px thumbnails left the bottom third of the page empty
         # (Heaven p5, owner 17 Oct 2026 on the dead space)
-        w = {1: 760, 2: 548, 3: 362}.get(n, 362)
+        w = {1: 760, 2: 548, 3: 362}.get(n, 362) if n <= 3 else {1: 362, 2: 470, 3: 362}.get(len(rows[0]), 362)
         h = int(w * 9 / 16)
         items = []
         for f in films:
@@ -931,10 +937,13 @@ class _Deck:
                 f'<p class="thumbcap"><b>{_esc(f.get("label") or f.get("title"))}</b> &middot; '
                 f'{_esc(_sentence(f.get("caption")))} Click to watch.</p></a>')
         self.pages.append(
-            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<div class="pg{" six" if n > 3 else ""}"><div class="pad"><h3>{_esc(kicker)}</h3>'
+            f'<div class="rule"></div>'
             f'<h2>{_hl(heading, self.accent)}</h2>'
             + (f'<p style="max-width:1060px;margin-bottom:16px">{_esc(intro)}</p>' if intro else "")
-            + f'<div style="display:flex;gap:24px;margin-top:6px">{"".join(items)}</div>'
+            + "".join(f'<div style="display:flex;gap:24px;margin-top:{6 if r == 0 else 22}px">'
+                       f'{"".join(items[sum(len(x) for x in rows[:r]):sum(len(x) for x in rows[:r + 1])])}</div>'
+                       for r in range(len(rows)))
             + (f'<p style="margin-top:22px"><a href="{_esc(playlist["url"])}" style="color:{self.accent};'
                f'text-decoration:none;font-weight:600">See the full {_esc(playlist["title"])} playlist on YouTube '
                f'&rarr;</a> <span style="color:#7A7A84">{_esc(playlist["url"])}</span></p>' if playlist else "")

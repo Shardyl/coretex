@@ -1283,6 +1283,27 @@ def _cases():
     case("a single pricing plan fills the page and keeps every feature",
          "iTellu one package, 20 Oct", _solo_pricing_fills_the_page)
 
+    def _samples_six_in_two_rows():
+        co = _co("sensa")
+        ids = [r["youtube_video_id"] for r in __import__("cortex.db", fromlist=["x"]).query(
+            "select youtube_video_id from media_assets where company_id=%s and youtube_video_id is not null "
+            "limit 6", (co["id"],))]
+        if len(ids) < 6:
+            return True                      # nothing to prove on a library this small
+        films = deck.films_by_ids(co["id"], ids)
+        d = deck._Deck(co, "T", "#00DAFF", "", "")
+        d.samples("K", "H", "i", films, "s")
+        pg = d.pages[0]
+        # six at 362px is nearly twice the 1136px the pad allows, so they wrap three to a row
+        rows = pg.count('display:flex;gap:24px;margin-top')
+        three = deck._Deck(co, "T", "#00DAFF", "", "")
+        three.samples("K", "H", "i", films[:3], "s")
+        return (rows == 2 and 'class="pg six"' in pg
+                and three.pages[0].count('display:flex;gap:24px;margin-top') == 1
+                and 'class="pg six"' not in three.pages[0])
+    case("a samples page carries six films in two rows", "iTellu page 3, 20 Oct",
+         _samples_six_in_two_rows)
+
     def _site_style():
         # tokens read off sensa.digital/ai-video-production, 17 Oct 2026
         ok = (deck.SITE["accent"] == "#00DAFF" and deck.SITE["accent2"] == "#FF6A2C"
