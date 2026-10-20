@@ -3519,7 +3519,7 @@ shoot needs none), then 10% off the whole quotation.
   (kept on record). Retired 14 Oct: Body Double 808-811 -> 812, AI Avatar Posts 813-814 -> 815. Company profile: doc 7
   (the 2.3MB email copy, profile `high_value_attach_doc`) is now kind company-profile and the one offered/attached;
   doc 1 (9.6MB master, same profile) is superseded by it, kept on record and on Drive.
-  20 Oct 2026: doc 7 superseded by **doc 1154** (same name, `high_value_attach_doc` repointed): page 6 AI work is now
+  20 Oct 2026: doc 7 superseded by doc 1154, then **doc 1157** (page 4 film CFI -> Whiskas) (same name, `high_value_attach_doc` repointed): page 6 AI work is now
   Whiskas, Chair obsession, FilmSpoke / HBMSU, CFI, MAH Gold (Mercedes E-Class and Orientica out). Built on the desktop
   by `C:\Users\rasha\sensa-profile-build\build6.py` (Edge headless print), compressed on the box with
   `gs -dPDFSETTINGS=/ebook`, filed with `sudo -u cortex bash /tmp/runbox.sh` (the box now refuses Cortex Python as root).
