@@ -4044,3 +4044,15 @@ shoot needs none), then 10% off the whole quotation.
 - One-off 19 Oct: every Quote deal on auto re-timed (scratch `rearm.py`); kept where the owner set the chase, the client
   gave a date or is on hold, or the chase is paused; RAFED #136 skipped (split pending). Moved: DSO, Dubai Police,
   ValuStrat (now), Orion, RFP #132 (Tue 20), SEF'27 (Mon 26).
+
+## An email is filed by its RFQ reference before its sender (owner, 20 Oct 2026)
+- RAFED #136 held three RFQs from one procurement contact (SAKINA RAF-REQ-0000153449, Salma RAF-REQ-0000127782,
+  DAWAK RAF-REQ-0000162089); the Salma cancellation was then read as SAKINA's and its waiting step was superseded.
+- `crm.tender_code` also reads a bare procurement reference (`_PROC_REF_RX`: letters-hyphen-5+ digits; our own
+  SEN-2026-0024 never qualifies). `events.they_wrote`: an email with a reference goes to the opportunity carrying it
+  (`find_tender_deal`, title first, VOIDED history ignored); a reference no opportunity has opens a new tender
+  opportunity via `engine._track_tender`, never the sender's other one. `nextsteps.tool_for` takes the FIRST work word
+  ("Prepare the two quotations ... covering concept" -> create_quotation).
+- Split 20 Oct: #136 SAKINA only (step #58 "Theirs: decision on SEN-2026-0024" reopened, weekly tender chase from Wed 21
+  Oct); #177 Salma (Lost: cancelled by RAFED 19 Oct; cards 871, 1058, 1198 moved); #178 DAWAK (tender, step #75 and its
+  To do moved, closing reminder 545 for Sun 25 Oct). Moved entries are voided on #136, never deleted.
