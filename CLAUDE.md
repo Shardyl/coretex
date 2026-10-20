@@ -4135,3 +4135,10 @@ shoot needs none), then 10% off the whole quotation.
   showed the offer and never reloaded the card, so the old draft and his typed words stayed on screen and a correction
   that had worked looked as if it had bounced back. It now clears the box and re-renders; `renderInbox` puts the rule
   offer back in its slot from `proposed_rule`. v85.
+
+## We never share spreadsheets (owner, DSO card 1378, 20 Oct 2026)
+- Talk attached "Quotation SEN-2026-0038 v1.xlsx" to Alex's email. Every quotation sits in the library as the .xlsx
+  working file beside its PDF, so a lookup could land on either. `documents.SPREADSHEET` (xlsx/xlsm/xls/csv/ods/
+  numbers); `documents.card_ref` swaps a spreadsheet for `pdf_twin` (same document `_identity`, same version, live,
+  this deal's copy first) and refuses when no PDF exists. `_send_email_reply` refuses any spreadsheet attachment
+  (library or uploaded) before sending, as the backstop. No email had ever gone out with one (checked 20 Oct).

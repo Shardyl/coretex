@@ -844,6 +844,11 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     req = task.get("request") or {}
     files = list(req.get("attachments") or [])            # outbound drafts carry real file attachments
     file_names = list(req.get("attachment_names") or [])  # ...with their original filenames
+    _xl = [n for n in list(file_names) + [str(r.get("filename") or "") for r in (req.get("attach_docs") or [])]
+           if documents.SPREADSHEET.search(n or "")]
+    if _xl:     # we never share spreadsheets (owner, 20 Oct 2026): the last line, whatever path put one on the card
+        raise RuntimeError(f"'{_xl[0]}' is a spreadsheet, and we never share spreadsheets. Swap it for the PDF. "
+                           "Nothing was sent.")
     for ref in (req.get("attach_docs") or []):            # library documents referenced by id -> real files
         doc = documents.get(int(ref.get("id", 0)), company_id=task.get("company_id"))
         if not doc:

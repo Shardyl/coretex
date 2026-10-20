@@ -997,6 +997,17 @@ def _cases():
          lambda: "THE REDRAFT ALWAYS SHOWS" in open(os.path.join(os.path.dirname(__file__), "..", "..", "web",
                                                                   "index.html"), encoding="utf-8").read())
 
+    def _xlsx_1378():
+        from . import documents as _docs
+        return (bool(_docs.SPREADSHEET.search("Dubai Silicon Oasis _DSO_ - Quotation SEN-2026-0038 v1 - 2026-10-13.xlsx"))
+                and not _docs.SPREADSHEET.search("Dubai Silicon Oasis _DSO_ - Quotation SEN-2026-0038 v1 - 2026-10-13.pdf")
+                and "pdf_twin(doc)" in inspect.getsource(_docs.card_ref)
+                and "we never share spreadsheets" in inspect.getsource(engine._send_email_reply)
+                and _docs._identity("X - Quotation SEN-2026-0038 v1 - 2026-10-13.xlsx")
+                == _docs._identity("X - Quotation SEN-2026-0038 v1 - 2026-10-13.pdf"))
+    case("an email never carries a spreadsheet: the PDF goes instead, and the send refuses one", "DSO card 1378, 20 Oct",
+         _xlsx_1378)
+
     def _qi_1374():
         email_words = ("Redraft this. Don't put a scheduled call in. We've attached two proposals, one for the one off "
                        "eight videos and one for the retainer contract. The retainer contract comes at a considerable "

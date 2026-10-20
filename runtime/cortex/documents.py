@@ -411,10 +411,36 @@ def _full(doc: dict) -> dict:
     return db.one("select * from company_documents where id=%s", (doc.get("id"),)) or doc
 
 
+# WE NEVER SHARE SPREADSHEETS (owner, 20 Oct 2026, DSO card 1378: Talk attached "Quotation SEN-2026-0038 v1.xlsx").
+# Every quotation exists as an .xlsx (the working file) beside its PDF in the library, so a lookup can land on either.
+# An email only ever carries the PDF: a spreadsheet put on a card is swapped for the PDF of the same document and
+# version, and refused when there is none. The send refuses one too (engine._send_email_reply), whatever path put it.
+SPREADSHEET = re.compile(r"\.(?:xlsx|xlsm|xls|csv|ods|numbers)$", re.I)
+
+
+def pdf_twin(doc: dict) -> dict | None:
+    """The PDF of the same document and version as a spreadsheet (quotation vN.xlsx -> quotation vN.pdf)."""
+    want, ver = _identity(doc.get("filename") or ""), re.search(r"\sv(\d+)\b", doc.get("filename") or "")
+    rows = db.query("select * from company_documents where company_id=%s and superseded_by is null and "
+                    "filename ilike '%%.pdf' order by (deal_id is not distinct from %s) desc, id desc",
+                    (doc.get("company_id"), doc.get("deal_id")))
+    for r in rows:
+        rv = re.search(r"\sv(\d+)\b", r.get("filename") or "")
+        if _identity(r.get("filename") or "") == want and (rv.group(1) if rv else None) == (ver.group(1) if ver else None):
+            return r
+    return None
+
+
 def card_ref(doc: dict) -> dict:
     """The reference put on a card's attach_docs, carrying the Drive checksum PIN so the send can tell
     whether the canonical file changed after the owner approved it."""
     doc = _full(doc)
+    if SPREADSHEET.search(doc.get("filename") or ""):
+        twin = pdf_twin(doc)
+        if not twin:
+            raise ValueError(f"'{doc.get('filename')}' is a spreadsheet, and we never share spreadsheets. There is no "
+                             "PDF of it in the library yet; issue the PDF first.")
+        doc = _full(twin)
     if (doc.get("kind") or "") in PRIVATE_KINDS:
         raise ValueError(f"'{doc.get('filename')}' is the internal meeting record (it carries the transcript) and is "
                          "never attached; attach the meeting notes summary instead")
