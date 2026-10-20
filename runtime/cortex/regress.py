@@ -993,6 +993,10 @@ def _cases():
     case("an email with an RFQ reference goes to that RFQ's opportunity, or opens a new one; a quote step says quotation",
          "RAFED #136, 20 Oct", _ref_routing)
 
+    case("after a correction the card reloads and the box clears, rule offer or not", "Al Barsha card 1374, 20 Oct",
+         lambda: "THE REDRAFT ALWAYS SHOWS" in open(os.path.join(os.path.dirname(__file__), "..", "..", "web",
+                                                                  "index.html"), encoding="utf-8").read())
+
     def _qi_1374():
         email_words = ("Redraft this. Don't put a scheduled call in. We've attached two proposals, one for the one off "
                        "eight videos and one for the retainer contract. The retainer contract comes at a considerable "

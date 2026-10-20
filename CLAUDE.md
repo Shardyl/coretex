@@ -4131,3 +4131,7 @@ shoot needs none), then 10% off the whole quotation.
 - 675 root-owned files in /opt/coretex/quotations, /opt/coretex/creative and /opt/cortex-knowledge/documents were
   chowned to cortex. `cortex/__init__.py` now REFUSES to import as root (`CORTEX_AS_ROOT=1` overrides, deliberately):
   run everything as `sudo -u cortex /opt/coretex/.venv/bin/python ...`.
+- THE REDRAFT ALWAYS SHOWS (same card, same day): when a correction also produced a standing-rule offer, `sendCorr`
+  showed the offer and never reloaded the card, so the old draft and his typed words stayed on screen and a correction
+  that had worked looked as if it had bounced back. It now clears the box and re-renders; `renderInbox` puts the rule
+  offer back in its slot from `proposed_rule`. v85.

@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v84';
+const APP_BUILD = 'cortex-v85';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -2595,8 +2595,13 @@ async function sendCorr(id){
   const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;
   try{ const r=await api(`/api/tasks/${id}/correct`,{method:'POST',body:JSON.stringify({text})});
     if(card) card.style.opacity=1;
-    if(r&&r.proposed_rule){ toast('Redrafted — one quick thing'); if(proposeRule(id,r.proposed_rule,r.skill_name,r.company,r.places,r.skill_key)===false) renderPendingRules(); }
-    else { toast('Redrafted ✓'); render(); pollRule(id,0); }   // rule offer (if any) lands shortly, off the critical path
+    // THE REDRAFT ALWAYS SHOWS (card 1374, 20 Oct 2026): when the correction also offered a standing rule, the card was
+    // never reloaded, so the old draft and his typed words stayed on screen and a correction that had worked looked
+    // as if it had bounced. The box is cleared and the card reloads; the Inbox puts any rule offer back in its slot.
+    if(ta) ta.value='';
+    toast(r&&r.proposed_rule?'Redrafted — one quick thing below':'Redrafted ✓');
+    await render();
+    if(!(r&&r.proposed_rule)) pollRule(id,0);   // a rule offer (if any) lands shortly, off the critical path
   }
   catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
 }
