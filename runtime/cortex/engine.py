@@ -2637,7 +2637,8 @@ _DETACH_ALL = re.compile(
     r"\b(?:all|any|every|the|both|those|these)\s+(?:of the\s+)?(?:attachments?|attached files?|files|documents|pdfs?)\b|"
     r"\bno attachments?\b|\bwithout (?:any |the )?attachments?\b|\bnothing attached\b|\bdon'?t attach anything\b", re.I)
 _ATTACH_VERB = re.compile(r"\battach(?!ments?\b)|\benclos", re.I)
-_REMOVAL = re.compile(r"\b(?:remove|take (?:off|out)|drop|strip|delete|detach|don'?t|do not|no need to|never)\b[^.?!]{0,60}", re.I)
+_REMOVAL = re.compile(r"\b(?:remove|take (?:off|out)|drop|strip|delete|detach|don'?t|do not|no need to|never)\b"
+                      r"(?:(?!\band\b|\bthen\b|\bbut\b)[^.?!,;]){0,60}", re.I)     # stops at "and": "remove X and attach Y"
 
 
 def _detach_all_asked(text: str) -> bool:

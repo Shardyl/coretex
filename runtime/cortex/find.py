@@ -100,7 +100,9 @@ def word_score(q: str, w: str) -> float:
     best = trigram(q, w)
     pq, pw = _PHON.get(q) or set(), _PHON.get(w) or set()
     if pq & pw and min(len(q), len(w)) >= 3:
-        best = max(best, 0.85)
+        # SOUNDING ALIKE IS NOT A TIE (20 Oct 2026): "ticky" sounds like "Tikkie" AND "DAWAK" (both TK), and a new
+        # opportunity's stage boost put DAWAK first. Spelling closeness and the first letter break the tie.
+        best = max(best, min(0.89, 0.8 + 0.3 * best + (0.03 if q[:1] == w[:1] else 0)))
     elif (min(len(q), len(w)) >= 4 and best >= 0.2 and min(len(q), len(w)) / max(len(q), len(w)) >= 0.6
           # one letter apart in sound AND some shared spelling: "Sharma" / "Shama", never "form" / "farheen"
           and any(len(x) >= 3 and len(y) >= 3 and _lev1(x, y) for x in pq for y in pw)):
