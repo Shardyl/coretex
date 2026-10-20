@@ -924,7 +924,8 @@ class _Deck:
         rows = [films] if n <= 3 else [films[:(n + 1) // 2], films[(n + 1) // 2:]]
         # wider than they were: three 352px thumbnails left the bottom third of the page empty
         # (Heaven p5, owner 17 Oct 2026 on the dead space)
-        w = {1: 760, 2: 548, 3: 362}.get(n, 362) if n <= 3 else {1: 362, 2: 470, 3: 362}.get(len(rows[0]), 362)
+        # 4 to 6 run smaller: at 362 the second row's captions landed on the footer and the logo
+        w = {1: 760, 2: 548, 3: 362}.get(n, 362) if n <= 3 else {1: 320, 2: 430, 3: 320}.get(len(rows[0]), 320)
         h = int(w * 9 / 16)
         items = []
         for f in films:
@@ -941,7 +942,7 @@ class _Deck:
             f'<div class="rule"></div>'
             f'<h2>{_hl(heading, self.accent)}</h2>'
             + (f'<p style="max-width:1060px;margin-bottom:16px">{_esc(intro)}</p>' if intro else "")
-            + "".join(f'<div style="display:flex;gap:24px;margin-top:{6 if r == 0 else 22}px">'
+            + "".join(f'<div style="display:flex;gap:24px;margin-top:{6 if r == 0 else 14}px">'
                        f'{"".join(items[sum(len(x) for x in rows[:r]):sum(len(x) for x in rows[:r + 1])])}</div>'
                        for r in range(len(rows)))
             + (f'<p style="margin-top:22px"><a href="{_esc(playlist["url"])}" style="color:{self.accent};'
