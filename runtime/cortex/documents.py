@@ -564,10 +564,7 @@ def find(company_id: int, query: str, scope: str = "", deal_id: int | None = Non
     rows = [r for r in listing(company_id) if r.get("kind") not in PRIVATE_KINDS]
     if not toks:
         return rows
-    def score(r):
-        hay = (r["kind"] + " " + r["filename"]).lower().replace("license", "licence")
-        return sum(1 for t in toks if t.replace("license", "licence") in hay)
-    scored = [(score(r), r) for r in rows]
+    scored = [(_score(r, query), r) for r in rows]
     best = [r for s, r in sorted(scored, key=lambda x: -x[0]) if s > 0]
     # numbers identify no client: "2026" in one deal's title matched every dated file of every client
     stoks = [t for t in re.split(r"[^a-z0-9]+", (scope or "").lower())
@@ -583,6 +580,41 @@ def find(company_id: int, query: str, scope: str = "", deal_id: int | None = Non
         best = [r for r in best if r["kind"] in CORE_KINDS or any(t in _words(r) for t in stoks)
                 or (deal_id and r.get("deal_id") == int(deal_id))]
     return best or []
+
+
+_STOP = {"the", "our", "and", "for", "with", "a", "an", "of", "to", "in", "on", "pdf", "doc", "file", "copy", "latest",
+         "new", "your", "my", "this", "that"}
+
+
+def _score(r: dict, query: str) -> int:
+    """How well a document matches what he called it (DSO card 1353, 20 Oct 2026: 'AI capabilities deck' tied three
+    capabilities-deck files on KIND alone and took 'AI Avatar Posts'). A word in the FILE NAME counts twice a word
+    that only the kind carries; short words ('ai') must be whole words ('ai' is inside 'dubai' and 'email')."""
+    qt = [t.replace("license", "licence") for t in re.split(r"[^a-z0-9]+", (query or "").lower())
+          if len(t) > 1 and t not in _STOP]
+    fn = (r.get("filename") or "").lower().replace("license", "licence")
+    kd = (r.get("kind") or "").lower()
+    fw, kw = set(re.split(r"[^a-z0-9]+", fn)), set(re.split(r"[^a-z0-9]+", kd))
+    s = 0
+    for t in qt:
+        if t in fw or (len(t) > 3 and t in fn):
+            s += 2
+        elif t in kw or (len(t) > 3 and t in kd):
+            s += 1
+    return s
+
+
+def pick(company_id: int, query: str, scope: str = "", deal_id: int | None = None) -> tuple:
+    """The ONE document he means, or (None, the tied candidates) when two or more match equally well: the card asks
+    which, it never guesses."""
+    hits = find(company_id, query, scope=scope, deal_id=deal_id)
+    if not hits:
+        return None, []
+    top = _score(hits[0], query)
+    tied = [h for h in hits if _score(h, query) == top]
+    if len(tied) > 1 and len({h["filename"] for h in tied}) > 1:
+        return None, tied
+    return hits[0], []
 
 
 # words that identify no project on their own - never enough to match a scoped document

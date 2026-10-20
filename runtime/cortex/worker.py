@@ -380,7 +380,12 @@ def draft(skill: dict, company: dict, request: dict,
                     (f"THE CLIENT PROPOSED A TIME: {_cs.get('label')}. We are NOT free then: say so courteously and "
                      "offer the nearest free times from the availability list instead."))
     _av = (request.get("availability") or "").strip() if isinstance(request, dict) else ""
-    if _av.startswith("NO CALL TIMES"):   # the facts say this email proposes no call (engine._call_is_relevant)
+    _ot = (request.get("owner_times") or []) if isinstance(request, dict) else []
+    if _ot:   # he chose them himself (engine._owner_times): they are the times, not a suggestion (DSO card 1353)
+        user.append("THE OWNER CHOSE THE MEETING TIMES HIMSELF. Offer exactly these, in this order, with the weekday "
+                    "and date exactly as written here, and no others: " + "; ".join(o["label"] for o in _ot)
+                    + ". Never swap one for a different time, never add a calendar suggestion.")
+    elif _av.startswith("NO CALL TIMES"):   # the facts say this email proposes no call (engine._call_is_relevant)
         user.append(_av)
     elif _av:
         # Which timezone to state them in, and how to word the offer, are scheduling rules on the skill.

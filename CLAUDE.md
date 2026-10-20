@@ -4056,3 +4056,20 @@ shoot needs none), then 10% off the whole quotation.
 - Split 20 Oct: #136 SAKINA only (step #58 "Theirs: decision on SEN-2026-0024" reopened, weekly tender chase from Wed 21
   Oct); #177 Salma (Lost: cancelled by RAFED 19 Oct; cards 871, 1058, 1198 moved); #178 DAWAK (tender, step #75 and its
   To do moved, closing reminder 545 for Sun 25 Oct). Moved entries are voided on #136, never deleted.
+
+## His words beat the guards on a correction (DSO card 1353, 20 Oct 2026)
+- CAUSE: the owner told card 1353 "we will send the concepts, quotation, AI capabilities deck and portfolio later",
+  then "remove any attachments", and gave his own times (tomorrow 10:00 or 14:00, Thursday 13:00). The card came back
+  with two files attached (the wrong deck), "Please find attached", and the calendar's Wed 10:00 / Thu 14:30. Not the
+  model (Sonnet 5 reads corrections): the fixed channels and the guards outranked what he said. Future tense went into
+  `attach_documents`; detach only matched a file name; `find` tied three capabilities-deck files on KIND and took the
+  AI Avatar Posts deck; the writer may "only offer times from the list".
+- `engine._attach_asked(text)`: `attach_documents` is applied only when his words say attach / enclose outside a
+  removal phrase. `_detach_all_asked(text)` (regex) or the reader's `detach_all` flag clears every file on the card.
+- `documents._score`: a word in the FILE NAME counts twice a word only the kind carries, short words whole-word only.
+  `documents.pick` returns the tie instead of guessing; the card says "which one: 'A' or 'B'?".
+- `engine._owner_times(task)`: the newest correction naming clock times; Haiku pairs each time with his day words,
+  CODE keeps only times in his words (`_clocks_in`), resolves the day from the day he wrote it (`_day_from_words`),
+  drops past times, checks `calendar.busy_blocks`. Stamped as `request.owner_times` INSTEAD of the slot list (manifest
+  `owner_times(N)`); a clash goes on the card ("Kept as you said"), never a reason to change his time. The worker
+  offers exactly those.

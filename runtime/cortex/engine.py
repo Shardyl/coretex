@@ -2602,8 +2602,13 @@ def _understand_correction(task: dict, text: str) -> dict:
             '"subject": "<the new SUBJECT LINE, only if he asks to change the subject: his words for it in SENTENCE CASE (only the first word and proper names capitalised), nothing added>", '
             '"cc_add": ["<first names to add on cc>"], '
             '"cc_remove": ["<first names or exact emails to drop from cc>"], '
-            '"attach_documents": ["<standing company documents he asks to attach, e.g. trade licence>"], '
+            '"attach_documents": ["<standing company documents he asks to ATTACH TO THIS EMAIL NOW, e.g. \'attach the '
+            "trade licence'. NEVER a document he says we WILL send later, shortly, today or separately ('tell him we "
+            "will send the deck and portfolio shortly'): that is wording for the reply, so it goes in "
+            'reply_instruction and nothing is attached>"], '
             '"detach_documents": ["<attached documents he asks to REMOVE from the email, by name>"], '
+            '"detach_all": true ONLY if he asks to remove EVERY attachment: \'remove any attachments\', \'no '
+            "attachments', 'take all the files off', 'send it without attachments'. "
             '"reminders": [{"title": "<self-contained>", "when_phrase": "<his EXACT time words verbatim, '
             "e.g. 'Monday morning', 'tomorrow', '31 August' - never resolve it yourself\"}], "
             '"deal_context": ["<a FACT about this opportunity worth keeping for every future email on it: who decides '
@@ -2625,6 +2630,25 @@ def _understand_correction(task: dict, text: str) -> dict:
         return out if isinstance(out, dict) else {}
     except Exception:  # noqa: BLE001 - on failure the whole text goes to the drafter, old behaviour
         return {}
+
+
+_DETACH_ALL = re.compile(
+    r"\b(?:remove|take (?:off|out)|drop|strip|delete|clear|detach|lose|get rid of)\b[^.?!]{0,25}?"
+    r"\b(?:all|any|every|the|both|those|these)\s+(?:of the\s+)?(?:attachments?|attached files?|files|documents|pdfs?)\b|"
+    r"\bno attachments?\b|\bwithout (?:any |the )?attachments?\b|\bnothing attached\b|\bdon'?t attach anything\b", re.I)
+_ATTACH_VERB = re.compile(r"\battach(?!ments?\b)|\benclos", re.I)
+_REMOVAL = re.compile(r"\b(?:remove|take (?:off|out)|drop|strip|delete|detach|don'?t|do not|no need to|never)\b[^.?!]{0,60}", re.I)
+
+
+def _detach_all_asked(text: str) -> bool:
+    return bool(_DETACH_ALL.search(text or ""))
+
+
+def _attach_asked(text: str) -> bool:
+    """His words ask to ATTACH something to this email ('attach the trade licence', 'enclose the profile'), outside
+    any removal phrase. 'We will send the deck shortly' asks for nothing to be attached."""
+    t = _REMOVAL.sub(" ", _DETACH_ALL.sub(" ", text or ""))
+    return bool(_ATTACH_VERB.search(t))
 
 
 def _apply_understood(task: dict, u: dict, text: str) -> tuple:
@@ -2702,6 +2726,18 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
     missing = []
     refs = {int(r["id"]): r for r in (req.get("attach_docs") or [])}
     n_refs0 = len(refs)
+    # REMOVE EVERY ATTACHMENT (DSO card 1353, 20 Oct 2026): "remove any attachments from this email" had no channel,
+    # because detach only matched a FILE NAME, so both files stayed and the email kept saying "please find attached".
+    # His words decide it (regex), or the reader's detach_all flag; either one clears the card's files.
+    if refs and (u.get("detach_all") is True or _detach_all_asked(text)):
+        for rid in list(refs):
+            created.append(f"detached '{refs.pop(rid)['filename']}'")
+    # "WE WILL SEND X LATER" IS NEVER AN ATTACHMENT (same card): "tell him I will send the concepts ... together with
+    # our AI capabilities deck and company portfolio" was read as attach_documents, two files were attached and the
+    # writer, bound by the attachment rule, wrote "Please find attached". A document is attached only when his words
+    # ask to ATTACH it (attach / enclose), outside a removal phrase.
+    if u.get("attach_documents") and not _attach_asked(text):
+        u = {**u, "attach_documents": []}
     _scope = ""
     try:   # a deal-linked card may ONLY attach that project's documents (see documents.find)
         _did = task.get("deal_id") or req.get("deal_id")
@@ -2711,11 +2747,14 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
     except Exception:  # noqa: BLE001
         _scope = ""
     for w in (u.get("attach_documents") or [])[:6]:
-        hits = documents.find(task["company_id"], str(w), scope=_scope,
-                              deal_id=int(_did) if _did else None)
-        if hits:
-            d = hits[0]
+        # BY ITS REAL NAME, AND ASK WHEN IT IS NOT CLEAR (same card): "AI capabilities deck" tied three
+        # capabilities-deck files on kind alone and took the AI Avatar Posts deck. documents.pick scores the file
+        # name above the kind and returns the tie instead of guessing.
+        d, tied = documents.pick(task["company_id"], str(w), scope=_scope, deal_id=int(_did) if _did else None)
+        if d:
             refs[d["id"]] = documents.card_ref(d)
+        elif tied:
+            missing.append(f"{w} (which one: " + " or ".join(f"'{t['filename']}'" for t in tied[:3]) + "?)")
         else:
             missing.append(str(w))
     for w in (u.get("detach_documents") or [])[:6]:   # remove-attachment verb (card 383: it didn't exist,
@@ -5773,6 +5812,109 @@ _PUT_ON_HOLD = re.compile(
     r"\binternal (?:review|approval|discussion)s?\b|\bnot (?:at )?this (?:time|stage)\b", re.I)
 
 
+_CLOCK = re.compile(r"\b(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)|\b(\d{1,2})[:.](\d{2})\b|\b(noon|midday)\b", re.I)
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+_MONTHS = ("january", "february", "march", "april", "may", "june", "july", "august", "september", "october",
+           "november", "december")
+
+
+def _clocks_in(text: str) -> set:
+    """Every clock time written in his words, as (hour, minute) in 24h: what a model's reading must match."""
+    out = set()
+    for m in _CLOCK.finditer(text or ""):
+        if m.group(6):
+            out.add((12, 0))
+        elif m.group(3):
+            h, mi = int(m.group(1)), int(m.group(2) or 0)
+            pm = m.group(3).lower().startswith("p")
+            h = (h % 12) + (12 if pm else 0)
+            out.add((h, mi))
+        else:
+            out.add((int(m.group(4)), int(m.group(5))))
+    return {(h, mi) for h, mi in out if 0 <= h < 24 and 0 <= mi < 60}
+
+
+def _day_from_words(day: str, base):
+    """His day words resolved BY CODE from the day he wrote them: today, tomorrow, a weekday (the next one after
+    that day; 'next <weekday>' one week further), or '21 October'. None when it is anything else."""
+    d = (day or "").strip().lower()
+    if not d:
+        return None
+    if re.search(r"\btoday\b|\bthis (?:afternoon|morning|evening)\b", d):
+        return base
+    if re.search(r"\btomorrow\b", d):
+        return base + timedelta(days=1)
+    for i, w in enumerate(_WEEKDAYS):
+        if re.search(rf"\b{w[:3]}(?:{w[3:]})?\b", d):
+            ahead = (i - base.weekday()) % 7 or 7
+            if re.search(r"\bnext\b", d) and ahead < 7:
+                ahead += 7
+            return base + timedelta(days=ahead)
+    m = re.search(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(" + "|".join(x[:3] for x in _MONTHS) + r")[a-z]*\b", d) or \
+        re.search(r"\b(" + "|".join(x[:3] for x in _MONTHS) + r")[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?\b", d)
+    if m:
+        a, b = m.group(1), m.group(2)
+        dd, mon = (int(a), b) if a.isdigit() else (int(b), a)
+        mo = [x[:3] for x in _MONTHS].index(mon[:3]) + 1
+        try:
+            out = base.replace(month=mo, day=dd)
+        except ValueError:
+            return None
+        return out if out >= base else out.replace(year=out.year + 1)
+    return None
+
+
+def _owner_times(task: dict) -> list:
+    """THE MEETING TIMES THE OWNER NAMED on this card, newest correction that names any (his later words win).
+    One narrow model reading pairs each time with HIS day words; CODE keeps only clock times that are in his words,
+    resolves the day from the date he wrote it, drops times already past and checks each against the calendar.
+    Returns [{iso, label, clash}] in his order, or []."""
+    rows = db.query("select note, created_at from decisions where task_id=%s and action='correct' and "
+                    "coalesce(note,'')<>'' order by id", (task.get("id") or 0,))
+    words = [(r["note"], r["created_at"]) for r in rows]
+    now_t = _CORRECTION_NOW.get()
+    if now_t:
+        words.append((now_t, datetime.now(timezone.utc)))
+    pick = next(((t, at) for t, at in reversed(words) if _clocks_in(t)), None)
+    if not pick:
+        return []
+    text, at = pick
+    said = _clocks_in(text)
+    base = at.astimezone(_GST).replace(hour=0, minute=0, second=0, microsecond=0)
+    try:
+        r = provider.think_json(
+            "The owner named meeting times for a client. List every time he offers, in his order, each with HIS OWN "
+            "day words copied verbatim (a day said once applies to every time after it until another day is named: "
+            "'tomorrow 10AM or 2PM, and Thursday at 1PM' = tomorrow 10:00, tomorrow 14:00, Thursday 13:00). Times in "
+            '24h HH:MM. Return {"times": [{"day": "<his words>", "time": "HH:MM"}]}; {"times": []} if he names none.',
+            text[:1500], model=provider.MODEL_ROUTER, max_tokens=300, purpose="owner-times",
+            company=(store.get_company(task.get("company_id")) or {}).get("slug"))
+    except Exception:  # noqa: BLE001
+        return []
+    out, now = [], datetime.now(timezone.utc)
+    for it in ((r or {}).get("times") or [])[:6] if isinstance(r, dict) else []:
+        try:
+            h, mi = (int(x) for x in str(it.get("time") or "").split(":")[:2])
+        except Exception:  # noqa: BLE001
+            continue
+        if (h, mi) not in said:          # a time he did not write is never offered
+            continue
+        day = _day_from_words(str(it.get("day") or ""), base)
+        if not day:
+            continue
+        dt = day.replace(hour=h, minute=mi)
+        if dt <= now or any(o["iso"] == dt.isoformat() for o in out):
+            continue
+        clash = False
+        try:
+            from . import calendar as _gcal
+            clash = bool(_gcal.busy_blocks(dt.astimezone(timezone.utc), (dt + timedelta(minutes=30)).astimezone(timezone.utc)))
+        except Exception:  # noqa: BLE001
+            clash = False
+        out.append({"iso": dt.isoformat(), "label": dt.strftime("%A %-d %B, %H:%M") + " Dubai time", "clash": clash})
+    return out
+
+
 def _call_is_relevant(task: dict, req: dict, email: str) -> str:
     """WHEN AN EMAIL MAY PROPOSE CALL TIMES, decided on facts (owner, 21 Sep 2026: "the only next meeting should
     be when it is relevant to have a meeting"). Returns the reason, or "" when it may not:
@@ -6014,7 +6156,26 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
             req["client_slot"] = _cs
             manifest.append("client_slot(free)" if _cs.get("free") else "client_slot(busy)")
         _why = _call_is_relevant(task, req, email)
-        if _why:
+        # HIS TIMES BEAT THE SLOT LIST (DSO card 1353, 20 Oct 2026): he said "tomorrow 10AM or 2PM, and Thursday at
+        # 1PM" and the email offered Wed 10:00 / Thu 14:30 from the calendar, because the writer may "ONLY offer times
+        # from that list". Times he names on the card are resolved by code and given INSTEAD of the list; a clash with
+        # the calendar is flagged on the card, never a reason to change his time.
+        _ot = _owner_times(task) if _why == "owner" else []
+        if _ot:
+            req["owner_times"] = _ot
+            req.pop("availability", None)
+            manifest.append(f"owner_times({len(_ot)})")
+            _clash = [o["label"] for o in _ot if o.get("clash")]
+            if _clash:
+                req["card_problem"] = ("Your time clashes with something already on the calendar: "
+                                       + "; ".join(_clash) + ". Kept as you said.")
+            elif str(req.get("card_problem") or "").startswith("Your time clashes"):
+                req.pop("card_problem", None)
+            if task.get("id"):
+                db.execute("update tasks set request = request || %s::jsonb where id=%s",
+                           (json.dumps({"owner_times": _ot, **({"card_problem": req["card_problem"]}
+                                                                if req.get("card_problem") else {})}), task["id"]))
+        elif _why:
             _tz = (req.get("client_tz") or "").strip() or _tz_for_email(email)
             _av = _gcal.availability_block(tz=_tz)
             if _av:

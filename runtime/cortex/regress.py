@@ -993,6 +993,39 @@ def _cases():
     case("an email with an RFQ reference goes to that RFQ's opportunity, or opens a new one; a quote step says quotation",
          "RAFED #136, 20 Oct", _ref_routing)
 
+    def _dso_1353():
+        from . import documents as _docs
+        later = ("In the second paragraph, tell him that I will send over the concepts and the quotation also today, "
+                 "together with our AI capabilities deck that outlines our previous experience with AI production, "
+                 "and also our company portfolio ahead of the meeting.")
+        remove = ("On the second paragraph, tell him we will send these over shortly. And remove any attachments "
+                  "from this email. We'll send them in a short while. You know?")
+        ok_attach = (not engine._attach_asked(later) and not engine._attach_asked(remove)
+                     and engine._attach_asked("attach the trade licence and the company profile")
+                     and engine._attach_asked("remove the quote and attach the profile instead"))
+        ok_detach = (engine._detach_all_asked(remove) and engine._detach_all_asked("send it without attachments")
+                     and engine._detach_all_asked("no attachments please")
+                     and not engine._detach_all_asked("remove the quotation attachment")
+                     and not engine._detach_all_asked(later))
+        rows = [{"kind": "capabilities-deck", "filename": "Sensa - AI Avatar Posts.pdf"},
+                {"kind": "capabilities-deck", "filename": "Sensa - Body Double - AI Character Social.pdf"},
+                {"kind": "capabilities-deck", "filename": "Sensa - AI Production Capabilities Deck.pdf"}]
+        best = max(rows, key=lambda r: _docs._score(r, "AI capabilities deck"))
+        ok_doc = (best["filename"] == "Sensa - AI Production Capabilities Deck.pdf"
+                  and _docs._score({"kind": "document", "filename": "Dubai Municipality - deck.pdf"}, "ai") == 0)
+        clocks = engine._clocks_in("tomorrow, 10AM or 2PM, and Thursday at 1PM")
+        from datetime import datetime as _dt
+        base = _dt(2026, 10, 20, tzinfo=engine._GST)      # a Tuesday
+        ok_time = (clocks == {(10, 0), (14, 0), (13, 0)}
+                   and engine._day_from_words("tomorrow", base).day == 21
+                   and engine._day_from_words("Thursday", base).day == 22
+                   and engine._day_from_words("next Monday", base).day == 2
+                   and engine._day_from_words("21 October", base).day == 21
+                   and "owner_times" in inspect.getsource(worker.draft))
+        return ok_attach and ok_detach and ok_doc and ok_time
+    case("'we will send X later' never attaches; 'remove any attachments' clears them; a deck is matched by its real "
+         "name; the owner's own meeting times beat the slot list", "DSO card 1353, 20 Oct", _dso_1353)
+
     def _push_rhythm():
         from . import crm as _c
         gaps = [p["after_days"] for p in _c.cadence_points(_c.CLOSING_CADENCE)][:7]
