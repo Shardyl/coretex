@@ -8051,6 +8051,26 @@ def build_quote_from_words(company: dict, deal_id, text: str, intent: dict, for_
             "msg": f"Quotation {rq.get('number')} is ready to check on card #{t['id']}: {rq.get('summary', '')}"}
 
 
+def _fold_files_into_email(em: dict, refs: list, nums: list, did, why: str) -> list:
+    """Put files onto an email that is already open: an older version of the same quotation leaves
+    (`_replaced_attachments`), everything else stays, and the wording is reconciled off-thread. Returns what was added."""
+    ereq = dict(em.get("request") or {})
+    cur = list(ereq.get("attach_docs") or [])
+    gone = _replaced_attachments(cur, refs, nums)
+    have = {a.get("id") for a in cur if a not in gone}
+    added = [r for r in refs if r.get("id") not in have]
+    ereq["attach_docs"] = [a for a in cur if a not in gone] + added
+    if added or gone:
+        ereq["attach_changes"] = ([f"Added: {r['filename']}" for r in added]
+                                  + [f"Removed (replaced): {a['filename']}" for a in gone])
+        store.update_task(em["id"], request=ereq)
+        reconcile_attachments(em["id"])
+        if did:
+            pipeline.log_deal(int(did), "note", f"Approved on {why}; added to email card #{em['id']}: "
+                                                + ", ".join(r["filename"] for r in added) + ".")
+    return added
+
+
 def _replaced_attachments(existing: list, refs: list, nums: list) -> list:
     """The attachments a new quotation replaces: filed in the library as the SAME KIND as one coming in (quotation,
     its terms copy) and carrying its number. Never a proposal, brief or anything else, whatever its name."""
@@ -8726,9 +8746,23 @@ def _draft_proposal_email(task: dict, skill: dict, company: dict, actor: str, nu
     _open = db.one("select id from tasks where company_id=%s and kind in ('email_reply','email_draft') and "
                    "status = any(%s) and lower(request->'inquiry'->>'email')=%s order by id desc limit 1",
                    (company["id"], list(_OPEN_CARD), to))
-    if _open:   # one open email per person: never a twin
-        return keep(f"There is already an open email to {to}: card #{_open['id']}. Correct or cancel that card, "
-                    "then approve this one again.")
+    if _open:
+        # ONE EMAIL PER PERSON, AND THE APPROVAL STILL COUNTS (Al Barsha cards 1341 / 1351, 20 Oct 2026): the open email
+        # to Randa already carried Option A's proposal and quotation, and approving Option B's proposal and quotation
+        # was REFUSED ("correct or cancel that card"), so the owner could not get the retainer files onto the email at
+        # all. The open email is the email: this approval adds its files to it and the wording follows.
+        em = store.get_task(_open["id"]) or {}
+        if em.get("status") == "drafting":
+            return keep(f"The open email to {to} (card #{em['id']}) is being written right now. Approve this card again "
+                        "in a minute and its files will be added to that email.")
+        added = _fold_files_into_email(em, refs, re.findall(r"SEN-\d{4}-\d{4}", str(number or "")), did,
+                                       f"proposal card {task['id']}")
+        msg = (f"Figures confirmed. Added to the open email to {to}, card #{em['id']}: "
+               + (", ".join(r["filename"] for r in added) if added else "its files were already on it")
+               + ". Approve that card to send.")
+        store.update_task(task["id"], status="done", draft=msg)
+        store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"email_card": em["id"], "quotation": number})
+        return {"approved": True, "email_card": em["id"], "note": msg}
     sk = (store.get_skill_by_key(company["id"], "email-handling")
           or store.get_skill_by_key(company["id"], "general-operations") or skill)
     name = ""

@@ -564,7 +564,8 @@ def find(company_id: int, query: str, scope: str = "", deal_id: int | None = Non
     rows = [r for r in listing(company_id) if r.get("kind") not in PRIVATE_KINDS]
     if not toks:
         return rows
-    scored = [(_score(r, query), r) for r in rows]
+    labels = _quote_labels(company_id)
+    scored = [(_score(r, query, labels), r) for r in rows]
     best = [r for s, r in sorted(scored, key=lambda x: -x[0]) if s > 0]
     # numbers identify no client: "2026" in one deal's title matched every dated file of every client
     stoks = [t for t in re.split(r"[^a-z0-9]+", (scope or "").lower())
@@ -586,14 +587,45 @@ _STOP = {"the", "our", "and", "for", "with", "a", "an", "of", "to", "in", "on", 
          "new", "your", "my", "this", "that"}
 
 
-def _score(r: dict, query: str) -> int:
+# WHAT A QUOTATION IS CALLED (Al Barsha card 1374, 20 Oct 2026): "attach the AI content retainer quotation" took the
+# retainer PROPOSAL, because the quotation's file is "Quotation SEN-2026-0050 v3" and never says "retainer"; only its
+# card does ("Option B: AI CONTENT RETAINER QUOTATION"). A quotation is matched by its file name AND its card's title
+# and option letter, and words naming a kind rule out the other kind: a quotation asked for is never a proposal.
+_ASKS_QUOTE = re.compile(r"\bquot(?:e|es|ation|ations)\b", re.I)
+_ASKS_DECK = re.compile(r"\b(?:proposal|proposals|deck|decks|treatment|treatments)\b", re.I)
+_QNUM = re.compile(r"\b[A-Z]{2,5}-\d{4}-\d{4}\b")
+
+
+def _quote_labels(company_id: int) -> dict:
+    """quotation number -> the words its card is known by (its title and option letter)."""
+    out = {}
+    try:
+        for t in db.query("select request->>'number' n, coalesce(nullif(request->>'title',''), title, '') ti, "
+                          "request->>'option' o from tasks where company_id=%s and kind='quotation' and "
+                          "coalesce(request->>'number','')<>'' order by id", (company_id,)):
+            out[t["n"]] = " ".join(x for x in (t["ti"] or "", f"option {t['o']}" if t.get("o") else "") if x)
+    except Exception:  # noqa: BLE001 - a label is a help to matching, never a reason to fail it
+        pass
+    return out
+
+
+def _score(r: dict, query: str, labels: dict | None = None) -> int:
     """How well a document matches what he called it (DSO card 1353, 20 Oct 2026: 'AI capabilities deck' tied three
     capabilities-deck files on KIND alone and took 'AI Avatar Posts'). A word in the FILE NAME counts twice a word
     that only the kind carries; short words ('ai') must be whole words ('ai' is inside 'dubai' and 'email')."""
-    qt = [t.replace("license", "licence") for t in re.split(r"[^a-z0-9]+", (query or "").lower())
+    kd = (r.get("kind") or "").lower()
+    q = query or ""
+    if kd == "proposal" and _ASKS_QUOTE.search(q) and not _ASKS_DECK.search(q):
+        return 0
+    if kd == "quotation" and _ASKS_DECK.search(q) and not _ASKS_QUOTE.search(q):
+        return 0
+    qt = [t.replace("license", "licence") for t in re.split(r"[^a-z0-9]+", q.lower())
           if len(t) > 1 and t not in _STOP]
     fn = (r.get("filename") or "").lower().replace("license", "licence")
-    kd = (r.get("kind") or "").lower()
+    if kd == "quotation" and labels:
+        m = _QNUM.search(r.get("filename") or "")
+        if m and labels.get(m.group(0)):
+            fn += " " + labels[m.group(0)].lower()
     fw, kw = set(re.split(r"[^a-z0-9]+", fn)), set(re.split(r"[^a-z0-9]+", kd))
     s = 0
     for t in qt:
@@ -608,13 +640,31 @@ def pick(company_id: int, query: str, scope: str = "", deal_id: int | None = Non
     """The ONE document he means, or (None, the tied candidates) when two or more match equally well: the card asks
     which, it never guesses."""
     hits = find(company_id, query, scope=scope, deal_id=deal_id)
+    return _choose(hits, query, _quote_labels(company_id), deal_id)
+
+
+def _identity(filename: str) -> str:
+    """One document across its versions and copies: the name without extension, version and date."""
+    n = re.sub(r"\.\w{2,4}$", "", filename or "")
+    n = re.sub(r"\s*-\s*\d{4}-\d{2}-\d{2}$", "", n)
+    return re.sub(r"\s+v\d+\b", "", n).strip().lower()
+
+
+def _choose(hits: list, query: str, labels: dict, deal_id: int | None = None) -> tuple:
+    """Among the best-scoring documents: one DOCUMENT (its versions and copies are one) -> its newest version, as a PDF,
+    preferring the copy filed on this deal; two or more different documents -> (None, them) so the card asks."""
     if not hits:
         return None, []
-    top = _score(hits[0], query)
-    tied = [h for h in hits if _score(h, query) == top]
-    if len(tied) > 1 and len({h["filename"] for h in tied}) > 1:
+    top = max(_score(h, query, labels) for h in hits)
+    tied = [h for h in hits if _score(h, query, labels) == top]
+    if len({_identity(h.get("filename") or "") for h in tied}) > 1:
         return None, tied
-    return hits[0], []
+
+    def _key(h):
+        v = re.search(r"\sv(\d+)\b", h.get("filename") or "")
+        return (int(v.group(1)) if v else 0, (h.get("filename") or "").lower().endswith(".pdf"),
+                bool(deal_id) and h.get("deal_id") == int(deal_id), int(h.get("id") or 0))
+    return max(tied, key=_key), []
 
 
 # words that identify no project on their own - never enough to match a scoped document

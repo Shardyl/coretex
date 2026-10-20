@@ -4102,3 +4102,17 @@ shoot needs none), then 10% off the whole quotation.
 - The client-slot reader is unchanged on purpose: a wrong guess now shows on the card and cannot reach the client.
   Known edge: an email that restates THEIR event's day and time (not a meeting) would still pass the check; the card
   line is what catches that.
+
+## A quotation is found by what it is; an approval adds to the open email (Al Barsha card 1374, 20 Oct 2026)
+- CAUSE 1: "attach the AI content retainer quotation" took the retainer PROPOSAL. Matching read file names only, the
+  quotation's file is "Quotation SEN-2026-0050 v3" (no "retainer"), the proposal's says "AI content retainer"; the
+  proposal was already on the email, so nothing changed and no "not found" notice was raised. `documents._score` now
+  reads a quotation's CARD name too (`_quote_labels`: title + option letter, by quotation number), and words naming a
+  kind rule out the other kind (`_ASKS_QUOTE` / `_ASKS_DECK`). `documents._choose`: the best-scoring rows that are one
+  DOCUMENT (`_identity`: name without extension, version, date) -> its newest version, as a PDF, the copy on this deal;
+  two or more different documents -> the card asks which.
+- CAUSE 2: approving Option B's proposal (1341) and quotation (1351) was REFUSED because an email to Randa was open
+  ("correct or cancel that card"). `_draft_proposal_email` now folds the deck and quotation into the open email
+  (`_fold_files_into_email`: an older version of the same quotation leaves via `_replaced_attachments`, everything else
+  stays, `reconcile_attachments` redrafts the wording) and closes the proposal card. Only an email being written at that
+  moment (`drafting`) still asks to approve again.

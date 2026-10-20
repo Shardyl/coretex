@@ -993,6 +993,34 @@ def _cases():
     case("an email with an RFQ reference goes to that RFQ's opportunity, or opens a new one; a quote step says quotation",
          "RAFED #136, 20 Oct", _ref_routing)
 
+    def _fold_1374():
+        from . import documents as _docs
+        labels = {"SEN-2026-0049": "Option A: AI PRESENTER VIDEOS QUOTATION option A",
+                  "SEN-2026-0050": "Option B: AI CONTENT RETAINER QUOTATION option B"}
+        rows = [{"id": 1140, "kind": "proposal", "deal_id": 170,
+                 "filename": "Al Barsha Private Notary - AI content retainer - Proposal v4 - 2026-10-20.pdf"},
+                {"id": 1110, "kind": "quotation", "deal_id": 170,
+                 "filename": "Al Barsha Private Notary - Quotation SEN-2026-0049 v4 - 2026-10-20.pdf"},
+                {"id": 1101, "kind": "quotation", "deal_id": None,
+                 "filename": "Al Barsha Private Notary - Quotation SEN-2026-0050 v2 - 2026-10-19.pdf"},
+                {"id": 1115, "kind": "quotation", "deal_id": None,
+                 "filename": "Al Barsha Private Notary - Quotation SEN-2026-0050 v3 - 2026-10-20.xlsx"},
+                {"id": 1107, "kind": "quotation", "deal_id": 170,
+                 "filename": "Al Barsha Private Notary - Quotation SEN-2026-0050 v3 - 2026-10-20.pdf"},
+                {"id": 1122, "kind": "quotation", "deal_id": None,
+                 "filename": "Al Barsha Private Notary - Quotation SEN-2026-0050 v3 - 2026-10-20.pdf"}]
+        q = "AI content retainer quotation"
+        hits = sorted([r for r in rows if _docs._score(r, q, labels) > 0], key=lambda r: -_docs._score(r, q, labels))
+        got, tied = _docs._choose(hits, q, labels, 170)
+        deck = [r for r in rows if _docs._score(r, "the retainer proposal", labels) > 0]
+        both, tie2 = _docs._choose(sorted(rows, key=lambda r: -_docs._score(r, "the quotation", labels)),
+                                   "the quotation", labels, 170)
+        return ((got or {}).get("id") == 1107 and not tied and [r["id"] for r in deck] == [1140]
+                and both is None and len({_docs._identity(r["filename"]) for r in tie2}) == 2
+                and "_fold_files_into_email(em, refs" in inspect.getsource(engine._draft_proposal_email))
+    case("a quotation is matched by its card's name, never a proposal; approving a proposal adds its files to the "
+         "open email instead of refusing", "Al Barsha card 1374, 20 Oct", _fold_1374)
+
     def _meet_1365():
         from . import api as _api
         mt = {"start": "2026-10-21T11:00:00+04:00", "minutes": 60, "event_id": "x",
