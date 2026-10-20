@@ -208,6 +208,24 @@ def they_wrote(company: dict, message: dict, deals: list | None = None, channel:
     body = (message.get("body") or message.get("snippet") or "").strip()
     rows = _deals(company, sender, deals)
     deal = None
+    # THE REFERENCE DECIDES BEFORE THE SENDER (20 Oct 2026, RAFED #136: three RFQs from one procurement contact, SAKINA,
+    # Salma and DAWAK, all filed on SAKINA; the Salma cancellation was then read as SAKINA's). An email carrying an RFQ
+    # or tender reference goes to the opportunity with that reference; a reference no opportunity has is a NEW job and
+    # is opened as its own tender opportunity, never filed on the sender's other one.
+    if channel == "email":
+        try:
+            _subj = message.get("subject") or ""
+            _code = crm.tender_code(_subj) or crm.tender_code(body[:4000])
+            if _code:
+                _hit = crm.find_tender_deal(company.get("slug") or "", "", _subj, body)
+                if _hit:
+                    rows = [_hit]
+                elif rows and not any(crm.same_job(r, _code, _subj) for r in rows):
+                    _new = engine._track_tender(company, message, _subj)
+                    if _new:
+                        rows = [db.one("select * from crm_projects where id=%s", (int(_new["id"]),)) or _new]
+        except Exception as e:  # noqa: BLE001
+            print(f"[events] reference routing: {type(e).__name__}: {e}", flush=True)
     if rows:
         deal = rows[0] if len(rows) == 1 else (engine._deal_for_thread(message, rows) if channel == "email" else rows[0])
         if not deal and len(rows) > 1 and channel == "email":

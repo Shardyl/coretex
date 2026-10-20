@@ -96,9 +96,12 @@ _MEETING_STEP = re.compile(r"^\s*(?:hold|have|attend|join|run|take)\b.{0,40}\b(?
 
 
 def tool_for(what: str) -> str | None:
+    """The Talk tool that does the step: the FIRST work word in it decides ("Prepare the two quotations ... covering
+    concept" is a quotation, not treatments: RAFED DAWAK, 20 Oct 2026)."""
     if _MEETING_STEP.search(what or ""):      # "Hold the call to run through the quotation" builds nothing
         return None
-    return next((t for rx, t in TOOLS if rx.search(what or "")), None)
+    hits = [(m.start(), t) for rx, t in TOOLS for m in [rx.search(what or "")] if m]
+    return min(hits)[1] if hits else None
 
 
 def items(deal_id: int, include_closed: bool = False) -> list[dict]:

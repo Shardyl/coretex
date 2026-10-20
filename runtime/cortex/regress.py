@@ -980,6 +980,19 @@ def _cases():
          and _ns.tool_for("Send the revised quotation") == "create_quotation"
          and "todoTalkOpen(${t.id},false)\">Type</button><button class=\"btn sm\" onclick=\"notifAct(${t.id},'dismiss')\">Dismiss"
          in open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"), encoding="utf-8").read())
+    def _ref_routing():
+        from . import crm as _c
+        ok_codes = (_c.tender_code("RE: Salma MARKETING-STUDIO ( RAF-REQ-0000127782/ SALMA-PR-0000006721)") == "RAF-REQ-0000127782"
+                    and _c.tender_code("RFQ for a promotional campaign for DAWAK, ( RAF-REQ-0000162089/ TLC-PR-26015197)")
+                    == "RAF-REQ-0000162089"
+                    and _c.tender_code("Re: Quotation SEN-2026-0024 for the SAKINA films") == ""
+                    and _c.tender_code("Wasl, Viya corporate festive video (RFQ 2026_1170)") == "2026_1170")
+        tool = _ns.tool_for("Prepare the two quotations for the DAWAK campaign covering concept, filming") == "create_quotation"
+        return ok_codes and tool and "find_tender_deal(company.get(\"slug\")" in inspect.getsource(
+            __import__("cortex.events", fromlist=["x"]).they_wrote)
+    case("an email with an RFQ reference goes to that RFQ's opportunity, or opens a new one; a quote step says quotation",
+         "RAFED #136, 20 Oct", _ref_routing)
+
     def _push_rhythm():
         from . import crm as _c
         gaps = [p["after_days"] for p in _c.cadence_points(_c.CLOSING_CADENCE)][:7]

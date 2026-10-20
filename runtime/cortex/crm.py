@@ -1919,13 +1919,20 @@ def sister_slugs(slug: str) -> list[str]:
     return [slug]
 
 
+# A PROCUREMENT REFERENCE ON ITS OWN (20 Oct 2026, RAFED: "RAF-REQ-0000127782" with no "RFQ" right before it):
+# letters, hyphen, then a long number. Our own quotation numbers (SEN-2026-0024: four digits) never qualify.
+_PROC_REF_RX = re.compile(r"\b([A-Z]{2,8}(?:-[A-Z]{2,8})*-\d{5,})\b")
+
+
 def tender_code(subject: str) -> str:
-    """The buyer's reference for a tender/RFQ (e.g. '2026_1170' from 'Request for Quotation Code 2026_1170'), or ''."""
+    """The buyer's reference for a tender/RFQ (e.g. '2026_1170' from 'Request for Quotation Code 2026_1170', or
+    'RAF-REQ-0000162089'), or ''."""
     for m in list(_TENDER_CODE_RX.finditer(subject or "")) + list(re.finditer(r"#\s*([A-Z0-9][A-Z0-9_\-/]{3,})", subject or "", re.I)):
         code = m.group(1).strip(" .,:;-")
         if any(ch.isdigit() for ch in code):      # 'INVITATION' is a word, '2026_1170' is a reference
             return code
-    return ""
+    m = _PROC_REF_RX.search(subject or "")
+    return m.group(1) if m else ""
 
 
 _JOB_STOP = {"the", "and", "for", "with", "from", "request", "quotation", "rfq", "rfp", "tender", "invitation",
@@ -1958,8 +1965,11 @@ def find_tender_deal(slug: str, sender: str, subject: str, body: str = "") -> di
     open_sales = stages.sql_list(stages.SALES)
     code = tender_code(subject) or tender_code((body or "")[:4000])
     if code:
+        # a VOIDED entry (misfiled, moved elsewhere) never claims the reference for this deal
         d = db.one("select * from crm_projects where company = any(%s) and stage in " + open_sales + " and "
-                   "(title ilike %s or history::text ilike %s) order by id limit 1", (orgs, f"%{code}%", f"%{code}%"))
+                   "(title ilike %s or exists (select 1 from jsonb_array_elements(coalesce(history,'[]'::jsonb)) h "
+                   "where not (h ? 'voided') and h->>'text' ilike %s)) order by (title ilike %s) desc, id limit 1",
+                   (orgs, f"%{code}%", f"%{code}%", f"%{code}%"))
         if d:
             return d
     if sender:
