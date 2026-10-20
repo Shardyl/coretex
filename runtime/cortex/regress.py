@@ -993,6 +993,21 @@ def _cases():
     case("an email with an RFQ reference goes to that RFQ's opportunity, or opens a new one; a quote step says quotation",
          "RAFED #136, 20 Oct", _ref_routing)
 
+    def _qi_1374():
+        email_words = ("Redraft this. Don't put a scheduled call in. We've attached two proposals, one for the one off "
+                       "eight videos and one for the retainer contract. The retainer contract comes at a considerable "
+                       "cost saving. Explain politely that the one off quote is a bit more expensive as far as the "
+                       "initial setup cost to create the AI characters. Don't ask for the script.")
+        return (not engine._QUOTE_CHANGE.search(email_words)
+                and bool(engine._QUOTE_CHANGE.search("remove the voice over from the quotation"))
+                and bool(engine._QUOTE_CHANGE.search("bring it down to 28,000"))
+                and bool(engine._QUOTE_CHANGE.search("quote them for 10 videos instead of 8"))
+                and bool(engine._QUOTE_OPTION_WORDS.search("add a second option without the voice over"))
+                and "guarded=task[\"kind\"] in EMAIL_RENDER_KINDS" in inspect.getsource(engine.apply_correction)
+                and "a failed quotation build never swallows" in inspect.getsource(engine.apply_correction))
+    case("an email instruction that talks about price is not a quotation change; a failed quotation build still "
+         "redrafts the email", "Al Barsha card 1374, 20 Oct", _qi_1374)
+
     def _fold_1374():
         from . import documents as _docs
         labels = {"SEN-2026-0049": "Option A: AI PRESENTER VIDEOS QUOTATION option A",

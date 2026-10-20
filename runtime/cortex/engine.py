@@ -2260,11 +2260,22 @@ def apply_correction(task: dict, text: str, _quote_checked: bool = False, infer:
     _did0 = _rq0.get("deal_id") or task.get("deal_id")
     if not _quote_checked and _did0 and (task["kind"] in EMAIL_RENDER_KINDS or (
             task["kind"] == "quotation" and not _rq0.get("proposal_card"))):
-        _qi = _quote_intent(text)
+        _qi = _quote_intent(text, guarded=task["kind"] in EMAIL_RENDER_KINDS)
         if _qi:
             _skill0, _co0 = store.get_skill(task["skill_id"]), store.get_company(task["company_id"])
             _for = task["id"] if task["kind"] in EMAIL_RENDER_KINDS else _rq0.get("for_email")
-            r = build_quote_from_words(_co0, _did0, text, _qi, for_email=_for)
+            try:
+                r = build_quote_from_words(_co0, _did0, text, _qi, for_email=_for)
+            except Exception as _bq:  # noqa: BLE001 - a failed quotation build never swallows his correction
+                import traceback
+                traceback.print_exc()
+                r = {"ok": False, "msg": f"Quotation not rebuilt ({type(_bq).__name__}: {str(_bq)[:160]}). The email "
+                                         "was redrafted from your words; say on the quotation card what to change."}
+                if task["kind"] in EMAIL_RENDER_KINDS:
+                    _rqx = dict((store.get_task(task["id"]) or task).get("request") or {})
+                    _rqx["card_problem"] = r["msg"]
+                    store.update_task(task["id"], request=_rqx)
+                    _qi = None      # the email still follows his words, below
             if r.get("unchanged"):
                 _qi = None     # the quotation already says it: these words are about the email, redraft it below
         if _qi:
@@ -7704,9 +7715,26 @@ _QUOTE_HINT = re.compile(
 _ROUND_WORD = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
 
 
-def _quote_intent(text: str) -> dict | None:
+# A QUOTATION DECISION MUST BE IN HIS WORDS, NOT ONLY IN A MODEL'S READING (Al Barsha card 1374, 20 Oct 2026). "Explain
+# politely that the one-off quote is a bit more expensive ... the retainer comes at a considerable cost saving" is an
+# instruction for the EMAIL; the reader called it a quotation revision, and the card tried to rebuild SEN-2026-0049
+# (it crashed on a root-owned file, three times, and the cockpit hung). On an email card or a deal note a decision
+# now needs something code can see: a figure, rounds or a split he stated, or a change verb aimed at the quotation.
+_QUOTE_CHANGE = re.compile(
+    r"\b(?:add|remove|drop|take (?:out|off)|include|exclude|change|reduce|increase|lower|raise|bring (?:it |the price "
+    r"|the total |the quote |that )?(?:down|up)|discount|re-?quote|revise|reissue|redo|rebuild|scrap|split|swap|replace)"
+    r"\b[^.?!]{0,80}\b(?:quot\w*|price|pricing|total|lines?|items?|scope|deliverables?|fees?|costs?|rates?|discount|"
+    r"rounds?|payment|deposit|videos?|films?|reels?|days?)\b|"
+    r"\bquote (?:them|him|her|it|this) for\b|\bbring (?:it|the price|the total|the quote|that) (?:down|up) to\b|"
+    r"\b(?:quot\w*|price|total)\b[^.?!]{0,40}\b(?:should be|to be|down to|up to|at)\s*(?:aed\s*)?\d", re.I)
+_QUOTE_OPTION_WORDS = re.compile(r"\b(?:option|alternative|second quot\w*|another quot\w*|new quot\w*|separate quot\w*|"
+                                 r"scrap\w*|new number)\b", re.I)
+
+
+def _quote_intent(text: str, guarded: bool = True) -> dict | None:
     """What the owner decided for the QUOTATION in these words, or None. The model only reads; every figure must be
-    one he wrote (`_stated_numbers`), a split must add to 100 (its last part may be the remainder)."""
+    one he wrote (`_stated_numbers`), a split must add to 100 (its last part may be the remainder). `guarded` (an
+    email card or a deal note, not a quotation card): the decision must also be visible in his words, by code."""
     if not _QUOTE_HINT.search(text or ""):
         return None
     try:
@@ -7738,6 +7766,13 @@ def _quote_intent(text: str) -> dict | None:
             out["target"], out["inclusive"] = float(t), bool(r.get("vat_inclusive"))
     except (TypeError, ValueError):
         pass
+    _rr0 = r.get("revision_rounds")
+    if guarded and not out.get("target") and not r.get("payment") and not isinstance(_rr0, (int, float)):
+        if out["mode"] in ("scrap", "new_number", "option"):
+            if not _QUOTE_OPTION_WORDS.search(text or ""):
+                return None
+        elif not _QUOTE_CHANGE.search(text or ""):
+            return None
     rr = r.get("revision_rounds")
     if isinstance(rr, (int, float)) and 1 <= int(rr) <= 5 and (
             re.search(rf"\b{int(rr)}\b", text or "") or any(re.search(rf"\b{w}\b", text or "", re.I)

@@ -4116,3 +4116,18 @@ shoot needs none), then 10% off the whole quotation.
   (`_fold_files_into_email`: an older version of the same quotation leaves via `_replaced_attachments`, everything else
   stays, `reconcile_attachments` redrafts the wording) and closes the proposal card. Only an email being written at that
   moment (`drafting`) still asks to approve again.
+
+## A price comparison in an email is not a quotation change; Cortex never runs as root (Al Barsha card 1374, 20 Oct 2026)
+- CAUSE: his redraft ("the retainer comes at a considerable cost saving ... explain the one-off quote is a bit more
+  expensive for the AI character setup") was read by `_quote_intent` (one Haiku judgement) as a revision of
+  SEN-2026-0049, so the card tried to REBUILD the quotation. That crashed on a root-owned
+  `/opt/coretex/quotations/quotation-sensa-SEN-2026-0049.xlsx`, three times; the endpoint returned a bare 500 and the
+  cockpit looked hung. Had it not crashed, an unasked v5 would have been issued and the email parked behind it.
+- `_quote_intent(text, guarded=True)` (email cards and deal notes; a QUOTATION card passes guarded=False): the model's
+  "yes" counts only when code can see a decision in his words: a figure he stated, rounds or a split, or `_QUOTE_CHANGE`
+  (a change verb aimed at the quotation, "quote them for", "bring it down to"); scrap / new number / option need
+  `_QUOTE_OPTION_WORDS`. A failed quotation build never swallows his correction: the email is redrafted and the reason
+  goes on the card. `/api/tasks/{id}/correct` returns a readable error instead of a bare 500.
+- 675 root-owned files in /opt/coretex/quotations, /opt/coretex/creative and /opt/cortex-knowledge/documents were
+  chowned to cortex. `cortex/__init__.py` now REFUSES to import as root (`CORTEX_AS_ROOT=1` overrides, deliberately):
+  run everything as `sudo -u cortex /opt/coretex/.venv/bin/python ...`.

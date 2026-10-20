@@ -2898,7 +2898,13 @@ def skip(task_id: int, u: dict = Depends(current_user)) -> dict:
 @app.post("/api/tasks/{task_id}/correct")
 def correct(task_id: int, body: Correction, u: dict = Depends(current_user)) -> dict:
     _guard_task(u, task_id)
-    return engine.correct_task(task_id, body.text)
+    try:
+        return engine.correct_task(task_id, body.text)
+    except Exception as e:  # noqa: BLE001 - say what failed; a bare 500 left the card "hanging" (card 1374)
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Cortex could not apply this correction ({type(e).__name__}: "
+                                                    f"{str(e)[:180]}). Nothing on the card changed.")
 
 
 class MenuPicks(BaseModel):
