@@ -4148,3 +4148,16 @@ shoot needs none), then 10% off the whole quotation.
   numbers); `documents.card_ref` swaps a spreadsheet for `pdf_twin` (same document `_identity`, same version, live,
   this deal's copy first) and refuses when no PDF exists. `_send_email_reply` refuses any spreadsheet attachment
   (library or uploaded) before sending, as the backstop. No email had ever gone out with one (checked 20 Oct).
+
+## A sent email is history (iTellu card 1381, 20 Oct 2026)
+- The owner approved and sent 1381 to Luna at 11:37:36. Four seconds later ANOTHER Claude session on his machine ran a
+  correction script on the same card: `apply_correction` reopened the SENT card, `_quote_intent` read its email edits
+  ("remove the sentence claiming the package includes the Dubai Police Innovation film") as a quotation change, built
+  quotation card 1382 (the "Trimmed to reach your figure" pop-up), and left 1381 looking unsent, one approval from a
+  second email to the client. 1381 was closed again as sent (corrected wording kept as `request.after_send_draft`).
+- `apply_correction` raises `SentAlready` on an email or WhatsApp card in done / sending / sent; `correct_task` returns
+  it as an error and `/api/tasks/{id}/correct` answers 409 with the reason. A change to a sent email is a follow-up email.
+- `_EMAIL_EDIT` ("remove/drop/reword the sentence / line / mention / reference ...") is taken out of his words before
+  `_QUOTE_CHANGE` is tested: the object is the email's wording, not the quotation.
+- LESSON for parallel sessions: re-read a card's status from the DB immediately before acting on it; the owner may
+  have approved it in the meantime.

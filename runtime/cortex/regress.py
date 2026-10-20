@@ -997,6 +997,16 @@ def _cases():
          lambda: "THE REDRAFT ALWAYS SHOWS" in open(os.path.join(os.path.dirname(__file__), "..", "..", "web",
                                                                   "index.html"), encoding="utf-8").read())
 
+    def _sent_1381():
+        edit = ("Remove the sentence claiming the package 'includes the Dubai Police Innovation film and the AI legal "
+                "services presenter concept'. Those are sample films shown inside the proposal.")
+        return (not engine._QUOTE_CHANGE.search(engine._EMAIL_EDIT.sub(" ", edit))
+                and bool(engine._QUOTE_CHANGE.search(engine._EMAIL_EDIT.sub(" ", "remove two films from the quotation")))
+                and "SentAlready" in inspect.getsource(engine.apply_correction)
+                and "SentAlready" in inspect.getsource(engine.correct_task))
+    case("a sent email cannot be corrected (no reopened card, no second send); 'remove the sentence ...' is an email "
+         "edit, never a quotation change", "iTellu card 1381, 20 Oct", _sent_1381)
+
     def _xlsx_1378():
         from . import documents as _docs
         return (bool(_docs.SPREADSHEET.search("Dubai Silicon Oasis _DSO_ - Quotation SEN-2026-0038 v1 - 2026-10-13.xlsx"))

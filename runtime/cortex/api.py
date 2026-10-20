@@ -2899,7 +2899,12 @@ def skip(task_id: int, u: dict = Depends(current_user)) -> dict:
 def correct(task_id: int, body: Correction, u: dict = Depends(current_user)) -> dict:
     _guard_task(u, task_id)
     try:
-        return engine.correct_task(task_id, body.text)
+        r = engine.correct_task(task_id, body.text)
+        if r.get("ok") is False and r.get("error"):
+            raise HTTPException(status_code=409, detail=r["error"])
+        return r
+    except HTTPException:
+        raise
     except Exception as e:  # noqa: BLE001 - say what failed; a bare 500 left the card "hanging" (card 1374)
         import traceback
         traceback.print_exc()

@@ -2256,9 +2256,24 @@ def _keep_team_names(company: dict, old: str, new: str) -> str:
     return new
 
 
+class SentAlready(Exception):
+    """A correction aimed at an email that has already gone out."""
+
+
+# A SENT EMAIL IS HISTORY (iTellu card 1381, 20 Oct 2026): the owner approved and sent it at 11:37:36; a correction run
+# by another session four seconds later reopened the SENT card, built a quotation from its email edits and left the
+# card looking unsent in the Inbox, one approval away from a second email to the client. A correction on an email or
+# WhatsApp card that has gone (or is going) out changes nothing: it is refused, and the reason says so.
+_SENT_STATES = ("done", "sending", "sent")
+
+
 def apply_correction(task: dict, text: str, _quote_checked: bool = False, infer: bool = True) -> None:
     """Redraft a task from the owner's correction (works from Telegram OR the cockpit API). `infer=False` for a
     redraft that is not him teaching a rule (a note on the deal, a quotation now attached)."""
+    _now = store.get_task(task["id"]) or task
+    if _now.get("kind") in tuple(EMAIL_RENDER_KINDS) + ("wa_reply",) and _now.get("status") in _SENT_STATES:
+        raise SentAlready(f"Card #{task['id']} has already been sent, so a correction cannot change it. "
+                          "Ask for a follow-up email instead.")
     # a link in his words is REAL: kept on the card before anything else reads or rewrites the text
     task = _remember_owner_links(task, text)
     _rq0 = task.get("request") or {}
@@ -4163,7 +4178,10 @@ def correct_task(task_id: int, text: str) -> dict:
     task, skill, company = _load(task_id)
     if not task:
         return {"ok": False, "error": "no such task"}
-    apply_correction(task, text)
+    try:
+        apply_correction(task, text)
+    except SentAlready as e:
+        return {"ok": False, "error": str(e)}
     proposed = db.setting_get(f"rule:{task_id}")   # _maybe_propose_rule stows the inferred rule here
     return {"ok": True, "task": store.get_task(task_id),
             "proposed_rule": proposed, "skill_name": skill["name"] if skill else None,
@@ -7732,6 +7750,11 @@ _QUOTE_CHANGE = re.compile(
     r"rounds?|payment|deposit|videos?|films?|reels?|days?)\b|"
     r"\bquote (?:them|him|her|it|this) for\b|\bbring (?:it|the price|the total|the quote|that) (?:down|up) to\b|"
     r"\b(?:quot\w*|price|total)\b[^.?!]{0,40}\b(?:should be|to be|down to|up to|at)\s*(?:aed\s*)?\d", re.I)
+# an edit to the EMAIL's own words ("remove the sentence claiming the package includes the Dubai Police film"): the
+# object is a sentence, not the quotation, so it is taken out before the quotation test (iTellu card 1381)
+_EMAIL_EDIT = re.compile(r"\b(?:remove|drop|delete|take out|cut|lose|rephrase|reword|change)\s+(?:the|that|this|any|"
+                         r"every)\s+(?:sentence|line|paragraph|mention|reference|part|bit|wording|phrase|words?|claim)"
+                         r"\b[^.?!]*", re.I)
 _QUOTE_OPTION_WORDS = re.compile(r"\b(?:option|alternative|second quot\w*|another quot\w*|new quot\w*|separate quot\w*|"
                                  r"scrap\w*|new number)\b", re.I)
 
@@ -7776,7 +7799,7 @@ def _quote_intent(text: str, guarded: bool = True) -> dict | None:
         if out["mode"] in ("scrap", "new_number", "option"):
             if not _QUOTE_OPTION_WORDS.search(text or ""):
                 return None
-        elif not _QUOTE_CHANGE.search(text or ""):
+        elif not _QUOTE_CHANGE.search(_EMAIL_EDIT.sub(" ", text or "")):
             return None
     rr = r.get("revision_rounds")
     if isinstance(rr, (int, float)) and 1 <= int(rr) <= 5 and (
