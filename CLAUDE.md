@@ -1092,6 +1092,16 @@ build the capability when it is missing).
   opens the deck, and every build saves its spec beside the PDF (`.spec.json`) so `reuse_copy=true`
   re-lays the SAME words for a layout change instead of rewriting them. Final Sensa deck: cover, Farmer
   John, What we control, seven module pages, four case studies, close (15 pages, card 560).
+- **AI Production Capabilities Deck v2 = library doc 1136** (20 Oct 2026, owner-approved), superseding 327 under
+  the same standard name; profile `ai_capabilities_deck_doc`, the taught note and the email-handling rule (skill 2001)
+  repointed (backups `chat_self_rules:backup-2026-10-20`, `skill2001_rules:backup-2026-10-20`). 17 pages in the
+  retainer format (render_spec, chunky): Whiskas lead (338), why Sensa, gate-by-gate process, studio software, characters,
+  how a character is locked (Jumeirah Golf Estates agent), legal presenter lead (337), real-person presenter samples,
+  locations, other departments, government (Dubai Police, HBMSU), Chair obsession lead (329), commercials, FAQ, CTA.
+  Rebuild: box `/opt/coretex/creative/_caps-v2/` (`capsv2_images.py` composites real film frames and makes the agent's
+  model sheet from his real references; `capsv2_deck.py` renders; `capsv2_file.py` files and repoints). Open: a
+  presenters-built-from-scratch samples page waits for the owner to name the films. Box yt-dlp is bot-blocked by
+  YouTube; film frames were pulled on the desktop and scp'd.
 - **The AI Production Capabilities Deck** (named 11 Sep 2026) is Sensa's STANDARD AI showcase: library doc
   327 (card 562, the approved 10 Sep build), renamed on Drive and in the library from "Brands agencies and
   government clients - Capabilities deck", kind `capabilities-deck`, profile `ai_capabilities_deck_doc`.
