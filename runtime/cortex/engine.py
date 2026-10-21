@@ -2758,6 +2758,41 @@ def _attach_asked(text: str) -> bool:
     return bool(_ATTACH_VERB.search(t))
 
 
+_ALL_FROM = re.compile(r"^(?:all|everyone|everybody|anyone|anybody|the)?\s*(?:of\s+)?(?:the\s+)?(?:people|guys|team|"
+                       r"contacts|folks)?\s*(?:from|at|of)?\s*(?:the\s+)?", re.I)
+
+
+def _people_matching(words: str, emails: list, deal_id=None) -> list:
+    """The addresses among `emails` that his words name: an address, a domain or organisation ("Gambit" is
+    gambit.ae; "everyone from Gambit"), or a person by name or by the role the deal records for them."""
+    w = _ALL_FROM.sub("", (words or "").strip().lower()).strip(" .,'\"")
+    ems = list(dict.fromkeys(e.lower().strip(".") for e in emails if e and "@" in e))
+    if not w:
+        return []
+    if "@" in w:
+        return [e for e in ems if e == w]
+    names = {}
+    if deal_id:
+        try:
+            for c in (db.one("select contacts from crm_projects where id=%s", (int(deal_id),)) or {}).get("contacts") or []:
+                if c.get("email"):
+                    names[c["email"].lower()] = f"{c.get('name') or ''} {c.get('role') or ''}".lower()
+        except Exception:  # noqa: BLE001
+            pass
+    toks = [t for t in re.split(r"[^a-z0-9]+", w) if len(t) > 2 and t not in
+            {"the", "all", "people", "guys", "team", "contacts", "folks", "everyone", "everybody", "from", "and", "copy"}]
+    if not toks:
+        return []
+    out = []
+    for e in ems:
+        dom = e.split("@")[-1].split(".")[0]
+        label = names.get(e, "")
+        if (w.replace(" ", "") == dom or (all(t in dom or t in label.split() or
+                                                       any(t == x.strip("()") for x in label.split()) for t in toks))):
+            out.append(e)
+    return out
+
+
 def _apply_understood(task: dict, u: dict, text: str) -> tuple:
     """Deterministically apply every non-reply channel of an understood correction; returns the (possibly
     refreshed) task and the text the DRAFTER should receive."""
@@ -2820,13 +2855,32 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
         req["card_problem"] = ("Could not work out who to copy in: " + ", ".join(unresolved)
                                + ". Give me the email address and I will add them.")
         changed = True
-    rems = []
+    # "REMOVE EVERYONE FROM GAMBIT" (Sheraa card 1389, 21 Oct 2026): cc_remove only knew an exact address or one of our
+    # team's first names, so a company, a person's name or "everyone from X" was dropped in silence and the card came
+    # back unchanged. Each one is matched against the people actually on this email (and the deal's contacts) by
+    # address, domain, name or the role the deal records for them; anything that matches nobody is said on the card.
+    rems, unres = [], []
+    try:
+        _env0 = _email_envelope(task, store.get_company(task["company_id"]))
+        _on = re.findall(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", f"{_env0.get('to') or ''} {_env0.get('cc') or ''}")
+    except Exception:  # noqa: BLE001
+        _on = []
+    _on += list(req.get("deal_cc") or []) + list(req.get("cc_extra") or []) + list(req.get("thread_cc") or [])
     for c in (u.get("cc_remove") or []):
-        if isinstance(c, str):
-            c = c.strip().lower()
-            rems.append(senders[c]["email"] if c in senders else (c if "@" in c else None))
-    rems = [r for r in rems if r]
+        if isinstance(c, str) and c.strip():
+            c0 = c.strip().lower()
+            if c0 in senders:
+                rems.append(senders[c0]["email"])
+                continue
+            hit = _people_matching(c0, _on, task.get("deal_id") or req.get("deal_id"))
+            (rems.extend(hit) if hit else unres.append(c.strip()))
+    rems = sorted(set(r.lower() for r in rems if r))
+    if unres:
+        req["card_problem"] = ("Could not work out who to take off the email: " + ", ".join(unres)
+                               + ". Give me their email address and I will remove them.")
+        changed = True
     if rems:
+        created.append("taken off the email: " + ", ".join(rems))
         req["cc_remove"] = sorted(set((req.get("cc_remove") or []) + rems))
         req["cc_extra"] = [e for e in (req.get("cc_extra") or []) if e.lower() not in set(rems)]
         changed = True

@@ -997,6 +997,22 @@ def _cases():
          lambda: "THE REDRAFT ALWAYS SHOWS" in open(os.path.join(os.path.dirname(__file__), "..", "..", "web",
                                                                   "index.html"), encoding="utf-8").read())
 
+    def _people_off():
+        from . import nextsteps as _n, crm as _c
+        on = ["shahnawaz.khan@sheraa.ae", "a.farhan@sheraa.ae", "jamal@gambit.ae", "shahnaz@gambit.ae", "procurement@sheraa.ae"]
+        g = engine._people_matching("all people from Gambit", on)
+        return (sorted(g) == ["jamal@gambit.ae", "shahnaz@gambit.ae"]
+                and engine._people_matching("everyone at gambit", on) == g
+                and engine._people_matching("jamal@gambit.ae", on) == ["jamal@gambit.ae"]
+                and engine._people_matching("Sheraa", on) == ["shahnawaz.khan@sheraa.ae", "a.farhan@sheraa.ae",
+                                                              "procurement@sheraa.ae"]
+                and not engine._people_matching("Unknown Agency", on)
+                and bool(_n._EMAIL_STEP.search("Email Luna to propose another call to go through the proposal"))
+                and not _n._EMAIL_STEP.search("Send the tailored proposal with pricing, packages and specifications")
+                and "role\": \"left\", \"pinned\": True" in inspect.getsource(_c.remove_deal_contact))
+    case("'remove everyone from Gambit' takes them off the email; a person removed from an opportunity stays off; an "
+         "email step is an email", "Sheraa card 1389 / iTellu #113, 21 Oct", _people_off)
+
     def _owner_chase():
         from . import gate as _g
         h = [{"event": "email_out", "ts": "2026-10-15T08:00:00+00:00"},

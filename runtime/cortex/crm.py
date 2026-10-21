@@ -839,12 +839,35 @@ def ensure_deal_account(deal_id: int, email: str | None = None) -> int | None:
         return None
 
 
-def remove_deal_contact(deal_id: int, email: str) -> dict | None:
+class LastContact(ValueError):
+    """An opportunity always keeps one contact (owner, 14 Oct 2026)."""
+
+
+def remove_deal_contact(deal_id: int, email: str, by: str = "owner") -> dict | None:
+    """TAKE A PERSON OFF AN OPPORTUNITY (owner, 21 Oct 2026, Sheraa SEF'27: the Gambit agency people were copied on
+    every email and there was no way to take them off). Off the deal's contacts AND marked 'left' (pinned) in its
+    who's-who list, so neither "everyone on a deal stays copied" nor a later email reading puts them back. The CRM
+    record is untouched; only the link to this opportunity goes. The last contact cannot be removed."""
     p = db.one("select contacts from crm_projects where id=%s", (deal_id,))
     if not p:
         return None
     email = (email or "").strip().lower()
     lst = [c for c in (p.get("contacts") or []) if (c.get("email") or "").lower() != email]
+    if not lst and (p.get("contacts") or []):
+        raise LastContact("An opportunity keeps at least one contact; add the new contact first, then remove this one.")
+    try:
+        from . import cast as _cast
+        c = _cast.get(deal_id)
+        for t in c.get("their") or []:
+            if t.get("email") == email:
+                t.update({"role": "left", "pinned": True, "why": f"removed from the opportunity by {by}", "at": _now()})
+        c["log"] = (c.get("log") or []) + [{"at": _now(), "what": f"{email} removed by {by}"}]
+        db.execute("update crm_projects set cast_list=%s where id=%s", (Json(c), deal_id))
+    except Exception as _ce:  # noqa: BLE001
+        print(f"[crm] remove contact cast {deal_id}: {type(_ce).__name__}: {_ce}", flush=True)
+    db.execute("update crm_projects set history = history || %s::jsonb where id=%s",
+               (Json([{"ts": _now(), "event": "contact_removed", "text": f"{email} taken off this opportunity ({by})."}]),
+                deal_id))
     if lst and not any(c.get("primary") for c in lst):
         lst[0]["primary"] = True
     prim = next((c["email"] for c in lst if c.get("primary")), None)

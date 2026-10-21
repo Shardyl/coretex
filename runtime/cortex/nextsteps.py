@@ -95,6 +95,14 @@ def _iso(x) -> str:
 _MEETING_STEP = re.compile(r"^\s*(?:hold|have|attend|join|run|take)\b.{0,40}\b(?:call|meeting|catch-?up|session)\b", re.I)
 
 
+# AN EMAIL STEP IS AN EMAIL (iTellu #113, 21 Oct 2026): "Email Luna to propose another call to go through the proposal"
+# was forced to "work: build the proposal" because it MENTIONS a proposal. A step that starts by writing to someone is
+# the email Cortex drafts on its day; only a step to build, prepare or send a document it must make is work.
+_EMAIL_STEP = re.compile(r"^\s*(?:e-?mail|write to|reply to|respond to|message|whatsapp|follow up with|chase|ask|invite|"
+                         r"thank|let\s+\w+\s+know|confirm (?:with|to)|propose (?:a|another|the) (?:call|meeting|time))\b",
+                         re.I)
+
+
 def tool_for(what: str) -> str | None:
     """The Talk tool that does the step: the FIRST work word in it decides ("Prepare the two quotations ... covering
     concept" is a quotation, not treatments: RAFED DAWAK, 20 Oct 2026)."""
@@ -188,8 +196,12 @@ def add(deal_id: int, what: str, *, whose: str = "us", kind: str | None = None, 
     kind = kind or ("theirs" if whose == "them" else "work")
     if whose == "them":
         kind = "theirs"
-    elif kind == "email" and tool_for(what):      # a proposal, quotation or treatments is never "just an email"
-        kind = "work"
+    elif kind == "email" and tool_for(what) and not _EMAIL_STEP.search(what):
+        kind = "work"     # "send the proposal" is the proposal; "email Luna to go through the proposal" is an email
+    elif kind == "work" and _EMAIL_STEP.search(what) and not re.search(r"\b(?:prepare|build|create|draft|revise|update)\b"
+                                                                      r"[^.]{0,40}\b(?:proposal|quotation|deck|treatment)",
+                                                                      what, re.I):
+        kind = "email"
     row = db.execute(
         "insert into next_steps (deal_id, company_id, what, whose, kind, tool, due_at, source, quote, then_what) "
         "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *",

@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v87';
+const APP_BUILD = 'cortex-v88';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -1033,9 +1033,15 @@ async function setProjStage(id,i){
 function dealPeople(p){
   const cs=p.contacts||[];
   const rows=cs.map(c=>{ const n=(c.name||'').trim()||c.email;
-    return `<div class="crow" style="padding:6px 0;cursor:pointer" onclick="openContact('${esc(c.email)}')"><div class="cav" style="width:28px;height:28px;font-size:10px">${esc(initials(n))}</div><div style="flex:1;min-width:0"><div class="cname" style="font-size:13.5px">${esc(n)}${c.primary?' <span class="chip" style="font-size:9px">primary</span>':''}</div><div class="csub">${esc([c.role,c.email].filter(Boolean).join(' · '))}</div></div></div>`; }).join('');
+    return `<div class="crow" style="padding:6px 0;cursor:pointer" onclick="openContact('${esc(c.email)}')"><div class="cav" style="width:28px;height:28px;font-size:10px">${esc(initials(n))}</div><div style="flex:1;min-width:0"><div class="cname" style="font-size:13.5px">${esc(n)}${c.primary?' <span class="chip" style="font-size:9px">primary</span>':''}</div><div class="csub">${esc([c.role,c.email].filter(Boolean).join(' · '))}</div></div>${c.email?`<button class="iconbtn sm" title="Take off this opportunity" onclick="event.stopPropagation();removeDealContact(${p.id},'${esc(c.email)}','${esc(n)}')">${ic('x',15)}</button>`:''}</div>`; }).join('');
   return `<div class="dsec"><div class="dlbl">Contacts on this deal</div>${rows||'<div class="csub">No contact on this deal yet</div>'}
     <div class="row" style="margin:7px 0 2px"><button class="btn sm" onclick="addDealContact(${p.id})">${ic('plus',14)} Add contact</button></div></div>`;
+}
+// TAKE SOMEONE OFF AN OPPORTUNITY (owner, 21 Oct 2026): off its contacts, never copied on its emails again
+async function removeDealContact(id, email, name){
+  if(!confirm(`Take ${name} off this opportunity? They stay in the CRM, but are no longer copied on its emails.`)) return;
+  try{ await api('/api/crm/project/'+id+'/contacts?email='+encodeURIComponent(email),{method:'DELETE'}); toast('Removed'); openProject(id); }
+  catch(e){ toast('Could not remove: '+e.message); }
 }
 async function addDealContact(id){
   const email=(prompt('Contact email:')||'').trim(); if(!email) return;

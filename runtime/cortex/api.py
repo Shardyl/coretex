@@ -2549,7 +2549,10 @@ def crm_deal_set_primary(id: int, body: DealContactBody, u: dict = Depends(curre
 @app.delete("/api/crm/project/{id}/contacts")
 def crm_deal_remove_contact(id: int, email: str, u: dict = Depends(current_user)) -> dict:
     _guard_deal(u, id)
-    r = crm.remove_deal_contact(id, email)
+    try:
+        r = crm.remove_deal_contact(id, email, by=_person(u) or "owner")
+    except crm.LastContact as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if not r:
         raise HTTPException(status_code=404, detail="deal not found")
     return r
@@ -3996,6 +3999,9 @@ SKILL_TOOLS = [
             "phone": {"type": "string"}, "primary": {"type": "boolean"}},
             "description": "each person: email, or for someone with only a number (a WhatsApp contact card) name + "
                            "phone"}},
+        "remove_contacts": {"type": "array", "items": {"type": "string"},
+                            "description": "people to take OFF this opportunity (emails, names, or an organisation such "
+                                           "as 'everyone from Gambit'): never copied on its emails again"},
         "meeting": {"type": "object", "description": "a meeting whose external attendees join this opportunity and "
                     "whose notes file here", "properties": {
             "date": {"type": "string", "description": "YYYY-MM-DD, or 'today' / 'yesterday'"},
@@ -4326,6 +4332,18 @@ def _update_opportunity(inp: dict) -> str:
         db.execute("update crm_projects set account_id=%s, updated_at=now() where id=%s", (aid, did))
         _pl.log_deal(did, "organisation_linked", f"Client organisation: {org} (owner, via Talk).")
         done.append(f"organisation {org}")
+    for _w in [str(x) for x in (inp.get("remove_contacts") or []) if str(x).strip()][:10]:
+        _hits = engine._people_matching(_w, [c.get("email") for c in (db.one("select contacts from crm_projects where "
+                                                                                "id=%s", (did,)) or {}).get("contacts") or []],
+                                        did)
+        if not _hits:
+            done.append(f"nobody on the opportunity matches '{_w}'")
+        for _em in _hits:
+            try:
+                crm.remove_deal_contact(did, _em, by="owner, via Talk")
+                done.append(f"removed {_em}")
+            except crm.LastContact as e:
+                done.append(f"{_em} NOT removed: {e}")
     people = list(inp.get("add_contacts") or [])
     meeting = None
     if inp.get("meeting"):

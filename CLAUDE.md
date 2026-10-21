@@ -4204,3 +4204,17 @@ shoot needs none), then 10% off the whole quotation.
   `_rhythm_floor` return None, for the gate and the Inbox tidy alike. The floor is for Cortex's own clock.
 - ONE PERSON, TWO DEALS: Shahnawaz is the contact on both Sheraa deals (118 ERF, 123 SEF'27); a chase on one while the
   other's chase card is open to him is held by one-email-per-person, which is right.
+
+## Taking people off an email and off an opportunity (owner, Sheraa card 1389, 21 Oct 2026)
+- "Remove all people from Gambit from this email" did nothing: `cc_remove` only resolved an exact address or one of our
+  team's first names, and everything else was dropped silently. `engine._people_matching(words, emails, deal)` resolves
+  an address, a domain or organisation ("Gambit" = gambit.ae, "everyone from X"), or a person by name or by the role the
+  deal records; it runs over everyone on the email (envelope, deal_cc, cc_extra, thread_cc). Unmatched words go on the
+  card ("Could not work out who to take off the email").
+- `crm.remove_deal_contact(deal, email, by)` takes a person off the deal's contacts AND marks them `left` (pinned) in
+  the cast, so `_deal_participants` and later email readings never copy them again; logs `contact_removed`; refuses the
+  last contact (`LastContact`). Cockpit (v88): an x on each person under "Contacts on this deal"; Talk
+  `update_opportunity(remove_contacts=[...])` takes names, emails or "everyone from X". The CRM record stays.
+- AN EMAIL STEP IS AN EMAIL (iTellu #113): `nextsteps._EMAIL_STEP` ("Email Luna to ...", "write to", "follow up with",
+  "propose a call") keeps a step `email` even when it mentions a proposal; only build/prepare/send-a-document steps are
+  `work` with a build tool.
