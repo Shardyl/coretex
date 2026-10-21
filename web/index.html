@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v85';
+const APP_BUILD = 'cortex-v86';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -675,8 +675,20 @@ const ICON={
   play:'M7 5l12 7-12 7z',
   up:'M6 15l6-6 6 6',
   down:'M6 9l6 6 6-6',
-  download:'M12 4v12M7 11l5 5 5-5M5 20h14'
+  download:'M12 4v12M7 11l5 5 5-5M5 20h14',
+  star:'M12 17.75l-6.17 3.24 1.18-6.87-5-4.87 6.9-1L12 2l3.09 6.25 6.9 1-5 4.87 1.18 6.87z'
 };
+// STARRED = ABOUT TO CLOSE (owner, 21 Oct 2026): filled when starred, outline when not
+function starBtn(x, sz){
+  if(!FORECAST_STAGES.includes(x.stage)) return '';
+  const on=!!x.starred, s=sz||18;
+  return `<button class="iconbtn sm" title="${on?'Unstar':'Star: about to close'}" aria-pressed="${on}" onclick="event.stopPropagation();toggleStar(${x.id},${!on})" style="color:${on?'var(--accent)':'var(--mut)'}"><svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="${on?'currentColor':'none'}" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="${ICON.star}"></path></svg></button>`;
+}
+async function toggleStar(id, on){
+  try{ await api(`/api/crm/project/${id}/star`,{method:'POST',body:JSON.stringify({on})}); toast(on?'Starred':'Unstarred');
+    const v=document.getElementById('view'); if(v&&v.querySelector('#cuBox')) openProject(id); else render(); }
+  catch(e){ toast('Error: '+e.message); }
+}
 function ic(n,s){ s=s||20; return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle"><path d="${ICON[n]||''}"></path></svg>`; }
 function paintIcons(){
   const m={hLock:['lock',20],themeBtn:['moon',20]};
@@ -1205,7 +1217,7 @@ async function openProject(id){
   const forecast=FORECAST_STAGES.includes(p.stage);
   const fld=(ic_,t)=>t?`<div class="dfld">${ic(ic_,15)} ${esc(t)}</div>`:'';
   v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>${forecast?'Opportunity':'Project'}</b>
-      <div style="margin-left:auto;display:flex;gap:6px"><button class="iconbtn sm" title="Edit" onclick="openEditDeal(${p.id})">${ic('edit',16)}</button><button class="iconbtn sm" title="Delete" onclick="deleteDeal(${p.id})">${ic('trash',16)}</button></div></div>
+      <div style="margin-left:auto;display:flex;gap:6px">${starBtn(p,16)}<button class="iconbtn sm" title="Edit" onclick="openEditDeal(${p.id})">${ic('edit',16)}</button><button class="iconbtn sm" title="Delete" onclick="deleteDeal(${p.id})">${ic('trash',16)}</button></div></div>
     <div class="card">
       <div class="cname" style="font-size:17px">${esc(p.title||'Untitled')}</div>
       <div class="csub" style="margin-bottom:10px">${esc(p.company||'')} <span class="dnum" style="display:inline">#${p.id}</span></div>
@@ -1290,7 +1302,7 @@ function valueHeadline(currencies){
 }
 function byCompany(rows){ const g={}; rows.forEach(r=>{ const k=r.company||'Other'; (g[k]=g[k]||[]).push(r); }); return g; }
 function dealCard(x){
-  return `<div class="card prow" style="cursor:pointer" onclick="openProject(${x.id})"><div style="flex:1;min-width:0"><div class="cname">${esc(x.title||'Untitled')}</div><div class="csub">${esc(x.company||'')}</div><div class="dnum">#${x.id}</div></div><div style="text-align:right"><div class="pval">${x.value?dmoney(x.value)+' <span style="font-size:11px;color:var(--mut)">'+esc(x.currency||'AED')+'</span>':'<span style="color:var(--mut)">no value yet</span>'}</div>${stageChip(x.stage)}</div></div>`;
+  return `<div class="card prow" style="cursor:pointer" onclick="openProject(${x.id})">${starBtn(x)}<div style="flex:1;min-width:0"><div class="cname">${esc(x.title||'Untitled')}</div><div class="csub">${esc(x.company||'')}</div><div class="dnum">#${x.id}</div></div><div style="text-align:right"><div class="pval">${x.value?dmoney(x.value)+' <span style="font-size:11px;color:var(--mut)">'+esc(x.currency||'AED')+'</span>':'<span style="color:var(--mut)">no value yet</span>'}</div>${stageChip(x.stage)}</div></div>`;
 }
 async function renderProjects(b,co){
   let d; try{ d=await api('/api/crm/projects?company='+encodeURIComponent(co||'all')); }catch(e){ d={projects:[],groups:{},total_value:0,count:0}; }
@@ -1309,12 +1321,17 @@ async function renderOpps(b,co){
   let d; try{ d=await api('/api/crm/opportunities?company='+encodeURIComponent(co||'all')); }catch(e){ d={opportunities:[],lost:[],total_value:0,count:0}; }
   const allco=!co;
   let h=`<div class="mrow"><div class="mcard"><div class="ml">Forecast value</div><div class="mv">${valueHeadline(d.currencies)}</div></div>
+    <div class="mcard"><div class="ml">Starred value${d.starred_count?' · '+d.starred_count:''}</div><div class="mv">${valueHeadline(d.starred_currencies)}</div></div>
     <div class="mcard"><div class="ml">Open opportunities</div><div class="mv">${d.count}</div></div></div>`;
   h+=`<div class="row" style="margin:2px 0 8px;gap:8px"><button class="btn go sm" onclick="openNewDeal(null)">${ic('plus',15)} New opportunity</button><button class="btn sm" onclick="openReview()">${ic('check',15)} Review next steps</button></div>`;
+  // STARRED FIRST, highest value first (the server sorts by value); everything else as before, below
+  const starred=d.opportunities.filter(o=>o.starred), rest=d.opportunities.filter(o=>!o.starred);
+  if(starred.length){ const s=starred.reduce((a,o)=>a+(+o.value||0),0);
+    h+=`<div class="h" style="color:var(--accent)">Starred · ${starred.length}${s?' · '+dmoney(s):''}</div>`+starred.map(dealCard).join(''); }
   if(!d.opportunities.length){ h+='<div class="empty">No open opportunities</div>'; }
-  else if(allco){ const g=byCompany(d.opportunities); Object.keys(g).sort().forEach(cn=>{ const it=g[cn], s=it.reduce((a,o)=>a+(+o.value||0),0);
+  else if(allco){ const g=byCompany(rest); Object.keys(g).sort().forEach(cn=>{ const it=g[cn], s=it.reduce((a,o)=>a+(+o.value||0),0);
     h+=`<div class="h">${esc(cn)} · ${it.length}${s?' · '+dmoney(s):''}</div>`+it.map(dealCard).join(''); }); }
-  else { h+='<div class="h">In the pipeline</div>'+d.opportunities.map(dealCard).join(''); }
+  else if(rest.length){ h+='<div class="h">In the pipeline</div>'+rest.map(dealCard).join(''); }
   if(d.dormant&&d.dormant.length){ h+=`<div class="h" style="color:var(--mut)">Dormant · ${d.dormant.length}</div><div style="opacity:.75">`+d.dormant.map(dealCard).join('')+'</div>'; }
   if(d.lost&&d.lost.length){ h+=`<div class="h" style="color:var(--mut)">Lost · ${d.lost.length}</div><div style="opacity:.55">`+d.lost.map(dealCard).join('')+'</div>'; }
   b.outerHTML='<div id="crmbody">'+h+'</div>';

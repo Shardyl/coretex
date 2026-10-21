@@ -997,6 +997,16 @@ def _cases():
          lambda: "THE REDRAFT ALWAYS SHOWS" in open(os.path.join(os.path.dirname(__file__), "..", "..", "web",
                                                                   "index.html"), encoding="utf-8").read())
 
+    def _star():
+        from . import crm as _c, api as _a
+        html = open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"), encoding="utf-8").read()
+        return ("set_star(project_id, False" in inspect.getsource(_c.set_project_stage)
+                and "stage\") in FORECAST_STAGES" in inspect.getsource(_c.set_star)
+                and "starred_currencies" in inspect.getsource(_a.crm_opportunities)
+                and "Starred value" in html and "o.starred" in html and "starBtn(p,16)" in html)
+    case("a starred opportunity sits at the top by value, its value beside the forecast; it drops off when it leaves "
+         "the sales stages", "owner, 21 Oct", _star)
+
     def _bare_wa():
         sk = {"rules": ["AUTO REPLY: Hi {name}, thanks for getting in touch with {company}. Rashad will be in touch.",
                         "AUTO REPLY NO DETAILS: Hi {name}, thanks for getting in touch with {company}. Can you give us a "

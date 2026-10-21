@@ -724,6 +724,8 @@ alter table crm_projects add column if not exists automation text;             -
 alter table crm_projects add column if not exists followup_step int not null default 0;
 alter table crm_projects add column if not exists next_followup timestamptz;    -- when the next auto follow-up fires
 alter table crm_projects add column if not exists cadence jsonb;               -- per-opportunity override of the company cadence
+alter table crm_projects add column if not exists starred boolean not null default false;  -- owner's "about to close" flag
+alter table crm_projects add column if not exists starred_at timestamptz;
 alter table tasks add column if not exists deal_id bigint;                     -- link a reminder/follow-up card to an opportunity
 """
 
@@ -1458,6 +1460,8 @@ def set_project_stage(project_id: int, stage: str, actor: str = "system") -> dic
     db.execute("update crm_projects set stage=%s, history = history || %s::jsonb, updated_at=now() where id=%s",
                (stage, Json([ev]), project_id))
     p["stage"] = stage
+    if p.get("starred") and stage not in FORECAST_STAGES:     # won, lost or dormant: no longer "about to close"
+        set_star(project_id, False, by=f"the stage change to {stage}")
     if stage in CLOSED_STAGES and old not in CLOSED_STAGES:
         _cancel_cortex_reminders(p, stage)
     _apply_stage_rhythm(p, old, stage)
@@ -1552,6 +1556,23 @@ def enter_closing(deal_id: int) -> bool:
                                    "they answer, restarting whenever they reply."}]),
                     int(deal_id)))
     return True
+
+
+def set_star(deal_id: int, on: bool, by: str = "owner") -> dict | None:
+    """STARRED = ABOUT TO CLOSE (owner, 21 Oct 2026): a starred opportunity sits at the top of the Opportunities
+    screen, highest value first, and its value is totalled beside the forecast. One flag on the deal, so the team
+    sees the same list. Only an open opportunity can be starred; it drops off when the deal leaves the sales stages."""
+    p = db.one("select id, stage, starred from crm_projects where id=%s", (int(deal_id),))
+    if not p:
+        return None
+    on = bool(on) and p.get("stage") in FORECAST_STAGES
+    if bool(p.get("starred")) == on:
+        return p
+    db.execute("update crm_projects set starred=%s, starred_at=%s, history = history || %s::jsonb, updated_at=now() "
+               "where id=%s", (on, datetime.now(timezone.utc) if on else None,
+                               Json([{"ts": _now(), "event": "starred" if on else "unstarred",
+                                      "text": ("Starred" if on else "Unstarred") + f" by {by}."}]), int(deal_id)))
+    return db.one("select id, stage, starred from crm_projects where id=%s", (int(deal_id),))
 
 
 def set_next_chase(deal_id: int, when: datetime | None = None, every_days: int | None = None,

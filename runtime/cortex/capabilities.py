@@ -203,7 +203,8 @@ CAPABILITIES: list[tuple[str, str]] = [
      "everywhere; context is about one client. When Rashad corrects a draft, facts in his words are filed this way "
      "automatically and the card says 'noted on the opportunity'."),
     ("Editing an opportunity: update_opportunity",
-     "update_opportunity(deal_id or search, ...) renames a deal, sets its value or stage, links its client organisation, "
+     "update_opportunity(deal_id or search, ...) stars or unstars it (star: true/false; 'star the DSO opportunity'), "
+     "renames a deal, sets its value or stage, links its client organisation, "
      "attaches people (created in the CRM if new), and with meeting={date, time, title} attaches EVERYONE outside "
      "our companies who was invited to that meeting, read from the calendar, and links the meeting so its notes file "
      "on the deal. Never ask Rashad for attendee emails the invite already holds. A file he sent earlier on WhatsApp "

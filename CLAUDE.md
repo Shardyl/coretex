@@ -4180,3 +4180,12 @@ shoot needs none), then 10% off the whole quotation.
   `_PREFILLS_DEFAULT` and the ref) -> `auto_reply_text(..., bare=True)` uses the rule starting `AUTO REPLY NO
   DETAILS:` on social-dm-replies (Sensa skill 68, Sky Vision 69; backup `wa_autoreply_rules_backup_2026_10_21`),
   which asks the same question; without that rule the normal AUTO REPLY is sent.
+
+## Starred opportunities: about to close (owner, 21 Oct 2026)
+- `crm_projects.starred` / `starred_at`; `crm.set_star(deal, on, by)` (logged on the timeline; only Opportunity / Quote can
+  be starred). `set_project_stage` unstars a deal that leaves the sales stages (won, lost, dormant).
+- `/api/crm/opportunities` returns `starred` per row plus `starred_currencies` / `starred_count`; `POST
+  /api/crm/project/{id}/star {on}`; Talk `update_opportunity(star=true|false)`.
+- Cockpit (v86): a star button on every opportunity card and the opportunity page (`starBtn`, `toggleStar`); the
+  Opportunities screen shows a "Starred value" tile beside "Forecast value" and a Starred section first, highest value
+  first, the rest below as before. One flag on the deal, so the team sees the same list.

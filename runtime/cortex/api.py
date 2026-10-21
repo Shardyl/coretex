@@ -2275,7 +2275,7 @@ def crm_opportunities(company: str | None = None, u: dict = Depends(current_user
 
     def run(stages):
         params = [stages] + (p if f else [])
-        return db.query("select id, company, title, contact_email, value, currency, stage, owner "
+        return db.query("select id, company, title, contact_email, value, currency, stage, owner, starred "
                         f"from crm_projects where {' and '.join(base)} order by value desc nulls last, id", tuple(params))
     rows = run(crm.FORECAST_STAGES)
     dormant = run([crm.DORMANT_STAGE])
@@ -2284,9 +2284,31 @@ def crm_opportunities(company: str | None = None, u: dict = Depends(current_user
     total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects where {' and '.join(base)}", tuple(fparams))
     cur = db.query(f"select coalesce(nullif(currency,''),'AED') c, coalesce(sum(value),0) v from crm_projects "
                    f"where {' and '.join(base)} and value is not null group by c", tuple(fparams))
+    star_cur = {}
+    for r in rows:      # STARRED VALUE beside the forecast (owner, 21 Oct 2026), per currency like the forecast
+        if r.get("starred") and r.get("value"):
+            c = (r.get("currency") or "AED") or "AED"
+            star_cur[c] = star_cur.get(c, 0.0) + float(r["value"] or 0)
     return {"opportunities": rows, "dormant": dormant, "lost": lost, "total_value": float(total["v"] or 0),
             "count": total["n"],
-            "currencies": {r["c"]: float(r["v"] or 0) for r in cur if float(r["v"] or 0) > 0}}
+            "currencies": {r["c"]: float(r["v"] or 0) for r in cur if float(r["v"] or 0) > 0},
+            "starred_currencies": star_cur, "starred_count": sum(1 for r in rows if r.get("starred"))}
+
+
+class StarBody(BaseModel):
+    on: bool = True
+
+
+@app.post("/api/crm/project/{id}/star")
+def crm_project_star(id: int, body: StarBody, u: dict = Depends(current_user)) -> dict:
+    """Star / unstar an opportunity (about to close): it goes to the top of the Opportunities screen."""
+    _guard_deal(u, id)
+    r = crm.set_star(id, body.on, by=_person(u) or "owner")
+    if not r:
+        raise HTTPException(status_code=404, detail="opportunity not found")
+    if body.on and not r.get("starred"):
+        raise HTTPException(status_code=400, detail="only an open opportunity (Opportunity or Quote) can be starred")
+    return {"ok": True, "starred": bool(r.get("starred"))}
 
 
 class OptOutBody(BaseModel):
@@ -3965,7 +3987,9 @@ SKILL_TOOLS = [
                       "description": "library document ids (or exact file names) to file on this opportunity"},
         "next_chase": {"type": "string", "description": "when the next email chase goes, in his words ('Thursday "
                        "10am', 'tomorrow', 'in 3 days')"},
-        "chase_every_days": {"type": "integer", "description": "his own chase rhythm from then on, in days"}}}},
+        "chase_every_days": {"type": "integer", "description": "his own chase rhythm from then on, in days"},
+        "star": {"type": "boolean", "description": "true to STAR the opportunity (about to close: it goes to the top "
+                 "of the Opportunities screen and into the starred value), false to unstar it"}}}},
     {"name": "update_proposal_pricing",
      "description": "Re-stamp the pricing page of the proposal deck on an opportunity from its quotation's live "
                     "version, ONLY when Rashad asks for it. A proposal that already went to the client is never "
@@ -4334,6 +4358,10 @@ def _update_opportunity(inp: dict) -> str:
             db.execute("update tasks set deal_id=%s where kind='quotation' and request->>'number'=%s", (did, _qn.group(1)))
         _pl.log_deal(did, "document_filed", f"Filed: {doc['filename']} (owner, via Talk).", ref=f"doc:{doc['id']}")
         done.append(f"filed {doc['filename']}")
+    if inp.get("star") is not None:
+        _sr = crm.set_star(did, bool(inp["star"]), by="owner, via Talk")
+        done.append(("starred" if (_sr or {}).get("starred") else
+                     ("NOT starred: only an open opportunity can be starred" if inp["star"] else "unstarred")))
     if (inp.get("next_chase") or "").strip() or inp.get("chase_every_days"):
         from datetime import timedelta, timezone
         from . import reminders
