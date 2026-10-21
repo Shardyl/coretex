@@ -1562,6 +1562,7 @@ def set_star(deal_id: int, on: bool, by: str = "owner") -> dict | None:
     """STARRED = ABOUT TO CLOSE (owner, 21 Oct 2026): a starred opportunity sits at the top of the Opportunities
     screen, highest value first, and its value is totalled beside the forecast. One flag on the deal, so the team
     sees the same list. Only an open opportunity can be starred; it drops off when the deal leaves the sales stages."""
+    ensure_deal_schema()
     p = db.one("select id, stage, starred from crm_projects where id=%s", (int(deal_id),))
     if not p:
         return None

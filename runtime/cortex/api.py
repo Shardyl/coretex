@@ -2268,6 +2268,7 @@ def crm_opportunities(company: str | None = None, u: dict = Depends(current_user
     """Forecast deals (Opportunity/Quote) with values + a running total — same deal records as Projects,
     just on the pre-Booked side of the line. Lost deals come back separately (not in the forecast total)."""
     company = _scoped_companies(u, company)
+    crm.ensure_deal_schema()       # the starred column (21 Oct 2026) must exist before this query reads it
     f, p = _org_like(company, "company")
     base = ["stage = any(%s)"]
     if f:
