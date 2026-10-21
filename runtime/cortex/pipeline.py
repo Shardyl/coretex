@@ -21,7 +21,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def log_deal(deal_id: int, event: str, text: str, ref: str = "") -> None:
+def log_deal(deal_id: int, event: str, text: str, ref: str = "", extra: dict | None = None) -> None:
     """Append one event to the deal's timeline. The timeline is the deal's memory: drafting,
     follow-ups and the cockpit all read it.
 
@@ -34,7 +34,7 @@ def log_deal(deal_id: int, event: str, text: str, ref: str = "") -> None:
     if ref and db.one("select 1 from crm_projects where id=%s and history @> %s::jsonb",
                       (int(deal_id), Json([{"ref": ref}]))):
         return
-    ev = {"ts": _now_iso(), "event": event, "text": (text or "")[:1200]}
+    ev = {"ts": _now_iso(), "event": event, "text": (text or "")[:1200], **(extra or {})}
     if ref:
         ev["ref"] = ref
     db.execute("update crm_projects set history = history || %s::jsonb, updated_at=now() where id=%s",
@@ -189,6 +189,59 @@ def extract_commitments(draft: str, stage: str = "") -> list[dict]:
         return []
 
 
+# WHAT WE SAID, ON THE OPPORTUNITY (owner, 21 Oct 2026: "do I get to see when we send an email ... and just a summary of
+# the email that we've sent them?"). The timeline line carried who, when, the subject and the files, never what the
+# email said. Every email out (Cortex-approved or sent by hand) is kept in `deal_emails` with its body; one Haiku line
+# summarises it, off the send path; the timeline entry carries `email_id` so the opportunity page shows the summary
+# and opens the full email.
+def _ensure_emails() -> None:
+    db.execute("create table if not exists deal_emails (id bigserial primary key, deal_id bigint not null, "
+               "ts timestamptz not null default now(), direction text not null default 'out', ref text, subject text, "
+               "sender text, recipient text, body text, summary text)")
+    db.execute("create index if not exists deal_emails_deal on deal_emails(deal_id)")
+
+
+def keep_email(deal_id: int, subject: str, sender: str, recipient: str, body: str, ref: str = "",
+               direction: str = "out", at=None) -> int | None:
+    """Store an email on the opportunity (once per ref) and summarise it on a thread. Returns its id."""
+    try:
+        _ensure_emails()
+        if ref:
+            ex = db.one("select id from deal_emails where deal_id=%s and ref=%s", (int(deal_id), ref))
+            if ex:
+                return ex["id"]
+        r = db.one("insert into deal_emails (deal_id, ts, direction, ref, subject, sender, recipient, body) "
+                   "values (%s, coalesce(%s, now()), %s, %s, %s, %s, %s, %s) returning id",
+                   (int(deal_id), at, direction, ref or None, (subject or "")[:300], (sender or "")[:200],
+                    (recipient or "")[:300], (body or "")[:20000]))
+        eid = r["id"]
+        import threading
+        threading.Thread(target=summarise_email, args=(eid,), daemon=True).start()
+        return eid
+    except Exception as e:  # noqa: BLE001 - keeping a copy never stands in the way of the send's bookkeeping
+        print(f"[deal-email] keep: {type(e).__name__}: {e}", flush=True)
+        return None
+
+
+def summarise_email(eid: int) -> str:
+    row = db.one("select * from deal_emails where id=%s", (int(eid),)) or {}
+    if not (row.get("body") or "").strip() or row.get("summary"):
+        return row.get("summary") or ""
+    try:
+        s = (provider.think(
+            "Summarise an email WE sent to a client in ONE plain line under 22 words: what it gave them, asked them or "
+            "offered them. No greeting, no sign-off, no names of our own team, no quotation marks. Only what the email "
+            "says.", f"Subject: {row.get('subject') or ''}\n\n{(row.get('body') or '')[:6000]}",
+            model=provider.MODEL_ROUTER, max_tokens=120, purpose="email-summary") or "").strip().strip('"')
+    except Exception as e:  # noqa: BLE001
+        print(f"[deal-email] summary {eid}: {type(e).__name__}: {e}", flush=True)
+        return ""
+    s = re.sub(r"\s+", " ", s)[:240]
+    if s:
+        db.execute("update deal_emails set summary=%s where id=%s", (s, int(eid)))
+    return s
+
+
 def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
                 deal_id: int | None = None, draft: str | None = None, ref: str = "") -> None:
     """An outbound sales email went out (Cortex-approved, or detected in a sent folder). Log it on
@@ -229,9 +282,11 @@ def record_send(task: dict, env: dict, company: dict, *, manual: bool = False,
     # subject, the entry showed only that subject, and the next-steps review re-added "send the quotation".
     _carried = [str((a or {}).get("filename") or "") for a in (req.get("attach_docs") or [])]         + [str(x) for x in (req.get("attachment_names") or [])] + [str(x) for x in (env.get("attachment_names") or [])]
     _carried = [x for x in dict.fromkeys(_carried) if x]
+    _eid = keep_email(int(did), subj, frm, to, body, ref=ref or (f"task:{task['id']}" if (task or {}).get("id") else ""))
     log_deal(did, "email_out_manual" if manual else "email_out",
              f"{who} from {frm or 'company mailbox'} to {to}: {subj or '(no subject)'}"
-             + (f" [attached: {'; '.join(_carried)[:400]}]" if _carried else ""), ref=ref)
+             + (f" [attached: {'; '.join(_carried)[:400]}]" if _carried else ""), ref=ref,
+             extra={"email_id": _eid} if _eid else None)
     try:   # WHO'S WHO (cast.py): one of us writing BY HAND leads for us now; any email out may add or hand over people
         from . import cast
         _frm = (re.findall(r"[\w.+-]+@[\w.-]+", frm) or [""])[0].lower()

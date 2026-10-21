@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v86';
+const APP_BUILD = 'cortex-v87';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -614,6 +614,21 @@ function inboxContact(email){ if(!email) return; tab='crm'; crmView='contacts';
   try{ localStorage.setItem('cortex_crm2','contacts'); }catch(e){}
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t==='crm'));
   openContact(email); }
+// WHAT WE SAID (owner, 21 Oct 2026): every email we sent carries a one-line summary and opens in full here
+function emailLine(p, eid){
+  const s=((p.email_summaries||{})[String(eid)]||'').trim();
+  return `<div class="csub" style="margin-top:3px;color:var(--ink)">${s?esc(s):'<span style="color:var(--mut)">Summary on its way</span>'}
+    <span style="cursor:pointer;text-decoration:underline;color:var(--accent);margin-left:6px" onclick="showEmail(${eid},this)">Read the email</span></div><div id="em${eid}"></div>`;
+}
+async function showEmail(eid, el){
+  const box=document.getElementById('em'+eid); if(!box) return;
+  if(box.innerHTML){ box.innerHTML=''; if(el) el.textContent='Read the email'; return; }
+  box.innerHTML='<div class="csub">Loading…</div>';
+  try{ const e=await api('/api/crm/deal-email/'+eid);
+    box.innerHTML=`<div style="margin-top:6px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);white-space:pre-wrap;font-size:13.5px;color:var(--ink)"><div class="csub" style="margin-bottom:6px">To ${esc(e.recipient||'')} · ${esc(e.subject||'')}</div>${linky(e.body||'')}</div>`;
+    if(el) el.textContent='Hide the email'; }
+  catch(err){ box.innerHTML=`<div class="csub">Could not open it: ${esc(err.message)}</div>`; }
+}
 function histText(t){ t=t||'';
   if(t.length<=260) return linky(t);
   const id='h'+Math.random().toString(36).slice(2,9);
@@ -1230,7 +1245,7 @@ async function openProject(id){
       ${noteBox('p',p.id)}
       <div class="dgrid">${fld('briefcase',p.owner&&('Owner: '+p.owner))}${fld('file',p.quote_ref&&('Quote ref '+p.quote_ref))}</div>
       ${p.note?`<div class="dsec"><div class="dlbl">Note</div><div class="dnote">${linky(p.note)}</div></div>`:''}
-      ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b>${histWhen(h.ts)}<div class="csub">${histText(h.text)}</div></div></div>`).join('')}</div>`:''}
+      ${hist.length?`<div class="dsec"><div class="dlbl">History</div>${hist.slice().reverse().map(h=>`<div class="hitem"><span class="hled" style="background:#00DAFF"></span><div><b>${esc((h.event||'').replace(/_/g,' '))}</b>${histWhen(h.ts)}<div class="csub">${histText(h.text)}</div>${h.email_id?emailLine(p,h.email_id):''}</div></div>`).join('')}</div>`:''}
     </div>`;
   comingUp(p.id);
 }

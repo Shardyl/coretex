@@ -4189,3 +4189,12 @@ shoot needs none), then 10% off the whole quotation.
 - Cockpit (v86): a star button on every opportunity card and the opportunity page (`starBtn`, `toggleStar`); the
   Opportunities screen shows a "Starred value" tile beside "Forecast value" and a Starred section first, highest value
   first, the rest below as before. One flag on the deal, so the team sees the same list.
+
+## What we said, on the opportunity (owner, 21 Oct 2026)
+- "Do I get to see when we send an email ... and a summary of the email?" The timeline showed who, when, subject and
+  files, never the content. Table `deal_emails` (deal_id, ts, direction, ref, subject, sender, recipient, body,
+  summary): `pipeline.keep_email` stores every email out from `record_send` (Cortex-approved and the sent sweep's
+  manual sends), once per ref (`task:<id>` for Cortex sends), and `summarise_email` writes one Haiku line
+  (purpose `email-summary`) on a thread. The timeline entry carries `email_id` (`log_deal(extra=)`).
+- `/api/crm/project` returns `email_summaries`; `GET /api/crm/deal-email/{id}` the full text (deal-guarded). Cockpit
+  (v87) `emailLine` / `showEmail`: the summary under each sent email in History, "Read the email" opens it inline.

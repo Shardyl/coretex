@@ -1935,7 +1935,24 @@ def crm_project(id: int, u: dict = Depends(current_user)) -> dict:
     p["reminders"] = db.query(
         "select id, title, due_at, recurrence, priority, (action is not null) as drafts, status from reminders "
         "where target_type='deal' and target_id=%s and status in ('pending','snoozed') order by due_at", (str(id),))
+    try:     # the one-line summary of each email we sent, shown under its timeline entry (21 Oct 2026)
+        pipeline._ensure_emails()
+        p["email_summaries"] = {str(r["id"]): r["summary"] or "" for r in db.query(
+            "select id, summary from deal_emails where deal_id=%s", (id,))}
+    except Exception:  # noqa: BLE001
+        p["email_summaries"] = {}
     return p
+
+
+@app.get("/api/crm/deal-email/{eid}")
+def crm_deal_email(eid: int, u: dict = Depends(current_user)) -> dict:
+    """The full text of an email we sent, from the opportunity's timeline."""
+    pipeline._ensure_emails()
+    r = db.one("select * from deal_emails where id=%s", (eid,))
+    if not r:
+        raise HTTPException(status_code=404, detail="email not found")
+    _guard_deal(u, int(r["deal_id"]))
+    return {k: r.get(k) for k in ("id", "deal_id", "ts", "subject", "sender", "recipient", "body", "summary")}
 
 
 class NewContactBody(BaseModel):

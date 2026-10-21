@@ -997,6 +997,14 @@ def _cases():
          lambda: "THE REDRAFT ALWAYS SHOWS" in open(os.path.join(os.path.dirname(__file__), "..", "..", "web",
                                                                   "index.html"), encoding="utf-8").read())
 
+    def _deal_email():
+        html = open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"), encoding="utf-8").read()
+        return ("keep_email(int(did)" in inspect.getsource(pipeline.record_send)
+                and "extra={\"email_id\": _eid}" in inspect.getsource(pipeline.record_send)
+                and "h.email_id?emailLine(p,h.email_id)" in html and "/api/crm/deal-email/" in html)
+    case("every email we send is kept on the opportunity with a one-line summary and opens in full", "owner, 21 Oct",
+         _deal_email)
+
     def _star():
         from . import crm as _c, api as _a
         html = open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"), encoding="utf-8").read()
