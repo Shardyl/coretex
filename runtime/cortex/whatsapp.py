@@ -176,6 +176,9 @@ def _clean_phone(p: str) -> str:
 
 
 AUTO_RULE = "AUTO REPLY:"
+# NOTHING OF THEIR OWN (owner, 21 Oct 2026): 7 of 10 WhatsApp enquiries in 30 days were only the website's pre-filled
+# line. Then the acknowledgement ASKS: the rule starting "AUTO REPLY NO DETAILS:" (same skill, same placeholders).
+AUTO_RULE_BARE = "AUTO REPLY NO DETAILS:"
 
 # What the automated acknowledgement SAYS lives on the skill, never here (standing rule: behaviour in
 # editable craft/rules). This is the safety net for a company whose skill has no such rule yet.
@@ -183,7 +186,7 @@ AUTO_REPLY_DEFAULT = ("Hi {name}, thanks for getting in touch with {company}. "
                       "Rashad will be in touch with you shortly from +971 54 404 9549.")
 
 
-def auto_reply_text(skill: dict, co: dict, name: str = "") -> str:
+def auto_reply_text(skill: dict, co: dict, name: str = "", bare: bool = False) -> str:
     """The acknowledgement we send a new WhatsApp enquiry.
 
     NOT a model draft. He answers WhatsApp himself from his personal number (10 Oct 2026); Cortex's job
@@ -191,8 +194,13 @@ def auto_reply_text(skill: dict, co: dict, name: str = "") -> str:
     message has to be the same every time and has to say who will follow up and FROM WHICH NUMBER: they
     wrote to the business line and a stranger on another number is otherwise a cold approach."""
     body = ""
-    for r in (skill.get("rules") or []):
-        t = (r if isinstance(r, str) else (r or {}).get("text") or "").strip()
+    rules = [(r if isinstance(r, str) else (r or {}).get("text") or "").strip() for r in (skill.get("rules") or [])]
+    if bare:     # their message was only our pre-filled text: the rule that asks what the video is for, when set
+        for t in rules:
+            if t.upper().startswith(AUTO_RULE_BARE):
+                body = t.split(":", 1)[1].split("\n")[0].strip()
+                break
+    for t in ([] if body else rules):
         if t.upper().startswith(AUTO_RULE):
             # THE MESSAGE IS THE FIRST LINE, nothing else. A rule carries guidance for whoever edits it
             # next, and the first version of this sent the guidance to the client (caught in testing).
@@ -208,7 +216,16 @@ def auto_reply_text(skill: dict, co: dict, name: str = "") -> str:
             .replace("{company}", co.get("name") or "Sensa Productions"))
 
 
-_PREFILLS_DEFAULT = ["Hi Sensa, I need a video produced in Dubai. My project:"]
+# every pre-filled line our sites put in a WhatsApp message (the Sensa landing pages and the site-wide default)
+_PREFILLS_DEFAULT = ["Hi Sensa, I need a corporate video produced in Dubai. My project:",
+                     "Hi Sensa, I need a video produced in Dubai. My project:",
+                     "Hi Sensa, I tried making an AI video and want it done properly. I was trying to make:",
+                     "Hi Sensa Productions, I would like to enquire about a video production."]
+
+
+def bare_enquiry(msg: str) -> bool:
+    """Nothing of their own: fewer than four words once our pre-filled text and the reference are taken out."""
+    return len([w for w in their_words(msg).split() if len(w) > 1]) < 4
 
 
 def their_words(msg: str) -> str:
@@ -414,7 +431,7 @@ def _process_message(rt: dict, co: dict, skill: dict, slug: str, account: str,
     # ARMED, not fired: flush_alerts sends the alert once the burst has settled, so one enquiry rings his
     # phone once. The Inbox card is live immediately either way.
     req = _arm_alert(dict(task.get("request") or {}))
-    store.update_task(task["id"], draft=auto_reply_text(skill, co, know_name),
+    store.update_task(task["id"], draft=auto_reply_text(skill, co, know_name, bare=bare_enquiry(msg)),
                       status="awaiting_approval", request=req, **({"deal_id": deal_id} if deal_id else {}))
     return "drafted"
 

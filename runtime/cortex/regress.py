@@ -997,6 +997,21 @@ def _cases():
          lambda: "THE REDRAFT ALWAYS SHOWS" in open(os.path.join(os.path.dirname(__file__), "..", "..", "web",
                                                                   "index.html"), encoding="utf-8").read())
 
+    def _bare_wa():
+        sk = {"rules": ["AUTO REPLY: Hi {name}, thanks for getting in touch with {company}. Rashad will be in touch.",
+                        "AUTO REPLY NO DETAILS: Hi {name}, thanks for getting in touch with {company}. Can you give us a "
+                        "short description of the video you are looking for?\n(guidance)"]}
+        co = {"name": "Sensa Productions"}
+        return (whatsapp.bare_enquiry("Hi Sensa, I need a video produced in Dubai. My project: (ref LENB3)")
+                and not whatsapp.bare_enquiry("Hi Sensa, I need a video produced in Dubai. My project: a 60 second "
+                                              "launch film for our perfume (ref LENB3)")
+                and "short description" in whatsapp.auto_reply_text(sk, co, "Rajanya", bare=True)
+                and "(guidance)" not in whatsapp.auto_reply_text(sk, co, "Rajanya", bare=True)
+                and "Rashad will be in touch" in whatsapp.auto_reply_text(sk, co, "Rajanya", bare=False)
+                and "Rashad will be in touch" in whatsapp.auto_reply_text({"rules": sk["rules"][:1]}, co, "R", bare=True))
+    case("a WhatsApp enquiry that is only our pre-filled text gets the acknowledgement that asks what the video is for",
+         "Rajanya, ref LENB3, 21 Oct", _bare_wa)
+
     def _sent_1381():
         edit = ("Remove the sentence claiming the package 'includes the Dubai Police Innovation film and the AI legal "
                 "services presenter concept'. Those are sample films shown inside the proposal.")
