@@ -1595,6 +1595,9 @@ def _cases():
          and "running" in inspect.getsource(_fit.reconcile_watch))
     case("every cardio and lifting row carries its start time", "fitness times 20 Oct",
          lambda: '"startAt"' in inspect.getsource(_fit.pull))
+    case("the fitness app pushes only rows changed since its last pull", "stale browser 21 Oct",
+         lambda: (lambda h: "recordFp(state)" in h and "h!==fpHash(r)" in h and "if(!loadFp())" in h)(
+             open(_web + "/fitness/index.html", encoding="utf-8").read()))
     case("every health check query runs", "invariants", _invariants)
     return C
 

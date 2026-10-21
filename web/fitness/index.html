@@ -993,7 +993,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='114';                         // keep in step with CACHE in sw.js
+const APP_VERSION='115';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1024,6 +1024,29 @@ function ensureIds(){
 const PENDING_DEL_KEY='fitness_pending_deletes_v1';
 function markDeleted(coll,id){if(!id)return;try{const p=JSON.parse(localStorage.getItem(PENDING_DEL_KEY)||'{}');(p[coll]=p[coll]||[]).push(id);localStorage.setItem(PENDING_DEL_KEY,JSON.stringify(p));}catch(e){}}
 window.markDeleted=markDeleted;
+// ONLY CHANGED ROWS ARE PUSHED (21 Oct 2026). A device opened after days away pushed its whole stale copy,
+// and every row in it overwrote newer edits made on another device: the 19 Oct 4x4 and 20 Oct Zone 2 were
+// confirmed on the phone and came back "check settings" after the browser synced. After every pull the app
+// fingerprints each row the server returned; a push then carries only rows edited here since (or new here).
+const SYNC_FP_KEY='fitness_sync_fp_v1';
+const FP_KEYS={bodyweight:'date',fastDays:'date'};
+function syncColls(){
+  ensureIds();
+  return {plans:liftWorkouts,liftSessions:liftSessions,cardioPresets:cardioExercises,cardioSessions:cardioSessions,
+    bodyweight:bodyweightLog.map(b=>({date:b.date,kg:b.kg,notes:b.notes||null})),vo2:vo2Records,foods:foods,
+    foodLog:foodLog,meals:savedMeals,supplements:supplements,fastDays:fastDays,readings:readings};
+}
+function fpHash(o){const s=JSON.stringify(o)||'';let h=0;for(let i=0;i<s.length;i++)h=(Math.imul(h,31)+s.charCodeAt(i))|0;return h;}
+function loadFp(){try{return JSON.parse(localStorage.getItem(SYNC_FP_KEY)||'null');}catch(e){return null;}}
+function recordFp(state){
+  const c=syncColls(),fp={};
+  Object.keys(c).forEach(k=>{
+    const key=FP_KEYS[k]||'id',ids=new Set(((state&&state[k])||[]).map(r=>r&&r[key]).filter(Boolean)),m={};
+    (c[k]||[]).forEach(r=>{if(r&&r[key]&&ids.has(r[key]))m[r[key]]=fpHash(r);});
+    fp[k]=m;
+  });
+  try{localStorage.setItem(SYNC_FP_KEY,JSON.stringify(fp));}catch(e){}
+}
 function syncDoc(){
   ensureIds();
   const doc={
@@ -1041,6 +1064,14 @@ function syncDoc(){
     readings:readings,
     targets:(()=>{try{return localStorage.getItem(TARGETS_DIRTY_KEY)?foodTargets:undefined;}catch(e){return undefined;}})()
   };
+  const fp=loadFp();
+  if(fp){
+    Object.keys(fp).forEach(k=>{
+      const key=FP_KEYS[k]||'id',m=fp[k]||{};
+      doc[k]=(doc[k]||[]).filter(r=>{if(!r||!r[key])return false;const h=m[r[key]];return h===undefined||h!==fpHash(r);});
+    });
+    doc.partial=true;
+  }
   // Deletions: anything we pushed before that is no longer here went on purpose. Send it as a
   // tombstone rather than just omitting it, or the next pull would resurrect it.
   let sent={};
@@ -1170,6 +1201,13 @@ async function syncNow(manual){
         return;
       }
     }
+    // First run of the changed-rows sync on this device: take the server's copy first, so a stale local copy
+    // can never be pushed whole. Rows that exist only here survive the merge and go up on the push below.
+    if(!loadFp()){
+      const st=await syncApi('/api/fitness/state');
+      if(st===null){_syncing=false;return;}
+      if(st&&st.counts)applyServerState(st,true);
+    }
     const pushed=await syncApi('/api/fitness/state',{method:'POST',body:JSON.stringify(syncDoc())});
     if(pushed===null){_syncing=false;return;}                 // not signed in; state already shown
     try{localStorage.removeItem(PENDING_DEL_KEY);localStorage.removeItem(TARGETS_DIRTY_KEY);}catch(e){}
@@ -1244,6 +1282,7 @@ function applyServerState(state,force){
   {const cut=new Date(Date.now()-120*86400000).toISOString().slice(0,10);foodLog=foodLog.filter(e=>!e.date||e.date>=cut);}   // full history lives on Cortex
   saveFoods();saveFoodLog();saveMeals();saveSupplements();saveFasts();saveReadings();saveTargets();
   rememberSent();
+  recordFp(state);
   }finally{_applyingServer=false;}
   redrawAll();
 }
@@ -3108,6 +3147,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=114"></script>
+<script src="food.js?v=115"></script>
 </body>
 </html>
