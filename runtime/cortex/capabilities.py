@@ -125,7 +125,10 @@ CAPABILITIES: list[tuple[str, str]] = [
      "confirm card when he TELLS you it was signed. issue_proforma(company, number, stage=) raises a later stage, "
      "or replaces an unsent one (billed_to = legal name, address, TRN in his words). Approving a pro forma card "
      "drafts its email on the invoice-sending lane; that email is owner-only to send, and the payment follow-up "
-     "clock starts when it goes. You never type an amount on any of this."),
+     "clock starts when it goes. You never type an amount on any of this. A TAX INVOICE is its own document: "
+     "issue_tax_invoice(company, number, billed_to=, paid=) (UAE VAT format, no signature, no terms, figures from "
+     "the stored quotation, number from the sequence Rashad sets with set_tax_invoice_sequence); never build a "
+     "quotation for an invoice."),
     ("WhatsApp — inbound, and approved FROM WhatsApp",
      "Inbound WhatsApp arrives through Meta's Cloud API webhook. Cortex captures the contact in the CRM by "
      "PHONE (a WhatsApp contact has no email), triages it (enquiry / personal / supplier / spam), decodes the "

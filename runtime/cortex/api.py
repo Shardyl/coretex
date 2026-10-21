@@ -3950,6 +3950,37 @@ SKILL_TOOLS = [
         "replace": {"type": "string", "description": "a pro forma number to void and reissue, e.g. PI-2026-0003"},
         "deal_id": {"type": "integer"}},
         "required": ["company", "number"]}},
+    {"name": "issue_tax_invoice",
+     "description": "Issue the TAX INVOICE for the whole supply on a quotation (UAE VAT format: supplier and client "
+                    "names, addresses and TRNs, sequential number, date of issue, each line with qty, unit price, VAT "
+                    "rate and VAT amount, totals in AED, bank details). No signature, no terms, no validity date: never "
+                    "use create_quotation or a quotation prep card for an invoice. Every figure comes BY CODE from the "
+                    "stored quotation version (the signed one when recorded); you pass no amounts except `paid`, and "
+                    "only a figure Rashad stated. The number comes from the tax invoice sequence Rashad seeds; until "
+                    "he gives the prefix and next number it refuses and says so. `billed_to` = the client company's "
+                    "legal name, address lines, then 'TRN <number>' (remembered on the account; the TRN is needed "
+                    "when the client is VAT registered). Issue it only once we hold the client's VAT certificate and trade "
+                    "licence (finance-quote-to-invoice rule); if Rashad has not said they are in, ask him first. "
+                    "`replace` voids an UNSENT tax invoice and issues it again. "
+                    "Lands in the Inbox as a card; approving it drafts the email, which only Rashad can send.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "our business slug, e.g. sensa"},
+        "number": {"type": "string", "description": "the quotation number, e.g. SEN-2026-0021"},
+        "version": {"type": "integer", "description": "the version supplied; omit for the signed or latest version"},
+        "billed_to": {"type": "array", "items": {"type": "string"}},
+        "paid": {"type": "number", "description": "amount already received including VAT, only as Rashad states it"},
+        "supply_date": {"type": "string", "description": "YYYY-MM-DD, only when the supply date differs from today"},
+        "replace": {"type": "string", "description": "a tax invoice number to void and reissue"},
+        "deal_id": {"type": "integer"}},
+        "required": ["company", "number"]}},
+    {"name": "set_tax_invoice_sequence",
+     "description": "Record the tax invoice number run Rashad states (prefix and the next number, e.g. prefix "
+                    "'INV-', next 4301), so Cortex's tax invoices continue the accountant's sequence and never collide. "
+                    "Only from his own words.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string"}, "prefix": {"type": "string"}, "next": {"type": "integer"},
+        "width": {"type": "integer", "description": "zero-padded digits, default 4"}},
+        "required": ["company", "next"]}},
     {"name": "lead_source",
      "description": "Where a WhatsApp lead came from: give the landing-page reference in their message ('ref D7F3K') "
                     "and get back the Google Ads keyword, match type, campaign, page and time of the click. Google does "
@@ -5022,6 +5053,29 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         return (f"issued pro forma {_pf.get('pi')}: {_pf.get('description')}, {_pf.get('currency')} "
                 f"{float(_pf.get('total') or 0):,.2f} including VAT. It is card #{t['id']} in the Inbox with the PDF "
                 "attached; nothing has been sent. Approving that card drafts the email, which only Rashad can send.")
+    if name in ("issue_tax_invoice", "set_tax_invoice_sequence"):
+        from . import taxinvoice, proforma as _pfm
+        _co = _talk_company(inp.get("company"), u)
+        if not _co:
+            return f"unknown business '{inp.get('company')}'"
+        if name == "set_tax_invoice_sequence":
+            if u and u.get("role") != "owner":
+                return "Only Rashad sets the tax invoice number run."
+            _ent = (_pfm.plan(_co) or {}).get("seq") or _co.get("slug")
+            _seq = {"prefix": str(inp.get("prefix") or ""), "next": int(inp["next"]), "width": int(inp.get("width") or 4)}
+            db.setting_set(f"tax_invoice_seq:{_ent}", _seq)
+            return f"tax invoice numbering set for {_ent}: the next one is {taxinvoice.next_number(_ent)}."
+        try:
+            t = engine.deliver_tax_invoice(_co["slug"], str(inp.get("number") or "").strip().upper(),
+                                           version=inp.get("version"), deal_id=inp.get("deal_id"),
+                                           billed_to=inp.get("billed_to"), paid=float(inp.get("paid") or 0),
+                                           supply_date=inp.get("supply_date") or "", replace=inp.get("replace"))
+        except ValueError as _e:
+            return str(_e)
+        _ti = (t.get("request") or {}).get("tax_invoice") or {}
+        return (f"issued tax invoice {_ti.get('no')} against {_ti.get('quotation')}: {_ti.get('currency')} "
+                f"{float(_ti.get('total') or 0):,.2f} including VAT, amount due {float(_ti.get('due_amount') or 0):,.2f}. "
+                f"Card #{t['id']} in the Inbox with the PDF; nothing has been sent.")
     if name == "lead_source":
         from . import lptrack
         row = lptrack.lookup(str(inp.get("ref") or "").replace("ref", "").strip(" ()"))

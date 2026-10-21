@@ -62,15 +62,21 @@ create index if not exists next_steps_deal on next_steps (deal_id, status);
 """
 _READY = False
 
+# A step about an invoice is never a quotation, whatever quotation it names ("Tax invoice for quotation SEN-2026-0021"
+# built quotation SEN-2026-0055, 21 Oct 2026). Read by the prep-card makers in pipeline and engine.
+INVOICE_STEP = re.compile(r"\binvoice|\bpro ?forma", re.I)
+
 # Talk tools a WORK item can start, matched by code on its words (first match wins)
 TOOLS = [
     (re.compile(r"\btreatment|\bconcept|\bcreative (?:idea|option|route|direction)|\bstoryboard", re.I), "creative_treatments"),
+    (re.compile(r"\btax invoice", re.I), "issue_tax_invoice"),
     (re.compile(r"\bpro ?forma|\binvoice", re.I), "issue_proforma"),
     (re.compile(r"\bquot", re.I), "create_quotation"),
     (re.compile(r"\bproposal|\bdeck\b|\bpitch", re.I), "create_proposal"),
 ]
 TOOL_SAY = {"creative_treatments": "Say in Talk: \"build the treatments for this opportunity\"",
             "issue_proforma": "Say in Talk: \"issue the pro forma\"",
+            "issue_tax_invoice": "Say in Talk: \"issue the tax invoice\"",
             "create_quotation": "Say in Talk: \"build the quotation\"",
             "create_proposal": "Say in Talk: \"build the proposal\""}
 
@@ -502,7 +508,7 @@ def _todo_notice(it: dict) -> None:
 _TOOL_DOES = {"creative_treatments": "creative_treatments", "create_creative_proposal": "creative_treatments",
               "creative_quote": "create_quotation", "create_quotation": "create_quotation",
               "reissue_quotation": "create_quotation", "create_proposal": "create_proposal",
-              "issue_proforma": "issue_proforma"}
+              "issue_proforma": "issue_proforma", "issue_tax_invoice": "issue_tax_invoice"}
 
 
 def started_from_tool(name: str, inp: dict, out) -> None:

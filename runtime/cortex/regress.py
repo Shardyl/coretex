@@ -1021,6 +1021,16 @@ def _cases():
                 and not _g.owner_set_chase([h[1], {"event": "email_out", "ts": "2026-10-21T06:00:00+00:00"}]))
     case("a chase date the owner set beats the rhythm floor", "MBK Marine #141, 21 Oct", _owner_chase)
 
+    def _tax_invoice():
+        from . import nextsteps, taxinvoice
+        src = inspect.getsource(taxinvoice.render)
+        return (nextsteps.tool_for("Tax invoice for quotation SEN-2026-0021 at final agreed amount") == "issue_tax_invoice"
+                and nextsteps.INVOICE_STEP.search("Tax invoice for quotation SEN-2026-0021")
+                and "TAX INVOICE" in src and "Signature" not in src and "Terms" not in src
+                and "INVOICE_STEP" in inspect.getsource(__import__("cortex.pipeline", fromlist=["x"]).suggest_next_step))
+    case("an invoice next step is a tax invoice, never a quotation; the tax invoice carries no signature or terms",
+         "Shama card 1401, 21 Oct", _tax_invoice)
+
     def _deal_email():
         html = open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"), encoding="utf-8").read()
         return ("keep_email(int(did)" in inspect.getsource(pipeline.record_send)

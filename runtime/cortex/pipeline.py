@@ -794,7 +794,10 @@ def suggest_next_step(e: dict, deal: dict, company: dict) -> None:
     # fix the video links in Honor's PowerPoint, which Cortex has no tool for, and approving it would have built
     # a new quotation because its text mentioned one. Only a quotation next step becomes an approvable card
     # (approving it genuinely builds the quotation); everything else is a reminder on the deal, no approve.
-    is_quote = act == "prepare_quotation" or bool(re.search(r"\bquot", what, re.I))
+    # AN INVOICE IS NEVER A QUOTATION (21 Oct 2026): "Tax invoice for quotation SEN-2026-0021" built a quotation
+    from . import nextsteps as _ns
+    is_quote = ((act == "prepare_quotation" or bool(re.search(r"\bquot", what, re.I)))
+                and not _ns.INVOICE_STEP.search(what))
     if not is_quote:
         return      # the next-steps list holds it (read from the same email by nextsteps.observe)
     brief = (f"NEXT STEP for deal {did} ({title}) - the client latest email requires: {what} ({act}). "

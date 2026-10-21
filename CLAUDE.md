@@ -4218,3 +4218,26 @@ shoot needs none), then 10% off the whole quotation.
 - AN EMAIL STEP IS AN EMAIL (iTellu #113): `nextsteps._EMAIL_STEP` ("Email Luna to ...", "write to", "follow up with",
   "propose a call") keeps a step `email` even when it mentions a proposal; only build/prepare/send-a-document steps are
   `work` with a build tool.
+
+## The tax invoice is its own document (owner, Shama card 1401, 21 Oct 2026)
+- CAUSE: next-step card 1401 "Tax invoice for quotation SEN-2026-0021" matched `\bquot`, so it was a quotation prep card;
+  approving it built quotation SEN-2026-0055 with the acceptance block and all the terms. Owner: a tax invoice needs no
+  signature and no terms. 1404 (the bogus quotation) left for the owner to cancel.
+- `runtime/cortex/taxinvoice.py` (`build`, `render`, `lines_of`, `next_number`): UAE VAT format (Executive Regulation
+  Art. 59): TAX INVOICE, our legal name, address and TRN, Billed To (+ client TRN), sequential number, date of issue,
+  optional date of supply, each line with qty, unit price, VAT rate and amount, totals in AED, optional Paid, amount due,
+  bank details. One page, no signature, no terms, no validity. Every figure from `quote_versions:<number>` (lines must
+  sum to `proforma.net_of` within 0.05 or nothing is issued). The number comes from setting
+  `tax_invoice_seq:<entity>` ({prefix, next, width}; entity = the PROFORMA craft's `seq`, Sensa/Sky Vision
+  `skyvision-entity`); until the owner seeds it nothing is issued (Talk `set_tax_invoice_sequence`, owner only), so it
+  never collides with the accountant's run.
+- `engine.deliver_tax_invoice` -> card (content, `request.kind = 'tax_invoice'`, PDF in the library as kind
+  `tax-invoice` on the deal + client Drive folder, registry `tax_invoices:<number>`, one live per quotation, `replace`
+  voids an unsent one, a sent one needs a credit note). Approve = `_approve_tax_invoice`: a money email draft
+  (owner's PIN). `_tax_invoice_sent` marks it sent. Talk `issue_tax_invoice`.
+- AN INVOICE STEP IS NEVER A QUOTATION: `nextsteps.INVOICE_STEP` is checked by both prep-card makers
+  (`pipeline.suggest_next_step`, the correction prep path in engine); `tool_for` maps "tax invoice" to
+  `issue_tax_invoice` ahead of the pro forma.
+- RULES: finance-quote-to-invoice (296, 297) "TAX INVOICE NEEDS THEIR DOCUMENTS": the client's VAT certificate and
+  trade licence before a tax invoice; Billed To comes from them. email-handling (2001, 2002) acceptance rule now asks for
+  both documents with the signed quotation. Backup `tax_invoice_docs_rules_backup_2026_10_21`.

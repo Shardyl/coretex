@@ -98,7 +98,8 @@ APPROVE_ACTION = {
 
 
 _REQUEST_KIND_ACTION = {"signed_quotation": "Confirm signed & issue pro forma",
-                        "proforma": "Approve & draft the email"}
+                        "proforma": "Approve & draft the email",
+                        "tax_invoice": "Approve & draft the email"}
 
 
 def approve_label(kind: str, request: dict | None = None) -> str:
@@ -971,6 +972,7 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
             pipeline.log_deal(int(_odid), "note", f"Moved to {_oss} on the send of card {task['id']}"
                               + (f": {(task.get('request') or {}).get('on_sent_note')}" if (task.get("request") or {}).get("on_sent_note") else "."))
         _proforma_sent(task)     # a pro forma went out: marked sent, payment follow-up clock armed
+        _tax_invoice_sent(task)  # a tax invoice went out: marked sent on its record
         # a proposal card whose deck just went out is finished: close it (it stayed open for revisions)
         _sent_ids = [int(a.get("id")) for a in ((task.get("request") or {}).get("attach_docs") or []) if a.get("id")]
         if _sent_ids:
@@ -1534,6 +1536,8 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         return _confirm_signed(task, skill, company, actor)
     if _rk == "proforma":           # approving a pro forma drafts the (owner-only) email that carries it
         return _approve_proforma(task, skill, company, actor)
+    if _rk == "tax_invoice":        # likewise a tax invoice
+        return _approve_tax_invoice(task, skill, company, actor)
     if (task.get("request") or {}).get("prep_action") == "proforma":   # a stage-playbook invoice card does the work
         return _prep_build_proforma(task, skill, company, actor)
     if task["kind"] in ("newsletter_idea", "newsletter_review", "newsletter_send"):
@@ -2980,7 +2984,9 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
             _dt = ((db.one("select title from crm_projects where id=%s", (int(did),)) or {}).get("title")
                    if did else "")
             _pt = p_.get("title") or "Prepare"
-            _quote = bool(re.search(r"\bquot", f"{_pt} {p_.get('brief') or ''}", re.I))
+            from . import nextsteps as _nsx     # an invoice step is never a quotation (21 Oct 2026)
+            _quote = (bool(re.search(r"\bquot", f"{_pt} {p_.get('brief') or ''}", re.I))
+                      and not _nsx.INVOICE_STEP.search(_pt))
             store.create_card(task["company_id"], sk["id"], "content",
                               {"brief": "INTERNAL PREP (from the owner's instruction on card "
                                         f"#{task['id']}): {p_.get('brief') or p_.get('title')}",
@@ -9707,6 +9713,183 @@ def _proforma_sent(task: dict) -> None:
     proforma.update_record(pf.get("number") or "", pf["pi"], status="sent",
                            sent=datetime.now(timezone.utc).isoformat(), email_card=task["id"])
     _arm_on_done_reminders(task)
+
+
+# THE TAX INVOICE (owner, 21 Oct 2026): "there's no need to sign a tax invoice ... it doesn't need any terms on it".
+# Card 1401 ("Tax invoice for quotation SEN-2026-0021") was a quotation prep card, because its words said "quotation",
+# and approving it built quotation SEN-2026-0055 with the acceptance block and the 24 terms. A tax invoice is its own
+# document (`taxinvoice.py`): figures from the stored quotation version, number from the owner-seeded sequence, no
+# signature, no terms. Raised as a card; approving it drafts the (money) email, exactly as a pro forma does.
+def deliver_tax_invoice(company: str, number: str, *, version: int | None = None, deal_id: int | None = None,
+                        billed_to: list | None = None, paid: float = 0.0, supply_date: str = "",
+                        replace: str | None = None) -> dict:
+    from . import taxinvoice
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise ValueError(f"unknown company {company}")
+    data = profile.get(co["id"]) or {}
+    if not deal_id:
+        _row = db.one("select deal_id from tasks where kind='quotation' and request->>'number'=%s and "
+                      "deal_id is not null order by id desc limit 1", (number,))
+        deal_id = (_row or {}).get("deal_id")
+    if not version and deal_id:
+        _sr = _signed_record(int(deal_id))
+        version = _sr["v"] if _sr and _sr.get("number") == number else None
+    key = f"tax_invoices:{number}"
+    reg = db.setting_get(key) or []
+    live = [r for r in reg if r.get("status") != "void"]
+    if replace:
+        old = next((r for r in live if r.get("no") == replace), None)
+        if not old:
+            raise ValueError(f"{replace} is not a live tax invoice of {number}")
+        if old.get("status") == "sent":
+            raise ValueError(f"{replace} has already been sent. A sent tax invoice is corrected with a credit note, "
+                             "agreed with the accountant, never silently replaced.")
+        old["status"] = "void"
+        db.execute("update tasks set status='cancelled', updated_at=now() where kind='content' and "
+                   "request->>'kind'='tax_invoice' and request->'tax_invoice'->>'no'=%s and status='awaiting_approval'",
+                   (replace,))
+        if old.get("doc_id"):
+            db.execute("update company_documents set filename = 'VOID ' || filename where id=%s and "
+                       "filename not like 'VOID %%'", (int(old["doc_id"]),))
+        live = [r for r in live if r.get("no") != replace]
+    elif live:
+        raise ValueError(f"tax invoice {live[-1]['no']} is already issued for {number}. Ask to replace it "
+                         "(replace=<number>) if it is wrong and not yet sent.")
+    if billed_to and deal_id:      # remembered on the client account, the same block the pro forma reads
+        try:
+            db.execute("alter table crm_accounts add column if not exists billing jsonb")
+            acc = db.one("select account_id from crm_projects where id=%s", (int(deal_id),)) or {}
+            if acc.get("account_id"):
+                ls = [str(x).strip() for x in billed_to if str(x).strip()]
+                _t = next((re.sub(r"(?i)^trn[:\s]*", "", x) for x in ls if re.match(r"(?i)^trn\b", x)), "")
+                _r = [x for x in ls if not re.match(r"(?i)^trn\b", x)]
+                db.execute("update crm_accounts set billing=%s where id=%s",
+                           (Json({"name": _r[0] if _r else "", "address": _r[1:], "trn": _t}), acc["account_id"]))
+        except Exception:  # noqa: BLE001
+            pass
+    lines = [str(x).strip() for x in (billed_to or _proforma_billed_to(deal_id, "")) if str(x).strip()]
+    trn = next((re.sub(r"(?i)^trn[:\s]*", "", x) for x in lines if re.match(r"(?i)^trn\b", x)), "")
+    rest = [x for x in lines if not re.match(r"(?i)^trn\b", x)]
+    inv = taxinvoice.build(co, number, version=version, billed_to=rest[0] if rest else "", billed_address=rest[1:],
+                           billed_trn=trn, paid=float(paid or 0), supply_date=supply_date or "")
+    customer = inv["billed_to"]
+    safe = re.sub(r"[^A-Za-z0-9 -]", "", customer)[:60].strip()
+    name = f"{safe + ' - ' if safe else ''}Tax invoice {inv['no']} - {inv['date']}.pdf"
+    with open(inv["path"], "rb") as fh:
+        blob = fh.read()
+    doc = documents.save(co["id"], co.get("slug") or company, name, "application/pdf", blob, kind="tax-invoice",
+                         uploaded_by=f"taxinvoice:{inv['no']}", push=False, deal_id=int(deal_id) if deal_id else None)
+    filed = None
+    try:
+        from . import drive as _drive
+        parent = (data.get("clients_drive_folder") or "").strip()
+        client = customer.split(",")[0].strip()
+        if parent and client:
+            tok = _drive.access_token()
+            f = _drive.ensure_client_folder(client, parent, token=tok)
+            if f.get("id"):
+                fid = _drive.upload_to_folder(f["id"], name, "application/pdf", blob, token=tok)
+                db.execute("update company_documents set drive_id=%s, client=%s where id=%s", (fid, f["name"], doc["id"]))
+                filed = f["name"]
+    except Exception as _de:  # noqa: BLE001
+        print(f"[taxinvoice] drive: {type(_de).__name__}: {_de}", flush=True)
+    cur = inv["currency"]
+    rec = {k: inv[k] for k in ("no", "date", "quotation", "net", "vat", "total", "paid", "due_amount", "currency")}
+    draft = (f"TAX INVOICE {inv['no']} for {customer or 'the client'}\n\n"
+             f"Against quotation {inv['quotation']}: {_pf_money(inv['net'], cur)} before VAT, "
+             f"VAT {_pf_money(inv['vat'], cur)}, total {_pf_money(inv['total'], cur)}"
+             + (f", paid {_pf_money(inv['paid'], cur)}" if inv.get("paid") else "")
+             + f". Amount due {_pf_money(inv['due_amount'], cur)}.\n\n"
+             + ("" if trn else "Billed To carries no TRN: if the client is VAT registered, tell Talk their TRN and "
+                                f"ask it to replace {inv['no']}.\n\n")
+             + "The PDF is attached to this card" + (f" and filed to the {filed} client folder on Drive" if filed else "")
+             + ". Nothing has been sent. Approve it and I draft the email to the client with it attached; that "
+               "email needs your own PIN to send.")
+    skill = store.get_skill_by_key(co["id"], "finance-quote-to-invoice") or store.get_skill_by_key(co["id"], QUOTE_SKILL_KEY)
+    req = {"kind": "tax_invoice", "company": company, "tax_invoice": rec, "number": number, "customer": customer,
+           "deal_id": int(deal_id) if deal_id else None, "file": inv["path"], "attach_docs": [documents.card_ref(doc)],
+           "title": f"Tax invoice {inv['no']}: {customer}"}
+    t = db.execute(
+        "insert into tasks (company_id,skill_id,kind,request,draft,status,origin,title,deal_id) "
+        "values (%s,%s,'content',%s,%s,'awaiting_approval','cortex',%s,%s) returning *",
+        (co["id"], skill["id"] if skill else None, Json(req), draft, req["title"], int(deal_id) if deal_id else None))
+    # `reg` holds the voided row too (marked in place above): a number is never reused or dropped from the record
+    db.setting_set(key, [*reg, {**rec, "status": "issued", "doc_id": doc["id"], "task_id": t["id"]}])
+    if deal_id:
+        pipeline.log_deal(int(deal_id), "tax_invoice_issued",
+                          f"Tax invoice {inv['no']} issued against {inv['quotation']}: {_pf_money(inv['total'], cur)} "
+                          f"including VAT. Card {t['id']}.", ref=f"taxinvoice:{inv['no']}")
+    return t
+
+
+def _approve_tax_invoice(task: dict, skill: dict, company: dict, actor: str) -> dict:
+    """Approving a tax invoice card drafts the email that carries it; the email is MONEY (owner's own PIN)."""
+    req = dict(task.get("request") or {})
+    ti = req.get("tax_invoice") or {}
+    did = task.get("deal_id") or req.get("deal_id")
+
+    def keep(note: str) -> dict:
+        base = (task.get("draft") or "").split("\n\nEMAIL NOT DRAFTED:")[0]
+        store.update_task(task["id"], status="awaiting_approval", draft=f"{base}\n\nEMAIL NOT DRAFTED: {note}")
+        return {"blocked": True, "error": note}
+    if not did:
+        return keep("this tax invoice is not on an opportunity, so I do not know who to write to.")
+    deal = db.one("select id, title, contact_email from crm_projects where id=%s", (int(did),)) or {}
+    to = (deal.get("contact_email") or "").strip().lower()
+    if not to:
+        return keep(f"opportunity #{did} has no contact to write to. Tell Talk who the contact is, then approve again.")
+    refs = [a for a in (req.get("attach_docs") or []) if a.get("id")][:1]
+    if not refs:
+        return keep("the tax invoice PDF is not in the library, so no email was drafted.")
+    _open = db.one("select id from tasks where company_id=%s and kind in ('email_reply','email_draft') and "
+                   "status = any(%s) and lower(request->'inquiry'->>'email')=%s order by id desc limit 1",
+                   (company["id"], list(_OPEN_CARD), to))
+    if _open:
+        return keep(f"there is already an open email to {to}: card #{_open['id']}. Send, correct or cancel that "
+                    "card, then approve this one again.")
+    from . import proforma
+    sk = (store.get_skill_by_key(company["id"], proforma.SEND_SKILL_KEY)
+          or store.get_skill_by_key(company["id"], "email-handling") or skill)
+    name = ""
+    try:
+        name = crm._name_of(to) or ""
+    except Exception:  # noqa: BLE001
+        pass
+    cur = ti.get("currency") or "AED"
+    title = deal.get("title") or req.get("customer") or ""
+    due = float(ti.get("due_amount") or 0)
+    ereq = {"outbound": True, "deal_id": int(did), "tax_invoice_card": task["id"], "money": True,
+            "tax_invoice": {"no": ti.get("no"), "number": req.get("number")}, "attach_docs": refs,
+            "brief": (f"Send tax invoice {ti.get('no')} for \"{title}\". The PDF is attached to this email. These are "
+                      f"the only figures you may state, exactly as written: total {_pf_money(ti.get('total') or 0, cur)} "
+                      f"including VAT; " + (f"amount due {_pf_money(due, cur)}, payable by bank transfer to the account "
+                                            "on the invoice" if due > 0 else "nothing further is due")
+                      + ". The INVOICE EMAIL standing rules on this skill govern the rest. Continue the conversation "
+                        "we already have with them."),
+            "inquiry": {"name": name, "email": to, "message": "",
+                        "subject": f"Tax invoice {ti.get('no')}, quotation {req.get('number')}"}}
+    t = store.create_task(company["id"], sk["id"], "email_draft", ereq)
+    db.execute("update tasks set deal_id=%s where id=%s", (int(did), t["id"]))
+    msg = (f"Tax invoice {ti.get('no')} approved. The email to {name or to} is being drafted as card #{t['id']} with "
+           f"{refs[0].get('filename')} attached. That card needs your own PIN to send.")
+    store.update_task(task["id"], status="done", draft=msg)
+    store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"email_card": t["id"], "tax_invoice": ti.get("no")})
+    pipeline.log_deal(int(did), "note", f"Tax invoice {ti.get('no')} approved on card {task['id']}; "
+                                        f"cover email drafted as card {t['id']}.")
+    return {"approved": True, "email_card": t["id"], "note": msg}
+
+
+def _tax_invoice_sent(task: dict) -> None:
+    ti = (task.get("request") or {}).get("tax_invoice") or {}
+    if not ti.get("no") or not ti.get("number"):
+        return
+    key = f"tax_invoices:{ti['number']}"
+    reg = db.setting_get(key) or []
+    for r in reg:
+        if r.get("no") == ti["no"]:
+            r.update(status="sent", sent=datetime.now(timezone.utc).isoformat(), email_card=task["id"])
+    db.setting_set(key, reg)
 
 
 def _signed_card_text(co: dict, deal: dict, m: dict, seen: dict, data: dict, filename: str, sender: str) -> str:
