@@ -1092,6 +1092,12 @@ build the capability when it is missing).
   opens the deck, and every build saves its spec beside the PDF (`.spec.json`) so `reuse_copy=true`
   re-lays the SAME words for a layout change instead of rewriting them. Final Sensa deck: cover, Farmer
   John, What we control, seven module pages, four case studies, close (15 pages, card 560).
+- **AI Production Capabilities Deck = library doc 1179** (21 Oct 2026): v2 plus an aerial page (AI drone showreel
+  zFM7OW-9Iqk, ground footage + satellite reference imagery), 18 pages, superseding 1136; profile, taught note and
+  skill 2001 repointed (backups `*:backup-2026-10-21`). OWNER, 21 Oct: old versions must not clutter a Drive search, so
+  the ten older deck copies in SENSA CORTEX / Documents/Archive were TRASHED on Drive (recoverable 30 days); library
+  rows kept (superseded). The Dubai Municipality client-folder copy stays. The box refuses Cortex Python as root: run
+  `sudo -u cortex bash /tmp/runbox.sh`.
 - **AI Production Capabilities Deck v2 = library doc 1136** (20 Oct 2026, owner-approved), superseding 327 under
   the same standard name; profile `ai_capabilities_deck_doc`, the taught note and the email-handling rule (skill 2001)
   repointed (backups `chat_self_rules:backup-2026-10-20`, `skill2001_rules:backup-2026-10-20`). 17 pages in the
