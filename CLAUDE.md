@@ -4175,7 +4175,7 @@ shoot needs none), then 10% off the whole quotation.
 - SITE (sensa repo, theme 0.8.66, `sensa_wa_lead_source`): tapping ANY WhatsApp link opens one required question,
   "Can you give us a short description of the video you are looking for?"; WhatsApp opens only after 4+ words, with
   their answer after the page's own pre-filled line and before the click ref. The Cortex click beacon is unchanged.
-  Sky Vision's site is NOT changed yet.
+  Sky Vision theme 0.9.7 carries the same question (yellow); Cloudflare caches its HTML up to 10 min.
 - CORTEX: `whatsapp.bare_enquiry(msg)` (fewer than 4 words of their own after `their_words` strips every pre-fill in
   `_PREFILLS_DEFAULT` and the ref) -> `auto_reply_text(..., bare=True)` uses the rule starting `AUTO REPLY NO
   DETAILS:` on social-dm-replies (Sensa skill 68, Sky Vision 69; backup `wa_autoreply_rules_backup_2026_10_21`),

@@ -220,7 +220,8 @@ def auto_reply_text(skill: dict, co: dict, name: str = "", bare: bool = False) -
 _PREFILLS_DEFAULT = ["Hi Sensa, I need a corporate video produced in Dubai. My project:",
                      "Hi Sensa, I need a video produced in Dubai. My project:",
                      "Hi Sensa, I tried making an AI video and want it done properly. I was trying to make:",
-                     "Hi Sensa Productions, I would like to enquire about a video production."]
+                     "Hi Sensa Productions, I would like to enquire about a video production.",
+                     "Hi Sky Vision, I would like to enquire about drone filming."]
 
 
 def bare_enquiry(msg: str) -> bool:

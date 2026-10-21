@@ -1005,6 +1005,7 @@ def _cases():
         return (whatsapp.bare_enquiry("Hi Sensa, I need a video produced in Dubai. My project: (ref LENB3)")
                 and not whatsapp.bare_enquiry("Hi Sensa, I need a video produced in Dubai. My project: a 60 second "
                                               "launch film for our perfume (ref LENB3)")
+                and whatsapp.bare_enquiry("Hi Sky Vision, I would like to enquire about drone filming. (ref ABCDE)")
                 and "short description" in whatsapp.auto_reply_text(sk, co, "Rajanya", bare=True)
                 and "(guidance)" not in whatsapp.auto_reply_text(sk, co, "Rajanya", bare=True)
                 and "Rashad will be in touch" in whatsapp.auto_reply_text(sk, co, "Rajanya", bare=False)
