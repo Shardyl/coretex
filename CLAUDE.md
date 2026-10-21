@@ -4241,3 +4241,12 @@ shoot needs none), then 10% off the whole quotation.
 - RULES: finance-quote-to-invoice (296, 297) "TAX INVOICE NEEDS THEIR DOCUMENTS": the client's VAT certificate and
   trade licence before a tax invoice; Billed To comes from them. email-handling (2001, 2002) acceptance rule now asks for
   both documents with the signed quotation. Backup `tax_invoice_docs_rules_backup_2026_10_21`.
+
+## His correction survives the read-through (owner, Estithmar card 1405, 21 Oct 2026)
+- CAUSE: he told 1405 to confirm the call and ask whether they could use our Meet link, or else send their own invite.
+  The redraft wrote it (replayed on the box, it does); the final `_read_through` then "fixed" a repeated "looking
+  forward" and returned the email with his ask collapsed into "Here is the Google Meet link for the call".
+- `_read_through(..., owner=)` is told his words ("keep every sentence that carries it; an offer beside a request is not
+  a contradiction"), and CODE refuses any fix that loses one: `_owner_ask_lost(before, after, owner)` = a sentence
+  sharing 3+ content words with his words that has no 60% match after. `_ensure_clean_email(..., owner=text)` from
+  every redraft in `apply_correction`. His correction text is already kept as `decisions.note` on the `correct` row.

@@ -1021,6 +1021,22 @@ def _cases():
                 and not _g.owner_set_chase([h[1], {"event": "email_out", "ts": "2026-10-21T06:00:00+00:00"}]))
     case("a chase date the owner set beats the rhythm floor", "MBK Marine #141, 21 Oct", _owner_chase)
 
+    def _owner_ask_kept():
+        said = ("Yes. This is good. You can confirm that you're avail happy to meet. However, if you could kindly ask if "
+                "it's possible, we could do the call on the following meeting link. And then say, if not, it's okay. "
+                "Please share the... Your your invite.")
+        before = ("Hello Bernadette,\n\nTomorrow at 12:00 PM Doha time works well for us.\n\nWould it be possible to hold "
+                  "the call on the following Google Meet link: https://meet.google.com/vpk-fuvi-jbv? If that is not "
+                  "convenient, it is no problem at all, please do send through your own invitation and we will join."
+                  "\n\nWe are looking forward to the call. We look forward to speaking with you then.")
+        cut = ("Hello Bernadette,\n\nTomorrow at 12:00 PM Doha time works well for us.\n\nHere is the Google Meet link "
+               "for the call: https://meet.google.com/vpk-fuvi-jbv\n\nWe look forward to speaking with you then.")
+        kept = before.replace("We are looking forward to the call. ", "")
+        return (bool(engine._owner_ask_lost(before, cut, said)) and not engine._owner_ask_lost(before, kept, said)
+                and "owner=text" in inspect.getsource(engine.apply_correction))
+    case("the final read-through never cuts what the owner's correction asked for", "Estithmar card 1405, 21 Oct",
+         _owner_ask_kept)
+
     def _tax_invoice():
         from . import nextsteps, taxinvoice
         src = inspect.getsource(taxinvoice.render)

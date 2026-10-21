@@ -2525,13 +2525,13 @@ def apply_correction(task: dict, text: str, _quote_checked: bool = False, infer:
     finally:
         _CORRECTION_NOW.set("")
     new = worker.draft(skill, company, dreq, correction=text, prev_draft=old)
-    new = _ensure_clean_email(skill, company, dreq, new, prev=old)
+    new = _ensure_clean_email(skill, company, dreq, new, prev=old, owner=text)
     _mm = _identity_mismatch(new, (dreq.get("from_email") or ""), company)
     if _mm:                                   # a correction can reintroduce it: same guard, same place
         print(f"[identity] task {task['id']} (correction): {_mm}", flush=True)
         new = _ensure_clean_email(skill, company, dreq,
                                   worker.draft(skill, company, dreq, correction=text, prev_draft=new,
-                                               manager_feedback=[_mm]), prev=old)
+                                               manager_feedback=[_mm]), prev=old, owner=text)
     new = _hold_corrections(task["id"], new, text)     # what he corrected earlier on this email stays corrected
     # corrections bypass the Manager by design (the owner is reviewing personally) — clear any verdict
     # from the PREVIOUS pass so a stale flag never scares the owner off his own corrected draft
@@ -2553,7 +2553,8 @@ def apply_correction(task: dict, text: str, _quote_checked: bool = False, infer:
             task = _booked
             _dreq = _request_for_draft(task)
             new = _ensure_clean_email(skill, company, _dreq,
-                                      worker.draft(skill, company, _dreq, correction=text, prev_draft=new))
+                                      worker.draft(skill, company, _dreq, correction=text, prev_draft=new),
+                                      owner=text)
             new = _hold_corrections(task["id"], new, text)
             task = store.update_task(task["id"], draft=new)
     store.log_decision(task["id"], skill["id"], "owner", "correct", note=text, snapshot={"old": old, "new": new})
@@ -3610,12 +3611,13 @@ def _attachment_claim(draft: str, req: dict) -> str:
 
 
 def _ensure_clean_email(skill: dict, company: dict, dreq: dict, draft: str,
-                        prev: str | None = None) -> str:
+                        prev: str | None = None, owner: str = "") -> str:
     """HARD output check for email drafts: system/meta text addressed to Cortex or the owner must never
     appear in a client email. One automatic retry with explicit feedback; the send-layer placeholder
-    guard remains the final backstop."""
+    guard remains the final backstop. `owner` = his correction words on this redraft: the read-through
+    may never cut what they asked for."""
     try:
-        draft = _ensure_clean_email_inner(skill, company, dreq, draft, prev)
+        draft = _ensure_clean_email_inner(skill, company, dreq, draft, prev, owner=owner)
     finally:
         pass
     try:
@@ -3628,7 +3630,7 @@ def _ensure_clean_email(skill: dict, company: dict, dreq: dict, draft: str,
 
 
 def _ensure_clean_email_inner(skill: dict, company: dict, dreq: dict, draft: str,
-                              prev: str | None = None) -> str:
+                              prev: str | None = None, owner: str = "") -> str:
     try:
         if draft and _META_LEAK.search(draft):
             draft = worker.draft(skill, company, dreq, prev_draft=prev, manager_feedback=[
@@ -3655,10 +3657,45 @@ def _ensure_clean_email_inner(skill: dict, company: dict, dreq: dict, draft: str
                 "claim: offer to send it, or refer to what was sent before, in your own words."])
     except Exception:  # noqa: BLE001
         pass
-    return _read_through(company, dreq, _ensure_real_links(skill, company, dreq, draft))
+    return _read_through(company, dreq, _ensure_real_links(skill, company, dreq, draft), owner=owner)
 
 
-def _read_through(company: dict, dreq: dict, draft: str) -> str:
+# HIS CORRECTION SURVIVES THE READ-THROUGH (Estithmar card 1405, 21 Oct 2026). He told the card to confirm the call
+# and ask whether they could use our Meet link, or else send their own invite. The redraft wrote it; the read-through
+# then "fixed" a repeated 'looking forward' and handed back the email with his ask collapsed into "Here is the Google
+# Meet link for the call", so the correction looked ignored. The read-through is told his words, and CODE refuses any
+# fix that loses a sentence carrying them.
+_KEEP_STOP = frozenset("""a an and are as at be but by can could do for from have if in is it its of on or our
+please so that the their them then they this to we will with would you your yes no not okay ok just also kindly
+""".split())
+
+
+def _content_words(s: str) -> set:
+    return {w for w in re.findall(r"[a-z]{3,}", re.sub(r"https?://\S+", " ", (s or "").lower()))
+            if w not in _KEEP_STOP}
+
+
+def _sentences(text: str) -> list:
+    return [x.strip() for x in re.split(r"(?<=[.!?])\s+|\n+", text or "") if len(x.strip()) > 2]
+
+
+def _owner_ask_lost(before: str, after: str, owner: str) -> str:
+    """A sentence of `before` that carries the owner's words and is gone from `after`, else ''. Carries = shares
+    3+ content words with his words; gone = no sentence of `after` shares 60% of its content words."""
+    want = _content_words(owner)
+    if not want:
+        return ""
+    after_sets = [_content_words(s) for s in _sentences(after)]
+    for s in _sentences(before):
+        cw = _content_words(s)
+        if len(cw & want) < 3:
+            continue
+        if not any(cw and len(cw & a) / len(cw) >= 0.6 for a in after_sets):
+            return s
+    return ""
+
+
+def _read_through(company: dict, dreq: dict, draft: str, owner: str = "") -> str:
     """THE FINAL READ, AS A PERSON WOULD (owner, 23 Sep 2026). Card 876 went to the Inbox saying "I would also be
     glad to send over our company profile", then "Looking forward to hearing from you.", then "Please also see our
     company profile attached", because every pass edits one thing and none of them reads the whole email again.
@@ -3682,11 +3719,19 @@ def _read_through(company: dict, dreq: dict, draft: str) -> str:
             "just those words. Return JSON "
             '{"ok": true} when nothing needs fixing, else {"ok": false, "issues": ["<one line each>"], "email": '
             '"<the corrected email body, complete, plain text>"}. Never add new content, offers or pleasantries.',
-            "ATTACHED FILES: " + (", ".join(names) or "(none)") + "\n\nEMAIL:\n" + draft[:6000],
+            "ATTACHED FILES: " + (", ".join(names) or "(none)")
+            + (f"\n\nTHE OWNER ASKED FOR THIS ON THIS REDRAFT (it is deliberate: keep every sentence that carries "
+               f"it, never cut, merge or soften it; an offer beside a request is not a contradiction):\n{owner[:1500]}"
+               if (owner or "").strip() else "")
+            + "\n\nEMAIL:\n" + draft[:6000],
             model=provider.MODEL_FAST, max_tokens=3000, purpose="email-read-through", company=company.get("slug"))
         if isinstance(out, dict) and out.get("ok") is False and (out.get("email") or "").strip():
             fixed = str(out["email"]).strip()
             if 0.5 < len(fixed) / max(1, len(draft)) < 1.5:     # a fix, not a rewrite
+                _lost = _owner_ask_lost(draft, fixed, owner)
+                if _lost:
+                    print(f"[read-through] fix refused, it cut the owner's ask: {_lost[:140]}", flush=True)
+                    return draft
                 print(f"[read-through] fixed: {'; '.join(str(i) for i in (out.get('issues') or [])[:4])}", flush=True)
                 return fixed
     except Exception:  # noqa: BLE001 - the read-through is a check, never a blocker
