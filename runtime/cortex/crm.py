@@ -1594,8 +1594,9 @@ def set_next_chase(deal_id: int, when: datetime | None = None, every_days: int |
                (when, int(deal_id)))
     txt = (f"Next chase set to {when.astimezone(timezone(timedelta(hours=4))):%a %d %b %H:%M} Dubai"
            + (f", then every {int(every_days)} days" if every_days else "") + f" ({by}" + (f": {why[:160]}" if why else "") + ").")
+    # event "chase_set": HIS DATE, which the rhythm floor must not override (gate.owner_set_chase, MBK #141, 21 Oct)
     db.execute("update crm_projects set history = history || %s::jsonb where id=%s",
-               (Json([{"ts": _now(), "event": "note", "text": txt}]), int(deal_id)))
+               (Json([{"ts": _now(), "event": "chase_set", "text": txt}]), int(deal_id)))
     return db.one("select * from crm_projects where id=%s", (int(deal_id),))
 
 

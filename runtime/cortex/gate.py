@@ -75,8 +75,22 @@ def _manual_owner(company_id, deal_id, email: str, request: dict | None) -> str:
     return ""
 
 
+def owner_set_chase(hist: list) -> bool:
+    """HIS DATE WINS (MBK Marine #141, 21 Oct 2026): he moved a quiet quoted deal's chase to today and the rhythm floor
+    held it ("due from Thu 22 Oct, a full rhythm step after our last email"). A chase date he set after our last email
+    is his decision; the floor is for Cortex's own clock."""
+    sets = [_ts(e.get("ts")) for e in hist if e.get("event") == "chase_set"
+            or (e.get("event") == "note" and str(e.get("text") or "").startswith("Next chase set to"))]
+    outs = [_ts(e.get("ts")) for e in hist if str(e.get("event", "")).startswith("email_out")]
+    last_set, last_out = max((t for t in sets if t), default=None), max((t for t in outs if t), default=None)
+    return bool(last_set and (not last_out or last_set > last_out))
+
+
 def _rhythm_floor(deal: dict, hist: list):
-    """When the next chase may go: the deal's current rhythm step, counted from the last email we sent."""
+    """When the next chase may go: the deal's current rhythm step, counted from the last email we sent. None when
+    the owner set the next chase himself after our last email."""
+    if owner_set_chase(hist):
+        return None
     try:
         from . import crm
         outs = [_ts(e.get("ts")) for e in hist if str(e.get("event", "")).startswith("email_out")]

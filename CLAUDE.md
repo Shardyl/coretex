@@ -4198,3 +4198,9 @@ shoot needs none), then 10% off the whole quotation.
   (purpose `email-summary`) on a thread. The timeline entry carries `email_id` (`log_deal(extra=)`).
 - `/api/crm/project` returns `email_summaries`; `GET /api/crm/deal-email/{id}` the full text (deal-guarded). Cockpit
   (v87) `emailLine` / `showEmail`: the summary under each sent email in History, "Read the email" opens it inline.
+- HIS CHASE DATE WINS (MBK Marine #141, 21 Oct 2026): he moved a quiet quoted deal's chase to today and `gate`'s rhythm
+  floor held it as "a full rhythm step after our last email". `crm.set_next_chase` now logs event `chase_set`;
+  `gate.owner_set_chase(hist)` (a chase_set, or an older "Next chase set to" note, newer than our last email) makes
+  `_rhythm_floor` return None, for the gate and the Inbox tidy alike. The floor is for Cortex's own clock.
+- ONE PERSON, TWO DEALS: Shahnawaz is the contact on both Sheraa deals (118 ERF, 123 SEF'27); a chase on one while the
+  other's chase card is open to him is held by one-email-per-person, which is right.

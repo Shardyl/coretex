@@ -997,6 +997,14 @@ def _cases():
          lambda: "THE REDRAFT ALWAYS SHOWS" in open(os.path.join(os.path.dirname(__file__), "..", "..", "web",
                                                                   "index.html"), encoding="utf-8").read())
 
+    def _owner_chase():
+        from . import gate as _g
+        h = [{"event": "email_out", "ts": "2026-10-15T08:00:00+00:00"},
+             {"event": "chase_set", "ts": "2026-10-21T04:54:00+00:00", "text": "Next chase set to Wed 21 Oct"}]
+        return (_g.owner_set_chase(h) and _g._rhythm_floor({"cadence": None}, h) is None
+                and not _g.owner_set_chase([h[1], {"event": "email_out", "ts": "2026-10-21T06:00:00+00:00"}]))
+    case("a chase date the owner set beats the rhythm floor", "MBK Marine #141, 21 Oct", _owner_chase)
+
     def _deal_email():
         html = open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"), encoding="utf-8").read()
         return ("keep_email(int(did)" in inspect.getsource(pipeline.record_send)
