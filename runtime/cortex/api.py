@@ -6342,6 +6342,11 @@ def google_start(purpose: str = "drive", company: str = "", mailbox: str = "") -
     elif purpose == "google_ads":   # per-company Google Ads API (Keyword Planner) on the Internal token -> never expires
         scope = ("https://www.googleapis.com/auth/adwords openid "
                  "https://www.googleapis.com/auth/userinfo.email")
+    elif purpose == "slides":   # the Drive login PLUS Google Slides (owner, 21 Oct 2026): same token, same account
+        scope = ("https://www.googleapis.com/auth/drive.file "
+                 "https://www.googleapis.com/auth/drive.readonly "
+                 "https://www.googleapis.com/auth/presentations openid "
+                 "https://www.googleapis.com/auth/userinfo.email")
     else:
         scope = ("https://www.googleapis.com/auth/drive.file "
                  "https://www.googleapis.com/auth/drive.readonly")
@@ -6459,7 +6464,21 @@ def google_callback(code: str = "", error: str = "", state: str = "") -> HTMLRes
         return page(f"✓ Cortex is connected to {who}'s YouTube"
                     + (f" — channel “{ch_name}”." if ch_name else ".")
                     + " You can close this tab.")
+    if purpose == "slides":   # REPLACES the Drive token, so only the account Drive already runs as may do it
+        want = (db.setting_get("drive_account") or "rashad@sensa.digital").lower()
+        try:
+            got = (httpx.get("https://openidconnect.googleapis.com/v1/userinfo", timeout=15,
+                             headers={"Authorization": "Bearer " + body.get("access_token", "")}).json()
+                   .get("email") or "").lower()
+        except Exception:  # noqa: BLE001
+            got = ""
+        if got != want:
+            return page(f"Not saved: you signed in as {got or 'an unknown account'}. Cortex's Drive runs as {want}; "
+                        "sign in as that account and try again. Drive is unchanged.")
     db.setting_set("google_refresh_token" + sfx, rt)
+    if purpose == "slides":
+        return page("✓ Cortex can now build Google Slides in your Drive. Drive keeps working as before. "
+                    "You can close this tab.")
     return page("✓ Cortex is connected to your Google Drive. You can close this tab — backups run nightly.")
 
 
