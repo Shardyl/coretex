@@ -1092,6 +1092,14 @@ build the capability when it is missing).
   opens the deck, and every build saves its spec beside the PDF (`.spec.json`) so `reuse_copy=true`
   re-lays the SAME words for a layout change instead of rewriting them. Final Sensa deck: cover, Farmer
   John, What we control, seven module pages, four case studies, close (15 pages, card 560).
+- **Google Slides twin of doc 1179** (22 Oct 2026, owner ask: films play inside the slide so their sound carries over a
+  Google Meet tab share): "Sensa - AI Production Capabilities Deck (Google Slides)" in SENSA CORTEX / Documents, id
+  1o256o9-2M0R-ehsIxBoj7LnAzB1eo-bEdVv6BPzpyuE. Each slide = the PDF page as background; films are native YouTube video
+  objects placed from the PDF's own link boxes; a full-frame film runs a sixth past top and bottom (Slides shows YouTube's
+  4:3 letterboxed poster) with the page's caption band laid back over it. Rebuild: box `_caps-v2/slides_build.py` (needs
+  `slides_png/`; `slides_clean.py` trashes the old copy by name first). Needed the Slides API ON in project
+  coretex-499507 and the `presentations` scope on the Drive OAuth (both done 21 Oct). Not in the document library
+  (a native Slides file has no bytes to file).
 - **AI Production Capabilities Deck = library doc 1179** (21 Oct 2026): v2 plus an aerial page (AI drone showreel
   zFM7OW-9Iqk, ground footage + satellite reference imagery), 18 pages, superseding 1136; profile, taught note and
   skill 2001 repointed (backups `*:backup-2026-10-21`). OWNER, 21 Oct: old versions must not clutter a Drive search, so
