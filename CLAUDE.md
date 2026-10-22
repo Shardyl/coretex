@@ -4278,3 +4278,12 @@ shoot needs none), then 10% off the whole quotation.
 - IN PERSON: both readers return `in_person` / `place`; the meeting is booked on our calendar with the place as
   location and NO Meet room (`calendar.create_event(location=)`), and the send path invites nobody (it is their
   meeting). The card says "In person at ...: on our calendar only, nobody is sent an invite". v89.
+
+## Quotation prices in hundreds (owner, 22 Oct 2026)
+- "We do not want anything like 1,850. It should just be 1,800, and make another line 50 higher." When
+  `ratecard.price_lines` moves lines to reach his figure, every moved unit is rounded to whole steps (`_round(v, step)`,
+  step = profile `quote_round_to`, default 100; the old 50/100/500 ladder is gone) and the difference is spread onto
+  the qty-1 blocks in whole steps, largest first (`_spread_in_steps`). Only when the figure itself is not in hundreds
+  (a VAT-inclusive total) does one line carry the odd amount (`odd_amount` in the result).
+- Rule "PRICES IN HUNDREDS" on Sensa (164) and Sky Vision (165) sales-quotation. Backup
+  `quote_hundreds_rules_backup_2026_10_22`. Discount lines (a stated %) are untouched.

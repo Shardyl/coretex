@@ -1021,6 +1021,16 @@ def _cases():
                 and not _g.owner_set_chase([h[1], {"event": "email_out", "ts": "2026-10-21T06:00:00+00:00"}]))
     case("a chase date the owner set beats the rhythm floor", "MBK Marine #141, 21 Oct", _owner_chase)
 
+    def _hundreds():
+        from . import ratecard
+        lines = [{"unit": 1800.0, "qty": 1}, {"unit": 4200.0, "qty": 1}, {"unit": 900.0, "qty": 1}]
+        rem = ratecard._spread_in_steps(lines, -300.0, 100)
+        ok_spread = (rem == 0 and all(float(x["unit"]) % 100 == 0 for x in lines)
+                     and sum(float(x["unit"]) for x in lines) == 6600.0)
+        return (ratecard._round(870, 100) == 900.0 and ok_spread
+                and "_spread_in_steps(ones, drift, step)" in inspect.getsource(ratecard.price_lines))
+    case("lines moved to reach the owner's figure are priced in whole hundreds", "owner, 22 Oct", _hundreds)
+
     def _no_busy_booking():
         from . import calendar as _c
         pre, ext = inspect.getsource(engine._prebook_meeting), inspect.getsource(engine._maybe_extract_meeting)

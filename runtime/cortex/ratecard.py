@@ -53,9 +53,39 @@ def rates(slug: str) -> set:
             for it in g.get("items") or [] for k in ("rate", "budget") if isinstance(it.get(k), (int, float))}
 
 
-def _round(v: float) -> float:
-    step = 50 if v < 1000 else 100 if v < 10000 else 500
+def _round(v: float, step: float = 100) -> float:
     return float(round(v / step) * step)
+
+
+# PRICES IN HUNDREDS (owner, 22 Oct 2026: "we do not want anything like 1,850. It should just be 1,800, and make
+# another line 50 higher"). When lines move to reach his figure, every moved unit price is a whole number of
+# hundreds and the difference is carried by other lines in steps of 100, so no line ends in 50 or in odd cents.
+# The step is data: company profile `quote_round_to` (default 100).
+def round_step(slug: str) -> float:
+    try:
+        r = db.one("select p.data->>'quote_round_to' v from company_profiles p join companies c on c.id=p.company_id "
+                   "where c.slug=%s", (slug,)) or {}
+        return float(r.get("v") or 100) or 100.0
+    except Exception:  # noqa: BLE001
+        return 100.0
+
+
+def _spread_in_steps(lines: list, drift: float, step: float) -> float:
+    """Put `drift` onto `lines` (qty-1 blocks, largest first) in whole steps, never taking a line to zero or
+    below. Returns what could not be placed in whole steps (non-zero only when the target itself is not a
+    whole number of steps)."""
+    n = int(round(drift / step)) if abs(drift / step - round(drift / step)) < 1e-6 else int(drift / step)
+    rem = round(drift - n * step, 2)
+    order = sorted(lines, key=lambda it: float(it["unit"]), reverse=True)
+    i = 0
+    while n and order and i < 10000:
+        it = order[i % len(order)]
+        d = step if n > 0 else -step
+        if float(it["unit"]) + d > 0:
+            it["unit"] = round(float(it["unit"]) + d, 2)
+            n -= 1 if n > 0 else -1
+        i += 1
+    return round(rem + n * step, 2)
 
 
 def price_lines(slug: str, sections: list, *, allowed: set | None = None, target: float | None = None,
@@ -152,14 +182,18 @@ def price_lines(slug: str, sections: list, *, allowed: set | None = None, target
                         + (" even at Budget tier" if tier == "budget" else "") + ". "
                         "Drop or add scope, or change the target.")
         return out
+    step = round_step(slug)
     for it in movable:
-        it["unit"] = _round(float(it["unit"]) * factor)
+        it["unit"] = max(step, _round(float(it["unit"]) * factor, step))
     new = fixed_total + sum(float(it["unit"]) * float(it.get("qty") or 1) for it in movable)
     drift = round(target - new, 2)
     ones = [it for it in movable if float(it.get("qty") or 1) == 1]
-    if drift and ones:            # park the rounding remainder on the largest block so the total is exact
-        big = max(ones, key=lambda it: float(it["unit"]))
-        big["unit"] = round(float(big["unit"]) + drift, 2)
+    if drift and ones:            # the difference goes onto the blocks in whole hundreds, largest first
+        rem = _spread_in_steps(ones, drift, step)
+        if rem:                   # only when his figure itself is not in hundreds (a VAT-inclusive total)
+            big = max(ones, key=lambda it: float(it["unit"]))
+            big["unit"] = round(float(big["unit"]) + rem, 2)
+            out["odd_amount"] = rem
     out["scaled"] = round((factor - 1) * 100, 1)
     out["lines_total"] = target
     out["tier"] = tier
