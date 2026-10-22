@@ -1738,6 +1738,15 @@ def _cases():
     case("the drone preset pays 70/30 and states the six-hour day",
          "50/25/25 printed under a 70% note 22 Oct", _drone_preset)
 
+    def _samples_four():
+        """Four films in ONE row: split 2+2 they made the page overflow under a chunky heading
+        (Wasl technical proposal rendered 15 pages for 12, 22 Oct 2026)."""
+        src = inspect.getsource(deck._Deck.samples)
+        return "rows = [films] if n <= 4 else" in src and "4: 260" in src
+
+    case("a samples page puts four films in one row", "Wasl proposal overflowed 22 Oct",
+         _samples_four)
+
     def _permit_units():
         """Irish, 22 Oct 2026: the RATE was right and the UNIT was wrong, which is worse, because a
         unit error scales with the job. A civil-aviation clearance is ONE per application however

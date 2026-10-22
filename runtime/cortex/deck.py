@@ -921,11 +921,16 @@ class _Deck:
         # 1136px the pad allows. Four to six wrap three to a row; one to three are unchanged.
         films = list(films)[:6]
         n = max(1, len(films))
-        rows = [films] if n <= 3 else [films[:(n + 1) // 2], films[(n + 1) // 2:]]
+        # FOUR GO IN ONE ROW (22 Oct 2026). Four split 2+2 made two rows 242px tall, and
+        # under a chunky 58px heading the second row pushed the page over: the Wasl
+        # proposal rendered 15 pages for 12. 4 x 260 + 3 x 24 of gap is 1112, inside the
+        # 1136px pad.
+        rows = [films] if n <= 4 else [films[:(n + 1) // 2], films[(n + 1) // 2:]]
         # wider than they were: three 352px thumbnails left the bottom third of the page empty
         # (Heaven p5, owner 17 Oct 2026 on the dead space)
         # 4 to 6 run smaller: at 362 the second row's captions landed on the footer and the logo
-        w = {1: 760, 2: 548, 3: 362}.get(n, 362) if n <= 3 else {1: 320, 2: 430, 3: 320}.get(len(rows[0]), 320)
+        w = ({1: 760, 2: 548, 3: 362, 4: 260}.get(n, 362) if n <= 4
+             else {1: 320, 2: 430, 3: 320}.get(len(rows[0]), 320))
         h = int(w * 9 / 16)
         items = []
         for f in films:
