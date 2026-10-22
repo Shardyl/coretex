@@ -4264,3 +4264,17 @@ shoot needs none), then 10% off the whole quotation.
   a contradiction"), and CODE refuses any fix that loses one: `_owner_ask_lost(before, after, owner)` = a sentence
   sharing 3+ content words with his words that has no 60% match after. `_ensure_clean_email(..., owner=text)` from
   every redraft in `apply_correction`. His correction text is already kept as `decisions.note` on the `correct` row.
+
+## Nothing books into a busy slot; in person is not a Meet (owner, DSO card 1422, 22 Oct 2026)
+- CAUSE: Alex asked "would you be available tomorrow at 2:00 PM at the DSO HQ?". `_client_proposed_slot` (the pre-draft
+  calendar check) did not register it as a proposed time, so the writer accepted it; `_maybe_extract_meeting` then
+  stamped it from the draft and `_prebook_meeting` booked a Google Meet over the owner's golf (Work Calendar,
+  13:00 to 21:15), with no calendar check at either step, for a meeting in their office.
+- `_slot_clash(start, minutes)` (calendar busy check over the exact slot, no prep gap) runs in `_maybe_extract_meeting`
+  (busy -> nothing stamped, `card_problem` "The time in this reply ... clashes with your calendar ... Nothing was
+  booked") and in `_prebook_meeting` (an `email_reply` slot is refused the same way; an outbound draft's time is his
+  own and is kept, with "Kept as you said"). `_owner_said_book(task)` ("book it anyway" on the card) overrides.
+- `_client_proposed_slot` prompt: asking whether we are available at ONE named day and time IS proposing it.
+- IN PERSON: both readers return `in_person` / `place`; the meeting is booked on our calendar with the place as
+  location and NO Meet room (`calendar.create_event(location=)`), and the send path invites nobody (it is their
+  meeting). The card says "In person at ...: on our calendar only, nobody is sent an invite". v89.

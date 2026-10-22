@@ -932,7 +932,7 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         if mt2 and mt2.get("event_id") and not mt2.get("invited") and not _email_carries_meeting(c["plain"], mt2):
             drop_meeting(task["id"], "the email that went out does not carry this meeting", actor)
             mt2 = None
-        if mt2 and mt2.get("event_id"):
+        if mt2 and mt2.get("event_id") and not mt2.get("in_person"):   # in person: on our calendar, no invite
             # EVERYONE ON THE EMAIL IS ON THE INVITE (24 Sep 2026): Farheen asked to add Sarah Shaikh to the
             # meeting invite (card 904); the reply promised it, and only the To recipient was ever added. Every
             # external address on this email's To and cc lines joins the event (merged, never replacing).
@@ -3114,12 +3114,31 @@ def _prebook_meeting(task: dict) -> dict | None:
                 company_id=task["company_id"], target_type="task", target_id=str(task["id"]))
             return None
         cal_co = slug
-        ev = gcal.create_event(cal_co, start=datetime.fromisoformat(mt["start"]),
-                               minutes=int(mt.get("minutes") or 30),
+        _st, _mins = datetime.fromisoformat(mt["start"]), int(mt.get("minutes") or 30)
+        _clash = _slot_clash(_st, _mins)
+        if _clash and task.get("kind") == "email_reply" and not _owner_said_book(task):
+            # NOTHING BOOKS INTO A BUSY SLOT (DSO card 1422, 22 Oct 2026): Alex's "tomorrow at 2:00 PM" was booked
+            # straight over the owner's golf. A slot a CLIENT named is only booked when the calendars are free, or
+            # when he says "book it" on the card; a time he chose himself (an outbound draft) is kept as he said.
+            req.pop("meeting", None)
+            req["card_problem"] = _clash_problem(_st, _clash)
+            store.update_task(task["id"], request=req)
+            print(f"[prebook] task {task['id']}: not booked, the calendar is busy then ({_clash})", flush=True)
+            return None
+        _person = bool(mt.get("in_person"))
+        ev = gcal.create_event(cal_co, start=_st, minutes=_mins,
                                summary=mt.get("summary") or "Call",
-                               description=f"Pre-booked via Cortex (task #{task['id']}); "
-                                           "guest added on the owner's approval.", meet=True)
+                               description=(f"In person{(' at ' + mt['place']) if mt.get('place') else ''}. Booked via "
+                                            f"Cortex (task #{task['id']}); nobody is invited from here."
+                                            if _person else
+                                            f"Pre-booked via Cortex (task #{task['id']}); "
+                                            "guest added on the owner's approval."),
+                               meet=not _person, location=str(mt.get("place") or "") if _person else "")
         req["meeting"] = {**mt, "event_id": ev.get("id"), "meet": ev.get("meet") or "", "calendar": cal_co}
+        if _clash:      # his own time, kept: the clash is on the card, never a reason to move it
+            req["card_problem"] = _clash_problem(_st, _clash, kept=True)
+        elif str(req.get("card_problem") or "").startswith(("The time in this reply", "Your time in this reply")):
+            req.pop("card_problem", None)
         return store.update_task(task["id"], request=req)
     except Exception as _e:  # noqa: BLE001 — best-effort, the send path books as the backstop
         # NEVER silent: a swallowed booking failure is indistinguishable from "no meeting was agreed",
@@ -3331,8 +3350,11 @@ def _client_proposed_slot(task: dict, req: dict, email: str) -> dict | None:
             worker._now_line() + " Does the SENDER of this message propose or accept ONE specific day and clock time "
             "for a call or meeting with us? Report the time EXACTLY AS WRITTEN and its timezone; never convert. "
             'Return JSON {"proposed": true|false, "start_local": "YYYY-MM-DDTHH:MM", "tz": "<IANA zone, Asia/Dubai '
-            'if none stated>", "minutes": 30, "summary": "<short meeting title naming the sender>"}. '
-            "proposed:false when they only ask for our availability or give a range.",
+            'if none stated>", "minutes": 30, "summary": "<short meeting title naming the sender>", '
+            '"in_person": true|false, "place": "<venue or address as written, for an in-person meeting>"}. '
+            "Asking whether we are available at ONE named day and time (\"would you be available tomorrow at 2 PM?\") "
+            "IS proposing that time: proposed:true. proposed:false only when they ask for our availability in "
+            "general or give a range. in_person:true when they say where to meet (their office, HQ, a venue).",
             theirs[:2000], model=provider.MODEL_ROUTER, purpose="client-slot",
             company=(store.get_company(task["company_id"]) or {}).get("slug"))
         if not (isinstance(out, dict) and out.get("proposed") and out.get("start_local")):
@@ -3353,7 +3375,9 @@ def _client_proposed_slot(task: dict, req: dict, email: str) -> dict | None:
                 "label": dt.astimezone(_GST).strftime("%A %-d %B, %H:%M") + " (Dubai)"}
         if free:
             req["meeting"] = {"start": dt.isoformat(), "minutes": mins,
-                              "summary": str(out.get("summary") or "Call")[:80]}
+                              "summary": str(out.get("summary") or "Call")[:80],
+                              **({"in_person": True, "place": str(out.get("place") or "")[:200]}
+                                 if out.get("in_person") else {})}
             store.update_task(task["id"], request={**(store.get_task(task["id"]) or {}).get("request", {}),
                                                    "meeting": req["meeting"]})
         return slot
@@ -3389,6 +3413,39 @@ def _client_agreed_slot(task: dict, req: dict, dt: datetime) -> bool:
         return False
 
 
+def _owner_said_book(task: dict) -> bool:
+    """His words on THIS card (his last corrections, and the one being applied) say book / accept / confirm it."""
+    try:
+        notes = " ".join(d["note"] for d in db.query(
+            "select note from decisions where task_id=%s and action='correct' and coalesce(note,'')<>'' order by id desc limit 3",
+            (task.get("id") or 0,)) if d.get("note")) + " " + _CORRECTION_NOW.get()
+        return bool(_OWNER_BOOKS.search(_OWNER_ASKS.sub("", notes)))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _slot_clash(start: datetime, minutes: int) -> str:
+    """'' when every calendar that owns the owner's time is free for the slot, else the busy window, in Dubai time.
+    The exact slot only, no prep gap: a meeting that merely ends next to another is not a clash."""
+    try:
+        from . import calendar as _gcal
+        busy = _gcal.busy_blocks(start, start + timedelta(minutes=int(minutes or 30)))
+        if not busy:
+            return ""
+        s, e = busy[0]
+        return f"busy {s.astimezone(_GST).strftime('%H:%M')} to {e.astimezone(_GST).strftime('%H:%M')} Dubai"
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _clash_problem(start: datetime, clash: str, kept: bool = False) -> str:
+    lab = start.astimezone(_GST).strftime("%a %-d %b, %H:%M") + " Dubai"
+    if kept:
+        return f"Your time in this reply ({lab}) clashes with your calendar ({clash}). Kept as you said."
+    return (f"The time in this reply ({lab}) clashes with your calendar ({clash}). Nothing was booked: correct "
+            "the reply with a time that works, or say 'book it anyway' on the card.")
+
+
 def _maybe_extract_meeting(task: dict, draft: str) -> None:
     """When a reply draft CONFIRMS one specific meeting slot with the client, stamp request.meeting so
     the approval that sends the email ALSO books the calendar event + Google Meet (link appended to the
@@ -3409,8 +3466,10 @@ def _maybe_extract_meeting(task: dict, draft: str) -> None:
             "\"start_local\": \"YYYY-MM-DDTHH:MM\" as stated in the email, "
             "\"tz\": \"<IANA zone for the timezone the email states, e.g. Europe/Amsterdam, "
             "America/New_York, Asia/Dubai; use Asia/Dubai ONLY if no other timezone is stated>\", "
-            "\"minutes\": 30, \"summary\": \"short meeting title naming the counterpart\"} — "
-            "confirmed:false unless ONE exact slot is clearly agreed in the text.",
+            "\"minutes\": 30, \"summary\": \"short meeting title naming the counterpart\", "
+            "\"in_person\": true|false, \"place\": \"<the address or venue for an in-person meeting, as written>\"} — "
+            "confirmed:false unless ONE exact slot is clearly agreed in the text. in_person:true only when the "
+            "email says it is held at a physical place (their office, HQ, a venue), not a call.",
             (draft or "")[:1500], model=provider.MODEL_ROUTER, purpose="meeting-extract",
             company=(store.get_company(task["company_id"]) or {}).get("slug"))
         if not (isinstance(out, dict) and out.get("confirmed")
@@ -3449,8 +3508,21 @@ def _maybe_extract_meeting(task: dict, draft: str) -> None:
         if prior and prior.get("m"):
             req["meeting"] = prior["m"]
         else:
-            req["meeting"] = {"start": dt.isoformat(), "minutes": int(out.get("minutes") or 30),
-                              "summary": (out.get("summary") or "Intro call")[:80]}
+            _mins = int(out.get("minutes") or 30)
+            _clash = _slot_clash(dt, _mins)
+            if _clash and not _owner_said_book(task):
+                # THE DRAFT ACCEPTED A TIME THE CALENDAR SAYS IS TAKEN (DSO card 1422): nothing is stamped or booked,
+                # and the card says so before he approves, whichever step missed it upstream
+                req.pop("meeting", None)
+                req["card_problem"] = _clash_problem(dt, _clash)
+                store.update_task(task["id"], request=req)
+                return
+            req["meeting"] = {"start": dt.isoformat(), "minutes": _mins,
+                              "summary": (out.get("summary") or "Intro call")[:80],
+                              **({"in_person": True, "place": str(out.get("place") or "")[:200]}
+                                 if out.get("in_person") else {})}
+            if str(req.get("card_problem") or "").startswith("The time in this reply"):
+                req.pop("card_problem", None)
         store.update_task(task["id"], request=req)
     except Exception:  # noqa: BLE001 — booking is a bonus; the draft must never fail because of it
         pass

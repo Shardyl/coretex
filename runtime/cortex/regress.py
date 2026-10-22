@@ -1021,6 +1021,17 @@ def _cases():
                 and not _g.owner_set_chase([h[1], {"event": "email_out", "ts": "2026-10-21T06:00:00+00:00"}]))
     case("a chase date the owner set beats the rhythm floor", "MBK Marine #141, 21 Oct", _owner_chase)
 
+    def _no_busy_booking():
+        from . import calendar as _c
+        pre, ext = inspect.getsource(engine._prebook_meeting), inspect.getsource(engine._maybe_extract_meeting)
+        slot = inspect.getsource(engine._client_proposed_slot)
+        send = inspect.getsource(engine._send_email_reply)
+        return ("_slot_clash(" in pre and "_slot_clash(" in ext and "meet=not _person" in pre
+                and "location" in inspect.signature(_c.create_event).parameters
+                and "IS proposing that time" in slot and 'not mt2.get("in_person")' in send)
+    case("nothing books into a busy slot; an in-person meeting gets no Meet link and no invite", "DSO card 1422, 22 Oct",
+         _no_busy_booking)
+
     def _owner_ask_kept():
         said = ("Yes. This is good. You can confirm that you're avail happy to meet. However, if you could kindly ask if "
                 "it's possible, we could do the call on the following meeting link. And then say, if not, it's okay. "

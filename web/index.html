@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v88';
+const APP_BUILD = 'cortex-v89';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -2582,7 +2582,8 @@ function dealPickCard(t,co){
 // THE INVITE IS ON THE CARD (card 1365): what approving sends to the calendar, before he approves it
 function meetingLine(t){
   const m=t.meeting_invite, who=(m.guests||[]).join(', ')||'nobody outside Sensa';
-  const txt=m.carried?`Approving also sends a Google Meet invite: ${m.label} (${m.minutes} min) to ${who}`
+  const txt=m.in_person?`In person${m.place?' at '+m.place:''}, ${m.label}: on our calendar only, nobody is sent an invite`
+    :m.carried?`Approving also sends a Google Meet invite: ${m.label} (${m.minutes} min) to ${who}`
     :`A meeting (${m.label}) is attached, but the email does not mention it, so nobody will be invited`;
   return `<div class="row" style="margin-bottom:8px;padding:7px 10px;border-radius:9px;border:1px solid ${m.carried?'var(--line)':'#F59E0B55'};font-size:13px;gap:8px;align-items:center">${ic('calendar',14)} <span style="flex:1">${esc(txt)}</span><button class="btn sm" onclick="meetingOff(${t.id})">Don't invite</button></div>`;
 }

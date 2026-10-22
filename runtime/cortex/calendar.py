@@ -62,7 +62,7 @@ def format_slots(slots: list[datetime]) -> list[str]:
 
 def create_event(company: str, *, calendar_id: str = "primary", start: datetime, minutes: int = 30,
                  summary: str = "Call", attendee: str = "", description: str = "",
-                 meet: bool = False) -> dict:
+                 meet: bool = False, location: str = "") -> dict:
     """Create a booking event (read-write). Caller MUST gate this behind Inbox approval — never auto-book.
     meet=True attaches a Google Meet room; the returned dict carries its join link."""
     import uuid
@@ -73,6 +73,8 @@ def create_event(company: str, *, calendar_id: str = "primary", start: datetime,
                 "start": {"dateTime": start.isoformat()}, "end": {"dateTime": end.isoformat()}}
     if attendee:
         ev["attendees"] = [{"email": attendee}]
+    if location:
+        ev["location"] = location
     if meet:
         ev["conferenceData"] = {"createRequest": {
             "requestId": uuid.uuid4().hex,

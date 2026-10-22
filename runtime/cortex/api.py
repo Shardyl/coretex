@@ -510,6 +510,7 @@ def _enrich_action_card(t: dict) -> dict:
             try:
                 _st = datetime.fromisoformat(str(_mt.get("start"))).astimezone(engine._GST)
                 t["meeting_invite"] = {"label": _st.strftime("%a %-d %b, %H:%M") + " Dubai",
+                                       "in_person": bool(_mt.get("in_person")), "place": _mt.get("place") or "",
                                        "minutes": int(_mt.get("minutes") or 30),
                                        "guests": engine._invite_guests(env),
                                        "carried": engine._email_carries_meeting(t.get("draft") or "", _mt)}
