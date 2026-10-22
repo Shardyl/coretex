@@ -1092,14 +1092,18 @@ build the capability when it is missing).
   opens the deck, and every build saves its spec beside the PDF (`.spec.json`) so `reuse_copy=true`
   re-lays the SAME words for a layout change instead of rewriting them. Final Sensa deck: cover, Farmer
   John, What we control, seven module pages, four case studies, close (15 pages, card 560).
-- **Google Slides twin of doc 1179** (22 Oct 2026, owner ask: films play inside the slide so their sound carries over a
-  Google Meet tab share): "Sensa - AI Production Capabilities Deck (Google Slides)" in SENSA CORTEX / Documents, id
-  1o256o9-2M0R-ehsIxBoj7LnAzB1eo-bEdVv6BPzpyuE. Each slide = the PDF page as background; films are native YouTube video
-  objects placed from the PDF's own link boxes; a full-frame film runs a sixth past top and bottom (Slides shows YouTube's
-  4:3 letterboxed poster) with the page's caption band laid back over it. Rebuild: box `_caps-v2/slides_build.py` (needs
-  `slides_png/`; `slides_clean.py` trashes the old copy by name first). Needed the Slides API ON in project
-  coretex-499507 and the `presentations` scope on the Drive OAuth (both done 21 Oct). Not in the document library
-  (a native Slides file has no bytes to file).
+- **Google Slides twins** (22 Oct 2026, owner: present in Meet with every film playable inside its slide), both in
+  SENSA CORTEX / Documents: "Sensa - AI Production Capabilities Deck (Google Slides)" (doc 1179's twin, id
+  1QxZ_cYfTsEfXff6fgBKrTmXXTUS4zrheuz601JvWBdI) and "Sensa Productions - Company Profile 2026 (Google Slides)" (doc 1157's
+  twin, id 1FGJJtOqUNr4Jnm8AeFaDlhtXqS1Ilf7N0xdyjaGW_6g). Method (`prep.py` on the desktop, `slides_build2.py` on the box,
+  copies in box `_caps-v2/` and `C:\Users\rasha\sensa-profile-build\`): each slide = the PDF page render as background;
+  each film tile (read from the PDF's own link boxes) becomes a YouTube video in a 4:3 box whose middle 16:9 band
+  COVERS the tile, because Slides stretches YouTube's 4:3 letterboxed poster over the box and plays the film width-fit;
+  render crops mask everything outside the tile, tiles go top to bottom so overlaps land on caption bands; caption bands
+  are laid back on top; video outlines OFF (they drew a hairline); other PDF links become invisible link boxes. Rebuild
+  = `python prep.py <pdf> <dir> caps|profile`, tar to the box, `sudo -u cortex bash /tmp/runbox.sh slides_build2.py
+  <dir> "<title>"` (it trashes the earlier copy with that title). Needs the Slides API ON in coretex-499507 and the
+  `presentations` scope (both done 21 Oct). Not in the document library (a native Slides file has no bytes to file).
 - **AI Production Capabilities Deck = library doc 1179** (21 Oct 2026): v2 plus an aerial page (AI drone showreel
   zFM7OW-9Iqk, ground footage + satellite reference imagery), 18 pages, superseding 1136; profile, taught note and
   skill 2001 repointed (backups `*:backup-2026-10-21`). OWNER, 21 Oct: old versions must not clutter a Drive search, so
