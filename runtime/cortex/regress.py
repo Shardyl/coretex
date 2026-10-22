@@ -1703,6 +1703,51 @@ def _cases():
     case("the fitness app pushes only rows changed since its last pull", "stale browser 21 Oct",
          lambda: (lambda h: "recordFp(state)" in h and "h!==fpHash(r)" in h and "if(!loadFp())" in h)(
              open(_web + "/fitness/index.html", encoding="utf-8").read()))
+    # --- drone: the gear, crew and post rates were missing from the card, so every drone line
+    #     blanked; and the shoot preset printed 50/25/25 under a 70% deposit note (22 Oct 2026)
+    def _drone_emergy():
+        """The card must reproduce the issued Emergy quotation: one Dubai day, Option A = 31,520."""
+        from . import ratecard
+        sec = [{"header": "X", "items": [
+            {"desc": "g", "components": [{"item": "drone-inspire-3", "qty": 1}]},
+            {"desc": "c", "components": [{"item": "drone-licensed-operator", "qty": 1},
+                                         {"item": "drone-camera-operator-assistant", "qty": 1}]},
+            {"desc": "p", "components": [
+                {"item": "dxb-dubai-film-and-tv-commission", "qty": 1},
+                {"item": "dxb-dubai-civil-aviation-authority", "qty": 1},
+                {"item": "dxb-general-civil-aviation-authority", "qty": 1},
+                {"item": "dxb-ministry-of-defence", "qty": 1},
+                {"item": "dxb-administrative-fee", "qty": 1}]},
+            {"desc": "d", "components": [{"item": "drone-raw-files-ssd", "qty": 1}]}]}]
+        r = ratecard.price_lines("skyvision", sec)
+        return not r["blanked"] and abs(r["lines_total"] - 31520) < 1
+
+    case("a drone quotation prices off the card and matches the issued Emergy figure",
+         "drone lines all blanked 22 Oct", _drone_emergy)
+
+    def _drone_preset():
+        """An aerial job holds a permit, not a studio: 70/30, never the shoot preset's 50/25/25."""
+        from . import quotation
+        p = quotation.presets().get("drone-aerial") or {}
+        pay = " ".join(p.get("payment_lines") or [])
+        terms = str(p.get("terms") or {})
+        return (pay.startswith("70%") and "50%" not in pay and "25%" not in pay
+                and "six hours per day inclusive of travel" in terms
+                and "doubled for a twelve-hour day" in terms)
+
+    case("the drone preset pays 70/30 and states the six-hour day",
+         "50/25/25 printed under a 70% note 22 Oct", _drone_preset)
+
+    def _mod_double():
+        """The MOD fee doubles on an extended day; the note on both MOD lines has to say so."""
+        from . import ratecard
+        idx = ratecard.index("skyvision")
+        got = [idx.get(k) for k in ("dxb-ministry-of-defence", "auh-mod")]
+        return all(g and g["rate"] == 2500 and "5,000" in (g.get("note") or "") for g in got)
+
+    case("both Ministry of Defence lines carry the extended-day doubling",
+         "MOD doubling unrecorded 22 Oct", _mod_double)
+
     case("every health check query runs", "invariants", _invariants)
     return C
 

@@ -4307,6 +4307,24 @@ shoot needs none), then 10% off the whole quotation.
   `skyvision_quotation_rules_backup_2026_10_22`). Emirate decides the permit set, NEVER substitute Dubai
   rates for Abu Dhabi, permits always separate lines at cost, confirm what a package already includes so
   nothing is charged twice, and an unconfirmed authority fee is FLAGGED, never invented.
-- OPEN, and it is a real cost: he said verbally that a shoot beyond six hours DOUBLES the MOD fee to
-  5,000 for a twelve-hour day. His written rules mention only the AED 2,000 extended-hours charge and say
-  nothing about the MOD. The doubling is not on the card until he confirms it.
+- The MOD extended-day doubling is CONFIRMED (owner, 22 Oct 2026: "if you want to do the extended day,
+  you know that it's an additional 2.5, so 5,000"). An extended day therefore carries TWO charges, not
+  one: our own `drone-extended-hours` AED 2,000, and a SECOND unit of that emirate's MOD line, so the
+  doubling from 2,500 to 5,000 stays visible on the quotation instead of hiding in a bigger number. Use
+  the emirate's own line: `dxb-ministry-of-defence` in Dubai, `auh-mod` in Abu Dhabi. Rate card **v1.3**,
+  and the rule "MOD EXTENDED DAY" on Sky Vision `sales-quotation`.
+- Rate card **v1.4** adds `Drone equipment and crew`, which had been missing entirely, so until now
+  `price_lines` BLANKED every gear, crew and post line on any drone quotation and only the permits
+  priced. All five are transcribed from the Emergy quotation: `drone-inspire-3` 9,000/day,
+  `drone-mavic-cine-pair` 6,000/day, `drone-licensed-operator` 6,000/day,
+  `drone-camera-operator-assistant` 3,000/day, `drone-raw-files-ssd` 3,500/project. The regress case
+  rebuilds Emergy's one-day Option A sub-total of **31,520** from the card, so a rate drifting breaks it.
+- Quote aerial work on the **`drone-aerial` preset**, never `shoot-production`. A shoot preset pays
+  50/25/25 because it holds a studio and a crew; an aerial job holds a PERMIT, which leaves us before the
+  shoot and is non-refundable, so it pays **70/30**. Rendering Wasl on the shoot preset printed "50% on
+  confirmation" directly under a note saying 70% deposit. The preset carries the 17 Emergy clauses as
+  real terms (flight and safety, permits, payment and cancellation, scope), so the conditions print as
+  terms instead of being crammed into the note. Backup `quotation_presets_backup_2026_10_22`.
+- PRICING A MULTI-PROPERTY JOB: one shoot day per PROPERTY, not per session or per course, and one permit
+  application per property because each is a different location. Count the sessions at each property to
+  find which days exceed six hours. Travel allowance (Misc, 1,500/day) on every day outside Dubai.
