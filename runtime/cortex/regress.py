@@ -1738,6 +1738,29 @@ def _cases():
     case("the drone preset pays 70/30 and states the six-hour day",
          "50/25/25 printed under a 70% note 22 Oct", _drone_preset)
 
+    def _permit_units():
+        """Irish, 22 Oct 2026: the RATE was right and the UNIT was wrong, which is worse, because a
+        unit error scales with the job. A civil-aviation clearance is ONE per application however
+        many locations; a filming permit is per location; the MOD is per day and doubles on an
+        extended day; the risk assessment is once per emirate, not once per shoot day."""
+        from . import ratecard
+        idx = ratecard.index("skyvision")
+        want = {"dxb-dubai-civil-aviation-authority": "application",
+                "dxb-general-civil-aviation-authority": "application",
+                "dxb-administrative-fee": "application",
+                "auh-gcaa": "application",
+                "auh-administrative-fee": "application",
+                "dxb-dubai-film-and-tv-commission": "location",
+                "auh-nmc": "location",
+                "dxb-ministry-of-defence": "day",
+                "auh-mod": "day",
+                "auh-department-of-transport": "day",
+                "drone-risk-assessment-twilight": "emirate"}
+        return all((idx.get(k) or {}).get("unit") == u for k, u in want.items())
+
+    case("drone permit fees carry the unit that decides their quantity",
+         "Irish's Wasl corrections 22 Oct", _permit_units)
+
     def _mod_double():
         """The MOD fee doubles on an extended day; the note on both MOD lines has to say so."""
         from . import ratecard

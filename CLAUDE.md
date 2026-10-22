@@ -4329,6 +4329,21 @@ shoot needs none), then 10% off the whole quotation.
   confirmation" directly under a note saying 70% deposit. The preset carries the 17 Emergy clauses as
   real terms (flight and safety, permits, payment and cancellation, scope), so the conditions print as
   terms instead of being crammed into the note. Backup `quotation_presets_backup_2026_10_22`.
-- PRICING A MULTI-PROPERTY JOB: one shoot day per PROPERTY, not per session or per course, and one permit
-  application per property because each is a different location. Count the sessions at each property to
-  find which days exceed six hours. Travel allowance (Misc, 1,500/day) on every day outside Dubai.
+- **PERMIT UNITS decide the quantity, and I got them wrong** (Irish corrected the Wasl quotation,
+  22 Oct 2026). Getting the RATE right is not enough: a unit error scales with the job. Rate card
+  **v1.5** now carries the unit on every line, and a regress case locks them:
+  - **PER APPLICATION, always quantity ONE** however many locations or days, because one
+    application covers the whole emirate: Dubai DCAA, Dubai GCAA, Dubai admin, Abu Dhabi GCAA,
+    Abu Dhabi admin.
+  - **PER LOCATION**, count the properties, because a filming permit is issued against a location:
+    Dubai Film and TV Commission, Abu Dhabi NMC.
+  - **PER SHOOT DAY**: Abu Dhabi Department of Transport, and the MOD in both emirates. The MOD
+    DOUBLES on an extended day, so three extended days in an emirate is quantity **6**, not 3.
+  - **PER EMIRATE, once for the whole job**: the twilight risk assessment. Both emirates = 2.
+- **No extended-hours section.** Where the schedule exceeds six hours a day, the AED 2,000 goes on
+  the DAILY RATE in the equipment and crew section, on every such day. The MOD doubling and the
+  risk assessment belong in their own emirate's permit section, so each emirate's permit cost reads
+  as one number. The separate "Extended hours and twilight operations" section is deleted.
+- PRICING A MULTI-PROPERTY JOB: one shoot day per PROPERTY, not per session or per course. Count
+  the sessions at each property to find which days exceed six hours. Travel allowance (Misc,
+  1,500/day) on every day outside Dubai.
