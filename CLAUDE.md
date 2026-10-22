@@ -4287,3 +4287,26 @@ shoot needs none), then 10% off the whole quotation.
   (a VAT-inclusive total) does one line carry the odd amount (`odd_amount` in the result).
 - Rule "PRICES IN HUNDREDS" on Sensa (164) and Sky Vision (165) sales-quotation. Backup
   `quote_hundreds_rules_backup_2026_10_22`. Discount lines (a stated %) are untouched.
+
+## Drone quotations price themselves (owner, 22 Oct 2026)
+
+- The house template is Sky Vision quotation **2026-09-0238 (Emergy, 21 Sep 2026)**, library doc 643: gear
+  (Inspire 3 AED 9,000 or Mavic Cine pair 6,000, client picks one), crew (licensed operator 6,000 +
+  assistant 3,000), permit fees as separate at-cost lines, post. Its terms carry the operating limits:
+  **6 hours per day inclusive of travel**, max three locations a day at the MOD attendee's discretion,
+  **4 to 5 week permit lead time**, 70% deposit or the full permit cost whichever is greater, permit fees
+  non-refundable, property-owner NOCs excluded.
+- Sky Vision rate card **v1.2** (v1.1 kept) now carries the money: group `Drone permits, Dubai` (at cost,
+  from the Emergy quotation: Film & TV 500, DCAA 3,020, GCAA 1,000, MOD 2,500, admin 3,000), group
+  `Drone permits, Abu Dhabi` (at cost, owner-stated: NMC 500, MOD 2,500, GCAA 1,000, Department of
+  Transport **500 PER SHOOT DAY**, admin 3,000), and `Drone operational charges`:
+  `drone-extended-hours` AED 2,000 a day beyond six hours, `drone-risk-assessment-twilight` AED 2,000 for
+  any flight before sunrise or after sunset. The two package rates were keyed so they can finally be
+  priced: `drone-day-light` 19,700, `drone-day-dual-full-permits` 35,600.
+- The LOGIC is a rule, not code: "DRONE QUOTATION RULES" on Sky Vision `sales-quotation` (backup
+  `skyvision_quotation_rules_backup_2026_10_22`). Emirate decides the permit set, NEVER substitute Dubai
+  rates for Abu Dhabi, permits always separate lines at cost, confirm what a package already includes so
+  nothing is charged twice, and an unconfirmed authority fee is FLAGGED, never invented.
+- OPEN, and it is a real cost: he said verbally that a shoot beyond six hours DOUBLES the MOD fee to
+  5,000 for a twelve-hour day. His written rules mention only the AED 2,000 extended-hours charge and say
+  nothing about the MOD. The doubling is not on the card until he confirms it.
