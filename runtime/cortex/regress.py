@@ -1781,6 +1781,8 @@ def _cases():
     case("both Ministry of Defence lines carry the extended-day doubling",
          "MOD doubling unrecorded 22 Oct", _mod_double)
 
+    case("a watch session whose log entry was deleted is not served to the burn", "false start 22 Oct",
+         lambda: "c.deleted and c.watch->>'uid' = hs.uid" in inspect.getsource(_fit))
     case("every health check query runs", "invariants", _invariants)
     return C
 

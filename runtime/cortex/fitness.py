@@ -316,7 +316,11 @@ def health_pull(days: int = 400) -> dict:
           "kcal": _num(r["kcal"]), "avgHR": _num(r["avg_hr"]), "maxHR": _num(r["max_hr"]),
           "minHR": _num(r["min_hr"]), "distanceM": _num(r["distance_m"]), "steps": _num(r["steps"]),
           "minutes": round((r["end_at"] - r["start_at"]).total_seconds() / 60, 1), "source": r["source"]}
-         for r in db.query("select * from fitness.health_sessions where day > current_date - %s "
+         # A watch session whose log entry he DELETED (a false start, 22 Oct 2026) leaves the burn and the glucose
+         # chart: deleted entry for it, and no live entry (a copy-and-tombstone fix keeps one live) -> not served.
+         for r in db.query("select * from fitness.health_sessions hs where day > current_date - %s "
+                           "and not (exists (select 1 from fitness.cardio_sessions c where c.deleted and c.watch->>'uid' = hs.uid) "
+                           "and not exists (select 1 from fitness.cardio_sessions c where not c.deleted and c.watch->>'uid' = hs.uid)) "
                            "order by start_at", (days,))]
     w = [{"at": r["at"].isoformat(), "date": r["at"].date().isoformat(), "kg": _num(r["kg"]),
           "bodyFatPct": _num(r["body_fat_pct"])}
