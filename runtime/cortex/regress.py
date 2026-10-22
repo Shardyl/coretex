@@ -1766,7 +1766,8 @@ def _cases():
         from . import ratecard
         idx = ratecard.index("skyvision")
         got = [idx.get(k) for k in ("dxb-ministry-of-defence", "auh-mod")]
-        return all(g and g["rate"] == 2500 and "5,000" in (g.get("note") or "") for g in got)
+        return all(g and g["rate"] == 2500 and "DOUBLED" in (g.get("note") or "")
+                   and "extended" in (g.get("note") or "") for g in got)
 
     case("both Ministry of Defence lines carry the extended-day doubling",
          "MOD doubling unrecorded 22 Oct", _mod_double)
