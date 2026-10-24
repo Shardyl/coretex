@@ -312,10 +312,10 @@ def health_pull(days: int = 400) -> dict:
            "hr": _num(r["hr"]), "hrv": _num(r["hrv"]), "resp": _num(r["resp"])}
           for r in db.query("select * from fitness.sleep_8 where day > current_date - %s order by day", (days,))]
     s = [{"id": r["uid"], "date": r["day"].isoformat(), "start": r["start_at"].isoformat(),
-          "end": r["end_at"].isoformat(), "type": r["type"], "typeName": r["type_name"], "title": r["title"],
-          "kcal": _num(r["kcal"]), "avgHR": _num(r["avg_hr"]), "maxHR": _num(r["max_hr"]),
+          "end": _trim(r)[0].isoformat(), "type": r["type"], "typeName": r["type_name"], "title": r["title"],
+          "kcal": _trim(r)[1], "avgHR": _num(r["avg_hr"]), "maxHR": _num(r["max_hr"]),
           "minHR": _num(r["min_hr"]), "distanceM": _num(r["distance_m"]), "steps": _num(r["steps"]),
-          "minutes": round((r["end_at"] - r["start_at"]).total_seconds() / 60, 1), "source": r["source"]}
+          "minutes": _trim(r)[2], "trimmed": bool(r.get("trim_min")), "source": r["source"]}
          # A watch session whose log entry he DELETED (a false start, 22 Oct 2026) leaves the burn and the glucose
          # chart: deleted entry for it, and no live entry (a copy-and-tombstone fix keeps one live) -> not served.
          for r in db.query("select * from fitness.health_sessions hs where day > current_date - %s "
@@ -362,6 +362,18 @@ def _sleep_vals(r: dict) -> list:
     n = _num(r.get("day_hr_samples"))
     v += [int(n) if n is not None else None, _num(r.get("day_hr_gap_s"))]
     return v
+
+
+def _trim(r):
+    """A session he cut short after the fact (owner, 24 Oct 2026: the watch timer left running after weights).
+    `health_sessions.trim_min` is his figure; the Bridge's upsert never touches it, so it survives every re-sync.
+    End = start + trim; kcal scaled pro rata to the minutes kept (the watch gives no per-minute burn)."""
+    full = (r["end_at"] - r["start_at"]).total_seconds() / 60
+    t = _num(r.get("trim_min"))
+    if not t or t >= full or full <= 0:
+        return r["end_at"], _num(r["kcal"]), round(full, 1)
+    k = _num(r["kcal"])
+    return r["start_at"] + timedelta(minutes=t), (round(k * t / full, 1) if k is not None else None), round(t, 1)
 
 
 def ingest_health(doc: dict) -> dict:

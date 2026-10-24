@@ -1783,6 +1783,9 @@ def _cases():
 
     case("a watch session whose log entry was deleted is not served to the burn", "false start 22 Oct",
          lambda: "c.deleted and c.watch->>'uid' = hs.uid" in inspect.getsource(_fit))
+    case("a trimmed watch session serves the trimmed minutes and pro-rata kcal", "timer left on 22 Oct",
+         lambda: (lambda r: r[2] == 50 and r[1] == 400.0)(_fit._trim({"start_at": __import__("datetime").datetime(2026,10,22,12,31),
+             "end_at": __import__("datetime").datetime(2026,10,22,13,31), "kcal": 480, "trim_min": 50})))
     case("every health check query runs", "invariants", _invariants)
     return C
 
