@@ -4357,3 +4357,21 @@ shoot needs none), then 10% off the whole quotation.
 - PRICING A MULTI-PROPERTY JOB: one shoot day per PROPERTY, not per session or per course. Count
   the sessions at each property to find which days exceed six hours. Travel allowance (Misc,
   1,500/day) on every day outside Dubai.
+
+## A step for someone else goes to them, or is a To do; the greeting must match the To line (card 1471, 25 Oct 2026)
+- CAUSE: next step #143 "Message Colonel Ebrahim at Dubai Police directly to find out where the submitted BAFO stands"
+  (our own promise to Shehryar) fell due and `nextsteps._draft_email` addressed it, like every email step, to the
+  deal's lead (Shehryar at EY, on the EY thread, the deal cc on it). The writer greeted "Dear Colonel Ibrahim".
+  `_greeting_mismatch` read "Colonel" as the name and only ever blocked a name it knew, so nothing caught it.
+- `nextsteps.route_for(it, lead)` runs before any email step is drafted: `personal_channel` (directly, a call,
+  WhatsApp, in person; never when the step starts "Email ..."/"Write to ...") -> a To do card for the owner, saying
+  why; `named_people` (a title and a name, or a capitalised name after the verb) matched with spelling forgiven
+  (`name_like`, Ebrahim = Ibrahim) against the deal's contacts, cast and the CRM at its account: the lead -> the normal
+  email; one other person with an address -> the email goes TO them, on their own conversation, `no_deal_cc` (nobody
+  else from the deal copied); no address, several matches, or one of our own team -> a To do. The client organisation
+  named in a step ("Ask Dubai Police for ...") is not a person. `add()` files a personal-channel step as work, never
+  email.
+- `_greeting_mismatch`: titles are skipped (`nextsteps.TITLES`), so "Dear Colonel Ibrahim" greets Ibrahim; when the
+  recipient's name is known (card or CRM), a greeted name sharing nothing with it is blocked even if it is in no
+  record. Forgiven: spelling (`name_like`), nicknames keeping the first two letters (Kostas / Konstantinos), and any
+  name in the owner's own words on the card (corrections, his brief). No name for the recipient = never blocked.

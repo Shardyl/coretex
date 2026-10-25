@@ -109,6 +109,157 @@ _EMAIL_STEP = re.compile(r"^\s*(?:e-?mail|write to|reply to|respond to|message|w
                          re.I)
 
 
+# A STEP FOR A PERSON IS DONE WITH THAT PERSON (Dubai Police card 1471, 25 Oct 2026). "Message Colonel Ebrahim at
+# Dubai Police directly to find out where the submitted BAFO stands" was drafted to the opportunity's lead, Shehryar
+# at EY, and greeted "Dear Colonel Ibrahim". Two rules, both code:
+#   1. a step that says how the owner reaches someone HIMSELF (directly, a call, WhatsApp, in person) is a To do
+#      for him, never an email;
+#   2. a step that names someone other than the lead is written to THAT person, on their own conversation, with
+#      nobody else from the deal copied; a person Cortex has no address for, or one of our own team, is a To do.
+_PERSONAL_CHANNEL = re.compile(
+    r"^\s*(?:call|ring|phone|whatsapp|visit|meet)\b"
+    r"|\b(?:directly|in person|face[- ]to[- ]face|(?:on|via|by|over) whatsapp|whatsapp (?:him|her|them)|"
+    r"by phone|over the phone|on the phone|give (?:\w+\s+){1,3}a (?:call|ring)|pick up the phone)\b", re.I)
+_WRITE_VERB = re.compile(r"^\s*(?:e-?mail|write to|reply to)\b", re.I)
+TITLES = {"colonel", "col", "lt", "lieutenant", "major", "maj", "captain", "capt", "brigadier", "brig", "general",
+          "gen", "mr", "mrs", "ms", "miss", "dr", "doctor", "eng", "engr", "engineer", "sheikh", "sheikha", "shaikh",
+          "prof", "professor", "excellency", "sir", "dame", "madam", "ustaz", "ustadh"}
+_TITLE_RX = "|".join(sorted(TITLES, key=len, reverse=True))
+_NAME_AFTER = re.compile(r"(?i:\b(?:message|e-?mail|write to|reply to|ask|contact|follow up with|chase|thank|invite|"
+                         r"remind|let|tell|update|send|confirm (?:with|to)|check (?:in )?with|reach out to|speak to|"
+                         r"talk to|call|ring|whatsapp|meet)\s+)((?:[A-Z][\w'\-]*\.?\s+){0,3}[A-Z][\w'\-]*)")
+_TITLED = re.compile(r"(?i:\b(?:" + _TITLE_RX + r")\.?\s+)([A-Z][\w'\-]+(?:\s+[A-Z][\w'\-]+)?)")
+_NOT_NAMES = {"the", "our", "their", "a", "an", "to", "and", "of", "re", "monday", "tuesday", "wednesday", "thursday",
+              "friday", "saturday", "sunday", "january", "february", "march", "april", "may", "june", "july",
+              "august", "september", "october", "november", "december", "ai", "vo", "rfp", "rfq", "bafo", "pdf"}
+
+
+def personal_channel(what: str) -> bool:
+    """The step is done by the owner himself (a call, WhatsApp, in person, 'directly'), never by an email."""
+    w = what or ""
+    return not _WRITE_VERB.match(w) and bool(_PERSONAL_CHANNEL.search(w))
+
+
+def named_people(what: str) -> list[tuple[str, bool]]:
+    """The people a step names, by code: a title and a name ('Colonel Ebrahim'), or a capitalised name after the
+    verb ('Message Luna', 'follow up with Shehryar Rahman'). [(name words, titled)]; titles stripped."""
+    out, seen = [], set()
+    for m in _TITLED.finditer(what or ""):
+        nm = m.group(1).strip()
+        if nm.lower() not in seen:
+            seen.add(nm.lower())
+            out.append((nm, True))
+    for m in _NAME_AFTER.finditer(what or ""):
+        ws = m.group(1).replace(".", " ").split()
+        titled = any(x.lower() in TITLES for x in ws)
+        ws = [x for x in ws if x.lower() not in TITLES]
+        nm = " ".join(ws).strip()
+        if nm and nm.lower() not in seen and not all(x.lower() in _NOT_NAMES for x in ws):
+            seen.add(nm.lower())
+            out.append((nm, titled))
+    return out
+
+
+def _norm(s: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFKD", str(s or "").lower()) if not unicodedata.combining(c))
+
+
+def name_like(a: str, b: str) -> bool:
+    """One name word against another, forgiving spelling (Ebrahim / Ibrahim, Shehryar / Sheryar)."""
+    import difflib
+    a, b = re.sub(r"[^a-z]", "", _norm(a)), re.sub(r"[^a-z]", "", _norm(b))
+    if len(a) < 2 or len(b) < 2:
+        return False
+    return (a == b or (len(a) >= 5 and len(b) >= 5 and a[:5] == b[:5])
+            or (min(len(a), len(b)) >= 4 and difflib.SequenceMatcher(None, a, b).ratio() >= 0.8))
+
+
+def _people_on(deal_id: int) -> list[dict]:
+    """Everyone on the client's side of this opportunity Cortex knows: the deal's contacts, its cast, and the CRM
+    at the deal's account. [{name, email}]"""
+    p = db.one("select contacts, contact_email, account_id from crm_projects where id=%s", (int(deal_id),)) or {}
+    out = {}
+    for c in p.get("contacts") or []:
+        em = (c.get("email") or "").lower()
+        out[em or ("name:" + str(c.get("name") or ""))] = {"name": c.get("name") or "", "email": em}
+    try:
+        from . import cast
+        for t in (cast.get(deal_id) or {}).get("their") or []:
+            em = (t.get("email") or "").lower()
+            if em and (em not in out or not out[em]["name"]):
+                out[em] = {"name": t.get("name") or (out.get(em) or {}).get("name") or "", "email": em}
+    except Exception:  # noqa: BLE001
+        pass
+    if p.get("account_id"):
+        for r in db.query("select email, first_name, last_name from crm_master where account_id=%s limit 200",
+                          (p["account_id"],)):
+            em = (r.get("email") or "").lower()
+            nm = " ".join(x for x in (r.get("first_name"), r.get("last_name")) if x).strip()
+            if em and (em not in out or not out[em]["name"]):
+                out[em] = {"name": nm, "email": em}
+    for em, v in out.items():     # a contact listed by address only takes its CRM name
+        if "@" in em and not v["name"]:
+            r = db.one("select first_name, last_name from crm_master where lower(email)=%s", (em,)) or {}
+            v["name"] = " ".join(x for x in (r.get("first_name"), r.get("last_name")) if x).strip()
+    return list(out.values())
+
+
+def _org_words(deal_id: int) -> set:
+    p = db.one("select p.title, p.company, a.name acct from crm_projects p left join crm_accounts a on a.id=p.account_id "
+               "where p.id=%s", (int(deal_id),)) or {}
+    return {w for w in re.split(r"[^a-z]+", _norm(" ".join(str(p.get(k) or "") for k in ("title", "company", "acct"))))
+            if len(w) >= 2}
+
+
+def route_for(it: dict, lead: str = "") -> tuple[str, dict]:
+    """How an OURS email step gets done: ('lead', {}) the ordinary email to the lead; ('person', {name, email}) an
+    email to the person the step names, on their own conversation; ('todo', {why}) a To do for the owner."""
+    what = it.get("what") or ""
+    if personal_channel(what):
+        return "todo", {"why": "This one is for you to do yourself (a call, WhatsApp or in person), so Cortex did "
+                               "not write an email."}
+    names = named_people(what)
+    if not names:
+        return "lead", {}
+    team = {}
+    try:
+        from . import cast
+        team = cast._team()
+    except Exception:  # noqa: BLE001
+        pass
+    orgw = _org_words(it["deal_id"])
+    people = _people_on(it["deal_id"])
+    lead = (lead or "").lower()
+    for nm, titled in names:
+        ws = [w for w in nm.split() if w.lower() not in _NOT_NAMES]
+        if not ws:
+            continue
+        if any(name_like(w, t) for w in ws for v in team.values() for t in str(v).split()[:1]):
+            return "todo", {"why": f"The step names {nm}, one of our own team, so it is not an email to the client."}
+        hits = [p for p in people if any(name_like(w, t) for w in ws for t in re.split(r"[\s.\-]+", p["name"]) if t)]
+        if hits:
+            if any(p["email"] == lead for p in hits):
+                continue
+            mails = {p["email"] for p in hits if "@" in p["email"]}
+            if len(mails) == 1:
+                p = next(p for p in hits if p["email"] in mails)
+                return "person", {"name": p["name"] or nm, "email": p["email"]}
+            if len(mails) > 1:
+                return "todo", {"why": f"The step names {nm}, and more than one person on this opportunity could be "
+                                       "meant, so Cortex did not guess who to email."}
+            return "todo", {"why": f"The step is for {nm}, and Cortex has no email address for them, so it did not "
+                                   "write it to anyone else."}
+        if all(_norm(w) in orgw for w in ws) or (not titled and all(w.isupper() and len(w) <= 5 for w in ws)):
+            continue          # the client organisation, not a person ("Ask Dubai Police for ...")
+        known_first = titled or bool(db.one("select 1 from crm_master where lower(first_name)=%s limit 1",
+                                            (_norm(ws[0]),)))
+        if known_first:
+            return "todo", {"why": f"The step is for {nm}, who is not on this opportunity with an email address, so "
+                                   "Cortex did not write it to anyone else."}
+    return "lead", {}
+
+
 def tool_for(what: str) -> str | None:
     """The Talk tool that does the step: the FIRST work word in it decides ("Prepare the two quotations ... covering
     concept" is a quotation, not treatments: RAFED DAWAK, 20 Oct 2026)."""
@@ -208,6 +359,8 @@ def add(deal_id: int, what: str, *, whose: str = "us", kind: str | None = None, 
                                                                       r"[^.]{0,40}\b(?:proposal|quotation|deck|treatment)",
                                                                       what, re.I):
         kind = "email"
+    if kind == "email" and personal_channel(what):
+        kind = "work"     # "Message Colonel Ebrahim directly": the owner does it himself (card 1471)
     row = db.execute(
         "insert into next_steps (deal_id, company_id, what, whose, kind, tool, due_at, source, quote, then_what) "
         "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *",
@@ -498,7 +651,7 @@ def _todo_notice(it: dict) -> None:
             else (f"Due {due.astimezone(_GST):%a %d %b}" if due else "No date"))
     notifications.notify(
         f"To do: {it['what']}"[:150],
-        f"{it['deal_title']}. {when}." + (f" {say}." if say else ""),
+        f"{it['deal_title']}. {when}." + (f" {say}." if say else "") + (f" {it['_why']}" if it.get("_why") else ""),
         priority="normal", category="todo", company_id=it.get("company_id"),
         target_type="deal", target_id=it["deal_id"], dedup_key=f"nextstep:{it['id']}")
     db.execute("update next_steps set notified_at=now() where id=%s", (it["id"],))
@@ -549,12 +702,23 @@ def _draft_email(it: dict) -> bool:
         lead = cast.lead(it["deal_id"]) or ""
     except Exception:  # noqa: BLE001
         lead = ""
+    route, info = route_for(it, lead)
+    if route == "todo":
+        it["_why"] = info.get("why") or ""
+        _log(it["id"], f"due: a To do, not an email ({it['_why'][:160]})")
+        return False                      # tick raises the To do card
+    person = info if route == "person" else None
     req = {"brief": (f"NEXT STEP ON THIS OPPORTUNITY, now due: {it['what']}. Write the email that does exactly this "
                      "(a call: propose specific times from the availability list; a document we hold or an answer: give "
                      "it). Do not re-promise it, do not apologise at length, do not add a chase."
+                     + (f" This email is to {person['name']} ({person['email']}) ONLY, on their own conversation: write "
+                        "to them by name, about exactly this step." if person else "")
                      + (f" It comes from: \"{it['quote'][:300]}\"" if it.get("quote") else "")),
            "next_step": it["id"], "system_note": f"From next step #{it['id']}.",
-           "inquiry": {"name": "", "email": lead, "subject": ""} if lead else {}}
+           "inquiry": ({"name": person["name"], "email": person["email"], "subject": ""} if person
+                       else {"name": "", "email": lead, "subject": ""} if lead else {})}
+    if person:
+        req["no_deal_cc"] = True          # their own conversation: nobody else from the deal is copied
     req = reminders._with_deal({"target_type": "deal", "target_id": it["deal_id"], "title": it["what"]}, "email_reply", req)
     if "@" not in ((req.get("inquiry") or {}).get("email") or ""):
         return False

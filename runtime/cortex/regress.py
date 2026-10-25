@@ -1042,6 +1042,27 @@ def _cases():
     case("nothing books into a busy slot; an in-person meeting gets no Meet link and no invite", "DSO card 1422, 22 Oct",
          _no_busy_booking)
 
+    def _step_for_a_person():
+        from . import nextsteps as ns
+        step = "Message Colonel Ebrahim at Dubai Police directly to find out where the submitted BAFO stands"
+        to_ey = {"inquiry": {"name": "Shehryar Rahman", "email": "shehryar@nonexistent-regress.test"}}
+        return (ns.personal_channel(step)
+                and not ns.personal_channel("Email Luna to propose another call to go through the proposal")
+                and not ns.personal_channel("Email Alex directly with the revised deck")
+                and ns.personal_channel("WhatsApp Shahnawaz about the shoot date")
+                and ("Ebrahim", True) in ns.named_people(step)
+                and ns.named_people("Email Luna to propose another call")[:1] == [("Luna", False)]
+                and ns.name_like("Ebrahim", "Ibrahim") and not ns.name_like("Ibrahim", "Shehryar")
+                and bool(engine._greeting_mismatch("Dear Colonel Ibrahim,\n\nI hope you are well.", to_ey))
+                and not engine._greeting_mismatch("Dear Shehryar,\n\nThanks.", to_ey)
+                and not engine._greeting_mismatch("Hi Kostas,\n\nThanks.",
+                                                  {"inquiry": {"name": "Konstantinos Kanellaidis", "email": "k@x.test"}})
+                and not engine._greeting_mismatch("Dear Colonel Ibrahim,", {"inquiry": {"email": "a@x.test"}})
+                and "personal_channel(what)" in inspect.getsource(ns.add)
+                and "route_for(it, lead)" in inspect.getsource(ns._draft_email))
+    case("a step for someone else is done with them, or is a To do; a greeting must match the To line",
+         "Dubai Police card 1471, 25 Oct", _step_for_a_person)
+
     def _owner_ask_kept():
         said = ("Yes. This is good. You can confirm that you're avail happy to meet. However, if you could kindly ask if "
                 "it's possible, we could do the call on the following meeting link. And then say, if not, it's okay. "

@@ -3599,8 +3599,8 @@ _ATTACH_CLAIM = re.compile(
     r"|enclosed\s+(?:is|are|please)|(?:i|we)\s+attach\b|attaching\s+(?:our|the|a|both|it|them))", re.I)
 
 
-_GREET = re.compile(r"^\s*(?:hello|hi|hey|dear|good\s+(?:morning|afternoon|evening))[\s,]+([A-Za-z][\w'\-]*)",
-                    re.I)
+_GREET = re.compile(r"^\s*(?:hello|hi|hey|dear|good\s+(?:morning|afternoon|evening))[\s,]+"
+                    r"([A-Za-z][\w'\-.]*(?:[ \t]+[A-Za-z][\w'\-.]*){0,3})", re.I)
 _GENERIC_GREET = {"all", "team", "there", "everyone", "both", "sir", "madam", "sirs", "colleagues", "friends",
                   "guys", "folks", "again"}
 
@@ -3614,22 +3614,40 @@ def _greeting_mismatch(draft: str, req: dict) -> str:
     mm = _GREET.match(first)
     if not mm:
         return ""
-    g = mm.group(1).lower()
-    if g in _GENERIC_GREET or len(g) < 2:
+    from . import nextsteps as _ns
+    # TITLES ARE NOT NAMES (card 1471): "Dear Colonel Ibrahim" greets Ibrahim, not "Colonel"
+    words = [w.strip(".") for w in mm.group(1).split() if w.strip(".")]
+    while words and words[0].lower() in _ns.TITLES:
+        words.pop(0)
+    if not words:
+        return ""
+    gname = words[0]
+    g = _ns._norm(gname)
+    if g in _GENERIC_GREET or g in {"and", "to", "or"} or len(g) < 2:
         return ""
     req = req or {}
     inq = req.get("inquiry") or {}
     to = [inq.get("email") or ""] + [str(x) for x in (req.get("to_extra") or [])]
-    for h in [(inq.get("name") or "").lower()] + [t.split("@")[0].lower() for t in to]:
-        if g in re.split(r"[^a-z]+", h) or (len(g) >= 3 and g in re.sub(r"[^a-z]+", "", h)):
-            return ""
+    names_to = [inq.get("name") or ""]
     try:   # THE RECIPIENT'S OWN CRM NAME counts even when the card carries no name (card 745: "Hello Antonio"
         # to contact@antonientertainment.com, whose CRM record is Antonio Rosello, was blocked as WRONG PERSON)
-        own = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (inq.get("email") or "",))
-        if own and g in re.split(r"[^a-z]+", f"{own.get('first_name') or ''} {own.get('last_name') or ''}".lower()):
-            return ""
+        for t in to:
+            own = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (t,)) if "@" in t else None
+            if own:
+                names_to.append(f"{own.get('first_name') or ''} {own.get('last_name') or ''}")
     except Exception:  # noqa: BLE001
         pass
+    for h in names_to + [t.split("@")[0] for t in to]:
+        h = _ns._norm(h)
+        if (g in re.split(r"[^a-z]+", h) or (len(g) >= 3 and g in re.sub(r"[^a-z]+", "", h))
+                or any(_ns.name_like(g, t) for t in re.split(r"[^a-z]+", h) if t)):
+            return ""
+    _named_to = [t for h in names_to for t in re.split(r"[^a-z]+", _ns._norm(h)) if len(t) >= 2]
+    # HIS WORDS WIN: a name he gave on this card ("greet him as Bob") is never blocked
+    _his = " ".join(str(x or "") for x in (req.get("card_corrections"), req.get("pending_instruction"),
+                                          _CORRECTION_NOW.get(), "" if req.get("system_note") else req.get("brief")))
+    if g in re.split(r"[^a-z]+", _ns._norm(_his)):
+        return ""
     known = any(g in re.split(r"[^a-z]+", str(a).split("@")[0].lower())
                 for a in (req.get("thread_cc") or []) + (req.get("cc_extra") or []))
     try:
@@ -3644,8 +3662,12 @@ def _greeting_mismatch(draft: str, req: dict) -> str:
     except Exception:  # noqa: BLE001
         pass
     if not known:
-        return ""
-    return (f"it greets '{mm.group(1)}' but it is addressed to {inq.get('name') or inq.get('email')} "
+        # A GREETING TO SOMEONE WHO IS NOT ON THE TO LINE IS WRONG, KNOWN OR NOT (card 1471, 25 Oct 2026): when we know
+        # the recipient's name, a greeted name sharing nothing with it is blocked. Nicknames that keep the first two
+        # letters (Kostas / Konstantinos) pass; with no name for the recipient, nothing is blocked.
+        if not _named_to or any(g[:2] == t[:2] for t in _named_to):
+            return ""
+    return (f"it greets '{mm.group(1).strip()}' but it is addressed to {inq.get('name') or inq.get('email')} "
             f"({inq.get('email')})")
 
 
@@ -6420,8 +6442,9 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
             manifest.append(f"card_corrections({len(_cn)})")
     except Exception:  # noqa: BLE001
         pass
-    try:   # EVERYONE ON THE DEAL STAYS COPIED: the deal's whole cast rides every email on it (24 Sep 2026)
-        _dcc = _deal_participants(task["company_id"], task.get("deal_id") or req.get("deal_id"), email)
+    try:   # EVERYONE ON THE DEAL STAYS COPIED: the deal's whole cast rides every email on it (24 Sep 2026); not on
+        # an email a next step writes to one named person on their own conversation (card 1471)
+        _dcc = [] if req.get("no_deal_cc") else _deal_participants(task["company_id"], task.get("deal_id") or req.get("deal_id"), email)
         if _dcc:
             req["deal_cc"] = _dcc
             manifest.append(f"deal_cc({len(_dcc)})")
