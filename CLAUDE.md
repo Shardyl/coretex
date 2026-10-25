@@ -33,6 +33,14 @@ Hetzner box `cortex-1`. Read this before touching anything.
   day-to-day, so remembered passwords drift (bit Gino 25 Aug 2026). Cockpit demo mode
   (passcode `demo`, sample data) was removed the same day — no unauthenticated entry.
 
+## The nightly backup (fixed 25 Oct 2026)
+- `runtime/backup_drive.py` (cron 03:00 UTC as cortex, log `/opt/coretex/backup.log`): pg_dump + knowledge tar to
+  Drive folder `1oEKRo6...`, keep 30. NO BACKUP REACHED DRIVE 23 to 25 Oct: the upload read the whole 1.5 GB archive into
+  memory (OOM-killed 23 Oct before its cleanup), leftovers filled the 3.8 GB `/tmp` tmpfs, the next runs died with "no
+  space left" (and /tmp being full broke PDF builds too). Now: work dir `/var/tmp/cortex-backup` (real disk), dump
+  streamed through gzip, resumable upload in 32 MB chunks, leftovers cleared at start, success stamps setting
+  `backup_last_ok`; health check `backup_not_reaching_drive` (36 h) raises a notice. Never write big files to /tmp.
+
 ## Start of every session: the repeating-fault list (owner, 18 Oct 2026)
 
 Run `ssh cortex "cd /opt/coretex/runtime && sudo -u cortex /opt/coretex/.venv/bin/python -m cortex.invariants repeats"`.

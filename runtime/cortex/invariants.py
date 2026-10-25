@@ -141,6 +141,15 @@ CHECKS = [
                "and coalesce(cadence->>'name','') <> 'revival'",
     },
     {
+        "key": "backup_not_reaching_drive",
+        "what": "No nightly backup has reached Google Drive in the last 36 hours (backup_drive.py stamps backup_last_ok)",
+        "owner": {"title": "Cortex backup has not reached Drive",
+                  "body": "The nightly database and knowledge backup has not uploaded to Google Drive for over 36 hours. "
+                          "Check /opt/coretex/backup.log on the box."},
+        "sql": "select 1 as id where coalesce((select (value#>>'{}')::timestamptz from settings "
+               "where key='backup_last_ok'), 'epoch'::timestamptz) < now() - interval '36 hours'",
+    },
+    {
         "key": "opportunity_without_contact",
         "what": "An open opportunity has no designated contact (no email and no phone)",
         "owner": {"deal": "id",
