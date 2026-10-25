@@ -1787,7 +1787,7 @@ def _cases():
          lambda: (lambda r: r[2] == 50 and r[1] == 400.0)(_fit._trim({"start_at": __import__("datetime").datetime(2026,10,22,12,31),
              "end_at": __import__("datetime").datetime(2026,10,22,13,31), "kcal": 480, "trim_min": 50})))
     case("the nightly backup streams to disk and uploads in chunks", "backup OOM 23 Oct",
-         lambda: (lambda b: "uploadType=resumable" in b and "/tmp/" not in b and "backup_last_ok" in b)(
+         lambda: (lambda b: "uploadType=resumable" in b and 'f"/tmp/' not in b and "backup_last_ok" in b)(
              open(__import__("os").path.join(__import__("os").path.dirname(__import__("os").path.dirname(
                  __import__("os").path.abspath(__file__))), "backup_drive.py"), encoding="utf-8").read()))
     case("every health check query runs", "invariants", _invariants)
