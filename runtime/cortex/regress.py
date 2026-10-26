@@ -1822,6 +1822,9 @@ def _cases():
     case("a storyboard voice over is printed only from the owner's words or a deal document", "Qabilah storyboards 26 Oct",
          lambda: _sb.vo_source("The door is open.", 'use "The door is open." at the end', None) == "the owner's words"
          and _sb.vo_source("A line nobody wrote", "make it heartfelt", None) is None)
+    case("a storyboard's 9:16 cut is reframed on the subject and stays inside the frame", "Majlis shot 9 bottle cut",
+         lambda: _sb.StoryboardDeck._window(5)[0] == 0 and _sb.StoryboardDeck._window(95)[0] == 360 - 114
+         and _sb.StoryboardDeck._window(50)[0] == 123 and _sb._x("x") == 50)
     return C
 
 

@@ -149,7 +149,9 @@ def _rules(co: dict) -> str:
 
 _SHOT_SCHEMA = ('{"shots": [{"n": 1, "action": "what HAPPENS in this shot, present tense, at most 16 words", '
                 '"camera": "the camera, at most 8 words (e.g. slow push in, locked off macro)", '
-                '"sound": "what we hear, at most 8 words"}]}')
+                '"sound": "what we hear, at most 8 words", '
+                '"x": "where the main subject sits across the frame, 0 (left edge) to 100 (right edge), so the 9:16 '
+                'vertical cut is reframed on it"}]}')
 
 
 def write_notes(co: dict, film: str, frames: list[str], times: list[tuple[int, int]], *, vo: str = "",
@@ -186,17 +188,40 @@ def write_notes(co: dict, film: str, frames: list[str], times: list[tuple[int, i
         for i in chunk:
             s = got.get(i + 1) or {}
             shots.append({"n": i + 1, "action": _clean(s.get("action")), "camera": _clean(s.get("camera")),
-                          "sound": _clean(s.get("sound"))})
-    framing = provider.think_json(
-        sysmsg, f"FILM: {film}.\n" + (f"CONTEXT:\n{context[:3000]}\n" if context else "")
-        + "SHOTS:\n" + "\n".join(f"{s['n']}. {s['action']}" for s in shots)
-        + '\n\nJSON: {"line": "one sentence for the cover saying what the film is, at most 22 words", '
-          '"note": "one short footnote for the cover saying the frames illustrate the look and flow and are not '
-          'final, at most 20 words", "approve": "one sentence for the last page asking for their notes, at most '
-          '24 words"}',
-        fast=False, model=MODEL, max_tokens=4000, purpose="storyboard-framing", company=co.get("slug"))
-    return {"shots": shots, "line": _clean(framing.get("line")), "note": _clean(framing.get("note")),
-            "approve": _clean(framing.get("approve"))}
+                          "sound": _clean(s.get("sound")), "x": _x(s.get("x"))})
+    return {"shots": shots, **framing(co, film, shots, context)}
+
+
+def framing(co: dict, film: str, shots: list[dict], context: str = "") -> dict:
+    """The three short lines around the shots: the cover line, the cover footnote, the closing ask. One retry when
+    a key comes back empty (Majlis dry run, 26 Oct 2026: the first call returned none of them)."""
+    ask = (f"FILM: {film}.\n" + (f"CONTEXT:\n{context[:3000]}\n" if context else "")
+           + "SHOTS:\n" + "\n".join(f"{s['n']}. {s['action']}" for s in shots)
+           + '\n\nWrite three lines for the storyboard document. JSON with exactly these keys: '
+             '{"line": "one sentence for the cover saying what the film is, at most 22 words", '
+             '"note": "one short footnote for the cover: the frames show the look and the flow, the final film is '
+             'made from them, at most 20 words", "approve": "one sentence for the last page asking for their notes '
+             'on this storyboard by email, at most 24 words"}')
+    sysmsg = ("You write the short framing lines of a film storyboard a client will approve. Plain British English, "
+              "no dashes, no hype, never a date, price or name.\n\nSTANDING RULES:\n" + _rules(co))
+    out: dict = {}
+    for _ in range(2):
+        got = provider.think_json(sysmsg, ask, fast=False, model=MODEL, max_tokens=4000,
+                                  purpose="storyboard-framing", company=co.get("slug"))
+        out.update({k: _clean(got.get(k)) for k in ("line", "note", "approve") if got.get(k)})
+        if all(out.get(k) for k in ("line", "note", "approve")):
+            break
+        print(f"[storyboard] framing came back without {[k for k in ('line', 'note', 'approve') if not out.get(k)]}: "
+              f"{str(got)[:300]}", flush=True)
+    return {k: out.get(k, "") for k in ("line", "note", "approve")}
+
+
+def _x(v) -> int:
+    """The subject's position across the frame, 0 to 100; the centre when the model gave nothing usable."""
+    try:
+        return max(0, min(100, int(round(float(v)))))
+    except (TypeError, ValueError):
+        return 50
 
 
 def _clean(s) -> str:
@@ -224,9 +249,18 @@ _SB_CSS = """
 .sn { display:flex; justify-content:space-between; margin-top:12px; font-size:11px; letter-spacing:2px;
       color:ACCENT; font-weight:600; text-transform:uppercase; }
 .sn span { color:#C4C4CC; letter-spacing:1px; }
-.act { font-size:14.5px; line-height:1.45; color:#EDEDF2; margin-top:7px; font-weight:400; }
+.act { font-size:14px; line-height:1.45; color:#EDEDF2; margin-top:6px; font-weight:400; }
+.sub { display:flex; gap:16px; margin-top:14px; }
+.vc { flex:0 0 113px; }
+.vc img { width:113px; height:200px; object-fit:cover; object-position:center; border-radius:6px; display:block; }
+.vc div { font-size:8.5px; letter-spacing:1.5px; color:#7A7A84; font-weight:600; margin-top:5px; text-align:center; }
+.tx { flex:1; min-width:0; }
+.tx .sn { margin-top:0; }
+.cimgr { position:absolute; top:0; right:0; width:740px; height:720px; object-fit:cover; }
+.cfade { position:absolute; top:0; right:0; width:740px; height:720px;
+         background:linear-gradient(to right, #0A0A0A 0%, rgba(10,10,10,.55) 18%, rgba(10,10,10,0) 42%); }
 .kv { display:flex; gap:10px; margin-top:8px; font-size:12px; line-height:1.4; color:#B4B4BC; }
-.kv b { flex:0 0 64px; font-size:9px; letter-spacing:1.8px; color:#7A7A84; font-weight:600; padding-top:2px;
+.kv b { flex:0 0 58px; font-size:9px; letter-spacing:1.8px; color:#7A7A84; font-weight:600; padding-top:2px;
         text-transform:uppercase; }
 .kv.vo b { color:ACCENT; }
 .kv.vo span { color:#FFFFFF; font-style:italic; font-family:Poppins,sans-serif; font-size:13px; }
@@ -251,13 +285,14 @@ class StoryboardDeck(deck._Deck):
     def cover(self, kicker, title, sub, line, stats, image, note="", section="Storyboard"):
         st = "".join(f'<div><div class="pk">{deck._esc(s["k"])}</div><div class="pv">{deck._esc(s["v"])}</div></div>'
                      for s in stats[:4])
-        img = f'<img class="full" src="{deck._b64(image)}">' if image else ""
+        # the frame on the RIGHT, the words on black: a full-bleed cover hid the bottle behind the title (Majlis v1 dry run)
+        img = f'<img class="cimgr" src="{deck._b64(image)}"><div class="cfade"></div>' if image else ""
         lg = (f'<img class="logobig" style="position:absolute;top:54px;left:72px;z-index:3" src="{self.logo}">'
               if self.logo else "")
         self.pages.append(
-            f'<div class="pg hero">{img}<div class="hshade"></div>'
+            f'<div class="pg hero">{img}'
             f'<div style="position:absolute;top:0;left:0;width:1280px;height:6px;background:{self.accent}"></div>{lg}'
-            f'<div style="position:absolute;left:72px;top:190px;width:560px"><h3>{deck._esc(kicker)}</h3>'
+            f'<div style="position:absolute;left:72px;top:190px;width:450px"><h3>{deck._esc(kicker)}</h3>'
             f'<div class="rule"></div><h1>{deck._esc(title)}</h1>'
             + (f'<div class="psub" style="margin-top:10px">{deck._esc(sub)}</div>' if sub else "")
             + (f'<p style="margin-top:16px;font-size:17px;color:#DADAE0">{deck._esc(line)}</p>' if line else "")
@@ -265,12 +300,19 @@ class StoryboardDeck(deck._Deck):
             + (f'<div class="cnote">{deck._esc(note)}</div>' if note else "")
             + f'{self._foot(section)}</div>')
 
-    def _crop(self) -> str:
-        """The 9:16 window centred on a 16:9 frame: the outside darkened, its edges dashed."""
+    @staticmethod
+    def _window(x_pct: int) -> tuple[int, int, float]:
+        """The 9:16 window on a 360x203 frame, centred on the subject (x as 0-100), kept inside the frame.
+        Returns (left, width, css object-position %). A centred window cut the bottle in half on Majlis shot 9."""
+        w = round(203 * 9 / 16)
+        left = max(0, min(360 - w, round(x_pct / 100 * 360 - w / 2)))
+        return left, w, left / (360 - w) * 100
+
+    def _crop(self, x_pct: int = 50) -> str:
+        """The 9:16 window on a 16:9 frame, reframed on the subject: the outside darkened, its edges dashed."""
         if self.aspect != "9:16":
             return ""
-        w = round(203 * 9 / 16)
-        x = (360 - w) // 2
+        x, w, _ = self._window(x_pct)
         return (f'<div class="sh" style="left:0;width:{x}px"></div><div class="sh" style="left:{x + w}px;right:0"></div>'
                 f'<div class="ln" style="left:{x}px"></div><div class="ln" style="left:{x + w}px"></div>'
                 f'<div class="ar" style="left:{x + 4}px">9:16</div>')
@@ -285,12 +327,17 @@ class StoryboardDeck(deck._Deck):
         cells = []
         for s in shots:
             vo = (f'<div class="kv vo"><b>Voice over</b><span>{deck._esc(s["vo"])}</span></div>' if s.get("vo") else "")
-            cells.append(
-                f'<div class="shot"><div class="fr"><img src="{deck._b64(s["img"])}">{self._crop()}</div>'
-                f'<div class="sn">Shot {s["n"]:02d}<span>{tc(s["t"][0])} to {tc(s["t"][1])}</span></div>'
-                f'<div class="act">{deck._esc(s.get("action"))}</div>'
-                f'<div class="kv"><b>Camera</b><span>{deck._esc(s.get("camera"))}</span></div>'
-                f'<div class="kv"><b>Sound</b><span>{deck._esc(s.get("sound"))}</span></div>{vo}</div>')
+            src = deck._b64(s["img"])
+            text = (f'<div class="sn">Shot {s["n"]:02d}<span>{tc(s["t"][0])} to {tc(s["t"][1])}</span></div>'
+                    f'<div class="act">{deck._esc(s.get("action"))}</div>'
+                    f'<div class="kv"><b>Camera</b><span>{deck._esc(s.get("camera"))}</span></div>'
+                    f'<div class="kv"><b>Sound</b><span>{deck._esc(s.get("sound"))}</span></div>{vo}')
+            # a vertical film also shows the vertical cut itself beside the words: what the phone will show
+            xp = _x(s.get("x", 50))
+            body = (f'<div class="sub"><div class="vc"><img src="{src}" style="object-position:'
+                    f'{self._window(xp)[2]:.1f}% 50%"><div>9:16 CUT</div></div>'
+                    f'<div class="tx">{text}</div></div>') if self.aspect == "9:16" else text
+            cells.append(f'<div class="shot"><div class="fr"><img src="{src}">{self._crop(xp)}</div>{body}</div>')
         self.pages.append(
             f'<div class="pg"><div class="sbh"><h3>{deck._esc(kicker)}</h3><h2>{heading}</h2>'
             f'<div class="span">{tc(first["t"][0])} to {tc(last["t"][1])} of {tc(self.duration)}</div></div>'
@@ -500,7 +547,7 @@ def revise(task: dict, text: str) -> bool:
         threading.Thread(target=run, args=(job.id, task["id"]), daemon=True).start()
         return True
     co = store.get_company_by_slug(s["company"])
-    cur = {"shots": [{"frame": i + 1, **{k: x.get(k) for k in ("action", "camera", "sound")}}
+    cur = {"shots": [{"frame": i + 1, **{k: x.get(k) for k in ("action", "camera", "sound", "x")}}
                      for i, x in enumerate(s["notes"]["shots"])],
            "line": s["notes"].get("line"), "note": s["notes"].get("note"), "approve": s["notes"].get("approve"),
            "cover": s.get("cover"), "duration": s["duration"], "end_hold": s["times"][-1][1] - s["times"][-1][0]}
@@ -521,7 +568,7 @@ def revise(task: dict, text: str) -> bool:
         if 1 <= i <= len(old_frames):
             new_frames.append(old_frames[i - 1])
             notes.append({"n": len(notes) + 1, "action": _clean(x.get("action")), "camera": _clean(x.get("camera")),
-                          "sound": _clean(x.get("sound"))})
+                          "sound": _clean(x.get("sound")), "x": _x(x.get("x", s["notes"]["shots"][i - 1].get("x")))})
     if not new_frames:
         return False
     nvo = re.sub(r"\s+", " ", str(out.get("vo") or "").strip().strip('"“”'))
