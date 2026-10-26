@@ -4375,3 +4375,28 @@ shoot needs none), then 10% off the whole quotation.
   recipient's name is known (card or CRM), a greeted name sharing nothing with it is blocked even if it is in no
   record. Forgiven: spelling (`name_like`), nicknames keeping the first two letters (Kostas / Konstantinos), and any
   name in the owner's own words on the card (corrections, his brief). No name for the recipient = never blocked.
+
+## Storyboards: one document per film (owner, 26 Oct 2026)
+- A storyboard is what the client APPROVES before production, so it is a production document, not a pitch deck.
+  `runtime/cortex/storyboard.py` (`StoryboardDeck(deck._Deck)`), Talk tool `create_storyboard`, card
+  `request.kind = 'storyboard'`, library kind `storyboard`. First use: Shama Qabilah (deal 130), the three 30-second
+  9:16 chapters Majlis, Saqarah, Sadaf, from Gino's frames; the main film follows in the same format once approved.
+- LAYOUT: cover (frame on the right, words on black: a full-bleed cover hid the bottle), then THREE SHOTS A PAGE with a
+  timeline bar for the whole film, each shot: the 16:9 frame with a dashed 9:16 window, the vertical cut itself beside
+  the words, shot number, timecode, action, camera, sound, and the voice over on the shot where it plays; last page =
+  the voice over set large on the end frame plus the ask for notes. No price page, no sample films, no new images.
+- CODE STAMPS: timecodes (`timecodes(n, duration, end_hold)`: whole seconds, contiguous, the last shot held a sixth of
+  the film); the 9:16 window is REFRAMED per shot on the subject (`x` 0-100 from the shot notes, `_window` keeps it
+  inside the frame; a centred window cut the Majlis bottle in half); the voice over is printed VERBATIM and only when
+  `vo_source` finds it in his words this turn or in a document on the deal (the client's deck), else the build refuses.
+- MODEL WRITES (Fable 5, the creative-stage model): per shot action / camera / sound / x from the frames, in chunks of 5
+  images, under the live "STORYBOARD STANDARD" rule on sales-proposal (skill 168, backup
+  `sales_proposal_rules_backup_2026_10_26`); `framing()` writes the cover line, cover note and closing ask (one retry:
+  the first Fable call returned `{}` on the dry run).
+- FRAMES: `frames_folder` (box folder, ordered by the number in the file name), images attached in Talk, or a Drive
+  folder. Qabilah inputs: `/opt/coretex/creative/storyboards/_inputs/130-qabilah/{majlis,saqarah,sadaf}` (2400px JPEGs
+  from the WeTransfer PNGs). Job state `/opt/coretex/creative/storyboards/<job>/state.json`.
+- CARD: reply = `storyboard.revise` (words change as asked, frames dropped/reordered never invented, VO only to a line in
+  his note, running time only to a figure he wrote), filed as the next version; approve = closes it
+  (`storyboard.approve`); sending is an email he asks for. CLI: `python -m cortex.storyboard dry <deal> "<film>"
+  <frames_dir> "<vo>" [seconds]`.
