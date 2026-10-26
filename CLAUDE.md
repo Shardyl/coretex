@@ -4407,3 +4407,27 @@ shoot needs none), then 10% off the whole quotation.
   Saqarah, Sadaf order) as ONE presentation, each page a full-slide picture (pdftoppm 1920x1080, temporary public Drive
   images trashed after), in the client folder; same title replaced. Qabilah: "Shama - Qabilah - Storyboards (Google
   Slides)", id 1Zd1BBnDVtPa8LnZr9mYGfBLUoRWDClAUZjEXTBnE-84 (Majlis v2, Saqarah v2, Sadaf v1, 15 slides).
+
+## Not interested closes the whole opportunity (owner, SSMC tender deal 179, 26 Oct 2026)
+- CAUSE: RAFED's circular for flags, scarves and pins became tender opportunity 179 (as stress balls #180, radio and TV
+  equipment #140, Union Day decorations #174 had). Dismiss only hid one notice, the opportunity stayed open, and the
+  morning health check raised "opened from an old enquiry" again on 21, 22, 23, 24 Oct, then "1 owed item may already
+  be done" for its passed closing date. The 15 Oct Not interested button only existed on cards; a tender raises notices.
+- `engine.deal_not_interested(deal, actor)`: every open or scheduled card on the deal cancelled (decision
+  `not_interested`, no streak hit), every Cortex reminder on it (pending, snoozed or fired) closed with owner evidence,
+  stage Lost (which dismisses next steps and the chase), `not_pursued` on the timeline, its notices dismissed, and the
+  tender remembered in setting `not_pursued` [{deal_id, org, title, subject, domain, code}]. Nothing sent or deleted.
+  Doors: "Not interested" on every notice tied to an open opportunity and on the opportunity page (Opportunity / Quote),
+  `POST /api/crm/project/{id}/not-interested`, Talk `update_opportunity(not_interested=true)`. v90.
+- REPEATS STAY QUIET: `_not_pursued_match` (same tender reference across the sister brands, or same sender domain and
+  subject with Re:/Fwd:/Reminder stripped, `_subj_norm`): `_track_tender` logs the copy on the closed opportunity
+  (`tender_repeat`) and returns it marked `_not_pursued`; `_flag_skipped_opportunity` checks it before any model call;
+  `events.they_wrote` files such an email on no other job.
+- SCOPE: `_tender_in_scope(co, e)` is the one relevance check (services + the company's `TENDER SCOPE` rules on
+  sales-triage + the last 20 not-pursued subjects as examples; goods supply is not a service). `_track_tender` runs it
+  before opening any NEW tender opportunity unless the caller already did (`scoped=True`); the reference-routing path
+  in `events.they_wrote` used to open one with no check at all, which is how the SSMC circular from RAFED (a sender with
+  other open RFQs) arrived.
+- A tender closing date is no longer owed work (`obligations.KINDS` `owed: False`, trigger + backfill follow), so a
+  passed date is never "may already be done". A dismissed health notice comes back only when its title or body changes
+  (`invariants._owner_notices`).

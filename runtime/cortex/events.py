@@ -222,7 +222,9 @@ def they_wrote(company: dict, message: dict, deals: list | None = None, channel:
                     rows = [_hit]
                 elif rows and not any(crm.same_job(r, _code, _subj) for r in rows):
                     _new = engine._track_tender(company, message, _subj)
-                    if _new:
+                    if _new and (_new.get("_out_of_scope") or _new.get("_not_pursued")):
+                        rows = []        # not our work, or a tender he said Not interested to: never another job's
+                    elif _new and _new.get("id"):
                         rows = [db.one("select * from crm_projects where id=%s", (int(_new["id"]),)) or _new]
         except Exception as e:  # noqa: BLE001
             print(f"[events] reference routing: {type(e).__name__}: {e}", flush=True)

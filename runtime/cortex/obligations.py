@@ -33,7 +33,9 @@ KINDS = [
      "done_on": "an email that actually delivers it (judged)"},
     {"key": "conversation_commitment", "created_by": "cortex-commitment",
      "done_on": "an email that actually delivers it (judged)"},
-    {"key": "tender_close", "prefix": "Tender closes",
+    # A CLOSING DATE IS A HEADS-UP, NOT WORK WE OWE (26 Oct 2026): as owed work, a tender that passed its date without a
+    # bid was flagged "may already be done" for him to confirm, every morning. It still settles on won / Lost.
+    {"key": "tender_close", "prefix": "Tender closes", "owed": False,
      "done_on": "the deal moving to won work or Lost"},
 ]
 JUDGED = ("commitment", "meeting_commitment", "client_deadline", "next_step", "conversation_commitment")
@@ -63,6 +65,8 @@ def _owed_sql() -> str:
     """The SQL test for 'owed', built from KINDS so the trigger and the Python agree by construction."""
     parts = []
     for k in KINDS:
+        if k.get("owed") is False:
+            continue
         if k.get("prefix"):
             parts.append("NEW.title like " + "'" + k["prefix"].replace("'", "''") + "%'")
         if k.get("created_by"):

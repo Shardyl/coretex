@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v89';
+const APP_BUILD = 'cortex-v90';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -1238,7 +1238,7 @@ async function openProject(id){
   const forecast=FORECAST_STAGES.includes(p.stage);
   const fld=(ic_,t)=>t?`<div class="dfld">${ic(ic_,15)} ${esc(t)}</div>`:'';
   v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>${forecast?'Opportunity':'Project'}</b>
-      <div style="margin-left:auto;display:flex;gap:6px">${starBtn(p,16)}<button class="iconbtn sm" title="Edit" onclick="openEditDeal(${p.id})">${ic('edit',16)}</button><button class="iconbtn sm" title="Delete" onclick="deleteDeal(${p.id})">${ic('trash',16)}</button></div></div>
+      <div style="margin-left:auto;display:flex;gap:6px">${['Opportunity','Quote'].includes(p.stage)?`<button class="btn sm" onclick="dealNotInterested(${p.id})">Not interested</button>`:''}${starBtn(p,16)}<button class="iconbtn sm" title="Edit" onclick="openEditDeal(${p.id})">${ic('edit',16)}</button><button class="iconbtn sm" title="Delete" onclick="deleteDeal(${p.id})">${ic('trash',16)}</button></div></div>
     <div class="card">
       <div class="cname" style="font-size:17px">${esc(p.title||'Untitled')}</div>
       <div class="csub" style="margin-bottom:10px">${esc(p.company||'')} <span class="dnum" style="display:inline">#${p.id}</span></div>
@@ -1905,6 +1905,7 @@ function infoCard(t){
       ${(t.target_type==='contact'&&t.target_id&&!grouped)?`<button class="btn sm go" onclick="inboxContact('${esc(t.target_id)}')">${ic('arrow',13)} View contact</button>`:''}
       ${(t.target_type==='task'&&t.target_id&&t.target_open)?`<button class="btn sm go" onclick="inboxCard(${+t.target_id})">${ic('arrow',13)} Open card</button>`:''}
       ${(t.target_type==='deal'&&t.target_id&&t.target_open)?`<button class="btn sm go" onclick="openProject(${+t.target_id})">${ic('arrow',13)} View deal</button>`:''}
+      ${(t.target_type==='deal'&&t.target_id&&t.target_open&&!t.next_step)?`<button class="btn sm" onclick="dealNotInterested(${+t.target_id})">Not interested</button>`:''}
       ${t.next_step?`<button class="btn sm go" onclick="todoAct(${t.id},${+t.target_id},${t.next_step},'done')">Done</button><button class="btn sm" onclick="todoAct(${t.id},${+t.target_id},${t.next_step},'dismiss')">Not needed</button><button class="btn warn sm" onclick="todoTalkOpen(${t.id},true)">${ic('mic',14)} Tap to talk</button><button class="btn sm" onclick="todoTalkOpen(${t.id},false)">Type</button><button class="btn sm" onclick="notifAct(${t.id},'dismiss')">Dismiss</button>`:`<button class="btn sm" onclick="notifAct(${t.id},'dismiss')">Dismiss</button>`}
       <button class="btn sm" onclick="notifAct(${t.id},'snooze')">Snooze 1h</button></div>
     ${t.next_step?`<div id="tt${t.id}w" hidden style="margin-top:8px"><textarea id="tt${t.id}" rows="3" style="width:100%" placeholder="Tell Cortex what to do (for example: build three treatments, no quote)"></textarea>
@@ -2589,6 +2590,11 @@ function meetingLine(t){
 }
 async function meetingOff(id){
   try{ const r=await api(`/api/tasks/${id}/meeting-off`,{method:'POST',body:'{}'}); toast(r&&(r.note||r.error)||'Removed'); render(); }
+  catch(e){ toast('Error: '+e.message); }
+}
+async function dealNotInterested(id){
+  if(!confirm('Not interested: close this opportunity as not pursued, with everything Cortex raised for it. A repeat of it stays quiet. Nothing is sent. Continue?')) return;
+  try{ const r=await api(`/api/crm/project/${id}/not-interested`,{method:'POST',body:'{}'}); toast(r&&r.note||'Closed'); render(); }
   catch(e){ toast('Error: '+e.message); }
 }
 async function notInterested(id){

@@ -1042,6 +1042,19 @@ def _cases():
     case("nothing books into a busy slot; an in-person meeting gets no Meet link and no invite", "DSO card 1422, 22 Oct",
          _no_busy_booking)
 
+    def _not_interested_deal():
+        from . import obligations as ob, invariants as inv, events as ev
+        return (engine._subj_norm("Reminder: RE: SSMC RFQ for UAE Flag Day") == engine._subj_norm("SSMC RFQ for UAE Flag Day")
+                and "Tender closes" not in ob._owed_sql() and "Commitment owed to" in ob._owed_sql()
+                and 'set_project_stage(p["id"], "Lost"' in inspect.getsource(engine.deal_not_interested)
+                and "_not_pursued_match(" in inspect.getsource(engine._track_tender)
+                and "_tender_in_scope(" in inspect.getsource(engine._track_tender)
+                and "_not_pursued_match(" in inspect.getsource(engine._flag_skipped_opportunity)
+                and '"dismissed"' in inspect.getsource(inv._owner_notices)
+                and "_out_of_scope" in inspect.getsource(ev.they_wrote))
+    case("not interested closes the whole opportunity; repeats stay quiet; dismissed health notices stay dismissed",
+         "SSMC tender deal 179, 26 Oct", _not_interested_deal)
+
     def _step_for_a_person():
         from . import nextsteps as ns
         step = "Message Colonel Ebrahim at Dubai Police directly to find out where the submitted BAFO stands"

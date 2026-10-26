@@ -2981,6 +2981,16 @@ def task_meeting_off(task_id: int, u: dict = Depends(current_user)) -> dict:
     return engine.drop_meeting(task_id, "the owner removed it on the card", actor=(u or {}).get("email") or "owner")
 
 
+@app.post("/api/crm/project/{id}/not-interested")
+def crm_project_not_interested(id: int, u: dict = Depends(current_user)) -> dict:
+    """Not interested in the whole opportunity: closed as not pursued, everything Cortex raised for it closed."""
+    _guard_deal(u, id)
+    r = engine.deal_not_interested(id, actor=_person(u) or "owner")
+    if not r.get("ok"):
+        raise HTTPException(status_code=404, detail=r.get("error") or "opportunity not found")
+    return r
+
+
 @app.post("/api/tasks/{task_id}/not-interested")
 def task_not_interested(task_id: int, u: dict = Depends(current_user)) -> dict:
     """Close a card about an incoming email, and every card that email raised, with nothing sent."""
@@ -4076,6 +4086,9 @@ SKILL_TOOLS = [
         "next_chase": {"type": "string", "description": "when the next email chase goes, in his words ('Thursday "
                        "10am', 'tomorrow', 'in 3 days')"},
         "chase_every_days": {"type": "integer", "description": "his own chase rhythm from then on, in days"},
+        "not_interested": {"type": "boolean", "description": "true when he is NOT INTERESTED in the opportunity (a "
+                           "tender or enquiry we will not pursue): closes it as Lost, not pursued, cancels everything "
+                           "Cortex raised for it, and a repeat of it raises nothing. Nothing is sent."},
         "star": {"type": "boolean", "description": "true to STAR the opportunity (about to close: it goes to the top "
                  "of the Opportunities screen and into the starred value), false to unstar it"}}}},
     {"name": "update_proposal_pricing",
@@ -4458,6 +4471,9 @@ def _update_opportunity(inp: dict) -> str:
             db.execute("update tasks set deal_id=%s where kind='quotation' and request->>'number'=%s", (did, _qn.group(1)))
         _pl.log_deal(did, "document_filed", f"Filed: {doc['filename']} (owner, via Talk).", ref=f"doc:{doc['id']}")
         done.append(f"filed {doc['filename']}")
+    if inp.get("not_interested"):
+        _ni = engine.deal_not_interested(did, actor="owner, via Talk")
+        done.append(_ni.get("note") or _ni.get("error") or "")
     if inp.get("star") is not None:
         _sr = crm.set_star(did, bool(inp["star"]), by="owner, via Talk")
         done.append(("starred" if (_sr or {}).get("starred") else

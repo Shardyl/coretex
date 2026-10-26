@@ -1880,6 +1880,128 @@ def not_interested(task_id: int, actor: str = "owner") -> dict:
             "note": f"Not interested: {len(group)} card(s) closed, nothing sent."}
 
 
+# NOT INTERESTED IN THE WHOLE OPPORTUNITY (owner, 26 Oct 2026: "there was a type of card that said not interested ...
+# it doesn't keep following up ... effectively closes any opportunity that's open regarding something like this").
+# RAFED's SSMC circular for flags, scarves and pins (deal 179) became a tender opportunity, and every Dismiss only hid
+# one notice: the opportunity stayed open, so the morning check raised it again (21, 22, 23, 24 and 26 Oct). One tap
+# now closes the opportunity as not pursued (Lost), cancels every open card on it, every reminder Cortex set (the
+# closing date included), its next steps and its chase, and dismisses its notices. Nothing is sent, nothing deleted.
+# The tender is remembered (setting `not_pursued`), so a reminder or re-send of it is logged on the closed opportunity
+# and raises nothing, and the scope check reads the list as examples of what he does not want.
+_OPEN_OR_SCHEDULED = _OPEN_CARD + ("scheduled",)
+
+
+def deal_not_interested(deal_id: int, actor: str = "owner", why: str = "") -> dict:
+    from . import obligations as _ob
+    p = db.one("select * from crm_projects where id=%s", (int(deal_id),))
+    if not p:
+        return {"ok": False, "error": "no such opportunity"}
+    reason = "Not interested (owner): the opportunity was not pursued"
+    closed = []
+    for c in db.query("select * from tasks where deal_id=%s and status = any(%s)", (p["id"], list(_OPEN_OR_SCHEDULED))):
+        store.update_task(c["id"], status="cancelled", request={**(c.get("request") or {}), "cancelled_reason": reason})
+        store.log_decision(c["id"], c.get("skill_id"), actor, "not_interested", note=reason)
+        try:
+            _cancel_owed_work(c, reason)
+        except Exception:  # noqa: BLE001
+            pass
+        closed.append(c["id"])
+    rems = _ob.close_where("target_type='deal' and target_id=%s and status in ('pending','snoozed','fired') and "
+                           "coalesce(created_by,'') like 'cortex%%'", (str(p["id"]),), "cancelled",
+                           _ob.evidence("owner", who=actor), "not interested: the opportunity was not pursued")
+    if p.get("stage") != "Lost":
+        crm.set_project_stage(p["id"], "Lost", actor=actor)
+    db.execute("update crm_projects set automation=null, next_followup=null where id=%s", (p["id"],))
+    pipeline.log_deal(p["id"], "not_pursued", f"Not interested ({actor}): not pursued, closed as Lost."
+                      + (f" {why.strip()}" if (why or "").strip() else "")
+                      + (f" Cancelled {len(closed)} card(s)" if closed else "")
+                      + (f"{' and' if closed else ' Cancelled'} {len(rems)} reminder(s)" if rems else "")
+                      + ". Nothing was sent. A repeat of it raises nothing.")
+    db.execute("update notifications set state='dismissed' where target_type='deal' and target_id=%s and "
+               "state in ('unread','read','snoozed')", (str(p["id"]),))
+    _remember_not_pursued(p)
+    return {"ok": True, "deal_id": p["id"], "cards": closed, "reminders": [r["id"] for r in rems],
+            "note": f"Not interested: #{p['id']} closed as not pursued, nothing sent."}
+
+
+def _subj_norm(s: str) -> str:
+    s = (s or "").lower().strip()
+    while True:
+        t = re.sub(r"^(?:re|fw|fwd|reminder|urgent|\[external\]|تذكير)\s*[:\-–]?\s*", "", s)
+        if t == s:
+            break
+        s = t
+    return re.sub(r"[\W_]+", "", s)
+
+
+def _remember_not_pursued(p: dict) -> None:
+    title = p.get("title") or ""
+    m = re.match(r"^Tender:\s*(.*)\s+\(([^()]*)\)\s*$", title)
+    subj = m.group(1) if m else title
+    dom = (m.group(2) if m else "") or (p.get("contact_email") or "").split("@")[-1]
+    code = crm.tender_code(title)
+    if not code:
+        for h in (p.get("history") or []):
+            code = crm.tender_code(str(h.get("text") or ""))
+            if code:
+                break
+    lst = [x for x in (db.setting_get("not_pursued") or []) if x.get("deal_id") != p["id"]]
+    lst.append({"deal_id": p["id"], "org": p.get("company") or "", "title": title[:200], "subject": subj[:200],
+                "domain": (dom or "").lower(), "code": code or "", "at": datetime.now(timezone.utc).isoformat()})
+    db.setting_set("not_pursued", lst[-500:])
+
+
+def _not_pursued_match(slug: str, sender: str, subject: str, body: str = "") -> dict | None:
+    """A tender he already said Not interested to (the same reference, or the same sender's domain and subject)."""
+    lst = db.setting_get("not_pursued") or []
+    if not lst:
+        return None
+    orgs = {crm._org(s).lower() for s in crm.sister_slugs(slug or "")}
+    code = (crm.tender_code(subject or "") or crm.tender_code((body or "")[:4000]) or "").lower()
+    dom = (sender or "").split("@")[-1].lower()
+    ns = _subj_norm(subject)
+    for x in reversed(lst):
+        if (x.get("org") or "").lower() not in orgs:
+            continue
+        if code and (x.get("code") or "").lower() == code:
+            return x
+        if dom and x.get("domain") == dom and ns and _subj_norm(x.get("subject")) == ns:
+            return x
+    return None
+
+
+def _tender_in_scope(co: dict, e: dict) -> dict | None:
+    """Is this circular work we sell? The company's services, its TENDER SCOPE rules (sales-triage) and the tenders
+    he marked Not interested decide. Returns the judgement when relevant, else None."""
+    ctx = (co.get("context") or {}).get("products") or co.get("name") or ""
+    rules = ""
+    try:
+        sk = store.get_skill_by_key(co["id"], "sales-triage")
+        if sk:
+            uni, loc = store.effective_rules(sk)
+            rules = "\n".join("- " + r for r in uni + loc if str(r).upper().startswith("TENDER SCOPE"))
+    except Exception:  # noqa: BLE001
+        rules = ""
+    orgs = {crm._org(s).lower() for s in crm.sister_slugs(co.get("slug") or "")}
+    declined = [x.get("subject") for x in (db.setting_get("not_pursued") or [])
+                if (x.get("org") or "").lower() in orgs][-20:]
+    out = provider.think_json(
+        "A company received this email. A standing rule stopped an automatic REPLY (it is a broadcast, "
+        "not correspondence). Decide only whether it still contains an OPPORTUNITY worth the owner's "
+        "eyes: work this company could actually bid for or supply. Company services: " + str(ctx)[:600]
+        + (("\nThe company's rules on which tenders are in scope:\n" + rules) if rules else "")
+        + (("\nThe owner marked these tenders NOT interested; anything of the same kind is not relevant:\n- "
+            + "\n- ".join(str(d)[:140] for d in declined)) if declined else "")
+        + '\nReturn JSON {"relevant": true|false, "what": "<one line: the opportunity>", '
+          '"deadline": "<closing date exactly as written, or empty>"}. Be strict: false unless the '
+          "subject matter is genuinely within those services. Supplying goods is not a service.",
+        f"From: {e.get('name')} <{e.get('email')}>\nSubject: {e.get('subject')}\n\n"
+        + (e.get("body") or e.get("snippet") or "")[:1500],
+        model=provider.MODEL_ROUTER, max_tokens=200, purpose="skipped-opportunity",
+        company=co.get("slug"))
+    return out if isinstance(out, dict) and out.get("relevant") else None
+
+
 _CANCEL_HINT = re.compile(r"\b(?:cancel|not needed|no need|don'?t need|didn'?t (?:commit|promise|agree)|did not "
                           r"(?:commit|promise|agree)|never (?:committed|promised|agreed)|not (?:requested|asked)|"
                           r"wasn'?t (?:requested|asked)|scrap|drop (?:this|it)|ignore (?:this|it)|not required)\b", re.I)
@@ -3179,19 +3301,11 @@ def _flag_skipped_opportunity(co: dict, e: dict, reason: str, rt_key: str | None
     surface it to the owner as an opportunity to consider (with its closing date) instead of letting
     it vanish silently. Never drafts anything; notification only."""
     try:
-        ctx = (co.get("context") or {}).get("products") or co.get("name") or ""
-        out = provider.think_json(
-            "A company received this email. A standing rule stopped an automatic REPLY (it is a broadcast, "
-            "not correspondence). Decide only whether it still contains an OPPORTUNITY worth the owner's "
-            "eyes: work this company could actually bid for or supply. Company services: " + str(ctx)[:600]
-            + '\nReturn JSON {"relevant": true|false, "what": "<one line: the opportunity>", '
-              '"deadline": "<closing date exactly as written, or empty>"}. Be strict: false unless the '
-              "subject matter is genuinely within those services.",
-            f"From: {e.get('name')} <{e.get('email')}>\nSubject: {e.get('subject')}\n\n"
-            + (e.get("body") or e.get("snippet") or "")[:1500],
-            model=provider.MODEL_ROUTER, max_tokens=200, purpose="skipped-opportunity",
-            company=co.get("slug"))
-        if not (isinstance(out, dict) and out.get("relevant")):
+        if _not_pursued_match(co.get("slug") or "", e.get("email") or "", e.get("subject") or "", e.get("body") or ""):
+            _track_tender(co, e, e.get("subject") or "", rt_key=rt_key, client=client, scoped=True)   # logged, quiet
+            return
+        out = _tender_in_scope(co, e)
+        if not out:
             return
         what = (out.get("what") or e.get("subject") or "").strip()
         due = (out.get("deadline") or "").strip()
@@ -3205,7 +3319,7 @@ def _flag_skipped_opportunity(co: dict, e: dict, reason: str, rt_key: str | None
         _day = datetime.now(timezone.utc).date().isoformat()
         _td_deal = None
         try:   # tracked FIRST, so the notice points at its deal and clears when the deal closes (audit 13 Oct)
-            _td_deal = _track_tender(co, e, what, rt_key=rt_key, client=client)
+            _td_deal = _track_tender(co, e, what, rt_key=rt_key, client=client, scoped=True)
         except Exception as _te:  # noqa: BLE001 - tracking must never lose the notification below
             print(f"[tender] {type(_te).__name__}: {_te}", flush=True)
         if _td_deal and not _td_deal.get("_fresh"):
@@ -3223,7 +3337,8 @@ def _flag_skipped_opportunity(co: dict, e: dict, reason: str, rt_key: str | None
         pass
 
 
-def _track_tender(co: dict, e: dict, what: str, rt_key: str | None = None, client: str | None = None) -> dict | None:
+def _track_tender(co: dict, e: dict, what: str, rt_key: str | None = None, client: str | None = None,
+                  scoped: bool = False) -> dict | None:
     """A relevant supplier blast is PICKED UP, not merely announced: it becomes a tracked opportunity,
     with its closing date as a reminder. Owner, 10 Sep 2026: "we do get those supplier blasts from time
     to time, so definitely they should be picked up". Massar's RFP arrived by BCC, was rightly not
@@ -3243,6 +3358,13 @@ def _track_tender(co: dict, e: dict, what: str, rt_key: str | None = None, clien
     slug = co.get("slug") or ""
     title = f"Tender: {subj} ({email.split('@')[-1]})"[:160]
     org = crm._org(slug)
+    _np = _not_pursued_match(slug, email, subj, e.get("body") or "")
+    if _np:     # he said Not interested to this tender: the copy is logged on that opportunity, nothing is raised
+        _dd = db.one("select * from crm_projects where id=%s", (int(_np["deal_id"]),))
+        if _dd:
+            _pl.log_deal(_dd["id"], "tender_repeat", f"Another copy of a tender you marked Not interested, from "
+                         f"{email}: {subj[:140]}. Nothing raised.", ref=gmail.mail_ref(e))
+            return {**_dd, "_fresh": False, "_not_pursued": True}
     d = db.one("select * from crm_projects where company=%s and lower(title)=lower(%s) limit 1", (org, title))
     fresh = False
     if not d:
@@ -3265,6 +3387,13 @@ def _track_tender(co: dict, e: dict, what: str, rt_key: str | None = None, clien
                 crm.add_deal_contact(d["id"], email, role="issuer", primary=not d.get("contact_email"))
             except Exception:  # noqa: BLE001
                 pass
+    if not d and not scoped:
+        try:     # a NEW tender opportunity only for work we sell (SSMC flags and pins, 26 Oct 2026)
+            if not _tender_in_scope(co, e):
+                print(f"[tender] not in scope, no opportunity: {subj[:100]}", flush=True)
+                return {"_out_of_scope": True}
+        except Exception as _se:  # noqa: BLE001 - a scope hiccup opens it as before
+            print(f"[tender] scope: {type(_se).__name__}: {_se}", flush=True)
     if not d:
         try:
             # a NEW RFQ from a client we already have open work with is a second job, by its reference

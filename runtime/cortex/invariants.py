@@ -413,6 +413,12 @@ def _owner_notices(out: dict) -> None:
             rows = db.query(c["sql"])          # what is LEFT after the repair is what he is told about
         for key, title, body, deal in owner_lines(c, rows):
             live.add(key)
+            # DISMISSED STAYS DISMISSED (26 Oct 2026): he dismissed "opened from an old enquiry" on deal 179 four
+            # mornings running and it came back each time. The same notice returns only when what it says changed.
+            _last = db.one("select state, title, body from notifications where dedup_key=%s order by id desc limit 1",
+                           (key,))
+            if _last and _last["state"] == "dismissed" and (_last.get("title"), _last.get("body") or "") == (title, body):
+                continue
             notifications.notify(title, body, priority="normal", category="approval",
                                  target_type="deal" if deal else None, target_id=deal, dedup_key=key)
     # a notice whose problem has gone clears itself; the old one-card summaries go too
