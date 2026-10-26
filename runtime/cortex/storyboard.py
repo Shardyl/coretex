@@ -565,16 +565,16 @@ def revise(task: dict, text: str) -> bool:
                      for i, x in enumerate(s["notes"]["shots"])],
            "line": s["notes"].get("line"), "note": s["notes"].get("note"), "approve": s["notes"].get("approve"),
            "cover": s.get("cover"), "duration": s["duration"], "end_hold": s["times"][-1][1] - s["times"][-1][0]}
-    out = provider.think_json(
+    out = _ask(
         "You revise a film storyboard from the owner's note. Change EXACTLY what the note asks and keep everything "
         "else word for word. To drop or reorder shots, list the frames in the new order by their frame number; never "
         "add a frame that is not listed. Write plainly, British English, no dashes.\n\nSTANDING RULES:\n" + _rules(co),
         f"CURRENT STORYBOARD:\n{json.dumps(cur, indent=1)}\n\nOWNER'S NOTE:\n{text}\n\nJSON: the same shape as the "
         'current storyboard (shots with frame, action, camera, sound; line; note; approve; cover; duration; end_hold), '
         'plus "vo": the new voice over line ONLY if the note gives one word for word, else "".',
-        fast=False, model=MODEL, max_tokens=8000, purpose="storyboard-revise", company=s["company"])
+        keys=("shots",), max_tokens=8000, purpose="storyboard-revise", company=s["company"])
     if not out.get("shots"):
-        return False
+        raise RuntimeError("no model returned a revised storyboard; the card is unchanged")
     old_frames = list(s["frames"])
     new_frames, notes = [], []
     for x in out["shots"]:
@@ -584,7 +584,7 @@ def revise(task: dict, text: str) -> bool:
             notes.append({"n": len(notes) + 1, "action": _clean(x.get("action")), "camera": _clean(x.get("camera")),
                           "sound": _clean(x.get("sound")), "x": _x(x.get("x", s["notes"]["shots"][i - 1].get("x")))})
     if not new_frames:
-        return False
+        raise RuntimeError("the revision listed no frames that exist; the card is unchanged")
     nvo = re.sub(r"\s+", " ", str(out.get("vo") or "").strip().strip('"“”'))
     if nvo and _norm(nvo) in _norm(text):          # a new line only when he wrote it
         s["vo"], s["vo_src"] = nvo, "the owner's note on the card"
@@ -619,6 +619,87 @@ def approve(task: dict, actor: str) -> dict:
     if rq.get("deal_id"):
         pipeline.log_deal(int(rq["deal_id"]), "storyboard", f"Storyboard approved by {actor}: {rq.get('title')}")
     return {"ok": True, "storyboard": rq.get("title")}
+
+
+# --------------------------------------------------------------------------- Google Slides for presenting
+
+def to_slides(deal_id: int, doc_ids: list | None = None, title: str | None = None) -> dict:
+    """The deal's live storyboards as ONE Google Slides presentation for presenting in Meet (owner, 26 Oct 2026),
+    every PDF page a full slide in order, filed in the client's Drive folder. A presentation with the same title in
+    that folder is trashed first, so the latest is the only one. Images reach Slides through temporary public links
+    on app-created Drive files, trashed straight after (the capabilities-deck twin's method)."""
+    import subprocess
+    import tempfile
+    from . import drive, profile
+    rows = (db.query("select * from company_documents where id = any(%s) and kind='storyboard'", ([int(i) for i in doc_ids],))
+            if doc_ids else db.query("select * from company_documents where deal_id=%s and kind='storyboard' and "
+                                     "superseded_by is null order by id", (int(deal_id),)))
+    if not rows:
+        raise ValueError("no storyboards on this deal")
+    order = {"majlis": 0, "saqarah": 1, "sadaf": 2}         # brief order when the names say it; else filing order
+    rows.sort(key=lambda r: next((v for k, v in order.items() if k in r["filename"].lower()), 9))
+    co = store.get_company(rows[0]["company_id"])
+    client = (rows[0].get("client") or rows[0]["filename"].split(" - ")[0]).strip()
+    title = title or f"{rows[0]['filename'].split(' - Storyboard')[0].rsplit(' - ', 1)[0]} - Storyboards (Google Slides)"
+    tok = drive.access_token()
+    parent = ((profile.get(co["id"]) or {}).get("clients_drive_folder") or "").strip()
+    folder = drive.ensure_client_folder(client, parent, token=tok)["id"]
+    hdr = {"Authorization": f"Bearer {tok}"}
+    import httpx
+    G = "https://www.googleapis.com"
+    q = f"trashed=false and name = '{title}' and '{folder}' in parents"
+    for f in httpx.get(f"{G}/drive/v3/files", headers=hdr, params={"q": q, "supportsAllDrives": "true",
+                       "includeItemsFromAllDrives": "true", "fields": "files(id)"}).json().get("files", []):
+        httpx.patch(f"{G}/drive/v3/files/{f['id']}?supportsAllDrives=true", headers=hdr, json={"trashed": True})
+    pres = httpx.post(f"{G}/drive/v3/files?supportsAllDrives=true&fields=id,webViewLink", headers=hdr,
+                      json={"name": title, "mimeType": "application/vnd.google-apps.presentation",
+                            "parents": [folder]}).json()
+    pid = pres["id"]
+    first = httpx.get(f"https://slides.googleapis.com/v1/presentations/{pid}", headers=hdr).json()
+    tmp, reqs, n = [], [{"deleteObject": {"objectId": sl["objectId"]}} for sl in first.get("slides", [])], 0
+    work = tempfile.mkdtemp(prefix="sbslides-")
+    try:
+        for r in rows:
+            path = documents.local_path(r) if hasattr(documents, "local_path") else r["path"]
+            pre = os.path.join(work, f"d{r['id']}")
+            subprocess.run(["pdftoppm", "-png", "-scale-to-x", "1920", "-scale-to-y", "1080", path, pre],
+                           check=True, timeout=300)
+            for png in sorted(f for f in os.listdir(work) if f.startswith(f"d{r['id']}-")):
+                bnd = "sbbnd"
+                crlf = "\r\n"
+                head = (f"--{bnd}{crlf}Content-Type: application/json{crlf}{crlf}"
+                        + json.dumps({"name": f"_slides_tmp_{png}"})
+                        + f"{crlf}--{bnd}{crlf}Content-Type: image/png{crlf}{crlf}")
+                body = (head.encode() + open(os.path.join(work, png), "rb").read()
+                        + f"{crlf}--{bnd}--".encode())
+                fid = httpx.post(f"{G}/upload/drive/v3/files?uploadType=multipart&fields=id", content=body,
+                                 headers={**hdr, "Content-Type": f"multipart/related; boundary={bnd}"}, timeout=120).json()["id"]
+                tmp.append(fid)
+                httpx.post(f"{G}/drive/v3/files/{fid}/permissions", headers=hdr, json={"role": "reader", "type": "anyone"})
+                sid = f"sb{n:03d}"
+                reqs += [{"createSlide": {"objectId": sid, "insertionIndex": n,
+                                          "slideLayoutReference": {"predefinedLayout": "BLANK"}}},
+                         {"updatePageProperties": {"objectId": sid, "fields": "pageBackgroundFill", "pageProperties": {
+                             "pageBackgroundFill": {"stretchedPictureFill": {
+                                 "contentUrl": f"https://drive.google.com/uc?export=download&id={fid}"}}}}}]
+                n += 1
+        for i in range(0, len(reqs), 300):
+            x = httpx.post(f"https://slides.googleapis.com/v1/presentations/{pid}:batchUpdate", headers=hdr,
+                           json={"requests": reqs[i:i + 300]}, timeout=300)
+            if x.status_code != 200:
+                raise RuntimeError(f"Slides refused the build: {x.status_code} {x.text[:300]}")
+    except Exception:
+        httpx.patch(f"{G}/drive/v3/files/{pid}?supportsAllDrives=true", headers=hdr, json={"trashed": True})
+        raise
+    finally:
+        for fid in tmp:
+            try:
+                httpx.patch(f"{G}/drive/v3/files/{fid}", headers=hdr, json={"trashed": True})
+            except Exception:  # noqa: BLE001
+                pass
+    link = pres.get("webViewLink") or f"https://docs.google.com/presentation/d/{pid}/edit"
+    pipeline.log_deal(int(deal_id), "storyboard", f"Storyboards as Google Slides for presenting: {title} ({n} slides) {link}")
+    return {"id": pid, "link": link, "slides": n, "title": title, "folder": client}
 
 
 if __name__ == "__main__":      # python -m cortex.storyboard dry <deal> "<film>" <frames_dir> "<vo>" [seconds]

@@ -2343,8 +2343,8 @@ def apply_correction(task: dict, text: str, _quote_checked: bool = False, infer:
         # or reordered but never invented, and the next version is filed on this card.
         from . import storyboard
         try:
-            if storyboard.revise(task, text):
-                return
+            storyboard.revise(task, text)
+            return          # never the email redraft: it overwrote a storyboard card's summary (card 1480, 26 Oct)
         except Exception as _se:  # noqa: BLE001
             notifications.notify(f"Card #{task['id']}: the storyboard could not be revised",
                                  f"{type(_se).__name__}: {str(_se)[:200]}", category="approval",
