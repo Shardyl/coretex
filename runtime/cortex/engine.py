@@ -1927,7 +1927,7 @@ def deal_not_interested(deal_id: int, actor: str = "owner", why: str = "") -> di
 def _subj_norm(s: str) -> str:
     s = (s or "").lower().strip()
     while True:
-        t = re.sub(r"^(?:(?:reminder|urgent|fwd|fw|re)|\[external\]|تذكير)\s*[:\-–]?\s*", "", s)
+        t = re.sub(r"^(?:(?:reminder|urgent|fwd|fw|re)\b|\[external\]|تذكير)\s*[:\-–]?\s*", "", s)
         if t == s:
             break
         s = t
