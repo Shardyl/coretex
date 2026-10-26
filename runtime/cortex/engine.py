@@ -2894,11 +2894,21 @@ def _detach_all_asked(text: str) -> bool:
     return bool(_DETACH_ALL.search(text or ""))
 
 
+# "INCLUDE OUR AI CAPABILITIES PDF" IS AN ATTACHMENT (Shurooq card 1488, 26 Oct 2026): only attach / enclose counted,
+# so the deck was dropped and the writer promised to "separately send over" it. Include / add / put in a document
+# counts too, unless the same sentence puts it in the future ("we will include the deck next week").
+_INCLUDE_DOC = re.compile(r"\b(?:include|add|put in|pop in|stick in)\b[^.?!;\n]{0,60}?\b(?:pdf|deck|document|doc|file|"
+                          r"profile|brochure|portfolio|presentation|licen[cs]e|certificate|quotation|proposal)s?\b", re.I)
+_LATER = re.compile(r"\b(?:will|shall|going to|later|separately|shortly|soon|next week|tomorrow)\b|'ll\b", re.I)
+
+
 def _attach_asked(text: str) -> bool:
-    """His words ask to ATTACH something to this email ('attach the trade licence', 'enclose the profile'), outside
-    any removal phrase. 'We will send the deck shortly' asks for nothing to be attached."""
+    """His words ask to ATTACH something to this email ('attach the trade licence', 'enclose the profile', 'include
+    our AI capabilities pdf'), outside any removal phrase. 'We will send the deck shortly' asks for nothing."""
     t = _REMOVAL.sub(" ", _DETACH_ALL.sub(" ", text or ""))
-    return bool(_ATTACH_VERB.search(t))
+    if _ATTACH_VERB.search(t):
+        return True
+    return any(_INCLUDE_DOC.search(s) and not _LATER.search(s) for s in re.split(r"[.?!;\n]", t))
 
 
 _ALL_FROM = re.compile(r"^(?:all|everyone|everybody|anyone|anybody|the)?\s*(?:of\s+)?(?:the\s+)?(?:people|guys|team|"

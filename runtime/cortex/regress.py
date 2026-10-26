@@ -1042,6 +1042,15 @@ def _cases():
     case("nothing books into a busy slot; an in-person meeting gets no Meet link and no invite", "DSO card 1422, 22 Oct",
          _no_busy_booking)
 
+    def _include_is_attach():
+        return (engine._attach_asked("remove this paragraph\n\nand also include our ai capabilities pdf")
+                and engine._attach_asked("add the company profile")
+                and not engine._attach_asked("tell him I will send the concepts together with our AI capabilities deck")
+                and not engine._attach_asked("we'll include the deck next week")
+                and not engine._attach_asked("add a sentence thanking her"))
+    case("'include our AI capabilities pdf' attaches it; a later send never does", "Shurooq card 1488, 26 Oct",
+         _include_is_attach)
+
     def _not_interested_deal():
         from . import obligations as ob, invariants as inv, events as ev
         return (engine._subj_norm("Reminder: RE: SSMC RFQ for UAE Flag Day") == engine._subj_norm("SSMC RFQ for UAE Flag Day")

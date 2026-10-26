@@ -4431,3 +4431,9 @@ shoot needs none), then 10% off the whole quotation.
 - A tender closing date is no longer owed work (`obligations.KINDS` `owed: False`, trigger + backfill follow), so a
   passed date is never "may already be done". A dismissed health notice comes back only when its title or body changes
   (`invariants._owner_notices`).
+
+## "Include the PDF" attaches it (Shurooq card 1488, 26 Oct 2026)
+- "and also include our ai capabilities pdf" dropped the deck: `_attach_asked` (20 Oct, so "we will send X later" never
+  attaches) only knew attach / enclose, and the writer then promised to "separately send over" the deck. `_INCLUDE_DOC`:
+  include / add / put in + a document word (pdf, deck, profile, quotation...) counts, unless the same sentence is in
+  the future (`_LATER`: will, 'll, later, separately, shortly, next week...).
