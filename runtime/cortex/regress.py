@@ -1811,7 +1811,17 @@ def _cases():
          lambda: (lambda b: "uploadType=resumable" in b and 'f"/tmp/' not in b and "backup_last_ok" in b)(
              open(__import__("os").path.join(__import__("os").path.dirname(__import__("os").path.dirname(
                  __import__("os").path.abspath(__file__))), "backup_drive.py"), encoding="utf-8").read()))
-    case("every health check query runs", "invariants", _invariants)
+    from . import storyboard as _sb
+
+    def _sb_times():
+        t9, t8 = _sb.timecodes(9, 30), _sb.timecodes(8, 30)
+        ok = lambda t: t[0][0] == 0 and t[-1][1] == 30 and all(a < b for a, b in t) and             all(t[i][1] == t[i + 1][0] for i in range(len(t) - 1))
+        return ok(t9) and ok(t8) and len(t9) == 9 and t9[-1] == (25, 30) and _sb.tc(65) == "1:05"
+    case("storyboard timecodes are contiguous, whole seconds, end on the running time", "Qabilah storyboards 26 Oct",
+         _sb_times)
+    case("a storyboard voice over is printed only from the owner's words or a deal document", "Qabilah storyboards 26 Oct",
+         lambda: _sb.vo_source("The door is open.", 'use "The door is open." at the end', None) == "the owner's words"
+         and _sb.vo_source("A line nobody wrote", "make it heartfelt", None) is None)
     return C
 
 

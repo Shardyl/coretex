@@ -3814,6 +3814,30 @@ SKILL_TOOLS = [
         "fresh": {"type": "boolean", "description": "true ONLY when Rashad explicitly asks for a brand-new concept on a "
                                                     "deal that already has a creative proposal"}},
       "required": ["company", "deal_id"]}},
+    {"name": "create_storyboard",
+     "description": "Build a STORYBOARD for ONE film from frames the team already has: one document per film, three "
+                    "frames a page, each shot timecoded (computed by code from the running time) with what happens, "
+                    "the camera and the sound written from the frames, a 9:16 crop guide when the film is delivered "
+                    "vertical, and the voice over line printed word for word over the shot it plays on. Filed on the "
+                    "deal and the client's Drive folder as a review card; replies on the card revise it as the next "
+                    "version. Frames come from images attached in this turn (in the order sent), `frames_folder` (a "
+                    "folder on the box, ordered by the number in each file name) or `drive_folder` (a Drive folder "
+                    "id). `voice_over` must be Rashad's exact words or a line from a document on the deal (the deck "
+                    "the client saw); it is refused otherwise. Call once per film. About three minutes in the background.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug (sensa)"},
+        "deal_id": {"type": "integer", "description": "the opportunity or project it is for"},
+        "film": {"type": "string", "description": "the film's name as the client knows it, e.g. 'Majlis'"},
+        "project": {"type": "string", "description": "the campaign name, e.g. 'Qabilah'"},
+        "subtitle": {"type": "string", "description": "a short line under the title, e.g. 'Chapter one, the gathering'"},
+        "voice_over": {"type": "string", "description": "the voice over line, WORD FOR WORD; empty when the film has none"},
+        "duration_s": {"type": "integer", "description": "running time in seconds (default 30)"},
+        "aspect": {"type": "string", "description": "delivery format: '9:16' (default, draws the crop guide) or '16:9'"},
+        "context": {"type": "string", "description": "the approved idea for this film, e.g. its chapter page in the deck"},
+        "frames_folder": {"type": "string", "description": "box folder holding the frames"},
+        "drive_folder": {"type": "string", "description": "Drive folder id holding the frames"},
+        "end_hold_s": {"type": "integer", "description": "seconds the final shot is held (default a sixth of the film)"}},
+      "required": ["company", "deal_id", "film"]}},
     {"name": "creative_routes",
      "description": "Write N genuinely different creative ROUTES (ideas: title, logline, a short idea, why it suits) "
                     "for an opportunity, from the deal record and Rashad's direction. No images, no quotation, about "
@@ -4707,6 +4731,20 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                       "return to the Inbox in a few minutes.")
         except (ValueError, KeyError) as _e:
             return str(_e)
+    if name == "create_storyboard":
+        from . import storyboard
+        try:
+            r = storyboard.build(inp.get("company") or "sensa", int(inp["deal_id"]), inp["film"],
+                                 vo=inp.get("voice_over", ""), said=_TURN_SAID.get() or "",
+                                 duration=int(inp.get("duration_s") or 30), aspect=inp.get("aspect") or "9:16",
+                                 project=inp.get("project", ""), subtitle=inp.get("subtitle", ""),
+                                 context=inp.get("context", ""), end_hold=inp.get("end_hold_s"),
+                                 frames_dir=inp.get("frames_folder"), drive_folder=inp.get("drive_folder"),
+                                 images=inp.get("_images") or None, background=True)
+        except (ValueError, KeyError, FileNotFoundError) as _e:
+            return f"Storyboard NOT started: {_e}"
+        return (f"Building the {inp['film']} storyboard on card #{r['task_id']}: shot notes from the frames, then the "
+                "layout. About three minutes; the card returns to the Inbox when it is ready. Nothing is sent.")
     if name == "create_creative_proposal":
         _filed = _file_turn_files_on_deal(inp)   # a brief attached in this turn joins the deal record first
         from . import creative
@@ -5998,7 +6036,7 @@ def _chat_prepare(body: ChatTurn, user: dict | None = None):
 
     def _exec(name: str, inp: dict) -> str:   # carry the turn's attachments through when a tool drafts/creates
         if name in ("create_task", "draft", "draft_email", "save_document", "create_proposal",
-                    "create_creative_proposal", "create_quotation") and body.images:
+                    "create_creative_proposal", "create_quotation", "create_storyboard") and body.images:
             inp = {**inp, "_images": body.images, "_image_names": body.image_names}
         # the PERSON's own words, never the model's: read by create_quotation's price check and by every
         # card-making tool, which keeps any link he typed as trusted (owner_links)

@@ -90,6 +90,14 @@ CAPABILITIES: list[tuple[str, str]] = [
      "same as a words-led proposal: approve the proposal card, then approve the quotation card, and the email "
      "with both attached is drafted. Use "
      "create_proposal instead for a words-led proposal where the client already has the idea."),
+    ("Storyboards — LIVE, one document per film",
+     "create_storyboard(deal_id=..., film=..., voice_over=..., frames...) lays out a STORYBOARD for one film from frames "
+     "the team already made (attached in the turn, a box folder or a Drive folder): cover, three frames a page with "
+     "shot number, rough timecode (code computes it from the running time), what happens, camera and sound, a 9:16 "
+     "crop guide for vertical films, and a last page with the voice over set large. The voice over is printed word for "
+     "word and must be his words or a line already in a document on the deal. One call per film; it lands as a review "
+     "card filed on the deal; replies on the card revise it as the next version; approving closes it, and sending it "
+     "is an email he asks for (draft_email with attach_documents). It is NOT a proposal: no price page, no new images."),
     ("Proposal decks — LIVE, revisable, quotation on approval",
      "create_proposal(deal_id=...) builds a branded, house-format PDF proposal deck from the WHOLE deal record "
      "(the client's brief and documents filed on the deal, every email, meeting notes) and lands it in the "

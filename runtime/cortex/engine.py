@@ -1516,6 +1516,10 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
     # are approved, in either order. No second approval on the proposal card, no "mark as seen".
     if task.get("kind") == "quotation":
         return _approve_quotation_card(task, skill, company, actor)
+    if (task.get("request") or {}).get("kind") == "storyboard":   # approving closes it; sending is its own email
+        from . import storyboard
+        store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"version": (task.get("request") or {}).get("version")})
+        return storyboard.approve(task, actor)
     if (task.get("request") or {}).get("kind") == "creative_proposal":   # its quotation was issued in the run
         rq = task.get("request") or {}
         if not rq.get("attach_docs"):
@@ -2334,6 +2338,18 @@ def apply_correction(task: dict, text: str, _quote_checked: bool = False, infer:
         return      # "they signed v2": re-matched by code, the card restamped; anything else redrafts as usual
     skill = store.get_skill(task["skill_id"])
     company = store.get_company(task["company_id"])
+    if (task.get("request") or {}).get("kind") == "storyboard":
+        # A STORYBOARD IS REVISED IN PLACE (26 Oct 2026): the words he asks to change change, frames may be dropped
+        # or reordered but never invented, and the next version is filed on this card.
+        from . import storyboard
+        try:
+            if storyboard.revise(task, text):
+                return
+        except Exception as _se:  # noqa: BLE001
+            notifications.notify(f"Card #{task['id']}: the storyboard could not be revised",
+                                 f"{type(_se).__name__}: {str(_se)[:200]}", category="approval",
+                                 company_id=task.get("company_id"), target_type="task", target_id=str(task["id"]))
+            return
     if (task.get("request") or {}).get("kind") == "creative_proposal":
         # A CREATIVE PROPOSAL IS REVISED IN PLACE (15 Sep 2026): only the parts his words touch re-run
         # (location, concept, beats, frames, price, copy), the deck is filed as the next version on this card.
@@ -8693,12 +8709,13 @@ def _proposal_name(customer: str, quotation_number: str | None, version: int, st
 
 
 def _file_proposal_pdf(co: dict, customer: str, name: str, path: str, deal_id, quotation_number: str | None,
-                       supersede: list | None = None, archive_prefix: str | None = None) -> tuple[dict, str | None]:
+                       supersede: list | None = None, archive_prefix: str | None = None,
+                       kind: str = "proposal") -> tuple[dict, str | None]:
     """Library row (on the deal) + the client's Drive folder, earlier versions of this proposal into the
     folder's Archive and retired in the library. Returns (doc, client folder name or None)."""
     data = open(path, "rb").read()
     # client work: recorded in the library, filed ONLY in the client folder (never also in Documents)
-    doc = documents.save(co["id"], co.get("slug") or "", name, "application/pdf", data, kind="proposal",
+    doc = documents.save(co["id"], co.get("slug") or "", name, "application/pdf", data, kind=kind,
                          uploaded_by="cortex", push=False, deal_id=int(deal_id) if deal_id else None)
     filed = None
     try:                                       # same client-folder rule as quotations
