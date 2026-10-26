@@ -4397,6 +4397,13 @@ shoot needs none), then 10% off the whole quotation.
   folder. Qabilah inputs: `/opt/coretex/creative/storyboards/_inputs/130-qabilah/{majlis,saqarah,sadaf}` (2400px JPEGs
   from the WeTransfer PNGs). Job state `/opt/coretex/creative/storyboards/<job>/state.json`.
 - CARD: reply = `storyboard.revise` (words change as asked, frames dropped/reordered never invented, VO only to a line in
-  his note, running time only to a figure he wrote), filed as the next version; approve = closes it
+  his note, running time only to a figure he wrote), filed as the next version; a failed revise RAISES (it once fell
+  into the email redraft and overwrote card 1480's summary); approve = closes it
   (`storyboard.approve`); sending is an email he asks for. CLI: `python -m cortex.storyboard dry <deal> "<film>"
   <frames_dir> "<vo>" [seconds]`.
+- FABLE DECLINES THESE OFTEN: Fable 5 returned stop_reason "refusal" (empty) on the Majlis framing lines and on every
+  revise of 26 Oct; `storyboard._ask` asks Fable twice, then Sonnet, and the card says which lines Sonnet wrote.
+- GOOGLE SLIDES: `storyboard.to_slides(deal_id)` / Talk `storyboard_slides` = the deal's live storyboards (Majlis,
+  Saqarah, Sadaf order) as ONE presentation, each page a full-slide picture (pdftoppm 1920x1080, temporary public Drive
+  images trashed after), in the client folder; same title replaced. Qabilah: "Shama - Qabilah - Storyboards (Google
+  Slides)", id 1Zd1BBnDVtPa8LnZr9mYGfBLUoRWDClAUZjEXTBnE-84 (Majlis v2, Saqarah v2, Sadaf v1, 15 slides).

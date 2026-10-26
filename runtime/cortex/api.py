@@ -3838,6 +3838,14 @@ SKILL_TOOLS = [
         "drive_folder": {"type": "string", "description": "Drive folder id holding the frames"},
         "end_hold_s": {"type": "integer", "description": "seconds the final shot is held (default a sixth of the film)"}},
       "required": ["company", "deal_id", "film"]}},
+    {"name": "storyboard_slides",
+     "description": "Put an opportunity's live storyboards into ONE Google Slides presentation for presenting in a "
+                    "meeting (every storyboard page a full slide, in order), filed in the client's Drive folder; an "
+                    "earlier presentation with the same title there is replaced. Returns the link.",
+     "input_schema": {"type": "object", "properties": {
+        "deal_id": {"type": "integer", "description": "the opportunity or project"},
+        "title": {"type": "string", "description": "optional title; default '<Client> - <Project> - Storyboards (Google Slides)'"}},
+      "required": ["deal_id"]}},
     {"name": "creative_routes",
      "description": "Write N genuinely different creative ROUTES (ideas: title, logline, a short idea, why it suits) "
                     "for an opportunity, from the deal record and Rashad's direction. No images, no quotation, about "
@@ -4731,6 +4739,13 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                       "return to the Inbox in a few minutes.")
         except (ValueError, KeyError) as _e:
             return str(_e)
+    if name == "storyboard_slides":
+        from . import storyboard
+        try:
+            r = storyboard.to_slides(int(inp["deal_id"]), title=inp.get("title"))
+        except (ValueError, RuntimeError) as _e:
+            return f"Slides NOT built: {_e}"
+        return f"Google Slides ready: '{r['title']}', {r['slides']} slides, in the {r['folder']} client folder: {r['link']}"
     if name == "create_storyboard":
         from . import storyboard
         try:

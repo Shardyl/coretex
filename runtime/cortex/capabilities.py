@@ -97,7 +97,9 @@ CAPABILITIES: list[tuple[str, str]] = [
      "crop guide for vertical films, and a last page with the voice over set large. The voice over is printed word for "
      "word and must be his words or a line already in a document on the deal. One call per film; it lands as a review "
      "card filed on the deal; replies on the card revise it as the next version; approving closes it, and sending it "
-     "is an email he asks for (draft_email with attach_documents). It is NOT a proposal: no price page, no new images."),
+     "is an email he asks for (draft_email with attach_documents). It is NOT a proposal: no price page, no new images. "
+     "storyboard_slides(deal_id) puts the deal's live storyboards into one Google Slides presentation for presenting "
+     "in a meeting, in the client's Drive folder, and returns the link."),
     ("Proposal decks — LIVE, revisable, quotation on approval",
      "create_proposal(deal_id=...) builds a branded, house-format PDF proposal deck from the WHOLE deal record "
      "(the client's brief and documents filed on the deal, every email, meeting notes) and lands it in the "
