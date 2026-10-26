@@ -138,6 +138,25 @@ def _thumb(path: str, w: int = 768) -> str:
 
 # --------------------------------------------------------------------------- the words (model, under the rules)
 
+FALLBACKS: list = []        # calls Fable declined and Sonnet answered, shown on the card (never a silent switch)
+
+
+def _ask(sysmsg: str, user: str, *, keys: tuple, purpose: str, company: str | None, max_tokens: int = 6000,
+         images: list | None = None) -> dict:
+    """Fable 5 first (the creative-stage model). Fable can DECLINE a harmless request (stop_reason 'refusal', empty
+    text: the Majlis framing lines, 26 Oct 2026, twice in a row), so an answer missing its keys is asked once more and
+    then of Sonnet, the prose model, and the switch is recorded for the card."""
+    for mdl in (MODEL, MODEL, provider.MODEL_FAST):
+        got = provider.think_json(sysmsg, user, fast=False, model=mdl, max_tokens=max_tokens, purpose=purpose,
+                                  company=company, images=images)
+        if all(got.get(k) for k in keys):
+            if mdl != MODEL:
+                FALLBACKS.append(purpose)
+            return got
+        print(f"[storyboard] {purpose}: {mdl} returned no {keys}", flush=True)
+    return {}
+
+
 def _rules(co: dict) -> str:
     """The live STORYBOARD rules on the company's sales-proposal skill (behaviour lives in the skill)."""
     sk = store.get_skill_by_key(co["id"], "sales-proposal")
@@ -181,9 +200,8 @@ def write_notes(co: dict, film: str, frames: list[str], times: list[tuple[int, i
         lines.append("WRITE SHOTS " + ", ".join(
             f"{i + 1} ({tc(times[i][0])} to {tc(times[i][1])})" for i in chunk)
             + f". The images follow in that order.\nJSON: {_SHOT_SCHEMA}")
-        out = provider.think_json(sysmsg, "\n\n".join(lines), fast=False, model=MODEL, max_tokens=6000,
-                                  purpose="storyboard-shots", company=co.get("slug"),
-                                  images=[_thumb(frames[i]) for i in chunk])
+        out = _ask(sysmsg, "\n\n".join(lines), keys=("shots",), purpose="storyboard-shots",
+                   company=co.get("slug"), images=[_thumb(frames[i]) for i in chunk])
         got = {int(s.get("n") or 0): s for s in (out.get("shots") or []) if isinstance(s, dict)}
         for i in chunk:
             s = got.get(i + 1) or {}
@@ -193,8 +211,7 @@ def write_notes(co: dict, film: str, frames: list[str], times: list[tuple[int, i
 
 
 def framing(co: dict, film: str, shots: list[dict], context: str = "") -> dict:
-    """The three short lines around the shots: the cover line, the cover footnote, the closing ask. One retry when
-    a key comes back empty (Majlis dry run, 26 Oct 2026: the first call returned none of them)."""
+    """The three short lines around the shots: the cover line, the cover footnote, the closing ask."""
     ask = (f"FILM: {film}.\n" + (f"CONTEXT:\n{context[:3000]}\n" if context else "")
            + "SHOTS:\n" + "\n".join(f"{s['n']}. {s['action']}" for s in shots)
            + '\n\nWrite three lines for the storyboard document. JSON with exactly these keys: '
@@ -204,16 +221,9 @@ def framing(co: dict, film: str, shots: list[dict], context: str = "") -> dict:
              'on this storyboard by email, at most 24 words"}')
     sysmsg = ("You write the short framing lines of a film storyboard a client will approve. Plain British English, "
               "no dashes, no hype, never a date, price or name.\n\nSTANDING RULES:\n" + _rules(co))
-    out: dict = {}
-    for _ in range(2):
-        got = provider.think_json(sysmsg, ask, fast=False, model=MODEL, max_tokens=4000,
-                                  purpose="storyboard-framing", company=co.get("slug"))
-        out.update({k: _clean(got.get(k)) for k in ("line", "note", "approve") if got.get(k)})
-        if all(out.get(k) for k in ("line", "note", "approve")):
-            break
-        print(f"[storyboard] framing came back without {[k for k in ('line', 'note', 'approve') if not out.get(k)]}: "
-              f"{str(got)[:300]}", flush=True)
-    return {k: out.get(k, "") for k in ("line", "note", "approve")}
+    got = _ask(sysmsg, ask, keys=("line", "note", "approve"), purpose="storyboard-framing",
+               company=co.get("slug"), max_tokens=4000)
+    return {k: _clean(got.get(k)) for k in ("line", "note", "approve")}
 
 
 def _x(v) -> int:
@@ -449,7 +459,9 @@ def summary(job: Job) -> str:
         lines.append(f"Voice over (verbatim, from {s.get('vo_src')}), from {tc(s['times'][s['vo_from']][0])}: \"{s['vo']}\"")
     lines.append("Shots:\n" + "\n".join(f"{x['n']}. {tc(t[0])}-{tc(t[1])} {x.get('action')}"
                                        for x, t in zip(s["notes"]["shots"], s["times"])))
-    lines.append("The PDF is attached" +(f" and filed in the {s['folder']} client folder" if s.get("folder") else "")
+    if s.get("fallbacks"):
+        lines.append("Model note: Fable 5 declined " + ", ".join(s["fallbacks"]) + "; Sonnet wrote those lines.")
+    lines.append("The PDF is attached" + (f" and filed in the {s['folder']} client folder" if s.get("folder") else "")
                  + ". Nothing has been sent. Reply on this card with any change (a shot's words, the order, a frame "
                    "to drop, the timing, the cover frame) and it is rebuilt as the next version.")
     return "\n\n".join(lines)
@@ -511,9 +523,11 @@ def run(jid: str, task_id: int | None, dry: bool = False) -> None:
     try:
         co = store.get_company_by_slug(job.s["company"])
         if not job.s.get("notes"):
+            FALLBACKS.clear()
             job.s["notes"] = write_notes(co, job.s["film"], job.s["frames"], [tuple(t) for t in job.s["times"]],
                                          vo=job.s.get("vo", ""), vo_from=job.s["vo_from"],
                                          context=job.s.get("context", ""), aspect=job.s["aspect"])
+            job.s["fallbacks"] = sorted(set(FALLBACKS))
             job.save()
         render(job)
         if not dry:
