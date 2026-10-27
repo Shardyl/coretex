@@ -1697,6 +1697,7 @@ async function photoCard(){
   let list=[];try{list=await syncApi('/api/fitness/photos')||[];}catch(e){el.innerHTML='<div class="fd-sub">Progress photos</div><div class="fd-note" style="margin:4px 0 0">Could not reach Cortex.</div>';return;}
   const today=localDay(new Date()), last=list[list.length-1], due=!last||last.date<=shiftDay(today,-7);
   if(last){setPhotoLast(last.date);refreshBadges();}
+  _phList=list.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
   const byDay={};list.forEach(p=>{(byDay[p.date]=byDay[p.date]||[]).push(p);});
   const days=Object.keys(byDay).sort().reverse();
   el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:baseline"><div class="fd-sub">Progress photos &middot; weekly</div>
@@ -1724,20 +1725,46 @@ window.foodPhotoUpload=async function(inp){
   }
   toast(ok===files.length?'Saved':'Saved '+ok+' of '+files.length);photoCard();
 };
-window.foodPhotoView=async function(id,day){
-  let src='';try{src=await photoBlob(id);}catch(e){toast('Could not load the photo');return;}
+// Viewer flicks through every photo in date order (owner, 27 Oct 2026): arrows, swipe or keyboard;
+// left = older, right = newer. Tapping the dark background closes it.
+let _phList=[];
+function phClose(){const o=document.getElementById('phOverlay');if(o)o.remove();document.removeEventListener('keydown',phKey);}
+function phKey(e){if(e.key==='ArrowLeft')phStep(-1);else if(e.key==='ArrowRight')phStep(1);else if(e.key==='Escape')phClose();}
+function phStep(d){const o=document.getElementById('phOverlay');if(!o)return;const i=+o.dataset.i+d;if(i>=0&&i<_phList.length)phShow(i);}
+async function phShow(i){
+  const o=document.getElementById('phOverlay'), p=_phList[i];if(!o||!p)return;
+  o.dataset.i=i;
+  const n=_phList.length, arrow=(dir,on)=>`<button aria-label="${dir<0?'Older':'Newer'} photo" onclick="event.stopPropagation();phStep(${dir})" ${on?'':'disabled'}
+    style="position:absolute;top:50%;${dir<0?'left':'right'}:8px;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,${on?0.18:0.05});color:#fff;font-size:22px;cursor:${on?'pointer':'default'}">${dir<0?'&#8249;':'&#8250;'}</button>`;
+  o.innerHTML=`<div style="position:relative;width:100%;display:flex;justify-content:center">
+      <img id="phImg" alt="Progress photo ${fmtDate(p.date)}" style="max-width:100%;max-height:78vh;border-radius:10px;object-fit:contain;background:#111;min-height:200px"/>
+      ${arrow(-1,i>0)}${arrow(1,i<n-1)}</div>
+    <div style="display:flex;gap:10px;margin-top:14px;align-items:center"><span style="color:#fff;font-weight:700">${fmtDate(p.date)}</span>
+      <span style="color:#aaa;font-size:12px">${i+1} of ${n}</span>
+      <button class="btn-sm" onclick="event.stopPropagation();foodPhotoDelete('${p.id}')">Delete</button>
+      <button class="btn-sm" onclick="event.stopPropagation();phClose()">Close</button></div>`;
+  const img=o.querySelector('#phImg');img.onclick=e=>e.stopPropagation();
+  try{const src=await photoBlob(p.id);if(+o.dataset.i===i)img.src=src;}catch(e){toast('Could not load the photo');}
+  [i-1,i+1].forEach(j=>{if(_phList[j])photoBlob(_phList[j].id).catch(()=>{});});
+}
+window.phStep=phStep;window.phClose=phClose;
+window.foodPhotoView=function(id){
+  let i=_phList.findIndex(p=>p.id===id);if(i<0)return;
+  phClose();
   const ov=document.createElement('div');ov.id='phOverlay';
   ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
-  ov.innerHTML=`<img src="${src}" alt="Progress photo" style="max-width:100%;max-height:80vh;border-radius:10px;object-fit:contain"/>
-    <div style="display:flex;gap:10px;margin-top:14px;align-items:center"><span style="color:#fff;font-weight:700">${fmtDate(day)}</span>
-      <button class="btn-sm" onclick="event.stopPropagation();foodPhotoDelete('${id}')">Delete</button>
-      <button class="btn-sm" onclick="event.stopPropagation();document.getElementById('phOverlay').remove()">Close</button></div>`;
-  ov.onclick=()=>ov.remove();document.body.appendChild(ov);
+  ov.onclick=e=>{if(e.target===ov)phClose();};
+  let x0=null,y0=null;
+  ov.addEventListener('touchstart',e=>{const t=e.touches[0];x0=t.clientX;y0=t.clientY;},{passive:true});
+  ov.addEventListener('touchend',e=>{if(x0==null)return;const t=e.changedTouches[0],dx=t.clientX-x0,dy=t.clientY-y0;x0=null;
+    if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy))phStep(dx<0?1:-1);});
+  document.addEventListener('keydown',phKey);
+  document.body.appendChild(ov);phShow(i);
 };
 window.foodPhotoDelete=async function(id){
   if(!confirm('Remove this photo?'))return;
   try{await fetch(API_BASE+'/api/fitness/photos/'+encodeURIComponent(id),{method:'DELETE',headers:{'Authorization':'Bearer '+syncToken()}});}catch(e){}
-  const o=document.getElementById('phOverlay');if(o)o.remove();delete _photoBlobs[id];photoCard();toast('Removed');
+  phClose();delete _photoBlobs[id];photoCard();toast('Removed');
 };
 
 // ---------- waist (weekly, at the navel; owner 8 Oct 2026) ----------
