@@ -70,6 +70,25 @@ def ask_which_deal(company: dict, message: dict, candidates: list[dict], directi
                "request->'message'->>'ref'=%s and status='new'", (_pick_text(direction, who, [msg], cands), ref))
 
 
+def ask_meeting_deal(company: dict, key: str, title: str, starts_at, attendees: list, candidates: list) -> None:
+    """The meeting twin of ask_which_deal: one card per meeting (request.meeting_key), never folded into an email
+    question; the answer files the stored meeting (meetnotes.file_meeting_on_deal)."""
+    from . import store
+    if db.one("select 1 from tasks where request->>'kind'='deal_pick' and request->>'meeting_key'=%s", (key,)):
+        return
+    sk = store.get_skill_by_key(company["id"], "general-operations") or store.get_skill_by_key(company["id"], "email-handling")
+    cands = [{"id": int(d["id"]), "title": d.get("title"), "stage": d.get("stage")} for d in candidates]
+    opts = "\n".join(f"{i}. #{c['id']} {c.get('title')} ({c.get('stage')})" for i, c in enumerate(cands, 1))
+    text = (f"Which opportunity was the meeting '{title}' ({str(starts_at)[:10]}) about? Its people are on more than "
+            f"one, and Cortex could not tell from the title.\n\nWith: {', '.join(attendees)}\n\n{opts}\n"
+            f"{len(cands) + 1}. None of these\n\nTap one, or say which opportunity (its name or number), or 'none'.")
+    t = store.create_task(company["id"], sk["id"], "content", {
+        "kind": "deal_pick", "title": f"Which opportunity: meeting {title[:60]}", "candidates": cands,
+        "direction": "meeting", "who": (attendees or ["them"])[0], "meeting_key": key, "messages": []})
+    if t:
+        db.execute("update tasks set status='awaiting_approval', draft=%s where id=%s", (text, t["id"]))
+
+
 def _pick_text(direction: str, who: str, msgs: list, cands: list) -> str:
     """The card's words: who, which messages, the options (also the buttons), and how else to answer."""
     head = (f"Which opportunity are {'these messages' if len(msgs) > 1 else 'this message'} "
@@ -178,6 +197,13 @@ def answer_which_deal(task: dict, text: str = "", pick_id: int | None = None) ->
             store.update_task(task["id"], request={**req, "card_problem": f"Could not create the opportunity: {e}"})
             return f"Could not create the opportunity: {e}"
         how, val = "deal", {"id": d["id"], "title": d.get("title") or title, "stage": d.get("stage") or "Opportunity"}
+    if how == "deal" and req.get("meeting_key"):
+        from . import meetnotes
+        r = meetnotes.file_meeting_on_deal(req["meeting_key"], int(val["id"]), by="owner")
+        note = r.get("note") or r.get("error") or ""
+        store.update_task(task["id"], status="done", request={**req, "card_problem": None},
+                          draft=(task.get("draft") or "") + "\n\nANSWER: " + note)
+        return note
     if how == "deal":
         pick = val
         for msg in msgs:

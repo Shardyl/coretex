@@ -4456,7 +4456,14 @@ def _update_opportunity(inp: dict) -> str:
         done.append("contacts on it: " + ", ".join(added))
     if meeting:
         meetnotes.link_meeting(did, meeting.get("event_id") or "", meeting["title"], meeting["starts_at"])
-        done.append(f"meeting '{meeting['title']}' linked, its notes file here")
+        _stored = db.one("select id from meeting_notes where (event_id=%s and %s<>'') or (lower(title)=lower(%s) and "
+                         "starts_at::date=%s::date) order by id desc limit 1",
+                         (meeting.get("event_id") or "", meeting.get("event_id") or "", meeting["title"],
+                          str(meeting["starts_at"])[:10]))
+        if _stored:        # notes already captured: file them here now, not only the next ones
+            done.append(meetnotes.file_meeting_on_deal(_stored["id"], did, by="owner, via Talk").get("note") or "")
+        else:
+            done.append(f"meeting '{meeting['title']}' linked, its notes file here")
     for ref in inp.get("documents") or []:
         ref = str(ref).strip()
         doc = (db.one("select id, filename, deal_id from company_documents where id=%s", (int(ref),)) if ref.isdigit()

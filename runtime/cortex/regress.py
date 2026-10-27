@@ -1042,6 +1042,33 @@ def _cases():
     case("nothing books into a busy slot; an in-person meeting gets no Meet link and no invite", "DSO card 1422, 22 Oct",
          _no_busy_booking)
 
+    def _meeting_finds_its_job():
+        from . import meetnotes, events
+        ds = [{"id": 107, "title": "HBMSU - Learn From Anywhere (PART 2)", "stage": "Booked"},
+              {"id": 32, "title": "HBMSU - Learn From Anywhere (PART 1)", "stage": "Close & review"},
+              {"id": 24, "title": "HBMSU Graduation 2026 Video", "stage": "Close & review"}]
+        two_live = [dict(ds[0]), {"id": 99, "title": "HBMSU other", "stage": "Opportunity"}]
+        return ((meetnotes._bound_deal("", "Sensa Productions and Islam Salah", "", ds) or {}).get("id") == 107
+                and meetnotes._bound_deal("", "Sensa Productions and Islam Salah", "", two_live) is None
+                and "_ask_meeting(" in inspect.getsource(meetnotes.sweep)
+                and "meeting_key" in inspect.getsource(events.answer_which_deal)
+                and "file_meeting_on_deal" in inspect.getsource(events.answer_which_deal))
+    case("a meeting files on the live job, or asks which; never left unlinked in silence", "HBMSU meeting 36, 27 Oct",
+         _meeting_finds_its_job)
+
+    def _post_meeting_to_the_right_person():
+        from . import meetnotes
+        ppl = {"as.alzarooni@hbmsu.ac.ae": "Aseela AlZarooni", "i.salah@hbmsu.ac.ae": "Islam Salah"}
+        req = {"inquiry": {"name": "Aseela AlZarooni", "email": "as.alzarooni@nonexistent-regress.test"},
+               "followup": "post-meeting", "brief": "POST-MEETING FOLLOW-UP after 'Sensa Productions and Islam Salah'."}
+        return (meetnotes.named_in_title("Sensa Productions and Islam Salah", ppl) == "i.salah@hbmsu.ac.ae"
+                and meetnotes.named_in_title("Weekly sync", ppl) is None
+                and bool(engine._greeting_mismatch("Hello Islam,\n\nThank you for your time.", req))
+                and "_pick_meeting_contact(" in inspect.getsource(meetnotes._spawn_post_meeting_followup)
+                and "cc_extra" in inspect.getsource(meetnotes._spawn_post_meeting_followup))
+    case("a post-meeting email goes to the person the meeting was with; a system brief is not the owner's words",
+         "HBMSU card 1498, 27 Oct", _post_meeting_to_the_right_person)
+
     def _include_is_attach():
         return (engine._attach_asked("remove this paragraph\n\nand also include our ai capabilities pdf")
                 and engine._attach_asked("add the company profile")

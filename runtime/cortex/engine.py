@@ -3799,8 +3799,12 @@ def _greeting_mismatch(draft: str, req: dict) -> str:
             return ""
     _named_to = [t for h in names_to for t in re.split(r"[^a-z]+", _ns._norm(h)) if len(t) >= 2]
     # HIS WORDS WIN: a name he gave on this card ("greet him as Bob") is never blocked
+    # the brief counts only on an email he composed: a brief Cortex wrote (a post-meeting follow-up naming "Islam
+    # Salah", HBMSU card 1498) is not his words
+    _sys_brief = any(req.get(k) for k in ("system_note", "followup", "next_step", "auto_source", "proposal_card",
+                                          "creative_set", "commitment"))
     _his = " ".join(str(x or "") for x in (req.get("card_corrections"), req.get("pending_instruction"),
-                                          _CORRECTION_NOW.get(), "" if req.get("system_note") else req.get("brief")))
+                                          _CORRECTION_NOW.get(), "" if _sys_brief else req.get("brief")))
     if g in re.split(r"[^a-z]+", _ns._norm(_his)):
         return ""
     known = any(g in re.split(r"[^a-z]+", str(a).split("@")[0].lower())

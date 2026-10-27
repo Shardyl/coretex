@@ -4437,3 +4437,27 @@ shoot needs none), then 10% off the whole quotation.
   attaches) only knew attach / enclose, and the writer then promised to "separately send over" the deck. `_INCLUDE_DOC`:
   include / add / put in + a document word (pdf, deck, profile, quotation...) counts, unless the same sentence is in
   the future (`_LATER`: will, 'll, later, separately, shortly, next week...).
+
+## The post-meeting email goes to the person the meeting was with (HBMSU card 1498, 27 Oct 2026)
+- CAUSE: the meeting "Sensa Productions and Islam Salah" had Aseela AlZarooni and Islam Salah on the invite;
+  `_spawn_post_meeting_followup` took the FIRST attendee in the CRM (Aseela) and the writer greeted Islam. The 25 Oct
+  greeting check let it through because it read the system-written brief (which names Islam Salah) as the owner's own
+  words.
+- `meetnotes._pick_meeting_contact`: the opportunity's cast lead when they were in the meeting, else the attendee the
+  meeting is named after (`named_in_title`, spelling forgiven, exactly one), else the first attendee we know. Everyone
+  else in the meeting is copied (`cc_extra`).
+- `_greeting_mismatch` reads the brief as his words only on an email he composed: never when the card carries
+  system_note, followup, next_step, auto_source, proposal_card, creative_set or commitment.
+
+## A meeting files on the live job, or asks (HBMSU meeting 36, 27 Oct 2026)
+- CAUSE: "Sensa Productions and Islam Salah" (Islam + Aseela) matched three HBMSU jobs: #107 Part 2 (Booked) and #32 /
+  #24 (Close & review). `_bound_deal` only took a single title-word match, so the meeting filed nowhere, and unlike
+  email no "which opportunity?" was asked: no notes on #107, no next steps, and the post-meeting card had no deal.
+- `_bound_deal`: when the title cannot tell, the ONE live job (sales or delivery stage) wins; two live jobs = no guess.
+- Still no answer: `meetnotes._ask_meeting` -> `events.ask_meeting_deal` raises one deal_pick card per meeting
+  (`request.meeting_key`, never folded into an email question); `answer_which_deal` then calls
+  `meetnotes.file_meeting_on_deal(key, deal)`: row deal_id, the binding (`link_meeting`), the full notes document, the
+  timeline + next-step re-plan (`record_meeting`), and the waiting post-meeting card moved onto the deal, readdressed
+  (`_pick_meeting_contact`, the others copied) and redrafted (`refresh_from_notes`).
+- Talk `update_opportunity(meeting=...)` on a meeting ALREADY captured files its stored notes there at once
+  (`file_meeting_on_deal`), not only the next ones.

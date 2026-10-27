@@ -349,6 +349,7 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
             ext = [a.get("email", "").lower() for a in (e.get("attendees") or [])
                    if a.get("email") and not _is_us(a["email"])]
             company_id = deal_id = None
+            _cands = []
             for em in ext:                        # first attendee on an active deal decides the home
                 for slug in ("sensa", "skyvision", "tabscanner", "filmspoke", "snaprewards"):
                     ds = crm.active_deals_for_email(em, slug)
@@ -356,6 +357,7 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
                         co = store.get_company_by_slug(slug)
                         _b = _bound_deal(e.get("id") or "", e.get("summary") or "", (e.get("start") or {}).get("dateTime") or "", ds)
                         company_id, deal_id = (co or {}).get("id"), (_b or {}).get("id")
+                        _cands = ds
                         break
                 if deal_id:
                     break
@@ -370,6 +372,8 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
                        (e["id"], note["fileId"], company_id, deal_id, e.get("summary"), starts,
                         json.dumps(ext), summary))
             _keep_full(e["id"], e.get("summary") or "Meeting", text, company_id, deal_id, starts)
+            if not deal_id and len(_cands) > 1 and company_id and not backfill:
+                _ask_meeting(company_id, e["id"], e.get("summary") or "Meeting", starts, ext, _cands)
             for em in ext:                        # meeting lands on each external attendee's CRM history
                 try:
                     crm.log_event(em, "meeting_notes", f"Meeting: {e.get('summary')} — notes captured", None)
@@ -389,6 +393,16 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
                     pass
             made += 1
     return {"captured": made}
+
+
+def _ask_meeting(company_id, key: str, title: str, starts_at, attendees: list, cands: list) -> None:
+    """WHICH OPPORTUNITY IS THIS MEETING? (HBMSU meeting 36, 27 Oct 2026): the email path asked, the meeting path
+    filed nothing and said nothing. One deal_pick card per meeting; his answer files it (file_meeting_on_deal)."""
+    try:
+        from . import events
+        events.ask_meeting_deal(store.get_company(company_id), key, title, starts_at, attendees, cands)
+    except Exception as e:  # noqa: BLE001
+        print(f"[meetnotes] ask which deal: {type(e).__name__}: {e}", flush=True)
 
 
 def link_meeting(deal_id: int, event_id: str, title: str, starts_at) -> None:
@@ -417,7 +431,73 @@ def _bound_deal(event_id: str, title: str, starts_at, candidates: list[dict]) ->
         return candidates[0]
     words = {w for w in re.findall(r"[a-z]{4,}", (title or "").lower())} - {"meeting", "call", "with", "catch"}
     hits = [d for d in candidates if words & set(re.findall(r"[a-z]{4,}", (d.get("title") or "").lower()))]
-    return hits[0] if len(hits) == 1 else None
+    if len(hits) == 1:
+        return hits[0]
+    # THE LIVE JOB WINS (HBMSU meeting 36, 27 Oct 2026): Islam and Aseela are on Part 2 (Booked) and on two finished
+    # jobs at Close & review; a meeting about the work is about the job still running
+    from . import stages
+    live = [d for d in (hits or candidates) if d.get("stage") in stages.SALES + stages.DELIVERY]
+    return live[0] if len(live) == 1 else None
+
+
+def file_meeting_on_deal(meeting, deal_id: int, by: str = "owner") -> dict:
+    """File a STORED meeting on an opportunity after the fact (his answer to "which opportunity?", or Talk linking a
+    meeting already captured): the row, the binding, the full notes document, the timeline + next steps, and the
+    waiting post-meeting card re-homed and readdressed. `meeting` = meeting_notes id or its event key."""
+    row = (db.one("select * from meeting_notes where id=%s", (int(meeting),)) if str(meeting).isdigit()
+           else db.one("select * from meeting_notes where event_id=%s", (str(meeting),)))
+    if not row:
+        return {"ok": False, "error": "no such meeting"}
+    p = db.one("select id, title, company from crm_projects where id=%s", (int(deal_id),))
+    if not p:
+        return {"ok": False, "error": "no such opportunity"}
+    co_id = row.get("company_id")
+    if not co_id:
+        for slug in ("sensa", "skyvision", "tabscanner", "filmspoke", "snaprewards"):
+            if (p.get("company") or "").lower() in (slug, crm._org(slug).lower()):
+                co_id = (store.get_company_by_slug(slug) or {}).get("id")
+                break
+    db.execute("update meeting_notes set deal_id=%s, company_id=coalesce(company_id, %s) where id=%s",
+               (p["id"], co_id, row["id"]))
+    title = row.get("title") or "Meeting"
+    link_meeting(p["id"], row.get("event_id") or "", title, row.get("starts_at"))
+    if row.get("full_text"):
+        _keep_full(row["event_id"], title, row["full_text"], co_id, p["id"], row.get("starts_at"))
+    try:
+        from . import pipeline
+        pipeline.record_meeting(p["id"], co_id, title, row.get("summary") or "", commitments=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[meetnotes] file on deal: {type(e).__name__}: {e}", flush=True)
+    atts = row.get("attendees") or []
+    if isinstance(atts, str):
+        try:
+            atts = json.loads(atts)
+        except ValueError:
+            atts = []
+    atts = [str(a).lower() for a in atts if "@" in str(a)]
+    moved = []
+    for t in db.query("select * from tasks where request->>'followup'='post-meeting' and status in ('new','drafting',"
+                      "'queued','awaiting_approval','awaiting_correction') and lower(request->'inquiry'->>'email') = "
+                      "any(%s) and created_at >= %s - interval '15 minutes'", (atts, row["created_at"])):
+        req = dict(t.get("request") or {})
+        req["deal_id"] = p["id"]
+        to = _pick_meeting_contact({"summary": title}, atts, p["id"]) or (req.get("inquiry") or {}).get("email")
+        if to and to.lower() != ((req.get("inquiry") or {}).get("email") or "").lower():
+            c = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (to,)) or {}
+            nm = f"{c.get('first_name') or ''} {c.get('last_name') or ''}".strip() or to.split("@")[0]
+            req["inquiry"] = {**(req.get("inquiry") or {}), "name": nm, "email": to}
+        req["cc_extra"] = [a for a in atts if a != (req.get("inquiry") or {}).get("email", "").lower()][:6]
+        store.update_task(t["id"], request=req)
+        db.execute("update tasks set deal_id=%s where id=%s", (p["id"], t["id"]))
+        try:
+            from . import engine
+            engine.refresh_from_notes(t["id"], f"The meeting is filed on opportunity #{p['id']} {p['title']}: write "
+                                               f"to {req['inquiry'].get('name')}, the person the meeting was with.")
+        except Exception as e:  # noqa: BLE001
+            print(f"[meetnotes] redraft #{t['id']}: {type(e).__name__}: {e}", flush=True)
+        moved.append(t["id"])
+    return {"ok": True, "meeting": row["id"], "deal_id": p["id"], "cards": moved,
+            "note": f"Meeting '{title}' filed on #{p['id']} {p['title']}" + (f"; card(s) {moved} updated" if moved else "")}
 
 
 def _linked_deal(event_id: str, title: str, starts_at) -> tuple:
@@ -433,12 +513,43 @@ def _linked_deal(event_id: str, title: str, starts_at) -> tuple:
     return None, b["id"]
 
 
+def named_in_title(title: str, people: dict) -> str | None:
+    """The attendee the meeting is NAMED after ('Sensa Productions and Islam Salah'): {email: name} -> email, when
+    exactly one attendee's name is in the title (spelling forgiven)."""
+    from .nextsteps import name_like
+    words = [w for w in re.split(r"[^\w]+", title or "") if len(w) >= 3]
+    hits = [em for em, nm in people.items()
+            if any(name_like(w, t) for t in str(nm or "").split() if len(t) >= 3 for w in words)]
+    return hits[0] if len(hits) == 1 else None
+
+
+def _pick_meeting_contact(event: dict, ext: list, deal_id) -> str | None:
+    """WHO THE POST-MEETING EMAIL IS TO (HBMSU card 1498, 27 Oct 2026): it went to the FIRST attendee on the invite,
+    Aseela, and the writer greeted Islam, the person the meeting was with. In order: the opportunity's lead when they
+    were in the meeting, the attendee the meeting is named after, then the first attendee we know."""
+    known = {}
+    for em in ext:
+        r = db.one("select first_name, last_name from crm_master where lower(email)=lower(%s)", (em,))
+        if r is not None:
+            known[em.lower()] = f"{r.get('first_name') or ''} {r.get('last_name') or ''}".strip()
+    if not known:
+        return None
+    if deal_id:
+        try:
+            from . import cast
+            lead = (cast.lead(deal_id) or "").lower()
+            if lead in known:
+                return lead
+        except Exception:  # noqa: BLE001
+            pass
+    return named_in_title(event.get("summary") or "", known) or next(iter(known))
+
+
 def _spawn_post_meeting_followup(event: dict, ext: list, company_id, deal_id, summary: str) -> None:
     """Notes captured and the client hasn't written since the meeting -> draft the post-meeting follow-up
     as an approval card: thanks, a short recap of what was agreed, and the committed next step (for a sales
     meeting usually confirming the proposal/quotation is in preparation with the scope from the notes)."""
-    contact = next((em for em in ext if db.one(
-        "select id from crm_master where lower(email)=lower(%s)", (em,))), None)
+    contact = _pick_meeting_contact(event, ext, deal_id)
     if not contact:
         return
     if company_id is None:                        # no deal matched: the contact's latest card names the company
@@ -468,6 +579,9 @@ def _spawn_post_meeting_followup(event: dict, ext: list, company_id, deal_id, su
            "inquiry": {"name": name or contact.split("@")[0], "email": contact,
                        "subject": f"Following up: {event.get('summary')}"},
            "followup": "post-meeting"}
+    _others = [em for em in dict.fromkeys(x.lower() for x in ext) if em != contact.lower()]
+    if _others:
+        req["cc_extra"] = _others[:6]      # everyone else who was in the meeting is copied
     if deal_id:
         req["deal_id"] = deal_id
     _attach_summary_to_request(req, deal_id=deal_id, contact=contact)
@@ -926,6 +1040,7 @@ def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = 
                 title = ev_title or want_title or subject.replace("Notes:", "").strip()
                 summary = _distil(title, text)
                 company_id = deal_id = None
+                _cands = []
                 for em in emails:
                     for slug in ("sensa", "skyvision", "tabscanner", "filmspoke", "snaprewards"):
                         ds = crm.active_deals_for_email(em, slug)
@@ -933,6 +1048,7 @@ def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = 
                             co = store.get_company_by_slug(slug)
                             _b = _bound_deal("", title, start, ds)
                             company_id, deal_id = (co or {}).get("id"), (_b or {}).get("id")
+                            _cands = ds
                             break
                     if deal_id:
                         break
@@ -945,6 +1061,8 @@ def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = 
                     " attendees, summary) values (%s,%s,%s,%s,%s,%s,%s,%s) on conflict (event_id) do nothing",
                     (key, _fid, company_id, deal_id, title, start, json.dumps(emails), summary))
                 _keep_full(key, title, text, company_id, deal_id, start)
+                if not deal_id and len(_cands) > 1 and company_id and not backfill:
+                    _ask_meeting(company_id, key, title, start, emails or [], _cands)
                 for em in emails:
                     try:
                         crm.log_event(em, "meeting_notes", f"Meeting: {title} — notes captured", None)
