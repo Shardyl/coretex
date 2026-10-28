@@ -993,7 +993,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='116';                         // keep in step with CACHE in sw.js
+const APP_VERSION='117';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1300,7 +1300,7 @@ function initSync(){
   setSyncState(syncToken()?'idle':'auth');
   window.addEventListener('online',()=>syncNow(false));
   window.addEventListener('offline',()=>setSyncState('offline'));
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden){syncNow(false);refreshReturned();}});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden){rollFormDates();syncNow(false);refreshReturned();}});
   setTimeout(()=>{try{refreshReturned();}catch(e){}},2000);   // came back via the intent's fallback reload
   syncNow(false);
 }
@@ -2954,11 +2954,16 @@ function exportXLSX(){
   XLSX.writeFile(wb,'fitness_'+new Date().toISOString().slice(0,10)+'.xlsx');
 }
 
+// The lift and cardio forms open on TODAY, in local time. They were set once at load (UTC), so an app left open
+// overnight saved the next day's lifts under yesterday (owner, 28 Oct 2026). A date he picked himself is kept.
+function localDay(){const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);}
+function rollFormDates(){const t=localDay();['liftDateIn','cardioDateIn'].forEach(id=>{const el=document.getElementById(id);if(el&&(!el.value||el.dataset.auto)){el.value=t;el.dataset.auto='1';}});}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 function init(){
   loadAll();
-  document.getElementById('liftDateIn').value=new Date().toISOString().slice(0,10);
-  document.getElementById('cardioDateIn').value=new Date().toISOString().slice(0,10);
+  rollFormDates();
+  ['liftDateIn','cardioDateIn'].forEach(id=>document.getElementById(id).addEventListener('change',e=>{e.target.dataset.auto='';}));
 
   // Section tabs
   document.querySelectorAll('.section-tab').forEach(t=>t.addEventListener('click',()=>showSection(t.dataset.section)));
@@ -3147,6 +3152,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=116"></script>
+<script src="food.js?v=117"></script>
 </body>
 </html>

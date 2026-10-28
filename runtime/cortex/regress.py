@@ -1795,6 +1795,10 @@ def _cases():
     case("a custom watch exercise titled incline walk is filed on the Incline Walk preset", "incline walk 28 Oct",
          lambda: _fit._titled_preset("Incline Treadmil Walking") == "id_jge_incline_walk"
          and _fit._titled_preset("") is None and '"titled"' in inspect.getsource(_fit.reconcile_watch))
+    case("the lift and cardio forms roll to today when the app comes back", "lifts filed under yesterday 28 Oct",
+         lambda: (lambda h: "rollFormDates();syncNow(false)" in h and "getTimezoneOffset()*60000" in h
+                  and "liftDateIn').value=new Date().toISOString()" not in h)(
+             open(_web + "/fitness/index.html", encoding="utf-8").read()))
     case("every cardio and lifting row carries its start time", "fitness times 20 Oct",
          lambda: '"startAt"' in inspect.getsource(_fit.pull))
     case("the fitness app pushes only rows changed since its last pull", "stale browser 21 Oct",
