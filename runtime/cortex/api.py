@@ -33,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Json
 from pydantic import BaseModel
 
-from . import (newsletter, anchor_score, capabilities, catalog, config, contentqueue, crm, db, deck, documents, engine, fitness, gmail, knowledge, meetingprep, nurture, pipeline,
+from . import (newsletter, anchor_score, capabilities, catalog, config, connector, contentqueue, crm, db, deck, documents, engine, fitness, gmail, knowledge, meetingprep, nurture, pipeline,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
                skillqa, social, social_comments, social_config, social_connect, social_dm, social_warm, store, voice, webauthn_auth, whatsapp,
                worker)
@@ -6165,6 +6165,137 @@ def talk_from_whatsapp(text: str, images: list | None = None, names: list | None
     store.conv_save(conv["id"], history + [{"role": "user", "content": said + (" [+ attachment]" if images else "")},
                                            {"role": "assistant", "content": reply}])
     return reply
+
+
+# ---------------------------------------------------------------- the Claude connector (28 Oct 2026)
+# A team member's own Claude reaches Talk here, as them (cortex/connector.py says why and what it exposes).
+CONNECTOR_PUBLIC = os.environ.get("CORTEX_PUBLIC_URL", "https://coretex.uk").rstrip("/")
+CONNECTOR_FILE_TTL = 30 * 60
+
+
+def talk_for_connector(user: dict, text: str, new: bool = False, company: str | None = None) -> str:
+    """One Talk turn from the team member's Claude: the SAME _chat_prepare + chat_tools as their cockpit, their scope
+    and gates. The conversation rolls on its own 'Claude (<name>)' chat (in Talk's history) and starts fresh after a
+    day of quiet or on request."""
+    from datetime import timedelta, timezone
+    first = (user.get("name") or "Team").split()[0]
+    ckey = f"connector_talk_conv:{user['email'].lower()}"
+    cid = None if new else db.setting_get(ckey)
+    conv = store.conv_get(int(cid)) if cid else None
+    if not conv or (conv.get("updated_at") and datetime.now(timezone.utc) - conv["updated_at"] > timedelta(hours=24)):
+        conv = store.conv_create(f"Claude ({first})", None)
+        db.setting_set(ckey, conv["id"])
+    history = [m for m in (conv.get("messages") or []) if m.get("role") in ("user", "assistant")]
+    user_msg = {"role": "user", "content": text + (
+        f"\n\n[Sent by {user.get('name')} ({user.get('email')}), a member of the team, not Rashad, through Claude on "
+        "their own computer: Claude relays their words and reads your reply back to them. They act with their own "
+        "Cortex access, and an email they ask for is sent as them unless they say otherwise. Whenever you make, find "
+        "or change a document, give its library id as #<id> so it can be downloaded.]")}
+    body = ChatTurn(messages=(history + [user_msg])[-40:], company=company or None)
+    msgs, chosen, system, tools, _exec = _chat_prepare(body, user)
+    reply = provider.chat_tools(system, msgs, tools, _exec, purpose="chat:connector", company=company or None) or ""
+    store.conv_save(conv["id"], history + [{"role": "user", "content": text}, {"role": "assistant", "content": reply}])
+    return reply
+
+
+def _connector_scope(user: dict, company_id: int) -> dict:
+    """The company row, if this team member may reach it (their `companies` slugs), else refuse."""
+    co = store.get_company(company_id)
+    allowed = user.get("companies")
+    if not co or (allowed is not None and co["slug"] not in allowed):
+        raise connector.ToolError("That document belongs to a company you do not have access to.")
+    return co
+
+
+def _connector_file_url(user: dict, doc_id: int) -> dict:
+    d = documents.get(doc_id)
+    if not d:
+        raise connector.ToolError(f"No library document #{doc_id}.")
+    _connector_scope(user, d["company_id"])
+    exp = int(time.time()) + CONNECTOR_FILE_TTL
+    sig = _sign(f"cfile.{doc_id}.{exp}")
+    return {"filename": d["filename"], "size": d.get("size") or 0, "mime": d.get("mime") or "",
+            "url": f"{CONNECTOR_PUBLIC}/api/connector/file/{doc_id}?exp={exp}&sig={sig}"}
+
+
+def _connector_upload(user: dict, filename: str, b64: str, company: str, kind: str) -> dict:
+    import mimetypes
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise connector.ToolError(f"Unknown company '{company}'.")
+    _connector_scope(user, co["id"])
+    raw = b64.split(",", 1)[1] if b64.startswith("data:") else b64
+    try:
+        data = base64.b64decode(raw, validate=False)
+    except Exception:  # noqa: BLE001
+        raise connector.ToolError("data_base64 is not valid base64.")
+    mime = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    d = documents.save(co["id"], co["slug"], filename, mime, data, kind=kind,
+                       uploaded_by=f"{user.get('email')} (Claude)", cap=documents.MAX_DEAL_BYTES)
+    return {"id": d["id"], "filename": d["filename"]}
+
+
+CONNECTOR_HANDLERS = {"talk": talk_for_connector, "file_url": _connector_file_url, "upload": _connector_upload}
+
+
+@app.post("/api/connector/mcp")
+async def connector_mcp(request: Request, authorization: str = Header(default="")):
+    """MCP over streamable HTTP. Auth is the team member's connector token (never a cockpit token). A tool call
+    answers as an SSE stream with a keepalive every 10s, so a deck that takes minutes never idles past
+    Cloudflare's ~100s ceiling; everything else answers as plain JSON."""
+    from fastapi.responses import JSONResponse
+    token = authorization[7:] if authorization.lower().startswith("bearer ") else authorization
+    user = connector.user_for(token.strip())
+    if not user:
+        return JSONResponse({"error": "not authenticated"}, status_code=401)
+    try:
+        msg = await request.json()
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}},
+                            status_code=400)
+    if isinstance(msg, list):
+        out = [r for r in (connector.handle(m, user, CONNECTOR_HANDLERS) for m in msg) if r]
+        return JSONResponse(out) if out else Response(status_code=202)
+    if not isinstance(msg, dict) or msg.get("id") is None:
+        return Response(status_code=202)
+    if msg.get("method") != "tools/call":
+        return JSONResponse(connector.handle(msg, user, CONNECTOR_HANDLERS))
+
+    def gen():
+        import queue as _q
+        import threading as _th
+        out: _q.Queue = _q.Queue()
+        _th.Thread(target=lambda: out.put(connector.handle(msg, user, CONNECTOR_HANDLERS)), daemon=True).start()
+        while True:
+            try:
+                resp = out.get(timeout=10)
+                break
+            except _q.Empty:
+                yield ": keepalive\n\n"
+        yield f"event: message\ndata: {json.dumps(resp, default=str)}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/connector/mcp")
+def connector_mcp_get():
+    return Response(status_code=405, headers={"Allow": "POST"})
+
+
+@app.get("/api/connector/file/{doc_id}")
+def connector_file(doc_id: int, exp: int = 0, sig: str = ""):
+    """A library document by a link cortex_get_document signed: 30 minutes, this one document, nothing else."""
+    if exp < time.time() or not hmac.compare_digest(sig, _sign(f"cfile.{doc_id}.{exp}")):
+        raise HTTPException(status_code=403, detail="link expired or invalid")
+    d = documents.get(doc_id)
+    if not d:
+        raise HTTPException(status_code=404, detail="not found")
+    from urllib.parse import quote as _q
+    _ascii = d["filename"].encode("ascii", "replace").decode().replace('"', "'")
+    return Response(content=documents.read_bytes(d), media_type=d["mime"],
+                    headers={"Content-Disposition": f"attachment; filename=\"{_ascii}\"; "
+                                                    f"filename*=UTF-8''{_q(d['filename'])}"})
 
 
 @app.post("/api/chat")

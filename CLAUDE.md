@@ -4462,3 +4462,21 @@ shoot needs none), then 10% off the whole quotation.
   (`_pick_meeting_contact`, the others copied) and redrafted (`refresh_from_notes`).
 - Talk `update_opportunity(meeting=...)` on a meeting ALREADY captured files its stored notes there at once
   (`file_meeting_on_deal`), not only the next ones.
+
+## The Claude connector: a team member's own Claude, as Talk (28 Oct 2026)
+- WHY: the owner wants Gino (on the hello@ Claude account, Claude Code desktop on his own PC) to make decks, formats,
+  documents, quotations and skill edits with the same Cortex knowledge, but never change code. The code block is the
+  PC itself: no repo, no box SSH key, no GitHub, no WP Engine remote. Cortex is reached ONLY through this endpoint.
+- `POST /api/connector/mcp` (`cortex/connector.py` + the handlers beside `talk_from_whatsapp` in `api.py`): MCP over
+  streamable HTTP. Three tools: `cortex_talk` (one Talk turn through the SAME `_chat_prepare` + `chat_tools`, as the
+  team member, their scope and gates; rolls on its own "Claude (<name>)" conversation, fresh after 24 h or on
+  request), `cortex_get_document` (a signed 30-minute download link for one library doc, company-scoped),
+  `cortex_upload_document` (base64 into the library). A tool call answers as SSE with a 10 s keepalive, so a deck that
+  takes minutes never idles past Cloudflare's ~100 s ceiling.
+- AUTH: a per-user connector token `cxk_...`, stored only as a sha256 in `users.connector_token_hash`, never a cockpit
+  token. Mint (shown once; any earlier one stops working) / revoke on the box:
+  `sudo -u cortex /opt/coretex/.venv/bin/python -m cortex.connector mint|revoke <email>`. The owner has none.
+- On the PC: `claude mcp add --scope user --transport http cortex https://coretex.uk/api/connector/mcp --header
+  "Authorization: Bearer <token>"`, plus the staff CLAUDE.md, skills and the admin-only managed-settings deny list
+  from the setup pack (`Desktop\Gino PC setup`, built 28 Oct). Regress case: "a team member's Claude reaches Cortex
+  only as Talk, as them, and nothing else".

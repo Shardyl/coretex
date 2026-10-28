@@ -1877,6 +1877,31 @@ def _cases():
     case("a storyboard's 9:16 cut is reframed on the subject and stays inside the frame", "Majlis shot 9 bottle cut",
          lambda: _sb.StoryboardDeck._window(5)[0] == 0 and _sb.StoryboardDeck._window(95)[0] == 360 - 114
          and _sb.StoryboardDeck._window(50)[0] == 123 and _sb._x("x") == 50)
+
+    # --- a team member's Claude reaches Cortex only as Talk, as them (the Claude connector, 28 Oct)
+    def _connector_is_talk_as_them():
+        from . import api, connector as cx
+        seen = {}
+        h = {"talk": lambda u, m, n, c: seen.setdefault("talk", (u["email"], m, n, c)) and "ok",
+             "file_url": lambda u, i: {"filename": "a.pdf", "size": 1, "mime": "application/pdf", "url": "u"},
+             "upload": lambda u, f, b, c, k: {"id": 9, "filename": f}}
+        who = {"id": 1, "email": "gino@sensa.digital", "companies": ["sensa"]}
+        init = cx.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                          "params": {"protocolVersion": "2025-06-18"}}, who, h)
+        names = [t["name"] for t in cx.handle({"id": 2, "method": "tools/list"}, who, h)["result"]["tools"]]
+        call = cx.handle({"id": 3, "method": "tools/call", "params": {"name": "cortex_talk",
+                                                                      "arguments": {"message": "make a deck"}}}, who, h)
+        bad = cx.handle({"id": 4, "method": "tools/call", "params": {"name": "run_shell", "arguments": {}}}, who, h)
+        return (init["result"]["protocolVersion"] == "2025-06-18"
+                and sorted(names) == ["cortex_get_document", "cortex_talk", "cortex_upload_document"]
+                and call["result"]["isError"] is False and seen["talk"] == ("gino@sensa.digital", "make a deck", False, None)
+                and bad["result"]["isError"] is True
+                and cx.handle({"method": "notifications/initialized"}, who, h) is None
+                and cx.user_for("") is None and cx.user_for("not-a-connector-token") is None
+                and "_chat_prepare(body, user)" in inspect.getsource(api.talk_for_connector)
+                and "connector.user_for(" in inspect.getsource(api.connector_mcp))
+    case("a team member's Claude reaches Cortex only as Talk, as them, and nothing else",
+         "Claude connector for Gino, 28 Oct", _connector_is_talk_as_them)
     return C
 
 
