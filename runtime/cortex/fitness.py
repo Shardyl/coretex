@@ -1008,7 +1008,16 @@ def _dur(mins: float) -> str:
 WARMUP_FIELDS = [{"type": "number", "label": "Incline (%)"}, {"type": "number", "label": "Speed (km/h)"}]
 _DEFAULT_SETTINGS = {"id_jge_z2_warmup": {"0": "2", "1": "9"},
                      "id_bv0krd6v": {"0": "2", "1": "12.2", "2": "6.5"},
-                     "id_dvp1x65m": {"0": "2", "1": "12.2", "2": "6.5"}}
+                     "id_dvp1x65m": {"0": "2", "1": "12.2", "2": "6.5"},
+                     "id_jge_incline_walk": {"0": "10", "1": "5.5"}}
+
+# A watch session he logs as a CUSTOM Samsung exercise arrives as type OTHER with his own title (28 Oct 2026: "Incline
+# Treadmil Walking", his spelling), so it is matched on the title. Steam Room is handled separately.
+_TITLED_PRESETS = [(re.compile(r"incline", re.I), "id_jge_incline_walk")]
+
+
+def _titled_preset(title: str) -> str | None:
+    return next((uid for rx, uid in _TITLED_PRESETS if rx.search(title or "")), None)
 
 
 def _settings_for(preset_uid: str) -> dict:
@@ -1115,8 +1124,11 @@ def reconcile_watch(since: date | None = None) -> dict:
         if s["uid"] in linked or s["uid"] in hold:
             continue
         tn, title = s["type_name"], (s["title"] or "")
+        titled = _titled_preset(title)
         if "steam" in title.lower():
             kind = "steam"
+        elif titled:
+            kind = "titled"
         elif warm.get(s["uid"]) == "warmup":
             kind = "warmup"
         elif tn == "ELLIPTICAL":
@@ -1129,7 +1141,7 @@ def reconcile_watch(since: date | None = None) -> dict:
         mins = float(s["mins"])
         watch = {"uid": s["uid"]}
         # 1. a hand-logged entry that day on the same kind of machine -> link only
-        if kind not in ("steam", "warmup"):
+        if kind not in ("steam", "warmup", "titled"):
             cands = db.query(
                 "select c.uid, c.minutes, c.watch from fitness.cardio_sessions c join fitness.cardio_presets p "
                 "on p.uid=c.preset_uid where c.day=%s and not c.deleted and c.watch is null "
@@ -1149,6 +1161,8 @@ def reconcile_watch(since: date | None = None) -> dict:
         elif kind == "warmup":
             preset, extra, conf, how = "id_jge_z2_warmup", _settings_for("id_jge_z2_warmup"), True, "prefilled"
             n["warmups"] += 1
+        elif kind == "titled":
+            preset, extra, conf, how = titled, _settings_for(titled), True, "prefilled"
         elif new and kind == "elliptical":
             preset = _JGE["z2_67"] if mins >= 60 else _JGE["z2_45"] if mins >= 40 else _JGE["z2_30"]
             extra = _last_settings(preset) or {"1": "17", "2": "60"}   # his stated defaults: level 17, 60 rpm

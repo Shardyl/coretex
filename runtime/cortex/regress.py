@@ -1768,6 +1768,9 @@ def _cases():
     case("a watch warm-up is held while the session after it is still running", "fitness warm-up 19 Oct",
          lambda: "hold.add(" in inspect.getsource(_fit.reconcile_watch)
          and "running" in inspect.getsource(_fit.reconcile_watch))
+    case("a custom watch exercise titled incline walk is filed on the Incline Walk preset", "incline walk 28 Oct",
+         lambda: _fit._titled_preset("Incline Treadmil Walking") == "id_jge_incline_walk"
+         and _fit._titled_preset("") is None and '"titled"' in inspect.getsource(_fit.reconcile_watch))
     case("every cardio and lifting row carries its start time", "fitness times 20 Oct",
          lambda: '"startAt"' in inspect.getsource(_fit.pull))
     case("the fitness app pushes only rows changed since its last pull", "stale browser 21 Oct",
