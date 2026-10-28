@@ -4480,3 +4480,28 @@ shoot needs none), then 10% off the whole quotation.
   "Authorization: Bearer <token>"`, plus the staff CLAUDE.md, skills and the admin-only managed-settings deny list
   from the setup pack (`Desktop\Gino PC setup`, built 28 Oct). Regress case: "a team member's Claude reaches Cortex
   only as Talk, as them, and nothing else".
+
+## The comparison deck: its own split format (owner, 28 Oct 2026)
+
+- Owner: "literally a split: left-hand side is AI production, right-hand side is traditional production ... a
+  completely different format for this comparison type deck than the retainer deck. Don't copy the retainer format."
+- `runtime/cortex/versus.py`, `versus.render(slug, spec, out_dir=, filename=)`: like `deck.render_spec`, NO model,
+  it lays out written content. Every page is cut down a centre spine; `spec.sides.left/right` = {label, colour}
+  (AI = #00DAFF, traditional = #FF6A2C, the site's accent and accent2), both labels on every page. Generic: any two
+  ways of doing a job render the same way. Page types (`versus.PAGE_TYPES`): `cover` (one picture per side, VS
+  badge), `spotlight` (one film full frame, edged in its side's colour), `scorecard` (dimension on the spine, each
+  side's answer facing it, a dot on the side that wins the row; let either side win, an honest card is the only
+  one a client's management believes), `cost` (mirrored bars out from the spine, totals and the difference computed
+  by the page from the rows), `process` (two numbered lanes; `wait: true` draws a dashed step, a wait on someone
+  else), `proscons`, `films` (`left_ids`/`right_ids`, resolved from `media_assets` by code, unknown ids drop),
+  `scale` (the Nth film), `verdict` (when to choose each, plus the one band allowed to cross the spine), `close`.
+  Unknown page type raises. Shared plumbing (logo, thumbnails, library, PDF) is imported from deck.py.
+- Every figure arrives priced by `ratecard.price_lines` from card components; facts on the process page come from
+  the deal timeline (D-Marin: date asked 17 Sep, shoot 10 Nov, read from deal 4) or standing terms (drone permits
+  4 to 5 weeks, Sky Vision Emergy terms). Never a duration nobody stated.
+- First use: D-Marin deal 182, "D-Marin - AI production vs traditional shoot - Comparison v2.pdf" (11 pages), built
+  by box `/tmp/dmarin_versus.py`, output `/opt/coretex/creative/_dmarin-compare/`. One 60s lifestyle film with
+  drone: shoot AED 95,570 (crew 26,500 incl. hair and makeup, 3 models at 12 months GCC, drone + DCAA, one
+  location + DFTC, post) vs AI AED 34,000; programme column = the Heaven SEN-2026-0048 shape (16 films, AED 15,000
+  a month). Page 2 is a PLACEHOLDER for the Palm Jumeirah AI clip (Jurgita's image is a transfer.it link in her
+  27 Oct email). v1 (retainer format, library #1306) superseded. Not yet a Talk tool.

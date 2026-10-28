@@ -1543,6 +1543,30 @@ def _cases():
     case("render_spec reports a page that overflowed", "Heaven Q&A overflow, 17 Oct",
          lambda: "has overflowed" in inspect.getsource(deck.render_spec))
 
+    # --- the comparison deck is its own split format (owner, 28 Oct: "don't copy the retainer format")
+    def _versus_split():
+        from . import versus as _vs
+        v = _vs._Versus(_co("sensa"), {"left": {"label": "AI production", "colour": "#00DAFF"},
+                                       "right": {"label": "Traditional shoot", "colour": "#FF6A2C"}}, "T")
+        v.scorecard("K", "H", [{"label": "Cost", "left": "AED 1", "right": "AED 3", "edge": "left"}])
+        v.cost("K", "H", [{"label": "Crew", "left": 0, "right": 300}, {"label": "Gen", "left": 100, "right": 0}])
+        v.process("K", "H", [{"title": "a"}], [{"title": "b", "wait": True}])
+        v.verdict("K", "H", ["x"], ["y"], {"title": "t", "body": "b"})
+        pg = v.pages
+        # every page names both sides, in their own colours, so a reader opening anywhere knows which is which
+        ok = all("AI production" in p and "Traditional shoot" in p and "#00DAFF" in p and "#FF6A2C" in p for p in pg)
+        # the cost bars are drawn from the figures: the dearer side is the longer bar, a zero prints Not needed
+        ok = ok and "Not needed" in pg[1] and "width:380px" in pg[1] and "AED 200" in pg[1]
+        # a wait on someone else is drawn as one; an unknown page type is refused, never guessed
+        ok = ok and "dashed" in pg[2]
+        try:
+            _vs.render("sensa", {"pages": [{"type": "investment"}]}, out_dir="/tmp")
+            return False
+        except ValueError:
+            return ok
+    case("the comparison deck splits every page into its two sides", "D-Marin comparison, 28 Oct",
+         _versus_split)
+
     def _chunky_optin():
         # chunky is per deck: a deck that does not ask for it keeps the 27px headings it was laid out for
         plain = deck._Deck(_co("sensa"), "T", "#00DAFF", "", "")
