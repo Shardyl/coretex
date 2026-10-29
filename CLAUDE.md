@@ -4472,8 +4472,8 @@ shoot needs none), then 10% off the whole quotation.
   streamable HTTP. Three tools: `cortex_talk` (one Talk turn through the SAME `_chat_prepare` + `chat_tools`, as the
   team member, their scope and gates; rolls on its own "Claude (<name>)" conversation, fresh after 24 h or on
   request), `cortex_get_document` (a signed 30-minute download link for one library doc, company-scoped),
-  `cortex_upload_document` (base64 into the library). A tool call answers as SSE with a 10 s keepalive, so a deck that
-  takes minutes never idles past Cloudflare's ~100 s ceiling.
+  `cortex_upload_document` (base64 into the library, REPLACED 29 Oct, see below). A tool call answers as SSE with a
+  10 s keepalive, so a deck that takes minutes never idles past Cloudflare's ~100 s ceiling.
 - AUTH: a per-user connector token `cxk_...`, stored only as a sha256 in `users.connector_token_hash`, never a cockpit
   token. Mint (shown once; any earlier one stops working) / revoke on the box:
   `sudo -u cortex /opt/coretex/.venv/bin/python -m cortex.connector mint|revoke <email>`. The owner has none.
@@ -4481,6 +4481,30 @@ shoot needs none), then 10% off the whole quotation.
   "Authorization: Bearer <token>"`, plus the staff CLAUDE.md, skills and the admin-only managed-settings deny list
   from the setup pack (`Desktop\Gino PC setup`, built 28 Oct). Regress case: "a team member's Claude reaches Cortex
   only as Talk, as them, and nothing else".
+- UPLOADS BY LINK + YOUTUBE (29 Oct 2026, owner: Gino must attach a concept he made to a Cortex draft, and put films on
+  YouTube and in the media library). Base64-in-the-tool-call meant the MODEL typed the file out: impossible past a few
+  KB. Tools now: `cortex_upload_link` (what=document|video) opens a `connector_uploads` ticket and returns a signed URL
+  (`_sign("cup.<id>")`, 24 h) plus a PowerShell snippet (`connector.push_script`) that PUTs the file in 32 MB parts
+  (`PUT /api/connector/upload/<id>?k=&offset=`, offset must equal what the box holds, so a rerun resumes from
+  `GET ...?k=`; parts stay under Cloudflare's 100 MB body ceiling), then `POST .../done`. Files land in
+  `/var/tmp/cortex-connector` (real disk, never the /tmp tmpfs). A DOCUMENT is filed at once: `documents.save`
+  (push=False), `client` (given, else the deal's account) and `deal_id` set so the deal scope lets it onto that deal's
+  email card, then `push_to_drive` into the client folder; cap 40 MB. A VIDEO is queued and the ENGINE runs it
+  (`youtube.kick` in the 60 s block, its own thread; `youtube.recover` re-queues a job cut off by a restart, and the
+  upload is skipped when `result.video_id` is already recorded): resumable upload to the company's channel
+  (`youtube_refresh_token:<slug>`, client `google_oauth_client_<slug>.json`, category copied from the channel's newest
+  library film), a `media_assets` row (source `connector:<email>`, unrated), then transcript (`voice.transcribe`,
+  Nova-3) + 5 ffmpeg frames profiled on Haiku (`MODEL_ROUTER`, the same pass as the old `yt_enrich2.py`), an FYI
+  notification, file deleted. `cortex_upload_status` follows a ticket. `cortex_youtube_guide` returns the live
+  `social-youtube` rules, the library's categories and types, and recent titles: what a title looks like is the
+  skill's rule, never code. `cortex_video_update` changes title/description/tags/privacy on YouTube and
+  client/categories/type/ai_production in the library; RATINGS ARE REFUSED (the owner's alone).
+- PUBLIC IS THE OWNER'S CALL. An upload goes up unlisted or private only (`youtube.upload` raises on public). Asking
+  for public, or changing ANY detail of a film that is already public (its title carries its SEO), makes a
+  `youtube_change` card (outward, in `_APPROVE_PUBLIC`, `request.owner_only`): `_biometric_gate(owner_only=True)`
+  passes only the OWNER's step-up even though Gino and Ayresh have `can_approve`; `_execute` applies it with
+  `youtube.update` + `youtube.record_change`. Regress case: "a file reaches Cortex by link, a film goes up unlisted,
+  and going public is the owner's card".
 
 ## The comparison deck: its own split format (owner, 28 Oct 2026)
 

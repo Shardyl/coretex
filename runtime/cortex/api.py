@@ -6218,24 +6218,159 @@ def _connector_file_url(user: dict, doc_id: int) -> dict:
             "url": f"{CONNECTOR_PUBLIC}/api/connector/file/{doc_id}?exp={exp}&sig={sig}"}
 
 
-def _connector_upload(user: dict, filename: str, b64: str, company: str, kind: str) -> dict:
-    import mimetypes
-    co = store.get_company_by_slug(company)
+def _connector_company(user: dict, slug: str) -> dict:
+    co = store.get_company_by_slug((slug or "sensa").strip().lower())
     if not co:
-        raise connector.ToolError(f"Unknown company '{company}'.")
-    _connector_scope(user, co["id"])
-    raw = b64.split(",", 1)[1] if b64.startswith("data:") else b64
-    try:
-        data = base64.b64decode(raw, validate=False)
-    except Exception:  # noqa: BLE001
-        raise connector.ToolError("data_base64 is not valid base64.")
-    mime = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    d = documents.save(co["id"], co["slug"], filename, mime, data, kind=kind,
-                       uploaded_by=f"{user.get('email')} (Claude)", cap=documents.MAX_DEAL_BYTES)
-    return {"id": d["id"], "filename": d["filename"]}
+        raise connector.ToolError(f"Unknown company '{slug}'.")
+    return _connector_scope(user, co["id"])
 
 
-CONNECTOR_HANDLERS = {"talk": talk_for_connector, "file_url": _connector_file_url, "upload": _connector_upload}
+def _connector_deal(co: dict, deal_id) -> dict:
+    """The opportunity, if it is this company's (deals carry the short company label, e.g. 'Sensa')."""
+    d = db.one("select p.id, p.title, p.company, a.name as account from crm_projects p "
+               "left join crm_accounts a on a.id = p.account_id where p.id=%s", (int(deal_id),))
+    lab = ((d or {}).get("company") or "").strip().lower()
+    if not d or not lab or not (co["name"].lower().startswith(lab) or co["slug"] == lab):
+        raise connector.ToolError(f"No {co['name']} opportunity #{deal_id}.")
+    return d
+
+
+def _connector_upload_link(user: dict, what: str, a: dict) -> dict:
+    import mimetypes
+    co = _connector_company(user, a.get("company") or "sensa")
+    fn = documents._safe_name(str(a.get("filename")))
+    deal = _connector_deal(co, a["deal_id"]) if a.get("deal_id") else None
+    client = (str(a.get("client") or "").strip() or (deal or {}).get("account") or None)
+    if what == "document":
+        meta = {"filename": fn, "client": client, "deal_id": (deal or {}).get("id"),
+                "kind": (str(a.get("kind") or "").strip().lower() or "client-document")}
+    else:
+        meta = {"filename": fn, "mime": mimetypes.guess_type(fn)[0] or "video/*", "client": client,
+                "deal_id": (deal or {}).get("id"), "title": str(a.get("title")).strip()[:100],
+                "description": str(a.get("description") or "").strip(),
+                "tags": [str(t) for t in (a.get("tags") or [])][:30],
+                "privacy": a.get("privacy") or "unlisted",
+                "categories": [str(c).strip().lower() for c in (a.get("categories") or []) if str(c).strip()],
+                "content_type": (str(a.get("content_type") or "").strip() or "client-film"),
+                "ai_production": bool(a.get("ai_production"))}
+    t = connector.new_ticket(user, co["id"], what, meta)
+    k = _sign(f"cup.{t['id']}")
+    base = f"{CONNECTOR_PUBLIC}/api/connector/upload/{t['id']}"
+    return {"id": t["id"], "company": co["name"],
+            "script": connector.push_script(f"{base}?k={k}", f"{base}/done?k={k}")}
+
+
+def _connector_ticket(user: dict, uid: int) -> dict:
+    t = connector.ticket(uid)
+    if not t or t["user_email"].lower() != (user.get("email") or "").lower():
+        raise connector.ToolError(f"No upload #{uid} of yours.")
+    return t
+
+
+def _connector_upload_status(user: dict, uid: int) -> str:
+    t = _connector_ticket(user, uid)
+    r, m = t.get("result") or {}, t.get("meta") or {}
+    mb = f"{(t.get('size') or 0) / 1e6:,.1f} MB"
+    if t["status"] == "open":
+        return f"Upload #{uid} ({m.get('filename')}): waiting for the file, {mb} received so far. Run the PowerShell."
+    if t["status"] == "failed":
+        return f"Upload #{uid} failed: {t.get('error')}." + (f" The film did reach YouTube: {r['watch_url']}"
+                                                             if r.get("watch_url") else " Ask for a new link.")
+    if t["kind"] == "document":
+        return f"Upload #{uid} is in the library as #{r.get('doc_id')} '{r.get('filename')}'" + (
+            f", filed under {m['client']}" if m.get("client") else "") + "."
+    if t["status"] == "done":
+        out = (f"Upload #{uid} is done: '{m.get('title')}' is on YouTube ({m.get('privacy')}) at {r.get('watch_url')} "
+               f"and in the media library as #{r.get('media_id')}, unrated until Rashad rates it.")
+        if r.get("profile_error"):
+            out += f" The automatic profile did not run ({r['profile_error']}); the film is listed all the same."
+        return out
+    return (f"Upload #{uid} ({m.get('title')}): {r.get('step') or 'queued, starting shortly'}."
+            + (f" YouTube link: {r['watch_url']}" if r.get("watch_url") else ""))
+
+
+def _connector_youtube_guide(user: dict, slug: str) -> str:
+    from . import youtube
+    co = _connector_company(user, slug)
+    sk = db.one("select * from skills where company_id=%s and skill_key='social-youtube'", (co["id"],))
+    uni, local = store.effective_rules(sk) if sk else ([], [])
+    rules = [r for r in (local + uni) if "youtube" in r.lower() or "title" in r.lower() or r in local]
+    cats = [r["c"] for r in db.query("select distinct jsonb_array_elements_text(categories) c from media_assets "
+                                     "where status='live' order by 1")]
+    types = [r["content_type"] for r in db.query("select content_type, count(*) n from media_assets where status='live' "
+                                                 "and content_type is not null group by 1 order by 2 desc")]
+    recent = [r["title"] for r in db.query("select title from media_assets where company_id=%s and status='live' "
+                                           "and privacy in ('unlisted','private') order by id desc limit 6", (co["id"],))]
+    return (f"CHANNEL: {youtube.channel_name(co['slug'])} ({co['name']}).\n\n"
+            "RULES FOR TITLES AND DESCRIPTIONS (live, from the social-youtube skill):\n"
+            + ("\n".join(f"- {r}" for r in rules) or "- none recorded yet: ask Cortex") + "\n\n"
+            f"MEDIA LIBRARY CATEGORIES (use these words): {', '.join(cats)}\n"
+            f"MEDIA LIBRARY TYPES: {', '.join(types)}\n\n"
+            "RECENT TITLES ON THIS CHANNEL:\n" + "\n".join(f"- {t}" for t in recent))
+
+
+def _connector_video_update(user: dict, vid: str, a: dict) -> str:
+    from . import youtube
+    row = db.one("select * from media_assets where youtube_video_id=%s", (vid,))
+    if not row:
+        raise connector.ToolError(f"Video {vid} is not in the Cortex media library.")
+    co = _connector_scope(user, row["company_id"])
+    lib = {}
+    if a.get("client") is not None:
+        lib["client"] = str(a["client"]).strip() or None
+    if a.get("categories") is not None:
+        lib["categories"] = json.dumps([str(c).strip().lower() for c in a["categories"] if str(c).strip()])
+    if a.get("content_type"):
+        lib["content_type"] = str(a["content_type"]).strip()
+    if a.get("ai_production") is not None:
+        lib["ai_production"] = bool(a["ai_production"])
+    if lib:
+        db.execute(f"update media_assets set {', '.join(k + '=%s' for k in lib)}, updated_at=now() "
+                   "where youtube_video_id=%s", (*lib.values(), vid))
+    yt = {k: a[k] for k in ("title", "description", "tags", "privacy") if a.get(k) is not None}
+    if yt.get("privacy") == row.get("privacy"):
+        yt.pop("privacy")
+    said = [f"library {', '.join(lib)} updated"] if lib else []
+    if not yt:
+        return ("; ".join(said) or "Nothing to change") + "."
+    if yt.get("privacy") == "public" or row.get("privacy") == "public":
+        t = _youtube_change_card(co, row, yt, user)
+        return "; ".join(said + [f"the YouTube change is approval card #{t['id']} for Rashad, because "
+                                 + ("it makes the film public" if yt.get("privacy") == "public"
+                                    else "the film is already public")]) + "."
+    youtube.update(co["slug"], vid, title=yt.get("title"), description=yt.get("description"), tags=yt.get("tags"),
+                   privacy=yt.get("privacy"))
+    youtube.record_change(vid, yt)
+    return "; ".join(said + [f"YouTube {', '.join(yt)} changed"]) + f". {row['watch_url']}"
+
+
+def _youtube_change_card(co: dict, row: dict, yt: dict, user: dict) -> dict:
+    """A change that reaches the PUBLIC (a film going public, or a public film's details) waits for the owner."""
+    sk = db.one("select id from skills where company_id=%s and skill_key='social-youtube'", (co["id"],)) or {}
+    lines = [f"{user.get('name') or user.get('email')} asks to change '{row['title']}' ({row['privacy']}), "
+             f"{row['watch_url']}:"]
+    if yt.get("privacy"):
+        lines.append(f"- privacy: {row['privacy']} -> {yt['privacy']}")
+    if "title" in yt:
+        lines.append(f"- title: {yt['title']}")
+    if "description" in yt:
+        lines.append(f"- description: {yt['description']}")
+    if "tags" in yt:
+        lines.append(f"- tags: {', '.join(yt['tags'])}")
+    title = (f"Make public on YouTube: {row['title']}" if yt.get("privacy") == "public"
+             else f"Change a public YouTube film: {row['title']}")
+    return db.execute(
+        "insert into tasks (company_id, skill_id, kind, request, draft, status, title) "
+        "values (%s,%s,'youtube_change',%s,%s,'awaiting_approval',%s) returning *",
+        (co["id"], sk.get("id"), Json({"video_id": row["youtube_video_id"], "changes": yt, "owner_only": True,
+                                             "requested_by": user.get("email"), "watch_url": row["watch_url"],
+                                             "title": title}),
+         "\n".join(lines), title))
+
+
+CONNECTOR_HANDLERS = {"talk": talk_for_connector, "file_url": _connector_file_url,
+                      "upload_link": _connector_upload_link, "upload_status": _connector_upload_status,
+                      "youtube_guide": _connector_youtube_guide, "video_update": _connector_video_update}
 
 
 @app.post("/api/connector/mcp")
@@ -6281,6 +6416,85 @@ async def connector_mcp(request: Request, authorization: str = Header(default=""
 @app.get("/api/connector/mcp")
 def connector_mcp_get():
     return Response(status_code=405, headers={"Allow": "POST"})
+
+
+def _upload_ticket_ok(uid: int, k: str) -> dict:
+    """The ticket a signed upload link names, while it is open and under a day old."""
+    if not hmac.compare_digest(k or "", _sign(f"cup.{uid}")):
+        raise HTTPException(status_code=403, detail="invalid upload link")
+    t = connector.ticket(uid)
+    if not t:
+        raise HTTPException(status_code=404, detail="no such upload")
+    from datetime import timezone
+    if (datetime.now(timezone.utc) - t["created_at"]).total_seconds() > connector.UPLOAD_TTL_H * 3600 \
+            and t["status"] == "open":
+        raise HTTPException(status_code=410, detail="this upload link has expired; ask for a new one")
+    return t
+
+
+@app.get("/api/connector/upload/{uid}")
+def connector_upload_size(uid: int, k: str = ""):
+    t = _upload_ticket_ok(uid, k)
+    return {"size": t["size"], "status": t["status"]}
+
+
+@app.put("/api/connector/upload/{uid}")
+async def connector_upload_part(uid: int, request: Request, k: str = "", offset: int = 0):
+    """One part of the file, appended at `offset` (which must be what the box already holds, so a rerun resumes)."""
+    t = _upload_ticket_ok(uid, k)
+    if t["status"] != "open":
+        raise HTTPException(status_code=409, detail=f"upload already {t['status']}")
+    have = os.path.getsize(t["path"]) if os.path.exists(t["path"]) else 0
+    if offset != have:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "offset mismatch", "size": have}, status_code=409)
+    cap = connector.DOC_CAP if t["kind"] == "document" else connector.VIDEO_CAP
+    n = have
+    with open(t["path"], "ab") as f:
+        async for chunk in request.stream():
+            n += len(chunk)
+            if n > cap:
+                f.truncate(have)
+                raise HTTPException(status_code=413, detail=f"file too large (max {cap // 1_000_000:,} MB)")
+            f.write(chunk)
+    db.execute("update connector_uploads set size=%s, updated_at=now() where id=%s", (n, uid))
+    return {"size": n}
+
+
+@app.post("/api/connector/upload/{uid}/done")
+def connector_upload_done(uid: int, k: str = ""):
+    """The whole file is here: a document is filed now; a film is queued for the engine's YouTube job."""
+    t = _upload_ticket_ok(uid, k)
+    if t["status"] != "open":
+        return {"upload_id": uid, "status": t["status"], "result": t.get("result")}
+    if not t["size"]:
+        raise HTTPException(status_code=400, detail="no file received")
+    m = t.get("meta") or {}
+    if t["kind"] == "video":
+        connector.job_update(uid, status="queued", result={"step": "queued for YouTube"})
+        return {"upload_id": uid, "status": "queued",
+                "next": "The film is going to YouTube and the media library: check cortex_upload_status."}
+    import mimetypes
+    co = store.get_company(t["company_id"]) or {}
+    with open(t["path"], "rb") as f:
+        data = f.read()
+    d = documents.save(co["id"], co["slug"], m.get("filename") or "file", mimetypes.guess_type(m.get("filename") or "")[0]
+                       or "application/octet-stream", data, kind=m.get("kind") or "client-document",
+                       uploaded_by=f"{t['user_email']} (Claude)", push=False, deal_id=m.get("deal_id"),
+                       cap=connector.DOC_CAP)
+    if m.get("client"):
+        db.execute("update company_documents set client=coalesce(client, %s) where id=%s", (m["client"], d["id"]))
+    try:
+        documents.push_to_drive(db.one("select * from company_documents where id=%s", (d["id"],)))
+    except Exception as e:  # noqa: BLE001 - filed in the library either way; sync_drive retries Drive
+        print(f"[connector] drive push for doc {d['id']} failed: {e}", flush=True)
+    connector.job_update(uid, status="done", result={"doc_id": d["id"], "filename": d["filename"]})
+    try:
+        os.remove(t["path"])
+    except OSError:
+        pass
+    return {"upload_id": uid, "status": "done", "doc_id": d["id"], "filename": d["filename"],
+            "next": f"Tell Cortex the document is #{d['id']}."}
 
 
 @app.get("/api/connector/file/{doc_id}")

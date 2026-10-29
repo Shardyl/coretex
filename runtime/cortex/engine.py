@@ -42,7 +42,7 @@ NEVER_AUTO_KINDS = {"newsletter_idea", "newsletter_review", "newsletter_send", "
 # PUBLIC actions (go OUT to the public) — approving these needs a biometric step-up (see
 # feedback_public_actions_biometric). Internal items use the normal approve. Split by where the action fires:
 _APPROVE_PUBLIC = {"email_reply", "email_draft", "newsletter_idea", "blog", "social_shift", "social_action",
-                   "wa_reply"}   # the action happens in approve_task
+                   "wa_reply", "youtube_change"}   # the action happens in approve_task
 _CONFIRM_PUBLIC = {"newsletter_review", "newsletter_send", "newsletter_test"}   # the action happens in confirm_send_task
 
 # Phase 3.2 — central kind -> security class (the single source of truth for gating; merged spec §3a).
@@ -67,6 +67,7 @@ KIND_CLASS = {
     "social_shift": "outward", "social_relogin": "internal", "social_action": "outward",
     "wa_reply": "outward",     # an approved WhatsApp reply the runner types back — goes to a real person
     "golf_booking": "outward",  # a real tee booking on Rashad's own Viya account (golf.py): never auto
+    "youtube_change": "outward",  # a film going public, or a public film's details (youtube.py): the owner's call
     "payment": "money", "invoice_send": "money", "refund": "money",
 }
 
@@ -89,6 +90,7 @@ APPROVE_ACTION = {
     "social_action": "Approve & run",
     "wa_reply": "Approve & send on WhatsApp",
     "golf_booking": "Approve & book at release",
+    "youtube_change": "Approve & change on YouTube",
     # lead_escalation: an INTERNAL strategic-lead briefing card — nothing sends anywhere; approving only
     # acknowledges the owner is taking the lead over. Deliberately NOT in KIND_CLASS (unknown kinds fail safe
     # to 'outward' = never auto) and not in _APPROVE_PUBLIC (internal ack, no biometric).
@@ -177,7 +179,8 @@ def _identity_mismatch(draft: str, from_addr: str, company: dict) -> str:
     return ""
 
 
-def _biometric_gate(is_public: bool, stepup_token: str | None, money: bool = False) -> dict | None:
+def _biometric_gate(is_public: bool, stepup_token: str | None, money: bool = False,
+                    owner_only: bool = False) -> dict | None:
     """For a PUBLIC approval, require a fresh fingerprint/PIN step-up: returns a needs_biometric response if
     one wasn't provided, else None to proceed (consuming the step-up). Authorised TEAM members pass with
     their own PIN for outward work; MONEY-class kinds accept the OWNER's step-up only, always. No-op until
@@ -185,8 +188,11 @@ def _biometric_gate(is_public: bool, stepup_token: str | None, money: bool = Fal
     if not (is_public or money) or not webauthn_auth.stepup_enabled():
         return None
     scope = webauthn_auth.consume_stepup(stepup_token)
-    if scope and (scope == "owner" or not money):
+    if scope and (scope == "owner" or not (money or owner_only)):
         return None
+    if scope and owner_only and not money:
+        return {"ok": False, "needs_biometric": True,
+                "error": "This one is the owner's call: it needs Rashad's fingerprint or PIN."}
     if scope and money:
         return {"ok": False, "needs_biometric": True,
                 "error": "Money approvals are owner-only — this needs Rashad's fingerprint or PIN."}
@@ -1620,6 +1626,20 @@ def _execute(task: dict, skill: dict, company: dict, actor: str, auto: bool = Fa
         store.log_decision(task["id"], skill["id"], actor, "approve",
                            snapshot={"plan": (task.get("request") or {}).get("plan")})
         return {"sent_to": "the golf runner, which books the moment the day opens"}
+    if task["kind"] == "youtube_change":   # a film going public, or a public film's details: applied now
+        from . import youtube
+        rq = task.get("request") or {}
+        ch = rq.get("changes") or {}
+        try:
+            youtube.update(company["slug"], rq["video_id"], title=ch.get("title"), description=ch.get("description"),
+                           tags=ch.get("tags"), privacy=ch.get("privacy"))
+        except Exception as _ye:  # noqa: BLE001
+            store.update_task(task["id"], status="awaiting_approval")
+            return {"blocked": True, "error": f"YouTube refused it ({_ye}). The card is still open."}
+        youtube.record_change(rq["video_id"], ch)
+        store.update_task(task["id"], status="done")
+        store.log_decision(task["id"], skill["id"], actor, "approve", snapshot={"changes": ch})
+        return {"sent_to": f"YouTube: {rq.get('watch_url')}"}
     if task["kind"] == "social_relogin":   # acknowledging the re-login clears the logged-out flag so shifts resume
         db.setting_set(f"social_loggedout:{(task.get('request') or {}).get('account', '')}", False)
         store.update_task(task["id"], status="done")
@@ -4155,7 +4175,8 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
             return {"ok": False, "blocked": True,
                     "error": f"{_to} has LEFT their company — this would send into a dead mailbox. "
                              "Tell me who it should go to instead and I'll repoint it."}
-    gate = _biometric_gate(task["kind"] in _APPROVE_PUBLIC, stepup_token, money=is_money(task))
+    gate = _biometric_gate(task["kind"] in _APPROVE_PUBLIC, stepup_token, money=is_money(task),
+                           owner_only=bool((task.get("request") or {}).get("owner_only")))
     if gate:
         return gate
     if run_at:
@@ -10835,6 +10856,11 @@ def run(poll_idle: float = 1.0) -> None:
     _beat("start")
     _start_drip_thread()   # the newsletter drip ticks on its own clock, never behind a slow model call
     try:
+        from . import youtube
+        youtube.recover()     # a film that was mid-upload when the engine stopped goes back on the queue
+    except Exception as _ye:  # noqa: BLE001
+        print(f"[youtube] recover: {_ye}", flush=True)
+    try:
         from . import flow
         flow.start_thread()   # every event on a deal re-checks its open items (flow.py)
     except Exception as _fe:  # noqa: BLE001
@@ -10882,6 +10908,11 @@ def run(poll_idle: float = 1.0) -> None:
                 reminders.fire_due()    # fire due reminders -> nudge notification or spawn an action task
             except Exception as e:  # noqa: BLE001
                 tg.send(f"(reminder fire hiccup: {e})")
+            try:
+                from . import youtube
+                youtube.kick()          # films sent through the Claude connector: to YouTube on their own thread
+            except Exception as _ye:  # noqa: BLE001
+                print(f"[youtube] kick: {_ye}", flush=True)
             try:
                 documents.sync_all()    # hourly: pick up files hand-dropped into any CORTEX/Documents folder
             except Exception:  # noqa: BLE001 — background sync; never noisy

@@ -1912,7 +1912,9 @@ def _cases():
         seen = {}
         h = {"talk": lambda u, m, n, c: seen.setdefault("talk", (u["email"], m, n, c)) and "ok",
              "file_url": lambda u, i: {"filename": "a.pdf", "size": 1, "mime": "application/pdf", "url": "u"},
-             "upload": lambda u, f, b, c, k: {"id": 9, "filename": f}}
+             "upload_link": lambda u, w, a: {"id": 9, "company": "Sensa Productions", "script": "s"},
+             "upload_status": lambda u, i: "s", "youtube_guide": lambda u, c: "g",
+             "video_update": lambda u, v, a: "ok"}
         who = {"id": 1, "email": "gino@sensa.digital", "companies": ["sensa"]}
         init = cx.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize",
                           "params": {"protocolVersion": "2025-06-18"}}, who, h)
@@ -1921,7 +1923,8 @@ def _cases():
                                                                       "arguments": {"message": "make a deck"}}}, who, h)
         bad = cx.handle({"id": 4, "method": "tools/call", "params": {"name": "run_shell", "arguments": {}}}, who, h)
         return (init["result"]["protocolVersion"] == "2025-06-18"
-                and sorted(names) == ["cortex_get_document", "cortex_talk", "cortex_upload_document"]
+                and sorted(names) == ["cortex_get_document", "cortex_talk", "cortex_upload_link", "cortex_upload_status",
+                                      "cortex_video_update", "cortex_youtube_guide"]
                 and call["result"]["isError"] is False and seen["talk"] == ("gino@sensa.digital", "make a deck", False, None)
                 and bad["result"]["isError"] is True
                 and cx.handle({"method": "notifications/initialized"}, who, h) is None
@@ -1930,6 +1933,41 @@ def _cases():
                 and "connector.user_for(" in inspect.getsource(api.connector_mcp))
     case("a team member's Claude reaches Cortex only as Talk, as them, and nothing else",
          "Claude connector for Gino, 28 Oct", _connector_is_talk_as_them)
+
+    # --- files go up by link, never through the model; a film goes up unlisted and public is the owner's card
+    def _connector_uploads_by_link():
+        from . import api, connector as cx, youtube as yt
+        h = dict.fromkeys(("talk", "file_url", "upload_status", "youtube_guide"), lambda *a: "x")
+        h["upload_link"] = lambda u, w, a: {"id": 9, "company": "Sensa Productions", "script": "s"}
+        h["video_update"] = lambda u, v, a: "ok"
+        who = {"id": 1, "email": "gino@sensa.digital", "companies": ["sensa"]}
+
+        def call(name, args):
+            return cx.handle({"id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}},
+                             who, h)["result"]["isError"]
+        props = [p for t in cx.TOOLS for p in t["inputSchema"].get("properties", {})]
+        script = cx.push_script("https://x/u/1?k=a", "https://x/u/1/done?k=a")
+        try:
+            yt.upload("sensa", 3, "/nonexistent.mp4", "video/mp4", "t", "", None, "public")
+            refused_public = False
+        except ValueError:
+            refused_public = True
+        from . import engine as e
+        return ("data_base64" not in props
+                and call("cortex_upload_link", {"what": "document", "filename": "a.pdf"}) is False
+                and call("cortex_upload_link", {"what": "video", "filename": "a.mp4"}) is True          # no title
+                and call("cortex_upload_link", {"what": "video", "filename": "a.mp4", "title": "t",
+                                                "privacy": "public"}) is True
+                and call("cortex_video_update", {"video_id": "abc", "rating": 9}) is True
+                and "offset=$off" in script and "32MB" in script and "(Invoke-RestMethod -Uri $url).size" in script
+                and refused_public
+                and e.kind_class("youtube_change") == "outward" and "youtube_change" in e._APPROVE_PUBLIC
+                and "owner_only" in inspect.getsource(e._biometric_gate)
+                and "owner_only=bool(" in inspect.getsource(e.approve_task)
+                and '"owner_only": True' in inspect.getsource(api._youtube_change_card)
+                and 'row.get("privacy") == "public"' in inspect.getsource(api._connector_video_update))
+    case("a file reaches Cortex by link, a film goes up unlisted, and going public is the owner's card",
+         "Gino's PC: uploads and YouTube, 29 Oct", _connector_uploads_by_link)
     return C
 
 

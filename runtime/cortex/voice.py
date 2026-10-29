@@ -36,7 +36,7 @@ def normalize_brand_names(text: str) -> str:
     return text
 
 
-def transcribe(data: bytes, content_type: str = "audio/webm") -> str:
+def transcribe(data: bytes, content_type: str = "audio/webm", timeout: float = 60) -> str:
     """Audio bytes -> corrected text (Deepgram Nova-3). Returns "" when nothing was said, rather than
     raising: a silent or unintelligible voice note is a real outcome the callers have to handle, not an
     error. A missing API key DOES raise, because that is a misconfiguration."""
@@ -45,7 +45,7 @@ def transcribe(data: bytes, content_type: str = "audio/webm") -> str:
     params += [("keyterm", k) for k in STT_KEYTERMS]
     r = httpx.post("https://api.deepgram.com/v1/listen", params=params,
                    headers={"Authorization": f"Token {key}", "Content-Type": content_type},
-                   content=data, timeout=60)
+                   content=data, timeout=timeout)
     r.raise_for_status()
     try:
         text = r.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
