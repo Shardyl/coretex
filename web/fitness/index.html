@@ -993,7 +993,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='117';                         // keep in step with CACHE in sw.js
+const APP_VERSION='118';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -2146,6 +2146,7 @@ function fileToBase64(file){
 // ---------- Zone 2 this week (owner, 10 Oct 2026) ----------
 // Weekly target 180 min, Monday to Sunday. Counts every session on a "Zone 2" preset PLUS the treadmill warm-up
 // attached to a 4x4 (watch.warmup_min): he warms up in true Zone 2 (about 120 bpm), so it is part of his 3 hours.
+// Incline treadmill walks count as well (29 Oct 2026).
 const ZONE2_WEEK_MIN=180;
 function cardioMinutes(r){
   if(r.minutes!=null&&!isNaN(+r.minutes))return +r.minutes;
@@ -2163,7 +2164,8 @@ function zone2Week(){
   cardioSessions.forEach(r=>{
     if(!r||!r.date||r.date<a||r.date>b)return;
     const name=r.exerciseName||'';
-    if(/zone\s*2/i.test(name))items.push({date:r.date,label:name.replace(/^Zone 2\s*/i,'').replace(/\s*-\s*\d+(\.\d+)?\s*mins?$/i,''),min:cardioMinutes(r),hr:r.avgHR});
+    // An incline treadmill walk is Zone 2 work too (owner, 29 Oct 2026): incline 10, speed 5.5 sits around 115-120 bpm.
+    if(/zone\s*2|incline\s*walk/i.test(name))items.push({date:r.date,label:name.replace(/^Zone 2\s*/i,'').replace(/\s*-\s*\d+(\.\d+)?\s*mins?$/i,''),min:cardioMinutes(r),hr:r.avgHR});
     const w=r.watch&&+r.watch.warmup_min;   // legacy: warm-up folded into a 4x4 (before 11 Oct 2026), unless it now has its own entry
     if(w>0&&!cardioSessions.some(x=>x&&x.id==='w:'+r.watch.warmup_uid))items.push({date:r.date,label:'4x4 warm-up',min:w,hr:null});
   });
@@ -2226,7 +2228,8 @@ function renderCardioHistory(){
           ${r.watch.warmup_min?`<span style="font-size:11px;color:var(--ink3)">+ ${Math.round(r.watch.warmup_min)} min warm-up</span>`:''}
           ${r.watch.settings==='not recorded'?`<span style="font-size:11px;color:var(--ink3)">settings not recorded</span>`:''}
           ${!r.watch.confirmed||r.watch.settings!=='manual'?`<button class="btn-sm" onclick="event.stopPropagation();editWatchCardio('${r.id}')">${r.watch.confirmed?'Edit':'Check'}</button>`:''}
-        </div>`:''}
+          ${r.watch.uid?`<button class="btn-sm" onclick="event.stopPropagation();toggleHrTrace(this,'${r.watch.uid}')">Heart rate</button>`:''}
+        </div><div class="hr-trace" onclick="event.stopPropagation()"></div>`:''}
       </div>
       <div>
         <div class="hist-total" style="font-size:14px;color:var(--blue)">${(isZone2(ex)?r.avgHR:r.maxHR)||'—'}<div style="font-size:10px;color:var(--ink3);font-weight:600">${isZone2(ex)?'avg HR':'max HR'}</div>${isPR?'<div class="tag tag-amber" style="font-size:9px;margin-top:3px">PR</div>':''}</div>
@@ -2235,6 +2238,29 @@ function renderCardioHistory(){
     </div>`;
   }).join('');
 }
+// ---------- Heart-rate trace of a watch session (29 Oct 2026, Bridge 1.4.0) ----------
+// Fetched on demand from /api/fitness/hr/<uid>: the 5-second trace, minutes per zone and the efforts (each 4x4
+// interval) are all computed on the server; this only draws them. Zone floors come back with the data.
+const HR_ZONE_COL={5:'#e5484d',4:'#f76b15',3:'#ffc53d',2:'#30a46c',1:'#3e63dd'};
+window.toggleHrTrace=async function(btn,uid){
+  const box=btn.closest('.hist-item').querySelector('.hr-trace');if(!box)return;
+  if(box.innerHTML){box.innerHTML='';return;}
+  box.innerHTML='<div style="font-size:11px;color:var(--ink3);margin-top:6px">Loading heart rate...</div>';
+  let d=null;try{d=await syncApi('/api/fitness/hr/'+encodeURIComponent(uid));}catch(e){}
+  if(!d||!d.points||!d.points.length){box.innerHTML='<div style="font-size:11px;color:var(--ink3);margin-top:6px">No heart-rate trace for this session yet (needs Health Bridge 1.4.0).</div>';return;}
+  const pts=d.points, fl=d.zoneFloors||{}, zOf=b=>[5,4,3,2,1].find(z=>b>=(+fl[z]||0))||1;
+  const W=320,H=120,T=pts[pts.length-1][0]||1, lo=Math.min(...pts.map(p=>p[1]))-5, hi=Math.max(...pts.map(p=>p[1]))+5;
+  const x=t=>(t/T*W).toFixed(1), y=b=>(H-(b-lo)/(hi-lo)*H).toFixed(1);
+  let segs='';for(let i=1;i<pts.length;i++){const[a,b]=[pts[i-1],pts[i]];if(b[0]-a[0]>30)continue;
+    segs+=`<line x1="${x(a[0])}" y1="${y(a[1])}" x2="${x(b[0])}" y2="${y(b[1])}" stroke="${HR_ZONE_COL[zOf(b[1])]}" stroke-width="2" stroke-linecap="round"/>`;}
+  const z5=fl[5]?`<line x1="0" x2="${W}" y1="${y(+fl[5])}" y2="${y(+fl[5])}" stroke="var(--ink3)" stroke-dasharray="3 3" stroke-width="0.6"/>`:'';
+  const mmss=s=>Math.floor(s/60)+':'+String(Math.round(s%60)).padStart(2,'0');
+  const zr=[5,4,3,2,1].filter(z=>+d.zones[z]>0).map(z=>`<span style="color:${HR_ZONE_COL[z]};font-weight:700">Z${z}</span> ${d.zones[z]}m`).join(' &middot; ');
+  const ef=(d.efforts||[]).map((e,i)=>`<div>${i+1}. ${mmss(e.seconds)} hard, peak ${e.peak}, ${mmss(e.z5Seconds)} in Z5</div>`).join('');
+  box.innerHTML=`<div style="margin-top:8px"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${z5}${segs}</svg>
+    <div style="font-size:11px;color:var(--ink2);margin-top:4px">${zr}</div>
+    ${ef?`<div style="font-size:11px;color:var(--ink2);margin-top:4px">${ef}</div>`:''}</div>`;
+};
 window.delCardioSession=function(idx){if(!confirm('Delete?'))return;markDeleted('cardioSessions',(cardioSessions[idx]||{}).id);cardioSessions.splice(idx,1);saveCardio();renderCardioHistory();toast('Deleted');};
 
 // ─── CARDIO DETAIL VIEW ───────────────────────────────────────────────────────
@@ -3152,6 +3178,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=117"></script>
+<script src="food.js?v=118"></script>
 </body>
 </html>

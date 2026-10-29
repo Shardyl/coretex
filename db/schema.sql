@@ -294,6 +294,9 @@ create table if not exists fitness.health_sessions (
     updated_at timestamptz not null default now()
 );
 create index if not exists health_sessions_day_idx on fitness.health_sessions (day);
+-- Per-session heart-rate trace from the Bridge (1.4.0, 29 Oct 2026): [[seconds from start, bpm], ...] in 5 s buckets.
+-- Served on demand (/api/fitness/hr/{uid}), never in the state pull. A sync that sends none keeps what is held.
+alter table fitness.health_sessions add column if not exists hr jsonb;
 
 create table if not exists fitness.health_weights (
     at           timestamptz primary key,

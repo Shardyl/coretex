@@ -7050,6 +7050,12 @@ def fitness_health(body: dict, _: None = Depends(bridge_auth)) -> dict:
     return fitness.ingest_health(body or {})
 
 
+@app.get("/api/fitness/hr/{uid}")
+def fitness_hr(uid: str, _: None = Depends(auth)) -> dict:
+    """A watch session's heart-rate trace, zone minutes and interval efforts (loaded when a session is opened)."""
+    return fitness.hr_trace(uid)
+
+
 @app.get("/api/fitness/food/search")
 def fitness_food_search(q: str = "", _: None = Depends(auth)) -> dict:
     return fitness.food_search(q)

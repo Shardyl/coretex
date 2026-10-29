@@ -33,8 +33,8 @@ android {
         applicationId = "uk.coretex.healthbridge"
         minSdk = 29 // Samsung Health Data SDK needs API 29+
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.3.2"
+        versionCode = 8
+        versionName = "1.4.0"
         val escaped = bridgeToken().replace("\\", "\\\\").replace("\"", "\\\"")
         buildConfigField("String", "BRIDGE_TOKEN", "\"$escaped\"")
         buildConfigField("String", "API_URL", "\"https://coretex.uk/api/fitness/health\"")

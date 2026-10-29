@@ -159,6 +159,7 @@ object SamsungReader {
                             putN("avg_hr", hr?.first)
                             putN("max_hr", hr?.second)
                             putN("min_hr", hr?.third)
+                            putN("hr", sessionSeries(st, s, hrGranted, sStart, sEnd))
                             putN("distance_m", s.distance?.toDouble())
                             putN("steps", steps)
                             put("source", SOURCE)
@@ -341,6 +342,45 @@ object SamsungReader {
             }
         }
         return if (samples.isEmpty()) null else Triple(samples.average(), samples.max(), samples.min())
+    }
+
+    private const val SERIES_STEP_S = 5L
+
+    /**
+     * The session's heart-rate trace as [[seconds from start, bpm], ...], averaged into 5-second buckets so a
+     * 30-minute workout is ~360 points. Source order matches [sessionHr]: the session's own exercise log, else
+     * Samsung HEART_RATE samples inside the window. Null when neither has any (or HR read is not granted).
+     */
+    private suspend fun sessionSeries(
+        st: HealthDataStore, s: ExerciseSession, hrGranted: Boolean, start: Instant, end: Instant,
+    ): JSONArray? {
+        val pts = ArrayList<Pair<Instant, Double>>()
+        for (l in s.log.orEmpty()) {
+            val v = l.heartRate?.toDouble()?.takeIf { it > 0 } ?: continue
+            pts += l.timestamp to v
+        }
+        if (pts.isEmpty() && hrGranted && end.isAfter(start)) {
+            for (p in readAll(st, DataTypes.HEART_RATE.readDataRequestBuilder, start, end)) {
+                val series = runCatching { p.getValue(DataType.HeartRateType.SERIES_DATA) }.getOrNull().orEmpty()
+                if (series.isNotEmpty()) {
+                    for (e in series) { val t = e.startTime ?: continue; e.heartRate.toDouble().takeIf { it > 0 }?.let { pts += t to it } }
+                } else {
+                    val t = p.startTime ?: continue
+                    runCatching { p.getValue(DataType.HeartRateType.HEART_RATE) }.getOrNull()
+                        ?.toDouble()?.takeIf { it > 0 }?.let { pts += t to it }
+                }
+            }
+        }
+        val buckets = java.util.TreeMap<Long, MutableList<Double>>()
+        for ((t, v) in pts) {
+            if (t.isBefore(start) || t.isAfter(end)) continue
+            val off = Duration.between(start, t).seconds / SERIES_STEP_S * SERIES_STEP_S
+            buckets.getOrPut(off) { mutableListOf() } += v
+        }
+        if (buckets.isEmpty()) return null
+        val out = JSONArray()
+        for ((off, vs) in buckets) out.put(JSONArray().put(off).put(Math.round(vs.average())))
+        return out
     }
 
     private suspend fun readAll(

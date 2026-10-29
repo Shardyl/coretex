@@ -288,6 +288,61 @@ def _wake_day(r: dict) -> str:
     return r["day"].isoformat()
 
 
+# Heart-rate zones as the owner's Samsung watch shows them (29 Oct 2026 screenshot): 5 Maximum 155-172,
+# 4 Anaerobic 138-154, 3 Aerobic 121-137, 2 Weight control 104-120, 1 below. Lower bounds, highest first.
+HR_ZONES = [(5, 155), (4, 138), (3, 121), (2, 104), (1, 0)]
+
+
+def _hr_series(v) -> str | None:
+    """The Bridge's [[seconds, bpm], ...] trace, checked and stored as JSON text; anything malformed is None."""
+    if not isinstance(v, list) or not v:
+        return None
+    out = []
+    for p in v:
+        if isinstance(p, (list, tuple)) and len(p) == 2 and all(isinstance(x, (int, float)) for x in p) and 20 < p[1] < 250:
+            out.append([int(p[0]), int(round(p[1]))])
+    return json.dumps(out) if out else None
+
+
+def hr_trace(uid: str) -> dict:
+    """One watch session's heart-rate trace plus what code computes from it: minutes in each zone and the
+    efforts (runs of 60 s or more in zone 4 or above, so each 4x4 interval shows its own peak and time at the top)."""
+    r = db.one("select uid, start_at, end_at, avg_hr, max_hr, hr, trim_min from fitness.health_sessions where uid=%s",
+               (uid,))
+    if not r or not r["hr"]:
+        return {"uid": uid, "points": [], "zones": {}, "efforts": []}
+    pts = sorted(r["hr"] if isinstance(r["hr"], list) else json.loads(r["hr"]))
+    if r.get("trim_min"):
+        pts = [p for p in pts if p[0] <= float(r["trim_min"]) * 60]
+    return {"uid": uid, "start": r["start_at"].isoformat(), "points": pts, **_hr_analyse(pts)}
+
+
+def _hr_analyse(pts: list) -> dict:
+    """Minutes per zone and the efforts in a sorted [[seconds, bpm], ...] trace."""
+    zone = lambda b: next(z for z, lo in HR_ZONES if b >= lo)
+    zs = {z: 0.0 for z, _ in HR_ZONES}
+    efforts, cur = [], None
+    for i, (t, b) in enumerate(pts):
+        dt = (pts[i + 1][0] - t) if i + 1 < len(pts) else 5
+        dt = min(max(dt, 0), 30)                      # a gap in the trace is not time in a zone
+        zs[zone(b)] += dt
+        if b >= HR_ZONES[1][1]:
+            if cur is None:
+                cur = {"start": t, "end": t + dt, "peak": b, "z5": 0.0}
+            cur["end"], cur["peak"] = t + dt, max(cur["peak"], b)
+            if b >= HR_ZONES[0][1]:
+                cur["z5"] += dt
+        elif cur is not None and t - cur["end"] > 20:  # a brief dip does not split an interval
+            efforts.append(cur)
+            cur = None
+    if cur is not None:
+        efforts.append(cur)
+    efforts = [{"start": e["start"], "seconds": e["end"] - e["start"], "peak": e["peak"], "z5Seconds": round(e["z5"])}
+               for e in efforts if e["end"] - e["start"] >= 60]
+    return {"zones": {str(z): round(sec / 60, 1) for z, sec in zs.items()},
+            "zoneFloors": {str(z): lo for z, lo in HR_ZONES}, "efforts": efforts}
+
+
 def health_pull(days: int = 400) -> dict:
     """What the app shows: daily totals, watch sessions and weigh-ins for the last `days` days."""
     d = [{"date": r["day"].isoformat(), "steps": r["steps"], "totalKcal": _num(r["total_kcal"]),
@@ -404,16 +459,17 @@ def ingest_health(doc: dict) -> dict:
             continue
         db.execute(
             "insert into fitness.health_sessions (uid, start_at, end_at, day, type, type_name, title, kcal, "
-            "avg_hr, max_hr, min_hr, distance_m, steps, source) "
-            "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "avg_hr, max_hr, min_hr, distance_m, steps, source, hr) "
+            "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) "
             "on conflict (uid) do update set start_at=excluded.start_at, end_at=excluded.end_at, "
             "day=excluded.day, type=excluded.type, type_name=excluded.type_name, title=excluded.title, "
             "kcal=excluded.kcal, avg_hr=excluded.avg_hr, max_hr=excluded.max_hr, min_hr=excluded.min_hr, "
-            "distance_m=excluded.distance_m, steps=excluded.steps, source=excluded.source, updated_at=now()",
+            "distance_m=excluded.distance_m, steps=excluded.steps, source=excluded.source, "
+            "hr=coalesce(excluded.hr, fitness.health_sessions.hr), updated_at=now()",
             (str(r["id"])[:200], st, en, st.date(), r.get("type"), (r.get("type_name") or "")[:80] or None,
              (r.get("title") or "")[:200] or None, _num(r.get("kcal")), _num(r.get("avg_hr")),
              _num(r.get("max_hr")), _num(r.get("min_hr")), _num(r.get("distance_m")), _num(r.get("steps")),
-             (r.get("source") or "")[:120] or None))
+             (r.get("source") or "")[:120] or None, _hr_series(r.get("hr"))))
         n["sessions"] += 1
     for r in doc.get("weights") or []:
         at, kg = _ts(r.get("time")), _num(r.get("kg"))

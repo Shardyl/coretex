@@ -1799,6 +1799,22 @@ def _cases():
          lambda: (lambda h: "rollFormDates();syncNow(false)" in h and "getTimezoneOffset()*60000" in h
                   and "liftDateIn').value=new Date().toISOString()" not in h)(
              open(_web + "/fitness/index.html", encoding="utf-8").read()))
+    def _hr_4x4():
+        """A synthetic 4x4: 3 min warm at 120, then four 4-min efforts at 165 with 3-min recoveries at 125."""
+        pts, t = [], 0
+        for bpm, secs in [(120, 180)] + [(165, 240), (125, 180)] * 4:
+            for _ in range(secs // 5):
+                pts.append([t, bpm]); t += 5
+        a = _fit._hr_analyse(pts)
+        return (len(a["efforts"]) == 4 and all(e["seconds"] == 240 and e["peak"] == 165 and e["z5Seconds"] == 240
+                                               for e in a["efforts"]) and a["zones"]["5"] == 16.0)
+    case("a heart-rate trace splits a 4x4 into its four intervals with zone minutes", "HR trace 29 Oct", _hr_4x4)
+    case("the Bridge's heart-rate trace is checked and a sync without one keeps what is held", "HR trace 29 Oct",
+         lambda: (_fit._hr_series([[0, 120], [5, "x"], [10, 400], [15, 150.4]]) == "[[0, 120], [15, 150]]"
+                  and _fit._hr_series(None) is None
+                  and "coalesce(excluded.hr, fitness.health_sessions.hr)" in inspect.getsource(_fit.ingest_health)))
+    case("an incline treadmill walk counts toward the weekly Zone 2", "incline walk zone 2 29 Oct",
+         lambda: r"/zone\s*2|incline\s*walk/i" in open(_web + "/fitness/index.html", encoding="utf-8").read())
     case("every cardio and lifting row carries its start time", "fitness times 20 Oct",
          lambda: '"startAt"' in inspect.getsource(_fit.pull))
     case("the fitness app pushes only rows changed since its last pull", "stale browser 21 Oct",
