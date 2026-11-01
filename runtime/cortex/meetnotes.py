@@ -290,10 +290,7 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
     ensure_schema()
     from . import calendar as gcal
     tok = _tok()
-    cals = ["primary"]
-    main = db.setting_get("calendar_id:sensa")
-    if main:
-        cals.append(main)
+    cals = [c["id"] for c in _meeting_calendars() if c["company"] == "sensa"]   # the token is Sensa's
     t0 = (datetime.now(timezone.utc) - timedelta(days=days_back)).isoformat()
     t1 = datetime.now(timezone.utc).isoformat()   # only FINISHED meetings have meaningful notes
     made = 0
@@ -313,7 +310,10 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
                 continue
             note = None
             for cand in notes:                    # one row per notes doc: a rejoined meeting gets a second doc
-                if db.one("select id from meeting_notes where file_id=%s", (cand["fileId"],)):
+                _stored = db.one("select * from meeting_notes where file_id=%s", (cand["fileId"],))
+                if _stored:
+                    if not _stored.get("deal_id") and not backfill:
+                        _attribute_stored(_stored, e)   # the notes email got here first and could not file it
                     continue
                 note = cand
                 break
@@ -348,24 +348,8 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
                 continue
             ext = [a.get("email", "").lower() for a in (e.get("attendees") or [])
                    if a.get("email") and not _is_us(a["email"])]
-            company_id = deal_id = None
-            _cands = []
-            for em in ext:                        # first attendee on an active deal decides the home
-                for slug in ("sensa", "skyvision", "tabscanner", "filmspoke", "snaprewards"):
-                    ds = crm.active_deals_for_email(em, slug)
-                    if ds:
-                        co = store.get_company_by_slug(slug)
-                        _b = _bound_deal(e.get("id") or "", e.get("summary") or "", (e.get("start") or {}).get("dateTime") or "", ds)
-                        company_id, deal_id = (co or {}).get("id"), (_b or {}).get("id")
-                        _cands = ds
-                        break
-                if deal_id:
-                    break
-            if not deal_id:                       # the owner linked this meeting to a deal its people are not on yet
-                _lc, _ld = _linked_deal(e.get("id") or "", e.get("summary") or "",
-                                        (e.get("start") or {}).get("dateTime") or "")
-                if _ld:
-                    company_id, deal_id = _lc or company_id, _ld
+            company_id, deal_id, _cands = _home_for(ext, e.get("id") or "", e.get("summary") or "",
+                                                    (e.get("start") or {}).get("dateTime") or "")
             starts = (e.get("start") or {}).get("dateTime")
             db.execute("insert into meeting_notes (event_id, file_id, company_id, deal_id, title, starts_at, "
                        "attendees, summary) values (%s,%s,%s,%s,%s,%s,%s,%s) on conflict (event_id) do nothing",
@@ -393,6 +377,70 @@ def sweep(days_back: int = 7, min_gap_minutes: int = 60, backfill: bool = False)
                     pass
             made += 1
     return {"captured": made}
+
+
+def _meeting_calendars() -> list[dict]:
+    """EVERY CALENDAR A CLIENT MEETING CAN SIT ON, for BOTH capture paths (meeting 38, 31 Oct 2026). The calendar
+    sweep read Sensa's primary (hello@) and the Main Calender; the notes-email path read only the free/busy registry
+    (`availability_calendars`), which has no hello@ primary. Farheen's 'Qabilah Mood Image Presentation' was booked on
+    hello@, its notes email arrived first, found 'no calendar event with an external guest', and was stored unfiled.
+    One list, so the two paths can never look in different places again."""
+    out, seen = [], set()
+    main = db.setting_get("calendar_id:sensa")
+    entries = [{"company": "sensa", "id": "primary"}] + ([{"company": "sensa", "id": main}] if main else []) \
+        + list(db.setting_get("availability_calendars") or [])
+    for e in entries:
+        k = (e.get("company") or "sensa", e.get("id") or "primary")
+        if k not in seen:
+            seen.add(k)
+            out.append({"company": k[0], "id": k[1]})
+    return out
+
+
+def _home_for(ext: list, event_id: str, title: str, starts_at) -> tuple:
+    """(company_id, deal_id, candidate deals) for a meeting's outside guests: the first guest on an active deal
+    decides the company, `_bound_deal` the deal; else the owner's own link. One function for every path."""
+    company_id = deal_id = None
+    cands = []
+    for em in ext or []:
+        for slug in ("sensa", "skyvision", "tabscanner", "filmspoke", "snaprewards"):
+            ds = crm.active_deals_for_email(em, slug)
+            if ds:
+                co = store.get_company_by_slug(slug)
+                b = _bound_deal(event_id or "", title or "", starts_at or "", ds)
+                company_id, deal_id = (co or {}).get("id"), (b or {}).get("id")
+                cands = ds
+                break
+        if deal_id:
+            break
+    if not deal_id:                       # the owner linked this meeting to a deal its people are not on yet
+        lc, ld = _linked_deal(event_id or "", title or "", starts_at or "")
+        if ld:
+            company_id, deal_id = lc or company_id, ld
+    return company_id, deal_id, cands
+
+
+def _attribute_stored(row: dict, e: dict) -> bool:
+    """LATE BINDING (meeting 38, 31 Oct 2026): a meeting stored WITHOUT a deal (the notes email got there first and
+    could not prove the client) is filed when the calendar sweep reaches its event, from that event's guests,
+    exactly as it would have been first time. The sweep used to see the stored notes document and skip it, so an
+    unfiled meeting stayed unfiled for good. Asks 'which deal' at most once per meeting."""
+    ext = [a.get("email", "").lower() for a in (e.get("attendees") or [])
+           if a.get("email") and not _is_us(a["email"])]
+    if not ext:
+        return False
+    if not row.get("attendees"):
+        db.execute("update meeting_notes set attendees=%s where id=%s", (json.dumps(ext), row["id"]))
+    title = e.get("summary") or row.get("title") or "Meeting"
+    company_id, deal_id, cands = _home_for(ext, e.get("id") or "", title,
+                                           (e.get("start") or {}).get("dateTime") or row.get("starts_at") or "")
+    if deal_id:
+        file_meeting_on_deal(row["id"], deal_id, by="cortex")
+        return True
+    if len(cands) > 1 and company_id and not db.setting_get(f"meeting_late_asked:{row['id']}"):
+        db.setting_set(f"meeting_late_asked:{row['id']}", 1)
+        _ask_meeting(company_id, row.get("event_id") or "", title, row.get("starts_at"), ext, cands)
+    return False
 
 
 def _ask_meeting(company_id, key: str, title: str, starts_at, attendees: list, cands: list) -> None:
@@ -935,8 +983,8 @@ def _attendees_at(start: datetime, whole_day: bool = False,
     else:
         lo, hi = start - timedelta(minutes=45), start + timedelta(minutes=45)
     cands, seen = [], set()
-    for entry in (db.setting_get("availability_calendars") or []):
-        co, cal = entry.get("company") or "sensa", entry.get("id") or "primary"
+    for entry in _meeting_calendars():
+        co, cal = entry["company"], entry["id"]
         try:
             tok = gcal._token(co)
             q = urllib.parse.urlencode({"timeMin": lo.isoformat(), "timeMax": hi.isoformat(),
@@ -1039,23 +1087,7 @@ def sweep_email(days_back: int = 2, min_gap_minutes: int = 10, backfill: bool = 
                     if start else ([], "", "the subject carries no meeting date"))
                 title = ev_title or want_title or subject.replace("Notes:", "").strip()
                 summary = _distil(title, text)
-                company_id = deal_id = None
-                _cands = []
-                for em in emails:
-                    for slug in ("sensa", "skyvision", "tabscanner", "filmspoke", "snaprewards"):
-                        ds = crm.active_deals_for_email(em, slug)
-                        if ds:
-                            co = store.get_company_by_slug(slug)
-                            _b = _bound_deal("", title, start, ds)
-                            company_id, deal_id = (co or {}).get("id"), (_b or {}).get("id")
-                            _cands = ds
-                            break
-                    if deal_id:
-                        break
-                if not deal_id:                   # the owner linked this meeting to a deal its people are not on yet
-                    _lc, _ld = _linked_deal("", title, start)
-                    if _ld:
-                        company_id, deal_id = _lc or company_id, _ld
+                company_id, deal_id, _cands = _home_for(emails, "", title, start)
                 db.execute(
                     "insert into meeting_notes (event_id, file_id, company_id, deal_id, title, starts_at,"
                     " attendees, summary) values (%s,%s,%s,%s,%s,%s,%s,%s) on conflict (event_id) do nothing",

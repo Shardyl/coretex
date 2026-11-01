@@ -1056,6 +1056,21 @@ def _cases():
     case("a meeting files on the live job, or asks which; never left unlinked in silence", "HBMSU meeting 36, 27 Oct",
          _meeting_finds_its_job)
 
+    def _notes_email_sees_every_calendar():
+        from . import meetnotes
+        cals = meetnotes._meeting_calendars()
+        keys = {(c["company"], c["id"]) for c in cals}
+        reg = {(e.get("company") or "sensa", e.get("id") or "primary") for e in (db.setting_get("availability_calendars") or [])}
+        att = inspect.getsource(meetnotes._attendees_at)
+        sweep = inspect.getsource(meetnotes.sweep)
+        return (("sensa", "primary") in keys and reg <= keys and len(keys) == len(cals)
+                and "_meeting_calendars()" in att and "availability_calendars" not in att
+                and "_meeting_calendars()" in sweep and "_attribute_stored(" in sweep
+                and sweep.count("_home_for(") == 1
+                and "_home_for(" in inspect.getsource(meetnotes._attribute_stored))
+    case("the notes email checks the same calendars as the sweep (hello@ included); a meeting stored unfiled is "
+         "filed when its event is reached", "Qabilah meeting 38, 31 Oct", _notes_email_sees_every_calendar)
+
     def _post_meeting_to_the_right_person():
         from . import meetnotes
         ppl = {"as.alzarooni@hbmsu.ac.ae": "Aseela AlZarooni", "i.salah@hbmsu.ac.ae": "Islam Salah"}

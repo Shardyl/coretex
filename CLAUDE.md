@@ -1058,6 +1058,15 @@ extract/judge, never move stages or invent values:
   (date-only subject) were attributed to the ECBD tender call that ran the same morning, putting three
   of her commitments and four timeline entries onto deal 100 as reminders 87/88/89 (cancelled 6 Sep;
   the deal 100 entries are marked `voided`, not deleted). A wrong client is worse than no client.
+  BOTH PATHS LOOK IN THE SAME CALENDARS, AND AN UNFILED MEETING IS FILED LATE (1 Nov 2026): Farheen's "Qabilah
+  Mood Image Presentation" (meeting 38, 31 Oct) was booked on hello@'s primary calendar. Its notes email arrived
+  first and `_attendees_at` searched only `availability_calendars` (no hello@ primary), found "no calendar event
+  with an external guest" and stored it unfiled; the hourly calendar sweep (which DOES read hello@) then saw the
+  notes document already stored and skipped it, so it stayed unfiled. Now `_meeting_calendars()` is the one list
+  (Sensa primary + `calendar_id:sensa` + the availability registry) for both paths, `_home_for()` is the one
+  guests-to-deal decision, and when the sweep reaches an event whose notes are stored with no deal,
+  `_attribute_stored()` files it from that event's guests (or asks "which deal" once). Meeting 38 was filed on
+  deal 130 by hand the same day.
 - **Voided timeline entries:** a `voided` key on a `crm_projects.history` event keeps it on the record
   (cockpit still shows it) but `pipeline.deal_context` no longer reads it back into drafts. That is how
   a misfiled event is corrected: nothing is ever deleted from a deal.
