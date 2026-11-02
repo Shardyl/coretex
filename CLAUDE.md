@@ -1119,7 +1119,7 @@ build the capability when it is missing).
   render crops mask everything outside the tile, tiles go top to bottom so overlaps land on caption bands; caption bands
   are laid back on top; video outlines OFF (they drew a hairline); other PDF links become invisible link boxes. Rebuild
   = `python prep.py <pdf> <dir> caps|profile`, tar to the box, `sudo -u cortex bash /tmp/runbox.sh slides_build2.py
-  <dir> "<title>"` (it trashes the earlier copy with that title). Needs the Slides API ON in coretex-499507 and the
+  <dir> "<title>" [folder_id]` (it trashes the earlier copy with that title). A CLIENT deck passes its SENSA CLIENTS folder id as the third argument so it never lands in Documents (2 Nov 2026: DSO "The Line She Set Moving v4 (Google Slides)", id 10le4KxNyDPBpvVG0fXlM7phUkXdIKnYI2yvbbAQhYdc, in the DSO client folder). A deck with no films is just the page renders, one per slide. Needs the Slides API ON in coretex-499507 and the
   `presentations` scope (both done 21 Oct). Not in the document library (a native Slides file has no bytes to file).
 - **AI Production Capabilities Deck = library doc 1179** (21 Oct 2026): v2 plus an aerial page (AI drone showreel
   zFM7OW-9Iqk, ground footage + satellite reference imagery), 18 pages, superseding 1136; profile, taught note and
