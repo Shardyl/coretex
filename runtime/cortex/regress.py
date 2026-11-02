@@ -745,7 +745,7 @@ def _cases():
     case("a role mailbox decides even for a client on a deal; a person's address does not", "Sampras 1232 / #165",
          lambda: bool(_pol._ROLE_LOCAL.match("support")) and not _pol._ROLE_LOCAL.match("ben")
          and "by_address" in inspect.getsource(engine.poll_inbox)
-         and "if not _cdeals:" in inspect.getsource(engine.poll_inbox))
+         and "if not _cdeals and not _skip.get(\"copied\"):" in inspect.getsource(engine.poll_inbox))
 
     # --- one record of what is owed; deliverables get lead time and never draft an email (owner, 14 Oct 2026)
     _rm = __import__("cortex.reminders", fromlist=["x"])
@@ -2050,6 +2050,22 @@ def _cases():
                 and plain[0]["title"] != "Open Your Eyes")
     case("the operator's name for a film beats a library title that names the client",
          "Open Your Eyes issue, card 1585, 2 Nov 2026", _film_title)
+
+    def _watch_first():
+        from . import newsletter as _nl
+        yt, site = "https://www.youtube.com/watch?v=fR-UJ5Zb8Lk", "https://sensa.digital/ai-video-production/"
+        c = {"headline": "H", "intro": "Intro.", "primary_cta": {"label": "", "url": ""},
+             "sections": [{"heading": "The work", "body": "Body."}], "films": [],
+             "closing_cta": {"use": True, "heading": "See it", "subtext": "One minute.", "label": "Watch the film",
+                             "url": yt, "secondary_label": "See our AI work", "secondary_url": site}}
+        html, text = _nl.render_filmspoke(3, c, None), _nl.render_text_filmspoke(3, c)
+        top = html.split("<h2", 1)[0]
+        return (site not in top and yt not in top
+                and html.index("Watch the film") < html.index("See our AI work")
+                and f"Watch the film: {yt}" in text and f"See our AI work: {site}" in text
+                and text.index("Watch the film") < text.index("See our AI work"))
+    case("the newsletter lets them read first, then the button is the film and our site is the quiet link",
+         "owner, 2 Nov 2026 (Open Your Eyes issue)", _watch_first)
     return C
 
 

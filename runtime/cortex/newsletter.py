@@ -672,7 +672,9 @@ _FS_SCHEMA = (
     "sections (array of {heading, body, image:{use, kind:\"feature\"|\"grid\", "
     "items:[{image_prompt, alt, caption}]}}); steps {use, title, items:[{title, text}]}; "
     "stat_band {use, stats:[{value, label, highlight}]}; quote {use, text, attribution}; "
-    "closing_cta {use, heading, subtext, label, url}. Use real absolute FilmSpoke URLs (https://filmspoke.ai...)."
+    "closing_cta {use, heading, subtext, label, url, secondary_label, secondary_url (optional quiet text link "
+    "under the button)}. primary_cta is the button straight after the intro: leave its label empty when the rules "
+    "put the only button at the end. Use real absolute FilmSpoke URLs (https://filmspoke.ai...)."
 )
 _FS_COMPOSE = _FS_GUIDE + "\n\n" + _FS_SCHEMA   # back-compat alias
 
@@ -853,6 +855,12 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
                 f'padding:16px 32px;border-radius:6px;{btn_bg}text-decoration:none;">{_esc(label)} &nbsp;&rarr;</a>'
                 f'</td></tr></table>')
 
+    def quiet_link(cc):   # the subtle second link under the closing button (Sensa, 2 Nov 2026: watch the film first)
+        if not (cc.get("secondary_label") and cc.get("secondary_url")):
+            return ""
+        return (f'<p style="margin:18px 0 0;font:500 14px/1.4 {bodyf};"><a href="{_esc(cc["secondary_url"])}" '
+                f'style="color:{muted};text-decoration:underline;">{_esc(cc["secondary_label"])}</a></p>')
+
     def divider():
         return (f'<tr><td style="padding:30px 44px 0;"><div style="border-top:1px solid {line};'
                 f'font-size:0;line-height:0;">&nbsp;</div></td></tr>')
@@ -984,7 +992,7 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
                     f'border:1px solid {line};"><tr><td align="center" style="padding:34px 30px 36px;">'
                     f'<h2 style="margin:0;font:800 26px/1.2 {headf};color:{ink};">{_esc(cc.get("heading"))}</h2>'
                     f'<p style="margin:12px 0 22px;font:400 15px/1.6 {bodyf};color:{muted};">{_esc(cc.get("subtext"))}</p>'
-                    f'{btn(cc["label"], cc["url"])}</td></tr></table></td></tr>')
+                    f'{btn(cc["label"], cc["url"])}{quiet_link(cc)}</td></tr></table></td></tr>')
 
     legal = _esc(prof.get("legal_name") or company["name"])
     addr = _esc(worker._no_dashes(" ".join((prof.get("address") or "").split())).rstrip(". "))
@@ -1052,6 +1060,8 @@ def render_text_filmspoke(company_id: int, c: dict) -> str:
     cc = c.get("closing_cta") or {}
     if cc.get("use") and cc.get("label") and cc.get("url"):
         L += [f"{cc['label']}: {cc['url']}", ""]
+        if cc.get("secondary_label") and cc.get("secondary_url"):
+            L += [f"{cc['secondary_label']}: {cc['secondary_url']}", ""]
     L += ["-" * 40, f"You are receiving this email from {prof.get('legal_name') or company['name']}.",
           prof.get("address") or "", "Unsubscribe: %unsubscribe_url%"]
     return worker._no_dashes("\n".join(x for x in L if x is not None))

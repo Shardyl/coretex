@@ -1866,6 +1866,10 @@ thing every new conversation reads; a stale line here costs a future session rea
   `FILM TITLE: <name>` in the brief or a correction (last one wins) overrides the first featured film's title.
   The header image is a REAL frame from the featured film (Sensa imagery rule rewritten 2 Nov; backup setting
   `skill16_rules:backup-2026-11-02`); attach the frame to the card, it wins over everything.
+- READ FIRST, THEN THE FILM (owner, 2 Nov 2026): Sensa issues carry no button at the top; the one button is at
+  the end, 'Watch the film' to the featured film, with a quiet 'See our AI work' text link under it
+  (`closing_cta.secondary_label/secondary_url`, rendered by `quiet_link`, plain-text twin too). Behaviour is the
+  Sensa CTA + ISSUE SHAPE rules (backup `skill16_rules:backup-2026-11-02b`); the schema only carries the fields.
 - SENSA NEVER DOES FREE (owner, 13 Sep 2026): no free sample/frame/trial in any newsletter; CTA = see the work
   or talk. Universal rule: film links are public YouTube URLs, never the internal media library.
 - AUDIENCE IS DATA (13 Sep 2026): `company_profiles.data.newsletter_audience` = {org_labels, exclude_sources,
