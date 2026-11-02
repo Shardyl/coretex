@@ -2066,6 +2066,19 @@ def _cases():
                 and text.index("Watch the film") < text.index("See our AI work"))
     case("the newsletter lets them read first, then the button is the film and our site is the quiet link",
          "owner, 2 Nov 2026 (Open Your Eyes issue)", _watch_first)
+
+    def _film_button_above():
+        from . import newsletter as _nl
+        yt = "https://www.youtube.com/watch?v=fR-UJ5Zb8Lk"
+        c = {"headline": "H", "intro": "Intro.", "sections": [{"heading": "The work", "body": "Body."}],
+             "films": [{"title": "Open Your Eyes", "url": yt, "cid": "film0.jpg"}], "closing_cta": {}}
+        html, text = _nl.render_filmspoke(3, c, None), _nl.render_text_filmspoke(3, c)
+        card = html.split("The work", 1)[1]
+        return ("on YouTube" not in html and "on YouTube" not in text
+                and card.index("Watch the film") < card.index("cid:film0.jpg")
+                and f"Watch the film: {yt}" in text)
+    case("the film card is a 'Watch the film' button above the picture, with no text link under it",
+         "owner, 2 Nov 2026 (Open Your Eyes issue, screenshot)", _film_button_above)
     return C
 
 

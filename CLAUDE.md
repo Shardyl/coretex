@@ -1870,6 +1870,10 @@ thing every new conversation reads; a stale line here costs a future session rea
   the end, 'Watch the film' to the featured film, with a quiet 'See our AI work' text link under it
   (`closing_cta.secondary_label/secondary_url`, rendered by `quiet_link`, plain-text twin too). Behaviour is the
   Sensa CTA + ISSUE SHAPE rules (backup `skill16_rules:backup-2026-11-02b`); the schema only carries the fields.
+  THE FILM CARD (same day, owner's screenshot): a 'Watch the film' button sits right ABOVE the film's picture,
+  the picture itself links to the film, and there is no small "Watch X on YouTube" text link under it
+  (`render_filmspoke.film_cards`, every dark/light-saas issue). So a Sensa issue shows the button twice: over
+  the film after the first section, and at the end.
 - SENSA NEVER DOES FREE (owner, 13 Sep 2026): no free sample/frame/trial in any newsletter; CTA = see the work
   or talk. Universal rule: film links are public YouTube URLs, never the internal media library.
 - AUDIENCE IS DATA (13 Sep 2026): `company_profiles.data.newsletter_audience` = {org_labels, exclude_sources,

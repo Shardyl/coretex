@@ -904,15 +904,14 @@ def render_filmspoke(company_id: int, c: dict, logo_cid: str | None) -> str:
     if chips:
         rows.append(f'<tr><td style="padding:18px 44px 0;">{chips}</td></tr>')
 
-    def film_cards():
+    def film_cards():   # owner, 2 Nov 2026: the button sits right above the film, the picture is the link, no text link under it
         out = ""
         for f in (c.get("films") or []):
-            label = _esc(f"Watch {f['title']} on YouTube" if f.get("title") else "Watch the film on YouTube")
-            img = (f'<a href="{_esc(f["url"])}" style="text-decoration:none;"><img src="cid:{f["cid"]}" width="512" '
+            img = (f'<div style="height:14px;line-height:14px;font-size:0;">&nbsp;</div>'
+                   f'<a href="{_esc(f["url"])}" style="text-decoration:none;"><img src="cid:{f["cid"]}" width="512" '
                    f'alt="{_esc(f.get("title") or "Watch the film")}" style="display:block;width:100%;height:auto;'
                    f'border-radius:12px;border:0;"></a>') if f.get("cid") else ""
-            out += (f'<tr><td style="padding:16px 44px 0;">{img}<p style="margin:10px 0 0;font:600 14px/1.4 {bodyf};">'
-                    f'<a href="{_esc(f["url"])}" style="color:{red};text-decoration:none;">{label} &rarr;</a></p></td></tr>')
+            out += f'<tr><td style="padding:22px 44px 0;">{btn("Watch the film", f["url"])}{img}</td></tr>'
         return out
 
     secs = c.get("sections") or []
@@ -1044,7 +1043,7 @@ def render_text_filmspoke(company_id: int, c: dict) -> str:
         L += [str(s.get("heading") or "").upper(), (s.get("body") or "").strip(), ""]
         if si == 0:
             for f in (c.get("films") or []):
-                L += [f"Watch {f['title'] or 'the film'} on YouTube: {f['url']}", ""]
+                L += [f"Watch the film: {f['url']}", ""]
     st = c.get("steps") or {}
     if st.get("use") and st.get("items"):
         L += [str(st.get("title") or "How it works").upper()]
