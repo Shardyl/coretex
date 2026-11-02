@@ -1698,17 +1698,18 @@ async function photoCard(){
   const today=localDay(new Date()), last=list[list.length-1], due=!last||last.date<=shiftDay(today,-7);
   if(last){setPhotoLast(last.date);refreshBadges();}
   _phList=list.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
-  const byDay={};list.forEach(p=>{(byDay[p.date]=byDay[p.date]||[]).push(p);});
-  const days=Object.keys(byDay).sort().reverse();
   el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:baseline"><div class="fd-sub">Progress photos &middot; weekly</div>
       ${last?`<div style="font-size:11px;color:${due?'var(--amber)':'var(--ink3)'};font-weight:700">${due?'Due':'Next '+fmtDate(shiftDay(last.date,7))}</div>`:''}</div>
     <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
       <input type="date" id="fdPhotoDay" value="${today}" max="${today}" class="fd-input" style="width:auto;font-size:14px"/>
       <label class="fd-btn" style="width:auto;margin:0;padding:12px 16px;display:inline-block;text-align:center;cursor:pointer">+ Add photo<input type="file" accept="image/*" multiple style="display:none" onchange="foodPhotoUpload(this)"/></label></div>
     <div class="fd-note" style="margin:6px 0 0">Same place, light and pose each week. Private: stored only on your Cortex server.</div>
-    ${days.length?days.map(d=>`<div style="margin-top:12px"><div style="font-size:11px;font-weight:800;color:var(--ink3);margin-bottom:6px">${fmtDate(d)}</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${byDay[d].map(p=>`<img data-ph="${p.id}" onclick="foodPhotoView('${p.id}','${d}')" alt="Progress photo ${fmtDate(d)}" style="width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;background:var(--border);cursor:pointer"/>`).join('')}</div></div>`).join('')
+    ${_phList.length?`<div id="fdPhStrip" style="display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;margin-top:12px;padding-bottom:4px">${_phList.map(p=>`<div style="flex:0 0 42%;scroll-snap-align:start">
+        <img data-ph="${p.id}" onclick="foodPhotoView('${p.id}','${p.date}')" alt="Progress photo ${fmtDate(p.date)}" style="width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;background:var(--border);cursor:pointer;display:block"/>
+        <div style="font-size:11px;font-weight:800;color:var(--ink3);margin-top:4px">${fmtDate(p.date)}</div></div>`).join('')}</div>`
       :'<div class="fd-note" style="margin:10px 0 0">No photos yet.</div>'}`;
+  // One row you swipe through (owner, 2 Nov 2026): oldest on the left, opened at the newest end.
+  const strip=document.getElementById('fdPhStrip');if(strip)strip.scrollLeft=strip.scrollWidth;
   el.querySelectorAll('img[data-ph]').forEach(async img=>{try{img.src=await photoBlob(img.dataset.ph);}catch(e){}});
 }
 window.foodPhotoUpload=async function(inp){
@@ -1784,7 +1785,7 @@ function waistCard(){
       <input type="date" id="fdWaistDay" value="${today}" max="${today}" class="fd-input" style="width:auto;font-size:14px"/>
       <button class="fd-btn" style="width:auto;margin:0;padding:0 16px" onclick="foodSaveWaist()">Save</button></div>
     <div class="fd-note" style="margin:6px 0 0">Same conditions each week: morning, after the toilet, tape level at the navel, relaxed breath out.</div>
-    ${L.length>1?`<div style="margin-top:8px">${L.slice().reverse().slice(0,8).map(x=>`<div class="fd-entry" style="cursor:default;padding:5px 0"><div><div class="n" style="font-size:13px">${r1(x.value)} cm</div><div class="q">${fmtDate(localDay(new Date(x.at)))}</div></div><button class="hist-del" onclick="foodDelWaist('${x.id}')">&times;</button></div>`).join('')}</div>`:''}
+    ${L.length>1?`<div style="margin-top:8px">${L.slice().reverse().slice(0,7).map(x=>`<div class="fd-entry" style="cursor:default;padding:5px 0"><div><div class="n" style="font-size:13px">${r1(x.value)} cm</div><div class="q">${fmtDate(localDay(new Date(x.at)))}</div></div><button class="hist-del" onclick="foodDelWaist('${x.id}')">&times;</button></div>`).join('')}</div>`:''}
   </div>`;
 }
 window.foodSaveWaist=function(){
@@ -1809,7 +1810,16 @@ function renderWeight(){
   // The day being entered survives the page redrawing (owner, 17 Oct 2026: a refresh snapped the date back to today).
   const pick=window._wtPick&&window._wtPick<=today?window._wtPick:today, picked=all.find(w=>w.date===pick);
   const draft=window._wtDraft&&window._wtDraft.day===pick?window._wtDraft.kg:(picked?picked.kg:'');
+  // Order (owner, 2 Nov 2026): chart, last 7 weigh-ins, weigh-in form + averages, photo strip, waist.
   el.innerHTML=`
+    <div class="chart-section">
+      <div class="chart-toggle" style="margin-bottom:8px">${[[30,'30d'],[90,'90d'],[365,'1y'],[99999,'All']].map(([n,l])=>`<button class="${wtRange===n?'active':''}" onclick="foodWtRange(${n})">${l}</button>`).join('')}</div>
+      <div style="position:relative;width:100%;height:210px"><canvas id="fdWtChart" role="img" aria-label="Weight trend"></canvas></div>
+    </div>
+    <div class="card" style="padding:8px 12px">
+      ${all.slice().reverse().slice(0,7).map(w=>`<div class="fd-entry" style="cursor:pointer" onclick="foodEditWeight('${w.date}',${w.kg})"><div><div class="n">${w.kg} kg</div><div class="q">${fmtDate(w.date)}${isFree(shiftDay(w.date,-1))?' &middot; after a free day':''} ${new Date(w.date+'T12:00:00').getFullYear()!==new Date().getFullYear()?new Date(w.date+'T12:00:00').getFullYear():''}${w.src==='watch'?' &middot; from Health Connect':''}</div></div>
+        ${w.src==='log'?`<button class="hist-del" onclick="event.stopPropagation();foodDelWeight('${w.date}')">&times;</button>`:''}</div>`).join('')||'<div class="fd-note">No weigh-ins yet.</div>'}
+    </div>
     <div class="card">
       <div class="fd-sub">${pick===today?(todays?'Today':'Morning weigh-in'):'Weigh-in for '+fmtDate(pick)}</div>
       ${picked?`<div class="fd-big">${picked.kg} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kg</span></div>`:''}
@@ -1824,16 +1834,8 @@ function renderWeight(){
       <div class="fd-cell"><div class="v">${chip(diff(a7,p7))}</div><div class="l">vs last week</div></div>
       <div class="fd-cell"><div class="v">${chip(diff(a7,a30))}</div><div class="l">vs 30 days ago</div></div>
     </div><div class="fd-note" style="margin:8px 0 0">Daily weight swings with water and food, so judge progress by the 7-day average.</div>${projectWeek()}</div>
-    ${waistCard()}
     <div class="card" id="fdPhotoCard"><div class="fd-sub">Progress photos</div><div class="fd-note" style="margin:4px 0 0">Loading&hellip;</div></div>
-    <div class="chart-section">
-      <div class="chart-toggle" style="margin-bottom:8px">${[[30,'30d'],[90,'90d'],[365,'1y'],[99999,'All']].map(([n,l])=>`<button class="${wtRange===n?'active':''}" onclick="foodWtRange(${n})">${l}</button>`).join('')}</div>
-      <div style="position:relative;width:100%;height:210px"><canvas id="fdWtChart" role="img" aria-label="Weight trend"></canvas></div>
-    </div>
-    <div class="card" style="padding:8px 12px">
-      ${all.slice().reverse().slice(0,30).map(w=>`<div class="fd-entry" style="cursor:pointer" onclick="foodEditWeight('${w.date}',${w.kg})"><div><div class="n">${w.kg} kg</div><div class="q">${fmtDate(w.date)}${isFree(shiftDay(w.date,-1))?' &middot; after a free day':''} ${new Date(w.date+'T12:00:00').getFullYear()!==new Date().getFullYear()?new Date(w.date+'T12:00:00').getFullYear():''}${w.src==='watch'?' &middot; from Health Connect':''}</div></div>
-        ${w.src==='log'?`<button class="hist-del" onclick="event.stopPropagation();foodDelWeight('${w.date}')">&times;</button>`:''}</div>`).join('')||'<div class="fd-note">No weigh-ins yet.</div>'}
-    </div>`;
+    ${waistCard()}`;
   try{photoCard();}catch(e){}
   refreshBadges();
   const from=shiftDay(today,-wtRange), pts=all.filter(w=>w.date>=from);
