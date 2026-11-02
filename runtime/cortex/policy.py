@@ -114,6 +114,46 @@ def _addressed_to_us(email: dict, own_domain: str) -> bool:
     return bool(d) and ("@" + d) in rcpt
 
 
+_GREETING = re.compile(r"^\s*(?:hi|hello|hey|dear|good (?:morning|afternoon|evening))\b[ ,]*(.{0,80}?)\s*[,:!\n]",
+                       re.I | re.M)
+
+
+def copied_only(email: dict, own_domain: str = "") -> str:
+    """WE ARE ALONG FOR THE RIDE (2 Nov 2026, D-Marin card 1562). Jurgita wrote "Hi Amit" to Amit (the wardrobe
+    stylist, a hotmail address) with Dalal beside him on the To line; Cortex treated her wardrobe questions as ours
+    and drafted Rashad answering them. Returns who the email is really for, else "". Facts only, two ways:
+      - the HEADERS: the To line names people, none of them ours, and one of ours is on the Cc;
+      - the GREETING: it opens by name ("Hi Amit") and every name it greets is an OUTSIDE person on the To line, none
+        of ours.
+    An email with NO To line (a blind copy, an undisclosed list) is never "copied": it may be written to us (XPLOR's
+    RFP arrived exactly like that). A greeting with no name ("Hi all", "Dear team") decides nothing."""
+    from email.utils import getaddresses
+
+    from . import gmail, identity
+    to = [(n or "", a.lower()) for n, a in getaddresses([email.get("to") or ""]) if "@" in (a or "")]
+    cc = [(n or "", a.lower()) for n, a in getaddresses([email.get("cc") or ""]) if "@" in (a or "")]
+    if not to:
+        return ""
+    idx = identity.internal_index()
+    ours_to = [(n, a) for n, a in to if identity.is_internal(a, own_domain, idx)]
+    outside_to = [(n, a) for n, a in to if not identity.is_internal(a, own_domain, idx)]
+    if not ours_to and outside_to and any(identity.is_internal(a, own_domain, idx) for _n, a in cc):
+        return (email.get("to") or "").strip()
+    if not outside_to:
+        return ""
+    m = _GREETING.search(gmail.new_part(email.get("body") or "")[:400])
+    greeted = {w.lower() for w in re.findall(r"[^\W\d_]{2,}", (m.group(1) if m else ""))} - {"and", "all", "team"}
+    if not greeted:
+        return ""
+
+    def _first(n: str, a: str) -> str:
+        return ((n or "").split() or [a.split("@")[0].split(".")[0]])[0].lower()
+    if greeted & {_first(n, a) for n, a in ours_to}:
+        return ""                                  # one of ours is greeted: it is (also) written to us
+    hit = [f"{n} <{a}>".strip() for n, a in outside_to if _first(n, a) in greeted]
+    return ", ".join(hit) if hit else ""
+
+
 DEFAULT_CARD_CATEGORIES = ("lead", "client", "finance")
 
 
@@ -141,6 +181,13 @@ def should_skip(company: dict, email: dict, skill_key: str | tuple = NO_DRAFT_LA
     or None to proceed. Cheap: no model call at all unless the company actually has such a rule.
     THE POLICY OF EVERY EMAIL LANE (audit step 2e): it read sales-first-response only, so after the 13 Oct rule move
     any no-draft rule now on sales-followup or email-handling was never evaluated."""
+    # THE QUESTIONS ARE FOR WHOEVER THE EMAIL IS ADDRESSED TO. Jurgita wrote to Amit, our wardrobe stylist, with
+    # Dalal copied; the email went down the client lane and Rashad was drafted answering her wardrobe questions in
+    # Amit's place (cards 1536 and 1562). An email addressed to someone else, with us only on the Cc, gets no draft.
+    # It is still logged on the deal and read by the next-steps list as copied mail.
+    _to = copied_only(email, own_domain)
+    if _to:
+        return {"reason": f"addressed to {_to[:120]}; we are only copied", "copied": True}
     try:
         sits, addrs = [], []
         for _k in ((skill_key,) if isinstance(skill_key, str) else tuple(skill_key)):

@@ -409,8 +409,12 @@ def record_inbound(e: dict, deal: dict | None, company: dict) -> None:
     if gid and (after.get("n") == before.get("n")):
         return          # already logged from another mailbox: its deadlines were captured then too
     try:   # THE NEXT-STEPS LIST READS THEIR NEW WORDS (nextsteps.py, 18 Oct 2026); deadline reminders are retired
-        from . import nextsteps
-        nextsteps.observe_async(int(did), "email_in", f"From: {sender}\nSubject: {subj}\n\n"
+        from . import nextsteps, policy
+        # COPIED MAIL IS SOMEONE ELSE'S CONVERSATION (2 Nov 2026, D-Marin #188): the re-plan is told who it is addressed to
+        _copied = policy.copied_only(e)
+        nextsteps.observe_async(int(did), "email_in",
+                                (f"{nextsteps.COPIED_MARK} it is addressed to {_copied}.\n" if _copied else "")
+                                + f"From: {sender}\nTo: {e.get('to') or ''}\nCc: {e.get('cc') or ''}\nSubject: {subj}\n\n"
                                 + gmail.new_part(e.get("body") or "")[:8000], company_id=(company or {}).get("id"))
     except Exception as _ne:  # noqa: BLE001
         print(f"[nextsteps] inbound {did}: {type(_ne).__name__}: {_ne}", flush=True)

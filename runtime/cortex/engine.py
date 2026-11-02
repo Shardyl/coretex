@@ -6151,6 +6151,7 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
         bound = db.setting_get(f"thread_deal:{tid}")
         return bool(bound) and str(bound) != str(req.get("deal_id"))
     hits, seen_rt = {}, set()            # rt_key -> (dt, sender, newest message in THAT mailbox)
+    _msgs_by_rt: dict = {}                # rt_key -> the messages read from that mailbox (ownership proof)
     for s in pool:
         if s["rt_key"] in seen_rt:
             continue                     # alias entries (richard->rashad) point at the same mailbox
@@ -6204,6 +6205,7 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
             except Exception:  # noqa: BLE001
                 dt = None
             hits[s["rt_key"]] = (dt, s, m)
+            _msgs_by_rt[s["rt_key"]] = msgs or []
         except Exception:  # noqa: BLE001
             continue
     if not hits:
@@ -6222,7 +6224,19 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
         owner = ours[frm]
     else:
         owner = next((ours[a.lower()] for a in re.findall(r"[\w.+-]+@[\w.-]+",
-                      (m.get("to") or "") + " " + (m.get("cc") or "")) if a.lower() in ours), s)
+                      (m.get("to") or "") + " " + (m.get("cc") or "")) if a.lower() in ours), None)
+    if owner is None:
+        # A BLIND COPY OF THEIR EMAIL IS NOT OWNERSHIP (2 Nov 2026, card 1566). XPLOR's RFP was bcc'd to hello@, gino@
+        # and ayresh@ with no To line, so the reply fell back to the profile's reply_from (Rashad) - and then this
+        # function found Adham's own email sitting in Gino's mailbox and made the reply Gino's, because the fallback
+        # here was "whichever mailbox held the copy". Ownership is proven only by one of us having WRITTEN on the
+        # thread or being named on its To/Cc. Without that proof nothing is adopted: the sender stays the default and
+        # the reply still threads by its Message-Id headers.
+        owner = next((ours[(c.get("email") or "").lower()] for c in _msgs_by_rt.get(s["rt_key"]) or []
+                      if c.get("thread_id") == m.get("thread_id") and (c.get("email") or "").lower() in ours), None)
+        if owner is None:
+            manifest.append("thread_owner_unproven")
+            return
     if _chosen and owner["email"] != _chosen:
         owner = next((v for v in senders.values() if v["email"] == _chosen), owner)
     if owner["rt_key"] != s["rt_key"]:
@@ -7420,7 +7434,7 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                                           f"({(e.get('subject') or '(no subject)')[:80]}): {_skip['reason']}.")
                         # A CALENDAR INVITE OR AN AUTOMATED MESSAGE NEEDS NO REPLY, SO NO NOTICE (14 Oct 2026: Farheen's
                         # invitation and its update raised two "Not drafted" notices); a real email notifies once a day
-                        if not (_no_reply_mail(e) or _skip.get("by_address")):   # support's mail: on the deal only
+                        if not (_no_reply_mail(e) or _skip.get("by_address") or _skip.get("copied")):   # support's / copied mail: on the deal only
                             notifications.notify(
                                 f"Not drafted: {e.get('name') or e.get('email')} ({(e.get('subject') or '')[:60]})",
                                 f"An email from a client on '{_sd['title']}' got no draft because of the rule: {_skip['reason']}. "
@@ -7433,7 +7447,7 @@ def poll_inbox(company_slug: str = "tabscanner", rt_key: str = "gmail_refresh_to
                 results.append({"from": e.get("email"), "subject": (e.get("subject") or "")[:60],
                                 "category": cls["category"], "to_crm": cls.get("to_crm"),
                                 "reason": f"no draft - {_skip['reason']}"})
-                if not _cdeals:   # A CLIENT'S OWN EMAIL IS NEVER A TENDER (14 Oct 2026: Sampras support -> "Tender" #165)
+                if not _cdeals and not _skip.get("copied"):   # A CLIENT'S OWN EMAIL IS NEVER A TENDER (14 Oct 2026: Sampras support -> "Tender" #165)
                     _flag_skipped_opportunity(co, e, _skip["reason"], rt_key=rt_key, client=company)   # in-scope tender -> tracked
                 # A BLAST THAT ASKS US TO CONFIRM RECEIPT OR PARTICIPATION gets that acknowledgement drafted
                 # (DIEZ: "Please confirm receipt of this Invitation and your participation", 16 Sep 2026).

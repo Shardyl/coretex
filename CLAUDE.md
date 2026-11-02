@@ -285,6 +285,28 @@ built nothing. Now:
   straight back (no streak bump) and the cockpit shows as a toast. Nothing is sent in any case: the
   result is a quotation card for review.
 
+## Mail written to someone else, and a blind copy, are not ours (2 Nov 2026)
+
+Two cards in one morning, both "who is this email for":
+- **D-Marin, cards 1536 + 1562.** Jurgita wrote "Hi Amit" to Amit (our wardrobe stylist, a hotmail address) with
+  Dalal beside him on the To line. It went down the client lane (deal 4 is booked), Rashad was drafted answering her
+  wardrobe questions, and the next-steps list made them OURS (#188 "Reply to Jurgita on the male swim shorts..."),
+  which then fell due and became a second draft. `policy.copied_only(email)` now says who an email is really for, on
+  facts only: the HEADERS (To names people, none ours, one of ours on the Cc) or the GREETING (it opens by name and
+  every name it greets is an outside person on the To line, none of ours). No To line (a bcc, an undisclosed list)
+  is never "copied". `should_skip` returns `{copied: True}` first, so there is no draft, no "Not drafted" notice and
+  no tender check; the email is still logged on the deal. `pipeline.record_inbound` hands the re-plan the To/Cc and
+  `nextsteps.COPIED_MARK`; `_PLAN` rule 8 says copied mail's questions belong to the addressee, and code drops any
+  OURS item from it unless the quote names our company or one of our people (`nextsteps._asks_us`, the signature
+  roster).
+- **XPLOR, card 1566.** Adham's RFP was bcc'd to hello@, gino@ and ayresh@. The hello@ copy correctly fell back to
+  `reply_from` (Rashad), then `_adopt_existing_thread` found Adham's own email in Gino's mailbox and made the reply
+  Gino's, because its last fallback was "whichever mailbox held the copy" (`), s)`). Ownership is now proven only by
+  one of us having WRITTEN on the thread (From) or being named on its To/Cc; otherwise nothing is adopted
+  (`thread_owner_unproven` in the manifest), the default sender stands, and the reply threads by its Message-Id.
+Regress cases: "an email written to someone else is not ours to answer..." and "a blind copy of their email in a
+colleague's mailbox does not make the reply theirs".
+
 ## An empty draft is a failure, and the To line owns the reply (11 Sep 2026)
 
 Card 545 (Antoni Entertainment) reached the Inbox with an EMPTY body and the wrong sender. Approving

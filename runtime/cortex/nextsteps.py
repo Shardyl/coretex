@@ -419,6 +419,8 @@ def edit(item_id: int, *, what: str | None = None, whose: str | None = None, due
 
 # ------------------------------------------------------------------ reading what happened
 
+COPIED_MARK = "WE ARE ONLY COPIED ON THIS EMAIL:"   # pipeline.record_inbound puts it on top of copied mail
+
 REPLAN_MODEL_DEFAULT = "claude-opus-5"     # owner, 18 Oct 2026: the best model; setting `nextsteps_model` overrides
 
 _PLAN = """You RE-PLAN one sales opportunity for a production company after something has just happened (an email WE
@@ -451,7 +453,11 @@ HOW TO DECIDE, in order:
    [owner] unless the event is the OWNER's note.
 6. Only what the material SAYS. Silence closes nothing, nothing is "probably done", nothing is assumed. Every change
    carries its exact quote. When nothing changes, return empty lists.
-7. Plain words in "what": "Confirm a time for the call to discuss the filming requirements", not a title."""
+7. Plain words in "what": "Confirm a time for the call to discuss the filming requirements", not a title.
+8. COPIED MAIL. When the new event starts "WE ARE ONLY COPIED", it was written TO someone else (a supplier, a stylist,
+   their colleague) and we are on the copy line. Its questions and requests are for THAT person: they are never OURS.
+   An item is OURS from copied mail only when the email itself names our company or one of our people and asks us
+   directly. Otherwise it may close or update items it proves, and add nothing of ours."""
 
 _LOCKS: dict = {}
 
@@ -510,6 +516,7 @@ def _replan(deal_id: int, source: str, material: str, *, by: str = "", company_i
         print(f"[nextsteps] replan {deal_id}: {type(e).__name__}: {e}", flush=True)
         return []
     done = []
+    copied = source == "email_in" and material.startswith(COPIED_MARK)
     corpus = material + "\n" + timeline          # every quote must be in what the model was shown, checked by code
     try:
         byid = {i["id"]: i for i in allit}
@@ -535,6 +542,8 @@ def _replan(deal_id: int, source: str, material: str, *, by: str = "", company_i
             whose = "them" if a.get("whose") == "them" else "us"
             if whose == "us" and source != "note" and pipeline._is_offer(q):
                 continue
+            if whose == "us" and copied and not _asks_us(q, company_id):
+                continue      # rule 8 by code: copied mail's questions belong to whoever it is addressed to
             kind = "theirs" if whose == "them" else ("email" if a.get("kind") == "email" else "work")
             r = add(deal_id, what, whose=whose, kind=kind, due_at=_due(a.get("due_hint"), whose=whose), source=source,
                     quote=q, then_what=str(a.get("then") or ""), company_id=company_id, by=who)
@@ -555,6 +564,26 @@ def _replan(deal_id: int, source: str, material: str, *, by: str = "", company_i
     except Exception as e:  # noqa: BLE001
         print(f"[nextsteps] apply {deal_id}: {type(e).__name__}: {e}", flush=True)
     return done
+
+
+def _asks_us(quote: str, company_id) -> bool:
+    """Does this quote name us: our company, or the first name of one of our people (the profile's signature
+    roster)? The one way an item from copied mail can be OURS (rule 8)."""
+    try:
+        from . import profile, store
+        names = set()
+        prof = profile.get(int(company_id)) if company_id else {}
+        for v in ((prof or {}).get("signatures") or {}).values():
+            n = (v or {}).get("name") if isinstance(v, dict) else ""
+            if n:
+                names.add(n.split()[0].lower())
+        co = store.get_company(int(company_id)) if company_id else None
+        if co and co.get("name"):
+            names.add(str(co["name"]).split()[0].lower())
+        words = set(re.findall(r"[a-z]+", (quote or "").lower()))
+        return bool(names & words)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def observe_async(*a, **k) -> None:

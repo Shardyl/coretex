@@ -2003,6 +2003,42 @@ def _cases():
                 and 'row.get("privacy") == "public"' in inspect.getsource(api._connector_video_update))
     case("a file reaches Cortex by link, a film goes up unlisted, and going public is the owner's card",
          "Gino's PC: uploads and YouTube, 29 Oct", _connector_uploads_by_link)
+
+    # --- an email written to someone else is not ours to answer (D-Marin cards 1536 + 1562, 2 Nov 2026)
+    def _copied():
+        from . import nextsteps, pipeline
+        jurgita = {"email": "jlion@d-marin.com", "subject": "Re: November 10  - Styling & Requirements",
+                   "to": "AMIT MAIN <amitmain@hotmail.com>, Dalal Al Alawi <dalal@sensa.digital>", "cc": "",
+                   "body": "Hi Amit,\r\n\r\nPlease see below my feedback on the wardrobe.\r\n\r\nMALE - SWIM\r\n\r\n"
+                           "Why swimming shorts are not returnable and do we have to pay for it additionally?"}
+        co = _co("sensa")
+        skip = policy.should_skip(co, jurgita, own_domain="sensa.digital", deal={"id": 4, "title": "D-Marin (Marasi Bay)"})
+        to_us = {**jurgita, "to": "Ayresh <ayresh@sensa.digital>, AMIT MAIN <amitmain@hotmail.com>",
+                 "body": "Hi Ayresh,\r\n\r\nPlease share your valid trade license."}
+        both = {**jurgita, "body": "Hi Amit and Dalal,\r\n\r\nPlease see below."}
+        header_cc = {**jurgita, "to": "AMIT MAIN <amitmain@hotmail.com>", "cc": "Dalal Al Alawi <dalal@sensa.digital>",
+                     "body": "Thanks, noted."}
+        xplor = {"email": "adham@xplor.world", "to": "", "cc": "Youssef Elattar <y.attar@xplor.world>",
+                 "body": "Dear Production Team,\r\n\r\nXPLOR is inviting selected Dubai-based production companies"}
+        return (bool(skip) and skip.get("copied")
+                and "amitmain@hotmail.com" in policy.copied_only(jurgita)
+                and policy.copied_only(to_us) == ""            # greeted one of ours: written to us
+                and policy.copied_only(both) == ""             # greets us too
+                and policy.copied_only(header_cc) != ""        # we are only on the Cc
+                and policy.copied_only(xplor) == ""            # bcc'd RFP, no To line: judged as usual
+                and nextsteps._asks_us("Dalal, could Gino send the call sheet", co["id"])
+                and not nextsteps._asks_us("Why swimming shorts are not returnable", co["id"])
+                and "COPIED_MARK" in inspect.getsource(pipeline.record_inbound)
+                and "copied and not _asks_us" in inspect.getsource(nextsteps._replan))
+    case("an email written to someone else is not ours to answer, and its questions are not our next steps",
+         "D-Marin: Jurgita to Amit the stylist, cards 1536 + 1562", _copied)
+
+    def _bcc_not_owner():
+        src = inspect.getsource(engine._adopt_existing_thread)
+        return ("thread_owner_unproven" in src and "if a.lower() in ours), None)" in src
+                and "if a.lower() in ours), s)" not in src)
+    case("a blind copy of their email in a colleague's mailbox does not make the reply theirs",
+         "XPLOR RFP drafted from Gino, card 1566", _bcc_not_owner)
     return C
 
 
