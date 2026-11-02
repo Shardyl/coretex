@@ -1828,8 +1828,8 @@ def _cases():
          lambda: (_fit._hr_series([[0, 120], [5, "x"], [10, 400], [15, 150.4]]) == "[[0, 120], [15, 150]]"
                   and _fit._hr_series(None) is None
                   and "coalesce(excluded.hr, fitness.health_sessions.hr)" in inspect.getsource(_fit.ingest_health)))
-    case("the weight page leads with the chart and the last 7 weigh-ins, photos swipe in one row", "weight layout 2 Nov",
-         lambda: (lambda f: f.index('id="fdWtChart"') < f.index("slice(0,7).map(w=>") < f.index('id="fdWtDay"')
+    case("the weight page: today's weigh-in, then the chart, then the last 7; photos swipe in one row", "weight layout 2 Nov",
+         lambda: (lambda f: f.index('id="fdWtDay"') < f.index('id="fdWtChart"') < f.index("slice(0,7).map(w=>")
                   < f.index('id="fdPhotoCard"') < f.index("${waistCard()}`;") and "scroll-snap-type:x" in f)(
              open(_web + "/fitness/food.js", encoding="utf-8").read()))
     case("an incline treadmill walk counts toward the weekly Zone 2", "incline walk zone 2 29 Oct",

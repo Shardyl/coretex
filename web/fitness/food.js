@@ -1810,16 +1810,8 @@ function renderWeight(){
   // The day being entered survives the page redrawing (owner, 17 Oct 2026: a refresh snapped the date back to today).
   const pick=window._wtPick&&window._wtPick<=today?window._wtPick:today, picked=all.find(w=>w.date===pick);
   const draft=window._wtDraft&&window._wtDraft.day===pick?window._wtDraft.kg:(picked?picked.kg:'');
-  // Order (owner, 2 Nov 2026): chart, last 7 weigh-ins, weigh-in form + averages, photo strip, waist.
+  // Order (owner, 2 Nov 2026): today's weigh-in, chart, last 7 weigh-ins, averages, photo strip, waist.
   el.innerHTML=`
-    <div class="chart-section">
-      <div class="chart-toggle" style="margin-bottom:8px">${[[30,'30d'],[90,'90d'],[365,'1y'],[99999,'All']].map(([n,l])=>`<button class="${wtRange===n?'active':''}" onclick="foodWtRange(${n})">${l}</button>`).join('')}</div>
-      <div style="position:relative;width:100%;height:210px"><canvas id="fdWtChart" role="img" aria-label="Weight trend"></canvas></div>
-    </div>
-    <div class="card" style="padding:8px 12px">
-      ${all.slice().reverse().slice(0,7).map(w=>`<div class="fd-entry" style="cursor:pointer" onclick="foodEditWeight('${w.date}',${w.kg})"><div><div class="n">${w.kg} kg</div><div class="q">${fmtDate(w.date)}${isFree(shiftDay(w.date,-1))?' &middot; after a free day':''} ${new Date(w.date+'T12:00:00').getFullYear()!==new Date().getFullYear()?new Date(w.date+'T12:00:00').getFullYear():''}${w.src==='watch'?' &middot; from Health Connect':''}</div></div>
-        ${w.src==='log'?`<button class="hist-del" onclick="event.stopPropagation();foodDelWeight('${w.date}')">&times;</button>`:''}</div>`).join('')||'<div class="fd-note">No weigh-ins yet.</div>'}
-    </div>
     <div class="card">
       <div class="fd-sub">${pick===today?(todays?'Today':'Morning weigh-in'):'Weigh-in for '+fmtDate(pick)}</div>
       ${picked?`<div class="fd-big">${picked.kg} <span style="font-size:14px;font-weight:700;color:var(--ink3)">kg</span></div>`:''}
@@ -1828,6 +1820,14 @@ function renderWeight(){
         <div><label class="form-label">Weight (kg)</label><input class="fd-input" type="number" step="0.1" inputmode="decimal" id="fdWtIn" placeholder="${last?last.kg:'kg'}" value="${draft}" oninput="window._wtDraft={day:'${pick}',kg:this.value}"/></div>
       </div>
       <button class="fd-btn" style="margin-top:8px" onclick="foodLogWeight(document.getElementById('fdWtDay').value,'fdWtIn');window._wtPick=null;window._wtDraft=null">${picked?'Update':'Save'}${pick===today?'':' '+fmtDate(pick)}</button>
+    </div>
+    <div class="chart-section">
+      <div class="chart-toggle" style="margin-bottom:8px">${[[30,'30d'],[90,'90d'],[365,'1y'],[99999,'All']].map(([n,l])=>`<button class="${wtRange===n?'active':''}" onclick="foodWtRange(${n})">${l}</button>`).join('')}</div>
+      <div style="position:relative;width:100%;height:210px"><canvas id="fdWtChart" role="img" aria-label="Weight trend"></canvas></div>
+    </div>
+    <div class="card" style="padding:8px 12px">
+      ${all.slice().reverse().slice(0,7).map(w=>`<div class="fd-entry" style="cursor:pointer" onclick="foodEditWeight('${w.date}',${w.kg})"><div><div class="n">${w.kg} kg</div><div class="q">${fmtDate(w.date)}${isFree(shiftDay(w.date,-1))?' &middot; after a free day':''} ${new Date(w.date+'T12:00:00').getFullYear()!==new Date().getFullYear()?new Date(w.date+'T12:00:00').getFullYear():''}${w.src==='watch'?' &middot; from Health Connect':''}</div></div>
+        ${w.src==='log'?`<button class="hist-del" onclick="event.stopPropagation();foodDelWeight('${w.date}')">&times;</button>`:''}</div>`).join('')||'<div class="fd-note">No weigh-ins yet.</div>'}
     </div>
     <div class="card"><div class="fd-row" style="margin-top:0">
       <div class="fd-cell"><div class="v">${a7!=null?ragSpan(r1(a7),(()=>{const m=foodTargets.mission;if(!m||!m.startDate)return '';const cw=missionWeeks(m).find(w=>w.current);if(!cw)return '';const v=r1(a7);return v<=cw.target?RAG.g:v-cw.target<=0.3?RAG.a:RAG.r;})()):'—'}</div><div class="l">7-day avg</div></div>
