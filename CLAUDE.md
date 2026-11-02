@@ -1861,6 +1861,11 @@ thing every new conversation reads; a stale line here costs a future session rea
   `check_links` fails the build on any URL that is not the company's own site (profile domains/live_site/send
   root), one of its own social pages, or a real film id (featured or in its library); coretex.uk is always
   blocked. Ideation must repeat every brief URL verbatim. Verified on card 592 -> review 596.
+- THE ISSUE NAMES THE FILM, NOT THE LIBRARY (owner, 2 Nov 2026): library titles often carry the client ("Open Your
+  Eyes - Atlantis The Royal") and printed in the link label and alt text of an issue that must name nobody. A line
+  `FILM TITLE: <name>` in the brief or a correction (last one wins) overrides the first featured film's title.
+  The header image is a REAL frame from the featured film (Sensa imagery rule rewritten 2 Nov; backup setting
+  `skill16_rules:backup-2026-11-02`); attach the frame to the card, it wins over everything.
 - SENSA NEVER DOES FREE (owner, 13 Sep 2026): no free sample/frame/trial in any newsletter; CTA = see the work
   or talk. Universal rule: film links are public YouTube URLs, never the internal media library.
 - AUDIENCE IS DATA (13 Sep 2026): `company_profiles.data.newsletter_audience` = {org_labels, exclude_sources,

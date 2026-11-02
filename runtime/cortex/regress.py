@@ -2039,6 +2039,17 @@ def _cases():
                 and "if a.lower() in ours), s)" not in src)
     case("a blind copy of their email in a colleague's mailbox does not make the reply theirs",
          "XPLOR RFP drafted from Gino, card 1566", _bcc_not_owner)
+
+    def _film_title():
+        from . import newsletter as _nl
+        brief = "Feature: https://www.youtube.com/watch?v=fR-UJ5Zb8Lk"
+        named = _nl.featured_films(3, brief, "idea\n\nOWNER CORRECTIONS:\n- FILM TITLE: Open Your Eyes")
+        plain = _nl.featured_films(3, brief, "idea")
+        return (named[0]["title"] == "Open Your Eyes" and named[0]["id"] == "fR-UJ5Zb8Lk"
+                and "atlantis" not in named[0]["title"].lower()
+                and plain[0]["title"] != "Open Your Eyes")
+    case("the operator's name for a film beats a library title that names the client",
+         "Open Your Eyes issue, card 1585, 2 Nov 2026", _film_title)
     return C
 
 

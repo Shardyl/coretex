@@ -360,7 +360,16 @@ def featured_films(company_id: int, *texts: str) -> list[dict]:
                      "order by (company_id=%s) desc limit 1", (vid, company_id))
         out.append({"id": vid, "url": f"https://www.youtube.com/watch?v={vid}",
                     "title": ((row or {}).get("title") or "").strip(), "in_library": bool(row)})
+    # The library title often names the client ("Open Your Eyes - Atlantis The Royal"). When the operator says
+    # what the film is called in THIS issue ("FILM TITLE: Open Your Eyes" in the brief or a correction, the last
+    # one wins), that name is what the link and alt text print (card 1585, 2 Nov 2026: no client named).
+    names = [m.strip(" .\"'") for t in texts for m in _FILM_TITLE.findall(t or "")]
+    if out and names and names[-1]:
+        out[0]["title"] = names[-1]
     return out
+
+
+_FILM_TITLE = re.compile(r"(?im)^[\s\-*]*film title\s*:\s*(.+?)\s*$")
 
 
 def _thumb_bytes(video_id: str) -> bytes | None:
