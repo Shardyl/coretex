@@ -1297,6 +1297,11 @@ _CREATIVE_CSS = """
 .bstack { position:absolute; left:72px; right:150px; bottom:106px; }
 .vol { font-family:Poppins,sans-serif; font-size:31px; font-weight:500; font-style:italic; color:#FFFFFF;
        line-height:1.3; letter-spacing:-.2px; text-shadow:0 2px 18px rgba(0,0,0,.75); }
+.voln { font-family:'Noto Naskh Arabic',sans-serif; font-size:34px; font-weight:600; color:#FFFFFF; line-height:1.45;
+        text-align:right; text-shadow:0 2px 18px rgba(0,0,0,.75); margin-bottom:6px; }
+.bstack.bi .vol { font-size:20px; font-weight:400; color:#E4E4EA; }
+.vos .n { flex:1; font-family:'Noto Naskh Arabic',sans-serif; font-size:15px; line-height:1.5; color:#EDEDF2;
+          text-align:right; }
 .ostchip { display:inline-block; margin-bottom:14px; background:rgba(10,10,10,.66); border-left:2px solid ACCENT;
            padding:5px 11px; border-radius:0 3px 3px 0; font-size:12.5px; color:#EDEDF2; }
 .ostchip span { font-size:9px; letter-spacing:2.2px; color:ACCENT; font-weight:600; text-transform:uppercase;
@@ -1351,7 +1356,7 @@ class CreativeDeck(_Deck):
             f'<p style="margin-top:16px;font-size:17px;color:#DADAE0">{_esc(line)}</p>'
             f'<div class="hstats">{st}</div></div>{self._foot(section or kicker)}</div>')
 
-    def beat(self, film_label, n, total, time, text, cap, image, section="", vo=""):
+    def beat(self, film_label, n, total, time, text, cap, image, section="", vo="", vo_native=""):
         """`text` is the ON-SCREEN line (typography added in post); `vo` is the NARRATION heard over the beat.
         Two different things, never shown in the same place.
 
@@ -1359,12 +1364,18 @@ class CreativeDeck(_Deck):
         picture so the deck reads the way the film plays: you see the frame and hear the words at the same time.
         The on-screen line then rides above it as a small labelled chip, because it is the film's own typography
         and not the narration. A beat with no narration keeps the old behaviour, its on-screen line set large,
-        so a deliberately wordless film still reads as one."""
+        so a deliberately wordless film still reads as one.
+
+        THE LANGUAGE THEY HEAR GOES ON TOP (owner, 3 Nov 2026, XPLOR). When the narration is recorded in another
+        language (Emirati Arabic with English subtitles), `vo_native` is that line: set large, right to left,
+        above the English, which drops to subtitle size beneath it, so the page reads the way the film plays."""
         img = f'<img class="full" src="{_b64(image)}">' if image else ""
         if vo:
             o = (f'<div class="ostchip"><span>On screen</span>{_esc(text)}</div>' if text else "")
+            nat = (f'<div class="voln" dir="rtl" lang="ar">{_esc(vo_native)}</div>' if vo_native else "")
             # one absolutely-positioned stack, so the chip sits on top of the narration without guessing its height
-            body = f'<div class="bstack">{o}<div class="vol">{_esc(vo)}</div></div>'
+            body = (f'<div class="bstack{" bi" if vo_native else ""}">{o}{nat}'
+                    f'<div class="vol">{_esc(vo)}</div></div>')
         else:
             body = (f'<div class="ost">{_esc(text)}</div>' if text
                     else '<div class="ost none">PICTURE ONLY, NO TEXT</div>')
@@ -1388,11 +1399,14 @@ class CreativeDeck(_Deck):
         # not enough: ten beats of a talky film overflowed this page onto a second, orphan page with no
         # heading. This page exists so the client can approve the WORDS, so cutting a line here would defeat
         # it; the rows are set smaller instead, stepped by how much narration there actually is.
-        load = sum(len(x.get("line") or "") for x in rows)
+        # a row's `native` is the line as recorded (Arabic), shown beside the English; both count toward the load
+        load = sum(len(x.get("line") or "") + len(x.get("native") or "") for x in rows)
         fs, lh, pd = next((v for lim, v in ((900, (14, 1.4, 6)), (1200, (12.5, 1.35, 4.5)),
                                             (1600, (11.5, 1.3, 3.5))) if load <= lim), (10.5, 1.25, 3))
         r = "".join(f'<div style="padding:{pd}px 0"><div class="t">{_esc(x.get("time"))}</div>'
                     + (f'<div class="l" style="font-size:{fs}px;line-height:{lh}">{_esc(x["line"])}</div>'
+                       + (f'<div class="n" dir="rtl" lang="ar" style="font-size:{fs + 1}px">{_esc(x["native"])}</div>'
+                          if x.get("native") else "")
                        if x.get("line") else '<div class="l none">No narration</div>') + "</div>"
                     for x in rows)
         sub, note = cut(sub, 150), cut(note, 240)   # 240 is one full line at this page width; 150 cut the UAS note short

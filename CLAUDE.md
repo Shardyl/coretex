@@ -2188,6 +2188,19 @@ scripts), on the owner's call "one run with the ability to do revisions" (not a 
   `imagegen`, save it, register the character with `cast: True` and its path, then name that character in
   the beats and `_person_in_beat` binds it. Owner's own production protocol: nothing generates as video
   until the locked reference sheets exist.
+- NARRATION IN THE LANGUAGE IT IS RECORDED IN (XPLOR deal 190, 3 Nov 2026). The XPLOR RFP asks for Emirati Arabic
+  voice over with English subtitles; the deck showed English only. New stage `adapt` (after `script`): the brief now
+  carries `vo_language`; `vo_native_language(s)` (job override `vo_language` first, then the brief; "with English
+  subtitles" stripped; anything English = no adaptation) decides, and Fable 5 adapts each spoken line into
+  `beat.voiceover_native` under the sales-proposal rule "NARRATION IN ANOTHER LANGUAGE" (dialect, register,
+  speakable, a native checks it). `deck.beat(vo_native=)` sets it large, right to left (Noto Naskh Arabic, installed
+  on the box) above the English, which drops to subtitle size; `voscript` rows take `native` beside the English and
+  code writes the page's sub ("Recorded in X, with English subtitles ... a draft for your review"). A revision that
+  touches the script re-adapts; the planner's `adapt` key re-runs only the Arabic with the owner's feedback.
+- XPLOR FILING GAP (3 Nov 2026, NOT fixed in code): `engine._file_proposal_pdf` takes `customer.split(",")[0]`, so a
+  client named "XPLOR (... LLC, UAE)" truncates mid-parenthesis, `ensure_client_folder` returns it as a near-match
+  candidate with no id, and the deck files to the library only. Worked round with a `client_folder_aliases` entry for
+  the truncated name. The real fix is to stop splitting on a comma inside parentheses.
 - CLI: `python -m cortex.creative dry <deal_id> "<direction>"` (no card, no quote issued, no filing; output in the job
   dir) and `python -m cortex.creative resume <job> [task_id]`.
 

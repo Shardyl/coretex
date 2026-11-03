@@ -2079,6 +2079,35 @@ def _cases():
                 and f"Watch the film: {yt}" in text)
     case("the film card is a 'Watch the film' button above the picture, with no text link under it",
          "owner, 2 Nov 2026 (Open Your Eyes issue, screenshot)", _film_button_above)
+
+    def _recorded_language():
+        from . import creative as _cr
+        L = _cr.vo_native_language
+        # the XPLOR RFP: "Emirati Arabic VO ... English subtitles" -> the voice is Arabic, the subtitles are not
+        return (L({"brief": {"vo_language": "Emirati Arabic with English subtitles"}}) == "Emirati Arabic"
+                and L({"brief": {"vo_language": "Emirati Arabic voiceover"}}) == "Emirati Arabic"
+                and L({"brief": {"vo_language": "English"}}) == ""
+                and L({"brief": {"vo_language": "British English VO"}}) == ""
+                and L({"brief": {"vo_language": None}}) == ""
+                and L({"brief": {}}) == ""
+                and L({"vo_language": "Arabic", "brief": {"vo_language": "English"}}) == "Arabic"
+                and "adapt" in _cr.STAGES and _cr.STAGES.index("adapt") == _cr.STAGES.index("script") + 1)
+    case("an Arabic voice over with English subtitles is adapted into Arabic; English never is",
+         "owner, 3 Nov 2026 (XPLOR deal 190, card 1600)", _recorded_language)
+
+    def _arabic_above_english():
+        d = deck.CreativeDeck(_co("sensa"), "T", "#00DAFF", "", "")
+        d.beat("Film", 1, 9, "0:00-0:08", "", "cap", None, "Storyboard",
+               vo="No one is born knowing how to cross a dune.", vo_native="لا أحد يولد وهو يعرف")
+        d.beat("Film", 2, 9, "0:08-0:18", "", "cap", None, "Storyboard", vo="English only.")
+        d.voscript("K", "H", "s", [{"time": "0:00-0:08", "line": "No one is born.", "native": "لا أحد يولد"},
+                                   {"time": "0:08-0:18", "line": ""}])
+        p1, p2, vs = d.pages
+        return (p1.index('dir="rtl"') < p1.index("No one is born knowing") and "bstack bi" in p1
+                and 'dir="rtl"' not in p2 and "bstack bi" not in p2
+                and 'class="n" dir="rtl"' in vs and "No narration" in vs)
+    case("the recorded-language narration sits above the English on the beat and beside it on the script page",
+         "owner, 3 Nov 2026 (XPLOR deal 190)", _arabic_above_english)
     return C
 
 

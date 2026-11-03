@@ -9,6 +9,8 @@ and "one run with the ability to do revisions" rather than a card per stage. Thi
             as PRIVATE references for the frames (never shown in the deck)
   concept   three routes, one chosen, the look, verbatim asset descriptors (Fable 5)
   script    beat by beat: timings checked by code, on-screen lines, frame prompts (Fable 5)
+  adapt     when the narration is recorded in another language (the brief's vo_language, e.g. Emirati Arabic):
+            each spoken line adapted into it, shown above the English in the deck (Fable 5); English = skipped
   frames    two candidates per beat from Gemini WITH the reference photographs, picked by Fable 5; a frame
             with legible text or a logo is rejected; image spend capped
   quotation blocks priced by CODE from the rate card (ratecard.price_lines); a typed figure survives only if
@@ -234,6 +236,18 @@ def _likeness_prefix(person: dict) -> str:
               "and change only the setting, the light and the camera. ")
 
 
+def vo_native_language(s: dict) -> str:
+    """The language the narration is recorded in when it is NOT English, else "". From the job's own override
+    (`vo_language`) first, then the brief. English in any form (British English, English VO) means no adaptation."""
+    lang = str(s.get("vo_language") or (s.get("brief") or {}).get("vo_language") or "").strip()
+    # "Emirati Arabic with English subtitles": the subtitles are not the recorded language
+    lang = re.split(r"\s+(?:with|plus)\s+|[,;+(]", lang, maxsplit=1)[0].strip()
+    lang = re.sub(r"\s+(?:voice\s*-?\s*over|vo|narration)$", "", lang, flags=re.I).strip()
+    if not lang or lang.lower() in ("none", "null", "n/a") or re.search(r"\benglish\b", lang, re.I):
+        return ""
+    return lang
+
+
 def _rules(company: dict, *keys: str) -> str:
     out = []
     for k in keys:
@@ -289,7 +303,8 @@ class Job:
             'usage, what the client supplies"], "candidate_locations": ["places the brief or owner names"], '
             '"live_shoot": true|false, "audio_supplied": true|false, "talent": [""], "usage": "", '
             '"timeline": ["dated milestones exactly as stated"], "we_supply": [""], "client_supplies": [""], '
-            '"open_points": [""]}',
+            '"open_points": [""], "vo_language": "the language the narration is RECORDED in, as the brief or '
+            'owner states it with any dialect (e.g. \\"Emirati Arabic\\", \\"English\\"), or null when not stated"}',
             f"OWNER'S DIRECTION:\n{self.s.get('words') or '(none)'}\n\nDEAL RECORD:\n{facts or '(none)'}",
             fast=True, max_tokens=4000, purpose="creative-brief", company=self.s["company"])
         if not out:
@@ -491,6 +506,50 @@ class Job:
         out["changed_frames"] = [b["n"] for b in out["beats"] if not prev or old.get(b["n"]) != b.get("frame_prompt")]
         self.s["script"] = out
         self.log(f"script: {len(out['beats'])} beats, {dur}s, {len((out.get('tiles') or {}).get('items') or [])} tiles")
+
+    # ---------------------------------------------------------------- 4b narration adaptation
+    def stage_adapt(self, feedback: str = ""):
+        """THE NARRATION IN THE LANGUAGE IT IS RECORDED IN (owner, 3 Nov 2026, XPLOR deal 190: "do they not want
+        this in Arabic with English subtitles ... can you do the script in Arabic above it on the deck?"). The
+        script is written in English; when the brief says the voice over is recorded in another language, each
+        spoken line is adapted into it (`voiceover_native` on the beat) and the deck sets it above the English.
+        Which language comes from the brief, how to adapt (dialect, register) from the sales-proposal rules."""
+        beats = self.s["script"]["beats"]
+        lang = vo_native_language(self.s)
+        if not lang:
+            for b in beats:
+                b.pop("voiceover_native", None)
+            self.s["script"].pop("vo_language", None)
+            self.save()
+            return
+        spoken = [{"n": b["n"], "time": b["time"], "line": b["voiceover"]} for b in beats
+                  if (b.get("voiceover") or "").strip()]
+        prev = {b["n"]: b.get("voiceover_native") for b in beats if b.get("voiceover_native")}
+        out = provider.think_json(
+            "\n\n".join(filter(None, [
+                f"You adapt a film's English narration into {lang} for the voice artist to record, line by line. "
+                "Adapt, never translate word for word: natural, spoken, the same meaning, tone and rhythm, each line "
+                "speakable inside its beat's time. Keep the client's own lines and names exactly in meaning. No "
+                "dashes. No transliteration and no English words in the adapted lines unless they are names.",
+                _rules(self.co, "sales-proposal"),
+                'RETURN JSON: {"lines": [{"n": <beat number>, "line": "the adapted line"}]}, one per line given.',
+            ])),
+            (f"PREVIOUS {lang.upper()} LINES (revise: change exactly what the owner's feedback asks, keep every "
+             f"other line word for word):\n{json.dumps(prev, ensure_ascii=False)}\n\nOWNER'S FEEDBACK:\n{feedback}\n\n"
+             if feedback and prev else "")
+            + f"LANGUAGE: {lang}\n\nBRIEF:\n{json.dumps(self.s['brief'], ensure_ascii=False)}\n\nLINES:\n"
+            + json.dumps(spoken, ensure_ascii=False),
+            fast=False, model=MODEL, max_tokens=8000, purpose="creative-adapt", company=self.s["company"])
+        got = {int(x["n"]): (x.get("line") or "").strip() for x in (out or {}).get("lines") or []
+               if str(x.get("n", "")).isdigit()}
+        missing = [s["n"] for s in spoken if not got.get(s["n"])]
+        if missing:
+            raise RuntimeError(f"the {lang} narration came back without beat(s) {missing}")
+        for b in beats:
+            b["voiceover_native"] = got.get(b["n"], "") if (b.get("voiceover") or "").strip() else ""
+        self.s["script"]["vo_language"] = lang
+        self.save()
+        self.log(f"adapt: {len(spoken)} lines into {lang}")
 
     # ---------------------------------------------------------------- 5 frames
     def stage_frames(self, only: list | None = None):
@@ -835,7 +894,8 @@ class Job:
         n += 1
         for b in beats:
             d.beat(c.get("title"), b["n"], len(beats), b["time"], b.get("on_screen_text") or "",
-                   b.get("caption") or "", pick(b["n"]), "Storyboard", vo=b.get("voiceover") or "")
+                   b.get("caption") or "", pick(b["n"]), "Storyboard", vo=b.get("voiceover") or "",
+                   vo_native=b.get("voiceover_native") or "")
         d.sheet(f"{n:02d} · The film at a glance", f"{c.get('title')}: {int(c.get('duration_s') or 60)} seconds",
                 [{"img": pick(b["n"]), "time": b["time"], "text": b.get("on_screen_text") or ""} for b in beats],
                 "Storyboard", cp.get("sheet_note") or "Style frames show the look and the flow; faces are illustrations.")
@@ -846,9 +906,14 @@ class Job:
             where = (f"Heard over beat {first}" if first == last else f"Heard over beats {first} to {last}")
             sub = where + (". The remaining beats play on picture and sound alone."
                            if len(spoken) < len(beats) else ".")
+            vlang = sc.get("vo_language") if any(b.get("voiceover_native") for b in beats) else ""
+            if vlang:     # code states which line is recorded and which is the subtitle, never the writer
+                sub = (f"Recorded in {vlang}, with English subtitles. The {vlang} adaptation is a draft for your "
+                       "review. " + where + ".")
             d.voscript(f"{n:02d} · The voice over", cp["voscript"].get("heading") or "The words you hear",
-                       cp["voscript"].get("sub") or sub,
-                       [{"time": b["time"], "line": b.get("voiceover") or ""} for b in beats], "The voice over",
+                       sub if vlang else (cp["voscript"].get("sub") or sub),
+                       [{"time": b["time"], "line": b.get("voiceover") or "", "native": b.get("voiceover_native") or ""}
+                        for b in beats], "The voice over",
                        cp["voscript"].get("note") or "Read unhurried, one voice, over the picture.")
             n += 1
         cap_t = int(self.s.get("tile_cap") or 8)
@@ -1036,7 +1101,7 @@ class Job:
 
 # --------------------------------------------------------------------------- the run
 
-STAGES = ("brief", "location", "concept", "script", "frames", "quote", "copy", "render", "file")
+STAGES = ("brief", "location", "concept", "script", "adapt", "frames", "quote", "copy", "render", "file")
 
 
 def _run(job: Job, task: dict | None, dry: bool = False, start_at: str = "brief"):
@@ -1054,6 +1119,8 @@ def _run(job: Job, task: dict | None, dry: bool = False, start_at: str = "brief"
             job.stage_concept()
         elif st == "script":
             job.stage_script()
+        elif st == "adapt":
+            job.stage_adapt()
         elif st == "frames":
             job.stage_frames()
         elif st == "quote":
@@ -1226,9 +1293,10 @@ def revise(task: dict, text: str, force_plan: dict | None = None) -> bool:
         return True
     plan = dict(force_plan) if force_plan else provider.think_json(
         "You route an owner's feedback on a creative proposal to the parts that must change. JSON: "
-        '{"location": false, "concept": false, "script": false, "regenerate_beats": [beat numbers whose PICTURE '
-        'must change], "quote": false, "copy": true, "note": "one line"}. location = pick a different place; '
-        "concept = a different idea or a change to the idea; script = beats, timings or on-screen lines; quote = "
+        '{"location": false, "concept": false, "script": false, "adapt": false, "regenerate_beats": [beat numbers '
+        'whose PICTURE must change], "quote": false, "copy": true, "note": "one line"}. location = pick a different '
+        "place; concept = a different idea or a change to the idea; script = beats, timings or on-screen lines; "
+        "adapt = only the recorded-language (e.g. Arabic) narration lines change; quote = "
         "anything about price, lines, exclusions or clauses; copy = wording on the pages. Mark only what is needed.",
         f"FEEDBACK:\n{text}\n\nCURRENT CONCEPT: {job.s['concept'].get('title')}: {job.s['concept'].get('logline')}\n"
         f"BEATS: " + "; ".join(f"{b['n']} {b.get('caption')}" for b in job.s["script"]["beats"]),
@@ -1247,6 +1315,8 @@ def revise(task: dict, text: str, force_plan: dict | None = None) -> bool:
                 plan["script"] = True
             if plan.get("script"):
                 job.stage_script(feedback=text)
+            if plan.get("script") or plan.get("adapt"):     # new English lines need their recorded-language lines
+                job.stage_adapt(feedback=text)
             regen = sorted(set((job.s["script"].get("changed_frames") or []) if plan.get("script") else [])
                            | {int(n) for n in plan.get("regenerate_beats") or [] if str(n).isdigit()})
             if plan.get("concept"):
