@@ -2098,6 +2098,14 @@ def _cases():
     case("a locked script's half-second timings pass the script's timing check, and a real gap still fails",
          "owner, 3 Nov 2026 (HBMSU Treatment C stopped at the script, card 1617)", _half_second_beats)
 
+    def _note_author():
+        from . import api as _api
+        return (_api._talk_author({"role": "owner", "name": "Owner"}) == "owner"
+                and _api._talk_author({"role": "team", "name": "Gino Palmes", "email": "gino@sensa.digital"})
+                == "Gino Palmes" and _api._talk_author(None) == "owner")
+    case("a note a team member writes through Talk is filed under their name, never as the owner's",
+         "owner, 3 Nov 2026 (Gino's 'no further builds' note on deal 107 read back as Rashad's hold)", _note_author)
+
     case("the film card is a 'Watch the film' button above the picture, with no text link under it",
          "owner, 2 Nov 2026 (Open Your Eyes issue, screenshot)", _film_button_above)
 

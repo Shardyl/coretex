@@ -4506,6 +4506,14 @@ def _update_opportunity(inp: dict) -> str:
     return f"Opportunity #{did} '{t}': " + ("; ".join(done) if done else "nothing to change")
 
 
+def _talk_author(u: dict | None) -> str:
+    """Who wrote a note through Talk. Every note used to say 'owner', so Gino's 'no further builds until Rashad
+    has reviewed' on deal 107 read back as Rashad's own hold (3 Nov 2026)."""
+    if not u or u.get("role") == "owner":
+        return "owner"
+    return (u.get("name") or u.get("email") or "team member").strip()
+
+
 def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
     u = u if isinstance(u, dict) else {"companies": None}   # default: owner scope (no filter)
     if name == "system_knowledge":
@@ -5207,7 +5215,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         d = db.one("select id, title from crm_projects where id=%s", (int(did),))
         if not d:
             return f"no opportunity #{did}"
-        _pl.log_deal(int(did), "context", f"{note} (owner, via Talk)")
+        _pl.log_deal(int(did), "context", f"{note} ({_talk_author(u)}, via Talk)")
         _next = ""
         try:                               # his word on who's who is PINNED (cast.py)
             from . import cast

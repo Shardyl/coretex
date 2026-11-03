@@ -285,6 +285,15 @@ built nothing. Now:
   straight back (no streak bump) and the cockpit shows as a toast. Nothing is sent in any case: the
   result is a quotation card for review.
 
+## A note is never a hold (3 Nov 2026)
+
+Gino logged "NO FURTHER BUILDS until Rashad has reviewed" on HBMSU deal 107 through Talk; `note_opportunity` filed every
+note as "(owner, via Talk)", so it read back as Rashad's own hold and Talk refused to rebuild even when told the owner had
+lifted it ("only on his word, not a message passed on"). Now: `api._talk_author(u)` files a Talk note under the person who
+wrote it (owner only for the owner), and Talk's taught note "NOTES ARE NEVER HOLDS" (setting `chat_self_rules`, backup
+`chat_self_rules:backup-2026-11-03`) says a note or defect log is information, never a stop; only a real control (a
+toggle, a setting) pauses work. Regress case: "a note a team member writes through Talk is filed under their name...".
+
 ## Mail written to someone else, and a blind copy, are not ours (2 Nov 2026)
 
 Two cards in one morning, both "who is this email for":
