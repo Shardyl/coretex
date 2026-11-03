@@ -993,7 +993,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='121';                         // keep in step with CACHE in sw.js
+const APP_VERSION='122';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -2272,7 +2272,7 @@ window.openHrView=async function(uid){
   let n=0,m=0;const ef=(d.efforts||[]).map(e=>({...e,label:e.kind==='interval'?'I'+(++n):'W'+(++m)}));
   let marks='';ef.forEach(e=>{const x0=x(e.start),x1=x(e.start+e.seconds);
     marks+=`<rect x="${x0}" width="${Math.max(1,x1-x0)}" y="${Tp}" height="${H-Tp-B}" fill="var(--ink)" opacity="0.05"/>
-      <text x="${(x0+x1)/2}" y="${Tp-5}" text-anchor="middle" font-size="9" font-weight="800" fill="var(--ink2)">${e.label} ${e.peak}</text>`;});
+      <text x="${(x0+x1)/2}" y="${Tp-5}" text-anchor="middle" font-size="9" font-weight="800" fill="var(--ink2)">${e.kind==='interval'?e.label+' '+e.peak:e.label}</text>`;});   // warm-up bursts sit close: label only
   let axes='';for(let b=lo;b<=hi;b+=10)axes+=`<line x1="${L}" x2="${W-R}" y1="${y(b)}" y2="${y(b)}" stroke="var(--border)" stroke-width="0.5"/><text x="${L-4}" y="${y(b)+3}" text-anchor="end" font-size="9" fill="var(--ink3)">${b}</text>`;
   const step=T>2400?600:300;for(let t=0;t<=T;t+=step)axes+=`<text x="${x(t)}" y="${H-6}" text-anchor="middle" font-size="9" fill="var(--ink3)">${Math.round(t/60)}m</text>`;
   const z5=fl[5]?`<line x1="${L}" x2="${W-R}" y1="${y(+fl[5])}" y2="${y(+fl[5])}" stroke="${HR_ZONE_COL[5]}" stroke-dasharray="4 3" stroke-width="0.8"/>`:'';
@@ -3216,6 +3216,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=121"></script>
+<script src="food.js?v=122"></script>
 </body>
 </html>
