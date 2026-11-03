@@ -2088,7 +2088,13 @@ def _cases():
                 and _cr._timing_problem(b, 30) == "" and [x["time"] for x in b] == appr
                 and _cr._timing_problem(gap, 30) == "beat 4 does not start where beat 3 ends"
                 and _cr._timing_problem([{"time": "0:00-0:30"}], 31).startswith("the beats end at 30s")
-                and _cr._timing_problem([{"time": "opening"}], 30) == "the beat timings could not be read")
+                and _cr._timing_problem([{"time": "opening"}], 30) == "the beat timings could not be read"
+                and _retimed(_cr))
+
+    def _retimed(_cr):   # owner, 3 Nov 2026: bad timings are re-laid by code and the job carries on
+        bad = [{"time": "0:00-0:05"}, {"time": "the middle"}, {"time": "0:06-0:09"}, {"time": "0:09 - 0:12"}]
+        _cr._retime(bad, 30)
+        return _cr._timing_problem(bad, 30) == ""
     case("a locked script's half-second timings pass the script's timing check, and a real gap still fails",
          "owner, 3 Nov 2026 (HBMSU Treatment C stopped at the script, card 1617)", _half_second_beats)
 

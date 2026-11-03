@@ -148,6 +148,26 @@ def _timing_problem(beats: list, duration: int) -> str:
     return ""
 
 
+def _retime(beats: list, duration: int) -> None:
+    """The writer's timings did not chain from 0:00 to the running time: keep each beat's own length where it can
+    be read (else an equal share), scale the lengths to fill the film, and chain them on half seconds."""
+    lens = []
+    for b in beats:
+        try:
+            a, z = _span(b.get("time"))
+            lens.append(z - a if z > a else 0)
+        except Exception:  # noqa: BLE001
+            lens.append(0)
+    fill = (sum(lens) / max(1, sum(1 for x in lens if x))) if any(lens) else 1
+    lens = [x or fill for x in lens]
+    scale, t, cum = duration / sum(lens), 0.0, 0.0
+    for i, (b, x) in enumerate(zip(beats, lens)):
+        cum += x * scale
+        z = float(duration) if i == len(beats) - 1 else max(t + 0.5, round(cum * 2) / 2)
+        b["time"] = f"{_tc(t)}-{_tc(z)}"
+        t = z
+
+
 _MONTHS = r"(January|February|March|April|May|June|July|August|September|October|November|December)"
 _DATE = re.compile(rf"\b\d{{1,2}}(st|nd|rd|th)? {_MONTHS}\b|\b{_MONTHS} \d{{1,2}}\b|\b(Monday|Tuesday|Wednesday|"
                    r"Thursday|Friday|Saturday|Sunday)\b", re.I)
@@ -509,7 +529,10 @@ class Job:
                 break
             self.s.setdefault("script_rejected", []).append(   # kept on the job, so a failure can be diagnosed
                 {"why": why, "times": [b.get("time") for b in out.get("beats") or []]})
-        if why:
+        if why and out.get("beats"):   # owner, 3 Nov 2026: timing is a draft to iterate on, never a stop
+            _retime(out["beats"], dur)
+            self.log(f"script: timings re-laid by code ({why}); correct them on the card if they read wrong")
+        elif why:
             self.save()
             raise RuntimeError(f"the script failed its timing check: {why}")
         old = {b["n"]: b.get("frame_prompt") for b in (prev or {}).get("beats") or []}
