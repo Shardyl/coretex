@@ -2102,7 +2102,10 @@ scripts), on the owner's call "one run with the ability to do revisions" (not a 
   facts with source URLs; `_commons_photos` = Wikimedia Commons free-licence photos WITH credit, the only photos a deck
   may show; `_official_refs` = the venue site's photos, PRIVATE references for the frames only) -> concept (Fable 5,
   3 routes, one chosen, look, verbatim asset descriptors, reads the reference photos) -> script (Fable 5, 7-11 beats,
-  `_timing_problem` checks contiguity and running time, one retry) -> frames (`imagegen.generate`: Gemini WITH up to 3
+  `_timing_problem` checks contiguity and running time, one retry; half seconds like 0:14.5 are read and printed
+  as written. TIMING NEVER STOPS A JOB (owner, 3 Nov 2026, HBMSU card 1617: "let it be looser so we can iterate"):
+  timings that still do not chain are re-laid by code (`_retime`: each beat's own length kept where readable, scaled
+  to the film, half seconds), logged on the job, corrected on the card; rejected timings kept as `script_rejected`) -> frames (`imagegen.generate`: Gemini WITH up to 3
   reference photos and NO text prepass; 2 per beat + 9:16 contributor tiles; Fable 5 cull, legible text/logo = hard
   reject; cap `creative_image_cap` on the profile, default 40) -> quote (Sonnet structures blocks from the scope, CODE
   prices with `price_lines`, typed figures allowed only from HIS words (`said` = `_TURN_SAID` + direction), exclusions
