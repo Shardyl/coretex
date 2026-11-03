@@ -112,24 +112,39 @@ def _save_jpg(data: bytes, path: str, max_side: int = 1600) -> tuple[int, int] |
     return im.size
 
 
-def _secs(t: str) -> int:
-    m, s = t.strip().split(":")
-    return int(m) * 60 + int(s)
+_TC = re.compile(r"(\d+):(\d{1,2}(?:\.\d+)?)")
+
+
+def _tc(x: float) -> str:
+    m, s = divmod(round(x, 1), 60)
+    return f"{int(m)}:{int(s):02d}" if s == int(s) else f"{int(m)}:{s:04.1f}"
+
+
+def _span(t: str) -> tuple[float, float]:
+    """'0:11-0:14.5', '0:11 to 0:14.5', '0:11–0:14.5s' -> (11.0, 14.5). An owner's locked script can carry
+    half-second approved timings (HBMSU Treatment C, 3 Nov 2026), so whole seconds are not assumed."""
+    found = _TC.findall(str(t or ""))
+    if len(found) != 2:
+        raise ValueError(f"not a span: {t!r}")
+    return tuple(int(m) * 60 + float(s) for m, s in found)
 
 
 def _timing_problem(beats: list, duration: int) -> str:
-    """Beat timings must be contiguous from 0:00 and end exactly on the film's running time."""
+    """Beat timings must be contiguous from 0:00 and end exactly on the film's running time. A readable span is
+    rewritten in one form (M:SS-M:SS, half seconds kept) so every page prints it the same way."""
     try:
-        spans = [tuple(_secs(x) for x in re.split(r"\s*-\s*", b["time"].replace("–", "-"))) for b in beats]
+        spans = [_span(b["time"]) for b in beats]
     except Exception:  # noqa: BLE001
         return "the beat timings could not be read"
-    if not spans or spans[0][0] != 0:
+    if not spans or abs(spans[0][0]) > 0.01:
         return "the first beat must start at 0:00"
     for i in range(1, len(spans)):
-        if spans[i][0] != spans[i - 1][1]:
+        if abs(spans[i][0] - spans[i - 1][1]) > 0.01:
             return f"beat {i + 1} does not start where beat {i} ends"
-    if spans[-1][1] != duration:
-        return f"the beats end at {spans[-1][1]}s, the film is {duration}s"
+    if abs(spans[-1][1] - duration) > 0.01:
+        return f"the beats end at {spans[-1][1]:g}s, the film is {duration}s"
+    for b, (a, z) in zip(beats, spans):
+        b["time"] = f"{_tc(a)}-{_tc(z)}"
     return ""
 
 
@@ -492,7 +507,10 @@ class Job:
             why = _timing_problem(out.get("beats") or [], dur) if out.get("beats") else "no beats came back"
             if not why:
                 break
+            self.s.setdefault("script_rejected", []).append(   # kept on the job, so a failure can be diagnosed
+                {"why": why, "times": [b.get("time") for b in out.get("beats") or []]})
         if why:
+            self.save()
             raise RuntimeError(f"the script failed its timing check: {why}")
         old = {b["n"]: b.get("frame_prompt") for b in (prev or {}).get("beats") or []}
         out = _clean_text(out)

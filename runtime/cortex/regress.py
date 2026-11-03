@@ -2077,6 +2077,21 @@ def _cases():
         return ("on YouTube" not in html and "on YouTube" not in text
                 and card.index("Watch the film") < card.index("cid:film0.jpg")
                 and f"Watch the film: {yt}" in text)
+    def _half_second_beats():
+        from . import creative as _cr
+        appr = ["0:00-0:04", "0:04-0:07", "0:07-0:11", "0:11-0:14.5", "0:14.5-0:18.5", "0:18.5-0:22.5",
+                "0:22.5-0:26.5", "0:26.5-0:30"]   # Treatment C's locked APPROVED timings, card 1617
+        a = [{"time": t} for t in appr]
+        b = [{"time": t.replace("-", " to ")} for t in appr]
+        gap = [{"time": t} for t in appr[:3] + ["0:12-0:14.5"] + appr[4:]]
+        return (_cr._timing_problem(a, 30) == "" and [x["time"] for x in a] == appr
+                and _cr._timing_problem(b, 30) == "" and [x["time"] for x in b] == appr
+                and _cr._timing_problem(gap, 30) == "beat 4 does not start where beat 3 ends"
+                and _cr._timing_problem([{"time": "0:00-0:30"}], 31).startswith("the beats end at 30s")
+                and _cr._timing_problem([{"time": "opening"}], 30) == "the beat timings could not be read")
+    case("a locked script's half-second timings pass the script's timing check, and a real gap still fails",
+         "owner, 3 Nov 2026 (HBMSU Treatment C stopped at the script, card 1617)", _half_second_beats)
+
     case("the film card is a 'Watch the film' button above the picture, with no text link under it",
          "owner, 2 Nov 2026 (Open Your Eyes issue, screenshot)", _film_button_above)
 
