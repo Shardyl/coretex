@@ -1822,8 +1822,13 @@ def _cases():
                 pts.append([t, bpm]); t += 5
         a = _fit._hr_analyse(pts)
         return (len(a["efforts"]) == 4 and all(e["seconds"] == 240 and e["peak"] == 165 and e["z5Seconds"] == 240
-                                               for e in a["efforts"]) and a["zones"]["5"] == 16.0)
+                                               for e in a["efforts"]) and a["zones"]["5"] == 16.0
+                and all(e["kind"] == "interval" for e in a["efforts"])
+                and _fit._hr_analyse([[t * 5, 150 if t < 14 else 110] for t in range(40)])["efforts"][0]["kind"] == "burst")
     case("a heart-rate trace splits a 4x4 into its four intervals with zone minutes", "HR trace 29 Oct", _hr_4x4)
+    case("the heart-rate view compares a session with the previous one on its preset", "HR full view 3 Nov",
+         lambda: 'out["prev"]' in inspect.getsource(_fit.hr_trace) and "c.day < %s" in inspect.getsource(_fit.hr_trace)
+                 and "openHrView(" in open(_web + "/fitness/index.html", encoding="utf-8").read())
     case("the Bridge's heart-rate trace is checked and a sync without one keeps what is held", "HR trace 29 Oct",
          lambda: (_fit._hr_series([[0, 120], [5, "x"], [10, 400], [15, 150.4]]) == "[[0, 120], [15, 150]]"
                   and _fit._hr_series(None) is None

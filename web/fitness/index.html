@@ -993,7 +993,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='120';                         // keep in step with CACHE in sw.js
+const APP_VERSION='121';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -2228,8 +2228,8 @@ function renderCardioHistory(){
           ${r.watch.warmup_min?`<span style="font-size:11px;color:var(--ink3)">+ ${Math.round(r.watch.warmup_min)} min warm-up</span>`:''}
           ${r.watch.settings==='not recorded'?`<span style="font-size:11px;color:var(--ink3)">settings not recorded</span>`:''}
           ${!r.watch.confirmed||r.watch.settings!=='manual'?`<button class="btn-sm" onclick="event.stopPropagation();editWatchCardio('${r.id}')">${r.watch.confirmed?'Edit':'Check'}</button>`:''}
-          ${r.watch.uid?`<button class="btn-sm" onclick="event.stopPropagation();toggleHrTrace(this,'${r.watch.uid}')">Heart rate</button>`:''}
-        </div><div class="hr-trace" onclick="event.stopPropagation()"></div>`:''}
+          ${r.watch.uid?`<button class="btn-sm" onclick="event.stopPropagation();openHrView('${r.watch.uid}')">Heart rate</button>`:''}
+        </div>`:''}
       </div>
       <div>
         <div class="hist-total" style="font-size:14px;color:var(--blue)">${(isZone2(ex)?r.avgHR:r.maxHR)||'—'}<div style="font-size:10px;color:var(--ink3);font-weight:600">${isZone2(ex)?'avg HR':'max HR'}</div>${isPR?'<div class="tag tag-amber" style="font-size:9px;margin-top:3px">PR</div>':''}</div>
@@ -2242,24 +2242,62 @@ function renderCardioHistory(){
 // Fetched on demand from /api/fitness/hr/<uid>: the 5-second trace, minutes per zone and the efforts (each 4x4
 // interval) are all computed on the server; this only draws them. Zone floors come back with the data.
 const HR_ZONE_COL={5:'#e5484d',4:'#f76b15',3:'#ffc53d',2:'#30a46c',1:'#3e63dd'};
-window.toggleHrTrace=async function(btn,uid){
-  const box=btn.closest('.hist-item').querySelector('.hr-trace');if(!box)return;
-  if(box.innerHTML){box.innerHTML='';return;}
-  box.innerHTML='<div style="font-size:11px;color:var(--ink3);margin-top:6px">Loading heart rate...</div>';
+// Full-screen view (owner, 3 Nov 2026): labelled axes, zone bands, each effort marked and numbered, minutes per
+// zone, and the intervals side by side with the previous session on the same preset. Everything is computed by
+// the server; this only draws it.
+function hrClose(){const o=document.getElementById('hrOverlay');if(o)o.remove();}
+window.hrClose=hrClose;
+window.openHrView=async function(uid){
+  hrClose();
+  const ov=document.createElement('div');ov.id='hrOverlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:10000;background:var(--surface);overflow-y:auto;-webkit-overflow-scrolling:touch;padding:calc(var(--safe-top) + 12px) 14px calc(var(--safe-bottom) + 24px)';
+  ov.innerHTML='<div style="font-size:13px;color:var(--ink3);padding:40px 0;text-align:center">Loading heart rate...</div>';
+  document.body.appendChild(ov);
   let d=null;try{d=await syncApi('/api/fitness/hr/'+encodeURIComponent(uid));}catch(e){}
-  if(!d||!d.points||!d.points.length){box.innerHTML='<div style="font-size:11px;color:var(--ink3);margin-top:6px">No heart-rate trace for this session yet (needs Health Bridge 1.4.0).</div>';return;}
+  if(!document.getElementById('hrOverlay'))return;
+  const head=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div><div style="font-size:16px;font-weight:800">${d&&d.preset||'Heart rate'}</div>
+        <div style="font-size:12px;color:var(--ink3)">${d&&d.day?fmtDate(d.day):''}</div></div>
+      <button class="btn-sm" onclick="hrClose()">Close</button></div>`;
+  if(!d||!d.points||!d.points.length){ov.innerHTML=head+'<div style="font-size:13px;color:var(--ink3)">No heart-rate trace for this session (sessions synced by Health Bridge 1.4.0 or later have one).</div>';return;}
   const pts=d.points, fl=d.zoneFloors||{}, zOf=b=>[5,4,3,2,1].find(z=>b>=(+fl[z]||0))||1;
-  const W=320,H=120,T=pts[pts.length-1][0]||1, lo=Math.min(...pts.map(p=>p[1]))-5, hi=Math.max(...pts.map(p=>p[1]))+5;
-  const x=t=>(t/T*W).toFixed(1), y=b=>(H-(b-lo)/(hi-lo)*H).toFixed(1);
-  let segs='';for(let i=1;i<pts.length;i++){const[a,b]=[pts[i-1],pts[i]];if(b[0]-a[0]>30)continue;
-    segs+=`<line x1="${x(a[0])}" y1="${y(a[1])}" x2="${x(b[0])}" y2="${y(b[1])}" stroke="${HR_ZONE_COL[zOf(b[1])]}" stroke-width="2" stroke-linecap="round"/>`;}
-  const z5=fl[5]?`<line x1="0" x2="${W}" y1="${y(+fl[5])}" y2="${y(+fl[5])}" stroke="var(--ink3)" stroke-dasharray="3 3" stroke-width="0.6"/>`:'';
   const mmss=s=>Math.floor(s/60)+':'+String(Math.round(s%60)).padStart(2,'0');
-  const zr=[5,4,3,2,1].filter(z=>+d.zones[z]>0).map(z=>`<span style="color:${HR_ZONE_COL[z]};font-weight:700">Z${z}</span> ${d.zones[z]}m`).join(' &middot; ');
-  const ef=(d.efforts||[]).map((e,i)=>`<div>${i+1}. ${mmss(e.seconds)} hard, peak ${e.peak}, ${mmss(e.z5Seconds)} in Z5</div>`).join('');
-  box.innerHTML=`<div style="margin-top:8px"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${z5}${segs}</svg>
-    <div style="font-size:11px;color:var(--ink2);margin-top:4px">${zr}</div>
-    ${ef?`<div style="font-size:11px;color:var(--ink2);margin-top:4px">${ef}</div>`:''}</div>`;
+  const W=360,H=220,L=30,R=6,Tp=18,B=22, T=pts[pts.length-1][0]||1;
+  const lo=Math.floor((Math.min(...pts.map(p=>p[1]))-5)/10)*10, hi=Math.ceil((Math.max(...pts.map(p=>p[1]))+5)/10)*10;
+  const x=t=>L+t/T*(W-L-R), y=b=>Tp+(hi-b)/(hi-lo)*(H-Tp-B);
+  // zone bands behind the line
+  let bands='';[5,4,3,2,1].forEach(z=>{const top=z===5?hi:Math.min(hi,(+fl[z+1]||hi)), bot=Math.max(lo,+fl[z]||lo);if(top<=bot)return;
+    bands+=`<rect x="${L}" width="${W-L-R}" y="${y(top)}" height="${y(bot)-y(top)}" fill="${HR_ZONE_COL[z]}" opacity="0.07"/>`;});
+  // efforts: shaded span with its label and peak above it
+  let n=0,m=0;const ef=(d.efforts||[]).map(e=>({...e,label:e.kind==='interval'?'I'+(++n):'W'+(++m)}));
+  let marks='';ef.forEach(e=>{const x0=x(e.start),x1=x(e.start+e.seconds);
+    marks+=`<rect x="${x0}" width="${Math.max(1,x1-x0)}" y="${Tp}" height="${H-Tp-B}" fill="var(--ink)" opacity="0.05"/>
+      <text x="${(x0+x1)/2}" y="${Tp-5}" text-anchor="middle" font-size="9" font-weight="800" fill="var(--ink2)">${e.label} ${e.peak}</text>`;});
+  let axes='';for(let b=lo;b<=hi;b+=10)axes+=`<line x1="${L}" x2="${W-R}" y1="${y(b)}" y2="${y(b)}" stroke="var(--border)" stroke-width="0.5"/><text x="${L-4}" y="${y(b)+3}" text-anchor="end" font-size="9" fill="var(--ink3)">${b}</text>`;
+  const step=T>2400?600:300;for(let t=0;t<=T;t+=step)axes+=`<text x="${x(t)}" y="${H-6}" text-anchor="middle" font-size="9" fill="var(--ink3)">${Math.round(t/60)}m</text>`;
+  const z5=fl[5]?`<line x1="${L}" x2="${W-R}" y1="${y(+fl[5])}" y2="${y(+fl[5])}" stroke="${HR_ZONE_COL[5]}" stroke-dasharray="4 3" stroke-width="0.8"/>`:'';
+  let segs='';for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];if(b[0]-a[0]>30)continue;
+    segs+=`<line x1="${x(a[0]).toFixed(1)}" y1="${y(a[1]).toFixed(1)}" x2="${x(b[0]).toFixed(1)}" y2="${y(b[1]).toFixed(1)}" stroke="${HR_ZONE_COL[zOf(b[1])]}" stroke-width="2.2" stroke-linecap="round"/>`;}
+  // minutes per zone as one stacked bar plus a line per zone
+  const tot=[1,2,3,4,5].reduce((a,z)=>a+(+d.zones[z]||0),0)||1;
+  const bar=[5,4,3,2,1].filter(z=>+d.zones[z]>0).map(z=>`<div style="width:${(+d.zones[z])/tot*100}%;background:${HR_ZONE_COL[z]}"></div>`).join('');
+  const zl=[5,4,3,2,1].map(z=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${HR_ZONE_COL[z]};margin-right:6px"></span>Zone ${z} <span style="color:var(--ink3)">${z===5?fl[5]+'+':(fl[z]||0)+'-'+((+fl[z+1]||1)-1)}</span></span><b>${d.zones[z]||0} min</b></div>`).join('');
+  // efforts table; intervals compared with the previous session's intervals by position
+  const prevI=(d.prev&&d.prev.efforts||[]).filter(e=>e.kind==='interval');
+  const dlt=(a,b,f)=>{const v=a-b;if(!v)return '<span style="color:var(--ink3);font-size:10px"> =</span>';return `<span style="color:${v>0?'var(--teal)':'var(--red)'};font-size:10px"> ${v>0?'+':'-'}${f(Math.abs(v))}</span>`;};
+  const rows=ef.map(e=>{const k=e.kind==='interval'?+e.label.slice(1)-1:-1, p=k>=0?prevI[k]:null;
+    return `<tr><td style="padding:5px 0;font-weight:800">${e.kind==='interval'?'Interval '+e.label.slice(1):'Warm-up '+e.label.slice(1)}</td>
+      <td style="text-align:right">${mmss(e.seconds)}</td>
+      <td style="text-align:right">${e.peak}${p?dlt(e.peak,p.peak,v=>v):''}</td>
+      <td style="text-align:right">${mmss(e.z5Seconds)}${p?dlt(e.z5Seconds,p.z5Seconds,mmss):''}</td></tr>`;}).join('');
+  const prevNote=d.prev?`Changes are against your previous session on ${fmtDate(d.prev.day)} (${d.prev.zones[5]||0} min in zone 5 then, ${d.zones[5]||0} now).`:'No earlier session on this preset has a heart-rate trace to compare with yet.';
+  ov.innerHTML=head+`
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${bands}${axes}${marks}${z5}${segs}</svg>
+    <div class="card" style="margin-top:12px;padding:12px 14px"><div style="font-size:12px;font-weight:800;margin-bottom:8px">Time in zones</div>
+      <div style="display:flex;height:10px;border-radius:5px;overflow:hidden;margin-bottom:8px">${bar}</div>${zl}</div>
+    ${ef.length?`<div class="card" style="margin-top:12px;padding:12px 14px"><div style="font-size:12px;font-weight:800;margin-bottom:6px">Efforts</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="color:var(--ink3);font-size:10px"><td></td><td style="text-align:right">Hard</td><td style="text-align:right">Peak</td><td style="text-align:right">In Z5</td></tr>${rows}</table>
+      <div style="font-size:11px;color:var(--ink3);margin-top:8px">${prevNote}</div></div>`:''}`;
 };
 window.delCardioSession=function(idx){if(!confirm('Delete?'))return;markDeleted('cardioSessions',(cardioSessions[idx]||{}).id);cardioSessions.splice(idx,1);saveCardio();renderCardioHistory();toast('Deleted');};
 
@@ -3178,6 +3216,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=120"></script>
+<script src="food.js?v=121"></script>
 </body>
 </html>

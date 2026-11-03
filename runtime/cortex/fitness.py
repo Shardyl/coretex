@@ -314,7 +314,21 @@ def hr_trace(uid: str) -> dict:
     pts = sorted(r["hr"] if isinstance(r["hr"], list) else json.loads(r["hr"]))
     if r.get("trim_min"):
         pts = [p for p in pts if p[0] <= float(r["trim_min"]) * 60]
-    return {"uid": uid, "start": r["start_at"].isoformat(), "points": pts, **_hr_analyse(pts)}
+    out = {"uid": uid, "start": r["start_at"].isoformat(), "points": pts, **_hr_analyse(pts)}
+    # The previous session on the same preset that has a trace, for the side-by-side (owner, 3 Nov 2026).
+    c = db.one("select preset_uid, preset_name, day from fitness.cardio_sessions where not deleted and watch->>'uid' = %s",
+               (uid,))
+    if c:
+        out["preset"], out["day"] = c["preset_name"], c["day"].isoformat()
+        p = db.one("select c.day, h.hr, h.trim_min from fitness.cardio_sessions c join fitness.health_sessions h "
+                   "on h.uid = c.watch->>'uid' where not c.deleted and c.preset_uid = %s and c.day < %s "
+                   "and h.hr is not null order by c.day desc limit 1", (c["preset_uid"], c["day"]))
+        if p:
+            pp = sorted(p["hr"] if isinstance(p["hr"], list) else json.loads(p["hr"]))
+            if p.get("trim_min"):
+                pp = [x for x in pp if x[0] <= float(p["trim_min"]) * 60]
+            out["prev"] = {"day": p["day"].isoformat(), **_hr_analyse(pp)}
+    return out
 
 
 def _hr_analyse(pts: list) -> dict:
@@ -337,7 +351,9 @@ def _hr_analyse(pts: list) -> dict:
             cur = None
     if cur is not None:
         efforts.append(cur)
-    efforts = [{"start": e["start"], "seconds": e["end"] - e["start"], "peak": e["peak"], "z5Seconds": round(e["z5"])}
+    # An effort of 2.5 min or more is an interval (a 4x4 rep); shorter ones are bursts (his 3x1 warm-up).
+    efforts = [{"start": e["start"], "seconds": e["end"] - e["start"], "peak": e["peak"], "z5Seconds": round(e["z5"]),
+                "kind": "interval" if e["end"] - e["start"] >= 150 else "burst"}
                for e in efforts if e["end"] - e["start"] >= 60]
     return {"zones": {str(z): round(sec / 60, 1) for z, sec in zs.items()},
             "zoneFloors": {str(z): lo for z, lo in HR_ZONES}, "efforts": efforts}
