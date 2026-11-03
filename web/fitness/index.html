@@ -993,7 +993,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='122';                         // keep in step with CACHE in sw.js
+const APP_VERSION='123';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -2259,7 +2259,7 @@ window.openHrView=async function(uid){
       <div><div style="font-size:16px;font-weight:800">${d&&d.preset||'Heart rate'}</div>
         <div style="font-size:12px;color:var(--ink3)">${d&&d.day?fmtDate(d.day):''}</div></div>
       <button class="btn-sm" onclick="hrClose()">Close</button></div>`;
-  if(!d||!d.points||!d.points.length){ov.innerHTML=head+'<div style="font-size:13px;color:var(--ink3)">No heart-rate trace for this session (sessions synced by Health Bridge 1.4.0 or later have one).</div>';return;}
+  if(!d||!d.points||!d.points.length){ov.innerHTML='<div style="max-width:520px;margin:0 auto">'+head+'<div style="font-size:13px;color:var(--ink3)">No heart-rate trace for this session (sessions synced by Health Bridge 1.4.0 or later have one).</div></div>';return;}
   const pts=d.points, fl=d.zoneFloors||{}, zOf=b=>[5,4,3,2,1].find(z=>b>=(+fl[z]||0))||1;
   const mmss=s=>Math.floor(s/60)+':'+String(Math.round(s%60)).padStart(2,'0');
   const W=360,H=220,L=30,R=6,Tp=18,B=22, T=pts[pts.length-1][0]||1;
@@ -2291,13 +2291,14 @@ window.openHrView=async function(uid){
       <td style="text-align:right">${e.peak}${p?dlt(e.peak,p.peak,v=>v):''}</td>
       <td style="text-align:right">${mmss(e.z5Seconds)}${p?dlt(e.z5Seconds,p.z5Seconds,mmss):''}</td></tr>`;}).join('');
   const prevNote=d.prev?`Changes are against your previous session on ${fmtDate(d.prev.day)} (${d.prev.zones[5]||0} min in zone 5 then, ${d.zones[5]||0} now).`:'No earlier session on this preset has a heart-rate trace to compare with yet.';
-  ov.innerHTML=head+`
+  // On a desktop browser the view keeps phone proportions in a centred column instead of filling the window (owner, 3 Nov 2026).
+  ov.innerHTML=`<div style="max-width:520px;margin:0 auto">`+head+`
     <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${bands}${axes}${marks}${z5}${segs}</svg>
     <div class="card" style="margin-top:12px;padding:12px 14px"><div style="font-size:12px;font-weight:800;margin-bottom:8px">Time in zones</div>
       <div style="display:flex;height:10px;border-radius:5px;overflow:hidden;margin-bottom:8px">${bar}</div>${zl}</div>
     ${ef.length?`<div class="card" style="margin-top:12px;padding:12px 14px"><div style="font-size:12px;font-weight:800;margin-bottom:6px">Efforts</div>
       <table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="color:var(--ink3);font-size:10px"><td></td><td style="text-align:right">Hard</td><td style="text-align:right">Peak</td><td style="text-align:right">In Z5</td></tr>${rows}</table>
-      <div style="font-size:11px;color:var(--ink3);margin-top:8px">${prevNote}</div></div>`:''}`;
+      <div style="font-size:11px;color:var(--ink3);margin-top:8px">${prevNote}</div></div>`:''}</div>`;
 };
 window.delCardioSession=function(idx){if(!confirm('Delete?'))return;markDeleted('cardioSessions',(cardioSessions[idx]||{}).id);cardioSessions.splice(idx,1);saveCardio();renderCardioHistory();toast('Deleted');};
 
@@ -3216,6 +3217,6 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=122"></script>
+<script src="food.js?v=123"></script>
 </body>
 </html>
