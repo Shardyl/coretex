@@ -1571,21 +1571,26 @@ function fullDayBurn(day){
   const p=burnedParts(day), bmr=+foodTargets.bmr||1873;
   return p?bmr+p.move+p.work:null;
 }
-// Week so far, eaten minus burned (owner, 4 Nov 2026), in the slot the glucose reading used. Full days only: Monday up to
-// the day before the one shown (today is never complete); on a Monday it shows last week. Colour against the deficit
-// the owner set (4 Nov 2026: 500 a day is green, the mission's ~1,000 a day was "pretty crazy"): green at or past
-// WEEK_DEFICIT_GREEN per counted day, amber in deficit but short of it, red in surplus.
+// Week so far, eaten minus burned (owner, 4 Nov 2026), in the slot the glucose reading used. The week runs SUNDAY to
+// Saturday, matching his Sunday-morning weigh-ins. Past days use the full day's burn; TODAY is live: eaten so far minus
+// burned so far (BMR pro rata to the clock, as the daily burn), so it moves through the day. Green at or past
+// WEEK_DEFICIT_GREEN (500, owner 4 Nov 2026) per full day plus today's share of it by the clock; amber in deficit but
+// short; red in surplus. Viewing a past day shows that week up to and including that day.
 const WEEK_DEFICIT_GREEN=500;
 function weekBalance(day){
-  const today=localDay(new Date()), end=day>=today?shiftDay(today,-1):day;
-  const dow=(new Date(day+'T12:00:00').getDay()+6)%7;
-  let from=shiftDay(day,-dow), label='Week kcal';
-  if(end<from){from=shiftDay(from,-7);label='Last wk kcal';}
-  let bal=0,n=0;
-  for(let d=from;d<=end;d=shiftDay(d,1)){const e=entriesFor(d),b=fullDayBurn(d);if(!e.length||b==null)continue;bal+=totals(e).kcal-b;n++;}
+  const today=localDay(new Date());
+  if(day>today)return null;
+  const from=shiftDay(day,-new Date(day+'T12:00:00').getDay());   // Sunday on or before the day
+  let bal=0,need=0,n=0;
+  for(let d=from;d<=day;d=shiftDay(d,1)){
+    const e=entriesFor(d), live=d===today, b=live?burnedFor(d):fullDayBurn(d);
+    if(!e.length||b==null)continue;
+    bal+=totals(e).kcal-b;n++;
+    if(live){const t=new Date();need+=WEEK_DEFICIT_GREEN*(t.getHours()*60+t.getMinutes())/1440;}else need+=WEEK_DEFICIT_GREEN;
+  }
   if(!n)return null;
   bal=Math.round(bal);
-  return {bal,n,label,col:bal<=-WEEK_DEFICIT_GREEN*n?'var(--teal)':bal<0?'var(--amber)':'var(--red)'};
+  return {bal,n,label:'Week kcal',col:bal<=-need?'var(--teal)':bal<0?'var(--amber)':'var(--red)'};
 }
 function projLine(label,kcalDiffPerDay){
   const b=baseWeight();if(b==null)return '';
