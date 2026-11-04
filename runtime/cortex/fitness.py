@@ -438,10 +438,12 @@ def _sleep_vals(r: dict) -> list:
 def _trim(r):
     """A session he cut short after the fact (owner, 24 Oct 2026: the watch timer left running after weights).
     `health_sessions.trim_min` is his figure; the Bridge's upsert never touches it, so it survives every re-sync.
-    End = start + trim; kcal scaled pro rata to the minutes kept (the watch gives no per-minute burn)."""
+    End = start + trim; kcal scaled pro rata to the minutes kept (the watch gives no per-minute burn).
+    It also LENGTHENS a session the watch stopped early (owner, 4 Nov 2026: 3 Nov weights recorded 18 min, really
+    50): end = start + his minutes, kcal scaled up pro rata, his call since the watch has nothing for the rest."""
     full = (r["end_at"] - r["start_at"]).total_seconds() / 60
     t = _num(r.get("trim_min"))
-    if not t or t >= full or full <= 0:
+    if not t or t == full or full <= 0:
         return r["end_at"], _num(r["kcal"]), round(full, 1)
     k = _num(r["kcal"])
     return r["start_at"] + timedelta(minutes=t), (round(k * t / full, 1) if k is not None else None), round(t, 1)
