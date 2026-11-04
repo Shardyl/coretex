@@ -1839,7 +1839,7 @@ def _cases():
              open(_web + "/fitness/food.js", encoding="utf-8").read()))
     case("the food page leads with protein, carbs and fat for reference, week balance in the spare slot", "macros + week balance 4 Nov",
          lambda: (lambda f: "Protein is the one that counts" in f and "Carbs <b" in f and "function weekBalance(" in f
-                           and "weekBalance(foodDay)" in f)(
+                           and "weekBalance(foodDay)" in f and "WEEK_DEFICIT_GREEN=500" in f)(
              open(_web + "/fitness/food.js", encoding="utf-8").read()))
     case("an incline treadmill walk counts toward the weekly Zone 2", "incline walk zone 2 29 Oct",
          lambda: r"/zone\s*2|incline\s*walk/i" in open(_web + "/fitness/index.html", encoding="utf-8").read())

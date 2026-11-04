@@ -1573,8 +1573,9 @@ function fullDayBurn(day){
 }
 // Week so far, eaten minus burned (owner, 4 Nov 2026), in the slot the glucose reading used. Full days only: Monday up to
 // the day before the one shown (today is never complete); on a Monday it shows last week. Colour against the deficit
-// the mission needs: green at or past that pace, amber in deficit but short of it, red in surplus. The pace is computed
-// from the goal (kg to go x 7,700 / days left), else 500 a day with no mission set.
+// the owner set (4 Nov 2026: 500 a day is green, the mission's ~1,000 a day was "pretty crazy"): green at or past
+// WEEK_DEFICIT_GREEN per counted day, amber in deficit but short of it, red in surplus.
+const WEEK_DEFICIT_GREEN=500;
 function weekBalance(day){
   const today=localDay(new Date()), end=day>=today?shiftDay(today,-1):day;
   const dow=(new Date(day+'T12:00:00').getDay()+6)%7;
@@ -1583,11 +1584,8 @@ function weekBalance(day){
   let bal=0,n=0;
   for(let d=from;d<=end;d=shiftDay(d,1)){const e=entriesFor(d),b=fullDayBurn(d);if(!e.length||b==null)continue;bal+=totals(e).kcal-b;n++;}
   if(!n)return null;
-  const m=foodTargets.mission, cur=baseWeight();
-  const left=m&&m.goalDate?missionDays(today,m.goalDate):0;
-  const need=m&&m.goalKg&&cur!=null&&left>0?Math.max(0,(cur-m.goalKg)*KCAL_PER_KG/left):500;
   bal=Math.round(bal);
-  return {bal,n,label,col:bal<=-need*n?'var(--teal)':bal<0?'var(--amber)':'var(--red)'};
+  return {bal,n,label,col:bal<=-WEEK_DEFICIT_GREEN*n?'var(--teal)':bal<0?'var(--amber)':'var(--red)'};
 }
 function projLine(label,kcalDiffPerDay){
   const b=baseWeight();if(b==null)return '';
