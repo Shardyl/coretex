@@ -2106,6 +2106,16 @@ def _cases():
     case("a locked script's half-second timings pass the script's timing check, and a real gap still fails",
          "owner, 3 Nov 2026 (HBMSU Treatment C stopped at the script, card 1617)", _half_second_beats)
 
+    def _quote_pdf_only():
+        import inspect
+        from . import engine as _en
+        web = open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"), encoding="utf-8").read()
+        return ("""${r.file?`<button class="btn go" onclick="openQuotation(${t.id},'pdf')">""" in web
+                and """:(r.xlsx_file?`<button""" in web
+                and 'fmt == "xlsx" or not pdf_path' in inspect.getsource(_en.deliver_quotation))
+    case("a quotation card shows the PDF only; the spreadsheet appears only when asked for or the PDF failed",
+         "owner, 4 Nov 2026", _quote_pdf_only)
+
     def _note_author():
         from . import api as _api
         return (_api._talk_author({"role": "owner", "name": "Owner"}) == "owner"

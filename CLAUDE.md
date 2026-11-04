@@ -263,6 +263,13 @@ The one-off tidy that set this up is logged move by move in setting `drive_tidy_
 (file id, from, to, why) so any of it can be reversed. Nothing was deleted. Two emptied folders were left
 for the owner to delete: `Orion Global - FZCO` and `Honor International FZCO`.
 
+## A quotation card shows the PDF only (owner, 4 Nov 2026)
+
+The cockpit quotation card used to lead with "Open spreadsheet". Now `deliver_quotation` puts `xlsx_file` on the card
+only when the spreadsheet is asked for by name (`fmt='xlsx'`) or the PDF conversion failed, and the cockpit shows the
+spreadsheet button only when a card has no PDF (older cards included). The xlsx is still rendered as the PDF's source and
+still filed on the client's Drive folder with the ALL VERSIONS workbook; emails never carry spreadsheets (20 Oct rule).
+
 ## Approving a quotation prep card builds the quotation (11 Sep 2026)
 
 A quotation PREP card (kind `content`, `request.prep_action == "quotation"`, see `_is_quotation_prep`)

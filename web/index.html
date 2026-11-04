@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v90';
+const APP_BUILD = 'cortex-v91';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -2214,7 +2214,7 @@ function quotationCard(t,co){
     <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${ic('file',13)} quotation</span>${r.number?`<span class="chip">${esc(r.number)}</span>`:''}</div>
     <div class="title">${esc(r.title||'Quotation')}</div>
     <div class="body">${esc(t.draft||r.summary||'')}</div>${blanks}
-    <div class="row" style="margin:4px 0 9px">${r.xlsx_file?`<button class="btn go" onclick="openQuotation(${t.id},'xlsx')">${ic('file',16)} Open spreadsheet</button>`:''}${r.file?`<button class="btn${r.xlsx_file?'':' go'}" onclick="openQuotation(${t.id},'pdf')">${ic('file',16)} Open PDF</button>`:''}</div>
+    <div class="row" style="margin:4px 0 9px">${r.file?`<button class="btn go" onclick="openQuotation(${t.id},'pdf')">${ic('file',16)} Open PDF</button>`:(r.xlsx_file?`<button class="btn go" onclick="openQuotation(${t.id},'xlsx')">${ic('file',16)} Open spreadsheet</button>`:'')}</div>
     <div class="row">
       <button class="btn go" onclick="act(${t.id},'approve')">${ic('check',16)} Approve quotation</button>
       <button class="btn warn" id="cm${t.id}" onclick="voiceCorrect(${t.id},this)">${ic('mic',16)} Tap to talk</button>

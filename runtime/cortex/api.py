@@ -4139,8 +4139,8 @@ SKILL_TOOLS = [
         "deal_id": {"type": "integer"}},
         "required": ["company", "number"]}},
     {"name": "create_quotation",
-     "description": "Produce a branded, house-format QUOTATION (an editable .xlsx spreadsheet plus a ready-to-"
-                    "send .pdf by default) and drop it in the Inbox as a downloadable card. Use when Rashad asks "
+     "description": "Produce a branded, house-format QUOTATION (the card shows the ready-to-send PDF only; the house-format .xlsx stays its source and is "
+                    "filed on Drive) and drop it in the Inbox as a downloadable card. Use when Rashad asks "
                     "to 'quote', 'do a quotation / quote', or 'price up' a job. CALL rate_card FIRST: it returns "
                     "the card (each item with its [key]) and the house rules for how a quotation is laid out. "
                     "PRICES ARE CODE'S JOB: give every line `components` (rate-card keys with quantities) and "
@@ -4167,7 +4167,7 @@ SKILL_TOOLS = [
         "customer": {"type": "string", "description": "the client name for the quote"},
         "total": {"type": "number", "description": "the overall figure Rashad states (a target for component-priced lines, else split by weight). Omit if he gave none."},
         "total_inclusive": {"type": "boolean", "description": "true if `total` already includes VAT"},
-        "fmt": {"type": "string", "enum": ["both", "xlsx", "pdf"], "description": "which files to deliver; default 'both' (spreadsheet + PDF)"},
+        "fmt": {"type": "string", "enum": ["both", "xlsx", "pdf"], "description": "default 'both': the card shows the PDF; 'xlsx' only when the spreadsheet itself is asked for"},
         "sections": {"type": "array", "description": "EXPLICIT priced lines, when the figures are already "
                      "fixed - typically because a proposal states them and the quotation must not "
                      "contradict it. Each item's `unit` is that line's price (times `qty`); leave `unit` "

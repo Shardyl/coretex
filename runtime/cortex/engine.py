@@ -9428,7 +9428,9 @@ def deliver_quotation(company: str, *, preset: str = "ai-production", customer: 
             pdf_path = quotation.xlsx_to_pdf(x["path"], QUOTES_DIR)
         except Exception as e:  # noqa: BLE001 — never lose the card if the converter hiccups
             tg.send(f"Quotation {number} PDF conversion failed ({e}); the spreadsheet is still delivered.")
-    xlsx_path = x["path"] if want_xlsx else None   # pdf-only still renders the xlsx as the source, just not delivered
+    # the card shows the PDF only (owner, 4 Nov 2026); the xlsx is still the source and is still filed on Drive.
+    # It reaches the card only when asked for by name (fmt='xlsx') or when the PDF conversion failed.
+    xlsx_path = x["path"] if (want_xlsx and (fmt == "xlsx" or not pdf_path)) else None
 
     def _r2(path, kind):
         if not path:
