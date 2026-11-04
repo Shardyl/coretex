@@ -278,11 +278,16 @@ function renderTodayInner(){
         <div class="fd-cell"><div class="v">${burned!=null?fmtN(burned):'—'}</div><div class="l">${isFuture?'Planned day':'Burned'+(isToday&&burned!=null?' so far':'')}</div></div>
       </div>
       ${(()=>{const bp=burnedParts(foodDay);return bp?`<div style="margin-top:8px;font-size:11px;color:var(--ink3);text-align:right">Burned: BMR ${fmtN(bp.bmr)} &middot; Movement ${fmtN(bp.move)} &middot; Workouts ${fmtN(bp.work)}</div>`:'';})()}
-      <div style="margin-top:12px;display:flex;justify-content:space-between;font-size:12px;font-weight:700">
-        <span>Protein</span><span>${fmtN(t.protein)} / ${fmtN(ptgt)} g</span>
-      </div>
-      <div class="fd-bar"><div style="width:${pPct}%;background:${kpiProtein(t.protein,ptgt)}"></div></div>
-      <div style="margin-top:6px;font-size:11px;color:var(--ink3)">Carbs ${fmtN(t.carbs)} g &middot; Fat ${fmtN(t.fat)} g</div>
+      ${(()=>{   // Full macros at the same size (owner, 4 Nov 2026): protein against its target, carbs and fat as grams and share of the day's kcal
+        const kc=(+t.protein||0)*4+(+t.carbs||0)*4+(+t.fat||0)*9, sh=g=>kc>0?Math.round(g/kc*100):0;
+        const cell=(name,g,sub,pct,col)=>`<div><div style="font-size:11px;font-weight:700;color:var(--ink3)">${name}</div>
+          <div style="font-size:20px;font-weight:800;line-height:1.15">${fmtN(g)}<span style="font-size:12px;font-weight:700;color:var(--ink3)"> g</span></div>
+          <div style="font-size:11px;color:var(--ink3)">${sub}</div>
+          <div class="fd-bar" style="margin-top:4px"><div style="width:${Math.min(100,pct)}%;background:${col}"></div></div></div>`;
+        return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:14px">
+          ${cell('Protein',t.protein,'of '+fmtN(ptgt)+' g &middot; '+sh((+t.protein||0)*4)+'%',pPct,kpiProtein(t.protein,ptgt))}
+          ${cell('Carbs',t.carbs,sh((+t.carbs||0)*4)+'% of kcal',sh((+t.carbs||0)*4),'var(--amber)')}
+          ${cell('Fat',t.fat,sh((+t.fat||0)*9)+'% of kcal',sh((+t.fat||0)*9),'var(--purple)')}</div>`;})()}
       ${balance}
       ${projectToday()}
     </div>

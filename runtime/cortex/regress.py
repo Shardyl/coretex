@@ -1837,6 +1837,9 @@ def _cases():
          lambda: (lambda f: f.index('id="fdWtDay"') < f.index('id="fdWtChart"') < f.index("slice(0,7).map(w=>")
                   < f.index('id="fdPhotoCard"') < f.index("${waistCard()}`;") and "scroll-snap-type:x" in f)(
              open(_web + "/fitness/food.js", encoding="utf-8").read()))
+    case("the food page shows protein, carbs and fat at the same size", "full macros 4 Nov",
+         lambda: (lambda f: "cell('Carbs'" in f and "cell('Fat'" in f and "cell('Protein'" in f)(
+             open(_web + "/fitness/food.js", encoding="utf-8").read()))
     case("an incline treadmill walk counts toward the weekly Zone 2", "incline walk zone 2 29 Oct",
          lambda: r"/zone\s*2|incline\s*walk/i" in open(_web + "/fitness/index.html", encoding="utf-8").read())
     case("every cardio and lifting row carries its start time", "fitness times 20 Oct",
