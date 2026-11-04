@@ -2116,6 +2116,27 @@ def _cases():
     case("a quotation card shows the PDF only; the spreadsheet appears only when asked for or the PDF failed",
          "owner, 4 Nov 2026", _quote_pdf_only)
 
+    def _shot_list():
+        import inspect
+        from . import creative as _cr
+        txt = ('BEAT 1, 0:00 to 0:05\nVO: "Every district starts as a line\nsomeone drew."\n'
+               "1.1, 0:00 to 0:02. Macro, static. A line snaps alive. AI generated.\n"
+               "1.2, 0:02 to 0:05. Close on Alia, tracking. #1448,\nAI generated.\nPage 1 of 3\n"
+               "BEAT 2, 0:05 to 0:09\nVO: no narration\n2.1, 0:05 to 0:09. Her hand enters the twin. #1439, #1440.\n"
+               "NOTES AND ASSUMPTIONS\nReference ids are #9999.")
+        s = _cr.parse_shot_list(txt)
+        people = [{"name": "Alia (child)", "tag": "@char_alia_child", "cast": True, "refs": ["a"]},
+                  {"name": "Alia (grown)", "tag": "@char_alia_grown", "cast": True, "refs": ["b"]}]
+        return ([x["id"] for x in s] == ["1.1", "1.2", "2.1"]
+                and s[0]["vo"] == s[1]["vo"] == "Every district starts as a line someone drew."
+                and s[2]["vo"] == "" and s[1]["refs"] == [1448] and s[2]["refs"] == [1439, 1440]
+                and s[1]["time"] == "0:02-0:05" and s[0]["beat_time"] == "0:00-0:05"
+                and [p["name"] for p in _cr._cast_in_beat({"assets": ["@char_alia_grown"]}, people)] == ["Alia (grown)"]
+                and "self._ref_paths(b.get(\"refs\"))" in inspect.getsource(_cr.Job.stage_frames))
+    case("a locked shot list becomes one frame per shot with its beat's narration verbatim, library photo ids "
+         "are real references, and a grown character takes her own cast sheet",
+         "owner, 4 Nov 2026 (DSO 31-shot breakdown #1463; treatment #1468 had dropped every client photo)", _shot_list)
+
     def _note_author():
         from . import api as _api
         return (_api._talk_author({"role": "owner", "name": "Owner"}) == "owner"

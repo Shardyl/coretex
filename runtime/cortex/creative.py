@@ -271,6 +271,54 @@ def _likeness_prefix(person: dict) -> str:
               "and change only the setting, the light and the camera. ")
 
 
+_SHOT_BEAT = re.compile(r"^BEAT (\d+), (\d+:\d{2}(?:\.\d+)?) to (\d+:\d{2}(?:\.\d+)?)\s*\nVO:\s*(.*?)\n(?=\d+\.\d+, )",
+                        re.M | re.S)
+_SHOT = re.compile(r"^(\d+)\.(\d+), (\d+:\d{2}(?:\.\d+)?) to (\d+:\d{2}(?:\.\d+)?)\. (.*?)(?=^\d+\.\d+, |^BEAT \d|\Z)",
+                   re.M | re.S)
+
+
+def parse_shot_list(text: str) -> list:
+    """A shot breakdown's text into shots, by code: [{id, beat, beat_time, time, vo, text, refs}]. The narration
+    is the beat's VO line verbatim (quotes removed; "no narration" is silence) and rides on every shot of its
+    beat; `refs` are the library ids (#1450) the shot names."""
+    text = re.sub(r"^Page \d+ of \d+\s*$", "", text, flags=re.M)
+    text = re.split(r"^NOTES AND ASSUMPTIONS", text, flags=re.M)[0]
+    heads = list(_SHOT_BEAT.finditer(text))
+    out = []
+    for i, h in enumerate(heads):
+        body = text[h.end():heads[i + 1].start() if i + 1 < len(heads) else len(text)]
+        vo = re.sub(r"\s+", " ", h.group(4)).strip()
+        vo = "" if re.fullmatch(r"no narration\.?", vo, re.I) else vo.strip('"“” ')
+        for m in _SHOT.finditer(body):
+            if m.group(1) != h.group(1):
+                continue
+            desc = re.sub(r"\s+", " ", m.group(5)).strip()
+            out.append({"id": f"{m.group(1)}.{m.group(2)}", "beat": int(h.group(1)),
+                        "beat_time": f"{h.group(2)}-{h.group(3)}", "time": f"{m.group(3)}-{m.group(4)}", "vo": vo,
+                        "text": desc, "refs": [int(r) for r in re.findall(r"#(\d{3,6})", desc)]})
+    return out
+
+
+def _cast_in_beat(beat: dict, people: list) -> list:
+    """The locked CAST characters a beat shows, by the asset tags the script put on it (at most two). A tag is
+    exact where a name is not: one film can hold Alia at seven and Alia grown, each with her own sheet."""
+    tags = set(beat.get("assets") or [])
+    return [p for p in people if p.get("cast") and p.get("tag") and p["tag"] in tags][:2]
+
+
+def _cast_prefix(cast: list, place: bool) -> str:
+    """Several locked sheets in one frame: say which attached image is which character, in order."""
+    which = "; ".join(f"attached image {i + 1} is the sheet for {p['name']}"
+                      + (f" ({p['look']})" if p.get("look") else "") for i, p in enumerate(cast))
+    return ("The first attached images are locked CHARACTER REFERENCE SHEETS for this film's cast, generated for "
+            f"this production: {which}. The same performers play these characters in every frame: reproduce each "
+            "face, bone structure, hair, build and wardrobe exactly as their sheet shows. Do NOT cast different-"
+            "looking people and do NOT generalise the faces. "
+            + ("The remaining attached photographs show the real place: use them ONLY for its architecture, "
+               "materials and setting. " if place else "")
+            + "Change only the setting, the light, the action and the camera. ")
+
+
 def vo_native_language(s: dict) -> str:
     """The language the narration is recorded in when it is NOT English, else "". From the job's own override
     (`vo_language`) first, then the brief. English in any form (British English, English VO) means no adaptation."""
@@ -321,7 +369,28 @@ class Job:
         return int(self.s.get("images", 0))
 
     def image_cap(self) -> int:
-        return int((profile.get(self.co["id"]) or {}).get("creative_image_cap") or IMAGE_CAP)
+        return int(self.s.get("image_cap") or (profile.get(self.co["id"]) or {}).get("creative_image_cap")
+                   or IMAGE_CAP)
+
+    def _ref_paths(self, nums) -> list:
+        """The reference photographs a beat names. A small number is the location stage's own photograph
+        (1-based); a larger one is a LIBRARY DOCUMENT id, used when it is an image filed on this job's deal.
+        DSO, 3 Nov 2026: the script named the client's photographs by library id (#1423 to #1459), only the
+        location index was read, and every one was silently dropped, so the treatment (doc 1468) was drawn
+        without a single client photograph of the real place."""
+        refs = ((self.s.get("location") or {}).get("pick") or {}).get("refs") or []
+        out = []
+        for i in nums or []:
+            if not isinstance(i, int) or i <= 0:
+                continue
+            if i <= len(refs):
+                out.append(refs[i - 1])
+                continue
+            d = documents.get(i, self.co["id"])
+            if (d and d.get("deal_id") == self.s.get("deal_id") and str(d.get("mime") or "").startswith("image/")
+                    and d.get("path") and os.path.exists(d["path"])):
+                out.append(d["path"])
+        return out
 
     # ---------------------------------------------------------------- 1 brief
     def stage_brief(self):
@@ -592,6 +661,101 @@ class Job:
         self.save()
         self.log(f"adapt: {len(spoken)} lines into {lang}")
 
+    # ---------------------------------------------------------------- 4c a locked shot list
+    def stage_shots(self):
+        """A SHOT LIST IS THE SCRIPT (owner, 4 Nov 2026, DSO: "about 3 images per VO line ... a very, very long
+        deck, which is exactly what I want"). When the team has already broken the locked script into shots
+        (`shot_doc`, a library PDF on the deal), CODE reads it: every shot becomes one frame and one deck page,
+        its timecode, its beat's narration and its reference ids taken exactly as written. The model only turns
+        each shot's description into a frame prompt and names the cast in it; it cannot add, drop or move a
+        shot or touch a word of the narration."""
+        d = documents.get(int(self.s["shot_doc"]), self.co["id"])
+        if not d or d.get("deal_id") != self.s.get("deal_id"):
+            raise RuntimeError(f"shot list #{self.s['shot_doc']} is not a document on this deal")
+        from pypdf import PdfReader
+        shots = parse_shot_list("\n".join(p.extract_text() or "" for p in PdfReader(d["path"]).pages))
+        if not shots:
+            raise RuntimeError("no shots could be read from the shot list")
+        c = self.s["concept"]
+        tags = {a["tag"]: a.get("descriptor", "") for a in c.get("assets") or [] if a.get("tag")}
+        ask = ("You are the DIRECTOR OF PHOTOGRAPHY turning a locked shot list into style frames. For EVERY shot, in "
+               'order, JSON: {"shots": [{"id": "1.1", "frame_prompt": "one style frame: subject, action, setting, '
+               'time of day, light, lens, camera position, composition, under 110 words; describe the shot exactly '
+               'as written, adding nothing it does not say", "caption": "12-20 words, what we see", "assets": '
+               '["the @tags of every asset this shot shows, from the list only"], "on_screen_text": "only words the '
+               'shot itself says appear on screen, copied exactly, else empty", "cover": <true on ONE shot only>}]}. '
+               "A grown or older character is a different tag from the child or present-day one. No legible text, "
+               "logos, numbers or interface panels inside any frame. No em dashes.")
+        user = (f"ASSETS:\n{json.dumps(tags, ensure_ascii=False)}\n\nLOOK:\n{json.dumps(c.get('look'), ensure_ascii=False)}"
+                f"\n\nSHOT LIST:\n" + "\n".join(f"{s['id']} ({s['time']}): {s['text']}" for s in shots))
+        out = provider.think_json(ask, user, fast=False, model=MODEL, max_tokens=32000, purpose="creative-shots",
+                                  company=self.s["company"])
+        got = {str(x.get("id")): x for x in (out.get("shots") or [])}
+        missing = [s["id"] for s in shots if s["id"] not in got]
+        if missing:
+            raise RuntimeError(f"the frame writer skipped shots {', '.join(missing)}")
+        beats, vo_beats = [], []
+        for i, s in enumerate(shots):
+            g = _clean_text(got[s["id"]])
+            ost = str(g.get("on_screen_text") or "").strip()
+            if ost and ost.lower() not in s["text"].lower():    # on-screen words come from the shot list only
+                ost = ""
+            a = [t for t in (g.get("assets") or []) if t in tags]
+            b = {"n": i + 1, "shot": s["id"], "time": s["time"], "voiceover": s["vo"], "on_screen_text": ost,
+                 "caption": g.get("caption") or "", "frame_prompt": g.get("frame_prompt") or s["text"],
+                 "refs": s["refs"], "assets": a, "cover": bool(g.get("cover"))}
+            descs = [tags[t] for t in a if tags[t] and tags[t][:40] not in b["frame_prompt"]]
+            if descs:      # the asset descriptors ride in every frame by code, as in stage_script
+                b["frame_prompt"] += " " + " ".join(descs)
+            beats.append(b)
+            if not vo_beats or vo_beats[-1]["beat"] != s["beat"]:
+                vo_beats.append({"beat": s["beat"], "time": s["beat_time"], "line": s["vo"]})
+        if sum(1 for b in beats if b["cover"]) != 1:
+            for b in beats:
+                b["cover"] = False
+            beats[len(beats) * 2 // 3]["cover"] = True
+        why = _timing_problem(beats, int(c.get("duration_s") or 60))
+        if why:
+            raise RuntimeError(f"the shot list's timings do not chain: {why}")
+        self.s["script"] = {"beats": beats, "vo_beats": vo_beats, "tiles": None, "shot_list": d["filename"],
+                            "changed_frames": [b["n"] for b in beats]}
+        self.log(f"shots: {len(beats)} shots across {len(vo_beats)} beats from {d['filename']}")
+
+    # ---------------------------------------------------------------- 4d locked cast sheets
+    def stage_cast(self):
+        """ONE FACE PER CHARACTER ACROSS A LONG DECK. With thirty frames the same character drifts to a new actor
+        without a locked sheet. Each @char_ asset gets one character reference sheet before any frame is drawn;
+        a later age of the same character (@char_alia_grown after @char_alia_child) is drawn FROM the earlier
+        sheet, so the grown woman is recognisably the child. Sheets already on the job are kept."""
+        people = self.s.setdefault("people_refs", [])
+        have = {p.get("tag") for p in people}
+        sheets: dict = {p["tag"].split("_")[1]: p["refs"][0] for p in people if p.get("tag") and p.get("refs")}
+        n = 0
+        for a in self.s["concept"].get("assets") or []:
+            tag = str(a.get("tag") or "")
+            if not tag.startswith("@char_") or tag in have:
+                continue
+            parts = tag[6:].split("_")
+            base, age = parts[0], " ".join(parts[1:])
+            name = base.title() + (f" ({age})" if age else "")
+            prompt = ("CHARACTER REFERENCE SHEET for a film: ONE performer shown three times side by side on a plain "
+                      "light grey studio backdrop, head and shoulders facing camera, three-quarter view, and full "
+                      "length standing. Soft even studio light, photoreal, natural skin texture. "
+                      f"{a.get('descriptor', '')}. NO text, NO labels, NO numbers, NO logos.")
+            prior = sheets.get(base)
+            pre = ("The attached sheet shows this SAME character at another age. Keep the face, bone structure and "
+                   "eyes recognisably the same person, changed only as described. ") if prior else ""
+            data = imagegen.generate(pre + prompt, aspect="16:9", refs=[prior] if prior else None,
+                                     purpose="creative-cast", company=self.s["company"])
+            path = os.path.join(self.dir, f"cast_{tag[6:]}.jpg")
+            if not (data and _save_jpg(data, path, 1920)):
+                raise RuntimeError(f"the cast sheet for {name} could not be made")
+            n += 1
+            people.append({"name": name, "tag": tag, "cast": True, "refs": [path]})
+            sheets.setdefault(base, path)
+        self.s["images"] = self.images_used() + n
+        self.log(f"cast: {n} sheets made, {len(people)} on the job")
+
     # ---------------------------------------------------------------- 5 frames
     def stage_frames(self, only: list | None = None):
         sc, c = self.s["script"], self.s["concept"]
@@ -616,11 +780,15 @@ class Job:
         for b in sc["beats"]:
             if b["n"] not in todo:
                 continue
-            who = _person_in_beat(b, people)
-            if who:
+            cast = _cast_in_beat(b, people)
+            who = None if cast else _person_in_beat(b, people)
+            if cast:     # one locked sheet per character in the shot, then the real place if there is room
+                place = self._ref_paths(b.get("refs"))[:max(0, 3 - len(cast))]
+                rp, pre = [p["refs"][0] for p in cast] + place, _cast_prefix(cast, bool(place))
+            elif who:
                 rp, pre = who["refs"][:3], _likeness_prefix(who)
             else:
-                rp = [refs[i - 1] for i in (b.get("refs") or []) if isinstance(i, int) and 0 < i <= len(refs)][:3]
+                rp = self._ref_paths(b.get("refs"))[:3]
                 pre = use_ref if rp else ""
             for v in "ab":
                 jobs.append((f"b{b['n']}_{v}", b["frame_prompt"] + look + bans, rp, "16:9", pre))
@@ -635,7 +803,7 @@ class Job:
             pre_t = (TILE_CINEMATIC if cinematic else TILE_SELFIE)
             items = ((sc.get("tiles") or {}).get("items") or [])[:int(self.s.get("tile_cap") or 8)]
             for i, t in enumerate(items):
-                rt = [refs[k - 1] for k in (t.get("refs") or []) if isinstance(k, int) and 0 < k <= len(refs)][:3]
+                rt = self._ref_paths(t.get("refs"))[:3]
                 jobs.append((f"t{i + 1}", pre_t + f"{t['prompt']}." + (look if cinematic else "") + bans,
                              rt, "9:16", use_ref if rt else ""))
         if len(jobs) > self.image_cap():     # the cap is per generation pass (a revision regenerates only a few)
@@ -936,25 +1104,39 @@ class Job:
         for b in beats:
             d.beat(c.get("title"), b["n"], len(beats), b["time"], b.get("on_screen_text") or "",
                    b.get("caption") or "", pick(b["n"]), "Storyboard", vo=b.get("voiceover") or "",
-                   vo_native=b.get("voiceover_native") or "")
-        d.sheet(f"{n:02d} · The film at a glance", f"{c.get('title')}: {int(c.get('duration_s') or 60)} seconds",
-                [{"img": pick(b["n"]), "time": b["time"], "text": b.get("on_screen_text") or ""} for b in beats],
-                "Storyboard", cp.get("sheet_note") or "Style frames show the look and the flow; faces are illustrations.")
-        n += 1
+                   vo_native=b.get("voiceover_native") or "",
+                   label=f"Shot {b['shot']}" if b.get("shot") else "")
+        cells = [{"img": pick(b["n"]), "time": (f"{b['shot']} · " if b.get("shot") else "") + b["time"],
+                  "text": b.get("on_screen_text") or ""} for b in beats]
+        sheets = [cells[i:i + 12] for i in range(0, len(cells), 12)]     # a long shot list runs over several
+        for si, chunk in enumerate(sheets):
+            more = f" ({si + 1} of {len(sheets)})" if len(sheets) > 1 else ""
+            d.sheet(f"{n:02d} · The film at a glance{more}",
+                    f"{c.get('title')}: {int(c.get('duration_s') or 60)} seconds", chunk, "Storyboard",
+                    cp.get("sheet_note") or "Style frames show the look and the flow; faces are illustrations.")
+            n += 1
+        # a shot list repeats each narration line on its shots; the voice over page reads it once per beat
+        vrows = sc.get("vo_beats") or [{"time": b["time"], "line": b.get("voiceover") or "",
+                                        "native": b.get("voiceover_native") or ""} for b in beats]
         spoken = [b for b in beats if (b.get("voiceover") or "").strip()]
         if spoken:      # the narration end to end, only when the film actually has one
-            first, last = spoken[0]["n"], spoken[-1]["n"]
-            where = (f"Heard over beat {first}" if first == last else f"Heard over beats {first} to {last}")
-            sub = where + (". The remaining beats play on picture and sound alone."
-                           if len(spoken) < len(beats) else ".")
+            if sc.get("vo_beats"):
+                first, last = spoken[0]["shot"], spoken[-1]["shot"]
+                where = f"Heard over shots {first} to {last}"
+                sub = where + (". The rest play on picture and sound alone."
+                               if any(not r["line"] for r in vrows) else ".")
+            else:
+                first, last = spoken[0]["n"], spoken[-1]["n"]
+                where = (f"Heard over beat {first}" if first == last else f"Heard over beats {first} to {last}")
+                sub = where + (". The remaining beats play on picture and sound alone."
+                               if len(spoken) < len(beats) else ".")
             vlang = sc.get("vo_language") if any(b.get("voiceover_native") for b in beats) else ""
             if vlang:     # code states which line is recorded and which is the subtitle, never the writer
                 sub = (f"Recorded in {vlang}, with English subtitles. The {vlang} adaptation is a draft for your "
                        "review. " + where + ".")
             d.voscript(f"{n:02d} · The voice over", cp["voscript"].get("heading") or "The words you hear",
                        sub if vlang else (cp["voscript"].get("sub") or sub),
-                       [{"time": b["time"], "line": b.get("voiceover") or "", "native": b.get("voiceover_native") or ""}
-                        for b in beats], "The voice over",
+                       vrows, "The voice over",
                        cp["voscript"].get("note") or "Read unhurried, one voice, over the picture.")
             n += 1
         cap_t = int(self.s.get("tile_cap") or 8)
@@ -1159,7 +1341,12 @@ def _run(job: Job, task: dict | None, dry: bool = False, start_at: str = "brief"
         elif st == "concept":
             job.stage_concept()
         elif st == "script":
-            job.stage_script()
+            if job.s.get("shot_doc"):      # a locked shot list is the script; its cast is locked before frames
+                job.stage_shots()
+            else:
+                job.stage_script()
+            if job.s.get("cast_lock"):
+                job.stage_cast()
         elif st == "adapt":
             job.stage_adapt()
         elif st == "frames":
@@ -1282,6 +1469,40 @@ def start(company_slug: str, deal_id: int, *, direction: str = "", said: str = "
     else:
         run_task(jid, (task or {}).get("id"), dry)
     return {"job": jid, "task_id": (task or {}).get("id"), "dir": job.dir}
+
+
+def start_shot_deck(base_job: str, shot_doc: int, *, said: str = "", image_cap: int = 90,
+                    background: bool = True) -> dict:
+    """A SHOT-BY-SHOT DECK of a film already in a treatment: a page per shot of a locked shot list (`shot_doc`,
+    a PDF on the deal), with the base job's concept, look, cast descriptors and location kept, cast sheets
+    locked first, and the client's own photographs as references. A new review card; the deck files as the
+    next version on the deal. No quotation, no price page."""
+    base = Job(base_job)
+    if not base.s.get("concept"):
+        raise ValueError(f"no finished treatment at {base_job}")
+    co = base.co
+    deal_id = int(base.s["deal_id"])
+    jid = f"{deal_id}-{datetime.now(timezone.utc):%Y%m%d%H%M}-{secrets.token_hex(2)}-shots"
+    job = Job(jid)
+    job.s.update({k: base.s.get(k) for k in ("company", "deal_id", "customer", "brief", "facts", "location",
+                                             "concept", "letter", "words")})
+    job.s.update({"said": said, "shot_doc": int(shot_doc), "cast_lock": True, "image_cap": int(image_cap),
+                  "skip_quote": True, "omit_investment": True, "copy_from": base_job,
+                  "next_version": _next_version(base.s["customer"], None, deal_id)})
+    job.save()
+    skill = store.get_skill_by_key(co["id"], "sales-proposal") or store.get_skill_by_key(co["id"], "sales-quotation")
+    req = {"kind": "creative_proposal", "job": jid, "customer": base.s["customer"], "deal_id": deal_id,
+           "brief": f"Shot-by-shot deck for {base.s['customer']} from shot list #{shot_doc}", "direction": said}
+    task = db.execute("insert into tasks (company_id, skill_id, kind, request, draft, status, title, deal_id) "
+                      "values (%s,%s,'content',%s,%s,'drafting',%s,%s) returning *",
+                      (co["id"], skill["id"], Json(req),
+                       "Building the shot-by-shot deck: cast sheets, a frame per shot, copy and layout. The card "
+                       "returns to your Inbox when it is ready.", f"Shot-by-shot deck: {base.s['customer']}", deal_id))
+    if background:
+        threading.Thread(target=run_task, args=(jid, task["id"], False, "script"), daemon=True).start()
+    else:
+        run_task(jid, task["id"], False, "script")
+    return {"job": jid, "task_id": task["id"], "dir": job.dir}
 
 
 def run_task(jid: str, task_id: int | None, dry: bool = False, start_at: str | None = None) -> None:

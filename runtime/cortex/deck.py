@@ -1356,7 +1356,7 @@ class CreativeDeck(_Deck):
             f'<p style="margin-top:16px;font-size:17px;color:#DADAE0">{_esc(line)}</p>'
             f'<div class="hstats">{st}</div></div>{self._foot(section or kicker)}</div>')
 
-    def beat(self, film_label, n, total, time, text, cap, image, section="", vo="", vo_native=""):
+    def beat(self, film_label, n, total, time, text, cap, image, section="", vo="", vo_native="", label=""):
         """`text` is the ON-SCREEN line (typography added in post); `vo` is the NARRATION heard over the beat.
         Two different things, never shown in the same place.
 
@@ -1380,7 +1380,7 @@ class CreativeDeck(_Deck):
             body = (f'<div class="ost">{_esc(text)}</div>' if text
                     else '<div class="ost none">PICTURE ONLY, NO TEXT</div>')
         self.pages.append(
-            f'<div class="pg">{img}<div class="fshade"></div><div class="bk">{_esc(film_label)} · Beat {n} of {total}'
+            f'<div class="pg">{img}<div class="fshade"></div><div class="bk">{_esc(film_label)} · {_esc(label or f"Beat {n} of {total}")}'
             f'<span>{_esc(time)}</span></div>{body}<div class="obar"></div><div class="cap">{_esc(cap)}</div>'
             f'{self._foot(section)}</div>')
 
