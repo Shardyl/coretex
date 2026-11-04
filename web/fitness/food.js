@@ -265,7 +265,8 @@ function renderTodayInner(){
           return `<div style="flex:0 0 auto;display:grid;grid-template-columns:auto auto auto;gap:6px 12px;text-align:right;white-space:nowrap">
             <div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiUp(h.steps,KPI.steps[0],KPI.steps[1],kpiPace(foodDay))}">${h.steps!=null?fmtN(h.steps):'—'}</div><div class="fd-sub" style="font-size:10px">Steps</div></div>
             <div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${bp?kpiUp(bp.move+bp.work,KPI.active[0],KPI.active[1],kpiPace(foodDay)):''}">${bp?fmtN(bp.move+bp.work):'—'}</div><div class="fd-sub" style="font-size:10px">Active kcal</div></div>
-            ${gLast?`<div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiGlucose(Math.round(gLast.mmol*18.0182),gLast.at)}">${gShow(gLast.mmol)}<span style="font-size:13px;color:var(--ink3)"> ${TREND_ARROW[gLast.trend]||''}</span></div><div class="fd-sub" style="font-size:10px">Glucose ${foodDay===localDay(new Date())?Math.max(0,Math.round((Date.now()-new Date(gLast.at))/60000))+'m':tOf(gLast.at)}</div></div>`:''}
+            ${gLast?`<div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiGlucose(Math.round(gLast.mmol*18.0182),gLast.at)}">${gShow(gLast.mmol)}<span style="font-size:13px;color:var(--ink3)"> ${TREND_ARROW[gLast.trend]||''}</span></div><div class="fd-sub" style="font-size:10px">Glucose ${foodDay===localDay(new Date())?Math.max(0,Math.round((Date.now()-new Date(gLast.at))/60000))+'m':tOf(gLast.at)}</div></div>`:(()=>{const w=weekBalance(foodDay);if(!w)return '';
+              return `<div><div style="font-size:17px;font-weight:800;line-height:1.1;color:${w.col}">${w.bal>0?'+':w.bal<0?'-':''}${fmtN(Math.abs(w.bal))}</div><div class="fd-sub" style="font-size:10px">${w.label}</div></div>`;})()}
             ${(()=>{const sl=nightFor(foodDay), hr=nightHR(sl);
               return `<div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiSleepScore(sl&&sl.score)}">${sl&&sl.score!=null?fmtN(sl.score):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep score</div>${sl&&sl.awake!=null&&sl.awake>=5?`<div style="font-size:9px;color:${sl.awake>=45?'var(--amber)':'var(--ink3)'};font-weight:700">${durHM(sl.awake)} awake</div>`:''}</div>
               <div onclick="foodGoRecovery()" style="cursor:pointer"><div style="font-size:17px;font-weight:800;line-height:1.1;color:${kpiSleepHR(hr)}">${hr!=null?fmtN(hr):'—'}</div><div class="fd-sub" style="font-size:10px">Sleep HR</div></div>
@@ -278,16 +279,12 @@ function renderTodayInner(){
         <div class="fd-cell"><div class="v">${burned!=null?fmtN(burned):'—'}</div><div class="l">${isFuture?'Planned day':'Burned'+(isToday&&burned!=null?' so far':'')}</div></div>
       </div>
       ${(()=>{const bp=burnedParts(foodDay);return bp?`<div style="margin-top:8px;font-size:11px;color:var(--ink3);text-align:right">Burned: BMR ${fmtN(bp.bmr)} &middot; Movement ${fmtN(bp.move)} &middot; Workouts ${fmtN(bp.work)}</div>`:'';})()}
-      ${(()=>{   // Full macros at the same size (owner, 4 Nov 2026): protein against its target, carbs and fat as grams and share of the day's kcal
-        const kc=(+t.protein||0)*4+(+t.carbs||0)*4+(+t.fat||0)*9, sh=g=>kc>0?Math.round(g/kc*100):0;
-        const cell=(name,g,sub,pct,col)=>`<div><div style="font-size:11px;font-weight:700;color:var(--ink3)">${name}</div>
-          <div style="font-size:20px;font-weight:800;line-height:1.15">${fmtN(g)}<span style="font-size:12px;font-weight:700;color:var(--ink3)"> g</span></div>
-          <div style="font-size:11px;color:var(--ink3)">${sub}</div>
-          <div class="fd-bar" style="margin-top:4px"><div style="width:${Math.min(100,pct)}%;background:${col}"></div></div></div>`;
-        return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:14px">
-          ${cell('Protein',t.protein,'of '+fmtN(ptgt)+' g &middot; '+sh((+t.protein||0)*4)+'%',pPct,kpiProtein(t.protein,ptgt))}
-          ${cell('Carbs',t.carbs,sh((+t.carbs||0)*4)+'% of kcal',sh((+t.carbs||0)*4),'var(--amber)')}
-          ${cell('Fat',t.fat,sh((+t.fat||0)*9)+'% of kcal',sh((+t.fat||0)*9),'var(--purple)')}</div>`;})()}
+      ${(()=>{   // Protein is the one that counts (owner, 4 Nov 2026): big, with its bar; carbs and fat small on the right, reference only
+        return `<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:14px;gap:10px">
+          <div><div style="font-size:11px;font-weight:700;color:var(--ink3)">Protein</div>
+            <div style="font-size:24px;font-weight:800;line-height:1.1">${fmtN(t.protein)}<span style="font-size:13px;font-weight:700;color:var(--ink3)"> / ${fmtN(ptgt)} g</span></div></div>
+          <div style="text-align:right;font-size:12px;color:var(--ink3);line-height:1.5">Carbs <b style="color:var(--ink2)">${fmtN(t.carbs)} g</b><br>Fat <b style="color:var(--ink2)">${fmtN(t.fat)} g</b></div></div>
+        <div class="fd-bar" style="height:12px;border-radius:6px"><div style="width:${pPct}%;background:${kpiProtein(t.protein,ptgt)};border-radius:6px"></div></div>`;})()}
       ${balance}
       ${projectToday()}
     </div>
@@ -1573,6 +1570,24 @@ function baseWeight(){
 function fullDayBurn(day){
   const p=burnedParts(day), bmr=+foodTargets.bmr||1873;
   return p?bmr+p.move+p.work:null;
+}
+// Week so far, eaten minus burned (owner, 4 Nov 2026), in the slot the glucose reading used. Full days only: Monday up to
+// the day before the one shown (today is never complete); on a Monday it shows last week. Colour against the deficit
+// the mission needs: green at or past that pace, amber in deficit but short of it, red in surplus. The pace is computed
+// from the goal (kg to go x 7,700 / days left), else 500 a day with no mission set.
+function weekBalance(day){
+  const today=localDay(new Date()), end=day>=today?shiftDay(today,-1):day;
+  const dow=(new Date(day+'T12:00:00').getDay()+6)%7;
+  let from=shiftDay(day,-dow), label='Week kcal';
+  if(end<from){from=shiftDay(from,-7);label='Last wk kcal';}
+  let bal=0,n=0;
+  for(let d=from;d<=end;d=shiftDay(d,1)){const e=entriesFor(d),b=fullDayBurn(d);if(!e.length||b==null)continue;bal+=totals(e).kcal-b;n++;}
+  if(!n)return null;
+  const m=foodTargets.mission, cur=baseWeight();
+  const left=m&&m.goalDate?missionDays(today,m.goalDate):0;
+  const need=m&&m.goalKg&&cur!=null&&left>0?Math.max(0,(cur-m.goalKg)*KCAL_PER_KG/left):500;
+  bal=Math.round(bal);
+  return {bal,n,label,col:bal<=-need*n?'var(--teal)':bal<0?'var(--amber)':'var(--red)'};
 }
 function projLine(label,kcalDiffPerDay){
   const b=baseWeight();if(b==null)return '';
