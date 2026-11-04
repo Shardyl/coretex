@@ -263,6 +263,21 @@ The one-off tidy that set this up is logged move by move in setting `drive_tidy_
 (file id, from, to, why) so any of it can be reversed. Nothing was deleted. Two emptied folders were left
 for the owner to delete: `Orion Global - FZCO` and `Honor International FZCO`.
 
+## Shot-by-shot decks from a locked shot list (owner, 4 Nov 2026)
+
+"About 3 images per VO line ... a very, very long deck." `creative.start_shot_deck(base_job, shot_doc)` builds a page per
+shot of a shot breakdown PDF filed on the deal: `parse_shot_list` reads it by CODE (shot ids, timecodes, each beat's VO
+verbatim on all its shots, `#id` references), Fable only writes the frame prompt and names the cast per shot
+(`stage_shots`); `stage_cast` makes a locked character sheet per `@char_` asset first, a later age drawn from the earlier
+sheet; frames pass up to two sheets plus the real place (`_cast_in_beat`, matched by asset TAG, not name). The contact
+sheet paginates by 12, the voice over page reads once per beat (`vo_beats`). No quotation, no price page; files as the
+next deck version on the deal. Job-level `image_cap` overrides the profile. Not yet a Talk tool.
+**Library ids are real references now**: `Job._ref_paths` resolves a beat ref above the location count as a library
+image on the job's deal. Before this, DSO treatment 1468 (3 Nov) named #1423-#1459 and drew every frame without a client
+photograph. First run: DSO deal 148, breakdown #1463, 31 shots, 44 pages, v7 = doc 1470 on card 1628 (v6 = 1469, two
+frames redone and stale "sign the quotation" copy removed: the copy writer does not know a deal is already signed).
+Regress case: "a locked shot list becomes one frame per shot...".
+
 ## A quotation card shows the PDF only (owner, 4 Nov 2026)
 
 The cockpit quotation card used to lead with "Open spreadsheet". Now `deliver_quotation` puts `xlsx_file` on the card
