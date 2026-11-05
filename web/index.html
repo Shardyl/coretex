@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v93';
+const APP_BUILD = 'cortex-v94';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -1322,8 +1322,17 @@ function valueHeadline(currencies){
   return e.map(([c,v])=>`${fmtAmt(v)} <span style="font-size:12px;color:var(--mut)">${esc(c)}</span>`).join('<br>');
 }
 function byCompany(rows){ const g={}; rows.forEach(r=>{ const k=r.company||'Other'; (g[k]=g[k]||[]).push(r); }); return g; }
+// THE NEXT MOVE, at a glance (owner, 5 Nov 2026): when the next chase, to-do or reminder is due on this deal
+function nextMoveTag(x){
+  const m=x.next_move; if(!m) return '';
+  const d=new Date(m.at), today=new Date(); today.setHours(0,0,0,0);
+  const days=Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate())-today)/864e5);
+  const when=days===0?'today':days===1?'tomorrow':days===-1?'yesterday':d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+  const col=m.overdue?'#F43F5E':(days<=1?'#F59E0B':'var(--mut)');
+  return `<div class="csub" style="margin-top:3px;color:${col}" title="${esc(m.label)}">${ic(m.kind==='chase'?'mail':'clock',12)} ${esc(m.label.split(':')[0])}${m.overdue?' overdue':''} · ${esc(when)}${m.label.includes(':')?' · '+esc(m.label.split(':').slice(1).join(':').trim().slice(0,48)):''}</div>`;
+}
 function dealCard(x){
-  return `<div class="card prow" style="cursor:pointer" onclick="openProject(${x.id})">${starBtn(x)}<div style="flex:1;min-width:0"><div class="cname">${esc(x.title||'Untitled')}</div><div class="csub">${esc(x.company||'')}</div><div class="dnum">#${x.id}</div></div><div style="text-align:right"><div class="pval">${x.value?dmoney(x.value)+' <span style="font-size:11px;color:var(--mut)">'+esc(x.currency||'AED')+'</span>':'<span style="color:var(--mut)">no value yet</span>'}</div>${stageChip(x.stage)}</div></div>`;
+  return `<div class="card prow" style="cursor:pointer" onclick="openProject(${x.id})">${starBtn(x)}<div style="flex:1;min-width:0"><div class="cname">${esc(x.title||'Untitled')}</div><div class="csub">${esc(x.company||'')}</div><div class="dnum">#${x.id}</div>${nextMoveTag(x)}</div><div style="text-align:right"><div class="pval">${x.value?dmoney(x.value)+' <span style="font-size:11px;color:var(--mut)">'+esc(x.currency||'AED')+'</span>':'<span style="color:var(--mut)">no value yet</span>'}</div>${stageChip(x.stage)}</div></div>`;
 }
 async function renderProjects(b,co){
   let d; try{ d=await api('/api/crm/projects?company='+encodeURIComponent(co||'all')); }catch(e){ d={projects:[],groups:{},total_value:0,count:0}; }

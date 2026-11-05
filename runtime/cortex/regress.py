@@ -1182,6 +1182,20 @@ def _cases():
             live = bool((t.get("deal_link") or {}).get("id"))
         return (live and "${dealLine(t,isEmail)}" in html and "No opportunity linked" in html
                 and '"deal_link"' in inspect.getsource(api._enrich_action_card))
+    def _next_move_tag():
+        from . import api
+        import pathlib
+        html = (pathlib.Path(__file__).resolve().parents[2] / "web" / "index.html").read_text(encoding="utf-8")
+        rows = [dict(r) for r in db.query("select id from crm_projects where automation='auto' and next_followup is not null "
+                                          "order by id desc limit 3")]
+        api._next_moves(rows)
+        ok_live = all((r.get("next_move") or {}).get("at") for r in rows)
+        return (ok_live and "${nextMoveTag(x)}" in html
+                and "_next_moves(rows)" in inspect.getsource(api.crm_opportunities)
+                and "_next_moves(rows)" in inspect.getsource(api.crm_projects))
+    case("every opportunity and project row shows its next chase, to-do or reminder and when",
+         "owner, 5 Nov", _next_move_tag)
+
     def _quote_chase_every_two_days():
         from . import crm, gate, engine
         cad = crm.CLOSING_CADENCE

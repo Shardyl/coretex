@@ -278,6 +278,13 @@ photograph. First run: DSO deal 148, breakdown #1463, 31 shots, 44 pages, v7 = d
 frames redone and stale "sign the quotation" copy removed: the copy writer does not know a deal is already signed).
 Regress case: "a locked shot list becomes one frame per shot...".
 
+## The next move on every deal row (owner, 5 Nov 2026)
+
+Opportunities and Projects rows carry `next_move` (`api._next_moves`): the earliest of the automatic chase
+(`next_followup`, auto deals only), an open next step with a due date ("To do" ours, "Waiting on them" theirs) and a
+pending deal reminder. The cockpit's `nextMoveTag` shows it under the deal number: red when overdue, amber today or
+tomorrow. Cockpit build cortex-v94.
+
 ## After a quote: next working day, then every 2 (owner, 5 Nov 2026)
 
 XPLOR #190 got proposal + quotation SEN-2026-0060 on 4 Nov and its next follow-up read 12 Nov. Two faults:

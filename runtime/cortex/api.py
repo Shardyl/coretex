@@ -1915,6 +1915,41 @@ def crm_contact(email: str | None = None, id: int | None = None, u: dict = Depen
     return r or {}
 
 
+def _next_moves(rows: list[dict]) -> None:
+    """THE NEXT MOVE ON EACH DEAL, at a glance (owner, 5 Nov 2026: "a little tag that tells us when the next follow-up
+    or task is due"). The earliest of: the automatic chase (`next_followup`, auto only), an open next step (ours = To do,
+    theirs = waiting on them) and a pending reminder. Code reads the dates; nothing is estimated."""
+    ids = [int(r["id"]) for r in rows if r.get("id")]
+    if not ids:
+        return
+    cand: dict[int, list] = {i: [] for i in ids}
+    for r in db.query("select id, next_followup, automation from crm_projects where id = any(%s)", (ids,)):
+        if r.get("automation") == "auto" and r.get("next_followup"):
+            cand[r["id"]].append((r["next_followup"], "chase", "Next chase"))
+    try:
+        for r in db.query("select deal_id, what, whose, due_at from next_steps where deal_id = any(%s) and status='open' "
+                          "and due_at is not null", (ids,)):
+            cand[r["deal_id"]].append((r["due_at"], "us" if r.get("whose") == "us" else "them",
+                                       ("To do: " if r.get("whose") == "us" else "Waiting on them: ") + (r.get("what") or "")[:70]))
+    except Exception:  # noqa: BLE001
+        pass
+    for r in db.query("select target_id, title, due_at from reminders where target_type='deal' and status='pending' "
+                      "and target_id = any(%s)", ([str(i) for i in ids],)):
+        try:
+            cand[int(r["target_id"])].append((r["due_at"], "reminder", "Reminder: " + (r.get("title") or "")[:70]))
+        except Exception:  # noqa: BLE001
+            pass
+    from datetime import timezone as _tz
+    now = datetime.now(_tz.utc)
+    for r in rows:
+        c = [x for x in cand.get(int(r["id"]), []) if x[0]]
+        if not c:
+            r["next_move"] = None
+            continue
+        when, kind, label = min(c, key=lambda x: x[0])
+        r["next_move"] = {"at": when.isoformat(), "kind": kind, "label": label, "overdue": when < now}
+
+
 @app.get("/api/crm/projects")
 def crm_projects(company: str | None = None, u: dict = Depends(current_user)) -> dict:
     company = _scoped_companies(u, company)
@@ -1935,6 +1970,7 @@ def crm_projects(company: str | None = None, u: dict = Depends(current_user)) ->
     op = tuple([crm.OUTSTANDING_STAGES] + list(params)[1:])
     cur = db.query(f"select coalesce(nullif(currency,''),'AED') c, coalesce(sum(value),0) v from crm_projects {w} "
                    "and value is not null group by c", op)
+    _next_moves(rows)
     return {"projects": rows, "groups": {g["stage"]: {"n": g["n"], "value": float(g["v"] or 0)} for g in groups},
             "total_value": float(total["v"] or 0), "count": total["n"],
             "currencies": {r["c"]: float(r["v"] or 0) for r in cur if float(r["v"] or 0) > 0}}
@@ -2319,6 +2355,7 @@ def crm_opportunities(company: str | None = None, u: dict = Depends(current_user
         return db.query("select id, company, title, contact_email, value, currency, stage, owner, starred "
                         f"from crm_projects where {' and '.join(base)} order by value desc nulls last, id", tuple(params))
     rows = run(crm.FORECAST_STAGES)
+    _next_moves(rows)
     dormant = run([crm.DORMANT_STAGE])
     lost = run([crm.LOST_STAGE])
     fparams = [crm.FORECAST_STAGES] + (p if f else [])
