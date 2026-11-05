@@ -487,11 +487,12 @@ def _cases():
         d = _crm.cadence_points(_crm.DEFAULT_CADENCE)
         rv = _crm.cadence_points(__import__("cortex.stages", fromlist=["x"]).REVIVAL_CADENCE)
         # owner, 19 Oct: the push after a quote (2 to 3 working days for two weeks) before the weekly step
-        return (pts[0]["after_days"] == 1 and [p["after_days"] for p in pts[1:5]] == [2, 3, 2, 3]
-                and pts[5]["after_days"] == 5 and pts[-1]["after_days"] == 10
+        # owner, 5 Nov 2026 (supersedes 19 Oct's 2/3 alternation): every 2 working days after the receipt check
+        return (pts[0]["after_days"] == 1 and [p["after_days"] for p in pts[1:8]] == [2] * 7
+                and pts[8]["after_days"] == 5 and pts[-1]["after_days"] == 10
                 and len(pts) >= 30 and _crm.CLOSING_CADENCE.get("working_days")
                 and max(p["after_days"] for p in d) <= 14 and all(p["after_days"] <= 14 for p in rv))
-    case("submitted: receipt check next day, the 2-3 day push, then weekly, then every two weeks",
+    case("submitted: receipt check next day, then every 2 working days, then weekly, then every two weeks",
          "owner, follow-up audit + 19 Oct", _rhythm)
     case("a reply restarts at the weekly step; his own rhythm is never reset", "owner, follow-up audit",
          lambda: "followup_step=1" in inspect.getsource(_crm.enter_closing)
@@ -1421,14 +1422,15 @@ def _cases():
         from . import crm as _c
         gaps = [p["after_days"] for p in _c.cadence_points(_c.CLOSING_CADENCE)][:7]
         tg = [p["after_days"] for p in _c.cadence_points(_c.TENDER_CLOSING_CADENCE)][:3]
-        return (gaps == [1, 2, 3, 2, 3, 5, 5] and tg == [1, 5, 5]
-                and _c.is_formal_tender({"title": "Tender: Video Production Request for Proposal", "history": []})
-                and _c.is_formal_tender({"title": "Al Hamra RAK IN MOTION", "history": [
+        # owner, 5 Nov 2026: only a PORTAL tender (a circular on the deal) is weekly; an emailed RFP is an ordinary quote
+        return (gaps == [1, 2, 2, 2, 2, 2, 2] and tg == [1, 5, 5]
+                and _c.is_formal_tender({"title": "Tender: Video Production RFP", "history": [{"event": "tender"}]})
+                and not _c.is_formal_tender({"title": "Al Hamra RAK IN MOTION", "history": [
                     {"event": "email_out", "text": "sent to kiran: RFP Invitation - RAK IN MOTION"}]})
                 and not _c.is_formal_tender({"title": "Dubai Silicon Oasis - brand film", "history": []})
                 and "restart_after_quote" in inspect.getsource(pipeline.record_quotation_sent)
                 and "their_dates()" in inspect.getsource(_ns.tick))
-    case("after a quote: receipt check, then every 2-3 working days for two weeks (weekly for a formal tender); "
+    case("after a quote: receipt check, then every 2 working days (weekly only for a portal tender); "
          "their date wins", "owner 19 Oct: DSO / Al Hamra 'too slow'", _push_rhythm)
 
     def _tender_job():
