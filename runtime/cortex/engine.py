@@ -3588,6 +3588,33 @@ def _client_agreed_slot(task: dict, req: dict, dt: datetime) -> bool:
         return False
 
 
+_LINK_ASK = re.compile(r"\b(?:meet(?:ing)?\s+link|google\s+meet|meet\s+room|calendar\s+invite|invite|book\w*)\b", re.I)
+_SYS_BRIEF_KEYS = ("system_note", "followup", "next_step", "auto_source", "proposal_card", "creative_set", "commitment")
+
+
+def _owner_set_slot(task: dict, req: dict, dt: datetime) -> bool:
+    """On an email WE compose, the time is ours to set: book it when HIS words on this card (the brief he gave, unless
+    Cortex wrote it, and his corrections) name that clock time or ask for the link / invite. An automatic chase that
+    merely proposes a time is never booked: its brief is Cortex's, not his."""
+    try:
+        notes = " ".join(d["note"] for d in db.query(
+            "select note from decisions where task_id=%s and action='correct' and coalesce(note,'')<>'' order by id desc limit 3",
+            (task.get("id") or 0,)) if d.get("note")) + " " + _CORRECTION_NOW.get()
+        if not any(req.get(k) for k in _SYS_BRIEF_KEYS):
+            notes += " " + str(req.get("brief") or "")
+        low = " ".join(notes.lower().split())
+        if _LINK_ASK.search(low):
+            return True
+        local = dt.astimezone(_GST)
+        h, ap, mm = local.strftime("%-I"), local.strftime("%p").lower(), local.strftime("%M")
+        clock = {local.strftime("%H:%M"), f"{h}:{mm}{ap}", f"{h}:{mm} {ap}"}
+        if local.minute == 0:
+            clock |= {f"{h}{ap}", f"{h} {ap}"}
+        return any(c in low for c in clock)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _owner_said_book(task: dict) -> bool:
     """His words on THIS card (his last corrections, and the one being applied) say book / accept / confirm it."""
     try:
@@ -3627,7 +3654,11 @@ def _maybe_extract_meeting(task: dict, draft: str) -> None:
     email at send). Haiku only reads what the draft states; code stamps and validates the datetime."""
     try:
         req = dict(task.get("request") or {})
-        if task.get("kind") != "email_reply" or (req.get("meeting") or {}).get("event_id") or req.get("meeting_off"):
+        # AN EMAIL WE WRITE BOOKS ITS MEETING TOO (owner, 5 Nov 2026, Shama card 1641): this read email_reply only, so a
+        # Talk-composed email_draft told "include the meeting link" never stamped a slot, nothing was booked, and every
+        # redraft promised "we will send over the Google Meet link shortly".
+        if task.get("kind") not in ("email_reply", "email_draft") or (req.get("meeting") or {}).get("event_id") \
+                or req.get("meeting_off"):
             return
         if not _TIME_HINT.search(draft or ""):
             if req.get("meeting"):      # an earlier version confirmed a slot; this one names no time: unstamp
@@ -3671,7 +3702,8 @@ def _maybe_extract_meeting(task: dict, draft: str) -> None:
         # booking?"). A time WE propose is a question, however the draft words it. A slot is booked only when the
         # client's own message names that day and time (they proposed it, or accepted ours), or the owner said
         # "book it" / "they confirmed" on this card. Otherwise nothing is stamped and nothing is booked.
-        if not _client_agreed_slot(task, req, dt):
+        if not (_owner_set_slot(task, req, dt) if task.get("kind") == "email_draft"
+                else _client_agreed_slot(task, req, dt)):
             return
         # the SAME slot with the SAME contact may already be booked from an earlier card — reuse that
         # event and its Meet link instead of double-booking (Sunwoo got two invites, 2026-08-27)
@@ -6926,6 +6958,18 @@ def _pause_or_reschedule_followups(co: dict, deals: list, sender: str, body: str
 _ACK_ASK = re.compile(r"(confirm|acknowledge)\s+(?:the\s+)?(receipt|your\s+participation|participation|your\s+interest)", re.I)
 
 
+def _answers_newsletter(co: dict, e: dict) -> bool:
+    """True when this email replies to one of our newsletter issues: its In-Reply-To / References carry a Message-Id
+    from the company's newsletter send domain (news.sensa.digital)."""
+    try:
+        from . import newsletter as _nl
+        dom = (_nl.send_domain(co["id"]) or "").lower()
+        refs = f"{e.get('in_reply_to') or ''} {e.get('references') or ''}".lower()
+        return bool(dom) and ("@" + dom) in refs
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, address: str | None,
                         ack_only: bool = False) -> None:
     """A substantive lead/client/finance email sent DIRECTLY to a monitored mailbox -> draft the reply as an
@@ -7062,6 +7106,15 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
             _s = _addressed_person(co, e, address)
             if _s:
                 from_email, mailbox_rt = _s["email"], _s["rt_key"]
+        # A REPLY TO OUR NEWSLETTER IS ANSWERED BY ITS AUTHOR (owner, 5 Nov 2026, card 1648): John DiBartolo answered
+        # the Open Your Eyes issue, which Rashad signs; it reached hello@ and Gino's copy claimed it, so the reply was
+        # drafted as Gino. A header fact: the email answers a message from our newsletter domain. Profile
+        # `newsletter_replies_from` names who answers, else `reply_from`.
+        if not hv and _answers_newsletter(co, e):
+            _p = profile.get(co["id"]) or {}
+            _nf = (_p.get("newsletter_replies_from") or _p.get("reply_from") or "").strip().lower()
+            if _nf and _rt_for_sender(co, _nf):
+                from_email, mailbox_rt = _nf, _rt_for_sender(co, _nf)
         req = {"brief": brief, "inquiry": inq,
                "from_email": from_email, "mailbox_rt": mailbox_rt,
                "gmail_id": e.get("gmail_id") or "",   # this mailbox's copy (attachments are fetched by it)

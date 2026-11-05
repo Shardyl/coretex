@@ -1142,6 +1142,39 @@ def _cases():
                 and "dom not in _FREEMAIL" in inspect.getsource(engine._greeting_mismatch)
                 and "email_send_problem(task)" in src
                 and "engine.email_send_problem(t)" in inspect.getsource(api._enrich_action_card))
+    def _composed_email_books():
+        from . import engine
+        from datetime import datetime as _dt
+        slot = _dt(2026, 11, 6, 15, 0, tzinfo=engine._GST)
+        his = {"brief": "Very short confirmation email to Farheen, Friday at 11:00."}
+        chase = {"brief": "Chase them and propose Friday 3pm.", "followup": True}
+        tok = engine._CORRECTION_NOW.set("Reschedule this for 3PM. On Friday and include the meeting link.")
+        try:
+            moved = engine._owner_set_slot({"id": 0}, his, slot)
+        finally:
+            engine._CORRECTION_NOW.reset(tok)
+        src = inspect.getsource(engine._maybe_extract_meeting)
+        return (moved
+                and engine._owner_set_slot({"id": 0}, his, _dt(2026, 11, 6, 11, 0, tzinfo=engine._GST))
+                and not engine._owner_set_slot({"id": 0}, chase, slot)            # Cortex's own brief books nothing
+                and not engine._owner_set_slot({"id": 0}, {"brief": "Say thanks."}, slot)
+                and '("email_reply", "email_draft")' in src and "_owner_set_slot(task, req, dt)" in src)
+    def _newsletter_reply_from_author():
+        from . import engine, newsletter as nl
+        co = store.get_company(3) or {}
+        dom = nl.send_domain(3) or "news.sensa.digital"
+        john = {"references": f"<20261103113152.760311312748a4d5@{dom}>"}
+        src = inspect.getsource(engine._draft_direct_reply)
+        return (engine._answers_newsletter(co, john)
+                and not engine._answers_newsletter(co, {"references": "<abc@mail.gmail.com>"})
+                and not engine._answers_newsletter(co, {})
+                and "_answers_newsletter(co, e)" in src and "newsletter_replies_from" in src)
+    case("a reply to our newsletter is answered by its author, not whichever mailbox claimed it",
+         "Y23 Films card 1648, 5 Nov", _newsletter_reply_from_author)
+
+    case("an email we compose books its meeting when the owner names the time or asks for the link",
+         "Shama Perfumes card 1641, 5 Nov", _composed_email_books)
+
     case("the name they sign with is theirs, a free-mail domain is not a company, and a card shows why it cannot send",
          "Y23 Films card 1648, 5 Nov", _signed_name_is_theirs)
 

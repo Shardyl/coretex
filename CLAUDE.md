@@ -278,6 +278,23 @@ photograph. First run: DSO deal 148, breakdown #1463, 31 shots, 44 pages, v7 = d
 frames redone and stale "sign the quotation" copy removed: the copy writer does not know a deal is already signed).
 Regress case: "a locked shot list becomes one frame per shot...".
 
+## Newsletter replies are Rashad's (owner, 5 Nov 2026)
+
+Sensa's newsletter Reply-To was hello@ (profile `newsletter_reply_to`, 7 Oct), and the copy in Gino's mailbox claimed
+John DiBartolo's reply to Open Your Eyes, so card 1648 drafted as Gino. Now `newsletter_reply_to` = rashad@sensa.digital,
+and `_draft_direct_reply` routes any email whose References carry our newsletter domain (`_answers_newsletter`) to
+profile `newsletter_replies_from` (Sensa: rashad@), else `reply_from`. High-value routing still outranks it.
+
+## An email we compose books its own meeting (owner, 5 Nov 2026)
+
+Shama card 1641 (Talk-composed `email_draft`): "include the meeting link" and "reschedule to 3PM Friday and include the
+meeting link" each redrafted to "we will send over the Google Meet link shortly", with nothing booked.
+`_maybe_extract_meeting` only read `email_reply`. It now reads `email_draft` too, and on a composed email the slot is
+booked when HIS words on the card (his brief, unless Cortex wrote it, and his corrections) name that clock time or ask
+for a link/invite (`_owner_set_slot`); a reply still needs the client to have agreed the slot (`_client_agreed_slot`).
+Pre-booked attendee-less as before; the guest is invited on approval. Regress case: "an email we compose books its
+meeting...". Still open: a slot already pre-booked is not MOVED when he reschedules it on the card.
+
 ## A card that cannot send says so up front (owner, 5 Nov 2026)
 
 Card 1648 (Y23 Films, John DiBartolo from y23films@gmail.com) looked ready, and Approve silently did nothing: the
