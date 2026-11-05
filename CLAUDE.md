@@ -278,6 +278,16 @@ photograph. First run: DSO deal 148, breakdown #1463, 31 shots, 44 pages, v7 = d
 frames redone and stale "sign the quotation" copy removed: the copy writer does not know a deal is already signed).
 Regress case: "a locked shot list becomes one frame per shot...".
 
+## A card that cannot send says so up front (owner, 5 Nov 2026)
+
+Card 1648 (Y23 Films, John DiBartolo from y23films@gmail.com) looked ready, and Approve silently did nothing: the
+greeting check blocked "Hello John" because the card's name was "Y23 Films" and the CRM has other Johns on gmail.com.
+Now `engine.email_send_problem(task)` is the ONE list of email send refusals (no recipient, empty body, wrong greeting,
+false attachment claim, wrong identity, departed contact); `approve_task` runs it and `api._enrich_action_card` puts its
+answer on the card as `card_problem`, so a card can never look sendable when Approve would refuse it.
+`_greeting_mismatch` also counts the name they SIGN with (`_self_named`: their sign-off and "my name is ...", above any
+quoted email) and no longer treats a free-mail domain as a company. Regress case: "the name they sign with is theirs...".
+
 ## A quotation card shows the PDF only (owner, 4 Nov 2026)
 
 The cockpit quotation card used to lead with "Open spreadsheet". Now `deliver_quotation` puts `xlsx_file` on the card

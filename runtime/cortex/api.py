@@ -502,6 +502,15 @@ def _enrich_action_card(t: dict) -> dict:
         env = engine._email_envelope(t, co)
         if not (env.get("to") or "").strip():     # visible on the card, not a surprise at approval
             t["card_problem"] = "No recipient set — this cannot send. Tell Cortex who it goes to."
+        else:
+            # EVERY APPROVE-GATE REFUSAL IS ON THE CARD (owner, 5 Nov 2026, card 1648): the same function the gate
+            # runs, so the card can never look sendable when Approve would refuse it.
+            try:
+                _why = engine.email_send_problem(t)
+                if _why:
+                    t["card_problem"] = "This cannot send yet: " + _why
+            except Exception:  # noqa: BLE001
+                pass
         inq = (t.get("request") or {}).get("inquiry") or {}
         # THE INVITE IS ON THE CARD (card 1365, 20 Oct 2026): a meeting rode on an email approval unseen. Whatever
         # approving would send to the calendar is shown here, with who it invites and whether the email carries it.

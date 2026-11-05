@@ -1127,6 +1127,24 @@ def _cases():
     case("a step for someone else is done with them, or is a To do; a greeting must match the To line",
          "Dubai Police card 1471, 25 Oct", _step_for_a_person)
 
+    def _signed_name_is_theirs():
+        from . import api, engine
+        msg = ("Hello, my name is John DiBartolo, and I'm a producer here in Brazil. What's the cost per minute?\n\n"
+               "Grateful\n\njdi\n\nJohn DiBartolo\nProducer <https://pro.imdb.com/name/nm1916756>\n\n"
+               "Em ter., 3 de nov. de 2026 08:31, Sensa Productions <news@news.sensa.digital> escreveu:\n> Rashad\n")
+        y23 = {"inquiry": {"name": "Y23 Films", "email": "y23films@gmail.com", "message": msg}}
+        quoted = {"inquiry": {"name": "Y23 Films", "email": "y23films@gmail.com",
+                              "message": "What's the cost?\n\nOn Tue, Sensa wrote:\n> Best regards\n> Rashad Al-Safar"}}
+        src = inspect.getsource(engine.approve_task)
+        return (not engine._greeting_mismatch("Hello John,\n\nThanks for writing.", y23)
+                and bool(engine._greeting_mismatch("Hello Rashad,\n\nThanks.", quoted))   # a quoted name is not theirs
+                and engine._self_named(msg)[:1] == ["John"]
+                and "dom not in _FREEMAIL" in inspect.getsource(engine._greeting_mismatch)
+                and "email_send_problem(task)" in src
+                and "engine.email_send_problem(t)" in inspect.getsource(api._enrich_action_card))
+    case("the name they sign with is theirs, a free-mail domain is not a company, and a card shows why it cannot send",
+         "Y23 Films card 1648, 5 Nov", _signed_name_is_theirs)
+
     def _owner_ask_kept():
         said = ("Yes. This is good. You can confirm that you're avail happy to meet. However, if you could kindly ask if "
                 "it's possible, we could do the call on the following meeting link. And then say, if not, it's okay. "

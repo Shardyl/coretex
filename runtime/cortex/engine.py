@@ -3780,6 +3780,25 @@ _GENERIC_GREET = {"all", "team", "there", "everyone", "both", "sir", "madam", "s
                   "guys", "folks", "again"}
 
 
+_QUOTE_START = re.compile(r"^\s*(>|On .{4,120} wrote:|Em .{4,120} escreveu:|El .{4,120} escribió:|Le .{4,120} a écrit"
+                          r"|Am .{4,120} schrieb|-{2,}\s*Original Message|From:\s)", re.I)
+_MY_NAME = re.compile(r"\b(?:my name is|this is|i am|i'm)\s+([A-Z][a-z]+)", re.I)
+
+
+def _self_named(message: str) -> list[str]:
+    """Names the writer gives THEMSELVES in their own email: a 'my name is ...' and the sign-off lines, read above
+    any quoted earlier message. Never anyone they merely mention mid-text."""
+    own = []
+    for ln in (message or "").splitlines():
+        if _QUOTE_START.match(ln):
+            break
+        own.append(ln)
+    out = [m.group(1) for m in _MY_NAME.finditer(" ".join(own))]
+    tail = [ln.strip() for ln in own if ln.strip()][-6:]
+    out += [ln for ln in tail if re.match(r"^[A-Z][A-Za-z'\-]+(?:\s+[A-Z][A-Za-z'\-]+){0,3}$", ln)]
+    return out
+
+
 def _greeting_mismatch(draft: str, req: dict) -> str:
     """'' unless the email GREETS a known person who is not who it is addressed to (card 651: "Hello Mai" on
     an email to Hussein Osman). Deterministic: the greeted first name against the To name and address;
@@ -3812,6 +3831,10 @@ def _greeting_mismatch(draft: str, req: dict) -> str:
                 names_to.append(f"{own.get('first_name') or ''} {own.get('last_name') or ''}")
     except Exception:  # noqa: BLE001
         pass
+    # THE NAME THEY SIGN WITH IS THEIR NAME (card 1648, 5 Nov 2026): John DiBartolo wrote from y23films@gmail.com,
+    # so the card's name was "Y23 Films", and "Hello John" was blocked as WRONG PERSON. Their own sign-off and a
+    # "my name is ..." in their own words (above any quoted email) name the recipient.
+    names_to += _self_named(inq.get("message") or "")
     for h in names_to + [t.split("@")[0] for t in to]:
         h = _ns._norm(h)
         if (g in re.split(r"[^a-z]+", h) or (len(g) >= 3 and g in re.sub(r"[^a-z]+", "", h))
@@ -3831,7 +3854,9 @@ def _greeting_mismatch(draft: str, req: dict) -> str:
                 for a in (req.get("thread_cc") or []) + (req.get("cc_extra") or []))
     try:
         dom = (inq.get("email") or "").split("@")[-1].lower()
-        if not known and dom:
+        # a free-mail domain is not a company: every John on gmail.com is not this John's colleague
+        from .newsletter import _FREEMAIL
+        if not known and dom and dom not in _FREEMAIL:
             known = bool(db.one("select 1 from crm_master where lower(email) like %s and lower(first_name)=%s "
                                 "limit 1", ("%@" + dom, g)))
         if not known and req.get("deal_id"):
@@ -4130,35 +4155,46 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
             info["date"] = _next_newsletter_slot(company["id"]).strftime("%-d %b %Y")
         return info
     if task["kind"] in EMAIL_RENDER_KINDS:
+        _why = email_send_problem(task)
+        if _why:
+            return {"ok": False, "blocked": True, "error": _why}
+    gate = _biometric_gate(task["kind"] in _APPROVE_PUBLIC, stepup_token, money=is_money(task),
+                           owner_only=bool((task.get("request") or {}).get("owner_only")))
+    if gate:
+        return gate
+    return _approve_after_gate(task, skill, company, run_at)
+
+
+def email_send_problem(task: dict) -> str:
+    """'' when an email card may send, else the reason it cannot. ONE function for the approve gate AND the card
+    (owner, 5 Nov 2026: "the draft should not appear on the inbox if it's unapprovable"): card 1648 looked ready,
+    and Approve did nothing visible, because these checks only ran when he tapped it."""
+    if True:   # one indent kept so the checks read as they always did
         # A recipient-less email card must never look approvable. Card 398 was composed through the
         # generic task path (no inquiry block), so it sat in the Inbox with an empty To and the reply
         # fallback subject 'Re: your enquiry' (31 Aug 2026).
         _to = ((task.get("request") or {}).get("inquiry") or {}).get("email") or ""
         if "@" not in _to:
-            return {"ok": False, "blocked": True,
-                    "error": "this card has NO recipient — tell me who it goes to and I'll set it, "
-                             "nothing can send until then"}
+            return ("this card has NO recipient — tell me who it goes to and I'll set it, "
+                    "nothing can send until then")
         # ADDRESSED TO SOMEONE WHO HAS LEFT: cc is filtered silently, but the To is not a detail to fix
         # quietly - the email would go nowhere and the chase would look answered. Stop and say so.
         # NO BODY, NO SEND. An empty draft renders as just the signature, and approving it would have
         # sent Antonio Rosello "Best regards" and nothing else (card 545, 10 Sep 2026).
         if not re.sub(r"\s+", "", task.get("draft") or ""):
-            return {"ok": False, "blocked": True,
-                    "error": "this card has NO email body - nothing was drafted, so approving would send "
-                             "only a signature. Ask me to redraft it; nothing can send until then."}
+            return ("this card has NO email body - nothing was drafted, so approving would send "
+                             "only a signature. Ask me to redraft it; nothing can send until then.")
         # THE GREETING MATCHES THE RECIPIENT: never "Hello Mai" on an email to Hussein (card 651, MAH Gold).
         _gm = _greeting_mismatch(task.get("draft") or "", task.get("request") or {})
         if _gm:
-            return {"ok": False, "blocked": True,
-                    "error": f"WRONG PERSON: {_gm}. Fix the greeting or who it goes to; nothing can send "
-                             "until then."}
+            return (f"WRONG PERSON: {_gm}. Fix the greeting or who it goes to; nothing can send "
+                             "until then.")
         # NOTHING IS "ATTACHED" UNLESS IT IS: the guarantee, whatever the drafter did (card 631, Brandgate).
         _claim = _attachment_claim(task.get("draft") or "", task.get("request") or {})
         if _claim:
-            return {"ok": False, "blocked": True,
-                    "error": f"this email says something is attached, but NOTHING is attached (\"{_claim}\"). "
+            return (f"this email says something is attached, but NOTHING is attached (\"{_claim}\"). "
                              "Attach the file on the card, or ask me to take that line out; nothing can "
-                             "send until then."}
+                             "send until then.")
         # WRONG PERSON IN THE BODY: never send an email that introduces itself as someone else.
         try:
             _cco = store.get_company(task.get("company_id")) or {}
@@ -4166,19 +4202,19 @@ def approve_task(task_id: int, stepup_token: str | None = None, run_at: str | No
                 or ((profile.get(_cco.get("id")) or {}).get("reply_from") or "").strip()
             _mm = _identity_mismatch(task.get("draft") or "", _frm, _cco)
             if _mm:
-                return {"ok": False, "blocked": True, "error": _mm}
+                return _mm
         except Exception:  # noqa: BLE001
             pass
         _gone = db.one("select email from crm_master where lower(email)=lower(%s) and "
                        "lower(coalesce(lead_status,''))='left-company'", (_to,))
         if _gone:
-            return {"ok": False, "blocked": True,
-                    "error": f"{_to} has LEFT their company — this would send into a dead mailbox. "
-                             "Tell me who it should go to instead and I'll repoint it."}
-    gate = _biometric_gate(task["kind"] in _APPROVE_PUBLIC, stepup_token, money=is_money(task),
-                           owner_only=bool((task.get("request") or {}).get("owner_only")))
-    if gate:
-        return gate
+            return (f"{_to} has LEFT their company — this would send into a dead mailbox. "
+                             "Tell me who it should go to instead and I'll repoint it.")
+    return ""
+
+
+def _approve_after_gate(task: dict, skill: dict, company: dict, run_at: str | None) -> dict:
+    task_id = task["id"]
     if run_at:
         # APPROVE AND SCHEDULE (owner, 30 Aug): he authenticates NOW and the send fires later. The card
         # is parked as a one-off scheduled task carrying an approved-send marker, so the clock EXECUTES
