@@ -1169,6 +1169,21 @@ def _cases():
                 and not engine._answers_newsletter(co, {"references": "<abc@mail.gmail.com>"})
                 and not engine._answers_newsletter(co, {})
                 and "_answers_newsletter(co, e)" in src and "newsletter_replies_from" in src)
+    def _card_names_its_deal():
+        from . import api
+        import pathlib
+        html = (pathlib.Path(__file__).resolve().parents[2] / "web" / "index.html").read_text(encoding="utf-8")
+        row = db.one("select id from tasks where deal_id is not null and kind in ('email_reply','email_draft') "
+                     "order by id desc limit 1")
+        live = True
+        if row:
+            t = api._enrich_action_card(dict(store.get_task(row["id"])))
+            live = bool((t.get("deal_link") or {}).get("id"))
+        return (live and "${dealLine(t,isEmail)}" in html and "No opportunity linked" in html
+                and '"deal_link"' in inspect.getsource(api._enrich_action_card))
+    case("every Inbox card names the opportunity it is on, and a tap opens it",
+         "Shama card 1641, 5 Nov", _card_names_its_deal)
+
     case("a reply to our newsletter is answered by its author, not whichever mailbox claimed it",
          "Y23 Films card 1648, 5 Nov", _newsletter_reply_from_author)
 

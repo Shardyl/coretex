@@ -278,6 +278,13 @@ photograph. First run: DSO deal 148, breakdown #1463, 31 shots, 44 pages, v7 = d
 frames redone and stale "sign the quotation" copy removed: the copy writer does not know a deal is already signed).
 Regress case: "a locked shot list becomes one frame per shot...".
 
+## Every Inbox card names its opportunity (owner, 5 Nov 2026)
+
+"How do I know which opportunity or project this is assigned to?" (card 1641, deal 130). `api._enrich_action_card`
+serves `deal_link` {id, title, stage} from `tasks.deal_id`, else `request.deal_id`, read live; the cockpit's `dealLine`
+draws "Opportunity #N: <title>" with its stage chip under the card title, a tap opens the deal. Email and WhatsApp cards
+on no deal say "No opportunity linked". Cockpit build cortex-v92.
+
 ## Newsletter replies are Rashad's (owner, 5 Nov 2026)
 
 Sensa's newsletter Reply-To was hello@ (profile `newsletter_reply_to`, 7 Oct), and the copy in Gino's mailbox claimed

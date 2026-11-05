@@ -492,6 +492,14 @@ def _enrich_action_card(t: dict) -> dict:
     """Enrich a task row as an Inbox ACTION card (the existing approval-card shape)."""
     t["card"] = "action"
     t["wp"] = db.setting_get(f"wp:{t['id']}")   # preview/edit links for blog drafts
+    # EVERY CARD SAYS WHICH OPPORTUNITY IT IS ON (owner, 5 Nov 2026, card 1641: "how do I know which opportunity or
+    # project this is assigned to?"). The deal column first, else the request's deal_id; read live, never stored.
+    try:
+        _did = t.get("deal_id") or (t.get("request") or {}).get("deal_id")
+        _d = db.one("select id, title, stage from crm_projects where id=%s", (int(_did),)) if _did else None
+        t["deal_link"] = {"id": _d["id"], "title": _d.get("title") or "", "stage": _d.get("stage") or ""} if _d else None
+    except Exception:  # noqa: BLE001
+        t["deal_link"] = None
     # EVERY NEWSLETTER CARD OPENS ITS ISSUE (owner, 19 Oct 2026: "include the newsletter content links when producing
     # the card so I can click into them and have a quick look before I approve it")
     if str(t.get("kind") or "").startswith("newsletter"):

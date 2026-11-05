@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v91';
+const APP_BUILD = 'cortex-v92';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -2089,6 +2089,7 @@ function actionCard(t){
       <div class="meta"><span class="chip cy">${esc(co)}</span><span class="chip">${esc(sk)}</span>
         <span class="chip">${kindLabel}</span><span class="chip" style="margin-left:auto;opacity:.6" title="Task ID — quote this when troubleshooting">#${t.id}</span></div>
       <div class="title">${title}</div>
+      ${dealLine(t,isEmail)}
       ${isEmail&&em?envHeader(em):''}
       ${isEmail&&em&&!isOutbound?emailBlock(em):''}
       ${t.kind==='wa_reply'?waBlock(t.wa):''}
@@ -2557,6 +2558,12 @@ async function confirmLiveSend(id, r){
 // Voice (or typed) correction on every approval card: tap to talk -> editable transcript -> send.
 // "WHICH OPPORTUNITY?" (14 Oct 2026): a tap per option, or his own words. It used to render as a generic card whose
 // only way to answer was Type -> "Send correction", which nobody would guess.
+// WHICH OPPORTUNITY IS THIS CARD ON (owner, 5 Nov 2026): a tap opens the deal; an email or WhatsApp card on none says so.
+function dealLine(t,isEmail){
+  const d=t.deal_link;
+  if(d) return `<div class="meta" style="margin:2px 0 8px;cursor:pointer" onclick="go('crm');setTimeout(()=>openProject(${+d.id}),50)">${ic('arrow',13)} <span>Opportunity #${d.id}: <b>${esc(d.title||'Untitled')}</b></span> ${stageChip(d.stage)}</div>`;
+  return (isEmail||t.kind==='wa_reply')?`<div class="meta" style="margin:2px 0 8px;opacity:.7">${ic('arrow',13)} No opportunity linked</div>`:'';
+}
 function dealPickCard(t,co){
   const r=t.request||{}, c=r.candidates||[], msgs=r.messages||(r.message?[r.message]:[]);
   const who=esc(r.who||(msgs[0]&&(msgs[0].email||msgs[0].to))||'');
