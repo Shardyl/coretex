@@ -278,6 +278,23 @@ photograph. First run: DSO deal 148, breakdown #1463, 31 shots, 44 pages, v7 = d
 frames redone and stale "sign the quotation" copy removed: the copy writer does not know a deal is already signed).
 Regress case: "a locked shot list becomes one frame per shot...".
 
+## Who Cortex writes as (owner, 5 Nov 2026)
+
+Card 1641 (Shama, deal 130) was drafted as Ayresh: Talk gave no sender, and `_deal_sender` took `cast.our_lead`, who
+is Ayresh because she emails Farheen by hand. Owner: sales and client mail is from Rashad or Gino; Ayresh is fine on
+ADMIN cards and stays copied on everything. Profile `draft_senders` (Sensa: rashad@, gino@) and `admin_draft_senders`
+(Sensa: ayresh@); `_may_draft_as(co, email, task)` lets an admin sender through only on `_admin_card` (a `finance-*`
+lane, or `request.category == 'finance'`, now stamped on inbound cards). `_draft_context_for_reply` drops a
+non-drafter BEFORE the deal pin and again AFTER adoption, then re-adopts the same thread in the new sender's mailbox
+(thread ids are mailbox-local; Message-Id/References are kept). Empty `draft_senders` = no restriction (other companies).
+
+## Every Inbox card is on its opportunity (owner, 5 Nov 2026)
+
+`engine.autolink_open_cards()` (engine loop, every 5 min) puts an open email/WhatsApp card on its sender's opportunity
+when there is exactly ONE active one (`card_deal_options` = `crm.active_deals_for_email`), logged on the deal. Several:
+the card's opportunity line shows a button per deal; none: "Create opportunity" (`crm.qualify_opportunity`). Endpoint
+`POST /api/tasks/{id}/link-deal` {deal_id} | {create: true}. Linking never redrafts or sends. Cockpit cortex-v93.
+
 ## Every Inbox card names its opportunity (owner, 5 Nov 2026)
 
 "How do I know which opportunity or project this is assigned to?" (card 1641, deal 130). `api._enrich_action_card`

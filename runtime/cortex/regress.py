@@ -1181,6 +1181,31 @@ def _cases():
             live = bool((t.get("deal_link") or {}).get("id"))
         return (live and "${dealLine(t,isEmail)}" in html and "No opportunity linked" in html
                 and '"deal_link"' in inspect.getsource(api._enrich_action_card))
+    def _who_cortex_writes_as():
+        from . import engine, profile as _pf
+        p = _pf.get(3) or {}
+        fin = db.one("select id from skills where company_id=3 and skill_key like 'finance-%%' order by id limit 1")
+        sales_card = {"company_id": 3, "skill_id": None, "request": {"category": "client"}}
+        admin_card = {"company_id": 3, "skill_id": (fin or {}).get("id"), "request": {"category": "finance"}}
+        src = inspect.getsource(engine._draft_context_for_reply)
+        return ("ayresh@sensa.digital" not in [x.lower() for x in (p.get("draft_senders") or [])]
+                and engine._may_draft_as(3, "rashad@sensa.digital", sales_card)
+                and engine._may_draft_as(3, "gino@sensa.digital", sales_card)
+                and not engine._may_draft_as(3, "ayresh@sensa.digital", sales_card)
+                and engine._may_draft_as(3, "ayresh@sensa.digital", admin_card)
+                and "not_a_drafter(" in src and src.count("_adopt_existing_thread(task, req, manifest)") >= 2)
+    case("Cortex writes sales and client mail as Rashad or Gino; Ayresh only on admin cards, copied on the rest",
+         "Shama card 1641, 5 Nov", _who_cortex_writes_as)
+
+    def _cards_get_their_deal():
+        from . import engine
+        src = inspect.getsource(engine.autolink_open_cards)
+        return ("len(opts) == 1" in src and "autolink_open_cards()" in inspect.getsource(engine.run)
+                and engine.card_deal_options({"kind": "blog", "request": {}}) == []
+                and engine.card_deal_options({"kind": "email_reply", "deal_id": 1, "request": {}}) == [])
+    case("an open email card whose sender has one live opportunity goes on it; several are his pick; none can create",
+         "owner, 5 Nov", _cards_get_their_deal)
+
     case("every Inbox card names the opportunity it is on, and a tap opens it",
          "Shama card 1641, 5 Nov", _card_names_its_deal)
 

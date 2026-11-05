@@ -500,6 +500,11 @@ def _enrich_action_card(t: dict) -> dict:
         t["deal_link"] = {"id": _d["id"], "title": _d.get("title") or "", "stage": _d.get("stage") or ""} if _d else None
     except Exception:  # noqa: BLE001
         t["deal_link"] = None
+    if not t.get("deal_link"):
+        try:
+            t["deal_options"] = engine.card_deal_options(t)   # several -> he taps one; none -> "Create opportunity"
+        except Exception:  # noqa: BLE001
+            t["deal_options"] = []
     # EVERY NEWSLETTER CARD OPENS ITS ISSUE (owner, 19 Oct 2026: "include the newsletter content links when producing
     # the card so I can click into them and have a quick look before I approve it")
     if str(t.get("kind") or "").startswith("newsletter"):
@@ -3029,6 +3034,23 @@ def deal_pick(task_id: int, body: DealPick, u: dict = Depends(current_user)) -> 
         raise HTTPException(status_code=404, detail="not a which-opportunity card")
     from . import events
     return {"note": events.answer_which_deal(t, body.text, body.deal_id)}
+
+
+class CardDeal(BaseModel):
+    deal_id: int | None = None      # put the card on this opportunity
+    create: bool = False            # or open a new opportunity for the sender and put it there
+
+
+@app.post("/api/tasks/{task_id}/link-deal")
+def task_link_deal(task_id: int, body: CardDeal, u: dict = Depends(current_user)) -> dict:
+    """The opportunity line on an Inbox card: link the card to one of the sender's opportunities, or create one."""
+    _guard_task(u, task_id)
+    who = (u or {}).get("name") or (u or {}).get("email") or "owner"
+    if body.create:
+        return engine.create_deal_for_card(task_id, who)
+    if not body.deal_id:
+        raise HTTPException(status_code=400, detail="say which opportunity")
+    return engine.link_card_to_deal(task_id, int(body.deal_id), who)
 
 
 @app.post("/api/whatsapp/nudge/{task_id}")

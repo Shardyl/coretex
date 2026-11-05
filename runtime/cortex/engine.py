@@ -5884,7 +5884,43 @@ def _addressed_person(co: dict, e: dict, mailbox: str | None) -> dict | None:
     return next(iter(named.values())) if len(named) == 1 else None
 
 
-def _deal_sender(company_id, deal_id) -> str:
+def _draft_senders(company_id) -> set[str]:
+    """WHO CORTEX MAY WRITE AS (owner, 5 Nov 2026, card 1641: "it's either from myself or it's from Gino ... Ayresh is
+    not really included"). Profile `draft_senders`; empty means every send identity, as before. Someone who emails by
+    hand (Ayresh) is still a colleague on the thread and on the cc, just never the voice of a Cortex draft."""
+    try:
+        return {str(x).strip().lower() for x in ((profile.get(int(company_id)) or {}).get("draft_senders") or [])
+                if str(x).strip()}
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def _admin_card(task: dict | None) -> bool:
+    """An ADMIN card: a finance lane (invoices, payments, chasing, bookkeeping) or mail triaged as finance."""
+    if not task:
+        return False
+    try:
+        sk = (store.get_skill(task.get("skill_id")) or {}).get("skill_key") or ""
+    except Exception:  # noqa: BLE001
+        sk = ""
+    return sk.startswith("finance-") or ((task.get("request") or {}).get("category") == "finance")
+
+
+def _may_draft_as(company_id, email: str, task: dict | None = None) -> bool:
+    """Profile `draft_senders` write sales and client mail; `admin_draft_senders` (Sensa: Ayresh) may also write admin
+    cards (owner, 5 Nov 2026: "if it's an admin type task, it's fine that it's drafted from her")."""
+    allowed = _draft_senders(company_id)
+    e = (email or "").strip().lower()
+    if not allowed or e in allowed:
+        return True
+    try:
+        admin = {str(x).strip().lower() for x in ((profile.get(int(company_id)) or {}).get("admin_draft_senders") or [])}
+    except Exception:  # noqa: BLE001
+        admin = set()
+    return e in admin and _admin_card(task)
+
+
+def _deal_sender(company_id, deal_id, task: dict | None = None) -> str:
     """WHO SENDS FOR THIS DEAL: the person who owns the relationship, not whoever last happened to
     email this contact.
 
@@ -5896,6 +5932,8 @@ def _deal_sender(company_id, deal_id) -> str:
         return ""
     try:
         senders = {v["email"].lower() for v in _company_senders(company_id).values()}
+        if _draft_senders(company_id):
+            senders = {e for e in senders if _may_draft_as(company_id, e, task)}
         if not senders:
             return ""
         row = db.one("select owner from crm_projects where id=%s", (int(deal_id),))
@@ -6544,13 +6582,34 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
     # drafted as her, and it wrote Rashad's Thursday meeting at Dubai Police as her own (8 Sep 2026).
     # Pinning it here also narrows adoption to that person's mailbox, so the thread comes from the
     # mailbox that will actually send.
+    _was = (req.get("from_email") or "").strip().lower()
+    if _was and not _may_draft_as(task.get("company_id"), _was, task):
+        # a mailbox-local thread id belongs to the mailbox we are leaving; their Message-Id and References stay, so
+        # adoption finds the same conversation in the new sender's mailbox (everyone is copied on everything)
+        req.pop("from_email", None); req.pop("mailbox_rt", None)
+        if isinstance(req.get("thread"), dict) and req["thread"].get("id"):
+            req["thread"] = {**req["thread"], "id": ""}
+        manifest.append(f"not_a_drafter({_was})")
     if not (req.get("from_email") or "").strip():
-        _ds = _deal_sender(task.get("company_id"), req.get("deal_id") or task.get("deal_id"))
+        _ds = _deal_sender(task.get("company_id"), req.get("deal_id") or task.get("deal_id"), task)
         if _ds:
             req["from_email"] = _ds
             req["mailbox_rt"] = _rt_for_sender(co, _ds)
             manifest.append("deal_owner_sender")
     _adopt_existing_thread(task, req, manifest)
+    _ad = (req.get("from_email") or "").strip().lower()
+    if _ad and not _may_draft_as(task.get("company_id"), _ad, task):
+        req.pop("from_email", None); req.pop("mailbox_rt", None)
+        if isinstance(req.get("thread"), dict):
+            req["thread"] = {**req["thread"], "id": ""}
+        manifest.append(f"not_a_drafter({_ad})")
+        _pin = _deal_sender(task.get("company_id"), req.get("deal_id") or task.get("deal_id"), task) \
+            or ((profile.get(co.get("id")) or {}).get("reply_from") or "").strip().lower()
+        if _pin and not _may_draft_as(co.get("id"), _pin):
+            _pin = sorted(_draft_senders(co.get("id")))[0]
+        if _pin:      # the same conversation, found again in the mailbox that will really send it
+            req["from_email"], req["mailbox_rt"] = _pin, _rt_for_sender(co, _pin)
+            _adopt_existing_thread(task, req, manifest)
     # adoption may have re-addressed a follow-up to the person the thread is with: every shelf below is theirs
     email = ((req.get("inquiry") or {}).get("email") or "").strip() or email
     # ONE SENDER, DECIDED ONCE, BEFORE THE DRAFT. The envelope used to fall back to the company's
@@ -6562,6 +6621,8 @@ def _draft_context_for_reply(task: dict, req: dict) -> dict:
     if not (req.get("from_email") or "").strip():
         try:
             _rf = ((profile.get(co.get("id")) or {}).get("reply_from") or "").strip()
+            if _rf and not _may_draft_as(co.get("id"), _rf):
+                _rf = sorted(_draft_senders(co.get("id")))[0]
             if _rf:
                 req["from_email"] = _rf
                 req["mailbox_rt"] = _rt_for_sender(co, _rf)
@@ -7115,7 +7176,7 @@ def _draft_direct_reply(co: dict, e: dict, cls: dict, rt_key: str | None, addres
             _nf = (_p.get("newsletter_replies_from") or _p.get("reply_from") or "").strip().lower()
             if _nf and _rt_for_sender(co, _nf):
                 from_email, mailbox_rt = _nf, _rt_for_sender(co, _nf)
-        req = {"brief": brief, "inquiry": inq,
+        req = {"brief": brief, "inquiry": inq, "category": cls.get("category") or "",
                "from_email": from_email, "mailbox_rt": mailbox_rt,
                "gmail_id": e.get("gmail_id") or "",   # this mailbox's copy (attachments are fetched by it)
                "mail_ref": gmail.mail_ref(e)}         # the message itself -> what every dedup keys on
@@ -10941,6 +11002,85 @@ def sweep_stuck_sends(older_than_minutes: int = 5) -> dict:
     return out
 
 
+# ---------- every email card on its opportunity (owner, 5 Nov 2026) ----------
+_LINKABLE = ("email_reply", "email_draft", "wa_reply")
+_OPEN_CARD = ("new", "queued", "drafting", "awaiting_approval", "awaiting_correction")
+
+
+def _card_deal_id(t: dict):
+    return t.get("deal_id") or (t.get("request") or {}).get("deal_id")
+
+
+def card_deal_options(t: dict) -> list[dict]:
+    """The sender's ACTIVE opportunities for this card's company, newest first: one means the card belongs on it,
+    several means he picks, none means he may create one. A fact from the CRM, never a guess."""
+    if t.get("kind") not in _LINKABLE or _card_deal_id(t):
+        return []
+    em = (((t.get("request") or {}).get("inquiry") or {}).get("email") or "").strip()
+    co = store.get_company(t.get("company_id")) or {}
+    if "@" not in em or not co.get("slug"):
+        return []
+    return [{"id": d["id"], "title": d.get("title") or "", "stage": d.get("stage") or ""}
+            for d in crm.active_deals_for_email(em, co["slug"])]
+
+
+def link_card_to_deal(task_id: int, deal_id: int, actor: str = "owner") -> dict:
+    """Put a card on an opportunity: the deal column and request.deal_id (the drafter and the send path read either),
+    and one line on the deal's timeline. Linking never redrafts or sends anything."""
+    t = store.get_task(task_id)
+    d = db.one("select id, title, stage from crm_projects where id=%s", (int(deal_id),))
+    if not t or not d:
+        return {"ok": False, "error": "no such card or opportunity"}
+    rq = dict(t.get("request") or {}); rq["deal_id"] = d["id"]
+    store.update_task(task_id, request=rq)
+    db.execute("update tasks set deal_id=%s where id=%s", (d["id"], task_id))
+    try:
+        pipeline.log_deal(d["id"], "note", f"Card #{task_id} linked to this opportunity ({actor}).",
+                          ref=f"cardlink:{task_id}")
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True, "deal": {"id": d["id"], "title": d.get("title") or "", "stage": d.get("stage") or ""}}
+
+
+def create_deal_for_card(task_id: int, actor: str = "owner") -> dict:
+    """'Create opportunity' on an unlinked email card: the same qualify path as the CRM screen, then linked."""
+    t = store.get_task(task_id)
+    if not t:
+        return {"ok": False, "error": "no such card"}
+    em = (((t.get("request") or {}).get("inquiry") or {}).get("email") or "").strip()
+    co = store.get_company(t.get("company_id")) or {}
+    if "@" not in em:
+        return {"ok": False, "error": "this card has no email address to open an opportunity for"}
+    d = crm.qualify_opportunity(em, co.get("slug") or "")
+    if not d:
+        return {"ok": False, "error": f"{em} is not in the CRM yet"}
+    return link_card_to_deal(task_id, d["id"], actor)
+
+
+_LINK_SWEEP = {"at": 0.0}
+
+
+def autolink_open_cards(min_gap: float = 300) -> int:
+    """Open email/WhatsApp cards on no opportunity whose sender has exactly ONE active one are put on it. Two or
+    more stay for him to pick on the card; none stay as they are, saying so."""
+    if time.time() - _LINK_SWEEP["at"] < min_gap:
+        return 0
+    _LINK_SWEEP["at"] = time.time()
+    n = 0
+    for r in db.query("select id from tasks where kind = any(%s) and status = any(%s) and deal_id is null "
+                      "and coalesce(request->>'deal_id','') = '' order by id desc limit 200",
+                      (list(_LINKABLE), list(_OPEN_CARD))):
+        try:
+            t = store.get_task(r["id"])
+            opts = card_deal_options(t)
+            if len(opts) == 1:
+                link_card_to_deal(t["id"], opts[0]["id"], "Cortex: their only open opportunity")
+                n += 1
+        except Exception as _e:  # noqa: BLE001
+            print(f"[autolink] card {r['id']}: {type(_e).__name__}: {_e}", flush=True)
+    return n
+
+
 def run(poll_idle: float = 1.0) -> None:
     tg.send("\U0001F9E0 Cortex engine online.")
     try:
@@ -11057,6 +11197,10 @@ def run(poll_idle: float = 1.0) -> None:
                 nextsteps.tick()        # an item of OURS falling due: the drafted email, or one "To do" notice
             except Exception as _nte:  # noqa: BLE001
                 print(f"[nextsteps] tick: {type(_nte).__name__}: {_nte}", flush=True)
+            try:
+                autolink_open_cards()   # an open email card whose sender has one live opportunity goes on it
+            except Exception:  # noqa: BLE001
+                pass
             try:
                 from . import invariants
                 invariants.maybe_run()  # nightly: things that must never be true, safe repairs applied

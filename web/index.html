@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v92';
+const APP_BUILD = 'cortex-v93';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -2562,7 +2562,16 @@ async function confirmLiveSend(id, r){
 function dealLine(t,isEmail){
   const d=t.deal_link;
   if(d) return `<div class="meta" style="margin:2px 0 8px;cursor:pointer" onclick="go('crm');setTimeout(()=>openProject(${+d.id}),50)">${ic('arrow',13)} <span>Opportunity #${d.id}: <b>${esc(d.title||'Untitled')}</b></span> ${stageChip(d.stage)}</div>`;
-  return (isEmail||t.kind==='wa_reply')?`<div class="meta" style="margin:2px 0 8px;opacity:.7">${ic('arrow',13)} No opportunity linked</div>`:'';
+  if(!(isEmail||t.kind==='wa_reply')) return '';
+  const o=t.deal_options||[], em=(t.request&&t.request.inquiry&&t.request.inquiry.email)||'';
+  return `<div class="meta" style="margin:2px 0 8px;flex-wrap:wrap;gap:6px"><span style="opacity:.7">${ic('arrow',13)} No opportunity linked</span>
+    ${o.map(d=>`<button class="btn sm" onclick="linkCardDeal(${t.id},${+d.id})">#${d.id} ${esc(d.title||'')}</button>`).join('')}
+    ${em.includes('@')?`<button class="btn sm" onclick="linkCardDeal(${t.id},0,true)">Create opportunity</button>`:''}</div>`;
+}
+async function linkCardDeal(id,dealId,create){
+  try{ const r=await api('/api/tasks/'+id+'/link-deal',{method:'POST',body:JSON.stringify(create?{create:true}:{deal_id:dealId})});
+    if(r&&r.ok){ toast('On opportunity #'+r.deal.id); render(); } else toast('Not linked: '+((r&&r.error)||'unknown')); }
+  catch(e){ toast('Error: '+e.message); }
 }
 function dealPickCard(t,co){
   const r=t.request||{}, c=r.candidates||[], msgs=r.messages||(r.message?[r.message]:[]);
