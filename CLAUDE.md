@@ -278,6 +278,18 @@ photograph. First run: DSO deal 148, breakdown #1463, 31 shots, 44 pages, v7 = d
 frames redone and stale "sign the quotation" copy removed: the copy writer does not know a deal is already signed).
 Regress case: "a locked shot list becomes one frame per shot...".
 
+## After a quote: next working day, then every 2 (owner, 5 Nov 2026)
+
+XPLOR #190 got proposal + quotation SEN-2026-0060 on 4 Nov and its next follow-up read 12 Nov. Two faults:
+1. `crm.advance_followup` arms the NEXT step before `_spawn_followup_card` creates the card, and `gate._rhythm_floor`
+   read the step off the deal row, so the receipt check (1 working day) was measured with step 1's gap and held as
+   "due from Wed 11 Nov". The card now carries `followup_step` (the step being fired) and the gate measures that one.
+2. `is_formal_tender` matched "Request for Proposal" in an email, so a direct emailed RFP went on the weekly
+   TENDER rhythm. Now only a portal tender (a `tender` circular on the deal, from `_track_tender`) is a tender.
+CLOSING_CADENCE (owner's words: "within 1 or 2 days ... then 2 days later, 2 days later"): receipt check after 1
+working day, every 2 working days x7, then weekly x8, then every two weeks x26. Open deals on the tender rhythm with
+no portal circular (102, 172, 190) were moved to it.
+
 ## Who Cortex writes as (owner, 5 Nov 2026)
 
 Card 1641 (Shama, deal 130) was drafted as Ayresh: Talk gave no sender, and `_deal_sender` took `cast.our_lead`, who

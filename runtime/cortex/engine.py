@@ -5537,6 +5537,7 @@ def _spawn_followup_card(opp: dict, action: str) -> None:
         # the situation is SYSTEM knowledge, never 'their words' (contract: inquiry.message = client only)
         t = store.create_card(co["id"], skill["id"], "email_reply",
                               {"brief": brief, "inquiry": inq, "followup": action, "deal_id": opp["id"],
+                               "followup_step": int(opp.get("followup_step") or 0),   # the step being fired (gate.py)
                                "system_note": f"Automated {label} on the opportunity '{opp['title']}'. "
                                               "They have not replied to our last message."},
                               contact=email, deal_id=opp["id"])

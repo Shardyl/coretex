@@ -1181,6 +1181,25 @@ def _cases():
             live = bool((t.get("deal_link") or {}).get("id"))
         return (live and "${dealLine(t,isEmail)}" in html and "No opportunity linked" in html
                 and '"deal_link"' in inspect.getsource(api._enrich_action_card))
+    def _quote_chase_every_two_days():
+        from . import crm, gate, engine
+        cad = crm.CLOSING_CADENCE
+        pts = [s["after_days"] for s in cad["steps"]]
+        emailed_rfp = {"title": "XPLOR - cinematic promotional film", "history": [
+            {"event": "email_in", "text": "from adham@xplor.world: Request for Proposal – XPLOR National Resilience"}]}
+        portal = {"title": "Tender: Video Production RFP", "history": [{"event": "tender", "text": "circular"}]}
+        from datetime import datetime as _dt, timezone as _tz
+        hist = [{"event": "email_out", "ts": "2026-11-04T04:32:24Z"}]
+        deal = {"cadence": cad, "followup_step": 1, "company": "Sensa"}     # the row has already moved on to step 1
+        due = gate._rhythm_floor(deal, hist, 0)                               # the receipt check being fired
+        return (pts[:2] == [1, 2] and cad["steps"][1]["repeat"] >= 5
+                and not crm.is_formal_tender(emailed_rfp) and crm.is_formal_tender(portal)
+                and due is not None and due.date() <= _dt(2026, 11, 5, tzinfo=_tz.utc).date()
+                and '"followup_step": int(opp.get("followup_step") or 0)' in inspect.getsource(engine._spawn_followup_card)
+                and '(request or {}).get("followup_step")' in inspect.getsource(gate._check))
+    case("after a quote: receipt check next working day, then every 2; only a portal tender is weekly; the chase being "
+         "fired is measured by its own step", "XPLOR deal 190, 5 Nov", _quote_chase_every_two_days)
+
     def _who_cortex_writes_as():
         from . import engine, profile as _pf
         p = _pf.get(3) or {}

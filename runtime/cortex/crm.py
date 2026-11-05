@@ -1162,12 +1162,12 @@ CLOSING_CADENCE = {   # quotation with them AND they have engaged with it: push 
     # the deal enters Quote (the submission); a reply from them restarts at step 1 (they have it).
     # OWNER, 19 Oct 2026: "it's too slow ... they need pushing a little bit harder". The first two weeks after a
     # quote are the push: a chase every 2 to 3 working days, then weekly, then every two weeks.
+    # OWNER, 5 Nov 2026 (XPLOR #190): "if we've not heard from them within even 1 or 2 days, follow up to check they've
+    # received it and that it's being considered, then 2 days later, 2 days later". Receipt check the next working day,
+    # then every 2 working days for about three weeks, then weekly, then every two weeks until they answer.
     "steps": [
-        {"after_days": 1, "repeat": 1, "action": "chase"},       # did you receive it? (next working day)
-        {"after_days": 2, "repeat": 1, "action": "chase"},       # the push: every 2 to 3 working days, ~2 weeks
-        {"after_days": 3, "repeat": 1, "action": "chase"},
-        {"after_days": 2, "repeat": 1, "action": "chase"},
-        {"after_days": 3, "repeat": 1, "action": "chase"},
+        {"after_days": 1, "repeat": 1, "action": "chase"},       # did you receive it, is it being considered?
+        {"after_days": 2, "repeat": 7, "action": "chase"},       # every 2 working days, about three weeks
         {"after_days": 5, "repeat": 8, "action": "chase"},       # then weekly, about two months
         {"after_days": 10, "repeat": 26, "action": "checkin"},   # then every two weeks until they answer
     ],
@@ -1187,15 +1187,10 @@ _TENDER_WORDS = re.compile(r"\b(?:RFP|RFQ|tender|request for (?:proposal|quotati
 
 
 def is_formal_tender(p: dict) -> bool:
-    """A deal won through a formal tender / RFP process: its title, a tender circular on it, or the emails on it."""
-    if _TENDER_WORDS.search(p.get("title") or "") or tender_code(p.get("title") or ""):
-        return True
-    for h in (p.get("history") or []):
-        if h.get("event") == "tender":
-            return True
-        if h.get("event") in ("email_in", "email_out", "email_out_manual") and _TENDER_WORDS.search(str(h.get("text") or "")[:300]):
-            return True
-    return False
+    """A PORTAL TENDER: a tender circular is on the deal (`_track_tender`). Nothing else (owner, 5 Nov 2026: XPLOR #190
+    emailed us a "Request for Proposal" directly and was put on the weekly tender rhythm by its subject line; "it didn't
+    come through a tender portal"). An emailed RFP, brief or tender word in a title is an ordinary opportunity."""
+    return any(h.get("event") == "tender" for h in (p.get("history") or []))
 
 
 def closing_cadence_for(p: dict) -> dict:

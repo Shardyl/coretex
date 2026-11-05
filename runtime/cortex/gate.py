@@ -86,9 +86,13 @@ def owner_set_chase(hist: list) -> bool:
     return bool(last_set and (not last_out or last_set > last_out))
 
 
-def _rhythm_floor(deal: dict, hist: list):
-    """When the next chase may go: the deal's current rhythm step, counted from the last email we sent. None when
-    the owner set the next chase himself after our last email."""
+def _rhythm_floor(deal: dict, hist: list, step=None):
+    """When the next chase may go: the rhythm step BEING FIRED, counted from the last email we sent. None when the
+    owner set the next chase himself after our last email.
+
+    `step` is the step the chase card carries. The deal row has already moved on to the NEXT step by the time the card
+    is checked (`crm.advance_followup` arms it first), so reading the row measured the wrong gap: XPLOR #190's receipt
+    check (1 working day) was held as "due from Wed 11 Nov", the next step's 5 days (owner, 5 Nov 2026)."""
     if owner_set_chase(hist):
         return None
     try:
@@ -99,7 +103,7 @@ def _rhythm_floor(deal: dict, hist: list):
             return None
         cad = deal.get("cadence") if isinstance(deal.get("cadence"), dict) and deal["cadence"].get("steps") \
             else crm.get_cadence(deal.get("company"))
-        return crm._schedule_point(cad, int(deal.get("followup_step") or 0), base=last_out)
+        return crm._schedule_point(cad, int(step if step is not None else (deal.get("followup_step") or 0)), base=last_out)
     except Exception:  # noqa: BLE001
         return None
 
@@ -175,7 +179,7 @@ def _check(company_id: int, email: str, deal_id, request: dict | None) -> str | 
         # for Thu 15 Oct without seeing the chase that went that morning, and the 0.8-day quiet window let a second
         # chase through two days later. A chase waits its step's full gap from the last email we actually sent.
         if why in CHASE_TYPES:
-            nxt = _rhythm_floor(deal, hist)
+            nxt = _rhythm_floor(deal, hist, (request or {}).get("followup_step"))
             if nxt and now < nxt - timedelta(hours=6):
                 if deal.get("automation") == "auto":
                     db.execute("update crm_projects set next_followup=%s where id=%s and (next_followup is null or "
