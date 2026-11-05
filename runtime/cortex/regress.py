@@ -1182,6 +1182,14 @@ def _cases():
             live = bool((t.get("deal_link") or {}).get("id"))
         return (live and "${dealLine(t,isEmail)}" in html and "No opportunity linked" in html
                 and '"deal_link"' in inspect.getsource(api._enrich_action_card))
+    def _issue_opens_in_app():
+        import pathlib
+        html = (pathlib.Path(__file__).resolve().parents[2] / "web" / "index.html").read_text(encoding="utf-8")
+        return ("function showHtmlOverlay(" in html and "window.open(''" not in html
+                and html.count("showHtmlOverlay(await r.text()") >= 2)
+    case("a newsletter issue opens inside Cortex, never in a popup the browser blocks",
+         "Open Your Eyes View issue, 5 Nov", _issue_opens_in_app)
+
     def _next_move_tag():
         from . import api
         import pathlib

@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v94';
+const APP_BUILD = 'cortex-v95';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -1598,8 +1598,7 @@ async function openContent(id){
   if(L.fetch){
     try{ const r=await fetch(API+'/api/content/preview/'+id,{headers:token?{Authorization:'Bearer '+token}:{}});
       if(!r.ok) throw new Error('HTTP '+r.status);
-      const html=await r.text(); const w=window.open('','_blank');
-      if(w){ w.document.write(html); w.document.close(); } else toast('Allow popups to view it'); }
+      showHtmlOverlay(await r.text(),'Preview'); }
     catch(e){ toast('Could not open ('+e.message+')'); }
   } else { window.open(L.url,'_blank'); }
 }
@@ -1729,11 +1728,23 @@ async function cancelReminderCal(rid){ try{ await api('/api/reminders/'+rid+'/ca
 async function runCal(id){ try{ toast('Running…'); await api('/api/calendar/'+id+'/run',{method:'POST'}); toast('Done — it is heading to your Inbox'); }catch(e){ toast('Failed: '+e.message); } }
 // THE STANDARD PAIR (owner, 13 Sep 2026): every outbound card offers both "now" and "schedule". The primary
 // Approve button is whatever that kind does by default (label from the server); pairBtn adds the other half.
+// THE ISSUE OPENS INSIDE CORTEX (owner, 5 Nov 2026: "this is not loading when I click it"). A window opened after the
+// fetch has finished is a popup the browser blocks, and the installed app cannot open one at all, so the button did
+// nothing. The HTML is drawn in an overlay frame instead, on the phone and the desktop alike.
+function showHtmlOverlay(html,title){
+  let host=document.getElementById('htmlov'); if(host) host.remove();
+  host=document.createElement('div'); host.id='htmlov';
+  host.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:70;display:flex;flex-direction:column;padding:12px';
+  host.innerHTML=`<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px;color:#fff"><b style="font-size:15px">${esc(title||'Preview')}</b><button class="btn sm" onclick="document.getElementById('htmlov').remove()">Close</button></div>`;
+  const f=document.createElement('iframe'); f.setAttribute('sandbox','allow-popups allow-popups-to-escape-sandbox');
+  f.style.cssText='flex:1;width:100%;max-width:720px;margin:0 auto;border:0;border-radius:12px;background:#fff';
+  f.srcdoc=html; host.appendChild(f); host.onclick=e=>{ if(e.target===host) host.remove(); };
+  document.body.appendChild(host);
+}
 async function viewIssue(id){   // the newsletter itself, rendered as the reader will see it
   try{ const r=await fetch(API+'/api/content/preview/'+id,{headers:token?{Authorization:'Bearer '+token}:{}});
     if(!r.ok) throw new Error('HTTP '+r.status);
-    const html=await r.text(); const w=window.open('','_blank');
-    if(w){ w.document.write(html); w.document.close(); } else toast('Allow popups to view it'); }
+    showHtmlOverlay(await r.text(),'Newsletter issue'); }
   catch(e){ toast('Could not open the issue ('+e.message+')'); }
 }
 function pairBtn(t){

@@ -278,6 +278,13 @@ photograph. First run: DSO deal 148, breakdown #1463, 31 shots, 44 pages, v7 = d
 frames redone and stale "sign the quotation" copy removed: the copy writer does not know a deal is already signed).
 Regress case: "a locked shot list becomes one frame per shot...".
 
+## Previews open inside Cortex (owner, 5 Nov 2026)
+
+"View issue" on a sent newsletter did nothing: `viewIssue` / `openContent` fetched the HTML and THEN called
+`window.open`, which the browser treats as a blocked popup (the click gesture is gone after the await) and the installed
+app cannot open at all. Both now draw the HTML in `showHtmlOverlay` (an iframe `srcdoc`, sandboxed, Close button).
+Never reintroduce `window.open('')` + `document.write`. Cockpit build cortex-v95.
+
 ## The next move on every deal row (owner, 5 Nov 2026)
 
 Opportunities and Projects rows carry `next_move` (`api._next_moves`): the earliest of the automatic chase
