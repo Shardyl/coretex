@@ -260,6 +260,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
       <button class="section-tab active" data-section="food">Food</button>
       <button class="section-tab" data-section="lifts">Lifting</button>
       <button class="section-tab" data-section="cardio">Cardio</button>
+      <button class="section-tab" data-section="mobility">Mobility</button>
       <button class="section-tab" data-section="workouts">Workouts</button>
     </div>
     <div id="missionStrip"></div>
@@ -472,6 +473,9 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
     <div id="page-food-glucose" class="page" data-section="food"></div>
     <div id="page-food-recovery" class="page" data-section="food"></div>
     <div id="page-food-bloods" class="page" data-section="food"></div>
+
+    <!-- ═══ MOBILITY (rendered by mobility.js, 8 Nov 2026) ═══ -->
+    <div id="page-mobility-pillars" class="page" data-section="mobility"></div>
 
     <div id="page-workouts-lifts" class="page" data-section="workouts">
       <div class="section-label">Lifting plans</div>
@@ -993,7 +997,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='127';                         // keep in step with CACHE in sw.js
+const APP_VERSION='128';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1552,10 +1556,11 @@ const SUBNAVS={
   lifts:[{label:'Log',key:'log'},{label:'History',key:'history'},{label:'Reports',key:'reports'},{label:'Progress',key:'progress'}],
   cardio:[{label:'Log',key:'log'},{label:'History',key:'history'},{label:'Reports',key:'reports'},{label:'Progress',key:'progress'}],
   food:[{label:'Today',key:'today'},{label:'Weight',key:'weight'},{label:'Fasting',key:'fasting'},{label:'Glucose',key:'glucose'},{label:'Recovery',key:'recovery'},{label:'Bloods',key:'bloods'},{label:'History',key:'history'},{label:'My foods',key:'foods'}],
-  workouts:[{label:'Lifting',key:'lifts'},{label:'Cardio',key:'cardio'}]
+  workouts:[{label:'Lifting',key:'lifts'},{label:'Cardio',key:'cardio'}],
+  mobility:[{label:'Pillars',key:'pillars'}]
 };
 let currentSection='food';
-let currentSubpage={lifts:'log',cardio:'log',food:'today',workouts:'lifts'};
+let currentSubpage={lifts:'log',cardio:'log',food:'today',workouts:'lifts',mobility:'pillars'};
 
 function showSection(section){
   currentSection=section;
@@ -1593,6 +1598,7 @@ function showPage(section,sub){
   if(section==='workouts'&&sub==='lifts')renderLiftWorkouts();
   if(section==='workouts'&&sub==='cardio')renderCardioTypes();
   if(section==='food'&&typeof renderFood==='function')renderFood(sub);
+  if(section==='mobility'&&typeof renderMobility==='function')renderMobility();
 }
 
 // ─── LIFTING LOG ──────────────────────────────────────────────────────────────
@@ -3217,6 +3223,7 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=127"></script>
+<script src="food.js?v=128"></script>
+<script src="mobility.js?v=128"></script>
 </body>
 </html>

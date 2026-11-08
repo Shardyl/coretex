@@ -1967,6 +1967,17 @@ def _cases():
          lambda: (_fit._hr_series([[0, 120], [5, "x"], [10, 400], [15, 150.4]]) == "[[0, 120], [15, 150]]"
                   and _fit._hr_series(None) is None
                   and "coalesce(excluded.hr, fitness.health_sessions.hr)" in inspect.getsource(_fit.ingest_health)))
+    def _mobility():
+        from . import fitness_mobility as fm
+        pike = next(p for p in fm.DEFAULT_PILLARS if p["id"] == "pike")
+        return (len(fm.DEFAULT_PILLARS) == 8
+                and [t["name"] for t in pike["tests"]] == ["Standing Forward Fold", "Elbow/Head To Toe",
+                    "Standing Leg Lift", "Sciatic Nerve Level", "Hip Internal Rotation Length Test"]
+                and not fm.MEDIA_DIR.startswith("/opt/cortex-knowledge")   # never multiplied by the nightly tar
+                and fm.CHUNK_MAX < 100_000_000                              # under Cloudflare's request cap
+                and "mobility.js?v=" in open(_web + "/fitness/index.html", encoding="utf-8").read())
+    case("the mobility tab carries the 8 pillars, Smith's pike tests, chunked private video outside the backup",
+         "mobility assessments 8 Nov", _mobility)
     case("the weight page: today's weigh-in, then the chart, then the last 7; photos swipe in one row", "weight layout 2 Nov",
          lambda: (lambda f: f.index('id="fdWtDay"') < f.index('id="fdWtChart"') < f.index("slice(0,7).map(w=>")
                   < f.index('id="fdPhotoCard"') < f.index("${waistCard()}`;") and "scroll-snap-type:x" in f)(

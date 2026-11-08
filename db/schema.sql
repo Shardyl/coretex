@@ -514,3 +514,34 @@ create table if not exists fitness.progress_photos (
     deleted    boolean not null default false,
     created_at timestamptz not null default now()
 );
+
+-- mobility assessments (cortex/fitness_mobility.py, 8 Nov 2026): Matthew Smith's 8 pillars; results one row per
+-- day + pillar + test + side + measure; media private on the box (chunked upload), both soft-deleted only
+create table if not exists fitness.mobility_results (
+    uid        text primary key,
+    day        date not null,
+    pillar     text not null,
+    test       text not null,
+    side       text not null,
+    measure    text not null,
+    value      numeric,
+    label      text,
+    note       text,
+    deleted    boolean not null default false,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+create index if not exists mobility_results_pillar_idx on fitness.mobility_results (pillar, day);
+create table if not exists fitness.mobility_media (
+    uid        text primary key,
+    day        date not null,
+    pillar     text not null,
+    test       text not null,
+    side       text not null,
+    file       text not null,
+    mime       text,
+    bytes      bigint,
+    complete   boolean not null default false,
+    deleted    boolean not null default false,
+    created_at timestamptz not null default now()
+);

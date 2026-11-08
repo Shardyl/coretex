@@ -7296,6 +7296,83 @@ def fitness_photo_delete(uid: str, _: None = Depends(auth)) -> dict:
     return fitness_photos.delete(uid)
 
 
+# ---------- mobility assessments (8 Nov 2026) ----------
+class MobilityResult(BaseModel):
+    date: str
+    pillar: str
+    test: str
+    side: str
+    values: dict
+    note: str | None = None
+
+
+class MobilityMediaStart(BaseModel):
+    date: str
+    pillar: str
+    test: str
+    side: str
+    mime: str
+    bytes: int
+
+
+@app.get("/api/fitness/mobility")
+def fitness_mobility_state(_: None = Depends(auth)) -> dict:
+    from . import fitness_mobility
+    return fitness_mobility.state()
+
+
+@app.post("/api/fitness/mobility/result")
+def fitness_mobility_result(body: MobilityResult, _: None = Depends(auth)) -> dict:
+    from . import fitness_mobility
+    try:
+        return fitness_mobility.save_results(body.date, body.pillar, body.test, body.side, body.values, body.note or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/fitness/mobility/media")
+def fitness_mobility_media_start(body: MobilityMediaStart, _: None = Depends(auth)) -> dict:
+    from . import fitness_mobility
+    try:
+        return fitness_mobility.media_start(body.date, body.pillar, body.test, body.side, body.mime, body.bytes)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/fitness/mobility/media/{uid}/{index}")
+async def fitness_mobility_media_chunk(uid: str, index: int, request: Request, _: None = Depends(auth)) -> dict:
+    """One raw chunk of a clip (Cloudflare caps a request at 100 MB, so the app sends ~8 MB pieces in order)."""
+    from . import fitness_mobility
+    try:
+        return fitness_mobility.media_chunk(uid, index, await request.body())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/fitness/mobility/media/{uid}/finish")
+def fitness_mobility_media_finish(uid: str, _: None = Depends(auth)) -> dict:
+    from . import fitness_mobility
+    try:
+        return fitness_mobility.media_finish(uid)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/fitness/mobility/media/{uid}")
+def fitness_mobility_media_get(uid: str, _: None = Depends(auth)):
+    from . import fitness_mobility
+    hit = fitness_mobility.media_path(uid)
+    if not hit:
+        raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(hit[0], media_type=hit[1], headers={"Cache-Control": "private, max-age=86400"})
+
+
+@app.delete("/api/fitness/mobility/media/{uid}")
+def fitness_mobility_media_delete(uid: str, _: None = Depends(auth)) -> dict:
+    from . import fitness_mobility
+    return fitness_mobility.media_delete(uid)
+
+
 @app.post("/api/fitness/push/subscribe")
 def fitness_push_subscribe(body: PushSub, _: None = Depends(auth)) -> dict:
     """The Fitness PWA's own push subscription (app='fitness'): its reminders never reach, or come from, the cockpit."""
