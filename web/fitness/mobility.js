@@ -65,7 +65,7 @@ function renderPillar(el,p){
       <input type="date" value="${day}" max="${today()}" class="fd-input" style="width:auto;font-size:14px" onchange="mobDay(this.value)"/></div>
     ${p.tests.map((t,i)=>`<div class="card" style="padding:12px 14px;margin-bottom:10px">
       <div style="font-size:14px;font-weight:800">${i+1}. ${esc(t.name)}</div>
-      <div style="font-size:11px;color:var(--ink3);margin-top:2px">${esc(t.camera||'')}</div>
+      ${t.camera?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--surface2)"><b>Camera:</b> ${esc(t.camera)}</div>`:''}
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
       ${t.sides.map(s=>{const cur=resFor(p.id,t.id,s,day), med=mediaFor(p.id,t.id,s,day);
         return `<div style="margin-top:10px;padding-top:8px;border-top:0.5px solid var(--border)">
