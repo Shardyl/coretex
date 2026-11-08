@@ -940,7 +940,8 @@ window.renderMission=function(){
       <div style="text-align:right">
         <div style="font-size:10px;font-weight:800;letter-spacing:0.12em;color:var(--ink3)">NOW</div>
         <div style="font-size:22px;font-weight:900;line-height:1.1;color:${ragPace(s)}">${s.cur!=null?r1(s.cur)+'<span style="font-size:13px;font-weight:800"> kg</span>':'&mdash;'}</div>
-        <div style="font-size:10.5px;color:var(--ink3);font-weight:700;white-space:nowrap">${s.fat!=null?'~'+Math.round(s.fat)+'%':''}${s.cur!=null?(s.fat!=null?' &middot; ':'')+'<span style="color:var(--amber)">'+r1(Math.max(0,s.cur-m.goalKg))+' to go</span>':''}</div>
+        ${s.fat!=null?`<div class="fd-fatnow" style="font-size:19px;font-weight:900;line-height:1.1;color:var(--ink)">~${Math.round(s.fat)}<span style="font-size:12px;font-weight:800">% fat</span></div>`:''}
+        <div style="font-size:10.5px;color:var(--ink3);font-weight:700;white-space:nowrap">${s.cur!=null?'<span style="color:var(--amber)">'+r1(Math.max(0,s.cur-m.goalKg))+' to go</span>':''}</div>
       </div>
     </div>
     <div style="display:flex;gap:4px;margin-top:7px;align-items:center" title="Weekly checkpoints">
