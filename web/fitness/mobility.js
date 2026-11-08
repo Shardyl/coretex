@@ -164,7 +164,7 @@ window.mobMeasure=function(src,id,ov){
   if(!W||!H){toast('Could not read this frame');return;}
   const maxW=Math.min(window.innerWidth-32,900), maxH=window.innerHeight*0.66, k=Math.min(maxW/W,maxH/H);
   const cv=document.createElement('canvas');cv.width=W;cv.height=H;
-  cv.style.cssText='width:'+Math.round(W*k)+'px;height:'+Math.round(H*k)+'px;border-radius:8px;touch-action:none;cursor:crosshair';
+  cv.style.cssText='width:'+Math.round(W*k)+'px;max-width:100%;height:auto;border-radius:8px;touch-action:none;cursor:crosshair';   // never wider than the screen
   const ctx=cv.getContext('2d'), frame=document.createElement('canvas');frame.width=W;frame.height=H;frame.getContext('2d').drawImage(src,0,0,W,H);
   const pts=[], R=Math.max(10,W/90);
   const tip=document.createElement('div');tip.style.cssText='color:#ddd;font-size:12px;margin-bottom:8px;text-align:center';
