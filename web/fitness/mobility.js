@@ -137,9 +137,78 @@ window.mobPlay=async function(id,mime){
     const url=URL.createObjectURL(await r.blob());
     ov.innerHTML=(mime.startsWith('video')?`<video src="${url}" controls playsinline autoplay style="max-width:100%;max-height:80vh;border-radius:10px"></video>`
       :`<img src="${url}" style="max-width:100%;max-height:80vh;border-radius:10px"/>`)
-      +`<div style="display:flex;gap:10px;margin-top:14px"><button class="btn-sm" id="mobDel">Delete</button><button class="btn-sm" id="mobClose">Close</button></div>`;
+      +`<div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;justify-content:center">${hasAngle(id)?`<button class="btn-sm" id="mobMeasure" style="background:var(--teal);color:#fff;border-color:var(--teal)">Measure angle${mime.startsWith('video')?' on this frame':''}</button>`:''}<button class="btn-sm" id="mobDel">Delete</button><button class="btn-sm" id="mobClose">Close</button></div>`
+      +(mime.startsWith('video')?'<div style="color:#aaa;font-size:11px;margin-top:8px">Pause on your best position, then tap Measure.</div>':'');
     ov.querySelector('#mobClose').onclick=()=>{URL.revokeObjectURL(url);ov.remove();};
+    const mBtn=ov.querySelector('#mobMeasure');
+    if(mBtn)mBtn.onclick=()=>{const src=ov.querySelector('video,img');if(src.tagName==='VIDEO')src.pause();mobMeasure(src,id,ov);};
     ov.querySelector('#mobDel').onclick=async()=>{if(!confirm('Remove this clip?'))return;await fetch(API_BASE+'/api/fitness/mobility/media/'+encodeURIComponent(id),{method:'DELETE',headers:{'Authorization':'Bearer '+syncToken()}});ov.remove();await load();renderMobility();};
   }catch(e){ov.innerHTML='<div style="color:#fff">Could not load it.</div>';setTimeout(()=>ov.remove(),1500);}
+};
+// ---------- Tap to measure (owner, 8 Nov 2026) ----------
+// The frame (a paused video or a photo) is drawn on a canvas; he taps three points, the MIDDLE one being the joint,
+// and code computes the angle at it (0-180 deg). Tapping near a placed point moves it. Saving writes the angle into
+// the test's degree measure for that day and side (keeping the other values already saved) and uploads the marked-up
+// frame as a photo, so every number has the picture it was read from.
+const angleMeasures=t=>(t&&t.measures||[]).filter(m=>m.kind==='number'&&m.unit==='deg');
+function mediaRec(id){return (_mob.media||[]).find(m=>m.id===id);}
+function testOf(rec){const p=rec&&pillar(rec.pillar);return p&&p.tests.find(t=>t.id===rec.test);}
+function hasAngle(id){return angleMeasures(testOf(mediaRec(id))).length>0;}
+function angleAt(a,b,c){const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y];
+  const d=(v1[0]*v2[0]+v1[1]*v2[1])/(Math.hypot(v1[0],v1[1])*Math.hypot(v2[0],v2[1])||1);return Math.acos(Math.max(-1,Math.min(1,d)))*180/Math.PI;}
+window.mobAngleAt=angleAt;
+
+window.mobMeasure=function(src,id,ov){
+  const rec=mediaRec(id), t=testOf(rec), ms=angleMeasures(t);
+  const W=src.videoWidth||src.naturalWidth, H=src.videoHeight||src.naturalHeight;
+  if(!W||!H){toast('Could not read this frame');return;}
+  const maxW=Math.min(window.innerWidth-32,900), maxH=window.innerHeight*0.66, k=Math.min(maxW/W,maxH/H);
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  cv.style.cssText='width:'+Math.round(W*k)+'px;height:'+Math.round(H*k)+'px;border-radius:8px;touch-action:none;cursor:crosshair';
+  const ctx=cv.getContext('2d'), frame=document.createElement('canvas');frame.width=W;frame.height=H;frame.getContext('2d').drawImage(src,0,0,W,H);
+  const pts=[], R=Math.max(10,W/90);
+  const tip=document.createElement('div');tip.style.cssText='color:#ddd;font-size:12px;margin-bottom:8px;text-align:center';
+  tip.textContent='Tap three points along the limb. The middle point is the joint (yellow). Drag a point to adjust it.';
+  const out=document.createElement('div');out.style.cssText='color:#fff;font-weight:800;font-size:15px;margin:10px 0 6px';
+  const bar=document.createElement('div');bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center';
+  const pick=document.createElement('select');pick.style.cssText='font-size:13px;'+(ms.length>1?'':'display:none');
+  ms.forEach(m=>{const o=document.createElement('option');o.value=m.key;o.textContent=m.label;pick.appendChild(o);});
+  const save=document.createElement('button');save.className='btn-sm';save.textContent='Save angle';save.style.cssText='background:var(--teal);color:#fff;border-color:var(--teal)';
+  const reset=document.createElement('button');reset.className='btn-sm';reset.textContent='Start again';
+  const close=document.createElement('button');close.className='btn-sm';close.textContent='Cancel';close.onclick=()=>ov.remove();
+  const draw=()=>{ctx.drawImage(frame,0,0);ctx.lineWidth=Math.max(3,W/300);ctx.strokeStyle='#30d5a8';
+    if(pts.length>1){ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);ctx.lineTo(pts[1].x,pts[1].y);if(pts[2])ctx.lineTo(pts[2].x,pts[2].y);ctx.stroke();}
+    pts.forEach((p,i)=>{ctx.beginPath();ctx.arc(p.x,p.y,R,0,7);ctx.fillStyle=i===1?'#ffc53d':'#30d5a8';ctx.fill();});
+    const a=pts.length===3?angleAt(pts[0],pts[1],pts[2]):null;
+    if(a!=null){ctx.font='bold '+Math.round(W/22)+'px system-ui';ctx.fillStyle='#fff';ctx.strokeStyle='#000';ctx.lineWidth=Math.max(3,W/250);
+      const tx=pts[1].x+R*2, ty=pts[1].y-R*2, lab=Math.round(a)+'\u00b0';ctx.strokeText(lab,tx,ty);ctx.fillText(lab,tx,ty);}
+    out.textContent=a!=null?'Angle at the joint: '+Math.round(a)+'\u00b0':'Tap point '+(pts.length+1)+' of 3'+(pts.length===1?' (the joint)':'');
+    save.disabled=a==null;save.style.opacity=a==null?0.4:1;};
+  reset.onclick=()=>{pts.length=0;draw();};
+  const pos=e=>{const b=cv.getBoundingClientRect();return{x:(e.clientX-b.left)/b.width*W,y:(e.clientY-b.top)/b.height*H};};
+  let drag=-1;
+  cv.addEventListener('pointerdown',e=>{e.preventDefault();const p=pos(e);
+    const near=pts.findIndex(q=>Math.hypot(q.x-p.x,q.y-p.y)<R*3);
+    if(near>=0)drag=near;else if(pts.length<3){pts.push(p);drag=pts.length-1;}draw();});
+  cv.addEventListener('pointermove',e=>{if(drag<0)return;pts[drag]=pos(e);draw();});
+  cv.addEventListener('pointerup',()=>{drag=-1;});
+  cv.addEventListener('pointerleave',()=>{drag=-1;});
+  ov.innerHTML='';ov.onclick=null;
+  bar.append(pick,save,reset,close);ov.append(tip,cv,out,bar);draw();
+  save.onclick=async()=>{
+    const a=Math.round(angleAt(pts[0],pts[1],pts[2])*10)/10, key=pick.value||ms[0].key;
+    const values={};(_mob.results||[]).filter(r=>r.pillar===rec.pillar&&r.test===rec.test&&r.side===rec.side&&r.date===rec.date)
+      .forEach(r=>{values[r.measure]=r.label!=null?r.label:r.value;});
+    values[key]=a;
+    save.disabled=true;save.textContent='Saving...';
+    try{
+      await syncApi('/api/fitness/mobility/result',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:rec.side,values})});
+      const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.85));
+      const st=await syncApi('/api/fitness/mobility/media',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:rec.side,mime:'image/jpeg',bytes:blob.size})});
+      if(st&&st.id){await fetch(API_BASE+'/api/fitness/mobility/media/'+st.id+'/0',{method:'PUT',headers:{'Authorization':'Bearer '+syncToken(),'Content-Type':'application/octet-stream'},body:blob});
+        await syncApi('/api/fitness/mobility/media/'+st.id+'/finish',{method:'POST'});}
+      ov.remove();await load();renderMobility();toast('Saved '+Math.round(a)+'\u00b0 to '+t.name);
+    }catch(e){save.disabled=false;save.textContent='Save angle';toast('Could not save. Check your connection.');}
+  };
 };
 })();

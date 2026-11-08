@@ -1976,6 +1976,10 @@ def _cases():
                 and not fm.MEDIA_DIR.startswith("/opt/cortex-knowledge")   # never multiplied by the nightly tar
                 and fm.CHUNK_MAX < 100_000_000                              # under Cloudflare's request cap
                 and "mobility.js?v=" in open(_web + "/fitness/index.html", encoding="utf-8").read())
+    case("tap-to-measure computes the angle at the middle point and saves it with its marked-up frame",
+         "mobility angles 8 Nov",
+         lambda: (lambda m: "function angleAt(a,b,c)" in m and "values[key]=a" in m and "toBlob" in m
+                  and "kind==='number'&&m.unit==='deg'" in m)(open(_web + "/fitness/mobility.js", encoding="utf-8").read()))
     case("the mobility tab carries the 8 pillars, Smith's pike tests, chunked private video outside the backup",
          "mobility assessments 8 Nov", _mobility)
     case("the weight page: today's weigh-in, then the chart, then the last 7; photos swipe in one row", "weight layout 2 Nov",
