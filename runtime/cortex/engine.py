@@ -3803,7 +3803,15 @@ _ATTACH_CLAIM = re.compile(
     r"|(?:i|we)\s*(?:'ve|\s+have)\s+(?:also\s+)?(?:attached|enclosed)"
     r"|(?:i|we)\s*(?:'m|\s+am|'re|\s+are)\s+(?:also\s+)?(?:attaching|enclosing)"
     r"|attached\s+(?:is|are|you\s+will\s+find|herewith|to\s+this\s+(?:e-?mail|message))"
-    r"|enclosed\s+(?:is|are|please)|(?:i|we)\s+attach\b|attaching\s+(?:our|the|a|both|it|them))", re.I)
+    r"|enclosed\s+(?:is|are|please)|(?:i|we)\s+attach\b|attaching\s+(?:our|the|a|both|it|them)"
+    # A LABEL IS A CLAIM TOO (card 1716, 9 Nov 2026): "Option 1: image attached", three times, with nothing on the
+    # card. No "please find" anywhere in it, so the guard passed it and the card showed no problem. The noun list is
+    # what WE would call our own file, so "the attached brief" (theirs) still does not match.
+    r"|\b(?:image|images|photo|photos|picture|pictures|file|files|document|documents|pdf|deck|storyboard|"
+    r"moodboard|treatment|script|quotation|proposal|invoice|frame|frames|option|options|visual|visuals|"
+    r"version|versions|copy|artwork|reference|references)\s+(?:is\s+|are\s+)?attached\b"
+    # not "the quotation attached TO your email", which is the file THEY sent us
+    r"(?!\s+(?:to|with|in|on|from)\b))", re.I)
 
 
 _GREET = re.compile(r"^\s*(?:hello|hi|hey|dear|good\s+(?:morning|afternoon|evening))[\s,]+"

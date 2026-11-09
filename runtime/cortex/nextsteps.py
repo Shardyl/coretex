@@ -716,6 +716,46 @@ def started_from_tool(name: str, inp: dict, out) -> None:
         print(f"[nextsteps] started_from_tool {name}: {type(e).__name__}: {e}", flush=True)
 
 
+# A STEP THAT SENDS SOMETHING ATTACHES IT (owner, 9 Nov 2026). Card 1716 told Farheen "Option 1: image attached"
+# three times with nothing on the card: a reminder email had no route to a file, and the step's own words are an
+# instruction to send one. The deck that answered it had been filed on the deal two minutes earlier.
+_SENDS_FILE = re.compile(
+    r"\b(?:e-?mail|send|share|forward|provide|issue|submit|circulate|resend|attach)\w*\b[^.]{0,90}?"
+    r"\b(?:image|images|photo|photos|picture|pictures|option|options|visual|visuals|frame|frames|board|boards|"
+    r"deck|decks|storyboard|storyboards|moodboard|treatment|treatments|script|scripts|proposal|proposals|"
+    r"quotation|quotations|quote|invoice|document|documents|pdf|brief|breakdown|schedule|version|versions|"
+    r"file|files|sheet|artwork|reference|references)\b", re.I)
+
+
+def _step_attachments(it: dict) -> tuple[list[dict], list[str]]:
+    """The files a "send them X" step should carry: what was filed on THIS deal after the step was set, newest
+    first, never a file this deal has already sent, never an internal record. Deterministic on purpose - the
+    model is told what is on the card, it never chooses the file."""
+    from . import documents
+    since = it.get("created_at") or (_now() - timedelta(days=14))
+    rows = db.query("select * from company_documents where company_id=%s and deal_id=%s and superseded_by is null "
+                    "and created_at >= %s order by created_at desc limit 12",
+                    (it["company_id"], it["deal_id"], since))
+    sent = {r["id"] for r in db.query("select distinct (a->>'id')::int as id from tasks, "
+                                      "jsonb_array_elements(request->'attach_docs') a where deal_id=%s and "
+                                      "status='done'", (it["deal_id"],)) if r.get("id")}
+    refs, names, seen = [], [], set()
+    for d in rows:
+        key = (d.get("filename") or "").lower()
+        if d["id"] in sent or key in seen or (d.get("kind") or "") in documents.PRIVATE_KINDS:
+            continue
+        try:
+            refs.append(documents.card_ref(d))          # a spreadsheet becomes its PDF, or is refused
+        except Exception as e:  # noqa: BLE001
+            print(f"[nextsteps] step {it['id']} skips doc {d['id']}: {e}", flush=True)
+            continue
+        seen.add(key)
+        names.append(d["filename"])
+        if len(refs) >= 3:
+            break
+    return refs, names
+
+
 def _draft_email(it: dict) -> bool:
     """The email that does this step, to the opportunity's lead, as an ordinary card for approval."""
     from . import reminders, store
@@ -748,6 +788,17 @@ def _draft_email(it: dict) -> bool:
                        else {"name": "", "email": lead, "subject": ""} if lead else {})}
     if person:
         req["no_deal_cc"] = True          # their own conversation: nobody else from the deal is copied
+    if _SENDS_FILE.search(it["what"] or ""):
+        refs, names = _step_attachments(it)
+        if refs:
+            req["attach_docs"] = refs
+            req["brief"] += ("\n\nTHIS EMAIL CARRIES: " + ", ".join(names) + ". Write it around what is attached, "
+                             "naming what it is; everything the step asks for is in those files unless it says "
+                             "otherwise.")
+        else:
+            req["brief"] += ("\n\nNOTHING IS ATTACHED TO THIS EMAIL and you cannot attach anything. Do not write "
+                             "that anything is attached, enclosed or below. Say what is coming and when, or ask "
+                             "for what is needed to send it.")
     req = reminders._with_deal({"target_type": "deal", "target_id": it["deal_id"], "title": it["what"]}, "email_reply", req)
     if "@" not in ((req.get("inquiry") or {}).get("email") or ""):
         return False
@@ -760,6 +811,11 @@ def _draft_email(it: dict) -> bool:
         from . import engine
         r2 = dict(open_card.get("request") or {})
         r2["brief"] = (r2.get("brief") or "").rstrip() + f"\n\nALSO COVER IN THIS EMAIL (a next step now due): {it['what']}."
+        have = {int(a.get("id")) for a in (r2.get("attach_docs") or []) if a.get("id")}
+        add = [a for a in (req.get("attach_docs") or []) if int(a.get("id", 0)) not in have]
+        if add:                           # the step's own files ride on the email that now covers it
+            r2["attach_docs"] = (r2.get("attach_docs") or []) + add
+            r2["brief"] += (" IT NOW ALSO CARRIES: " + ", ".join(a["filename"] for a in add) + ".")
         store.update_task(open_card["id"], request=r2)
         try:
             engine.refresh_from_notes(open_card["id"], f"A next step is now due and belongs in this email: {it['what']}")

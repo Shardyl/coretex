@@ -2081,6 +2081,60 @@ def _cases():
     case("approval copy is grounded in what the team supplied",
          "no invented facts", _approval_grounded)
 
+    # --- a step that sends something attaches it (card 1716, 9 Nov 2026) ----------------
+    def _label_is_a_claim():
+        """The real draft. "Option 1: image attached" three times, no "please find" anywhere, nothing on the
+        card: the guard passed it and the card showed no problem, so Approve would have sent it."""
+        from . import engine
+        bad = ("Option 1: image attached\nOption 2: image attached\nOption 3: image attached",
+               "The deck is attached.", "Three options attached.", "Photos attached below.")
+        ok = ("Thank you for the quotation attached to your email.",
+              "I have read the attached brief.",
+              "We will send the three options across tomorrow.")
+        return (all(engine._attachment_claim(d, {}) for d in bad)
+                and not any(engine._attachment_claim(d, {}) for d in ok)
+                # ... and it is silent the moment the email really carries the file
+                and not engine._attachment_claim(bad[0], {"attach_docs": [{"id": 1, "filename": "deck.pdf"}]}))
+
+    case("a label claiming an attachment is a claim", "card 1716 9 Nov", _label_is_a_claim)
+
+    def _step_wants_a_file():
+        """Which steps are an instruction to send something we hold. The first is the real step #262."""
+        from . import nextsteps as ns
+        yes = ["Email Farheen 3 image options for the Sadaf lady with her wardrobe updated to a modern "
+               "traditional style",
+               "Send the revised storyboard to Alex", "Share the quotation with Salman",
+               "Issue the pro forma invoice"]
+        no = ["Call Farheen to agree the shoot dates", "Rework the Majlis frames: traditional-materials hero shot",
+              "Chase them for the signed quotation"]
+        return all(ns._SENDS_FILE.search(s) for s in yes) and not any(ns._SENDS_FILE.search(s) for s in no)
+
+    case("a next step that says send them something is recognised", "card 1716 9 Nov", _step_wants_a_file)
+
+    def _nothing_attached_says_so():
+        """With no file filed on the deal the brief must FORBID the claim, not leave the writer to guess:
+        the step's own words ("email 3 image options") read as an instruction to say "attached"."""
+        import inspect as _i
+        from . import nextsteps as ns
+        src = _i.getsource(ns._draft_email)
+        return ("NOTHING IS ATTACHED TO THIS EMAIL" in src and "THIS EMAIL CARRIES" in src
+                and "_step_attachments" in src)
+
+    case("a send-them-something step either carries the file or forbids the claim",
+         "card 1716 9 Nov", _nothing_attached_says_so)
+
+    def _step_files_are_the_deals_own():
+        """The model never chooses the file. Code takes what was filed on THIS deal after the step was set,
+        skips the internal meeting record, and never re-sends what the deal has already sent."""
+        import inspect as _i
+        from . import nextsteps as ns
+        src = _i.getsource(ns._step_attachments)
+        return ("deal_id=%s" in src and "superseded_by is null" in src and "created_at >= %s" in src
+                and "PRIVATE_KINDS" in src and "status='done'" in src and "card_ref" in src)
+
+    case("the files on a reminder email are the deal's own, by code", "card 1716 9 Nov",
+         _step_files_are_the_deals_own)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

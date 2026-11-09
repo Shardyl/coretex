@@ -277,6 +277,31 @@ parked roadmap note on skill 315 is his own wording and was left alone.
 whether it is a mangling of someone already there.** Gino and Ayresh carry IDENTICAL authority:
 role admin, companies sensa + skyvision, `can_approve` true. There is nothing to grant.
 
+## A step that sends something attaches it (owner, 9 Nov 2026)
+
+Gino filed the Qabilah client approval deck on deal 130 at 12:08 (doc 1565, 26 pages, the approval format:
+MJ/SD/SQ codes, the three Sadaf wardrobe options as SD-M1 to SD-M3, a sign-off page). Two minutes later next
+step #262 ("Email Farheen 3 image options for the Sadaf lady...") fell due and card 1716 was drafted with
+**no attachment at all**, saying "Option 1: image attached / Option 2: image attached / Option 3: image
+attached". Two separate faults, both fixed with cases:
+
+1. **A reminder email had no route to a file.** `nextsteps._draft_email` never looked at documents, and the
+   step's own words are an instruction to send one, so the writer wrote "attached" because it was told to
+   share three images. Now `_SENDS_FILE` recognises a step that sends something we hold, and
+   `_step_attachments(it)` takes, BY CODE, what was filed on that deal after the step was set: newest first,
+   max 3, superseded excluded, `documents.PRIVATE_KINDS` excluded, a spreadsheet swapped for its PDF by
+   `card_ref`, and never a document the deal has already sent. The model never chooses the file. With files,
+   the brief says "THIS EMAIL CARRIES: ..."; with none it says **NOTHING IS ATTACHED ... Do not write that
+   anything is attached**. A step folded into an open card carries its files onto that card.
+2. **"image attached" was not a claim.** `_ATTACH_CLAIM` only knew "please find attached", "I have attached"
+   and friends, so the false claim reached the Inbox with no `card_problem` and Approve would have sent it.
+   It now also matches a noun WE would use for our own file immediately before "attached" ("image attached",
+   "the deck is attached", "three options attached"), excluding "the quotation attached TO your email",
+   which is theirs.
+
+Card 1716 was repaired through the same mechanism as the cockpit's Attach button (`documents.card_ref` ->
+`request.attach_docs`, then `apply_correction(infer=False)`), not by hand.
+
 ## Shot-by-shot decks from a locked shot list (owner, 4 Nov 2026)
 
 "About 3 images per VO line ... a very, very long deck." `creative.start_shot_deck(base_job, shot_doc)` builds a page per
