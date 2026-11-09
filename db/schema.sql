@@ -527,6 +527,7 @@ create table if not exists fitness.mobility_results (
     value      numeric,
     label      text,
     note       text,
+    provisional boolean not null default false,   -- counts only after a proper retest (owner, 9 Nov 2026)
     deleted    boolean not null default false,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
@@ -543,5 +544,8 @@ create table if not exists fitness.mobility_media (
     bytes      bigint,
     complete   boolean not null default false,
     deleted    boolean not null default false,
+    note       text,                 -- e.g. "freestanding, not on the wall"
+    frame_s    numeric,              -- a measured still: the second of the clip it was read from
+    source     text,                 -- a measured still: the clip it was read from
     created_at timestamptz not null default now()
 );

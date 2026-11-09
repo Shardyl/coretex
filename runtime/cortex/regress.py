@@ -2084,6 +2084,20 @@ def _cases():
                 and "mobility.js?v=" in open(_web + "/fitness/index.html", encoding="utf-8").read())
     case("the mission strip shows body fat now as a big number of its own, not small print", "body fat bigger 8 Nov",
          lambda: 'class="fd-fatnow" style="font-size:19px' in open(_web + "/fitness/food.js", encoding="utf-8").read())
+    def _mob_overview():
+        from . import fitness_mobility as fm
+        pike = next(p for p in fm.DEFAULT_PILLARS if p["id"] == "pike")
+        t = {x["id"]: x for x in pike["tests"]}
+        js = open(_web + "/fitness/mobility.js", encoding="utf-8").read()
+        return ([p["id"] for p in fm.DEFAULT_PILLARS][:3] == ["shoulder_flexion", "shoulder_extension", "pike"]
+                and t["fold"]["measures"][1]["angle"]["mode"] == "flex" and t["leg_lift"]["measures"][0]["angle"]["mode"] == "flex"
+                and t["hip_ir"]["measures"][0]["angle"]["mode"] == "vertical"
+                and pike["gap"]["active"]["test"] == "leg_lift" and pike["gap"]["passive"]["test"] == "fold"
+                and fm._HAND[0] == "Beyond Shaka"
+                and "function cellState(" in js and "function todos(" in js and "function gapFor(" in js
+                and "sp.mode==='flex'?180-a:a" in js and "provisional" in js and "x.side==='both'" in js)
+    case("mobility shows what is done per test and side, the next to-dos, the active vs passive gap, and measures each "
+         "test's angle its own way", "mobility overview 9 Nov", _mob_overview)
     case("tap-to-measure computes the angle at the middle point and saves it with its marked-up frame",
          "mobility angles 8 Nov",
          lambda: (lambda m: "function angleAt(a,b,c)" in m and "values[key]=a" in m and "toBlob" in m

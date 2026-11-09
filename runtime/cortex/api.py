@@ -7304,6 +7304,7 @@ class MobilityResult(BaseModel):
     side: str
     values: dict
     note: str | None = None
+    provisional: bool = False
 
 
 class MobilityMediaStart(BaseModel):
@@ -7313,6 +7314,9 @@ class MobilityMediaStart(BaseModel):
     side: str
     mime: str
     bytes: int
+    note: str | None = None
+    frame_s: float | None = None
+    source: str | None = None
 
 
 @app.get("/api/fitness/mobility")
@@ -7325,7 +7329,8 @@ def fitness_mobility_state(_: None = Depends(auth)) -> dict:
 def fitness_mobility_result(body: MobilityResult, _: None = Depends(auth)) -> dict:
     from . import fitness_mobility
     try:
-        return fitness_mobility.save_results(body.date, body.pillar, body.test, body.side, body.values, body.note or "")
+        return fitness_mobility.save_results(body.date, body.pillar, body.test, body.side, body.values, body.note or "",
+                                             body.provisional)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -7334,7 +7339,8 @@ def fitness_mobility_result(body: MobilityResult, _: None = Depends(auth)) -> di
 def fitness_mobility_media_start(body: MobilityMediaStart, _: None = Depends(auth)) -> dict:
     from . import fitness_mobility
     try:
-        return fitness_mobility.media_start(body.date, body.pillar, body.test, body.side, body.mime, body.bytes)
+        return fitness_mobility.media_start(body.date, body.pillar, body.test, body.side, body.mime, body.bytes,
+                                            body.note or "", body.frame_s, body.source or "")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
