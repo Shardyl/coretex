@@ -30,8 +30,10 @@ PIKE_LESSON = "https://www.matthewismith.com/products/mobility-flexibility-toolk
 _HAND = ["Beyond Shaka", "Shaka", "Thumbs up", "Bent thumb", "Fist", "4 fingers", "3 fingers", "2 fingers", "1 finger", "Touching"]
 _TOUCH = ["Knee", "Upper shin", "Mid shin", "Lower shin", "Top of foot", "Fingertips to floor", "Knuckles to floor",
           "Palms flat", "Beyond palms (raised platform)"]
-_NERVE = ["1 Elevate leg", "2 Straighten knee", "3 Dorsiflex", "4 Adduct leg", "5 Internally rotate", "6 Fold at hips",
-          "7 Round lower back", "8 Round upper back", "9 Tuck chin", "10 Pull it all together", "Clear (no nerve feeling)"]
+# Smith's own names for the 10 levels, from the lesson's on-screen list (owner screenshot, 9 Nov 2026)
+_NERVE = ["1 Elevate leg", "2 Straighten knee", "3 Dorsiflex", "4 Adduct leg", "5 Internally rotate", "6 Flex hip",
+          "7 Flex lumbar", "8 Flex thoracic", "9 Flex cervical", "10 Pull together (pull on the foot)",
+          "Clear (no nerve feeling)"]
 
 # A measure may carry "angle": {"mode", "points"} saying how the tap tool reads it: "inside" = the angle at the
 # middle point, "flex" = 180 minus that (how far a joint has folded: a fold, read shoulder-hip-ankle; a leg lift is already "inside",
@@ -45,7 +47,7 @@ DEFAULT_PILLARS = [
     {"id": "shoulder_flexion", "name": "Shoulder flexion", "tests": []},
     {"id": "shoulder_extension", "name": "Shoulder extension", "tests": []},
     {"id": "pike", "name": "Pike & head to toe", "lesson": PIKE_LESSON,
-     "setup": "Test cold, no warm-up. Phone on the floor tilted slightly up, square to your hips; same spot every time. "
+     "setup": "Barefoot or socks, no shoes, for every test. Test cold, no warm-up. Phone on the floor tilted slightly up, square to your hips; same spot every time. "
               "Camera position 1 for tests 1 to 4 (both sides, same angle); position 2 for test 5.",
      "tests": [
          {"id": "fold", "name": "Standing Forward Fold", "sides": ["both"], "camera": "Position 1, side on",
@@ -66,7 +68,9 @@ DEFAULT_PILLARS = [
                                   "pose": {"joints": ["low:ankle", "mid:hip", "high:ankle"], "side": "lifted", "best": "max"}}}],
           "role": "active"},
          {"id": "nerve", "name": "Sciatic Nerve Level", "sides": ["L", "R"], "camera": "Position 1 (filming optional)",
-          "cue": "Foot up on a box, add each level in turn, stop at the first nervy feeling.",
+          "cue": "Foot up on a box. Go through the 10 movements in order, adding one at a time and keeping the ones before. "
+                 "Stop at the first nervy sensation and record that number. Level 10: pull on the foot to pull it all "
+                 "together. No nervy sensation through all 10 = Clear.",
           "measures": [{"key": "level", "label": "Level reached", "kind": "choice", "options": _NERVE}]},
          {"id": "hip_ir", "name": "Hip Internal Rotation Length Test", "sides": ["L", "R"],
           "camera": "Position 2: camera at BOX HEIGHT, level with the box seat, facing you from the front. This is the only test not filmed from the floor (tests 1 to 4 are filmed with the phone on the floor).",

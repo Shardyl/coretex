@@ -2216,6 +2216,12 @@ def _cases():
                 and t["hip_ir"]["measures"][0]["angle"]["pose"]["side"] == "each"
                 and "detectForVideo(" in js and "function bestOf(" in js and "auto-detected" in js
                 and "tasks-vision@'+MP_VER" in js and "MP_VER='0.10.14'" in js)
+    case("the pike tests say no shoes, and the nerve test uses Smith's own level names and says stop at the first "
+         "nervy sensation", "pike notes 9 Nov",
+         lambda: (lambda fm: (lambda pk: pk["setup"].startswith("Barefoot or socks, no shoes")
+                  and fm._NERVE[5] == "6 Flex hip" and fm._NERVE[9].startswith("10 Pull together")
+                  and "first nervy sensation" in next(t for t in pk["tests"] if t["id"] == "nerve")["cue"])
+                  (next(p for p in fm.DEFAULT_PILLARS if p["id"] == "pike")))(__import__("cortex.fitness_mobility", fromlist=["x"])))
     case("auto-measure finds the joints in the browser, picks the end-range frame per side by code, and a leg lift reads "
          "the angle between the legs (0 standing, 90 at hip height)", "mobility auto-measure 9 Nov", _mob_auto)
     case("tap-to-measure computes the angle at the middle point and saves it with its marked-up frame",
