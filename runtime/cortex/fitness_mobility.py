@@ -51,18 +51,21 @@ DEFAULT_PILLARS = [
               "Camera position 1 for tests 1 to 4 (both sides, same angle); position 2 for test 5.",
      "tests": [
          {"id": "fold", "name": "Standing Forward Fold", "sides": ["both"], "camera": "Position 1, side on",
-          "cue": "Stand on a raised platform, feet together, knees straight, fold and slide the hands down.",
+          "cue": "Stand on a raised platform, feet together, knees straight, fold and slide the hands down. "
+                 "Hold the end position for 5 seconds for it to count.",
           "measures": [{"key": "touch", "label": "Reach", "kind": "choice", "options": _TOUCH},
                        {"key": "deg", "label": "Hip flexion", "kind": "number", "unit": "deg",
                         "angle": {"mode": "flex", "points": ["Shoulder", "Hip", "Ankle"],
                                   "pose": {"joints": ["shoulder", "hip", "ankle"], "side": "visible", "best": "max"}}}],
           "role": "passive"},
          {"id": "elbow_head", "name": "Elbow/Head To Toe", "sides": ["L", "R"], "camera": "Position 1, side on",
-          "cue": "Front heel down, toes propped on a block, fold over the straight leg: elbow to toe, then head to toe.",
+          "cue": "Front heel down, toes propped on a block, fold over the straight leg: elbow to toe, then head to toe. "
+                 "Hold each for 5 seconds for it to count.",
           "measures": [{"key": "elbow", "label": "Elbow gap", "kind": "choice", "options": _HAND},
                        {"key": "head", "label": "Head gap", "kind": "choice", "options": _HAND}]},
          {"id": "leg_lift", "name": "Standing Leg Lift", "sides": ["L", "R"], "camera": "Position 1, side on",
-          "cue": "Back to a wall, lift the straight leg as high as you can, no hands. The active side of the pike.",
+          "cue": "Back to a wall, lift the straight leg as high as you can, no hands. Hold it for 5 seconds for it to "
+                 "count. The active side of the pike.",
           "measures": [{"key": "deg", "label": "Hip flexion", "kind": "number", "unit": "deg",
                         "angle": {"mode": "inside", "points": ["Standing foot", "Hip", "Lifted foot"],
                                   "pose": {"joints": ["low:ankle", "mid:hip", "high:ankle"], "side": "lifted", "best": "max"}}}],
