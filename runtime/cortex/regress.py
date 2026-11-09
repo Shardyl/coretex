@@ -1930,6 +1930,34 @@ def _cases():
     case("render_spec still refuses a page type it does not know", "Heaven retainer deck, 17 Oct",
          lambda: 'unknown page type' in inspect.getsource(deck.render_spec))
 
+    # --- client approval deck (9 Nov 2026) -----------------------------------------------
+    def _approval_types():
+        """The three page types an approval deck needs, wired into render_spec. Without the
+        wiring the pages are silently skipped and the deck renders short."""
+        src = inspect.getsource(deck)
+        want = ["def scene(self", "def approval(self", "def signoff(self",
+                'elif t == "scene":', 'elif t == "approval":', 'elif t == "signoff":']
+        return all(x in src for x in want)
+
+    case("an approval deck has scene, approval and signoff pages",
+         "client approval deck 9 Nov", _approval_types)
+
+    def _approval_two_rows():
+        """Five items means a second row, and at full size its captions landed on the footer."""
+        src = inspect.getsource(deck._Deck.approval)
+        return "two = len(got) > cols" in src and "4: 252" in src
+
+    case("a second row of approval items shrinks to clear the footer",
+         "characters page overflowed 9 Nov", _approval_two_rows)
+
+    def _scene_single():
+        """A lone frame sits BESIDE its words; stacked above them it left half the page empty."""
+        src = inspect.getsource(deck._Deck.scene)
+        return "if n == 1:" in src and "744, 419" in src
+
+    case("a one-shot scene page puts the frame beside the words",
+         "empty single-shot pages 9 Nov", _scene_single)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
