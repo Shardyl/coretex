@@ -1208,11 +1208,16 @@ class _Deck:
         client can write "PR-04, make it blue" and everyone knows what moved. Two rows maximum, so
         the page cannot overflow however many items are passed."""
         cols = 2 if cols < 2 else (4 if cols > 4 else cols)
-        got = (items or [])[:cols * 2]
-        # A SECOND ROW SHRINKS THE FRAMES. At full size two rows of captions ran onto the
-        # footer on the characters page, which has five items (9 Nov 2026).
+        # TWO ROWS ONLY AT FOUR COLUMNS. A cell is its image plus about 82px of code, name and
+        # caption, and two rows have roughly 250px each to live in, so the image can be about
+        # 145px tall, which is a 258px frame. At two or three columns that is far narrower than
+        # the column, so those lay out one row and the frames stay big; only the four-column
+        # grid is already near that size and can stack (9 Nov 2026: a two-row cols=2 page
+        # overflowed by a full page every time).
+        per = cols * 2 if cols == 4 else cols
+        got = (items or [])[:per]
         two = len(got) > cols
-        w = ({2: 486, 3: 320, 4: 252} if two else {2: 548, 3: 362, 4: 269})[cols]
+        w = ({4: 252} if two else {2: 548, 3: 362, 4: 269})[cols]
         h = int(w * 9 / 16)
         mb = 13 if two else 18
         cells = []
