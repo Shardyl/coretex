@@ -330,7 +330,7 @@ window.mobMeasure=function(src,id,ov){
   const tip=document.createElement('div');tip.style.cssText='color:#ddd;font-size:12px;margin-bottom:8px;text-align:center;max-width:520px';
   const out=document.createElement('div');out.style.cssText='color:#fff;font-weight:800;font-size:15px;margin:10px 0 6px;text-align:center';
   const bar=document.createElement('div');bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center';
-  const sel=(opts,cur)=>{const s=document.createElement('select');s.style.cssText='font-size:13px';opts.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;if(v===cur)o.selected=true;s.appendChild(o);});return s;};
+  const sel=(opts,cur)=>{const s=document.createElement('select');s.style.cssText='font-size:13px;width:auto';opts.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;if(v===cur)o.selected=true;s.appendChild(o);});return s;};
   const pick=sel(ms.map(x=>[x.key,x.label]),m.key);if(ms.length<2)pick.style.display='none';
   const sides=t.sides, side=sel(sides.map(s=>[s,SIDE[s]]),sides.includes(rec.side)?rec.side:sides[0]);if(sides.length<2)side.style.display='none';
   const provL=document.createElement('label');provL.style.cssText='color:#ddd;font-size:12px;display:flex;align-items:center;gap:4px';
