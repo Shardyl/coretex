@@ -50,6 +50,10 @@ _DOC = (".pdf", ".docx", ".txt", ".md", ".rtf")
 # a trailing section word, with or without brackets, and tolerant of the stray unclosed one
 _LABEL = re.compile(r"[\s(\[-]*\b(character|wardrobe|location|prop|props)\b\s*[)\]]*\s*$", re.I)
 _SCENE = re.compile(r"scene\s*0*(\d+)(?:\s*[-_]\s*0*(\d+))?", re.I)
+# a numbered frame, "07 - The weaver, in memory.jpg"; Drive's "Copy of " and a doubled
+# extension ("....jpg.png") are how hand-copied files actually arrive
+_FRAME = re.compile(r"^\s*(?:copy of\s+)*0*(\d{1,3})\s*[-_.]\s*(.+?)\s*$", re.I)
+_EXT = re.compile(r"(\.(?:png|jpe?g|webp))+$", re.I)
 
 
 # --------------------------------------------------------------------------- labels and codes
@@ -71,6 +75,32 @@ def scene_of(filename: str) -> tuple[int, int] | None:
     if not m:
         return None
     return int(m.group(1)), int(m.group(2) or 0)
+
+
+def frame_of(filename: str) -> tuple[int, str] | None:
+    """(7, 'The weaver, in memory') from 'Copy of 07 - The weaver, in memory.jpg.png'."""
+    stem = _EXT.sub("", os.path.basename(filename or ""))
+    m = _FRAME.match(stem)
+    return (int(m.group(1)), m.group(2).strip()) if m else None
+
+
+def _plain(filename: str) -> str:
+    return re.sub(r"^(?:copy of\s+)+", "", _EXT.sub("", os.path.basename(filename or "")),
+                  flags=re.I).strip()
+
+
+def film_prefix(name: str, taken: set) -> str:
+    """MJ for Majlis, SQ for Saqarah, SD for Sadaf: the first letter and the next consonant,
+    so two films sharing an initial still get distinct codes."""
+    w = re.sub(r"[^A-Za-z]", "", name or "").upper() or "FM"
+    cons = [c for c in w[1:] if c not in "AEIOU"] or list(w[1:]) or ["X"]
+    for c in cons:
+        if w[0] + c not in taken:
+            return w[0] + c
+    n = 2
+    while "%s%s%d" % (w[0], cons[0], n) in taken:
+        n += 1
+    return "%s%s%d" % (w[0], cons[0], n)
 
 
 def _key(company_slug: str, client: str, production: str) -> str:
@@ -119,11 +149,25 @@ def folder_id(company_id: int, client: str, production: str, tok: str) -> str | 
     cf = drive.ensure_client_folder(client, parent, token=tok)
     if not cf.get("id"):
         return None
-    assets = drive.ensure_subfolder(cf["id"], ASSETS_FOLDER, tok)
-    for f in drive.list_folder(assets, tok):
-        if (f.get("mimeType") == "application/vnd.google-apps.folder"
-                and _slug(f.get("name")) == _slug(production)):
+    # "APPROVAL ASSETS", "Approval Asset", "approval assets": whatever the team typed. Never
+    # create a second one beside it (Shama's folder is "Approval Asset", 9 Nov 2026).
+    assets = next((f["id"] for f in drive.list_folder(cf["id"], tok)
+                   if f.get("mimeType") == "application/vnd.google-apps.folder"
+                   and _slug(f.get("name")).rstrip("s") == _slug(ASSETS_FOLDER).rstrip("s")), None)
+    if not assets:
+        return None
+    subs = [f for f in drive.list_folder(assets, tok)
+            if f.get("mimeType") == "application/vnd.google-apps.folder"]
+    for f in subs:
+        if _slug(f.get("name")) == _slug(production):
             return f["id"]
+    # A client with ONE production often drops its films straight under the assets folder
+    # (Shama: Approval Asset/Majlis, /Saqarah, /Sadaf for Qabilah). Take the assets folder as the
+    # production when every subfolder in it holds numbered frames, never otherwise: another
+    # production's folder must not be swept into this deck.
+    if subs and all(any(frame_of(g.get("name")) for g in drive.list_folder(f["id"], tok))
+                    for f in subs):
+        return assets
     return None
 
 
@@ -158,7 +202,7 @@ def sync(company: str, client: str, production: str) -> dict:
             seen[name] = md5
         return dest, True
 
-    items, scenes, guidance, script, pulled = [], [], "", "", 0
+    items, scenes, films, guidance, script, pulled = [], [], [], "", "", 0
     for f in drive.list_folder(fid, tok):
         name = f.get("name") or ""
         low = name.lower()
@@ -169,6 +213,23 @@ def sync(company: str, client: str, production: str) -> dict:
                         p, new = grab(g, "frames")
                         pulled += new
                         scenes.append({"path": p, "scene": scene_of(g["name"])})
+            else:
+                film = {"name": name.strip(), "frames": [], "extras": []}
+                for g in drive.list_folder(f["id"], tok):
+                    gn = g.get("name") or ""
+                    if not gn.lower().endswith(_IMAGE):
+                        continue
+                    p, new = grab(g, os.path.join("films", _slug(name)))
+                    pulled += new
+                    fr = frame_of(gn)
+                    if fr:
+                        film["frames"].append({"n": fr[0], "caption": fr[1], "path": p})
+                    else:
+                        film["extras"].append({"name": _plain(gn), "path": p})
+                if film["frames"]:
+                    film["frames"].sort(key=lambda x: x["n"])
+                    film["extras"].sort(key=lambda x: x["name"].lower())
+                    films.append(film)
             continue
         if low.endswith(_IMAGE):
             kind, nm = parse_label(name)
@@ -192,7 +253,31 @@ def sync(company: str, client: str, production: str) -> dict:
     scenes.sort(key=lambda s: s["scene"])
     return {"dir": work, "folder": fid, "pulled": pulled, "guidance": guidance.strip(),
             "script": script.strip(), "scenes": scenes,
+            "films": film_codes(key, sorted(films, key=lambda x: x["name"].lower())),
             "items": assign_codes(key, items)}
+
+
+def film_codes(key: str, films: list[dict]) -> list[dict]:
+    """A frame's code is its film's prefix and its OWN number from the filename (MJ-07 is
+    "07 - The weaver"), so a replaced frame keeps its code by construction. The prefix is pinned
+    per film name, and extras (a model sheet beside the frames) are pinned by name as M1, M2..."""
+    reg = dict(db.setting_get(key + ":films") or {})
+    pre = dict(reg.get("prefix") or {})
+    extra = dict(reg.get("extra") or {})
+    for f in films:
+        k = f["name"].lower()
+        if k not in pre:
+            pre[k] = film_prefix(f["name"], set(pre.values()))
+        f["prefix"] = pre[k]
+        for fr in f["frames"]:
+            fr["code"] = "%s-%02d" % (pre[k], fr["n"])
+        mine = extra.setdefault(k, {})
+        for x in f["extras"]:
+            if x["name"].lower() not in mine:
+                mine[x["name"].lower()] = "%s-M%d" % (pre[k], len(mine) + 1)
+            x["code"] = mine[x["name"].lower()]
+    db.setting_set(key + ":films", {"prefix": pre, "extra": extra})
+    return films
 
 
 def _read(path: str) -> str:
@@ -315,22 +400,30 @@ def spec(company: str, client: str, production: str, synced: dict, caps: dict, *
     if synced["scenes"]:
         counts.append({"title": str(len({s["scene"][0] for s in synced["scenes"]})),
                        "sub": "scenes"})
+    films = synced.get("films") or []
+    counts += [{"title": str(len(f["frames"])), "sub": f["name"].lower() + " frames"}
+               for f in films][:4]
+    what = ", ".join(f["name"] for f in films)
+    codes_line = ", ".join("%s frames are %s" % (f["name"], f["prefix"]) for f in films)
     pages = [
         {"type": "covermeta", "kicker": "CLIENT APPROVAL DECK", "title": production,
          "title2": "Everything to approve, in one place.",
-         "standfirst": ("Characters, wardrobe, locations, props and the storyboard. Each item "
-                        "carries a code. Approve the deck, or quote the code of anything you "
-                        "want changed."),
+         "standfirst": ((("Every frame from %s, in film order. " % what) if films else
+                         "Characters, wardrobe, locations, props and the storyboard. ")
+                        + "Each item carries a code. Approve the deck, or quote the code of "
+                          "anything you want changed."),
          "meta": [{"k": "CLIENT", "v": client}, {"k": "PRODUCTION", "v": production},
                   {"k": "VERSION", "v": "Approval deck"},
                   {"k": "DATE", "v": _today()}],
-         "image": (by.get("character") or synced["items"] or [{}])[0].get("image"),
+         "image": ((by.get("character") or synced["items"] or [{}])[0].get("image")
+                   or (films[0]["frames"][-1]["path"] if films else None)),
          "section": "Approval"},
         {"type": "split", "kicker": "HOW THIS WORKS", "heading": "One code, one *decision*",
          "blocks": [
              {"title": "Everything has a code",
-              "body": ("Characters are CH, wardrobe WD, locations LOC, props PR and scenes SC. "
-                       "Quote the code and we both know exactly what is being discussed.")},
+              "body": (((codes_line + ", numbered as the films run. ") if films else
+                        "Characters are CH, wardrobe WD, locations LOC, props PR and scenes SC. ")
+                       + "Quote the code and we both know exactly what is being discussed.")},
              {"title": "Approve the deck, or name the exceptions",
               "body": ("The fastest route is to approve everything and list what you want "
                        "changed. Anything not named is taken as approved.")}],
@@ -353,10 +446,35 @@ def spec(company: str, client: str, production: str, synced: dict, caps: dict, *
                 "items": [{"code": x["code"], "name": x["name"], "image": x["image"],
                            "body": caps.get(x["code"], "")} for x in grp]})
 
+    for film in films:
+        fr = film["frames"]
+        for k in range(0, len(fr), 3):
+            pages.append({
+                "type": "approval", "kicker": film["name"].upper(),
+                "heading": ("%s, *frame by frame*" % film["name"]) if not k
+                else "%s, continued" % film["name"],
+                "intro": ("%d frames in film order." % len(fr)) if not k else "",
+                "cols": 3, "section": film["name"],
+                "items": [{"code": x["code"], "name": x["caption"], "image": x["path"],
+                           "body": ""} for x in fr[k:k + 3]]})
+        ex = film["extras"]
+        for k in range(0, len(ex), 3):
+            pages.append({
+                "type": "approval", "kicker": film["name"].upper(),
+                "heading": ("%s, *alongside the frames*" % film["name"]) if not k
+                else "%s, alongside, continued" % film["name"],
+                "intro": ("Also in the %s folder." % film["name"]) if not k else "",
+                "cols": 3, "section": film["name"],
+                "items": [{"code": x["code"], "name": x["name"], "image": x["path"],
+                           "body": ""} for x in ex[k:k + 3]]})
+
     for pg in (scenes_copy or []):
         pages.append(pg)
 
-    groups = [{"label": TITLE[k], "codes": _range(by[k])} for k, _, _ in SECTIONS if by[k]]
+    groups = [{"label": f["name"], "codes": "%s to %s%s" % (
+        f["frames"][0]["code"], f["frames"][-1]["code"],
+        (", plus %s" % _range([{"code": x["code"]} for x in f["extras"]])) if f["extras"] else "")}
+        for f in films] + [{"label": TITLE[k], "codes": _range(by[k])} for k, _, _ in SECTIONS if by[k]]
     if synced["scenes"]:
         ns = sorted({s["scene"][0] for s in synced["scenes"]})
         groups.append({"label": "Storyboard", "codes": "Scenes %02d to %02d" % (ns[0], ns[-1])})
@@ -396,9 +514,9 @@ def build(company: str, client: str, production: str, *, accent: str = "#4DA3FF"
 
     Returns {path, pages, items, pulled, missing_captions, scenes}."""
     synced = sync(company, client, production)
-    if not synced["items"] and not synced["scenes"]:
+    if not synced["items"] and not synced["scenes"] and not synced["films"]:
         raise ValueError("the %s folder holds nothing labelled Character, Wardrobe, Location, "
-                         "Prop or Scene" % production)
+                         "Prop or Scene, and no folder of numbered frames" % production)
     key = _key(company, client, production)
     caps = captions(key, synced["items"], synced["guidance"], company, force=force_captions)
     scenes_copy = scene_pages(key, synced, company, force=force_captions)
@@ -410,4 +528,6 @@ def build(company: str, client: str, production: str, *, accent: str = "#4DA3FF"
     missing = [i["code"] for i in synced["items"] if not caps.get(i["code"])]
     return {**res, "items": synced["items"], "pulled": synced["pulled"], "filename": name,
             "missing_captions": missing, "guidance": bool(synced["guidance"]),
-            "scenes": len({s["scene"][0] for s in synced["scenes"]})}
+            "scenes": len({s["scene"][0] for s in synced["scenes"]}),
+            "films": {f["name"]: {"frames": len(f["frames"]), "extras": len(f["extras"])}
+                      for f in synced["films"]}}

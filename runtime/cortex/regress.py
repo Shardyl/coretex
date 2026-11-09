@@ -2021,6 +2021,33 @@ def _cases():
     case("an approval code stays pinned to its item when the plate is replaced",
          "approval deck rebuild 9 Nov", _approval_codes_stable)
 
+    def _approval_film_frames():
+        """Shama's Approval Asset folder (9 Nov 2026): one subfolder per film, frames named
+        "NN - caption", hand-copied as "Copy of ..." and one "....jpg.png". The frame number is
+        the code (MJ-07), films sharing an initial still get distinct prefixes, and a picture with
+        no number (Sadaf Model 1) is an extra, not frame 1. These are the real filenames."""
+        from . import approval as ap
+        ok = (ap.frame_of("Copy of 16 - Today on the bow of a modern yacht.jpg.png")
+              == (16, "Today on the bow of a modern yacht")
+              and ap.frame_of("01 - Open on the weave.jpg") == (1, "Open on the weave")
+              and ap.frame_of("Sadaf Model 1.png") is None
+              and ap.frame_of("Scene 4 - 2.png") is None)
+        taken = set()
+        pres = []
+        for n in ("Majlis", "Sadaf", "Saqarah"):
+            pres.append(ap.film_prefix(n, taken))
+            taken.add(pres[-1])
+        k = "approval:__regress_films__"
+        db.setting_set(k + ":films", {})
+        f = ap.film_codes(k, [{"name": "Sadaf", "frames": [{"n": 9}],
+                               "extras": [{"name": "Sadaf Model 1"}]}])
+        db.execute("delete from settings where key = any(%s)", ([k + ":films"],))
+        return (ok and pres == ["MJ", "SD", "SQ"]
+                and f[0]["frames"][0]["code"] == "SD-09" and f[0]["extras"][0]["code"] == "SD-M1")
+
+    case("an approval folder of numbered film frames is coded by film and frame number",
+         "Shama Approval Asset folder 9 Nov", _approval_film_frames)
+
     def _approval_grounded():
         """Captions come from Gino's guidance document and the storyboard from the script.
         Neither writer may invent, and an item the guidance misses gets no caption."""
