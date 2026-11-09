@@ -263,6 +263,20 @@ The one-off tidy that set this up is logged move by move in setting `drive_tidy_
 (file id, from, to, why) so any of it can be reversed. Nothing was deleted. Two emptied folders were left
 for the owner to delete: `Orion Global - FZCO` and `Honor International FZCO`.
 
+## "Irish" is Ayresh (owner, 9 Nov 2026)
+
+Voice-to-text mangles names, the same way it renders Rashad as "Richard". The email-handling rule
+already said "Ayresh/Irish (ayresh@sensa.digital)" and nothing else checked it, so the Wasl drone
+permit corrections of 22 Oct were credited to "Irish" in a LIVE quotation rule (skill 165) and in
+the source field of sixteen Sky Vision rate-card entries, as though a colleague who exists nowhere
+in Cortex had made them. She was nearly given a second user account on 9 Nov. Corrected in both
+places (backups `skill165_rules_backup_2026_11_09`, `rate_card:skyvision:v1.5-pre-irish-fix`); the
+parked roadmap note on skill 315 is his own wording and was left alone.
+
+**Before creating a user, a contact or an attribution for a name you have not seen in Cortex, check
+whether it is a mangling of someone already there.** Gino and Ayresh carry IDENTICAL authority:
+role admin, companies sensa + skyvision, `can_approve` true. There is nothing to grant.
+
 ## Shot-by-shot decks from a locked shot list (owner, 4 Nov 2026)
 
 "About 3 images per VO line ... a very, very long deck." `creative.start_shot_deck(base_job, shot_doc)` builds a page per
@@ -4515,7 +4529,7 @@ shoot needs none), then 10% off the whole quotation.
   confirmation" directly under a note saying 70% deposit. The preset carries the 17 Emergy clauses as
   real terms (flight and safety, permits, payment and cancellation, scope), so the conditions print as
   terms instead of being crammed into the note. Backup `quotation_presets_backup_2026_10_22`.
-- **PERMIT UNITS decide the quantity, and I got them wrong** (Irish corrected the Wasl quotation,
+- **PERMIT UNITS decide the quantity, and I got them wrong** (Ayresh corrected the Wasl quotation,
   22 Oct 2026). Getting the RATE right is not enough: a unit error scales with the job. Rate card
   **v1.5** now carries the unit on every line, and a regress case locks them:
   - **PER APPLICATION, always quantity ONE** however many locations or days, because one
