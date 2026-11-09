@@ -194,13 +194,13 @@ def sync(company: str, client: str, production: str) -> dict:
         dest = os.path.join(work, sub, re.sub(r"[^A-Za-z0-9._ ()-]", "_", name))
         md5 = f.get("md5Checksum") or ""
         if md5 and seen.get(name) == md5 and os.path.exists(dest):
-            return dest, False
+            return _deck_copy(dest), False
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         with open(dest, "wb") as fh:
             fh.write(drive.download(f["id"], tok))
         if md5:
             seen[name] = md5
-        return dest, True
+        return _deck_copy(dest, fresh=True), True
 
     items, scenes, films, guidance, script, pulled = [], [], [], "", "", 0
     for f in drive.list_folder(fid, tok):
@@ -278,6 +278,30 @@ def film_codes(key: str, films: list[dict]) -> list[dict]:
             x["code"] = mine[x["name"].lower()]
     db.setting_set(key + ":films", {"prefix": pre, "extra": extra})
     return films
+
+
+DECK_PX = 1920
+
+
+def _deck_copy(path: str, fresh: bool = False) -> str:
+    """The picture the deck embeds: at most DECK_PX wide, JPEG. The team drops 4K upscales and
+    PNG masters into the folder (Shama 9 Nov 2026: 30 MB PNGs at 5504 px), and embedding those
+    as they are made a 93 MB deck the library refuses and no client can open. The original stays
+    untouched beside it; documents are passed through as they are."""
+    if not path.lower().endswith(_IMAGE):
+        return path
+    out = os.path.splitext(path)[0] + ".deck.jpg"
+    if not fresh and os.path.exists(out) and os.path.getmtime(out) >= os.path.getmtime(path):
+        return out
+    try:
+        from PIL import Image
+        im = Image.open(path).convert("RGB")
+        if im.width > DECK_PX:
+            im = im.resize((DECK_PX, round(im.height * DECK_PX / im.width)), Image.LANCZOS)
+        im.save(out, "JPEG", quality=86, optimize=True)
+        return out
+    except Exception:                                           # noqa: BLE001
+        return path
 
 
 def _read(path: str) -> str:

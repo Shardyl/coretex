@@ -2048,6 +2048,24 @@ def _cases():
     case("an approval folder of numbered film frames is coded by film and frame number",
          "Shama Approval Asset folder 9 Nov", _approval_film_frames)
 
+    def _approval_deck_size():
+        """4K PNG masters in the folder made a 93 MB deck the library refused. Every picture
+        pulled is embedded from a copy capped at DECK_PX, the original left alone."""
+        import inspect as _i, tempfile
+        from PIL import Image
+        from . import approval as ap
+        src = _i.getsource(ap.sync)
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "01 - big.png")
+        Image.new("RGB", (5504, 3072), (40, 30, 20)).save(p)
+        out = ap._deck_copy(p, fresh=True)
+        w = Image.open(out).width
+        return ("_deck_copy(dest" in src and out.endswith(".deck.jpg") and w == ap.DECK_PX
+                and os.path.exists(p))
+
+    case("an approval deck embeds pictures at deck size, never the 4K master",
+         "93 MB Shama approval deck 9 Nov", _approval_deck_size)
+
     def _approval_grounded():
         """Captions come from Gino's guidance document and the storyboard from the script.
         Neither writer may invent, and an item the guidance misses gets no caption."""
