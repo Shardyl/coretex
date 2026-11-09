@@ -1133,6 +1133,158 @@ class _Deck:
                if note else "")
             + f'</div>{self._foot(section or kicker)}</div>')
 
+    # ---- CLIENT APPROVAL DECK (9 Nov 2026) -------------------------------------------------
+    # An approval deck collects a decision, so everything on it carries a code the client can
+    # quote back and a frame big enough to judge. Page geometry: 1280x720 with a 1136x604 pad.
+
+    def scene(self, number: str, title: str, frames: list, action: str, vo: str = "",
+              tc: str = "", note: str = "", section: str = "Storyboard"):
+        """One SCENE per page, with every shot from it, so the client reads the story in order.
+
+        `frames` = up to four image paths. They run in one row, sized so the row plus the action
+        and voice-over block always fits the page: four 16:9 frames side by side is the widest a
+        1136px pad takes, and a single frame is held at 640 rather than filling the width, because
+        a full-width 16:9 frame is 639px tall and leaves nothing for the words."""
+        fr = [f for f in (frames or []) if f][:4]
+        n = max(1, len(fr))
+        w = {1: 640, 2: 560, 3: 368, 4: 276}[n]
+        h = int(w * 9 / 16)
+        gap = 12 if n == 4 else 16
+        shots = "".join(
+            f'<div style="width:{w}px">'
+            f'<img src="{_b64(f)}" style="width:{w}px;height:{h}px;object-fit:cover;'
+            f'border-radius:6px;display:block">'
+            + (f'<div style="margin-top:7px">'
+               + _mono(f"shot {i + 1} of {n}", "#6E6E78", 8.5, 1.4) + '</div>' if n > 1 else "")
+            + '</div>' for i, f in enumerate(fr))
+        # ONE FRAME SITS BESIDE ITS WORDS, not above them: a lone 16:9 frame capped to the
+        # height the text leaves is only 640px wide on a 1136px pad, and the first build left
+        # half of every single-shot scene page empty (9 Nov 2026).
+        def _vo(width, top):
+            if not vo:
+                return ""
+            return (f'<div style="width:{width}px;{top}'
+                    f'border-left:2px solid {self.accent};padding-left:18px">'
+                    + _mono("voice over", self.accent, 9, 1.8)
+                    + f'<p style="margin-top:9px;font-size:14.5px;color:#EDEDF2;'
+                    f'line-height:1.55;font-style:italic">{_esc(vo)}</p></div>')
+
+        if n == 1:
+            w, h = 744, 419
+            body = (f'<div style="font-size:0;margin-top:4px">'
+                    f'<div style="display:inline-block;vertical-align:top;margin-right:40px">'
+                    f'<img src="{_b64(fr[0])}" style="width:{w}px;height:{h}px;'
+                    f'object-fit:cover;border-radius:6px;display:block"></div>'
+                    f'<div style="width:352px;display:inline-block;vertical-align:top">'
+                    + _mono("what happens", "#6E6E78", 9, 1.8)
+                    + f'<p style="margin-top:9px">{_esc(action)}</p>'
+                    + _vo(334, "margin-top:22px;")
+                    + '</div></div>')
+        else:
+            aw = 732 if vo else 1136
+            body = (f'<div style="display:flex;gap:{gap}px;margin-bottom:22px">{shots}</div>'
+                    f'<div style="font-size:0">'
+                    f'<div style="width:{aw}px;display:inline-block;vertical-align:top;'
+                    f'{"margin-right:40px" if vo else ""}">'
+                    + _mono("what happens", "#6E6E78", 9, 1.8)
+                    + f'<p style="margin-top:9px;max-width:{aw}px">{_esc(action)}</p></div>'
+                    + _vo(352, "") + '</div>')
+        self.pages.append(
+            f'<div class="pg"><div class="pad">'
+            f'<div style="display:flex;align-items:baseline;gap:14px">'
+            + _mono(f"scene {number}", self.accent, 11, 2.5)
+            + (_mono(tc, "#6E6E78", 10, 2) if tc else "")
+            + '</div><div class="rule" style="margin-top:9px"></div>'
+            f'<h2 style="margin-bottom:18px">{_hl(title, self.accent)}</h2>'
+            + body
+            + (f'<p class="note">{_esc(note)}</p>' if note else "")
+            + f'</div>{self._foot(section)}</div>')
+
+    def approval(self, kicker: str, heading: str, intro: str, items: list, cols: int = 4,
+                 section: str = "", note: str = ""):
+        """A coded grid of things to approve. Each item = {code, name, body, image}.
+
+        The CODE is the point: it is printed on the frame and repeated on the sign-off page, so a
+        client can write "PR-04, make it blue" and everyone knows what moved. Two rows maximum, so
+        the page cannot overflow however many items are passed."""
+        cols = 2 if cols < 2 else (4 if cols > 4 else cols)
+        got = (items or [])[:cols * 2]
+        # A SECOND ROW SHRINKS THE FRAMES. At full size two rows of captions ran onto the
+        # footer on the characters page, which has five items (9 Nov 2026).
+        two = len(got) > cols
+        w = ({2: 486, 3: 320, 4: 252} if two else {2: 548, 3: 362, 4: 269})[cols]
+        h = int(w * 9 / 16)
+        mb = 13 if two else 18
+        cells = []
+        for it in got:
+            img = (f'<img src="{_b64(it["image"])}" style="width:{w}px;height:{h}px;'
+                   f'object-fit:cover;border-radius:6px;display:block">'
+                   if it.get("image") else
+                   f'<div style="width:{w}px;height:{h}px;background:#141418;'
+                   f'border-radius:6px"></div>')
+            chip = (f'<span style="display:inline-block;border:1px solid {self.accent}55;'
+                    f'border-radius:4px;padding:2px 7px;margin-right:8px">'
+                    + _mono(it.get("code", ""), self.accent, 9, 1.6) + '</span>')
+            cells.append(
+                f'<div style="width:{w}px;display:inline-block;vertical-align:top;'
+                f'margin:0 14px {mb}px 0">{img}'
+                f'<div style="margin-top:10px">{chip}'
+                f'<b style="font-family:Poppins,sans-serif;font-size:14px;font-weight:600;'
+                f'color:#EDEDF2">{_esc(it.get("name"))}</b></div>'
+                f'<p style="margin-top:5px;font-size:12.5px;line-height:1.5;width:{w}px">'
+                f'{_esc(it.get("body"))}</p></div>')
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2>{_hl(heading, self.accent)}</h2>'
+            + (f'<p style="max-width:1060px;margin-bottom:16px">{_esc(intro)}</p>' if intro else "")
+            + f'<div style="font-size:0;margin-top:6px">{"".join(cells)}</div>'
+            + (f'<p class="note">{_esc(note)}</p>' if note else "")
+            + f'</div>{self._foot(section or kicker)}</div>')
+
+    def signoff(self, kicker: str, heading: str, intro: str, groups: list,
+                contact: dict | None = None, note: str = "", section: str = "Sign-off"):
+        """The page that makes it an approval deck: what is being signed off, and room to sign.
+
+        `groups` = [{label, codes, count}] - one row per section, listing the code range so the
+        client can see at a glance that nothing is missing. Boxes are drawn with borders, never
+        a tick character, because the deck is printed and signed as often as it is clicked."""
+        rows = "".join(
+            f'<tr><td style="padding:9px 0;border-bottom:1px solid #22222A;width:230px">'
+            f'<b style="color:#EDEDF2;font-size:14px;font-weight:600;'
+            f'font-family:Poppins,sans-serif">{_esc(g.get("label"))}</b></td>'
+            f'<td style="padding:9px 0;border-bottom:1px solid #22222A">'
+            + _mono(g.get("codes", ""), "#8A8A94", 10, 1.4) + '</td>'
+            f'<td style="padding:9px 0;border-bottom:1px solid #22222A;width:120px;'
+            f'text-align:center"><span style="display:inline-block;width:15px;height:15px;'
+            f'border:1.5px solid {self.accent};border-radius:3px"></span></td>'
+            f'<td style="padding:9px 0;border-bottom:1px solid #22222A;width:150px;'
+            f'text-align:center"><span style="display:inline-block;width:15px;height:15px;'
+            f'border:1.5px solid #4A4A52;border-radius:3px"></span></td></tr>'
+            for g in (groups or [])[:7])
+        line = ('<div style="border-bottom:1px solid #3A3A44;height:30px;margin-top:4px"></div>')
+        sign = "".join(
+            f'<div style="width:252px;display:inline-block;vertical-align:top;margin-right:26px">'
+            + _mono(lbl, "#6E6E78", 9, 1.8) + line + '</div>'
+            for lbl in ("Name", "Position", "Date", "Signature"))
+        self.pages.append(
+            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2>{_hl(heading, self.accent)}</h2>'
+            + (f'<p style="max-width:1060px;margin-bottom:18px">{_esc(intro)}</p>' if intro else "")
+            + '<table style="width:100%;border-collapse:collapse;margin-bottom:26px">'
+            f'<tr><th style="text-align:left;padding-bottom:7px">'
+            + _mono("section", self.accent, 9.5, 1.8) + '</th>'
+            '<th style="text-align:left;padding-bottom:7px">'
+            + _mono("items", self.accent, 9.5, 1.8) + '</th>'
+            '<th style="padding-bottom:7px">' + _mono("approved", self.accent, 9.5, 1.8) + '</th>'
+            '<th style="padding-bottom:7px">'
+            + _mono("changes requested", "#8A8A94", 9.5, 1.8) + '</th></tr>'
+            + rows + '</table>'
+            f'<div style="font-size:0;margin-bottom:18px">{sign}</div>'
+            + (f'<p class="note" style="margin-top:0">{_esc(note)}</p>' if note else "")
+            + (f'<p class="note" style="margin-top:8px">{_esc(contact.get("line"))}</p>'
+               if contact and contact.get("line") else "")
+            + f'</div>{self._foot(section)}</div>')
+
     def investment(self, kicker: str, headline: str, blurb: str, rows: list, cards: list | None = None,
                    section: str = ""):
         r = "".join(f'<tr><td>{_esc(x.get("item"))}</td><td>{_esc(x.get("detail"))}</td>'
@@ -2030,6 +2182,18 @@ def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
             d.covermeta(pg.get("kicker", ""), pg.get("title", ""), pg.get("title2", ""),
                         pg.get("standfirst", ""), pg.get("meta") or [], pg.get("image"),
                         pg.get("section", "Proposal"))
+        elif t == "scene":
+            d.scene(str(pg.get("number", "")), pg.get("title", ""), pg.get("frames") or [],
+                    pg.get("action", ""), pg.get("vo", ""), pg.get("tc", ""),
+                    pg.get("note", ""), pg.get("section", "Storyboard"))
+        elif t == "approval":
+            d.approval(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""),
+                       pg.get("items") or [], int(pg.get("cols", 4)),
+                       pg.get("section", ""), pg.get("note", ""))
+        elif t == "signoff":
+            d.signoff(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""),
+                      pg.get("groups") or [], pg.get("contact"), pg.get("note", ""),
+                      pg.get("section", "Sign-off"))
         elif t == "cover":
             d.cover(pg.get("title", ""), pg.get("standfirst", ""), pg.get("image"),
                     pg.get("section", "Proposal"))
