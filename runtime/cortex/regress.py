@@ -2225,7 +2225,7 @@ def _cases():
         e2t = t["elbow_head"]["measures"]
         return (t["fold"]["measures"][0]["options"][7] == "Knuckles to floor" and len(fm._TOUCH) == 10
                 and len(e2t) == 1 and e2t[0]["options"][-1] == "Chin to toe" and len(fm._E2T) == 21
-                and fm._E2T[10] == "Elbow to toe" and "Head to bent thumbs up" in fm._E2T
+                and fm._E2T[9] == "Elbow to toe" and "Head to bent thumbs up" in fm._E2T
                 and "CLEAN_NOTE" in js and "Clean frame" in js)
     case("the fold and elbow/head scales are the program builder's own steps, and a measured frame is saved clean "
          "as well as marked up", "program builder form 9 Nov", _mob_form)
