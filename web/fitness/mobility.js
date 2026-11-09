@@ -301,6 +301,7 @@ window.mobPlay=async function(id,mime){
 // joint has folded, so a fold and a leg lift read on one scale); "vertical" = two points, the line's angle from a
 // plumb line. Saving writes it into that test's measure for the day and the chosen side (other values kept), with
 // the provisional flag, and uploads the marked-up frame as a still carrying the clip and the second it came from.
+const CLEAN_NOTE='Clean frame, no angle lines';
 const angleMeasures=t=>(t&&t.measures||[]).filter(m=>m.kind==='number'&&m.unit==='deg');
 function mediaRec(id){return (_mob.media||[]).find(m=>m.id===id);}
 function testOf(rec){const p=rec&&pillar(rec.pillar);return p&&p.tests.find(t=>t.id===rec.test);}
@@ -453,9 +454,14 @@ window.mobMeasure=function(src,id,ov,auto){
       const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.85));
       const how=auto&&auto.res[sd]?(moved?', auto-detected then adjusted by hand':', auto-detected'):'';
       const note=m.label+' '+Math.round(a)+'°'+(sides.length>1?', '+SIDE[sd]:'')+(frameS!=null?', read at '+frameS+' s of the clip':'')+how;
-      const st=await syncApi('/api/fitness/mobility/media',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:sd,mime:'image/jpeg',bytes:blob.size,note,frame_s:frameS,source:id})});
-      if(st&&st.id){await fetch(API_BASE+'/api/fitness/mobility/media/'+st.id+'/0',{method:'PUT',headers:{'Authorization':'Bearer '+syncToken(),'Content-Type':'application/octet-stream'},body:blob});
-        await syncApi('/api/fitness/mobility/media/'+st.id+'/finish',{method:'POST'});}
+      // Smith's program builder wants each test twice: with and without the angle lines. So the same frame is also
+      // saved clean (the frame canvas, before any drawing), marked by its note.
+      const clean=await new Promise(r=>frame.toBlob(r,'image/jpeg',0.9));
+      const put=async(b,n)=>{const st=await syncApi('/api/fitness/mobility/media',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:sd,mime:'image/jpeg',bytes:b.size,note:n,frame_s:frameS,source:id})});
+        if(st&&st.id){await fetch(API_BASE+'/api/fitness/mobility/media/'+st.id+'/0',{method:'PUT',headers:{'Authorization':'Bearer '+syncToken(),'Content-Type':'application/octet-stream'},body:b});
+          await syncApi('/api/fitness/mobility/media/'+st.id+'/finish',{method:'POST'});}};
+      await put(blob,note);
+      await put(clean,CLEAN_NOTE+(sides.length>1?', '+SIDE[sd]:'')+(frameS!=null?', '+frameS+' s of the clip':''));
       ov.remove();await load();renderMobility();toast('Saved '+Math.round(a)+'° to '+t.name);
     }catch(e){save.disabled=false;save.textContent='Save angle';toast('Could not save. Check your connection.');}
   };

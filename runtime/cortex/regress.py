@@ -2192,7 +2192,7 @@ def _cases():
                 and t["fold"]["measures"][1]["angle"]["mode"] == "flex" and t["leg_lift"]["measures"][0]["angle"]["mode"] == "inside"
                 and t["hip_ir"]["measures"][0]["angle"]["mode"] == "vertical"
                 and pike["gap"]["active"]["test"] == "leg_lift" and pike["gap"]["passive"]["test"] == "fold"
-                and fm._HAND[0] == "Beyond Shaka"
+                and fm._E2T[0] == "Elbow can't reach shakka"
                 and "function cellState(" in js and "function todos(" in js and "function gapFor(" in js
                 and "sp.mode==='flex'?180-a:a" in js and "provisional" in js and "x.side==='both'" in js)
     case("mobility shows what is done per test and side, the next to-dos, the active vs passive gap, and measures each "
@@ -2216,6 +2216,19 @@ def _cases():
                 and t["hip_ir"]["measures"][0]["angle"]["pose"]["side"] == "each"
                 and "detectForVideo(" in js and "function bestOf(" in js and "auto-detected" in js
                 and "tasks-vision@'+MP_VER" in js and "MP_VER='0.10.14'" in js)
+    def _mob_form():
+        # 9 Nov 2026: the scales are the program builder form's own steps, and every measured still has a clean twin
+        from . import fitness_mobility as fm
+        pike = next(p for p in fm.DEFAULT_PILLARS if p["id"] == "pike")
+        t = {x["id"]: x for x in pike["tests"]}
+        js = open(_web + "/fitness/mobility.js", encoding="utf-8").read()
+        e2t = t["elbow_head"]["measures"]
+        return (t["fold"]["measures"][0]["options"][7] == "Knuckles to floor" and len(fm._TOUCH) == 10
+                and len(e2t) == 1 and e2t[0]["options"][-1] == "Chin to toe" and len(fm._E2T) == 21
+                and fm._E2T[10] == "Elbow to toe" and "Head to bent thumbs up" in fm._E2T
+                and "CLEAN_NOTE" in js and "Clean frame" in js)
+    case("the fold and elbow/head scales are the program builder's own steps, and a measured frame is saved clean "
+         "as well as marked up", "program builder form 9 Nov", _mob_form)
     case("the pike tests say no shoes, and the nerve test uses Smith's own level names and says stop at the first "
          "nervy sensation", "pike notes 9 Nov",
          lambda: (lambda fm: (lambda pk: pk["setup"].startswith("Barefoot or socks, no shoes")

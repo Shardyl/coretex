@@ -27,9 +27,13 @@ _TYPES = {"video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm", "v
           "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic"}
 
 PIKE_LESSON = "https://www.matthewismith.com/products/mobility-flexibility-toolkit/categories/2156535269/posts/2182813313"
-_HAND = ["Beyond Shaka", "Shaka", "Thumbs up", "Bent thumb", "Fist", "4 fingers", "3 fingers", "2 fingers", "1 finger", "Touching"]
-_TOUCH = ["Knee", "Upper shin", "Mid shin", "Lower shin", "Top of foot", "Fingertips to floor", "Knuckles to floor",
-          "Palms flat", "Beyond palms (raised platform)"]
+# The fold and elbow/head ladders are the exact steps of Smith's Touching Toes program builder form (read 9 Nov 2026),
+# so a result goes into the form word for word. Elbow/head is ONE ladder: elbow steps first, then head, nose, chin.
+_TOUCH = ["Fingers above knee", "Fingers past knee", "Fingers to mid shin", "Fingers to ankles", "Fingers to toes",
+          "Fingers to floor", "Bent fingers to floor", "Knuckles to floor", "Palms to floor", "Elevating the feet"]
+_GAP = ["shakka", "thumbs up", "bent thumbs up", "fist", "4 fingers", "3 fingers", "2 fingers", "1 finger"]
+_E2T = (["Elbow can't reach shakka"] + [f"Elbow to {g}" for g in _GAP] + ["Elbow to toe"]
+        + [f"Head to {g}" for g in _GAP] + ["Head to toe", "Nose to toe", "Chin to toe"])
 # Smith's own names for the 10 levels, from the lesson's on-screen list (owner screenshot, 9 Nov 2026)
 _NERVE = ["1 Elevate leg", "2 Straighten knee", "3 Dorsiflex", "4 Adduct leg", "5 Internally rotate", "6 Flex hip",
           "7 Flex lumbar", "8 Flex thoracic", "9 Flex cervical", "10 Pull together (pull on the foot)",
@@ -61,8 +65,7 @@ DEFAULT_PILLARS = [
          {"id": "elbow_head", "name": "Elbow/Head To Toe", "sides": ["L", "R"], "camera": "Position 1, side on",
           "cue": "Front heel down, toes propped on a block, fold over the straight leg: elbow to toe, then head to toe. "
                  "Hold each for 5 seconds for it to count.",
-          "measures": [{"key": "elbow", "label": "Elbow gap", "kind": "choice", "options": _HAND},
-                       {"key": "head", "label": "Head gap", "kind": "choice", "options": _HAND}]},
+          "measures": [{"key": "touch", "label": "Touchpoint", "kind": "choice", "options": _E2T}]},
          {"id": "leg_lift", "name": "Standing Leg Lift", "sides": ["L", "R"], "camera": "Position 1, side on",
           "cue": "Back to a wall, lift the straight leg as high as you can, no hands. Hold it for 5 seconds for it to "
                  "count. The active side of the pike.",
