@@ -77,7 +77,8 @@ DEFAULT_PILLARS = [
           "measures": [{"key": "level", "label": "Level reached", "kind": "choice", "options": _NERVE}]},
          {"id": "hip_ir", "name": "Hip Internal Rotation Length Test", "sides": ["L", "R"],
           "camera": "Position 2: camera at BOX HEIGHT, level with the box seat, facing you from the front. This is the only test not filmed from the floor (tests 1 to 4 are filmed with the phone on the floor).",
-          "cue": "Sit on a box, knees together and still, swing the foot outward.",
+          "cue": "Sit on a box, knees bent at 90 degrees, a fist or a block between the knees to keep them together "
+                 "and still, then swing the foot outward.",
           "measures": [{"key": "deg", "label": "Rotation", "kind": "number", "unit": "deg",
                         "angle": {"mode": "vertical", "points": ["Knee", "Ankle"],
                                   "pose": {"joints": ["knee", "ankle"], "side": "each", "best": "max"}}}]},
