@@ -1247,34 +1247,53 @@ class _Deck:
             + f'</div>{self._foot(section or kicker)}</div>')
 
     def signoff(self, kicker: str, heading: str, intro: str, groups: list,
-                contact: dict | None = None, note: str = "", section: str = "Sign-off"):
+                contact: dict | None = None, note: str = "", section: str = "Sign-off",
+                light: bool = True):
         """The page that makes it an approval deck: what is being signed off, and room to sign.
 
         `groups` = [{label, codes, count}] - one row per section, listing the code range so the
         client can see at a glance that nothing is missing. Boxes are drawn with borders, never
-        a tick character, because the deck is printed and signed as often as it is clicked."""
+        a tick character, because the deck is printed and signed as often as it is clicked.
+
+        LIGHT BY DEFAULT: a page someone writes their name on is printed, and you cannot write on
+        black (owner, 9 Nov 2026). `light=False` keeps it on the deck's dark ground."""
+        ink = "#111115" if light else "#EDEDF2"
+        body = "#3A3A42" if light else "#C4C4CC"
+        soft = "#6A6A74" if light else "#8A8A94"
+        hair = "#D8D8DE" if light else "#22222A"
+        rule = "#9A9AA4" if light else "#3A3A44"
+        box2 = "#9A9AA4" if light else "#4A4A52"
+        bg = "background:#FFFFFF;" if light else ""
         rows = "".join(
-            f'<tr><td style="padding:9px 0;border-bottom:1px solid #22222A;width:230px">'
-            f'<b style="color:#EDEDF2;font-size:14px;font-weight:600;'
+            f'<tr><td style="padding:9px 0;border-bottom:1px solid {hair};width:230px">'
+            f'<b style="color:{ink};font-size:14px;font-weight:600;'
             f'font-family:Poppins,sans-serif">{_esc(g.get("label"))}</b></td>'
-            f'<td style="padding:9px 0;border-bottom:1px solid #22222A">'
-            + _mono(g.get("codes", ""), "#8A8A94", 10, 1.4) + '</td>'
-            f'<td style="padding:9px 0;border-bottom:1px solid #22222A;width:120px;'
+            f'<td style="padding:9px 0;border-bottom:1px solid {hair}">'
+            + _mono(g.get("codes", ""), soft, 10, 1.4) + '</td>'
+            f'<td style="padding:9px 0;border-bottom:1px solid {hair};width:120px;'
             f'text-align:center"><span style="display:inline-block;width:15px;height:15px;'
             f'border:1.5px solid {self.accent};border-radius:3px"></span></td>'
-            f'<td style="padding:9px 0;border-bottom:1px solid #22222A;width:150px;'
+            f'<td style="padding:9px 0;border-bottom:1px solid {hair};width:150px;'
             f'text-align:center"><span style="display:inline-block;width:15px;height:15px;'
-            f'border:1.5px solid #4A4A52;border-radius:3px"></span></td></tr>'
+            f'border:1.5px solid {box2};border-radius:3px"></span></td></tr>'
             for g in (groups or [])[:7])
-        line = ('<div style="border-bottom:1px solid #3A3A44;height:30px;margin-top:4px"></div>')
+        line = f'<div style="border-bottom:1px solid {rule};height:30px;margin-top:4px"></div>'
         sign = "".join(
             f'<div style="width:252px;display:inline-block;vertical-align:top;margin-right:26px">'
-            + _mono(lbl, "#6E6E78", 9, 1.8) + line + '</div>'
+            + _mono(lbl, soft, 9, 1.8) + line + '</div>'
             for lbl in ("Name", "Position", "Date", "Signature"))
+        # On white the deck's white logo disappears, so the footer is set in type instead.
+        foot = (f'<div class="foot" style="right:72px;color:{soft}">'
+                f'<span style="letter-spacing:1.5px;color:{ink}">{_esc(self.co.get("name"))}</span>'
+                f'<span>{_esc(section)}</span>'
+                f'<span>{_esc(self.label)} &middot; {len(self.pages) + 1:02d}</span></div>'
+                ) if light else self._foot(section)
         self.pages.append(
-            f'<div class="pg"><div class="pad"><h3>{_esc(kicker)}</h3><div class="rule"></div>'
-            f'<h2>{_hl(heading, self.accent)}</h2>'
-            + (f'<p style="max-width:1060px;margin-bottom:18px">{_esc(intro)}</p>' if intro else "")
+            f'<div class="pg" style="{bg}"><div class="pad">'
+            f'<h3>{_esc(kicker)}</h3><div class="rule"></div>'
+            f'<h2 style="color:{ink}">{_hl(heading, self.accent)}</h2>'
+            + (f'<p style="max-width:1060px;margin-bottom:18px;color:{body}">{_esc(intro)}</p>'
+               if intro else "")
             + '<table style="width:100%;border-collapse:collapse;margin-bottom:26px">'
             f'<tr><th style="text-align:left;padding-bottom:7px">'
             + _mono("section", self.accent, 9.5, 1.8) + '</th>'
@@ -1282,13 +1301,15 @@ class _Deck:
             + _mono("items", self.accent, 9.5, 1.8) + '</th>'
             '<th style="padding-bottom:7px">' + _mono("approved", self.accent, 9.5, 1.8) + '</th>'
             '<th style="padding-bottom:7px">'
-            + _mono("changes requested", "#8A8A94", 9.5, 1.8) + '</th></tr>'
+            + _mono("changes requested", soft, 9.5, 1.8) + '</th></tr>'
             + rows + '</table>'
             f'<div style="font-size:0;margin-bottom:18px">{sign}</div>'
-            + (f'<p class="note" style="margin-top:0">{_esc(note)}</p>' if note else "")
-            + (f'<p class="note" style="margin-top:8px">{_esc(contact.get("line"))}</p>'
+            + (f'<p class="note" style="margin-top:0;color:{soft}">{_esc(note)}</p>'
+               if note else "")
+            + (f'<p class="note" style="margin-top:8px;color:{soft}">'
+               f'{_esc(contact.get("line"))}</p>'
                if contact and contact.get("line") else "")
-            + f'</div>{self._foot(section)}</div>')
+            + f'</div>{foot}</div>')
 
     def investment(self, kicker: str, headline: str, blurb: str, rows: list, cards: list | None = None,
                    section: str = ""):
@@ -2198,7 +2219,7 @@ def render_spec(company_slug: str, spec: dict, *, out_dir: str = "/tmp",
         elif t == "signoff":
             d.signoff(pg.get("kicker", ""), pg.get("heading", ""), pg.get("intro", ""),
                       pg.get("groups") or [], pg.get("contact"), pg.get("note", ""),
-                      pg.get("section", "Sign-off"))
+                      pg.get("section", "Sign-off"), bool(pg.get("light", True)))
         elif t == "cover":
             d.cover(pg.get("title", ""), pg.get("standfirst", ""), pg.get("image"),
                     pg.get("section", "Proposal"))

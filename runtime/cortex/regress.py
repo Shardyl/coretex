@@ -1958,6 +1958,20 @@ def _cases():
     case("a one-shot scene page puts the frame beside the words",
          "empty single-shot pages 9 Nov", _scene_single)
 
+    def _signoff_printable():
+        """A page someone signs is printed, and you cannot write on black (owner, 9 Nov 2026).
+        Light is the DEFAULT, so an approval deck is signable without anyone remembering to
+        ask for it."""
+        import inspect as _i
+        src = _i.getsource(deck._Deck.signoff)
+        sig = _i.signature(deck._Deck.signoff)
+        return (sig.parameters["light"].default is True
+                and "background:#FFFFFF;" in src
+                and "self.co.get(\"name\")" in src)
+
+    case("the sign-off page prints black on white", "cannot sign on black 9 Nov",
+         _signoff_printable)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
