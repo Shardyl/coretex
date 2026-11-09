@@ -1972,6 +1972,70 @@ def _cases():
     case("the sign-off page prints black on white", "cannot sign on black 9 Nov",
          _signoff_printable)
 
+    # --- approval decks built from a Drive folder (9 Nov 2026) ---------------------------
+    def _approval_labels():
+        """The label is the filename, and the labels arrive exactly as a person types them:
+        brackets or none, one space or three, and at least one unclosed bracket in the first
+        real folder. Every one of these is a file Gino actually sent."""
+        from . import approval as ap
+        want = [("Daughter (Character).png", "character", "Daughter"),
+                ("DIO Aerial 2 (Location.png", "location", "DIO Aerial 2"),
+                ("DSO HQ  Location.png", "location", "DSO HQ"),
+                ("Blueprint Effect (Prop).png", "prop", "Blueprint Effect"),
+                ("Daughter (Wardrobe).png", "wardrobe", "Daughter"),
+                ("Guidance.docx", None, "Guidance")]
+        return all(ap.parse_label(f) == (k, n) for f, k, n in want)
+
+    case("every approval plate label Gino sends is parsed",
+         "approval deck folder 9 Nov", _approval_labels)
+
+    def _approval_scene_numbers():
+        from . import approval as ap
+        return (ap.scene_of("Scene 1 - 1.png") == (1, 1)
+                and ap.scene_of("Scene 9 -1.png") == (9, 1)
+                and ap.scene_of("Scene 10.png") == (10, 0)
+                and ap.scene_of("Daughter (Character).png") is None)
+
+    case("a storyboard frame is filed by its scene number",
+         "approval deck folder 9 Nov", _approval_scene_numbers)
+
+    def _approval_codes_stable():
+        """The code is pinned to the NAME, so replacing an image keeps CH-01 meaning the same
+        person, and a code belonging to a removed item is never reissued: the client may already
+        have written it down."""
+        from . import approval as ap
+        k = "approval:__regress__"
+        db.setting_set(k + ":codes", {})
+        a = ap.assign_codes(k, [{"kind": "character", "name": "Daughter"},
+                                {"kind": "character", "name": "Father"}])
+        first = {i["name"]: i["code"] for i in a}
+        # the daughter's plate is replaced and the father's is withdrawn; a new face arrives
+        b = ap.assign_codes(k, [{"kind": "character", "name": "Daughter"},
+                                {"kind": "character", "name": "Host"}])
+        second = {i["name"]: i["code"] for i in b}
+        db.execute("delete from settings where key = any(%s)",
+                   ([k + ":codes"],))
+        return (first["Daughter"] == "CH-01" and first["Father"] == "CH-02"
+                and second["Daughter"] == "CH-01" and second["Host"] == "CH-03")
+
+    case("an approval code stays pinned to its item when the plate is replaced",
+         "approval deck rebuild 9 Nov", _approval_codes_stable)
+
+    def _approval_grounded():
+        """Captions come from Gino's guidance document and the storyboard from the script.
+        Neither writer may invent, and an item the guidance misses gets no caption."""
+        import inspect as _i
+        from . import approval as ap
+        cap = _i.getsource(ap.captions)
+        sc = _i.getsource(ap.scene_pages)
+        return ("Use ONLY the guidance document" in cap
+                and "rather than writing something plausible" in cap
+                and "Use ONLY the script" in sc
+                and "fast=True" in cap)
+
+    case("approval copy is grounded in what the team supplied",
+         "no invented facts", _approval_grounded)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
