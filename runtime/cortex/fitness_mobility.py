@@ -34,8 +34,12 @@ _NERVE = ["1 Elevate leg", "2 Straighten knee", "3 Dorsiflex", "4 Adduct leg", "
           "7 Round lower back", "8 Round upper back", "9 Tuck chin", "10 Pull it all together", "Clear (no nerve feeling)"]
 
 # A measure may carry "angle": {"mode", "points"} saying how the tap tool reads it: "inside" = the angle at the
-# middle point, "flex" = 180 minus that (how far a joint has folded, so a fold and a leg lift compare), "vertical" =
-# two points, the line's angle from a plumb line. Units: deg, cm, s. A test's "role" (active/passive) and the
+# middle point, "flex" = 180 minus that (how far a joint has folded: a fold, read shoulder-hip-ankle; a leg lift is already "inside",
+# the angle between the two legs, so both read as hip flexion and compare), "vertical" =
+# two points, the line's angle from a plumb line. "pose" (optional) lets Auto-measure find the points in the browser:
+# joints = pose-model joints in the same order as points ("other:" the other side's, "mid:" halfway between both,
+# "high:"/"low:" whichever of the pair is higher/lower in the frame), side = "visible"
+# (one result, the side facing the camera), "each" (L and R) or "lifted" (the leg whose ankle is higher), best = max/min. Units: deg, cm, s. A test's "role" (active/passive) and the
 # pillar's "gap" pair make the active vs passive gap for any pillar.
 DEFAULT_PILLARS = [
     {"id": "shoulder_flexion", "name": "Shoulder flexion", "tests": []},
@@ -48,7 +52,8 @@ DEFAULT_PILLARS = [
           "cue": "Stand on a raised platform, feet together, knees straight, fold and slide the hands down.",
           "measures": [{"key": "touch", "label": "Reach", "kind": "choice", "options": _TOUCH},
                        {"key": "deg", "label": "Hip flexion", "kind": "number", "unit": "deg",
-                        "angle": {"mode": "flex", "points": ["Shoulder", "Hip", "Ankle"]}}],
+                        "angle": {"mode": "flex", "points": ["Shoulder", "Hip", "Ankle"],
+                                  "pose": {"joints": ["shoulder", "hip", "ankle"], "side": "visible", "best": "max"}}}],
           "role": "passive"},
          {"id": "elbow_head", "name": "Elbow/Head To Toe", "sides": ["L", "R"], "camera": "Position 1, side on",
           "cue": "Front heel down, toes propped on a block, fold over the straight leg: elbow to toe, then head to toe.",
@@ -57,7 +62,8 @@ DEFAULT_PILLARS = [
          {"id": "leg_lift", "name": "Standing Leg Lift", "sides": ["L", "R"], "camera": "Position 1, side on",
           "cue": "Back to a wall, lift the straight leg as high as you can, no hands. The active side of the pike.",
           "measures": [{"key": "deg", "label": "Hip flexion", "kind": "number", "unit": "deg",
-                        "angle": {"mode": "flex", "points": ["Standing foot", "Hip", "Lifted foot"]}}],
+                        "angle": {"mode": "inside", "points": ["Standing foot", "Hip", "Lifted foot"],
+                                  "pose": {"joints": ["low:ankle", "mid:hip", "high:ankle"], "side": "lifted", "best": "max"}}}],
           "role": "active"},
          {"id": "nerve", "name": "Sciatic Nerve Level", "sides": ["L", "R"], "camera": "Position 1 (filming optional)",
           "cue": "Foot up on a box, add each level in turn, stop at the first nervy feeling.",
@@ -66,7 +72,8 @@ DEFAULT_PILLARS = [
           "camera": "Position 2: camera at BOX HEIGHT, level with the box seat, facing you from the front. This is the only test not filmed from the floor (tests 1 to 4 are filmed with the phone on the floor).",
           "cue": "Sit on a box, knees together and still, swing the foot outward.",
           "measures": [{"key": "deg", "label": "Rotation", "kind": "number", "unit": "deg",
-                        "angle": {"mode": "vertical", "points": ["Knee", "Ankle"]}}]},
+                        "angle": {"mode": "vertical", "points": ["Knee", "Ankle"],
+                                  "pose": {"joints": ["knee", "ankle"], "side": "each", "best": "max"}}}]},
      ],
      # the active vs passive gap: the same shape, held by strength vs reached with help (both read as hip flexion)
      "gap": {"passive": {"test": "fold", "measure": "deg"}, "active": {"test": "leg_lift", "measure": "deg"}}},

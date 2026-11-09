@@ -284,13 +284,15 @@ window.mobPlay=async function(id,mime){
     ov.innerHTML=(mime.startsWith('video')?`<video src="${url}" controls playsinline autoplay style="max-width:100%;max-height:78vh;border-radius:10px"></video>`
       :`<img src="${url}" style="max-width:100%;max-height:78vh;border-radius:10px"/>`)
       +(rec&&rec.note?`<div style="color:#ccc;font-size:12px;margin-top:8px;text-align:center;max-width:520px">${esc(rec.note)}</div>`:'')
-      +`<div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;justify-content:center">${hasAngle(id)&&!(rec&&rec.source)?`<button class="btn-sm" id="mobMeasure" style="background:var(--teal);color:#fff;border-color:var(--teal)">Measure angle${mime.startsWith('video')?' on this frame':''}</button>`:''}<button class="btn-sm" id="mobDel">Delete</button><button class="btn-sm" id="mobClose">Close</button></div>`
-      +(mime.startsWith('video')&&hasAngle(id)?'<div style="color:#aaa;font-size:11px;margin-top:8px">Pause on your best position, then tap Measure.</div>':'');
+      +`<div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;justify-content:center">${hasAngle(id)&&!(rec&&rec.source)?`${mime.startsWith('video')&&hasPose(id)?`<button class="btn-sm" id="mobAuto" style="background:var(--teal);color:#fff;border-color:var(--teal)">Auto-measure</button>`:''}<button class="btn-sm" id="mobMeasure"${mime.startsWith('video')&&hasPose(id)?'':' style="background:var(--teal);color:#fff;border-color:var(--teal)"'}>Measure ${mime.startsWith('video')?'this frame by hand':'angle'}</button>`:''}<button class="btn-sm" id="mobDel">Delete</button><button class="btn-sm" id="mobClose">Close</button></div>`
+      +(mime.startsWith('video')&&hasAngle(id)?'<div id="mobAutoMsg" style="color:#aaa;font-size:11px;margin-top:8px;text-align:center;max-width:520px">'+(hasPose(id)?'Auto-measure finds your end range and reads the angle. Or pause on your best position and measure by hand.':'Pause on your best position, then tap Measure.')+'</div>':'');
     ov.querySelector('#mobClose').onclick=()=>{URL.revokeObjectURL(url);ov.remove();};
     const mBtn=ov.querySelector('#mobMeasure');
     if(mBtn)mBtn.onclick=()=>{const src=ov.querySelector('video,img');if(src.tagName==='VIDEO')src.pause();mobMeasure(src,id,ov);};
+    const aBtn=ov.querySelector('#mobAuto');
+    if(aBtn)aBtn.onclick=()=>mobAutoMeasure(ov.querySelector('video'),id,ov,aBtn,ov.querySelector('#mobAutoMsg'));
     ov.querySelector('#mobDel').onclick=async()=>{if(!confirm('Remove this clip?'))return;await fetch(API_BASE+'/api/fitness/mobility/media/'+encodeURIComponent(id),{method:'DELETE',headers:{'Authorization':'Bearer '+syncToken()}});ov.remove();await load();renderMobility();};
-  }catch(e){ov.innerHTML='<div style="color:#fff">Could not load it.</div>';setTimeout(()=>ov.remove(),1500);}
+  }catch(e){console.warn('mobPlay',e);ov.innerHTML='<div style="color:#fff">Could not load it.</div>';setTimeout(()=>ov.remove(),1500);}
 };
 
 // ---------- Tap to measure (owner, 8 Nov 2026; per-test angle definitions 9 Nov 2026) ----------
@@ -316,12 +318,82 @@ function readAngle(sp,pts){
 }
 window.mobAngleAt=angleAt;window.mobReadAngle=readAngle;
 
-window.mobMeasure=function(src,id,ov){
+// ---------- Auto-measure (owner, 9 Nov 2026) ----------
+// A pose model (MediaPipe Pose Landmarker) runs IN THE BROWSER: the clip never leaves the phone. It finds the joints
+// in every frame, code reads the angle with the same readAngle the tap tool uses, and the end-range frame per side
+// is chosen by code (median of 5 neighbouring frames, so one jittery frame cannot win). Which joints and which side
+// is the measure's `angle.pose` spec, which is data: {joints:[...], side:"visible"|"each"|"lifted", best:"max"|"min"}.
+// "other:ankle" = the ankle of the other leg. He then accepts the points or drags one; the number is never a guess.
+const MP_VER='0.10.14', MP_BASE='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@'+MP_VER;
+const MP_MODEL='https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
+const LMI={shoulder:[11,12],hip:[23,24],knee:[25,26],ankle:[27,28],heel:[29,30],toe:[31,32]};
+const VIS_MIN=0.35;
+let _poseP=null, _poseTs=0;
+function poseLoader(){
+  if(_poseP)return _poseP;
+  _poseP=(async()=>{const v=await import(MP_BASE+'/vision_bundle.mjs');const fs=await v.FilesetResolver.forVisionTasks(MP_BASE+'/wasm');
+    const o=d=>({baseOptions:{modelAssetPath:MP_MODEL,delegate:d},runningMode:'VIDEO',numPoses:1});
+    try{return await v.PoseLandmarker.createFromOptions(fs,o('GPU'));}catch(e){return await v.PoseLandmarker.createFromOptions(fs,o('CPU'));}})();
+  _poseP.catch(()=>{_poseP=null;});
+  return _poseP;
+}
+const poseSpecOf=t=>{const m=angleMeasures(t).find(x=>x.angle&&x.angle.pose);return m?{m,sp:specOf(m)}:null;};
+function hasPose(id){return !!poseSpecOf(testOf(mediaRec(id)));}
+function poseCandidates(P,L){
+  // "other:" = the other side's joint; "mid:" = halfway between both; "high:"/"low:" = whichever of the pair is higher
+  // or lower in the frame. Seen side-on the model often swaps left and right, so the leg lift is read by geometry.
+  const get=(n,s)=>{const [pre,j]=n.includes(':')?n.split(':'):['',n], A=L[LMI[j][0]], B=L[LMI[j][1]];
+    if(pre==='mid')return{x:(A.x+B.x)/2,y:(A.y+B.y)/2,visibility:Math.min(A.visibility??1,B.visibility??1)};
+    if(pre==='high')return A.y<B.y?A:B; if(pre==='low')return A.y<B.y?B:A;
+    return L[LMI[j][pre==='other'?1-s:s]];};
+  const cand=s=>{const pts=P.joints.map(n=>get(n,s));return{pts,vis:Math.min(...pts.map(p=>p.visibility==null?1:p.visibility))};};
+  const sd=s=>s===0?'L':'R';   // the model's left is HIS left, whichever way he faces the camera
+  if(P.side==='each')return[0,1].map(s=>({side:sd(s),...cand(s)}));
+  if(P.side==='lifted'){const s=L[LMI.ankle[0]].y<L[LMI.ankle[1]].y?0:1;return[{side:sd(s),...cand(s)}];}
+  const a=cand(0),b=cand(1);return[{side:'both',...(a.vis>=b.vis?a:b)}];
+}
+const seekTo=(v,t)=>new Promise(res=>{let done=false;const fin=()=>{if(done)return;done=true;v.removeEventListener('seeked',fin);res();};
+  v.addEventListener('seeked',fin);setTimeout(fin,2000);v.currentTime=Math.min(t,Math.max(0,v.duration-0.05));});
+function bestOf(arr,best){
+  const ok=arr.filter(x=>x.vis>=VIS_MIN&&x.a!=null);if(ok.length<3)return null;
+  const sm=ok.map((x,i)=>{const w=ok.slice(Math.max(0,i-2),i+3).map(y=>y.a).sort((a,b)=>a-b);return w[Math.floor(w.length/2)];});
+  let bi=0;sm.forEach((v,i)=>{if(best==='min'?v<sm[bi]:v>sm[bi])bi=i;});
+  let pick=bi;for(let i=Math.max(0,bi-2);i<=Math.min(ok.length-1,bi+2);i++)if(Math.abs(ok[i].a-sm[bi])<Math.abs(ok[pick].a-sm[bi]))pick=i;
+  return ok[pick];
+}
+async function poseScan(video,sp,prog){
+  const lm=await poseLoader(), P=sp.pose, dur=video.duration, step=dur>40?0.25:0.2, W=video.videoWidth, H=video.videoHeight;
+  const series={};video.pause();
+  for(let t=0;t<dur;t+=step){
+    await seekTo(video,t);
+    const r=lm.detectForVideo(video,_poseTs+=100), L=r&&r.landmarks&&r.landmarks[0];
+    if(L)poseCandidates(P,L).forEach(c=>{const pts=c.pts.map(q=>({x:q.x*W,y:q.y*H}));(series[c.side]=series[c.side]||[]).push({t:Math.round(t*10)/10,a:readAngle(sp,pts),pts,vis:c.vis});});
+    prog(t/dur);
+  }
+  const out={};Object.keys(series).forEach(s=>{const b=bestOf(series[s],P.best);if(b)out[s]=b;});
+  return out;
+}
+window.mobPoseBest=bestOf;window.mobPoseCandidates=poseCandidates;
+window.mobAutoMeasure=async function(video,id,ov,btn,msg){
+  const ps=poseSpecOf(testOf(mediaRec(id)));if(!ps||!video)return;
+  btn.disabled=true;btn.style.opacity=0.5;const say=t=>{if(msg)msg.textContent=t;};
+  try{
+    say('Loading the pose model (first time only)...');
+    if(!video.duration||!isFinite(video.duration))await new Promise(r=>video.addEventListener('loadedmetadata',r,{once:true}));
+    const res=await poseScan(video,ps.sp,f=>say('Finding your joints... '+Math.round(f*100)+'%'));
+    const sides=Object.keys(res);
+    if(!sides.length){say('Could not see you clearly enough in this clip. Pause on your best position and measure by hand.');btn.disabled=false;btn.style.opacity=1;return;}
+    await seekTo(video,res[sides[0]].t);
+    mobMeasure(video,id,ov,{m:ps.m,res});
+  }catch(e){say('Auto-measure could not start ('+(e&&e.message||'error')+'). Measure by hand instead.');btn.disabled=false;btn.style.opacity=1;}
+};
+
+window.mobMeasure=function(src,id,ov,auto){
   const rec=mediaRec(id), t=testOf(rec), ms=angleMeasures(t);
   const W=src.videoWidth||src.naturalWidth, H=src.videoHeight||src.naturalHeight;
   if(!W||!H){toast('Could not read this frame');return;}
-  const frameS=src.tagName==='VIDEO'?Math.round(src.currentTime*10)/10:null;
-  let m=ms[0], sp=specOf(m);
+  let frameS=src.tagName==='VIDEO'?Math.round(src.currentTime*10)/10:null;
+  let m=auto?auto.m:ms[0], sp=specOf(m), moved=false;
   const maxW=Math.min(window.innerWidth-32,900), maxH=window.innerHeight*0.6, k=Math.min(maxW/W,maxH/H);
   const cv=document.createElement('canvas');cv.width=W;cv.height=H;
   cv.style.cssText='width:'+Math.round(W*k)+'px;max-width:100%;height:auto;border-radius:8px;touch-action:none;cursor:crosshair';
@@ -332,13 +404,18 @@ window.mobMeasure=function(src,id,ov){
   const bar=document.createElement('div');bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center';
   const sel=(opts,cur)=>{const s=document.createElement('select');s.style.cssText='font-size:13px;width:auto';opts.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;if(v===cur)o.selected=true;s.appendChild(o);});return s;};
   const pick=sel(ms.map(x=>[x.key,x.label]),m.key);if(ms.length<2)pick.style.display='none';
-  const sides=t.sides, side=sel(sides.map(s=>[s,SIDE[s]]),sides.includes(rec.side)?rec.side:sides[0]);if(sides.length<2)side.style.display='none';
+  const autoSides=auto?Object.keys(auto.res).filter(s=>t.sides.includes(s)):[];
+  const sides=t.sides, side=sel(sides.map(s=>[s,SIDE[s]]),autoSides[0]||(sides.includes(rec.side)?rec.side:sides[0]));if(sides.length<2)side.style.display='none';
+  const loadAuto=async()=>{const r=auto&&auto.res[side.value];if(!r)return false;
+    if(src.tagName==='VIDEO'&&Math.abs(src.currentTime-r.t)>0.05){await seekTo(src,r.t);frame.getContext('2d').drawImage(src,0,0,W,H);}
+    frameS=r.t;pts.length=0;r.pts.forEach(q=>pts.push({x:q.x,y:q.y}));moved=false;return true;};
   const provL=document.createElement('label');provL.style.cssText='color:#ddd;font-size:12px;display:flex;align-items:center;gap:4px';
   const prov=document.createElement('input');prov.type='checkbox';provL.append(prov,'Provisional');
   const save=document.createElement('button');save.className='btn-sm';save.textContent='Save angle';save.style.cssText='background:var(--teal);color:#fff;border-color:var(--teal)';
   const reset=document.createElement('button');reset.className='btn-sm';reset.textContent='Start again';
   const close=document.createElement('button');close.className='btn-sm';close.textContent='Cancel';close.onclick=()=>ov.remove();
-  const setTip=()=>{tip.textContent='Tap '+sp.points.map((p,i)=>i===pivotOf(sp)?p+' (yellow)':p).join(', then ')+'. Drag a point to adjust it.'+(sp.mode==='vertical'?' The dashed line is straight down.':'');};
+  const setTip=()=>{if(auto&&auto.res[side.value]){tip.textContent='Auto-detected at '+frameS+' s. Check the dots sit on your '+sp.points.join(', ').toLowerCase()+'; drag any that are off, then save.';return;}
+    tip.textContent='Tap '+sp.points.map((p,i)=>i===pivotOf(sp)?p+' (yellow)':p).join(', then ')+'. Drag a point to adjust it.'+(sp.mode==='vertical'?' The dashed line is straight down.':'');};
   const draw=()=>{ctx.drawImage(frame,0,0);ctx.lineWidth=Math.max(3,W/300);ctx.strokeStyle='#30d5a8';
     if(pts.length>1){ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.stroke();}
     if(sp.mode==='vertical'&&pts.length){const L=pts[1]?Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y):H/4;
@@ -349,6 +426,7 @@ window.mobMeasure=function(src,id,ov){
       const pv=pts[pivotOf(sp)], tx=pv.x+R*2, ty=pv.y-R*2, lab=Math.round(a)+'°';ctx.strokeText(lab,tx,ty);ctx.fillText(lab,tx,ty);}
     out.textContent=a!=null?m.label+': '+Math.round(a)+'°':'Tap '+sp.points[pts.length]+' ('+(pts.length+1)+' of '+nPts(sp)+')';
     save.disabled=a==null;save.style.opacity=a==null?0.4:1;};
+  side.onchange=async()=>{if(await loadAuto()){setTip();draw();}};
   pick.onchange=()=>{m=ms.find(x=>x.key===pick.value)||ms[0];sp=specOf(m);pts.length=0;setTip();draw();};
   reset.onclick=()=>{pts.length=0;draw();};
   const pos=e=>{const b=cv.getBoundingClientRect();return{x:(e.clientX-b.left)/b.width*W,y:(e.clientY-b.top)/b.height*H};};
@@ -356,11 +434,14 @@ window.mobMeasure=function(src,id,ov){
   cv.addEventListener('pointerdown',e=>{e.preventDefault();const p=pos(e);
     const near=pts.findIndex(q=>Math.hypot(q.x-p.x,q.y-p.y)<R*3);
     if(near>=0)drag=near;else if(pts.length<nPts(sp)){pts.push(p);drag=pts.length-1;}draw();});
-  cv.addEventListener('pointermove',e=>{if(drag<0)return;pts[drag]=pos(e);draw();});
+  cv.addEventListener('pointermove',e=>{if(drag<0)return;pts[drag]=pos(e);moved=true;draw();});
   cv.addEventListener('pointerup',()=>{drag=-1;});
   cv.addEventListener('pointerleave',()=>{drag=-1;});
   ov.innerHTML='';ov.onclick=null;
-  bar.append(pick,side,provL,save,reset,close);ov.append(tip,cv,out,bar);setTip();draw();
+  bar.append(pick,side,provL,save,reset,close);ov.append(tip,cv,out,bar);
+  if(auto){const found=autoSides.length>1?'Found '+autoSides.map(s=>SIDE[s]+' '+Math.round(auto.res[s].a)+'°').join(', ')+'. Switch side to check each.':'';
+    if(found){const o=document.createElement('div');o.style.cssText='color:#aaa;font-size:11px;margin-top:6px;text-align:center';o.textContent=found;ov.append(o);}
+    loadAuto().then(()=>{setTip();draw();});}else{setTip();draw();}
   save.onclick=async()=>{
     const a=Math.round(readAngle(sp,pts)*10)/10, sd=side.value, key=m.key;
     const values={};let wasProv=false;
@@ -370,7 +451,8 @@ window.mobMeasure=function(src,id,ov){
     try{
       await syncApi('/api/fitness/mobility/result',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:sd,values,provisional:prov.checked||wasProv})});
       const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.85));
-      const note=m.label+' '+Math.round(a)+'°'+(sides.length>1?', '+SIDE[sd]:'')+(frameS!=null?', read at '+frameS+' s of the clip':'');
+      const how=auto&&auto.res[sd]?(moved?', auto-detected then adjusted by hand':', auto-detected'):'';
+      const note=m.label+' '+Math.round(a)+'°'+(sides.length>1?', '+SIDE[sd]:'')+(frameS!=null?', read at '+frameS+' s of the clip':'')+how;
       const st=await syncApi('/api/fitness/mobility/media',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:sd,mime:'image/jpeg',bytes:blob.size,note,frame_s:frameS,source:id})});
       if(st&&st.id){await fetch(API_BASE+'/api/fitness/mobility/media/'+st.id+'/0',{method:'PUT',headers:{'Authorization':'Bearer '+syncToken(),'Content-Type':'application/octet-stream'},body:blob});
         await syncApi('/api/fitness/mobility/media/'+st.id+'/finish',{method:'POST'});}

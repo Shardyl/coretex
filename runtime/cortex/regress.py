@@ -2189,7 +2189,7 @@ def _cases():
         t = {x["id"]: x for x in pike["tests"]}
         js = open(_web + "/fitness/mobility.js", encoding="utf-8").read()
         return ([p["id"] for p in fm.DEFAULT_PILLARS][:3] == ["shoulder_flexion", "shoulder_extension", "pike"]
-                and t["fold"]["measures"][1]["angle"]["mode"] == "flex" and t["leg_lift"]["measures"][0]["angle"]["mode"] == "flex"
+                and t["fold"]["measures"][1]["angle"]["mode"] == "flex" and t["leg_lift"]["measures"][0]["angle"]["mode"] == "inside"
                 and t["hip_ir"]["measures"][0]["angle"]["mode"] == "vertical"
                 and pike["gap"]["active"]["test"] == "leg_lift" and pike["gap"]["passive"]["test"] == "fold"
                 and fm._HAND[0] == "Beyond Shaka"
@@ -2197,6 +2197,27 @@ def _cases():
                 and "sp.mode==='flex'?180-a:a" in js and "provisional" in js and "x.side==='both'" in js)
     case("mobility shows what is done per test and side, the next to-dos, the active vs passive gap, and measures each "
          "test's angle its own way", "mobility overview 9 Nov", _mob_overview)
+    def _mob_auto():
+        # 9 Nov 2026: a standing leg read as ~170 deg "hip flexion" because the leg lift used flex (180 minus the angle
+        # between the legs). The angle between the legs IS the hip flexion of the lifted leg: 0 standing, ~90 at hip height.
+        from . import fitness_mobility as fm
+        import math
+        pike = next(p for p in fm.DEFAULT_PILLARS if p["id"] == "pike")
+        t = {x["id"]: x for x in pike["tests"]}
+        ll = t["leg_lift"]["measures"][0]["angle"]
+        def inside(a, b, c):
+            v1, v2 = (a[0]-b[0], a[1]-b[1]), (c[0]-b[0], c[1]-b[1])
+            return math.degrees(math.acos((v1[0]*v2[0]+v1[1]*v2[1]) / (math.hypot(*v1)*math.hypot(*v2))))
+        standing, lifted = inside((0, 100), (0, 0), (2, 100)), inside((0, 100), (0, 0), (100, 0))
+        js = open(_web + "/fitness/mobility.js", encoding="utf-8").read()
+        return (ll["mode"] == "inside" and standing < 5 and 85 < lifted < 95
+                and ll["pose"]["joints"] == ["low:ankle", "mid:hip", "high:ankle"]
+                and t["fold"]["measures"][1]["angle"]["pose"]["side"] == "visible"
+                and t["hip_ir"]["measures"][0]["angle"]["pose"]["side"] == "each"
+                and "detectForVideo(" in js and "function bestOf(" in js and "auto-detected" in js
+                and "tasks-vision@'+MP_VER" in js and "MP_VER='0.10.14'" in js)
+    case("auto-measure finds the joints in the browser, picks the end-range frame per side by code, and a leg lift reads "
+         "the angle between the legs (0 standing, 90 at hip height)", "mobility auto-measure 9 Nov", _mob_auto)
     case("tap-to-measure computes the angle at the middle point and saves it with its marked-up frame",
          "mobility angles 8 Nov",
          lambda: (lambda m: "function angleAt(a,b,c)" in m and "values[key]=a" in m and "toBlob" in m
