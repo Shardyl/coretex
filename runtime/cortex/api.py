@@ -7466,6 +7466,49 @@ def fitness_summary(_: None = Depends(auth)) -> dict:
     return fitness.summary()
 
 
+# ---- YOLO (personal boat book; the PWA at /yolo syncs here, cortex/yolo.py) ----
+# Same doctrine as fitness: same-origin, owner token, whole-document push/pull, bytes never stored
+# here (documents live on the owner's PERSONAL Drive and rows carry the Drive id).
+
+
+@app.get("/api/yolo/state")
+def yolo_state(_: None = Depends(auth)) -> dict:
+    from . import yolo
+    return yolo.pull()
+
+
+@app.post("/api/yolo/state")
+def yolo_sync(body: dict, _: None = Depends(auth)) -> dict:
+    from . import yolo
+    return yolo.push(body or {}, source="app")
+
+
+@app.get("/api/yolo/drive")
+def yolo_drive(folder: str = "", _: None = Depends(auth)) -> dict:
+    from . import yolo
+    try:
+        return yolo.browse(folder)
+    except Exception as e:                                   # a Drive hiccup is a message, not a 500
+        return {"error": str(e)}
+
+
+class YoloUpload(BaseModel):
+    name: str
+    mime: str | None = None
+    data: str                                               # base64
+    note: str | None = None
+    kind: str | None = None
+
+
+@app.post("/api/yolo/document")
+def yolo_document(body: YoloUpload, _: None = Depends(auth)) -> dict:
+    from . import yolo
+    try:
+        return yolo.upload_document(body.name, body.mime or "", body.data, body.note or "", body.kind or "other")
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # ---- the standalone pre-meeting brief page (coretex.uk/brief/<id>?k=...) ----
 #
 # A brief has to be readable in the ten seconds before a meeting, from a phone, without opening the

@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>YOLO boat book</title>
+<meta name="theme-color" content="#0e1b2a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f4f5f7; --card:#ffffff; --ink:#15202b; --ink2:#4a5868; --ink3:#8b97a5;
+  --line:#e3e7ec; --navy:#0e1b2a; --accent:#1660a8; --good:#1d8a5e; --warn:#b4552c; --bad:#b03030;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0d1420; --card:#15202e; --ink:#e8edf3; --ink2:#a9b6c5; --ink3:#6c7a8a;
+         --line:#243242; --navy:#0a141f; --accent:#5aa2e0; --good:#3fae7f; --warn:#d0794f; --bad:#d06060; }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font:15px/1.45 -apple-system,"Segoe UI",Roboto,Inter,sans-serif;background:var(--bg);color:var(--ink);
+     padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:20;background:var(--navy);color:#fff;padding:14px 16px calc(12px);
+       padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;gap:10px}
+header svg{flex:0 0 auto}
+header h1{font-size:17px;font-weight:600;letter-spacing:.4px;flex:1}
+#syncPill{font-size:11px;color:#bcd0e2;border:1px solid #2c4258;border-radius:999px;padding:3px 10px;cursor:pointer}
+#syncPill.error,#syncPill.auth{color:#ffd9c9;border-color:#7a4a35}
+main{max-width:720px;margin:0 auto;padding:14px}
+.tab{display:none}
+.tab.active{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;margin-bottom:12px}
+.card h2{font-size:13px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px}
+.big{font-size:30px;font-weight:700;letter-spacing:-.5px}
+.sub{font-size:12px;color:var(--ink3)}
+.row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:none}
+.row .t{flex:1;min-width:0}
+.row .t b{display:block;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .t span{font-size:12px;color:var(--ink3)}
+.row .amt{font-weight:650;font-size:14px;white-space:nowrap}
+.chip{display:inline-block;font-size:11px;color:var(--ink2);border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin-right:4px}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin:4px 0 2px}
+.bar i{display:block;height:100%;background:var(--accent)}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);
+    display:flex;z-index:30;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:none;color:var(--ink3);font:inherit;font-size:10.5px;padding:8px 0 7px;cursor:pointer}
+nav button svg{display:block;margin:0 auto 2px;stroke:currentColor}
+nav button.on{color:var(--accent)}
+button.btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer}
+button.ghost{background:none;border:1px solid var(--line);color:var(--ink2);border-radius:10px;padding:9px 14px;font:inherit;cursor:pointer}
+.fab{position:fixed;right:18px;bottom:calc(76px + env(safe-area-inset-bottom));width:52px;height:52px;border-radius:50%;
+     background:var(--accent);color:#fff;border:none;font-size:26px;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:25}
+.seg{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:4px;-webkit-overflow-scrolling:touch}
+.seg button{white-space:nowrap;border:1px solid var(--line);background:var(--card);color:var(--ink2);border-radius:999px;
+            padding:6px 13px;font:inherit;font-size:13px;cursor:pointer}
+.seg button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.sheet{position:fixed;inset:0;background:rgba(10,16,24,.55);z-index:40;display:none;align-items:flex-end;justify-content:center}
+.sheet.open{display:flex}
+.sheet>div{background:var(--card);width:100%;max-width:720px;border-radius:18px 18px 0 0;padding:18px 18px calc(22px + env(safe-area-inset-bottom));
+           max-height:88vh;overflow:auto}
+.sheet h3{font-size:16px;margin-bottom:14px}
+label{display:block;font-size:12px;color:var(--ink3);margin:10px 0 4px}
+input,select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);
+                      border-radius:10px;padding:10px 12px}
+textarea{min-height:64px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.task{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.task:last-child{border-bottom:none}
+.tick{width:22px;height:22px;flex:0 0 auto;border:1.6px solid var(--ink3);border-radius:7px;cursor:pointer;margin-top:1px;
+      display:flex;align-items:center;justify-content:center;color:transparent;background:none}
+.task.done .tick{background:var(--good);border-color:var(--good);color:#fff}
+.task.done .tt{color:var(--ink3);text-decoration:line-through}
+.task .tt{flex:1;font-size:14px}
+.task .meta{font-size:11px;color:var(--ink3)}
+.sec h4{font-size:13px;font-weight:600;margin:4px 0;display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 0}
+.sec h4 .n{font-size:11px;color:var(--ink3);font-weight:400}
+.sec .body{display:none}
+.sec.open .body{display:block}
+.crumbs{font-size:12px;color:var(--ink3);margin-bottom:8px;overflow-x:auto;white-space:nowrap}
+.crumbs a{color:var(--accent);text-decoration:none;cursor:pointer}
+.doc{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);text-decoration:none;color:var(--ink)}
+.doc:last-child{border-bottom:none}
+.doc svg{flex:0 0 auto;stroke:var(--ink3)}
+.doc .dn{flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doc .ds{font-size:11px;color:var(--ink3);white-space:nowrap}
+.login{max-width:360px;margin:16vh auto;padding:0 20px;text-align:center}
+.login input{text-align:center;font-size:18px;margin:14px 0}
+.muted{color:var(--ink3);font-size:12px}
+.right{margin-left:auto}
+.danger{color:var(--bad)}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));background:var(--navy);
+       color:#fff;padding:9px 16px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .25s;z-index:60;pointer-events:none;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<div id="loginView" class="login" style="display:none">
+  <svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="#1660a8" stroke-width="1.6" stroke-linecap="round" style="margin-bottom:6px">
+    <path d="M12 3v14"/><circle cx="12" cy="4.5" r="1.8"/><path d="M8 9h8"/><path d="M4 13c0 4 3.5 7 8 7s8-3 8-7"/><path d="M4 13l2 2M20 13l-2 2"/>
+  </svg>
+  <h1 style="font-size:22px;margin-bottom:4px">YOLO boat book</h1>
+  <p class="muted">Enter the owner passcode to connect this device.</p>
+  <input id="pass" type="password" placeholder="Passcode" autocomplete="current-password">
+  <button class="btn" style="width:100%" onclick="doLogin()">Sign in</button>
+  <p id="loginErr" class="muted danger" style="margin-top:10px"></p>
+</div>
+
+<div id="appView" style="display:none">
+<header>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round">
+    <path d="M12 3v14"/><circle cx="12" cy="4.5" r="1.8"/><path d="M8 9h8"/><path d="M4 13c0 4 3.5 7 8 7s8-3 8-7"/><path d="M4 13l2 2M20 13l-2 2"/>
+  </svg>
+  <h1>YOLO</h1>
+  <span id="syncPill" onclick="sync(true)">Sync</span>
+</header>
+<main>
+
+<section id="tab-dash" class="tab active">
+  <div class="card">
+    <h2>Lifetime running total</h2>
+    <div class="big" id="lifeTotal">—</div>
+    <div class="sub">every recorded euro since 2024, purchase excluded</div>
+  </div>
+  <div class="card"><h2>By boat year (Apr–Mar)</h2><div id="yearBars"></div></div>
+  <div class="card"><h2>This year by category</h2><div id="catBars"></div></div>
+  <div class="card"><h2>Maintenance</h2><div id="dashTasks"></div></div>
+  <div class="card"><h2>Latest costs</h2><div id="dashRecent"></div></div>
+</section>
+
+<section id="tab-costs" class="tab">
+  <div class="seg" id="yearSeg"></div>
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <h2 style="margin:0;flex:1">Costs <span id="yearSum" style="text-transform:none;letter-spacing:0"></span></h2>
+      <input id="costSearch" placeholder="Search" style="width:130px;padding:6px 10px;font-size:13px" oninput="renderCosts()">
+    </div>
+    <div id="costList"></div>
+  </div>
+</section>
+
+<section id="tab-maint" class="tab">
+  <div class="card"><div id="taskSections"></div></div>
+</section>
+
+<section id="tab-equip" class="tab">
+  <div class="card"><h2>Equipment register</h2><div id="assetList"></div></div>
+</section>
+
+<section id="tab-docs" class="tab">
+  <div class="card">
+    <h2>Google Drive · YOLO BOAT YACHT</h2>
+    <div class="crumbs" id="crumbs"></div>
+    <div id="driveList" class="muted">Loading…</div>
+  </div>
+  <div class="card">
+    <h2>Upload a document</h2>
+    <p class="muted" style="margin-bottom:8px">Goes to Drive → YOLO BOAT YACHT → APP UPLOADS, and into the register below.</p>
+    <input type="file" id="upFile" style="margin-bottom:8px">
+    <div class="grid2">
+      <select id="upKind"><option value="invoice">Invoice</option><option value="manual">Manual</option>
+        <option value="photo-batch">Photos</option><option value="registration">Registration</option>
+        <option value="insurance">Insurance</option><option value="other" selected>Other</option></select>
+      <button class="btn" onclick="uploadDoc()">Upload</button>
+    </div>
+    <div id="docList" style="margin-top:10px"></div>
+  </div>
+</section>
+
+</main>
+
+<button class="fab" id="fab" onclick="fabTap()">+</button>
+
+<nav>
+  <button data-tab="dash" class="on" onclick="go('dash')">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+    Overview</button>
+  <button data-tab="costs" onclick="go('costs')">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><circle cx="12" cy="12" r="8.5"/><path d="M14.8 9.5c-.5-1-1.6-1.5-2.8-1.5-1.7 0-3 .9-3 2s1 1.7 3 2 3 .9 3 2-1.3 2-3 2c-1.2 0-2.3-.5-2.8-1.5M12 6.5v11"/></svg>
+    Costs</button>
+  <button data-tab="maint" onclick="go('maint')">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><path d="M14.5 6.5a4 4 0 0 0-5.6 4.8L4 16.2V20h3.8l4.9-4.9a4 4 0 0 0 4.8-5.6l-2.7 2.7-2.3-2.3 2-2.9z"/></svg>
+    Maintenance</button>
+  <button data-tab="equip" onclick="go('equip')">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
+    Equipment</button>
+  <button data-tab="docs" onclick="go('docs')">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><path d="M14 3H7a1.5 1.5 0 0 0-1.5 1.5v15A1.5 1.5 0 0 0 7 21h10a1.5 1.5 0 0 0 1.5-1.5V7.5z"/><path d="M14 3v4.5h4.5"/><path d="M9 12h6M9 16h6"/></svg>
+    Docs</button>
+</nav>
+</div>
+
+<div class="sheet" id="sheet"><div id="sheetBody"></div></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+const API=(location.hostname==='coretex.uk')?'':'https://coretex.uk';
+const TOK_KEY='yolo_token', STATE_KEY='yolo_state_v1', SYNC_AT='yolo_sync_at';
+let S={costs:[],tasks:[],assets:[],documents:[],totals:null};
+let dirty={costs:new Set(),tasks:new Set(),assets:new Set(),documents:new Set()};
+let curYear='', curTab='dash', drivePath=[];
+
+// ---------- token ----------
+(function(){ // a setup link plants a long-lived token via #k=
+  const m=location.hash.match(/#k=([!-~]+)/);
+  if(m){try{localStorage.setItem(TOK_KEY,m[1]);}catch(e){} history.replaceState(null,'',location.pathname);}
+})();
+function token(){try{return localStorage.getItem(TOK_KEY)||'';}catch(e){return '';}}
+async function doLogin(){
+  const p=document.getElementById('pass').value.trim();
+  if(!p)return;
+  try{
+    const r=await fetch(API+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({passcode:p})});
+    if(!r.ok)throw 0;
+    const j=await r.json();
+    localStorage.setItem(TOK_KEY,j.token);
+    boot();
+  }catch(e){document.getElementById('loginErr').textContent='Wrong passcode';}
+}
+
+// ---------- api ----------
+async function api(path,opts){
+  const r=await fetch(API+path,Object.assign({headers:{'Content-Type':'application/json','Authorization':'Bearer '+token()}},opts||{}));
+  if(r.status===401){localStorage.removeItem(TOK_KEY);show('login');return null;}
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  return r.json();
+}
+
+// ---------- state ----------
+function saveLocal(){try{localStorage.setItem(STATE_KEY,JSON.stringify(S));}catch(e){}}
+function loadLocal(){try{const j=JSON.parse(localStorage.getItem(STATE_KEY)||'');if(j&&j.costs)S=j;}catch(e){}}
+function uid(p){return p+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function touch(kind,row){row.updated_local=Date.now();dirty[kind].add(row.uid);saveLocal();scheduleSync();renderAll();}
+
+let _syncTimer=null,_syncing=false;
+function scheduleSync(){if(_syncTimer)clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>sync(false),1200);}
+function pill(s,label){const el=document.getElementById('syncPill');if(el){el.textContent=label;el.className=s;}}
+async function sync(manual){
+  if(_syncing)return;
+  if(!navigator.onLine){pill('error','Offline');return;}
+  _syncing=true;pill('','Syncing…');
+  try{
+    const push={};
+    for(const k of Object.keys(dirty)){
+      if(dirty[k].size){push[k]=S[k].filter(r=>dirty[k].has(r.uid));}
+    }
+    if(Object.keys(push).length){const r=await api('/api/yolo/state',{method:'POST',body:JSON.stringify(push)});if(r===null){_syncing=false;return;}}
+    const st=await api('/api/yolo/state');
+    if(st===null){_syncing=false;return;}
+    // Server truth wins for anything not edited since: dirty rows keep the local copy until the next push.
+    for(const k of ['costs','tasks','assets','documents']){
+      const local={};(S[k]||[]).forEach(r=>{local[r.uid]=r;});
+      S[k]=(st[k]||[]).map(r=>dirty[k].has(r.uid)?local[r.uid]||r:r);
+      // rows created offline that the server has not seen yet survive:
+      Object.values(local).forEach(r=>{if(dirty[k].has(r.uid)&&!S[k].some(x=>x.uid===r.uid))S[k].push(r);});
+    }
+    S.totals=st.totals;
+    for(const k of Object.keys(dirty))dirty[k].clear();
+    saveLocal();localStorage.setItem(SYNC_AT,new Date().toISOString());
+    pill('','Synced '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}));
+    renderAll();
+  }catch(e){pill('error','Sync failed');}
+  _syncing=false;
+}
+
+// ---------- helpers ----------
+function eur(n){if(n==null||isNaN(n))return '—';return '€'+Number(n).toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:0});}
+function boatYear(d){if(!d)return null;const dt=new Date(d);const s=dt.getMonth()>=3?dt.getFullYear():dt.getFullYear()-1;return s+'-'+(s+1);}
+function nowYear(){return boatYear(new Date().toISOString().slice(0,10));}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.opacity=1;setTimeout(()=>t.style.opacity=0,2200);}
+const CATS=['berth','fuel','insurance','maintenance','engine-rebuild','equipment','crew','tax','trip','other'];
+
+// ---------- render ----------
+function renderAll(){renderDash();renderCosts();renderTasks();renderAssets();renderDocs();}
+
+function renderDash(){
+  const costs=S.costs.filter(c=>!c.deleted&&c.amount!=null);
+  const by={};costs.forEach(c=>{const y=c.day?boatYear(c.day):(c.year_label||'undated');by[y]=(by[y]||0)+Number(c.amount);});
+  const life=Object.values(by).reduce((a,b)=>a+b,0);
+  document.getElementById('lifeTotal').textContent=eur(life);
+  const years=Object.keys(by).sort();
+  const max=Math.max(...Object.values(by),1);
+  document.getElementById('yearBars').innerHTML=years.map(y=>
+    `<div style="margin-bottom:8px"><div style="display:flex;font-size:13px"><b>${esc(y)}</b><span class="right">${eur(by[y])}</span></div>
+     <div class="bar"><i style="width:${Math.round(by[y]/max*100)}%"></i></div></div>`).join('')||'<p class="muted">No costs yet</p>';
+  const cy=nowYear();
+  const cat={};costs.filter(c=>(c.day?boatYear(c.day):c.year_label)===cy).forEach(c=>{const k=c.category||'other';cat[k]=(cat[k]||0)+Number(c.amount);});
+  const cmax=Math.max(...Object.values(cat),1);
+  document.getElementById('catBars').innerHTML=Object.entries(cat).sort((a,b)=>b[1]-a[1]).map(([k,v])=>
+    `<div style="margin-bottom:8px"><div style="display:flex;font-size:13px"><b>${esc(k)}</b><span class="right">${eur(v)}</span></div>
+     <div class="bar"><i style="width:${Math.round(v/cmax*100)}%"></i></div></div>`).join('')||`<p class="muted">Nothing recorded in ${cy} yet</p>`;
+  const open=S.tasks.filter(t=>!t.deleted&&!t.completed);
+  const due=open.filter(t=>t.due&&t.due<=new Date().toISOString().slice(0,10));
+  document.getElementById('dashTasks').innerHTML=
+    `<div class="row"><div class="t"><b>${open.length} open tasks</b><span>${due.length?due.length+' past their date':'none overdue'}</span></div>
+     <button class="ghost" onclick="go('maint')">Open</button></div>`;
+  const recent=S.costs.filter(c=>!c.deleted).sort((a,b)=>String(b.day||'').localeCompare(String(a.day||''))).slice(0,5);
+  document.getElementById('dashRecent').innerHTML=recent.map(costRow).join('')||'<p class="muted">—</p>';
+}
+
+function costRow(c){
+  return `<div class="row" onclick="editCost('${c.uid}')" style="cursor:pointer">
+    <div class="t"><b>${esc(c.title)}</b><span>${esc(c.day||c.year_label||'')}${c.category?' · '+esc(c.category):''}${c.paid_by?' · '+esc(c.paid_by):''}</span></div>
+    <div class="amt">${eur(c.amount)}</div></div>`;
+}
+
+function renderCosts(){
+  const years=[...new Set(S.costs.filter(c=>!c.deleted).map(c=>c.day?boatYear(c.day):(c.year_label||'undated')))].sort().reverse();
+  if(!curYear||!years.includes(curYear))curYear=years.includes(nowYear())?nowYear():(years[0]||'');
+  document.getElementById('yearSeg').innerHTML=years.map(y=>
+    `<button class="${y===curYear?'on':''}" onclick="curYear='${y}';renderCosts()">${esc(y)}</button>`).join('');
+  const q=(document.getElementById('costSearch').value||'').toLowerCase();
+  let rows=S.costs.filter(c=>!c.deleted&&(c.day?boatYear(c.day):(c.year_label||'undated'))===curYear);
+  if(q)rows=rows.filter(c=>(c.title+' '+(c.category||'')+' '+(c.note||'')+' '+(c.paid_by||'')).toLowerCase().includes(q));
+  rows.sort((a,b)=>String(b.day||'').localeCompare(String(a.day||'')));
+  const sum=rows.reduce((a,c)=>a+(Number(c.amount)||0),0);
+  document.getElementById('yearSum').textContent=' · '+eur(sum);
+  document.getElementById('costList').innerHTML=rows.map(costRow).join('')||'<p class="muted">Nothing here yet</p>';
+}
+
+function renderTasks(){
+  const secs={};
+  S.tasks.filter(t=>!t.deleted).forEach(t=>{(secs[t.section||'Other']=secs[t.section||'Other']||[]).push(t);});
+  const openSecs=JSON.parse(sessionStorage.getItem('yolo_secs')||'{}');
+  document.getElementById('taskSections').innerHTML=Object.keys(secs).sort().map(sec=>{
+    const list=secs[sec];const open=list.filter(t=>!t.completed).length;
+    const id='sec_'+btoa(unescape(encodeURIComponent(sec))).replace(/[^a-z0-9]/gi,'').slice(0,12);
+    return `<div class="sec ${openSecs[id]?'open':''}" id="${id}">
+      <h4 onclick="toggleSec('${id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+        ${esc(sec)} <span class="n">${open} open / ${list.length}</span></h4>
+      <div class="body">${list.map(t=>
+        `<div class="task ${t.completed?'done':''}">
+           <button class="tick" onclick="tickTask('${t.uid}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></button>
+           <div style="flex:1" onclick="editTask('${t.uid}')">
+             <div class="tt">${esc(t.title)}</div>
+             <div class="meta">${t.interval?esc(t.interval)+' · ':''}${t.responsible?esc(t.responsible)+' · ':''}${t.completed&&t.completed_at?'done '+esc(t.completed_at):(t.due?'due '+esc(t.due):'')}${t.note?' · '+esc(t.note):''}</div>
+           </div></div>`).join('')}</div></div>`;
+  }).join('')||'<p class="muted">No tasks</p>';
+}
+function toggleSec(id){const el=document.getElementById(id);el.classList.toggle('open');
+  const m=JSON.parse(sessionStorage.getItem('yolo_secs')||'{}');m[id]=el.classList.contains('open');sessionStorage.setItem('yolo_secs',JSON.stringify(m));}
+function tickTask(uidv){const t=S.tasks.find(x=>x.uid===uidv);if(!t)return;
+  t.completed=!t.completed;t.completed_at=t.completed?new Date().toISOString().slice(0,10):null;touch('tasks',t);}
+
+function renderAssets(){
+  const rows=S.assets.filter(a=>!a.deleted).sort((a,b)=>String(b.installed||'').localeCompare(String(a.installed||'')));
+  document.getElementById('assetList').innerHTML=rows.map(a=>
+    `<div class="row" onclick="editAsset('${a.uid}')" style="cursor:pointer">
+      <div class="t"><b>${esc(a.name)}</b><span>${a.installed?'installed '+esc(a.installed):''}${a.cost?' · '+eur(a.cost):''}${a.serial?' · s/n '+esc(a.serial):''}</span>
+      ${a.manual_url?`<span><a href="${esc(a.manual_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Manual</a></span>`:''}</div>
+    </div>`).join('')||'<p class="muted">No equipment yet</p>';
+}
+
+function renderDocs(){
+  const rows=S.documents.filter(d=>!d.deleted).sort((a,b)=>String(b.day||'').localeCompare(String(a.day||''))).slice(0,30);
+  document.getElementById('docList').innerHTML=rows.map(d=>
+    `<a class="doc" href="https://drive.google.com/file/d/${esc(d.drive_id)}/view" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><path d="M14 3H7a1.5 1.5 0 0 0-1.5 1.5v15A1.5 1.5 0 0 0 7 21h10a1.5 1.5 0 0 0 1.5-1.5V7.5z"/><path d="M14 3v4.5h4.5"/></svg>
+      <span class="dn">${esc(d.name)}</span><span class="ds">${esc(d.kind||'')}${d.day?' · '+esc(d.day):''}</span></a>`).join('');
+}
+
+// ---------- Drive browser ----------
+async function loadDrive(folder){
+  const el=document.getElementById('driveList');el.textContent='Loading…';
+  try{
+    const r=await api('/api/yolo/drive'+(folder?('?folder='+encodeURIComponent(folder)):''));
+    if(!r||r.error){el.textContent=(r&&r.error)||'Not signed in';return;}
+    if(!folder)drivePath=[];
+    document.getElementById('crumbs').innerHTML=['<a onclick="loadDrive()">YOLO BOAT YACHT</a>']
+      .concat(drivePath.map((p,i)=>`<a onclick="crumbTo(${i})">${esc(p.name)}</a>`)).join(' / ');
+    el.innerHTML=r.files.map(f=>{
+      const isF=f.mimeType==='application/vnd.google-apps.folder';
+      const icon=isF?'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'
+                    :'<path d="M14 3H7a1.5 1.5 0 0 0-1.5 1.5v15A1.5 1.5 0 0 0 7 21h10a1.5 1.5 0 0 0 1.5-1.5V7.5z"/><path d="M14 3v4.5h4.5"/>';
+      return isF
+        ?`<a class="doc" onclick="openFolder('${f.id}','${esc(f.name).replace(/'/g,"\\'")}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.6">${icon}</svg><span class="dn">${esc(f.name)}</span></a>`
+        :`<a class="doc" href="${f.url}" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.6">${icon}</svg><span class="dn">${esc(f.name)}</span><span class="ds">${f.size?Math.round(f.size/1024)+' KB':''}</span></a>`;
+    }).join('')||'<p class="muted">Empty folder</p>';
+  }catch(e){el.textContent='Drive unavailable';}
+}
+function openFolder(id,name){drivePath.push({id,name});loadDrive(id);}
+function crumbTo(i){drivePath=drivePath.slice(0,i+1);loadDrive(drivePath[i].id);}
+
+async function uploadDoc(){
+  const f=document.getElementById('upFile').files[0];
+  if(!f){toast('Pick a file first');return;}
+  if(f.size>15*1024*1024){toast('Over 15 MB — add it on Drive directly');return;}
+  toast('Uploading…');
+  const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(f);});
+  try{
+    const r=await api('/api/yolo/document',{method:'POST',body:JSON.stringify({name:f.name,mime:f.type,data:b64,kind:document.getElementById('upKind').value})});
+    if(!r||r.error){toast((r&&r.error)||'Failed');return;}
+    toast('Uploaded to Drive');
+    document.getElementById('upFile').value='';
+    await sync(false);
+  }catch(e){toast('Upload failed');}
+}
+
+// ---------- editors ----------
+function sheetOpen(html){document.getElementById('sheetBody').innerHTML=html;document.getElementById('sheet').classList.add('open');}
+function sheetClose(){document.getElementById('sheet').classList.remove('open');}
+document.getElementById('sheet').addEventListener('click',e=>{if(e.target.id==='sheet')sheetClose();});
+
+function fabTap(){
+  if(curTab==='costs'||curTab==='dash')editCost();
+  else if(curTab==='maint')editTask();
+  else if(curTab==='equip')editAsset();
+  else go('costs');
+}
+
+function editCost(uidv){
+  const c=uidv?S.costs.find(x=>x.uid===uidv):{uid:'',day:new Date().toISOString().slice(0,10),currency:'EUR'};
+  sheetOpen(`<h3>${uidv?'Edit cost':'New cost'}</h3>
+    <label>What</label><input id="f_title" value="${esc(c.title||'')}">
+    <div class="grid2"><div><label>Amount (EUR)</label><input id="f_amount" type="number" inputmode="decimal" value="${c.amount!=null?c.amount:''}"></div>
+    <div><label>Date</label><input id="f_day" type="date" value="${esc(c.day||'')}"></div></div>
+    <div class="grid2"><div><label>Category</label><select id="f_cat">${CATS.map(k=>`<option ${c.category===k?'selected':''}>${k}</option>`).join('')}</select></div>
+    <div><label>Paid by</label><input id="f_paid" value="${esc(c.paid_by||'')}" placeholder="rashad / domagoj"></div></div>
+    <label>Method</label><input id="f_method" value="${esc(c.method||'')}" placeholder="revolut / cash / barclays">
+    <label>Note</label><textarea id="f_note">${esc(c.note||'')}</textarea>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      ${uidv?'<button class="ghost danger" onclick="delCost(\''+uidv+'\')">Delete</button>':''}
+      <button class="btn right" onclick="saveCost('${uidv||''}')">Save</button></div>`);
+}
+function saveCost(uidv){
+  const g=id=>document.getElementById(id).value.trim();
+  let c=uidv?S.costs.find(x=>x.uid===uidv):null;
+  if(!c){c={uid:uid('c')};S.costs.push(c);}
+  c.title=g('f_title')||'(untitled)';c.amount=g('f_amount')?Number(g('f_amount')):null;c.day=g('f_day')||null;
+  c.year_label=c.day?boatYear(c.day):c.year_label;c.category=g('f_cat');c.paid_by=g('f_paid')||null;
+  c.method=g('f_method')||null;c.note=g('f_note')||null;c.source=c.source||'app';
+  touch('costs',c);sheetClose();
+}
+function delCost(uidv){const c=S.costs.find(x=>x.uid===uidv);if(c){c.deleted=true;touch('costs',c);}sheetClose();}
+
+function editTask(uidv){
+  const t=uidv?S.tasks.find(x=>x.uid===uidv):{};
+  const secs=[...new Set(S.tasks.filter(x=>!x.deleted).map(x=>x.section))].sort();
+  sheetOpen(`<h3>${uidv?'Edit task':'New task'}</h3>
+    <label>Task</label><input id="f_title" value="${esc(t.title||'')}">
+    <label>Section</label><input id="f_sec" list="secList" value="${esc(t.section||'')}"><datalist id="secList">${secs.map(s=>`<option>${esc(s)}</option>`).join('')}</datalist>
+    <div class="grid2"><div><label>Interval</label><input id="f_int" value="${esc(t.interval||'')}" placeholder="annual / 500h / once"></div>
+    <div><label>Due</label><input id="f_due" type="date" value="${esc(t.due||'')}"></div></div>
+    <label>Responsible</label><input id="f_resp" value="${esc(t.responsible||'')}" placeholder="Boris / Doma / Kristijan / Rashad">
+    <label>Note</label><textarea id="f_note">${esc(t.note||'')}</textarea>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      ${uidv?'<button class="ghost danger" onclick="delTask(\''+uidv+'\')">Delete</button>':''}
+      <button class="btn right" onclick="saveTask('${uidv||''}')">Save</button></div>`);
+}
+function saveTask(uidv){
+  const g=id=>document.getElementById(id).value.trim();
+  let t=uidv?S.tasks.find(x=>x.uid===uidv):null;
+  if(!t){t={uid:uid('t'),completed:false};S.tasks.push(t);}
+  t.title=g('f_title')||'(untitled)';t.section=g('f_sec')||'Other';t.interval=g('f_int')||null;
+  t.due=g('f_due')||null;t.responsible=g('f_resp')||null;t.note=g('f_note')||null;
+  touch('tasks',t);sheetClose();
+}
+function delTask(uidv){const t=S.tasks.find(x=>x.uid===uidv);if(t){t.deleted=true;touch('tasks',t);}sheetClose();}
+
+function editAsset(uidv){
+  const a=uidv?S.assets.find(x=>x.uid===uidv):{};
+  sheetOpen(`<h3>${uidv?'Edit equipment':'New equipment'}</h3>
+    <label>Name</label><input id="f_name" value="${esc(a.name||'')}">
+    <div class="grid2"><div><label>Installed</label><input id="f_inst" type="date" value="${esc(a.installed||'')}"></div>
+    <div><label>Cost (EUR)</label><input id="f_cost" type="number" inputmode="decimal" value="${a.cost!=null?a.cost:''}"></div></div>
+    <label>Serial</label><input id="f_serial" value="${esc(a.serial||'')}">
+    <label>Manual link</label><input id="f_man" value="${esc(a.manual_url||'')}" placeholder="https://…">
+    <label>Note</label><textarea id="f_note">${esc(a.note||'')}</textarea>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      ${uidv?'<button class="ghost danger" onclick="delAsset(\''+uidv+'\')">Delete</button>':''}
+      <button class="btn right" onclick="saveAsset('${uidv||''}')">Save</button></div>`);
+}
+function saveAsset(uidv){
+  const g=id=>document.getElementById(id).value.trim();
+  let a=uidv?S.assets.find(x=>x.uid===uidv):null;
+  if(!a){a={uid:uid('a')};S.assets.push(a);}
+  a.name=g('f_name')||'(untitled)';a.installed=g('f_inst')||null;a.cost=g('f_cost')?Number(g('f_cost')):null;
+  a.serial=g('f_serial')||null;a.manual_url=g('f_man')||null;a.note=g('f_note')||null;
+  touch('assets',a);sheetClose();
+}
+function delAsset(uidv){const a=S.assets.find(x=>x.uid===uidv);if(a){a.deleted=true;touch('assets',a);}sheetClose();}
+
+// ---------- nav / boot ----------
+function go(tab){
+  curTab=tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.id==='tab-'+tab));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  document.getElementById('fab').style.display=(tab==='docs')?'none':'block';
+  if(tab==='docs')loadDrive();
+}
+function show(view){
+  document.getElementById('loginView').style.display=view==='login'?'block':'none';
+  document.getElementById('appView').style.display=view==='app'?'block':'none';
+}
+function boot(){
+  if(!token()){show('login');return;}
+  show('app');loadLocal();renderAll();sync(false);
+}
+document.getElementById('pass')&&document.getElementById('pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+boot();
+</script>
+</body>
+</html>

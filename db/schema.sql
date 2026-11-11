@@ -549,3 +549,81 @@ create table if not exists fitness.mobility_media (
     source     text,                 -- a measured still: the clip it was read from
     created_at timestamptz not null default now()
 );
+
+-- ---------------------------------------------------------------------------
+-- YOLO (cortex/yolo.py, 11 Nov 2026): the owner's boat maintenance + cost book.
+-- Personal project (Raffaelli Storm 46 Fly "YOLO"), NOT a company. Same sync
+-- doctrine as fitness: the PWA at /yolo pushes its whole document, the server
+-- explodes it into rows and keeps every push in yolo.snapshots. Rows are
+-- upserted by the client's own uid and never hard-deleted (deleted=true).
+-- Documents live on the owner's PERSONAL Drive (PERSONAL DRIVE/YOLO BOAT
+-- YACHT); yolo.documents holds links + metadata, never bytes.
+-- ---------------------------------------------------------------------------
+create schema if not exists yolo;
+
+create table if not exists yolo.costs (
+    uid        text primary key,
+    day        date,
+    year_label text,                  -- boat year "2025-2026" (Apr-Mar); kept even when day is unknown
+    title      text not null,
+    category   text,                  -- berth/fuel/insurance/maintenance/engine-rebuild/equipment/crew/tax/other
+    amount     numeric,
+    currency   text not null default 'EUR',
+    paid_by    text,                  -- rashad / domagoj / ...
+    method     text,                  -- revolut / barclays / cash / ...
+    note       text,
+    doc_uids   jsonb not null default '[]'::jsonb,
+    source     text,                  -- sheet-import / app / claude
+    deleted    boolean not null default false,
+    updated_at timestamptz not null default now()
+);
+create index if not exists yolo_costs_year_idx on yolo.costs (year_label, day);
+
+create table if not exists yolo.tasks (
+    uid        text primary key,
+    section    text not null,         -- e.g. "Caterpillar 3208TA - Annual", "Watermaker - Annual", "Minor repairs"
+    title      text not null,
+    interval   text,                  -- annual / 3-year / 5-year / 120h / once ...
+    due        date,
+    completed  boolean not null default false,
+    completed_at date,
+    responsible text,
+    note       text,
+    doc_uids   jsonb not null default '[]'::jsonb,
+    deleted    boolean not null default false,
+    updated_at timestamptz not null default now()
+);
+create index if not exists yolo_tasks_section_idx on yolo.tasks (section, completed);
+
+create table if not exists yolo.assets (
+    uid        text primary key,
+    name       text not null,
+    category   text,                  -- engine/generator/watermaker/electrical/...
+    installed  date,
+    cost       numeric,
+    serial     text,
+    manual_url text,
+    note       text,
+    doc_uids   jsonb not null default '[]'::jsonb,
+    deleted    boolean not null default false,
+    updated_at timestamptz not null default now()
+);
+
+create table if not exists yolo.documents (
+    uid        text primary key,
+    name       text not null,
+    drive_id   text,                  -- file or folder id on the personal Drive
+    kind       text,                  -- invoice/manual/photo-batch/registration/insurance/survey/other
+    mime       text,
+    day        date,
+    note       text,
+    deleted    boolean not null default false,
+    updated_at timestamptz not null default now()
+);
+
+create table if not exists yolo.snapshots (
+    id         bigserial primary key,
+    at         timestamptz not null default now(),
+    source     text,
+    doc        jsonb not null
+);

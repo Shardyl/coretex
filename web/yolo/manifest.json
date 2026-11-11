@@ -1,0 +1,18 @@
+{
+  "name": "YOLO boat book",
+  "short_name": "YOLO",
+  "description": "Maintenance, costs and documents for YOLO, synced to Cortex",
+  "id": "/yolo/",
+  "start_url": "/yolo/",
+  "scope": "/yolo/",
+  "display": "standalone",
+  "background_color": "#0e1b2a",
+  "theme_color": "#0e1b2a",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -2591,6 +2591,19 @@ def _cases():
                 and 'class="n" dir="rtl"' in vs and "No narration" in vs)
     case("the recorded-language narration sits above the English on the beat and beside it on the script page",
          "owner, 3 Nov 2026 (XPLOR deal 190)", _arabic_above_english)
+
+    def _boat_year():
+        from datetime import date as _d
+        from . import yolo as _y
+        # the owner's cost sheets run spring to spring, anchored on the March berth renewal: Apr-Mar.
+        # The berth paid 26 Mar 2025 belongs to 2024-2025; fuel in May 2025 to 2025-2026.
+        return (_y.boat_year(_d(2025, 3, 26)) == "2024-2025"
+                and _y.boat_year(_d(2025, 4, 1)) == "2025-2026"
+                and _y.boat_year(_d(2026, 2, 1)) == "2025-2026"
+                and _y.boat_year(_d(2026, 10, 28)) == "2026-2027"
+                and _y.boat_year(None) is None)
+    case("a boat cost lands in the Apr-Mar boat year its date belongs to",
+         "owner, 11 Nov 2026 (YOLO boat book: berth renewals were missing because the year was ambiguous)", _boat_year)
     return C
 
 
