@@ -6209,6 +6209,29 @@ def _deal_contact(deal_id, email: str) -> dict | None:
     return hit
 
 
+# A MACHINE'S NOTIFICATION IS NOT THE CONVERSATION (12 Nov 2026). Gino had replied on Google's own
+# "Alex Wilfred Noronha shared the folder "DSO X SENSA VIDEO" with you", so by every rule it was a
+# thread we had written on and adoption chose it: the District IO approval deck was about to go to
+# DSO under that subject. The calendar and auto-reply subjects were already excluded here; a Drive
+# or Docs sharing notice is the same class of thing and belongs beside them.
+_NOTICE_PREFIX = ("invitation:", "accepted:", "declined:", "updated invitation:", "canceled:",
+                  "cancelled:", "notes:", "automatic reply", "auto reply", "out of office",
+                  "réponse automatique", "delivery status", "shared folder:", "shared file:",
+                  "shared document:", "invitation to edit", "invitation to comment",
+                  "invitation to view")
+_NOTICE_SUBJ = re.compile(r"\bshared\b[^\"]{0,40}(?:\"[^\"]+\"|\b(?:folder|file|document|item|"
+                          r"spreadsheet|presentation)\b)[^.]{0,40}\bwith you\b"
+                          r"|\bhas invited you to (?:edit|comment|view)\b"
+                          r"|\binvited you to (?:edit|comment on|view)\b", re.I)
+
+
+def _notice_subject(subject: str | None) -> bool:
+    """True when a subject is a machine's notice (a calendar invite, an auto-reply, a Drive share)
+    rather than a conversation. Such a thread is never adopted as the one we write on."""
+    s = re.sub(r"^\s*(?:re|fw|fwd)\s*:\s*", "", (subject or "").strip(), flags=re.I).lower()
+    return bool(s.startswith(_NOTICE_PREFIX) or _NOTICE_SUBJ.search(s))
+
+
 def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
     """THREAD ADOPTION: a follow-up or deal-linked draft to a known contact must continue the REAL Gmail
     thread from the mailbox that owns it (thread-true reply + thread-sticky sender) — never open a fresh
@@ -6298,11 +6321,7 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
             def _usable(cand) -> bool:
                 if not cand.get("thread_id") or _another_deals(cand["thread_id"]):
                     return False
-                _subj = (cand.get("subject") or "").lower()
-                return not (cand.get("auto_marker") or any(_subj.startswith(p) for p in (
-                    "invitation:", "accepted:", "declined:", "updated invitation:", "canceled:",
-                    "cancelled:", "notes:", "automatic reply", "auto reply", "out of office",
-                    "réponse automatique", "delivery status")))
+                return not (cand.get("auto_marker") or _notice_subject(cand.get("subject")))
             # THE CONVERSATION THEY ANSWERED BEATS THE ONE WE STARTED. Taking the newest message
             # meant a follow-up we ourselves opened on a fresh thread became "the thread", and the
             # next chase continued THAT instead of the real exchange: Brent Woodhead's live

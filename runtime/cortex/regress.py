@@ -2250,6 +2250,29 @@ def _cases():
     case("an approval caption names the document it came from", "DSO captions 12 Nov",
          _captions_name_their_source)
 
+    def _notice_is_not_the_conversation():
+        """Gino had replied on Google's own "Alex Wilfred Noronha shared the folder ... with you",
+        so by every rule it was a thread we had written on and adoption chose it: the District IO
+        approval deck (card 1752) was about to go to DSO under that subject. Real subjects, both
+        ways round: a sharing notice is the same class as the calendar invites already excluded,
+        and a conversation that merely says "shared" is untouched."""
+        from . import engine
+        notice = ['Alex Wilfred Noronha shared the folder "DSO X SENSA VIDEO" with you',
+                  'Re: Alex Wilfred Noronha shared the folder "DSO X SENSA VIDEO" with you',
+                  'Rawdha shared "District IO brief" with you',
+                  "Klim Popov has invited you to edit the file",
+                  "Invitation: Qabilah review @ Fri Nov 14",
+                  'Notes: "Call with Mai" Sep 1, 2026']
+        real = ["RE: Brand Video: Dubai Silicon Oasis and District io",
+                "District IO: final approval deck",
+                "Shared services update for the district",
+                "Re: D-Marin - revised quotation SEN-2026-0062"]
+        return (all(engine._notice_subject(x) for x in notice)
+                and not any(engine._notice_subject(x) for x in real))
+
+    case("a Drive sharing notice is never the thread we answer on", "card 1752 12 Nov",
+         _notice_is_not_the_conversation)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
