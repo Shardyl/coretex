@@ -64,6 +64,12 @@ def _role(name: str) -> str:
 
 _IMAGE = (".png", ".jpg", ".jpeg", ".webp")
 _DOC = (".pdf", ".docx", ".txt", ".md", ".rtf")
+# WHICH DOCUMENT IS THE SCRIPT, matched on a name with its separators flattened to spaces.
+# `DSO_VO_by_Scene-v2.pdf` failed `\bvo\b` outright, because an underscore is a word character:
+# the voice-over script was filed as the guidance document, so every scene page printed with no
+# title, no action and no voice over, and the plate captions were written from the wrong file
+# (12 Nov 2026, the first real DSO run).
+_SCRIPT_NAME = re.compile(r"script|voice.?over|\bvo\b|\bvo by scene\b", re.I)
 # a trailing section word, with or without brackets, and tolerant of the stray unclosed one
 _LABEL = re.compile(r"[\s(\[-]*\b(character|wardrobe|location|prop|props)\b\s*[)\]]*\s*$", re.I)
 _SCENE = re.compile(r"scene\s*0*(\d+)(?:\s*[-_]\s*0*(\d+))?", re.I)
@@ -242,7 +248,7 @@ def sync(company: str, client: str, production: str) -> dict:
             p, new = grab(f)
             pulled += new
             text = _read(p)
-            if re.search(r"script|voice.?over|\bvo\b", low):
+            if _SCRIPT_NAME.search(re.sub(r"[^a-z0-9]+", " ", low)):
                 script = text
             else:
                 guidance += ("\n\n" if guidance else "") + text
@@ -596,7 +602,14 @@ def build(company: str, client: str, production: str, *, accent: str = "#4DA3FF"
         raise ValueError("the %s folder holds nothing labelled Character, Wardrobe, Location, "
                          "Prop or Scene, and no folder of numbered frames" % production)
     key = _key(company, client, production)
-    caps = captions(key, synced["items"], synced["guidance"], company, force=force_captions)
+    # THE CAPTIONS ARE GROUNDED IN A REAL DOCUMENT THE TEAM WROTE, and the card says WHICH. With no
+    # guidance document the script stands in rather than the items going out bare, but it is never
+    # the model's own words either way (12 Nov 2026: DSO has a voice-over script and no guidance).
+    source = "guidance document" if synced["guidance"] else (
+        "voice-over script, because the folder holds no guidance document" if synced["script"]
+        else "")
+    caps = captions(key, synced["items"], synced["guidance"] or synced["script"], company,
+                    force=force_captions)
     scenes_copy = scene_pages(key, synced, company, force=force_captions)
     out = out_dir or synced["dir"]
     os.makedirs(out, exist_ok=True)
@@ -614,7 +627,7 @@ def build(company: str, client: str, production: str, *, accent: str = "#4DA3FF"
     missing = [i["code"] for i in synced["items"] if not caps.get(i["code"])]
     return {**res, "items": synced["items"], "pulled": synced["pulled"], "filename": name,
             "bytes": os.path.getsize(res["path"]),
-            "missing_captions": missing, "guidance": bool(synced["guidance"]),
+            "missing_captions": missing, "caption_source": source,
             "scenes": len({s["scene"][0] for s in synced["scenes"]}),
             "films": {f["name"]: {"frames": len(f["frames"]), "extras": len(f["extras"])}
                       for f in synced["films"]}}
@@ -716,9 +729,13 @@ def summary(res: dict) -> str:
     if res.get("missing_captions"):
         lines.append("NO CAPTION, because the guidance document does not cover them: %s. They "
                      "print with the code and the name only." % ", ".join(res["missing_captions"]))
-    if not res.get("guidance"):
-        lines.append("There is no guidance document in the folder, so no item carries a caption. "
-                     "Drop one in and reply 'rewrite the captions'.")
+    if res.get("caption_source"):
+        lines.append("Captions come from the %s. Nothing in them is written by Cortex."
+                     % res["caption_source"])
+    else:
+        lines.append("The folder holds no guidance document and no script, so no item carries a "
+                     "caption: each prints with its code and name. Drop a guidance document in "
+                     "and reply 'rewrite the captions'.")
     lines.append("Reply on this card: 'rebuild' after changing a picture in the folder, or "
                  "'rewrite the captions' after changing the guidance document. A code stays with "
                  "its item, so a replaced plate keeps the code the client has written on.")

@@ -2216,6 +2216,40 @@ def _cases():
     case("an approval deck is re-encoded until it fits, never refused at the last step",
          "DSO build 12 Nov, 15.9 MB", _deck_must_fit)
 
+    def _script_is_the_script():
+        """`DSO_VO_by_Scene-v2.pdf` failed \bvo\b outright, because an underscore IS a word
+        character. The voice-over script was filed as the guidance document, so all 18 DSO scene
+        pages printed with no title, no action and no voice over, and the plate captions were
+        written from the wrong file. Real names from the folder, both ways round."""
+        import re as _re
+        from . import approval as ap
+
+        def kind(n):
+            return ("script" if ap._SCRIPT_NAME.search(_re.sub(r"[^a-z0-9]+", " ", n.lower()))
+                    else "guidance")
+        return (kind("DSO_VO_by_Scene-v2.pdf") == "script"
+                and kind("DSO 60 second script draft 4 - 2026-11-03.pdf") == "script"
+                and kind("Qabilah-VoiceOver.docx") == "script"
+                and kind("Guidance.docx") == "guidance"
+                and kind("Approval notes.docx") == "guidance")
+
+    case("the voice-over script is read as the script, not as the guidance document",
+         "DSO scene pages blank 12 Nov", _script_is_the_script)
+
+    def _captions_name_their_source():
+        """A caption is always from a document the TEAM wrote, and the card says which one. With no
+        guidance document the script stands in, rather than the items going out bare or Cortex
+        filling the gap itself."""
+        import inspect as _i
+        from . import approval as ap
+        src = _i.getsource(ap.build)
+        return ('synced["guidance"] or synced["script"]' in src and "caption_source" in src
+                and "voice-over script, because the folder holds no guidance document" in src
+                and "Use ONLY the guidance document" in _i.getsource(ap.captions))
+
+    case("an approval caption names the document it came from", "DSO captions 12 Nov",
+         _captions_name_their_source)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
