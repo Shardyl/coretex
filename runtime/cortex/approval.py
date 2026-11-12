@@ -32,7 +32,10 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 from datetime import datetime, timezone
+
+from psycopg.types.json import Json
 
 from . import db, deck, documents, drive, profile, provider, store
 
@@ -44,6 +47,20 @@ SECTIONS = [("character", "CH", "Characters"), ("wardrobe", "WD", "Wardrobe"),
             ("location", "LOC", "Locations"), ("prop", "PR", "Props")]
 PREFIX = {k: p for k, p, _ in SECTIONS}
 TITLE = {k: t for k, _, t in SECTIONS}
+
+# THE TEAM'S FOLDER SHAPE IS READ, NOT DICTATED (owner, 12 Nov 2026). Gino's DSO folder is
+# "APPROVAL ASSET" (singular) holding SCENES/ and ASSETS/; Shama's is one subfolder per film. Both
+# are read, and so is a flat folder. Nobody is asked to rename a folder to suit the code.
+_SCENE_DIRS = ("storyboard", "storyboards", "scenes", "scene", "frames", "shots")
+_ASSET_DIRS = ("assets", "asset", "plates", "items", "elements", "approval-assets",
+               "approval-asset", "approval")
+
+
+def _role(name: str) -> str:
+    """What a subfolder of the production folder IS: 'scenes', 'assets', or '' (a film)."""
+    s = _slug(name)
+    return "scenes" if s in _SCENE_DIRS else "assets" if s in _ASSET_DIRS else ""
+
 
 _IMAGE = (".png", ".jpg", ".jpeg", ".webp")
 _DOC = (".pdf", ".docx", ".txt", ".md", ".rtf")
@@ -161,10 +178,12 @@ def folder_id(company_id: int, client: str, production: str, tok: str) -> str | 
     for f in subs:
         if _slug(f.get("name")) == _slug(production):
             return f["id"]
-    # A client with ONE production often drops its films straight under the assets folder
-    # (Shama: Approval Asset/Majlis, /Saqarah, /Sadaf for Qabilah). Take the assets folder as the
-    # production when every subfolder in it holds numbered frames, never otherwise: another
-    # production's folder must not be swept into this deck.
+    # A client with ONE production drops it straight under the assets folder, two ways: named
+    # working folders (DSO: SCENES/ and ASSETS/) or a folder per film (Shama: Majlis, Saqarah,
+    # Sadaf for Qabilah). Either way the assets folder IS the production folder. Anything else is
+    # refused rather than guessed at: another production's folder must not be swept into this deck.
+    if subs and any(_role(f.get("name")) for f in subs):
+        return assets
     if subs and all(any(frame_of(g.get("name")) for g in drive.list_folder(f["id"], tok))
                     for f in subs):
         return assets
@@ -203,34 +222,12 @@ def sync(company: str, client: str, production: str) -> dict:
         return _deck_copy(dest, fresh=True), True
 
     items, scenes, films, guidance, script, pulled = [], [], [], "", "", 0
-    for f in drive.list_folder(fid, tok):
+
+    def take(f):
+        """What this FILE is: a labelled plate, a storyboard frame, the script, or guidance."""
+        nonlocal guidance, script, pulled
         name = f.get("name") or ""
         low = name.lower()
-        if f.get("mimeType") == "application/vnd.google-apps.folder":
-            if _slug(name) == _slug(STORYBOARD_FOLDER):
-                for g in drive.list_folder(f["id"], tok):
-                    if (g.get("name") or "").lower().endswith(_IMAGE) and scene_of(g["name"]):
-                        p, new = grab(g, "frames")
-                        pulled += new
-                        scenes.append({"path": p, "scene": scene_of(g["name"])})
-            else:
-                film = {"name": name.strip(), "frames": [], "extras": []}
-                for g in drive.list_folder(f["id"], tok):
-                    gn = g.get("name") or ""
-                    if not gn.lower().endswith(_IMAGE):
-                        continue
-                    p, new = grab(g, os.path.join("films", _slug(name)))
-                    pulled += new
-                    fr = frame_of(gn)
-                    if fr:
-                        film["frames"].append({"n": fr[0], "caption": fr[1], "path": p})
-                    else:
-                        film["extras"].append({"name": _plain(gn), "path": p})
-                if film["frames"]:
-                    film["frames"].sort(key=lambda x: x["n"])
-                    film["extras"].sort(key=lambda x: x["name"].lower())
-                    films.append(film)
-            continue
         if low.endswith(_IMAGE):
             kind, nm = parse_label(name)
             if kind:
@@ -249,6 +246,36 @@ def sync(company: str, client: str, production: str) -> dict:
                 script = text
             else:
                 guidance += ("\n\n" if guidance else "") + text
+
+    def take_film(f):
+        """A subfolder of numbered frames IS a film: '07 - The weaver, in memory.jpg' -> MJ-07."""
+        nonlocal pulled
+        name = (f.get("name") or "").strip()
+        film = {"name": name, "frames": [], "extras": []}
+        for g in drive.list_folder(f["id"], tok):
+            gn = g.get("name") or ""
+            if not gn.lower().endswith(_IMAGE):
+                continue
+            p, new = grab(g, os.path.join("films", _slug(name)))
+            pulled += new
+            fr = frame_of(gn)
+            (film["frames"].append({"n": fr[0], "caption": fr[1], "path": p}) if fr
+             else film["extras"].append({"name": _plain(gn), "path": p}))
+        if film["frames"]:
+            film["frames"].sort(key=lambda x: x["n"])
+            film["extras"].sort(key=lambda x: x["name"].lower())
+            films.append(film)
+
+    def walk(folder: str, depth: int = 0):
+        for f in drive.list_folder(folder, tok):
+            if f.get("mimeType") != "application/vnd.google-apps.folder":
+                take(f)
+            elif _role(f.get("name")) and depth < 2:
+                walk(f["id"], depth + 1)    # SCENES / ASSETS: working folders, not films
+            elif not _role(f.get("name")):
+                take_film(f)
+
+    walk(fid)
     db.setting_set(key + ":md5", seen)
     scenes.sort(key=lambda s: s["scene"])
     return {"dir": work, "folder": fid, "pulled": pulled, "guidance": guidance.strip(),
@@ -555,3 +582,136 @@ def build(company: str, client: str, production: str, *, accent: str = "#4DA3FF"
             "scenes": len({s["scene"][0] for s in synced["scenes"]}),
             "films": {f["name"]: {"frames": len(f["frames"]), "extras": len(f["extras"])}
                       for f in synced["films"]}}
+
+
+# ------------------------------------------------------------- the card: build, file, revise
+def start(company: str, deal_id: int, production: str, *, client: str = "", accent: str = "#4DA3FF",
+          rewrite_captions: bool = False, background: bool = True) -> dict:
+    """Raise the review card, then build on a thread. Everything a PERSON must supply is checked
+    first, so a bad call fails in the conversation rather than on a card minutes later."""
+    from . import engine
+    co = store.get_company_by_slug(company)
+    if not co:
+        raise ValueError("unknown company %s" % company)
+    deal = db.one("select id, title from crm_projects where id=%s", (int(deal_id),))
+    if not deal:
+        raise ValueError("no opportunity #%s" % deal_id)
+    client = (client or engine._deal_client_name(int(deal_id)) or "").split(",")[0].strip()
+    if not client:
+        raise ValueError("opportunity #%s has no client name, so there is no Drive folder to read; "
+                         "name the client" % deal_id)
+    production = (production or deal["title"] or "").strip()
+    if not production:
+        raise ValueError("name the production: it titles the deck and finds the folder")
+    tok = drive.access_token()
+    if not folder_id(co["id"], client, production, tok):
+        raise ValueError("no approval folder for %s on Drive. Expected '%s' inside the %s client "
+                         "folder, holding the labelled plates (a trailing Character, Wardrobe, "
+                         "Location or Prop), the storyboard frames named by scene, and the "
+                         "guidance document" % (production, ASSETS_FOLDER, client))
+    skill = store.get_skill_by_key(co["id"], "sales-proposal")
+    req = {"kind": "approval_deck", "company": company, "client": client,
+           "production": production, "accent": accent, "deal_id": int(deal_id)}
+    task = db.execute("insert into tasks (company_id, skill_id, kind, request, draft, status, "
+                      "title, deal_id) values (%s,%s,'content',%s,%s,'drafting',%s,%s) returning *",
+                      (co["id"], skill["id"], Json(req),
+                       "Building the %s client approval deck from the Drive folder: the plates, "
+                       "the storyboard and the sign-off sheet. A few minutes; the card returns to "
+                       "your Inbox when it is ready." % production,
+                       "Approval deck: %s - %s" % (client, production), int(deal_id)))
+    if background:
+        threading.Thread(target=run, args=(task["id"], rewrite_captions), daemon=True).start()
+    else:
+        run(task["id"], rewrite_captions)
+    return {"task_id": task["id"], "client": client, "production": production}
+
+
+def run(task_id: int, rewrite_captions: bool = False) -> None:
+    """Build, file on the deal and the client's Drive folder, hand the card back for approval.
+    A failure leaves a VISIBLE card saying what stopped, never a silent failed row."""
+    from . import engine, pipeline
+    task = store.get_task(task_id)
+    s = dict((task or {}).get("request") or {})
+    try:
+        res = build(s["company"], s["client"], s["production"], accent=s.get("accent") or "#4DA3FF",
+                    force_captions=bool(rewrite_captions))
+        co = store.get_company_by_slug(s["company"])
+        old = [r["id"] for r in db.query(
+            "select id from company_documents where kind='approval-deck' and superseded_by is null "
+            "and filename=%s and deal_id=%s", (res["filename"], s["deal_id"]))]
+        doc, folder = engine._file_proposal_pdf(co, s["client"], res["filename"], res["path"],
+                                                s["deal_id"], None, supersede=old,
+                                                archive_prefix=os.path.splitext(res["filename"])[0],
+                                                kind="approval-deck")
+        pipeline.log_deal(s["deal_id"], "approval_deck",
+                          "Client approval deck filed: %s (%d pages)%s"
+                          % (res["filename"], res.get("pages") or 0,
+                             (" (client folder %s)" % folder) if folder else ""))
+        s.update({"file": res["path"], "attach_docs": [documents.card_ref(doc)]})
+        store.update_task(task_id, request=s, draft=summary(res), status="awaiting_approval",
+                          title="Approval deck: %s - %s" % (s["client"], s["production"]))
+    except Exception as e:  # noqa: BLE001 - a visible card, never a silent failure
+        from . import notifications
+        store.update_task(task_id, status="awaiting_correction",
+                          draft=("The approval deck stopped: %s: %s.\n\nReply 'rebuild' to try "
+                                 "again once the folder is right." % (type(e).__name__, e)))
+        notifications.notify("Card #%s: the approval deck stopped" % task_id, str(e)[:300],
+                             category="approval", company_id=(task or {}).get("company_id"),
+                             target_type="task", target_id=str(task_id))
+        raise
+
+
+def summary(res: dict) -> str:
+    """What the card says. Every number is counted from what was actually built."""
+    by = {}
+    for i in res.get("items") or []:
+        by.setdefault(i["kind"], []).append(i)
+    counted = ([("%d %s" % (len(by[k]), TITLE[k].lower())) for k, _, _ in SECTIONS if by.get(k)]
+               + (["%d scenes" % res["scenes"]] if res.get("scenes") else [])
+               + ["%d %s frames" % (v["frames"], k.lower())
+                  for k, v in (res.get("films") or {}).items()])
+    lines = ["%d pages. %s." % (res.get("pages") or 0, ", ".join(counted) or "nothing counted")]
+    for k, _, title in SECTIONS:
+        if by.get(k):
+            lines.append("%s: %s" % (title, ", ".join("%s %s" % (i["code"], i["name"])
+                                                      for i in by[k])))
+    if res.get("missing_captions"):
+        lines.append("NO CAPTION, because the guidance document does not cover them: %s. They "
+                     "print with the code and the name only." % ", ".join(res["missing_captions"]))
+    if not res.get("guidance"):
+        lines.append("There is no guidance document in the folder, so no item carries a caption. "
+                     "Drop one in and reply 'rewrite the captions'.")
+    lines.append("Reply on this card: 'rebuild' after changing a picture in the folder, or "
+                 "'rewrite the captions' after changing the guidance document. A code stays with "
+                 "its item, so a replaced plate keeps the code the client has written on.")
+    return "\n\n".join(lines)
+
+
+_REBUILD = re.compile(r"\b(rebuild|rebuilt|re-?run|again|refresh|updated?|new (?:image|picture|"
+                      r"plate|frame)s?|changed|replaced|resume|retry)\b", re.I)
+_RECAPTION = re.compile(r"\b(caption|captions|wording|guidance|copy|text)\b", re.I)
+
+
+def revise(task: dict, text: str) -> bool:
+    """A reply on an approval-deck card. The deck's words are the team's own (the guidance
+    document and the script), so a reply never rewrites copy here: it rebuilds from the folder,
+    optionally re-reading the guidance. Anything else is answered plainly, never guessed at."""
+    req = dict(task.get("request") or {})
+    if req.get("kind") != "approval_deck":
+        return False
+    recap = bool(_RECAPTION.search(text or ""))
+    if not (recap or _REBUILD.search(text or "")):
+        store.update_task(task["id"], status="awaiting_correction",
+                          draft=((task.get("draft") or "") + "\n\n---\nYour note: \"%s\"\n"
+                                 "This deck carries the team's own words, from the guidance "
+                                 "document and the script in the Drive folder, so it is not "
+                                 "rewritten here. Change the file in the folder and reply "
+                                 "'rebuild', or reply 'rewrite the captions' to re-read the "
+                                 "guidance." % (text or "").strip()[:300]))
+        return True
+    store.update_task(task["id"], status="drafting",
+                      draft=("Rebuilding the %s approval deck from the Drive folder%s."
+                             % (req.get("production"),
+                                ", re-reading the guidance" if recap else "")))
+    threading.Thread(target=run, args=(task["id"], recap), daemon=True).start()
+    return True

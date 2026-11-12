@@ -2135,6 +2135,73 @@ def _cases():
     case("the files on a reminder email are the deal's own, by code", "card 1716 9 Nov",
          _step_files_are_the_deals_own)
 
+    # --- the approval deck is a Talk tool, and reads the team's folder (12 Nov 2026) ------
+    def _approval_is_a_tool():
+        """Gino asked Cortex for an approval deck three times on 11 Nov and got three
+        STORYBOARDS (docs 1606, 1608, 1609): approval.py existed but nothing exposed it, so the
+        model reached for the nearest tool it could see. A capability nobody can call is not one."""
+        from . import api, approval, capabilities
+
+        def approval_in_manifest():
+            return "create_approval_deck" in capabilities.manifest()
+
+        names = [t["name"] for t in api.SKILL_TOOLS]
+        tool = next((t for t in api.SKILL_TOOLS if t["name"] == "create_approval_deck"), None)
+        return bool(tool and "create_storyboard" in names
+                    and set(tool["input_schema"]["required"]) == {"company", "deal_id", "production"}
+                    and "never create_storyboard" in tool["description"]
+                    and hasattr(approval, "start") and hasattr(approval, "revise")
+                    and approval_in_manifest())
+
+    case("the approval deck is a tool Talk can actually call", "Gino 11 Nov, three storyboards",
+         _approval_is_a_tool)
+
+    def _folder_roles():
+        """The two shapes the team actually uses. DSO: APPROVAL ASSET (singular) holding SCENES
+        and ASSETS. Shama: a folder per film. Neither was readable, and renaming a person's
+        folder to suit the code is the wrong way round."""
+        from . import approval as ap
+        return (ap._role("SCENES") == "scenes" and ap._role("STORYBOARD") == "scenes"
+                and ap._role("ASSETS") == "assets" and ap._role("Approval Assets") == "assets"
+                and ap._role("Majlis") == "" and ap._role("Sadaf") == "")
+
+    case("a working subfolder is told apart from a film folder", "DSO + Shama folders 12 Nov",
+         _folder_roles)
+
+    def _dso_files_parse():
+        """Every file name is one Gino really sent, copied off the live Drive folder on 12 Nov:
+        the unclosed bracket, the double space, the missing space before a shot number."""
+        from . import approval as ap
+        plates = [("Daughter (Character).png", "character", "Daughter"),
+                  ("DIO Aerial 2 (Location.png", "location", "DIO Aerial 2"),
+                  ("DSO Street  Location.png", "location", "DSO Street"),
+                  ("Robodog (Prop).png", "prop", "Robodog"),
+                  ("Lab Researcher (Character).png", "character", "Lab Researcher")]
+        frames = [("Scene 1 - 1.jpeg", (1, 1)), ("Scene 6 -1.png", (6, 1)),
+                  ("Scene 10.png", (10, 0)), ("Scene 13 - 2.png", (13, 2))]
+        return (all(ap.parse_label(f) == (k, n) for f, k, n in plates)
+                and all(ap.scene_of(f) == s for f, s in frames)
+                # the VO script in the same folder is the script, not a plate and not guidance
+                and ap.parse_label("DSO_VO_by_Scene-v2.pdf")[0] is None)
+
+    case("every file in the DSO approval folder is read correctly", "DSO folder 12 Nov",
+         _dso_files_parse)
+
+    def _rebuild_not_rewrite():
+        """A reply on the card rebuilds from the folder; it never rewrites copy, because the words
+        belong to the guidance document and the script. A note that asks for something else is
+        answered rather than silently treated as a rebuild."""
+        from . import approval as ap
+        yes = ["rebuild", "I have replaced the daughter plate, rebuild please",
+               "rewrite the captions", "new images are in the folder"]
+        no = ["make the intro punchier", "send this to Alex"]
+        return (all(ap._REBUILD.search(t) or ap._RECAPTION.search(t) for t in yes)
+                and not any(ap._REBUILD.search(t) or ap._RECAPTION.search(t) for t in no)
+                and ap._RECAPTION.search("rewrite the captions") is not None)
+
+    case("a reply on an approval deck card rebuilds it, and never rewrites the client's words",
+         "approval deck revise 12 Nov", _rebuild_not_rewrite)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

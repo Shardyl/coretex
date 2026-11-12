@@ -3924,6 +3924,29 @@ SKILL_TOOLS = [
         "drive_folder": {"type": "string", "description": "Drive folder id holding the frames"},
         "end_hold_s": {"type": "integer", "description": "seconds the final shot is held (default a sixth of the film)"}},
       "required": ["company", "deal_id", "film"]}},
+    {"name": "create_approval_deck",
+     "description": "Build the CLIENT APPROVAL DECK for a production, from the team's own labelled files in the "
+                    "client's Drive folder: a page per group of characters, wardrobe, locations and props, the "
+                    "storyboard a page per scene with that scene's voice over, and a printable sign-off sheet at the "
+                    "back. Every item carries a code (CH, WD, LOC, PR, or the film's own prefix) so the client "
+                    "approves the deck or quotes the code of anything they want changed. It reads '<client>/APPROVAL "
+                    "ASSETS' on Drive (any spelling, flat or with SCENES and ASSETS subfolders, or a folder per "
+                    "film): the plate labels are the FILE NAMES (a trailing Character, Wardrobe, Location or Prop), "
+                    "storyboard frames are named by scene ('Scene 4 - 2.png'), and the captions come only from the "
+                    "guidance document in the folder, never invented. Filed on the deal and in the client folder as "
+                    "a review card; nothing is sent. A code stays pinned to its item, so after the team drops a "
+                    "replacement picture in, a reply of 'rebuild' on the card reissues the deck with every code "
+                    "unchanged. Use this, never create_storyboard, when the client has to approve the elements. A "
+                    "few minutes in the background.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string", "description": "your business slug (sensa)"},
+        "deal_id": {"type": "integer", "description": "the opportunity or project it is for"},
+        "production": {"type": "string", "description": "the production as the client knows it, e.g. 'District IO' "
+                                                        "or 'Qabilah'. It titles the deck and finds the folder"},
+        "client": {"type": "string", "description": "only when the deal's client name is not the Drive folder name"},
+        "rewrite_captions": {"type": "boolean", "description": "true ONLY when the guidance document itself has "
+                                                               "changed: it re-reads it and rewrites every caption"}},
+      "required": ["company", "deal_id", "production"]}},
     {"name": "storyboard_slides",
      "description": "Put an opportunity's live storyboards into ONE Google Slides presentation for presenting in a "
                     "meeting (every storyboard page a full slide, in order), filed in the client's Drive folder; an "
@@ -4867,6 +4890,17 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             return f"Storyboard NOT started: {_e}"
         return (f"Building the {inp['film']} storyboard on card #{r['task_id']}: shot notes from the frames, then the "
                 "layout. About three minutes; the card returns to the Inbox when it is ready. Nothing is sent.")
+    if name == "create_approval_deck":
+        from . import approval
+        try:
+            r = approval.start(inp.get("company") or "sensa", int(inp["deal_id"]), inp["production"],
+                               client=inp.get("client", ""),
+                               rewrite_captions=bool(inp.get("rewrite_captions")))
+        except (ValueError, KeyError, FileNotFoundError) as _e:
+            return f"Approval deck NOT started: {_e}"
+        return (f"Building the {r['production']} client approval deck for {r['client']} on card #{r['task_id']}: the "
+                "plates with their codes, the storyboard a page per scene, and the sign-off sheet. A few minutes; the "
+                "card returns to the Inbox when it is ready. Nothing is sent.")
     if name == "create_creative_proposal":
         _filed = _file_turn_files_on_deal(inp)   # a brief attached in this turn joins the deal record first
         from . import creative

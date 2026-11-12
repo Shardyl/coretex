@@ -2492,6 +2492,19 @@ def apply_correction(task: dict, text: str, _quote_checked: bool = False, infer:
                                  f"{type(_se).__name__}: {str(_se)[:200]}", category="approval",
                                  company_id=task.get("company_id"), target_type="task", target_id=str(task["id"]))
             return
+    if (task.get("request") or {}).get("kind") == "approval_deck":
+        # AN APPROVAL DECK IS REBUILT, NOT REWRITTEN (12 Nov 2026): its words are the team's own, from the guidance
+        # document and the script in the Drive folder, so a reply rebuilds from the folder and every code stays
+        # pinned to its item. A note asking for new copy is answered plainly, never guessed at.
+        from . import approval
+        try:
+            if approval.revise(task, text):
+                return
+        except Exception as _ae:  # noqa: BLE001
+            notifications.notify(f"Card #{task['id']}: the approval deck could not be rebuilt",
+                                 f"{type(_ae).__name__}: {str(_ae)[:200]}", category="approval",
+                                 company_id=task.get("company_id"), target_type="task", target_id=str(task["id"]))
+            return
     if (task.get("request") or {}).get("kind") == "creative_proposal":
         # A CREATIVE PROPOSAL IS REVISED IN PLACE (15 Sep 2026): only the parts his words touch re-run
         # (location, concept, beats, frames, price, copy), the deck is filed as the next version on this card.

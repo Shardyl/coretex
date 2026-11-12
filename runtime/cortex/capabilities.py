@@ -100,6 +100,18 @@ CAPABILITIES: list[tuple[str, str]] = [
      "is an email he asks for (draft_email with attach_documents). It is NOT a proposal: no price page, no new images. "
      "storyboard_slides(deal_id) puts the deal's live storyboards into one Google Slides presentation for presenting "
      "in a meeting, in the client's Drive folder, and returns the link."),
+    ("Client approval decks — LIVE, built from the team's Drive folder",
+     "create_approval_deck(deal_id=..., production=...) builds the CLIENT APPROVAL DECK: everything the client has to "
+     "sign off in one document, from the labelled files the team drops in '<client>/APPROVAL ASSETS' on Drive (any "
+     "spelling; flat, or with SCENES and ASSETS subfolders, or a folder per film). A page per group of characters, "
+     "wardrobe, locations and props, the storyboard a page per SCENE with that scene's voice over read out of the "
+     "script, and a printable sign-off sheet. The plate labels are the file names (a trailing Character, Wardrobe, "
+     "Location or Prop) and every caption comes only from the guidance document in the folder: an item it does not "
+     "cover prints with its code and name, never an invented line. Each item's CODE is pinned to the item, so when "
+     "the team drops a replacement picture in and replies 'rebuild' on the card, the deck reissues with every code "
+     "the client has written on unchanged; 'rewrite the captions' re-reads the guidance. Filed on the deal and in the "
+     "client folder as a review card; nothing is sent. Use it, never create_storyboard, when the client is approving "
+     "the elements rather than reading one film's shot list."),
     ("Proposal decks — LIVE, revisable, quotation on approval",
      "create_proposal(deal_id=...) builds a branded, house-format PDF proposal deck from the WHOLE deal record "
      "(the client's brief and documents filed on the deal, every email, meeting notes) and lands it in the "

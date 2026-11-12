@@ -302,6 +302,35 @@ attached". Two separate faults, both fixed with cases:
 Card 1716 was repaired through the same mechanism as the cockpit's Attach button (`documents.card_ref` ->
 `request.attach_docs`, then `apply_correction(infer=False)`), not by hand.
 
+## Client approval decks are a Talk tool (owner, 12 Nov 2026)
+
+Gino asked Cortex for a Qabilah/DSO approval deck three times on 11 Nov and got three STORYBOARDS
+(docs 1606, 1608, 1609, cards 1744 + 1745): `approval.py` was built on 9 Nov and NEVER WIRED, so the
+only thing the model could see was `create_storyboard`, which orders a folder itself and puts the VO
+on beats. It ignored his scene map because that tool has no scene-map input. **A capability nobody can
+call is not one: the same commit ships the tool, the manifest line and the cases.**
+
+- **`create_approval_deck(deal_id, production)`** -> `approval.start` raises the review card and builds
+  on a thread (`approval.run`): sync from Drive, captions, scene pages, `deck.render_spec`, then
+  `engine._file_proposal_pdf(kind="approval-deck")` onto the deal and the client folder. Everything a
+  PERSON must supply (company, deal, client name, a readable folder) is checked BEFORE the card, so a
+  bad call fails in the conversation. Nothing is sent.
+- **The team's folder shape is READ, not dictated.** `_role()` tells a working subfolder from a film
+  folder, so all three real shapes work: DSO's `APPROVAL ASSET` (singular) holding `SCENES/` +
+  `ASSETS/`, Shama's folder per film, and a flat folder. `sync` walks one level into SCENES/ASSETS and
+  still treats any other subfolder as a film. Renaming a person's folder to suit the code is the wrong
+  way round.
+- **A reply on the card REBUILDS, it never rewrites** (`approval.revise`, dispatched from
+  `apply_correction` like storyboard and creative_proposal). The words are the team's own, from the
+  guidance document and the script, so "rebuild" re-reads the folder and "rewrite the captions"
+  re-reads the guidance. Codes stay pinned to items, so a replaced plate keeps the code the client has
+  already written on. A note asking for new copy is answered plainly instead of being guessed at.
+- Gino's 24 plate labels and 27 scene frames all parse as they are (the unclosed bracket in
+  `DIO Aerial 2 (Location.png`, the double space, `Scene 6 -1.png`): regress case, real file names.
+- Known gaps in that folder, his to fill: no frame for scene 0 (the DSO aerial), and page 17 of the
+  Shama deck reads "Sadaf Model 1/2/3" because the folder had no guidance document. The VO script's
+  "5B" is not a scene: the owner settled that on 12 Nov.
+
 ## Shot-by-shot decks from a locked shot list (owner, 4 Nov 2026)
 
 "About 3 images per VO line ... a very, very long deck." `creative.start_shot_deck(base_job, shot_doc)` builds a page per
