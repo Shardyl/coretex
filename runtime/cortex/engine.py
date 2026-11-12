@@ -6247,6 +6247,13 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
         return
     if req.get("new_thread"):
         return          # the owner deliberately wants a FRESH conversation, not a continuation
+    # A SENT CARD IS A RECORD (12 Nov 2026). Adoption PERSISTS what it picks, so re-running it on a
+    # card that has already gone rewrites the thread and the subject the client actually received:
+    # card 1752's record stopped matching its own send, and the deal history then disagreed with the
+    # mailbox. apply_correction has refused a sent card since September; this path did not.
+    if task.get("id") and (store.get_task(task["id"]) or {}).get("status") in _SENT_STATES:
+        manifest.append("already_sent(thread_kept)")
+        return
     # A LIVE CONVERSATION is itself the work context: writing to someone we are mid-thread with must
     # continue that thread even when the card carries no deal (card 414 was composed in Talk, so it
     # would have opened a new conversation with a fake 'RE:' subject - owner, 31 Aug 2026). A genuinely

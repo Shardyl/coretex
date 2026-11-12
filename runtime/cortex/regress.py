@@ -2273,6 +2273,25 @@ def _cases():
     case("a Drive sharing notice is never the thread we answer on", "card 1752 12 Nov",
          _notice_is_not_the_conversation)
 
+    def _sent_card_is_a_record():
+        """Adoption PERSISTS what it picks, so re-running it on a card that has already gone
+        rewrites the thread and the subject the client actually received. On 12 Nov card 1752 was
+        approved and sent while the thread fix was being deployed; running adoption again left the
+        card's record disagreeing with its own send and with the mailbox. apply_correction has
+        refused a sent card since September, this path had no guard at all."""
+        import inspect as _i
+        from . import engine
+        src = _i.getsource(engine._adopt_existing_thread)
+        guard = src.split("def ")[0]
+        return ("_SENT_STATES" in guard and "already_sent(thread_kept)" in guard
+                and engine._SENT_STATES == ("done", "sending", "sent")
+                # and the guard sits BEFORE anything is read or written
+                and guard.index("_SENT_STATES") < (guard.index("gmail.list_recent")
+                                                   if "gmail.list_recent" in guard else 10 ** 9))
+
+    case("a card that has already sent is never re-threaded", "card 1752 12 Nov",
+         _sent_card_is_a_record)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
