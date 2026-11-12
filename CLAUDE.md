@@ -331,6 +331,26 @@ call is not one: the same commit ships the tool, the manifest line and the cases
   Shama deck reads "Sadaf Model 1/2/3" because the folder had no guidance document. The VO script's
   "5B" is not a scene: the owner settled that on 12 Nov.
 
+**The first real run (DSO, 12 Nov) found two faults the 9 Nov hand-build had hidden**, both fixed
+with cases:
+- **It has to FIT.** The deck rendered and was thrown away at the last step: 15.9 MB against
+  `documents.MAX_BYTES` of 15 MB, the whole sync, captions and render lost. `DECK_PX` is now 1280
+  (a deck PAGE is 1280 px wide, so nothing in it is ever displayed wider; a plate sits 548 or 362 px
+  across, a frame 368) and `shrink(work, px)` re-encodes the deck COPIES, never the team's
+  originals, with `build()` re-rendering until the PDF is under the cap. PIL's pixel limit is raised:
+  one DSO plate is 139 megapixels. The card reports the size.
+- **The voice-over script was filed as the guidance document**, so all 18 scene pages printed with no
+  title, no action and no voice over, and the plate captions were written from the wrong file.
+  `DSO_VO_by_Scene-v2.pdf` failed `\bvo\b` outright, because an underscore IS a word character.
+  `_SCRIPT_NAME` now matches on a name with its separators flattened to spaces. Captions are grounded
+  in a document the TEAM wrote and the card says which: the guidance document, or the script when the
+  folder holds no guidance, never Cortex's own words. The 22 captions written from the misread file
+  were discarded (backups `approval:...:captions:from-misread-script-2026-11-12`).
+
+Result: **doc 1615, card #1747**, 32 pages, 7.3 MB, 5 characters, 12 locations, 7 props, 18 scene
+pages with the voice over verbatim on each. Cards 1744/1745 and docs 1606/1608/1609 (the three
+mis-routed storyboard builds) were cancelled and retired, not deleted.
+
 ## Shot-by-shot decks from a locked shot list (owner, 4 Nov 2026)
 
 "About 3 images per VO line ... a very, very long deck." `creative.start_shot_deck(base_job, shot_doc)` builds a page per
