@@ -2282,12 +2282,11 @@ def _cases():
         import inspect as _i
         from . import engine
         src = _i.getsource(engine._adopt_existing_thread)
-        guard = src.split("def ")[0]
-        return ("_SENT_STATES" in guard and "already_sent(thread_kept)" in guard
+        return ("already_sent(thread_kept)" in src
                 and engine._SENT_STATES == ("done", "sending", "sent")
-                # and the guard sits BEFORE anything is read or written
-                and guard.index("_SENT_STATES") < (guard.index("gmail.list_recent")
-                                                   if "gmail.list_recent" in guard else 10 ** 9))
+                # and the guard sits BEFORE the mailbox is read or anything is written
+                and src.index("_SENT_STATES") < src.index("gmail.list_recent")
+                and src.index("_SENT_STATES") < src.index("update tasks set request"))
 
     case("a card that has already sent is never re-threaded", "card 1752 12 Nov",
          _sent_card_is_a_record)
