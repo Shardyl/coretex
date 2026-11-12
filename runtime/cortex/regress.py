@@ -2202,6 +2202,20 @@ def _cases():
     case("a reply on an approval deck card rebuilds it, and never rewrites the client's words",
          "approval deck revise 12 Nov", _rebuild_not_rewrite)
 
+    def _deck_must_fit():
+        """The first DSO build came out at 15.9 MB against the library's 15 MB cap and the whole
+        run was thrown away at the last step. A deck that cannot be filed cannot be sent either,
+        so the build re-encodes its own pictures until it fits, and a page is only 1280 px wide."""
+        import inspect as _i
+        from . import approval as ap, documents
+        src = _i.getsource(ap.build)
+        return (ap.DECK_PX <= 1280 and hasattr(ap, "shrink")
+                and "documents.MAX_BYTES" in src and "shrink(out, px)" in src
+                and documents.MAX_BYTES >= 15_000_000)
+
+    case("an approval deck is re-encoded until it fits, never refused at the last step",
+         "DSO build 12 Nov, 15.9 MB", _deck_must_fit)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants

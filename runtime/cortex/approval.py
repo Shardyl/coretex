@@ -307,14 +307,16 @@ def film_codes(key: str, films: list[dict]) -> list[dict]:
     return films
 
 
-DECK_PX = 1920
+# A deck PAGE is 1280 px wide, so nothing in it is ever displayed wider than that: a plate sits
+# 2 or 3 across (548 or 362 px) and a storyboard frame 3 across (368 px). 1920 was pure weight.
+DECK_PX = 1280
 
 
-def _deck_copy(path: str, fresh: bool = False) -> str:
-    """The picture the deck embeds: at most DECK_PX wide, JPEG. The team drops 4K upscales and
-    PNG masters into the folder (Shama 9 Nov 2026: 30 MB PNGs at 5504 px), and embedding those
-    as they are made a 93 MB deck the library refuses and no client can open. The original stays
-    untouched beside it; documents are passed through as they are."""
+def _deck_copy(path: str, fresh: bool = False, px: int = DECK_PX, quality: int = 84) -> str:
+    """The picture the deck embeds: at most `px` wide, JPEG. The team drops 4K upscales and PNG
+    masters into the folder (Shama 9 Nov 2026: 30 MB PNGs at 5504 px; DSO 12 Nov: a 139-megapixel
+    plate), and embedding those as they are made a 93 MB deck the library refuses and no client can
+    open. The original stays untouched beside it; documents are passed through as they are."""
     if not path.lower().endswith(_IMAGE):
         return path
     out = os.path.splitext(path)[0] + ".deck.jpg"
@@ -322,13 +324,38 @@ def _deck_copy(path: str, fresh: bool = False) -> str:
         return out
     try:
         from PIL import Image
+        Image.MAX_IMAGE_PIXELS = 400_000_000      # their masters are genuinely enormous
         im = Image.open(path).convert("RGB")
-        if im.width > DECK_PX:
-            im = im.resize((DECK_PX, round(im.height * DECK_PX / im.width)), Image.LANCZOS)
-        im.save(out, "JPEG", quality=86, optimize=True)
+        if im.width > px:
+            im = im.resize((px, round(im.height * px / im.width)), Image.LANCZOS)
+        im.save(out, "JPEG", quality=quality, optimize=True)
         return out
     except Exception:                                           # noqa: BLE001
         return path
+
+
+def shrink(work: str, px: int, quality: int = 78) -> int:
+    """Re-encode every picture already prepared for this deck smaller, in place.
+
+    The last resort when a built deck is over the library cap: a deck that cannot be filed cannot
+    be sent either, and the client's own mail server is stricter than we are. It re-encodes the
+    deck COPIES, never the team's originals."""
+    n = 0
+    for root, _, files in os.walk(work):
+        for f in files:
+            if not f.endswith(".deck.jpg"):
+                continue
+            p = os.path.join(root, f)
+            try:
+                from PIL import Image
+                im = Image.open(p).convert("RGB")
+                if im.width > px:
+                    im = im.resize((px, round(im.height * px / im.width)), Image.LANCZOS)
+                im.save(p, "JPEG", quality=quality, optimize=True)
+                n += 1
+            except Exception:                                   # noqa: BLE001
+                continue
+    return n
 
 
 def _read(path: str) -> str:
@@ -576,8 +603,17 @@ def build(company: str, client: str, production: str, *, accent: str = "#4DA3FF"
     sp = spec(company, client, production, synced, caps, accent=accent, scenes_copy=scenes_copy)
     name = "%s - %s - Client approval deck.pdf" % (client, production)
     res = deck.render_spec(company, sp, out_dir=out, filename=name)
+    # IT HAS TO FIT, AND THAT IS NOT THE LIBRARY'S PROBLEM (12 Nov 2026): the first DSO build came
+    # out at 15.9 MB against a 15 MB cap and the whole run was thrown away at the last step. A deck
+    # that cannot be filed cannot be sent either, so it is re-encoded smaller until it fits.
+    for px in (1024, 820, 660, 520):
+        if os.path.getsize(res["path"]) <= documents.MAX_BYTES:
+            break
+        shrink(out, px)
+        res = deck.render_spec(company, sp, out_dir=out, filename=name)
     missing = [i["code"] for i in synced["items"] if not caps.get(i["code"])]
     return {**res, "items": synced["items"], "pulled": synced["pulled"], "filename": name,
+            "bytes": os.path.getsize(res["path"]),
             "missing_captions": missing, "guidance": bool(synced["guidance"]),
             "scenes": len({s["scene"][0] for s in synced["scenes"]}),
             "films": {f["name"]: {"frames": len(f["frames"]), "extras": len(f["extras"])}
@@ -670,7 +706,9 @@ def summary(res: dict) -> str:
                + (["%d scenes" % res["scenes"]] if res.get("scenes") else [])
                + ["%d %s frames" % (v["frames"], k.lower())
                   for k, v in (res.get("films") or {}).items()])
-    lines = ["%d pages. %s." % (res.get("pages") or 0, ", ".join(counted) or "nothing counted")]
+    lines = ["%d pages, %.1f MB. %s." % (res.get("pages") or 0,
+                                        (res.get("bytes") or 0) / 1e6,
+                                        ", ".join(counted) or "nothing counted")]
     for k, _, title in SECTIONS:
         if by.get(k):
             lines.append("%s: %s" % (title, ", ".join("%s %s" % (i["code"], i["name"])
