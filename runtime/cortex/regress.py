@@ -2483,6 +2483,10 @@ def _cases():
                 and t["hip_ir"]["measures"][0]["angle"]["pose"]["side"] == "each"
                 and "detectForVideo(" in js and "function bestOf(" in js and "auto-detected" in js
                 and "tasks-vision@'+MP_VER" in js and "MP_VER='0.10.14'" in js)
+    case("a meal photo gets 90 seconds before the app gives up (one took 27 s and was cut off at the 25 s default)",
+         "meal photo timeout 13 Nov",
+         lambda: ("timeoutMs:90000" in open(_web + "/fitness/food.js", encoding="utf-8").read()
+                  and "ms=o.timeoutMs||25000" in open(_web + "/fitness/index.html", encoding="utf-8").read()))
     def _mob_form():
         # 9 Nov 2026: the scales are the program builder form's own steps, and every measured still has a clean twin
         from . import fitness_mobility as fm

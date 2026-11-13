@@ -1882,10 +1882,10 @@ function shrinkImage(file,max){return new Promise((res,rej)=>{const img=new Imag
 window.foodPhotoPicked=async function(inp){
   const f=inp.files&&inp.files[0];if(!f)return;
   const out=document.getElementById('fdPhotoOut');
-  out.innerHTML='<div class="fd-note">Analysing the photo&hellip; (about 10-20 seconds)</div>';
+  out.innerHTML='<div class="fd-note">Analysing the photo&hellip; (about 20-40 seconds)</div>';
   try{
     const img=await shrinkImage(f,1600);
-    const r=await syncApi('/api/fitness/food/photo',{method:'POST',body:JSON.stringify({image:img,note:document.getElementById('fdPhotoNote').value||''})});
+    const r=await syncApi('/api/fitness/food/photo',{method:'POST',timeoutMs:90000,body:JSON.stringify({image:img,note:document.getElementById('fdPhotoNote').value||''})});
     if(!r||!r.items||!r.items.length){out.innerHTML='<div class="fd-note">Could not read any food in that photo. Try another angle, or use Quick add.</div>';return;}
     window._fdPhoto=r.items;
     out.innerHTML=`<img src="${img}" style="width:100%;border-radius:var(--radius);margin-bottom:10px"/>

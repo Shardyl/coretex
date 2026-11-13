@@ -997,7 +997,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='135';                         // keep in step with CACHE in sw.js
+const APP_VERSION='136';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1141,12 +1141,15 @@ async function syncApi(path,opts){
   if(!t){setSyncState('auth');return null;}
   // A fetch with no timeout can stall forever on gym wifi, and the pill then says "Syncing…"
   // until the app is killed. 25s covers the slowest real push; after that, abort and show error.
+  // A call that runs a model (meal photo) passes its own timeoutMs: 13 Nov 2026 a photo took 27s and was
+  // aborted at 25s with the answer already on its way back.
+  const o=Object.assign({},opts||{}), ms=o.timeoutMs||25000;delete o.timeoutMs;
   const ctl=new AbortController();
-  const timer=setTimeout(()=>ctl.abort(),25000);
+  const timer=setTimeout(()=>ctl.abort(),ms);
   let res;
   try{
     res=await fetch(API_BASE+path,Object.assign({signal:ctl.signal,
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+t}},opts||{}));
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+t}},o));
   }finally{clearTimeout(timer);}
   if(res.status===401){setSyncState('auth');return null;}
   if(!res.ok)throw new Error('HTTP '+res.status);
@@ -3223,7 +3226,7 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=135"></script>
-<script src="mobility.js?v=135"></script>
+<script src="food.js?v=136"></script>
+<script src="mobility.js?v=136"></script>
 </body>
 </html>
