@@ -2373,7 +2373,7 @@ scripts), on the owner's call "one run with the ability to do revisions" (not a 
 - VERIFY A DRAFT WITH WORD BOUNDARIES, NEVER A SUBSTRING. Checking `"call" in draft` reported the missing call
   offer as present, because the email said "The film is called ONE DROP". The same pass also reported "seven
   working days" missing when the draft said "seven working day delivery". Both checks were wrong in opposite
-  directions; use `` anchors and allow for a singular adjective.
+  directions; use `\b` anchors and allow for a singular adjective.
 - A LONG MULTI-POINT CORRECTION IS PARTLY EXECUTED. A six point correction on card 1163 produced an email
   covering the first three: no links, no drone paragraph, no call offer, and a vague timeline. `owner_links` was
   on the request and the manifest showed `availability(owner)`, so nothing had been stripped by a guard and
@@ -2712,8 +2712,8 @@ the page's categories unless the owner named it, never re-picks a dropped one, a
 `poll_inbox` queried `-subject:"New enquiry from"` to leave form notifications to `poll_inquiries`. That also
 dropped every client REPLY on such a thread ("Re: New enquiry from Bohdan Bilych": SFORS pausing the hero video,
 never reached deal 101). The query no longer excludes it; only a subject that STARTS with "New enquiry from" (the
-notification itself) is skipped, in code. Same sweep found two literal backspace characters where `` was meant in
-the reminder date-phrase regex ("31 August" never parsed): fixed. Patch scripts: never put `` in a heredoc.
+notification itself) is skipped, in code. Same sweep found two literal backspace characters where `\b` was meant in
+the reminder date-phrase regex ("31 August" never parsed): fixed. Patch scripts: never put `\b` in a heredoc.
 
 ## Call times only when a call is relevant (21 Sep 2026)
 Owner: "I find myself constantly telling Cortex to stop offering dates for meetings." Cards 832 (Massar, decision on

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import io
 import sys
 import traceback
 from datetime import datetime, timezone
@@ -2352,10 +2353,33 @@ def _cases():
         return (named == "/c.jpg" and by_name == "/c.jpg" and plate == "/p.jpg"
                 and first == "/n.jpg" and missing[0] == "" and "not an item" in missing[1]
                 and ap.cover_from_words("make the cover CH-02") == "CH-02"
-                and ap.cover_from_words("cover: the nurse") == "the nurse"
+                and ap.cover_from_words("cover: the nurse") == "nurse"
                 and ap.cover_from_words("rebuild please") == "")
 
     case("the cover is the team's to choose, three ways", "HBMSU cover 13 Nov", _the_cover_is_theirs)
+
+    def _no_control_characters_in_source():
+        """A patch script that writes a regex through a shell heredoc turns the two characters of a
+        word boundary into ONE control character, and the pattern then matches nothing while looking
+        perfect in a terminal. It has happened twice: the reminder date-phrase regex ("31 August"
+        never parsed) and, on 13 Nov, four regexes in approval.py at once, including the one that
+        reads "cover CH-02" off a card. Invisible to the eye, cheap for code, so code checks it.
+        The characters are built with chr() so this case cannot be corrupted the same way."""
+        import glob
+        import os as _os
+        ctrl = {chr(n) for n in (0, 7, 8, 11, 12, 27)}
+        bad = []
+        for f in glob.glob(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "*.py")):
+            txt = io.open(f, encoding="utf-8").read()
+            hit = ctrl & set(txt)
+            if hit:
+                bad.append("%s: %s" % (_os.path.basename(f), sorted(ord(c) for c in hit)))
+        if bad:
+            raise AssertionError("control characters in source: " + "; ".join(bad))
+        return True
+
+    case("no runtime source file carries a control character", "backspace regexes 13 Nov",
+         _no_control_characters_in_source)
 
     # --- every health check query runs
     def _invariants():

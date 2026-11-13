@@ -74,7 +74,7 @@ _SCRIPT_NAME = re.compile(r"script|voice.?over|\bvo\b|\bvo by scene\b", re.I)
 _LABEL = re.compile(r"[\s(\[-]*\b(character|wardrobe|location|prop|props)\b\s*[)\]]*\s*$", re.I)
 # A leading number is the team's own ordering of a section ("1 - Nurse ( Hospital)").
 # A plate labelled (Cover) is the cover picture, not something to approve.
-_COVER = re.compile(r"[\s(\[-]*cover\s*[)\]]*\s*$", re.I)
+_COVER = re.compile(r"[\s(\[-]*\bcover\b\s*[)\]]*\s*$", re.I)
 _ORDER = re.compile(r"^\s*0*(\d{1,3})\s*[-_.)]\s*")
 _SCENE = re.compile(r"scene\s*0*(\d+)(?:\s*[-_]\s*0*(\d+))?", re.I)
 # a numbered frame, "07 - The weaver, in memory.jpg"; Drive's "Copy of " and a doubled
@@ -824,8 +824,8 @@ _REBUILD = re.compile(r"\b(rebuild|rebuilt|re-?run|again|refresh|updated?|new (?
 _RECAPTION = re.compile(r"\b(caption|captions|wording|guidance|copy|text)\b", re.I)
 
 
-_COVER_ASK = re.compile(r"cover", re.I)
-_CODE = re.compile(r"((?:CH|WD|LOC|PR|[A-Z]{2})-\d{1,2}|[A-Z]{2}-M\d)")
+_COVER_ASK = re.compile(r"\bcover\b", re.I)
+_CODE = re.compile(r"\b((?:CH|WD|LOC|PR|[A-Z]{2})-\d{1,2}|[A-Z]{2}-M\d)\b")
 
 
 def cover_from_words(text: str) -> str:
@@ -836,7 +836,7 @@ def cover_from_words(text: str) -> str:
     m = _CODE.search((text or "").upper())
     if m:
         return m.group(1)
-    m = re.search(r"cover\s*(?:to|:|=|should be|is)?\s*(?:the\s+)?([\w' -]{2,40})",
+    m = re.search(r"\bcover\b\s*(?:to|:|=|should be|is)?\s*(?:the\s+)?([\w' -]{2,40})",
                   text or "", re.I)
     return re.sub(r"\s+", " ", (m.group(1) if m else "")).strip(" .,'\"") if m else ""
 
