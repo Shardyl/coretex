@@ -183,7 +183,11 @@ def assign_codes(key: str, items: list[dict]) -> list[dict]:
         if s2 not in reg or code < reg[s2]:
             reg[s2] = code
     out = []
-    for it in items:
+    # ISSUED IN THE ORDER IT WILL PRINT (13 Nov 2026): numbering in arrival order and sorting
+    # afterwards gave HBMSU Nurse CH-05, CH-04, CH-03, CH-06, CH-02, CH-01 down the page. A client
+    # reading a deck whose codes run backwards does not trust the codes.
+    for it in sorted(items, key=lambda x: (x["kind"], x.get("order") is None,
+                                           x.get("order") or 0, x["name"].lower())):
         kind = it["kind"]
         slot = _slot(kind, it["name"])
         code = reg.get(slot)

@@ -2381,6 +2381,27 @@ def _cases():
     case("no runtime source file carries a control character", "backspace regexes 13 Nov",
          _no_control_characters_in_source)
 
+    def _codes_run_down_the_page():
+        """HBMSU Nurse printed CH-05 Nurse (Hospital), CH-04 Nurse (Home) ... CH-01 Collegue
+        (Senior): the team's order on the page, the codes running backwards down it, because codes
+        were issued in Drive's listing order and only sorted afterwards. A client reading a deck
+        whose codes run backwards does not trust the codes. His six real characters, shuffled the
+        way Drive served them."""
+        from . import approval as ap, db
+        k = "approval:__regress_order__"
+        db.setting_set(k + ":codes", {})
+        served = [("Collegue (Senior)", 6), ("Nurse ( Home)", 2), ("Patient (Out)", 4),
+                  ("Nurse ( Hospital)", 1), ("Collegue Nurse", 5), ("Patient (Hospital)", 3)]
+        out = ap.assign_codes(k, [{"kind": "character", "name": n, "order": o}
+                                  for n, o in served])
+        db.execute("delete from settings where key = any(%s)", ([k + ":codes"],))
+        return ([(i["code"], i["order"]) for i in out]
+                == [("CH-01", 1), ("CH-02", 2), ("CH-03", 3),
+                    ("CH-04", 4), ("CH-05", 5), ("CH-06", 6)])
+
+    case("a code is issued in the order the item prints", "HBMSU codes backwards 13 Nov",
+         _codes_run_down_the_page)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
