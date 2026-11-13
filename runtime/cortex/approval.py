@@ -72,6 +72,10 @@ _DOC = (".pdf", ".docx", ".txt", ".md", ".rtf")
 _SCRIPT_NAME = re.compile(r"script|voice.?over|\bvo\b|\bvo by scene\b", re.I)
 # a trailing section word, with or without brackets, and tolerant of the stray unclosed one
 _LABEL = re.compile(r"[\s(\[-]*\b(character|wardrobe|location|prop|props)\b\s*[)\]]*\s*$", re.I)
+# A leading number is the team's own ordering of a section ("1 - Nurse ( Hospital)").
+# A plate labelled (Cover) is the cover picture, not something to approve.
+_COVER = re.compile(r"[\s(\[-]*cover\s*[)\]]*\s*$", re.I)
+_ORDER = re.compile(r"^\s*0*(\d{1,3})\s*[-_.)]\s*")
 _SCENE = re.compile(r"scene\s*0*(\d+)(?:\s*[-_]\s*0*(\d+))?", re.I)
 # a numbered frame, "07 - The weaver, in memory.jpg"; Drive's "Copy of " and a doubled
 # extension ("....jpg.png") are how hand-copied files actually arrive
@@ -81,15 +85,32 @@ _EXT = re.compile(r"(\.(?:png|jpe?g|webp))+$", re.I)
 
 # --------------------------------------------------------------------------- labels and codes
 def parse_label(filename: str) -> tuple[str | None, str]:
-    """('character', 'Daughter') from 'Daughter (Character).png'. (None, stem) when unlabelled."""
+    """('character', 'Daughter') from 'Daughter (Character).png'. (None, stem) when unlabelled.
+
+    A leading number is the team's own ORDER ("1 - Nurse ( Hospital) (Character).png") and is not
+    part of the name: it decides where the item prints, and the first one is the cover."""
     stem = os.path.splitext(os.path.basename(filename or ""))[0]
     m = _LABEL.search(stem)
     if not m:
-        return None, re.sub(r"\s{2,}", " ", stem).strip()
+        return None, re.sub(r"\s{2,}", " ", _ORDER.sub("", stem)).strip()
     kind = m.group(1).lower().rstrip("s") if m.group(1).lower() != "props" else "prop"
-    name = re.sub(r"\s{2,}", " ", stem[:m.start()]).strip(" -(["
-                                                           )
+    name = re.sub(r"\s{2,}", " ", _ORDER.sub("", stem[:m.start()])).strip(" -([")
     return kind, name or stem
+
+
+def order_of(filename: str) -> int | None:
+    """The number the team put at the front of the file name, or None. Their order, not ours."""
+    m = _ORDER.match(os.path.splitext(os.path.basename(filename or ""))[0])
+    return int(m.group(1)) if m else None
+
+
+def _slot(kind: str, name: str) -> str:
+    """The registry key for an item, with everything that is NOT its identity removed: the order
+    number, the bracket spacing, the case, the punctuation. "Ward", "8 - Ward" and "ward " are one
+    item, so renumbering a folder never mints a second code (HBMSU Nurse, 13 Nov 2026)."""
+    n = _ORDER.sub("", name or "")
+    n = re.sub(r"[^a-z0-9]+", " ", n.lower()).strip()
+    return "%s/%s" % (kind, n)
 
 
 def scene_of(filename: str) -> tuple[int, int] | None:
@@ -145,22 +166,38 @@ def assign_codes(key: str, items: list[dict]) -> list[dict]:
     A replaced image keeps its code, because the registry is keyed on the name, not on the order
     the folder happens to list. A code belonging to an item that has since gone is never reissued:
     the client may already have written it down."""
-    reg = dict(db.setting_get(key + ":codes") or {})
-    used = {k: {v for n, v in reg.items() if n.startswith(k + "/")} for k in PREFIX}
+    raw = dict(db.setting_get(key + ":codes") or {})
+    # EVERY NUMBER EVER ISSUED STAYS TAKEN, read before anything is collapsed: a code the client may
+    # have written on must never come back meaning something else.
+    taken = {k: set() for k in PREFIX}
+    for slot, code in raw.items():
+        k = slot.split("/", 1)[0]
+        if k in taken and "-" in code:
+            taken[k].add(int(code.split("-")[1]))
+    # MIGRATE historic keys onto the normalised slot, keeping the lowest code where a rename minted
+    # a second one for the same item.
+    reg = {}
+    for slot, code in raw.items():
+        k, _, nm = slot.partition("/")
+        s2 = _slot(k, nm)
+        if s2 not in reg or code < reg[s2]:
+            reg[s2] = code
     out = []
     for it in items:
         kind = it["kind"]
-        slot = "%s/%s" % (kind, it["name"].lower())
+        slot = _slot(kind, it["name"])
         code = reg.get(slot)
         if not code:
-            taken = {int(c.split("-")[1]) for c in used.get(kind, set()) if "-" in c}
-            n = next(i for i in range(1, 100) if i not in taken)
+            n = next(i for i in range(1, 100) if i not in taken[kind])
             code = "%s-%02d" % (PREFIX[kind], n)
             reg[slot] = code
-            used.setdefault(kind, set()).add(code)
+            taken[kind].add(n)
         out.append({**it, "code": code})
-    db.setting_set(key + ":codes", reg)
-    return sorted(out, key=lambda x: (x["kind"], x["code"]))
+    if reg != raw:
+        db.setting_set(key + ":codes", reg)
+    # THEIR ORDER, THEN OURS: a numbered item prints where they numbered it; the rest follow by code.
+    return sorted(out, key=lambda x: (x["kind"], x.get("order") is None,
+                                      x.get("order") or 0, x["code"]))
 
 
 # --------------------------------------------------------------------------------- Drive sync
@@ -227,19 +264,24 @@ def sync(company: str, client: str, production: str) -> dict:
             seen[name] = md5
         return _deck_copy(dest, fresh=True), True
 
-    items, scenes, films, guidance, script, pulled = [], [], [], "", "", 0
+    items, scenes, films, guidance, script, pulled, cover = [], [], [], "", "", 0, ""
 
     def take(f):
         """What this FILE is: a labelled plate, a storyboard frame, the script, or guidance."""
-        nonlocal guidance, script, pulled
+        nonlocal guidance, script, pulled, cover
         name = f.get("name") or ""
         low = name.lower()
         if low.endswith(_IMAGE):
             kind, nm = parse_label(name)
-            if kind:
+            if _COVER.search(os.path.splitext(name)[0]):
+                p, new = grab(f)                  # a plate labelled (Cover) IS the cover, not an item
+                pulled += new
+                cover = p
+            elif kind:
                 p, new = grab(f)
                 pulled += new
-                items.append({"kind": kind, "name": nm, "image": p, "file": name})
+                items.append({"kind": kind, "name": nm, "image": p, "file": name,
+                              "order": order_of(name)})
             elif scene_of(name):
                 p, new = grab(f, "frames")
                 pulled += new
@@ -284,7 +326,8 @@ def sync(company: str, client: str, production: str) -> dict:
     walk(fid)
     db.setting_set(key + ":md5", seen)
     scenes.sort(key=lambda s: s["scene"])
-    return {"dir": work, "folder": fid, "pulled": pulled, "guidance": guidance.strip(),
+    return {"dir": work, "folder": fid, "pulled": pulled, "cover": cover,
+            "guidance": guidance.strip(),
             "script": script.strip(), "scenes": scenes,
             "films": film_codes(key, sorted(films, key=lambda x: x["name"].lower())),
             "items": assign_codes(key, items)}
@@ -474,7 +517,8 @@ def scene_pages(key: str, synced: dict, company: str, force: bool = False) -> li
 
 # -------------------------------------------------------------------------------------- build
 def spec(company: str, client: str, production: str, synced: dict, caps: dict, *,
-         accent: str = "#4DA3FF", label: str = "", scenes_copy: list | None = None) -> dict:
+         accent: str = "#4DA3FF", label: str = "", scenes_copy: list | None = None,
+         cover: str = "") -> dict:
     """Assemble the render_spec. Sections are laid out two across for the plate types (a
     turnaround or a three-view sheet has to be big enough to judge) and three across for
     locations, which read fine smaller."""
@@ -499,7 +543,12 @@ def spec(company: str, client: str, production: str, synced: dict, caps: dict, *
          "meta": [{"k": "CLIENT", "v": client}, {"k": "PRODUCTION", "v": production},
                   {"k": "VERSION", "v": "Approval deck"},
                   {"k": "DATE", "v": _today()}],
-         "image": ((by.get("character") or synced["items"] or [{}])[0].get("image")
+         # THE COVER IS THEIRS TO CHOOSE (owner, 13 Nov 2026): the picture named on the card, else
+         # a plate labelled (Cover) in the folder, else the FIRST item in their own numbering.
+         # HBMSU Nurse put the senior colleague on the cover because CH-01 was whichever file Drive
+         # happened to list first, and nothing could change it.
+         "image": (cover or synced.get("cover")
+                   or (by.get("character") or synced["items"] or [{}])[0].get("image")
                    or (films[0]["frames"][-1]["path"] if films else None)),
          "section": "Approval"},
         {"type": "split", "kicker": "HOW THIS WORKS", "heading": "One code, one *decision*",
@@ -592,8 +641,29 @@ def _range(items: list[dict]) -> str:
     return cs[0] if len(cs) == 1 else "%s to %s" % (cs[0], cs[-1])
 
 
+def cover_image(synced: dict, want: str = "") -> tuple[str, str]:
+    """(path, why) for the cover. `want` is a CODE the team named ("CH-05") or part of an item's
+    name ("the nurse"), matched against the items this build actually holds. Named and not found is
+    said out loud, never silently ignored: the cover is the first thing the client sees."""
+    items = synced.get("items") or []
+    w = re.sub(r"\s+", " ", (want or "").strip()).lower()
+    if w:
+        hit = next((i for i in items if i["code"].lower() == w), None) or next(
+            (i for i in items if w in i["name"].lower()), None)
+        if hit:
+            return hit["image"], "%s %s, as asked" % (hit["code"], hit["name"])
+        return "", "%r is not an item in this deck, so the cover was left as it was" % want
+    if synced.get("cover"):
+        return synced["cover"], "the plate labelled (Cover) in the folder"
+    first = next((i for i in items if i["kind"] == "character"), None) or (items or [{}])[0]
+    if first.get("image"):
+        return first["image"], "%s %s, the first item in your numbering" % (
+            first.get("code", ""), first.get("name", ""))
+    return "", "the last storyboard frame"
+
+
 def build(company: str, client: str, production: str, *, accent: str = "#4DA3FF",
-          force_captions: bool = False, out_dir: str | None = None) -> dict:
+          force_captions: bool = False, out_dir: str | None = None, cover: str = "") -> dict:
     """Sync, caption, lay the storyboard out, render.
 
     Returns {path, pages, items, pulled, missing_captions, scenes}."""
@@ -613,7 +683,9 @@ def build(company: str, client: str, production: str, *, accent: str = "#4DA3FF"
     scenes_copy = scene_pages(key, synced, company, force=force_captions)
     out = out_dir or synced["dir"]
     os.makedirs(out, exist_ok=True)
-    sp = spec(company, client, production, synced, caps, accent=accent, scenes_copy=scenes_copy)
+    pick, cover_why = cover_image(synced, cover)
+    sp = spec(company, client, production, synced, caps, accent=accent, scenes_copy=scenes_copy,
+              cover=pick)
     name = "%s - %s - Client approval deck.pdf" % (client, production)
     res = deck.render_spec(company, sp, out_dir=out, filename=name)
     # IT HAS TO FIT, AND THAT IS NOT THE LIBRARY'S PROBLEM (12 Nov 2026): the first DSO build came
@@ -626,7 +698,7 @@ def build(company: str, client: str, production: str, *, accent: str = "#4DA3FF"
         res = deck.render_spec(company, sp, out_dir=out, filename=name)
     missing = [i["code"] for i in synced["items"] if not caps.get(i["code"])]
     return {**res, "items": synced["items"], "pulled": synced["pulled"], "filename": name,
-            "bytes": os.path.getsize(res["path"]),
+            "bytes": os.path.getsize(res["path"]), "cover": cover_why,
             "missing_captions": missing, "caption_source": source,
             "scenes": len({s["scene"][0] for s in synced["scenes"]}),
             "films": {f["name"]: {"frames": len(f["frames"]), "extras": len(f["extras"])}
@@ -635,7 +707,7 @@ def build(company: str, client: str, production: str, *, accent: str = "#4DA3FF"
 
 # ------------------------------------------------------------- the card: build, file, revise
 def start(company: str, deal_id: int, production: str, *, client: str = "", accent: str = "#4DA3FF",
-          rewrite_captions: bool = False, background: bool = True) -> dict:
+          rewrite_captions: bool = False, background: bool = True, cover: str = "") -> dict:
     """Raise the review card, then build on a thread. Everything a PERSON must supply is checked
     first, so a bad call fails in the conversation rather than on a card minutes later."""
     from . import engine
@@ -660,7 +732,8 @@ def start(company: str, deal_id: int, production: str, *, client: str = "", acce
                          "guidance document" % (production, ASSETS_FOLDER, client))
     skill = store.get_skill_by_key(co["id"], "sales-proposal")
     req = {"kind": "approval_deck", "company": company, "client": client,
-           "production": production, "accent": accent, "deal_id": int(deal_id)}
+           "production": production, "accent": accent, "deal_id": int(deal_id),
+           **({"cover": cover} if cover else {})}
     task = db.execute("insert into tasks (company_id, skill_id, kind, request, draft, status, "
                       "title, deal_id) values (%s,%s,'content',%s,%s,'drafting',%s,%s) returning *",
                       (co["id"], skill["id"], Json(req),
@@ -683,7 +756,7 @@ def run(task_id: int, rewrite_captions: bool = False) -> None:
     s = dict((task or {}).get("request") or {})
     try:
         res = build(s["company"], s["client"], s["production"], accent=s.get("accent") or "#4DA3FF",
-                    force_captions=bool(rewrite_captions))
+                    force_captions=bool(rewrite_captions), cover=s.get("cover") or "")
         co = store.get_company_by_slug(s["company"])
         old = [r["id"] for r in db.query(
             "select id from company_documents where kind='approval-deck' and superseded_by is null "
@@ -736,6 +809,10 @@ def summary(res: dict) -> str:
         lines.append("The folder holds no guidance document and no script, so no item carries a "
                      "caption: each prints with its code and name. Drop a guidance document in "
                      "and reply 'rewrite the captions'.")
+    if res.get("cover"):
+        lines.append("Cover: %s. To change it, reply 'cover CH-02' (any code in this deck), or put "
+                     "a picture labelled (Cover) in the folder and reply 'rebuild'."
+                     % res["cover"])
     lines.append("Reply on this card: 'rebuild' after changing a picture in the folder, or "
                  "'rewrite the captions' after changing the guidance document. A code stays with "
                  "its item, so a replaced plate keeps the code the client has written on.")
@@ -747,6 +824,23 @@ _REBUILD = re.compile(r"\b(rebuild|rebuilt|re-?run|again|refresh|updated?|new (?
 _RECAPTION = re.compile(r"\b(caption|captions|wording|guidance|copy|text)\b", re.I)
 
 
+_COVER_ASK = re.compile(r"cover", re.I)
+_CODE = re.compile(r"((?:CH|WD|LOC|PR|[A-Z]{2})-\d{1,2}|[A-Z]{2}-M\d)")
+
+
+def cover_from_words(text: str) -> str:
+    """What they want on the cover, from a reply that mentions one: a CODE if they gave one, else
+    the words after "cover", which `cover_image` matches against the item names."""
+    if not _COVER_ASK.search(text or ""):
+        return ""
+    m = _CODE.search((text or "").upper())
+    if m:
+        return m.group(1)
+    m = re.search(r"cover\s*(?:to|:|=|should be|is)?\s*(?:the\s+)?([\w' -]{2,40})",
+                  text or "", re.I)
+    return re.sub(r"\s+", " ", (m.group(1) if m else "")).strip(" .,'\"") if m else ""
+
+
 def revise(task: dict, text: str) -> bool:
     """A reply on an approval-deck card. The deck's words are the team's own (the guidance
     document and the script), so a reply never rewrites copy here: it rebuilds from the folder,
@@ -755,18 +849,24 @@ def revise(task: dict, text: str) -> bool:
     if req.get("kind") != "approval_deck":
         return False
     recap = bool(_RECAPTION.search(text or ""))
-    if not (recap or _REBUILD.search(text or "")):
+    want = cover_from_words(text or "")
+    if want:                       # the cover is theirs to choose, and it is remembered
+        req["cover"] = want
+        store.update_task(task["id"], request=req)
+    if not (want or recap or _REBUILD.search(text or "")):
         store.update_task(task["id"], status="awaiting_correction",
                           draft=((task.get("draft") or "") + "\n\n---\nYour note: \"%s\"\n"
                                  "This deck carries the team's own words, from the guidance "
                                  "document and the script in the Drive folder, so it is not "
                                  "rewritten here. Change the file in the folder and reply "
-                                 "'rebuild', or reply 'rewrite the captions' to re-read the "
-                                 "guidance." % (text or "").strip()[:300]))
+                                 "'rebuild', reply 'rewrite the captions' to re-read the "
+                                 "guidance, or 'cover CH-02' to change the cover."
+                                 % (text or "").strip()[:300]))
         return True
     store.update_task(task["id"], status="drafting",
-                      draft=("Rebuilding the %s approval deck from the Drive folder%s."
+                      draft=("Rebuilding the %s approval deck from the Drive folder%s%s."
                              % (req.get("production"),
-                                ", re-reading the guidance" if recap else "")))
+                                ", re-reading the guidance" if recap else "",
+                                (", cover %s" % want) if want else "")))
     threading.Thread(target=run, args=(task["id"], recap), daemon=True).start()
     return True

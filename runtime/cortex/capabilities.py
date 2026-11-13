@@ -109,7 +109,10 @@ CAPABILITIES: list[tuple[str, str]] = [
      "Location or Prop) and every caption comes only from the guidance document in the folder: an item it does not "
      "cover prints with its code and name, never an invented line. Each item's CODE is pinned to the item, so when "
      "the team drops a replacement picture in and replies 'rebuild' on the card, the deck reissues with every code "
-     "the client has written on unchanged; 'rewrite the captions' re-reads the guidance. Filed on the deal and in the "
+     "the client has written on unchanged; 'rewrite the captions' re-reads the guidance. THE COVER IS THEIRS: a "
+     "leading number on a file name ('1 - Nurse (Character).png') is their running order and the first one is the "
+     "cover, a plate labelled (Cover) overrides it, and 'cover CH-02' on the card or the tool's `cover` input beats "
+     "both. Filed on the deal and in the "
      "client folder as a review card; nothing is sent. Use it, never create_storyboard, when the client is approving "
      "the elements rather than reading one film's shot list."),
     ("Proposal decks — LIVE, revisable, quotation on approval",

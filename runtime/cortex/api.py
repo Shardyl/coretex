@@ -3945,7 +3945,10 @@ SKILL_TOOLS = [
                                                         "or 'Qabilah'. It titles the deck and finds the folder"},
         "client": {"type": "string", "description": "only when the deal's client name is not the Drive folder name"},
         "rewrite_captions": {"type": "boolean", "description": "true ONLY when the guidance document itself has "
-                                                               "changed: it re-reads it and rewrites every caption"}},
+                                                               "changed: it re-reads it and rewrites every caption"},
+        "cover": {"type": "string", "description": "which picture goes on the cover: an item CODE ('CH-02') or part "
+                                                   "of its name ('the nurse'). Default is the first item in the "
+                                                   "team's own file numbering, or a plate labelled (Cover)"}},
       "required": ["company", "deal_id", "production"]}},
     {"name": "storyboard_slides",
      "description": "Put an opportunity's live storyboards into ONE Google Slides presentation for presenting in a "
@@ -4894,7 +4897,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         from . import approval
         try:
             r = approval.start(inp.get("company") or "sensa", int(inp["deal_id"]), inp["production"],
-                               client=inp.get("client", ""),
+                               client=inp.get("client", ""), cover=inp.get("cover", ""),
                                rewrite_captions=bool(inp.get("rewrite_captions")))
         except (ValueError, KeyError, FileNotFoundError) as _e:
             return f"Approval deck NOT started: {_e}"

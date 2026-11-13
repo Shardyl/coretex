@@ -2291,6 +2291,72 @@ def _cases():
     case("a card that has already sent is never re-threaded", "card 1752 12 Nov",
          _sent_card_is_a_record)
 
+    def _their_numbering_is_the_order():
+        """Gino numbered the HBMSU nurse characters 1 to 6 with the nurse first, and the deck put
+        "6 - Collegue (Senior)" on the cover: the number was part of the NAME and the order was
+        whatever Drive listed first. Real file names from his folder."""
+        from . import approval as ap
+        want = [("1 - Nurse ( Hospital) (Character).png", "character", "Nurse ( Hospital)", 1),
+                ("2 -  Nurse ( Home) (Character).png", "character", "Nurse ( Home)", 2),
+                ("6 - Collegue (Senior) (Character).png", "character", "Collegue (Senior)", 6),
+                ("Ward (Location).png", "location", "Ward", None),
+                ("Daughter (Character).png", "character", "Daughter", None)]
+        return all(ap.parse_label(f) == (k, n) and ap.order_of(f) == o for f, k, n, o in want)
+
+    case("the number the team puts on a file is their running order, not its name",
+         "HBMSU cover 13 Nov", _their_numbering_is_the_order)
+
+    def _renumbering_keeps_the_code():
+        """Renaming "Ward" to "8 - Ward" minted a SECOND code and stranded the first: HBMSU Nurse
+        carries four orphaned LOC codes from exactly that. The registry slot now ignores the order
+        number, the spacing, the case and the punctuation, so a renumber is the same item."""
+        from . import approval as ap
+        same = ap._slot("location", "Ward")
+        return (same == ap._slot("location", "8 - Ward") == ap._slot("location", "ward ")
+                == ap._slot("location", "08. Ward")
+                and ap._slot("location", "Ward") != ap._slot("location", "Staff room")
+                and ap._slot("character", "Ward") != ap._slot("location", "Ward"))
+
+    case("renumbering a file never mints a second code", "HBMSU orphan LOC codes 13 Nov",
+         _renumbering_keeps_the_code)
+
+    def _a_code_is_never_reissued():
+        """Collapsing the duplicates must not free a number for someone else: a code the client may
+        already have written on can never come back meaning a different thing."""
+        from . import approval as ap, db
+        k = "approval:__regress_cover__"
+        db.setting_set(k + ":codes", {"location/ward": "LOC-01", "location/8 - ward": "LOC-03",
+                                      "location/home": "LOC-02"})
+        out = ap.assign_codes(k, [{"kind": "location", "name": "8 - Ward", "order": 8},
+                                  {"kind": "location", "name": "Hospital Entrance", "order": 10}])
+        by = {i["name"]: i["code"] for i in out}
+        db.execute("delete from settings where key = any(%s)", ([k + ":codes"],))
+        return by["8 - Ward"] == "LOC-01" and by["Hospital Entrance"] == "LOC-04"
+
+    case("a collapsed duplicate never frees its code for someone else",
+         "HBMSU orphan LOC codes 13 Nov", _a_code_is_never_reissued)
+
+    def _the_cover_is_theirs():
+        """Three ways to say it, in the order they beat each other, and a code that is not in the
+        deck is SAID, never silently ignored."""
+        from . import approval as ap
+        items = [{"kind": "character", "name": "Nurse ( Hospital)", "code": "CH-01",
+                  "image": "/n.jpg", "order": 1},
+                 {"kind": "character", "name": "Collegue (Senior)", "code": "CH-06",
+                  "image": "/c.jpg", "order": 6}]
+        named = ap.cover_image({"items": items}, "CH-06")[0]
+        by_name = ap.cover_image({"items": items}, "collegue")[0]
+        plate = ap.cover_image({"items": items, "cover": "/p.jpg"})[0]
+        first = ap.cover_image({"items": items})[0]
+        missing = ap.cover_image({"items": items}, "CH-99")
+        return (named == "/c.jpg" and by_name == "/c.jpg" and plate == "/p.jpg"
+                and first == "/n.jpg" and missing[0] == "" and "not an item" in missing[1]
+                and ap.cover_from_words("make the cover CH-02") == "CH-02"
+                and ap.cover_from_words("cover: the nurse") == "the nurse"
+                and ap.cover_from_words("rebuild please") == "")
+
+    case("the cover is the team's to choose, three ways", "HBMSU cover 13 Nov", _the_cover_is_theirs)
+
     # --- every health check query runs
     def _invariants():
         from . import invariants
