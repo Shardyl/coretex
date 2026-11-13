@@ -302,6 +302,43 @@ attached". Two separate faults, both fixed with cases:
 Card 1716 was repaired through the same mechanism as the cockpit's Attach button (`documents.card_ref` ->
 `request.attach_docs`, then `apply_correction(infer=False)`), not by hand.
 
+## The folder is the control surface (owner, 13 Nov 2026)
+
+Gino built three HBMSU approval decks (Nurse, Pilot, Engineer; cards 1776-1778 on deal 107) and the
+Nurse cover showed the senior male colleague, with no way to change it. He had numbered his character
+files 1 to 6 with "1 - Nurse ( Hospital)" first, which is exactly how a person says what the lead is.
+Four faults, one symptom, all fixed with cases:
+
+1. **His numbering was never read.** The number was part of the NAME and the printed order was
+   whatever Drive happened to list first. `_ORDER` strips it, `order_of()` returns it, and items sort
+   by their number then by code.
+2. **Nothing could choose the cover**, not the folder, not the card, not the tool. Now, beating each
+   other in this order: `cover` on `create_approval_deck`, "cover CH-02" on the card
+   (`cover_from_words`, a code or part of a name), a plate labelled `(Cover)` in the folder, else the
+   first item in their own numbering. `cover_image()` returns the picture AND why, the card prints it
+   ("Cover: CH-01 Nurse ( Hospital), the first item in your numbering") with how to change it, and a
+   code that is not in the deck is said out loud rather than silently ignored.
+3. **Renaming a file minted a second code.** The registry keyed on the RAW name, so "Ward" becoming
+   "8 - Ward" stranded LOC-01 and issued LOC-05; HBMSU Nurse carried four orphans from exactly that.
+   `_slot()` normalises away the order number, spacing, case and punctuation; historic keys migrate
+   onto it keeping the LOWEST code, and every number ever issued stays taken, so collapsing a
+   duplicate never frees a code a client may have written on.
+4. **Codes were issued in Drive's order and only sorted afterwards**, so the Nurse deck printed
+   CH-05, CH-04, CH-03, CH-06, CH-02, CH-01 down the page. They are now issued in the order the item
+   will print. Pinning is unchanged: an item that already holds a code keeps it.
+
+The three HBMSU registries were cleared and re-issued (backups `approval:sensa:hbmsu:<prod>:codes:
+pre-order-2026-11-13`) because NOTHING had gone to the client: no sent card on deal 107 carried a
+deck. DSO's registry was not touched, its deck went out on 12 Nov. Result: CH-01 to CH-06 in his
+order, the female nurse on the cover, verified on the rendered page.
+
+**A PATCH SCRIPT NEVER GOES THROUGH A SHELL HEREDOC.** Four of the regexes above first shipped with a
+literal backspace where a word boundary was meant: the heredoc collapses the escape before Python
+sees it, the pattern then matches nothing, and it looks perfect in a terminal. This is the second
+time (the first was the reminder date-phrase regex, where "31 August" never parsed). Write patch
+scripts with the file-writing tool, and a case now scans every runtime source file for control
+characters.
+
 ## Client approval decks are a Talk tool (owner, 12 Nov 2026)
 
 Gino asked Cortex for a Qabilah/DSO approval deck three times on 11 Nov and got three STORYBOARDS
