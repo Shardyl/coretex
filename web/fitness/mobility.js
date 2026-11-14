@@ -778,10 +778,23 @@ window.mobAutoMeasure=async function(video,id,ov,btn,msg){
 };
 
 // ---------- both arms in one frame (owner 14 Nov 2026: "it should do two angles in one pic") ----------
+// ---------- magnifier for dragging dots (owner 14 Nov 2026: the picture was too small to place a dot) ----------
+function makeLoupe(cv){
+  const D=150, Z=3, lp=document.createElement('canvas');lp.width=D;lp.height=D;
+  lp.style.cssText='position:fixed;z-index:10001;width:'+D+'px;height:'+D+'px;border-radius:50%;border:3px solid #30d5a8;box-shadow:0 4px 18px rgba(0,0,0,.6);pointer-events:none;display:none;background:#000';
+  document.body.appendChild(lp);
+  return {show(e,img){const b=cv.getBoundingClientRect(), sx=cv.width/b.width, cx=(e.clientX-b.left)*sx, cy=(e.clientY-b.top)*sx;
+      const g=lp.getContext('2d'), src=D/Z*sx;g.clearRect(0,0,D,D);g.save();g.beginPath();g.arc(D/2,D/2,D/2,0,7);g.clip();
+      g.drawImage(img,cx-src/2,cy-src/2,src,src,0,0,D,D);g.restore();
+      g.strokeStyle='#ffffff';g.lineWidth=1.5;g.beginPath();g.moveTo(D/2-12,D/2);g.lineTo(D/2+12,D/2);g.moveTo(D/2,D/2-12);g.lineTo(D/2,D/2+12);g.stroke();
+      const top=e.clientY-D-40;lp.style.left=Math.max(4,Math.min(window.innerWidth-D-4,e.clientX-D/2))+'px';lp.style.top=(top<4?e.clientY+40:top)+'px';lp.style.display='block';},
+    hide(){lp.style.display='none';}, remove(){lp.remove();}};
+}
+
 window.mobMeasureBoth=function(src,id,ov,auto){
   const rec=mediaRec(id), t=testOf(rec), m=auto.m, sp=specOf(m);
   const W=src.videoWidth, H=src.videoHeight, frameS=auto.res.L.t;
-  const maxW=Math.min(window.innerWidth-32,900), maxH=window.innerHeight*0.6, k=Math.min(maxW/W,maxH/H);
+  const maxW=Math.min(window.innerWidth-16,1100), maxH=window.innerHeight*0.74, k=Math.min(maxW/W,maxH/H);
   const cv=document.createElement('canvas');cv.width=W;cv.height=H;
   cv.style.cssText='width:'+Math.round(W*k)+'px;max-width:100%;height:auto;border-radius:8px;touch-action:none';
   const ctx=cv.getContext('2d'), frame=document.createElement('canvas');frame.width=W;frame.height=H;frame.getContext('2d').drawImage(src,0,0,W,H);
@@ -800,8 +813,10 @@ window.mobMeasureBoth=function(src,id,ov,auto){
   let drag=null;
   cv.addEventListener('pointerdown',e=>{e.preventDefault();const q=pos(e);let best=null;
     ['L','R'].forEach(s=>P[s].forEach((p,i)=>{const d=Math.hypot(p.x-q.x,p.y-q.y);if(d<R0*3&&(!best||d<best.d))best={s,i,d};}));drag=best;});
-  cv.addEventListener('pointermove',e=>{if(!drag)return;P[drag.s][drag.i]=pos(e);draw();});
-  cv.addEventListener('pointerup',()=>{drag=null;});cv.addEventListener('pointerleave',()=>{drag=null;});
+  const loupe=makeLoupe(cv);
+  cv.addEventListener('pointermove',e=>{if(!drag)return;P[drag.s][drag.i]=pos(e);draw();loupe.show(e,cv);});
+  cv.addEventListener('pointerup',()=>{drag=null;loupe.hide();});cv.addEventListener('pointerleave',()=>{drag=null;loupe.hide();});
+  new MutationObserver((m,o)=>{if(!document.body.contains(ov)){loupe.remove();o.disconnect();}}).observe(document.body,{childList:true});
   const bar=document.createElement('div');bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center';
   const provL=document.createElement('label');provL.style.cssText='color:#ddd;font-size:12px;display:flex;align-items:center;gap:4px';
   const prov=document.createElement('input');prov.type='checkbox';provL.append(prov,'Provisional');
@@ -830,7 +845,7 @@ window.mobMeasure=function(src,id,ov,auto){
   if(!W||!H){toast('Could not read this frame');return;}
   let frameS=src.tagName==='VIDEO'?Math.round(src.currentTime*10)/10:null;
   let m=auto?auto.m:ms[0], sp=specOf(m), moved=false;
-  const maxW=Math.min(window.innerWidth-32,900), maxH=window.innerHeight*0.6, k=Math.min(maxW/W,maxH/H);
+  const maxW=Math.min(window.innerWidth-16,1100), maxH=window.innerHeight*0.74, k=Math.min(maxW/W,maxH/H);
   const cv=document.createElement('canvas');cv.width=W;cv.height=H;
   cv.style.cssText='width:'+Math.round(W*k)+'px;max-width:100%;height:auto;border-radius:8px;touch-action:none;cursor:crosshair';
   const ctx=cv.getContext('2d'), frame=document.createElement('canvas');frame.width=W;frame.height=H;frame.getContext('2d').drawImage(src,0,0,W,H);
@@ -873,9 +888,11 @@ window.mobMeasure=function(src,id,ov,auto){
   cv.addEventListener('pointerdown',e=>{e.preventDefault();const p=pos(e);
     const near=pts.findIndex(q=>Math.hypot(q.x-p.x,q.y-p.y)<R*3);
     if(near>=0)drag=near;else if(pts.length<nPts(sp)){pts.push(p);drag=pts.length-1;}draw();});
-  cv.addEventListener('pointermove',e=>{if(drag<0)return;pts[drag]=pos(e);moved=true;draw();});
-  cv.addEventListener('pointerup',()=>{drag=-1;});
-  cv.addEventListener('pointerleave',()=>{drag=-1;});
+  const loupe=makeLoupe(cv);
+  cv.addEventListener('pointermove',e=>{if(drag<0)return;pts[drag]=pos(e);moved=true;draw();loupe.show(e,cv);});
+  cv.addEventListener('pointerup',()=>{drag=-1;loupe.hide();});
+  new MutationObserver((m,o)=>{if(!document.body.contains(ov)){loupe.remove();o.disconnect();}}).observe(document.body,{childList:true});
+  cv.addEventListener('pointerleave',()=>{drag=-1;loupe.hide();});
   ov.innerHTML='';ov.onclick=null;
   bar.append(pick,side,provL,save,reset,close);ov.append(tip,cv,out,bar);
   if(auto){const found=autoSides.length>1?'Found '+autoSides.map(s=>SIDE[s]+' '+Math.round(auto.res[s].a)+'°').join(', ')+'. Switch side to check each.':'';
