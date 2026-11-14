@@ -89,17 +89,6 @@
       "label": "Straddle width used (record to repeat)",
       "kind": "number",
       "unit": "cm"
-     },
-     {
-      "key": "band",
-      "label": "Which is most similar to your pancake? (phase 1 builder Q2)",
-      "kind": "choice",
-      "options": [
-       "more_than_90",
-       "less_than_90",
-       "head_to_floor",
-       "chest_to_floor"
-      ]
      }
     ]
    },
@@ -234,8 +223,8 @@
       "label": "Did both calves make full contact with the floor? (phase 1 builder Q1)",
       "kind": "choice",
       "options": [
-       "no",
-       "yes"
+       "No",
+       "Yes"
       ]
      },
      {
@@ -243,8 +232,8 @@
       "label": "Feet on a block for this test",
       "kind": "choice",
       "options": [
-       "no",
-       "yes"
+       "No",
+       "Yes"
       ]
      }
     ]
@@ -266,10 +255,22 @@
     "text": "Answer honestly. Press handstand = train a narrower width; contemporary dance = wider.",
     "name": "Training pancake for a specific sport? (phase 1 builder Q4)",
     "options": [
-     "no",
-     "press_handstand",
-     "contemporary_dance",
-     "other"
+     {
+      "value": "no",
+      "label": "No"
+     },
+     {
+      "value": "press_handstand",
+      "label": "Press handstand"
+     },
+     {
+      "value": "contemporary_dance",
+      "label": "Contemporary dance"
+     },
+     {
+      "value": "other",
+      "label": "Other sport"
+     }
     ]
    }
   ]
@@ -503,8 +504,8 @@
       "label": "Stretch felt when pressed",
       "kind": "choice",
       "options": [
-       "yes_tight",
-       "no_stretch"
+       "Yes, tight",
+       "No, full stretch"
       ]
      }
     ],
@@ -553,8 +554,8 @@
       "label": "Test used",
       "kind": "choice",
       "options": [
-       "push_up",
-       "dip"
+       "Push up",
+       "Dip"
       ]
      },
      {
@@ -667,10 +668,22 @@
     "text": "Pick the one that fits best.",
     "name": "Shoulder type (builder input 9)",
     "options": [
-     "easier_strength_than_flexibility",
-     "easier_flexibility_than_strength",
-     "previous_injury",
-     "dont_know"
+     {
+      "value": "easier_strength_than_flexibility",
+      "label": "Easier to gain strength than flexibility"
+     },
+     {
+      "value": "easier_flexibility_than_strength",
+      "label": "Easier to gain flexibility than strength"
+     },
+     {
+      "value": "previous_injury",
+      "label": "Affected by a previous injury"
+     },
+     {
+      "value": "dont_know",
+      "label": "Don't know"
+     }
     ]
    },
    {
@@ -678,9 +691,18 @@
     "text": "How much time per session.",
     "name": "Time budget (builder input 1)",
     "options": [
-     "quick_20_most_limiting",
-     "quick_20_after_strength",
-     "comprehensive_60"
+     {
+      "value": "quick_20_most_limiting",
+      "label": "Quick, about 20 min on the most limiting areas"
+     },
+     {
+      "value": "quick_20_after_strength",
+      "label": "Quick, about 20 min after strength training"
+     },
+     {
+      "value": "comprehensive_60",
+      "label": "Comprehensive, about 1 hour"
+     }
     ]
    },
    {
@@ -688,8 +710,14 @@
     "text": "Required before training.",
     "name": "Healthcare approval to train (builder input 10)",
     "options": [
-     "yes_i_will",
-     "yes_i_have"
+     {
+      "value": "yes_i_will",
+      "label": "Yes, I will"
+     },
+     {
+      "value": "yes_i_have",
+      "label": "Yes, I have"
+     }
     ]
    }
   ],
