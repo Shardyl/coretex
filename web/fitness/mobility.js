@@ -578,7 +578,7 @@ let _poseP=null, _poseTs=0;
 function poseLoader(){
   if(_poseP)return _poseP;
   _poseP=(async()=>{const v=await import(MP_BASE+'/vision_bundle.mjs');const fs=await v.FilesetResolver.forVisionTasks(MP_BASE+'/wasm');
-    const o=d=>({baseOptions:{modelAssetPath:MP_MODEL,delegate:d},runningMode:'VIDEO',numPoses:1});
+    const o=d=>({baseOptions:{modelAssetPath:MP_MODEL,delegate:d},runningMode:'IMAGE',numPoses:1});
     try{return await v.PoseLandmarker.createFromOptions(fs,o('GPU'));}catch(e){return await v.PoseLandmarker.createFromOptions(fs,o('CPU'));}})();
   _poseP.catch(()=>{_poseP=null;});
   return _poseP;
@@ -601,7 +601,7 @@ function poseCandidates(P,L){
   if(P.side==='lifted'){const s=L[LMI.ankle[0]].y<L[LMI.ankle[1]].y?0:1;return[{side:sd(s),...cand(s)}];}
   const a=cand(0),b=cand(1);return[{side:'both',...(a.vis>=b.vis?a:b)}];
 }
-const seekTo=(v,t)=>new Promise(res=>{let done=false;const fin=()=>{if(done)return;done=true;v.removeEventListener('seeked',fin);res();};
+const seekTo=(v,t)=>new Promise(res=>{let done=false;const fin=()=>{if(done)return;done=true;v.removeEventListener('seeked',fin);if(v.requestVideoFrameCallback){let ok=false;v.requestVideoFrameCallback(()=>{ok=true;res();});setTimeout(()=>{if(!ok)res();},400);}else res();};
   v.addEventListener('seeked',fin);setTimeout(fin,2000);v.currentTime=Math.min(t,Math.max(0,v.duration-0.05));});
 function bestOf(arr,best){
   const ok=arr.filter(x=>x.vis>=VIS_MIN&&x.a!=null);if(ok.length<3)return null;
@@ -613,9 +613,11 @@ function bestOf(arr,best){
 async function poseScan(video,sp,prog){
   const lm=await poseLoader(), P=sp.pose, dur=video.duration, step=dur>40?0.25:0.2, W=video.videoWidth, H=video.videoHeight;
   const series={};video.pause();
-  for(let t=0;t<dur;t+=step){
+  const _cv=document.createElement('canvas');_cv.width=W;_cv.height=H;
+  for(let k=0;k*step<dur;k++){const t=Math.round(k*step*1000)/1000;
     await seekTo(video,t);
-    const r=lm.detectForVideo(video,_poseTs+=100), L=r&&r.landmarks&&r.landmarks[0];
+    _cv.getContext('2d').drawImage(video,0,0,W,H);
+    const r=lm.detect(_cv), L=r&&r.landmarks&&r.landmarks[0];
     if(L)poseCandidates(P,L).forEach(c=>{const pts=c.pts.map(q=>({x:q.x*W,y:q.y*H}));(series[c.side]=series[c.side]||[]).push({t:Math.round(t*10)/10,a:readAngle(sp,pts),pts,vis:c.vis});});
     prog(t/dur);
   }

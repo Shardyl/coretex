@@ -2481,7 +2481,7 @@ def _cases():
                 and ll["pose"]["joints"] == ["low:ankle", "mid:hip", "high:ankle"]
                 and t["fold"]["measures"][1]["angle"]["pose"]["side"] == "visible"
                 and t["hip_ir"]["measures"][0]["angle"]["pose"]["side"] == "each"
-                and "detectForVideo(" in js and "function bestOf(" in js and "auto-detected" in js
+                and "lm.detect(_cv)" in js and "runningMode:'IMAGE'" in js and "function bestOf(" in js and "auto-detected" in js
                 and "tasks-vision@'+MP_VER" in js and "MP_VER='0.10.14'" in js)
     case("a meal photo gets 90 seconds before the app gives up (one took 27 s and was cut off at the 25 s default)",
          "meal photo timeout 13 Nov",
