@@ -33,7 +33,7 @@ async function load(){
 const pillar=id=>(_mob&&_mob.pillars||[]).find(p=>p.id===id);
 const resFor=(p,t,side,day)=>(_mob.results||[]).filter(r=>r.pillar===p&&r.test===t&&r.side===side&&(!day||r.date===day));
 const clipsOf=(p,t)=>(_mob.media||[]).filter(m=>m.pillar===p&&m.test===t);
-const fmtV=(m,r)=>!r?'':(r.label!=null?r.label:(r.value!=null?r1(r.value)+(UNIT[m.unit]||''):''));
+const fmtV=(m,r)=>!r?'':(r.label!=null?r.label:(r.value!=null?(m.unit==='deg'?Math.round(r.value):r1(r.value))+(UNIT[m.unit]||''):''));
 
 // ---------- status, computed from the tests in the setting ----------
 function cellState(p,t,side){
@@ -623,11 +623,14 @@ function angleAt(a,b,c){const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y];
   const d=(v1[0]*v2[0]+v1[1]*v2[1])/(Math.hypot(v1[0],v1[1])*Math.hypot(v2[0],v2[1])||1);return Math.acos(Math.max(-1,Math.min(1,d)))*180/Math.PI;}
 function fromVertical(a,b){const dx=b.x-a.x,dy=b.y-a.y,l=Math.hypot(dx,dy)||1;return Math.acos(Math.max(-1,Math.min(1,dy/l)))*180/Math.PI;}
 const specOf=m=>(m&&m.angle)||{mode:'inside',points:['First point','The joint','Last point']};
-const nPts=sp=>sp.mode==='vertical'?2:3;
-const pivotOf=sp=>sp.mode==='vertical'?0:1;
+const nPts=sp=>sp.mode==='vertical'?2:3;   // up_signed: elbow, wrist, other shoulder
+const pivotOf=sp=>(sp.mode==='vertical'||sp.mode==='up_signed')?0:1;
 function readAngle(sp,pts){
   if(pts.length<nPts(sp))return null;
   if(sp.mode==='vertical')return fromVertical(pts[0],pts[1]);
+  if(sp.mode==='up_signed'){const e=pts[0],w=pts[1],o=pts[2],dx=w.x-e.x,dy=w.y-e.y,l=Math.hypot(dx,dy)||1;
+    const a=Math.acos(Math.max(-1,Math.min(1,-dy/l)))*180/Math.PI, out=Math.sign(e.x-o.x)||1;
+    return (dx*out>=0?1:-1)*a;}
   const a=angleAt(pts[0],pts[1],pts[2]);return sp.mode==='flex'?180-a:a;
 }
 window.mobAngleAt=angleAt;window.mobReadAngle=readAngle;
@@ -763,6 +766,8 @@ window.mobAutoMeasure=async function(video,id,ov,btn,msg){
     // Swap and it is remembered for this test on this device (owner 14 Nov 2026, pec major)
     {const t2=testOf(mediaRec(id));let sw=false;try{sw=localStorage.getItem('mobSwap_'+(t2&&t2.id))==='1';}catch(e){}
      if(sw&&res.L&&res.R&&!(ps.sp.pose&&ps.sp.pose.xside)){const x=res.L;res.L=res.R;res.R=x;}}
+    // a clip filed under one side (not a one-clip test) measures only that side, never the resting arm (owner 14 Nov)
+    {const rc=mediaRec(id), tt=testOf(rc);if(rc&&tt&&!tt.one_clip&&(rc.side==='L'||rc.side==='R')&&res[rc.side]){const k=rc.side, v=res[k];for(const z of Object.keys(res))delete res[z];res[k]=v;}}
     const sides=Object.keys(res);
     if(!sides.length){say('No steady '+hs+' s hold in the test position found in this clip. Check the set-up and hold, refilm, or pause on your held position and measure by hand.');btn.disabled=false;btn.style.opacity=1;return;}
     await seekTo(video,res[sides[0]].t);
@@ -805,7 +810,7 @@ window.mobMeasureBoth=function(src,id,ov,auto){
   ov.innerHTML='';ov.onclick=null;bar.append(save,provL,close);ov.append(tip,cv,out,bar);draw();
   save.onclick=async()=>{save.disabled=true;save.textContent='Saving...';
     try{const done=[];
-      for(const sd of ['L','R']){const a=Math.round(ang(sd)*10)/10, values={};let wasProv=false;
+      for(const sd of ['L','R']){const a=Math.round(ang(sd)), values={};let wasProv=false;
         resFor(rec.pillar,rec.test,sd,rec.date).forEach(r=>{values[r.measure]=r.label!=null?r.label:r.value;if(r.provisional)wasProv=true;});
         values[m.key]=a;
         await syncApi('/api/fitness/mobility/result',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:sd,values,provisional:prov.checked||wasProv})});
@@ -850,6 +855,8 @@ window.mobMeasure=function(src,id,ov,auto){
     tip.textContent='Tap '+sp.points.map((p,i)=>i===pivotOf(sp)?p+' (yellow)':p).join(', then ')+'. Drag a point to adjust it.'+(sp.mode==='vertical'?' The dashed line is straight down.':'');};
   const draw=()=>{ctx.drawImage(frame,0,0);ctx.lineWidth=Math.max(3,W/300);ctx.strokeStyle='#30d5a8';
     if(pts.length>1){ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.stroke();}
+    if(sp.mode==='up_signed'&&pts.length){const L=pts[1]?Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y):H/4;
+      ctx.save();ctx.setLineDash([R,R*0.8]);ctx.strokeStyle='#ffffff';ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);ctx.lineTo(pts[0].x,pts[0].y-L);ctx.stroke();ctx.restore();}
     if(sp.mode==='vertical'&&pts.length){const L=pts[1]?Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y):H/4;
       ctx.save();ctx.setLineDash([R,R*0.8]);ctx.strokeStyle='#ffffff';ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);ctx.lineTo(pts[0].x,pts[0].y+L);ctx.stroke();ctx.restore();}
     pts.forEach((p,i)=>{ctx.beginPath();ctx.arc(p.x,p.y,R,0,7);ctx.fillStyle=i===pivotOf(sp)?'#ffc53d':'#30d5a8';ctx.fill();});
@@ -875,7 +882,7 @@ window.mobMeasure=function(src,id,ov,auto){
     if(found){const o=document.createElement('div');o.style.cssText='color:#aaa;font-size:11px;margin-top:6px;text-align:center';o.textContent=found;ov.append(o);}
     loadAuto().then(()=>{setTip();draw();});}else{setTip();draw();}
   const saveOne=async(batch)=>{
-    const a=Math.round(readAngle(sp,pts)*10)/10, sd=side.value, key=m.key;
+    const a=Math.round(readAngle(sp,pts)), sd=side.value, key=m.key;   // whole degrees (owner 14 Nov 2026)
     const values={};let wasProv=false;
     resFor(rec.pillar,rec.test,sd,rec.date).forEach(r=>{values[r.measure]=r.label!=null?r.label:r.value;if(r.provisional)wasProv=true;});
     values[key]=a;

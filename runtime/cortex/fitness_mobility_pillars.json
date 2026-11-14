@@ -664,22 +664,25 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Forearm angle from vertical (negative if short of vertical)",
+      "label": "Forearm angle past vertical (0 = straight up, + past it, - short of it)",
       "kind": "number",
       "unit": "deg",
       "angle": {
-       "mode": "vertical",
+       "mode": "up_signed",
        "points": [
         "elbow centre",
-        "wrist centre"
+        "wrist centre",
+        "the other shoulder (tells the app which way is outward)"
        ],
        "pose": {
         "joints": [
          "elbow",
-         "wrist"
+         "wrist",
+         "other:shoulder"
         ],
         "side": "each",
-        "best": "max"
+        "best": "max",
+        "xside": "left_is_right"
        }
       }
      }
@@ -1753,22 +1756,25 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Forearm angle from vertical (negative if short of vertical)",
+      "label": "Forearm angle past vertical (0 = straight up, + past it, - short of it)",
       "kind": "number",
       "unit": "deg",
       "angle": {
-       "mode": "vertical",
+       "mode": "up_signed",
        "points": [
         "elbow centre",
-        "wrist centre"
+        "wrist centre",
+        "the other shoulder (tells the app which way is outward)"
        ],
        "pose": {
         "joints": [
          "elbow",
-         "wrist"
+         "wrist",
+         "other:shoulder"
         ],
         "side": "each",
-        "best": "max"
+        "best": "max",
+        "xside": "left_is_right"
        }
       }
      }
