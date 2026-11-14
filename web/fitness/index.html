@@ -1007,7 +1007,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='176';                         // keep in step with CACHE in sw.js
+const APP_VERSION='177';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1580,6 +1580,8 @@ let currentSubpage={lifts:'log',cardio:'log',food:'today',workouts:'lifts',mobil
 function showSection(section){
   currentSection=section;
   document.querySelectorAll('.section-tab').forEach(t=>t.classList.toggle('active',t.dataset.section===section));
+  {const at=document.querySelector('.section-tab.active'), bar=at&&at.parentElement;   // seven tabs scroll on a phone: keep the active one in view
+   if(bar){if(at.offsetLeft+at.offsetWidth>bar.scrollLeft+bar.clientWidth)bar.scrollLeft=at.offsetLeft+at.offsetWidth-bar.clientWidth;else if(at.offsetLeft<bar.scrollLeft)bar.scrollLeft=at.offsetLeft;}}
   renderSubnav(section);
   showPage(section,currentSubpage[section]);
 }
@@ -3240,9 +3242,9 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=176"></script>
-<script src="mobility.js?v=176"></script>
-<script src="calisthenics.js?v=176"></script>
-<script src="physio.js?v=176"></script>
+<script src="food.js?v=177"></script>
+<script src="mobility.js?v=177"></script>
+<script src="calisthenics.js?v=177"></script>
+<script src="physio.js?v=177"></script>
 </body>
 </html>
