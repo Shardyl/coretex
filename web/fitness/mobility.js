@@ -182,8 +182,9 @@ function gapBlock(p){
     ${!g.any?`<div style="font-size:11px;color:var(--ink3);margin-top:6px">Needs the ${esc(g.tp.name.toLowerCase())} and ${esc(g.ta.name.toLowerCase())} angles measured.</div>`:''}</div>`;
 }
 
-function clipBtns(list){
-  return list.map((x,k)=>`<button class="btn-sm" title="${esc(x.note||'')}" onclick="mobPlay('${x.id}','${x.mime}')">${x.source?'Measured still':(x.mime.startsWith('video')?'Video':'Photo')+' '+(k+1)}${x.side==='both'?' (both sides)':''} &middot; ${mb(x.bytes)}</button>`).join('');
+// "(both sides)" only where a left/right test has one clip covering both; a single-measurement test says nothing
+function clipBtns(list,lr){
+  return list.map((x,k)=>`<button class="btn-sm" title="${esc(x.note||'')}" onclick="mobPlay('${x.id}','${x.mime}')">${x.source?'Measured still':(x.mime.startsWith('video')?'Video':'Photo')+' '+(k+1)}${lr&&x.side==='both'?' (both sides)':''} &middot; ${mb(x.bytes)}</button>`).join('');
 }
 const noteLines=list=>list.filter(x=>x.note&&!x.source).map(x=>`<div style="font-size:11px;color:var(--ink3);margin-top:4px">Clip note: ${esc(x.note)}</div>`).join('');
 
@@ -398,7 +399,7 @@ function renderPillar(el,p){
       ${t.benchmark?`<div style="font-size:12px;margin-top:4px"><b>Benchmark:</b> ${esc(t.benchmark)}</div>`:''}
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
       ${t.lesson_slug||t.youtube||(t.extra_lessons||[]).length?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}${(t.extra_lessons||[]).map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}
-      ${t.sides.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both)}
+      ${t.sides.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both,true)}
         <label class="btn-sm" style="cursor:pointer">+ Both sides in one clip<input type="file" accept="video/*,image/*" style="display:none" onchange="mobUpload(this,'${p.id}','${t.id}','both')"/></label>
         <span id="mobup_${t.id}_both" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(both)}`:''}
       ${t.sides.map(sd=>{const cur=resFor(p.id,t.id,sd,day), med=mediaDay(t.id,sd);
