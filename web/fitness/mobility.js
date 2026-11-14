@@ -400,6 +400,27 @@ function drillBlock(p){
     ${SLOTS.map(([k,n,h])=>{const xs=ds.filter(x=>x.slot===k);return xs.length?`<div style="margin-top:10px"><div style="font-size:12px;font-weight:800">${n} <span style="font-weight:400;color:var(--ink3)">${h}</span></div>${xs.map(drillRow).join('')}</div>`:'';}).join('')}</details>`;
 }
 
+const _mobEdit=new Set();
+window.mobEditToggle=(id,on)=>{on?_mobEdit.add(id):_mobEdit.delete(id);renderMobility();
+  setTimeout(()=>{const e=document.getElementById('mobt_'+id);if(e)e.scrollIntoView({block:'start'});},40);};
+// the recorded result: per side the number(s), when, how (auto or by hand), its still; editing is a deliberate tap
+function recordBlock(p,t,day){
+  const allMed=(_mob.media||[]).filter(m=>m.pillar===p.id&&m.test===t.id&&m.date===day);
+  const rows=t.sides.map(sd=>{const c=resFor(p.id,t.id,sd,day);
+    const vals=t.measures.map(m=>{const r=c.find(x=>x.measure===m.key);return `<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+        ${t.measures.length>1?`<span style="font-size:11px;color:var(--ink3)">${esc(m.label)}</span>`:''}<span style="font-size:20px;font-weight:800;color:var(--teal)">${esc(fmtV(m,r))}</span>${r&&r.provisional?'<span style="font-size:10px;color:var(--amber);font-weight:800">PROVISIONAL</span>':''}</div>`;}).join('');
+    const still=allMed.filter(x=>x.source&&!String(x.note||'').startsWith('Clean frame')&&(x.side===sd||x.side==='both'));
+    const how=still.length&&/auto-detected/.test(still[still.length-1].note||'')?'auto-measured':still.length?'measured on the clip':'typed in';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:0.5px solid var(--border)">${icon('check','var(--teal)',18)}
+      <div style="flex:1;min-width:0">${t.sides.length>1?`<div style="font-size:12px;font-weight:800;color:var(--ink2)">${SIDE[sd]}</div>`:''}${vals}
+        <div style="font-size:11px;color:var(--ink3)">${fd(day)} &middot; ${how}</div></div></div>`;}).join('');
+  const clips=allMed.filter(x=>!x.source), stills=allMed.filter(x=>x.source&&!String(x.note||'').startsWith('Clean frame'));
+  const uniq=[...new Map(stills.map(x=>[x.side+'|'+x.note,x])).values()];
+  return `<div style="margin-top:10px">${rows}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">${clipBtns([...uniq,...clips])}</div>
+    <button style="background:none;border:none;padding:6px 0;color:var(--ink3);font-size:12px;text-decoration:underline;cursor:pointer" onclick="mobEditToggle('${t.id}',true)">Redo or edit this test</button></div>`;
+}
+
 function renderPillar(el,p){
   if(!p){_mobView='list';return renderList(el);}
   const s=pillarState(p);
@@ -424,6 +445,9 @@ function renderPillar(el,p){
       <input type="date" value="${day}" max="${today()}" class="fd-input" style="width:auto;font-size:14px" onchange="mobDay(this.value)"/></div>
     ${p.tests.map((t,i)=>{const both=t.sides.length>1?mediaDay(t.id,'both'):[];
       const prov=t.sides.some(sd=>resFor(p.id,t.id,sd,day).some(r=>r.provisional));
+      // measured = a record, not a form (owner 14 Nov 2026); "Redo or edit" unlocks it
+      const done=t.sides.every(sd=>{const c=resFor(p.id,t.id,sd,day);return t.measures.every(m=>c.some(r=>r.measure===m.key));});
+      const lock=done&&!_mobEdit.has(t.id);
       return `<div class="card" id="mobt_${t.id}" style="padding:12px 14px;margin-bottom:10px;scroll-margin-top:70px">
       <div style="font-size:14px;font-weight:800">${i+1}. ${esc(t.name)}${t.role?` <span style="font-size:10px;font-weight:700;color:var(--ink3)">${t.role==='active'?'ACTIVE':'PASSIVE'}</span>`:''}</div>
       ${t.camera?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--surface2)"><b>Camera:</b> ${esc(t.camera)}<div style="margin-top:4px;color:var(--ink3)">${CAM_TIP}</div></div>`:''}
@@ -433,18 +457,20 @@ function renderPillar(el,p){
       ${t.benchmark?`<div style="font-size:12px;margin-top:4px"><b>Benchmark:</b> ${esc(t.benchmark)}</div>`:''}
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
       ${t.lesson_slug||t.youtube||(t.extra_lessons||[]).length?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}${(t.extra_lessons||[]).map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}
-      ${t.sides.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both,true)}
+      ${lock?recordBlock(p,t,day):''}
+      ${!lock&&t.sides.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both,true)}
         ${upBtn(t.one_clip?'Upload video or photo (one clip, both sides)':'Upload both sides in one clip',p.id,t.id,'both')}
         <span id="mobup_${t.id}_both" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(both)}`:''}
-      ${t.sides.map(sd=>{const cur=resFor(p.id,t.id,sd,day), med=mediaDay(t.id,sd);
+      ${lock?'':t.sides.map(sd=>{const cur=resFor(p.id,t.id,sd,day), med=mediaDay(t.id,sd);
         return `<div style="margin-top:10px;padding-top:8px;border-top:0.5px solid var(--border)">
           ${t.sides.length>1?`<div style="font-size:12px;font-weight:800;color:var(--ink2)">${SIDE[sd]}</div>`:''}
           ${t.measures.map(m=>inputFor(p,t,sd,m,cur)).join('')}
           ${t.one_clip&&!med.length?'':`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(med)}
             ${t.one_clip?'':upBtn('Upload video or photo',p.id,t.id,sd)}
             <span id="mobup_${t.id}_${sd}" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(med)}`}</div>`;}).join('')}
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2);margin-top:10px"><input type="checkbox" id="mobprov_${t.id}"${prov?' checked':''}/> Provisional (needs a proper retest)</label>
-      <button class="fd-btn" style="margin-top:8px" onclick="mobSave('${p.id}','${t.id}')">Save ${esc(t.name)}</button></div>`;}).join('')}
+      ${lock?'':`<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2);margin-top:10px"><input type="checkbox" id="mobprov_${t.id}"${prov?' checked':''}/> Provisional (needs a proper retest)</label>
+      <button class="fd-btn" style="margin-top:8px" onclick="mobSave('${p.id}','${t.id}')">Save ${esc(t.name)}</button>
+      ${done?`<button class="btn-sm" style="margin-top:6px" onclick="mobEditToggle('${t.id}',false)">Cancel</button>`:''}`}</div>`;}).join('')}
     ${days.length?historyBlock(p,days):''}`;
 }
 
@@ -481,7 +507,7 @@ window.mobSave=async function(pid,tid){
       const values={};t.measures.forEach(m=>{const e=document.getElementById(`mob_${t.id}_${s}_${m.key}`);if(e&&e.value!=='')values[m.key]=m.kind==='number'?+e.value:e.value;});
       await syncApi('/api/fitness/mobility/result',{method:'POST',body:JSON.stringify({date:day,pillar:pid,test:tid,side:s,values,provisional})});
     }
-    await load();renderMobility();toast('Saved');
+    _mobEdit.delete(tid);await load();renderMobility();toast('Saved');
   }catch(e){toast('Could not save. Check your connection.');}
 };
 
