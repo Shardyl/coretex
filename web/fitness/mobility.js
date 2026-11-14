@@ -391,6 +391,7 @@ function renderPillar(el,p){
       return `<div class="card" id="mobt_${t.id}" style="padding:12px 14px;margin-bottom:10px;scroll-margin-top:70px">
       <div style="font-size:14px;font-weight:800">${i+1}. ${esc(t.name)}${t.role?` <span style="font-size:10px;font-weight:700;color:var(--ink3)">${t.role==='active'?'ACTIVE':'PASSIVE'}</span>`:''}</div>
       ${t.camera?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--surface2)"><b>Camera:</b> ${esc(t.camera)}<div style="margin-top:4px;color:var(--ink3)">${CAM_TIP}</div></div>`:''}
+      ${holdOf(t)?`<div style="font-size:13px;font-weight:800;margin-top:6px;color:var(--teal)">Hold ${esc(holdOf(t))} for it to count</div>`:''}
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
       ${t.lesson_slug||t.youtube?`<div style="margin-top:6px">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}</div>`:''}
       ${t.sides.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both)}
@@ -536,6 +537,8 @@ const lessonBtn=(x,label)=>{const s=x.lesson_slug||'', y=x.youtube||'';
 // plumb line. Saving writes it into that test's measure for the day and the chosen side (other values kept), with
 // the provisional flag, and uploads the marked-up frame as a still carrying the clip and the second it came from.
 const CLEAN_NOTE='Clean frame, no angle lines';
+// the hold time pulled out of the cue so it cannot be missed (owner, 14 Nov 2026: it was buried at the end)
+const holdOf=t=>{const m=String(t&&t.cue||'').match(/hold(?: (?:it|each|the [a-z ]+?))?(?: for)? ([0-9]+(?:-[0-9]+)? ?(?:s|sec|seconds))/i);return m?m[1].replace(/ ?(sec|seconds)$/,' s'):'';};
 // Distance and lens (owner, 14 Nov 2026): Smith gives no distance, only 'whole body in frame, same spot every time';
 // this is OUR guidance from camera geometry, labelled as such in the app.
 const CAM_TIP='Our guide (Smith gives no distance): about 2.5 to 3 m away so your whole body fits with space around it; normal 1x lens, not ultra-wide (it bends lines and skews angles); square on to the movement with the joint you measure near the middle of the frame; tape the phone spot and your spot so retests match.';
