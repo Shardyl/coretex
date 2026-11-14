@@ -218,6 +218,11 @@ def media_start(day: str, pillar: str, test: str, side: str, mime: str, size: in
     if not 0 < int(size) <= MAX_BYTES:
         raise ValueError("file too large (1.5 GB max)")
     os.makedirs(MEDIA_DIR, mode=0o700, exist_ok=True)
+    if source and not (note or "").startswith("Clean frame"):
+        # a new measurement replaces the previous one's stills for this day + test + side (owner 14 Nov 2026: re-measures
+        # piled up). Soft delete only; the clean twin of THIS measurement is uploaded right after and survives.
+        db.execute("update fitness.mobility_media set deleted=true where not deleted and source is not null and day=%s "
+                   "and pillar=%s and test=%s and side=%s", (d, pillar, test, side))
     uid = f"mm_{d.isoformat()}_{secrets.token_hex(5)}"
     fname = f"{uid}.{_TYPES[mime]}"
     open(os.path.join(MEDIA_DIR, fname + ".part"), "wb").close()
