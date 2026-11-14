@@ -192,6 +192,10 @@ def dose(drill: dict) -> dict:
     d = dict(drill.get("dose") or {})
     src, filled = d.get("source") or "", []
     slot, meth = drill.get("slot"), drill.get("method")
+    if meth == "soft_tissue":                      # by feel (lessons 64/82): no sets, reps or rest to prescribe
+        d.update({"sets": d.get("sets") or "1", "by_feel": True})
+        d["source"], d["filled"] = src, []
+        return d
     if not d.get("sets"):
         d["sets"] = SLOT_SETS.get(slot, "2-3")
         filled.append("sets")

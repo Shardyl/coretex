@@ -183,7 +183,7 @@ const progOf=pid=>(_mob.programs||[]).find(x=>x.pillar===pid&&x.status==='active
 const draftOf=pid=>(_mob.programs||[]).find(x=>x.pillar===pid&&x.status==='draft');
 const setTxt=z=>(z.side?z.side+' ':'')+(z.reps!=null?z.reps+'r':'')+(z.hold_s!=null?z.hold_s+'s':'')+(z.kg?' @'+z.kg+'kg':'');
 function doseLine(it,t){const d=it.dose||{}, sets=t&&t.sets||d.sets, reps=t&&t.reps!=null?t.reps:d.reps, hold=t&&t.hold_s!=null?t.hold_s:d.hold_s;
-  const a=[];if(sets)a.push(sets+' sets');if(reps)a.push(reps+(d.cr?' rounds':' reps'));if(hold)a.push(hold+' s hold');
+  const a=[];if(d.by_feel)a.push('by feel');else if(sets)a.push(sets+(String(sets)==='1'?' set':' sets'));if(reps)a.push(reps+(d.cr?' rounds':' reps'));if(hold)a.push(hold+' s hold');
   if(d.tempo)a.push('tempo '+d.tempo);if(d.cr)a.push(d.cr);if(d.rest_s)a.push(d.rest_s+' s rest');
   return esc(a.join(' · '))+(it.unilateral?' &middot; each side':'');}
 function itemRow(it,showTarget){const t=it.target;
@@ -267,7 +267,7 @@ function renderSession(el,id){
         <div style="font-size:12px;margin-top:4px"><b>Today:</b> ${doseLine(it,t)}</div>
         ${t.text?`<div style="font-size:12px;color:var(--ink2);margin-top:2px">${esc(t.text)}</div>`:''}
         ${last?`<div style="font-size:11px;color:var(--ink3);margin-top:4px">Last time: ${esc(last.sets.map(setTxt).join(', '))}${last.marker?' &middot; <b>'+esc(last.marker)+'</b>':''}</div>`:''}
-        <table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:12px"><tr style="font-size:10px;color:var(--ink3)"><td>Set</td>${sides.map(sd=>`<td>${sd?SIDE[sd]+' ':''}${hold?'hold s':'reps'}</td>${w?`<td>${sd?sd+' ':''}kg</td>`:''}`).join('')}</tr>
+        <table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:12px"><tr style="font-size:10px;color:var(--ink3)"><td style="width:28px">Set</td>${sides.map(sd=>`<td>${sd?SIDE[sd]+' ':''}${hold?'hold s':'reps'}</td>${w?`<td>${sd?sd+' ':''}kg</td>`:''}`).join('')}</tr>
           ${Array.from({length:nS},(_,i)=>`<tr><td style="padding:2px 0;color:var(--ink3)">${i+1}</td>${sides.map(sd=>`<td style="padding:2px 4px 2px 0"><input id="mobs_${k}_${i}_${sd||'x'}_v" type="number" inputmode="decimal" class="fd-input" style="font-size:14px;padding:6px" placeholder="${esc(hold?(t.hold_s==null?'':t.hold_s):(t.reps==null?'':t.reps))}"/></td>${w?`<td style="padding:2px 4px 2px 0"><input id="mobs_${k}_${i}_${sd||'x'}_kg" type="number" inputmode="decimal" class="fd-input" style="font-size:14px;padding:6px"/></td>`:''}`).join('')}</tr>`).join('')}</table>
         ${it.method!=='strength'?`<label class="form-label" style="margin-top:6px">Depth marker${it.marker&&it.marker.label?': '+esc(it.marker.label):''}</label>
         <input id="mobs_${k}_marker" class="fd-input" style="font-size:14px" placeholder="${last&&last.marker?'last: '+esc(last.marker):'e.g. 2 fingers, 3 blocks, 42 cm'}"/>
