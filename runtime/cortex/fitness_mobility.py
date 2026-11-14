@@ -82,7 +82,7 @@ DEFAULT_PILLARS = [
                  "Stop at the first nervy sensation and record that number. Level 10: pull on the foot to pull it all "
                  "together. No nervy sensation through all 10 = Clear.",
           "measures": [{"key": "level", "label": "Level reached", "kind": "choice", "options": _NERVE}]},
-         {"id": "hip_ir", "name": "Hip Internal Rotation Length Test", "position": {"img": "pike_4.jpg", "caption": "Smith's form: on a box, knees together, feet swing out"}, "sides": ["L", "R"],
+         {"id": "hip_ir", "name": "Hip Internal Rotation Length Test", "one_clip": True, "position": {"img": "pike_4.jpg", "caption": "Smith's form: on a box, knees together, feet swing out"}, "sides": ["L", "R"],
           "camera": "Position 2: camera at BOX HEIGHT, level with the box seat, facing you from the front. This is the only test not filmed from the floor (tests 1 to 4 are filmed with the phone on the floor).",
           "cue": "Sit on a box, knees bent at 90 degrees, a fist or a block between the knees to keep them together "
                  "and still, then swing the foot outward.",

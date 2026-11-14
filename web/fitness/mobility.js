@@ -410,15 +410,15 @@ function renderPillar(el,p){
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
       ${t.lesson_slug||t.youtube||(t.extra_lessons||[]).length?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}${(t.extra_lessons||[]).map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}
       ${t.sides.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both,true)}
-        <label class="btn-sm" style="cursor:pointer">+ Both sides in one clip<input type="file" accept="video/*,image/*" style="display:none" onchange="mobUpload(this,'${p.id}','${t.id}','both')"/></label>
+        <label class="btn-sm" style="cursor:pointer">${t.one_clip?'+ Video or photo (one clip, both sides)':'+ Both sides in one clip'}<input type="file" accept="video/*,image/*" style="display:none" onchange="mobUpload(this,'${p.id}','${t.id}','both')"/></label>
         <span id="mobup_${t.id}_both" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(both)}`:''}
       ${t.sides.map(sd=>{const cur=resFor(p.id,t.id,sd,day), med=mediaDay(t.id,sd);
         return `<div style="margin-top:10px;padding-top:8px;border-top:0.5px solid var(--border)">
           ${t.sides.length>1?`<div style="font-size:12px;font-weight:800;color:var(--ink2)">${SIDE[sd]}</div>`:''}
           ${t.measures.map(m=>inputFor(p,t,sd,m,cur)).join('')}
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(med)}
-            <label class="btn-sm" style="cursor:pointer">+ Video or photo<input type="file" accept="video/*,image/*" style="display:none" onchange="mobUpload(this,'${p.id}','${t.id}','${sd}')"/></label>
-            <span id="mobup_${t.id}_${sd}" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(med)}</div>`;}).join('')}
+          ${t.one_clip&&!med.length?'':`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(med)}
+            ${t.one_clip?'':`<label class="btn-sm" style="cursor:pointer">+ Video or photo<input type="file" accept="video/*,image/*" style="display:none" onchange="mobUpload(this,'${p.id}','${t.id}','${sd}')"/></label>`}
+            <span id="mobup_${t.id}_${sd}" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(med)}`}</div>`;}).join('')}
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2);margin-top:10px"><input type="checkbox" id="mobprov_${t.id}"${prov?' checked':''}/> Provisional (needs a proper retest)</label>
       <button class="fd-btn" style="margin-top:8px" onclick="mobSave('${p.id}','${t.id}')">Save ${esc(t.name)}</button></div>`;}).join('')}
     ${days.length?historyBlock(p,days):''}`;

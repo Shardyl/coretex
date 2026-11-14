@@ -648,7 +648,8 @@
     "position": {
      "img": "sh_pec_bench.jpg",
      "caption": "Smith's form: lying on a bench, elbows drop below the shoulder line"
-    }
+    },
+    "one_clip": true
    },
    {
     "id": "er_length",
@@ -715,7 +716,8 @@
     "position": {
      "img": "shoulder_flexion_pec_minor.jpg",
      "caption": "Lie on the back, arms slightly out, partner presses both shoulders down to the floor"
-    }
+    },
+    "one_clip": true
    },
    {
     "id": "ir_length",
@@ -1820,7 +1822,8 @@
     "position": {
      "img": "br_pec.jpg",
      "caption": "Smith's form: 10 deg poor, 40 deg good below the shoulder line"
-    }
+    },
+    "one_clip": true
    },
    {
     "id": "couch_stretch_low",
@@ -2005,7 +2008,8 @@
     "position": {
      "img": "sh_pec_bench.jpg",
      "caption": "Smith's form: lying on a bench, elbows drop below the shoulder line"
-    }
+    },
+    "one_clip": true
    },
    {
     "id": "dislocate_grip",
@@ -2164,7 +2168,8 @@
     "position": {
      "img": "pike_4.jpg",
      "caption": "Smith's form: on a box, knees together, feet swing out"
-    }
+    },
+    "one_clip": true
    }
   ],
   "questions": [],
