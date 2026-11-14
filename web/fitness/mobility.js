@@ -146,7 +146,8 @@ window.mobPosBig=function(im){if(!im.src)return;const ov=document.createElement(
 // the position pictures load after the page draws; scroll again once they are in so the target does not get pushed
 // down (owner 14 Nov 2026: Next to do landed one or two tests too high)
 let _scrollTo=null;
-const scrollTarget=smooth=>{const e=_scrollTo&&document.getElementById('mobt_'+_scrollTo);if(e)e.scrollIntoView({behavior:smooth?'smooth':'auto',block:'start'});};
+const scrollTarget=smooth=>{const c=_scrollTo&&document.getElementById('mobt_'+_scrollTo);if(!c)return;
+  const e=c.querySelector('img[data-pos]')||c;e.scrollIntoView({behavior:smooth?'smooth':'auto',block:'start'});};  // land on its picture (owner)
 window.mobOpen=function(id,tid){_mobView=id;_mobDay=null;_scrollTo=tid||null;renderMobility();
   setTimeout(()=>{if(_scrollTo)scrollTarget(true);else window.scrollTo(0,0);},30);};
 window.mobBack=function(){_mobView='list';renderMobility();};
@@ -408,7 +409,7 @@ function renderPillar(el,p){
       return `<div class="card" id="mobt_${t.id}" style="padding:12px 14px;margin-bottom:10px;scroll-margin-top:70px">
       <div style="font-size:14px;font-weight:800">${i+1}. ${esc(t.name)}${t.role?` <span style="font-size:10px;font-weight:700;color:var(--ink3)">${t.role==='active'?'ACTIVE':'PASSIVE'}</span>`:''}</div>
       ${t.camera?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--surface2)"><b>Camera:</b> ${esc(t.camera)}<div style="margin-top:4px;color:var(--ink3)">${CAM_TIP}</div></div>`:''}
-      ${t.position?`<div style="margin-top:8px"><img data-pos="${esc(t.position.img)}" alt="Correct position" onclick="mobPosBig(this)" style="width:100%;max-width:420px;aspect-ratio:16/9;object-fit:contain;border-radius:8px;background:var(--surface2);cursor:zoom-in;display:block"/>
+      ${t.position?`<div style="margin-top:8px"><img data-pos="${esc(t.position.img)}" alt="Correct position" onclick="mobPosBig(this)" style="width:100%;max-width:420px;aspect-ratio:16/9;object-fit:contain;scroll-margin-top:90px;border-radius:8px;background:var(--surface2);cursor:zoom-in;display:block"/>
         <div style="font-size:11.5px;color:var(--ink2);margin-top:3px"><b>Correct position:</b> ${esc(t.position.caption||'')}</div></div>`:''}
       ${holdOf(t)?`<div style="font-size:13px;font-weight:800;margin-top:6px;color:var(--teal)">Hold ${esc(holdOf(t))} for it to count</div>`:''}
       ${t.benchmark?`<div style="font-size:12px;margin-top:4px"><b>Benchmark:</b> ${esc(t.benchmark)}</div>`:''}
