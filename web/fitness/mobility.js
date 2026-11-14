@@ -749,7 +749,7 @@ window.mobMeasure=function(src,id,ov,auto){
   if(auto){const found=autoSides.length>1?'Found '+autoSides.map(s=>SIDE[s]+' '+Math.round(auto.res[s].a)+'°').join(', ')+'. Switch side to check each.':'';
     if(found){const o=document.createElement('div');o.style.cssText='color:#aaa;font-size:11px;margin-top:6px;text-align:center';o.textContent=found;ov.append(o);}
     loadAuto().then(()=>{setTip();draw();});}else{setTip();draw();}
-  save.onclick=async()=>{
+  const saveOne=async(batch)=>{
     const a=Math.round(readAngle(sp,pts)*10)/10, sd=side.value, key=m.key;
     const values={};let wasProv=false;
     resFor(rec.pillar,rec.test,sd,rec.date).forEach(r=>{values[r.measure]=r.label!=null?r.label:r.value;if(r.provisional)wasProv=true;});
@@ -770,11 +770,24 @@ window.mobMeasure=function(src,id,ov,auto){
       await put(clean,CLEAN_NOTE+(sides.length>1?', '+SIDE[sd]:'')+(frameS!=null?', '+frameS+' s of the clip':''));
       // both sides found in one clip: after saving one, go straight to the other (owner 14 Nov 2026)
       _savedSides.add(sd);
+      if(batch)return a;
       const nxt=autoSides.find(x=>!_savedSides.has(x));
       if(nxt){await load();side.value=nxt;await loadAuto();setTip();draw();save.disabled=false;save.textContent='Save angle';
         toast('Saved '+Math.round(a)+'° '+SIDE[sd]+'. Now check '+SIDE[nxt]+'.');return;}
       ov.remove();await load();renderMobility();toast('Saved '+Math.round(a)+'° to '+t.name);
-    }catch(e){save.disabled=false;save.textContent='Save angle';toast('Could not save. Check your connection.');}
+    }catch(e){save.disabled=false;save.textContent='Save angle';toast('Could not save. Check your connection.');if(batch)throw e;}
   };
+  save.onclick=()=>saveOne(false);
+  // both arms found in one clip: one tap saves both, each with its own marked frame (owner 14 Nov 2026)
+  if(autoSides.length>1){
+    const both=document.createElement('button');both.className='btn-sm';
+    both.textContent='Save both ('+autoSides.map(x=>SIDE[x]+' '+Math.round(auto.res[x].med!=null?auto.res[x].med:auto.res[x].a)+'\u00b0').join(', ')+')';
+    both.style.cssText='background:var(--teal);color:#fff;border-color:var(--teal);font-weight:800';
+    both.onclick=async()=>{both.disabled=true;const done=[];
+      try{for(const x of autoSides){side.value=x;await loadAuto();setTip();draw();done.push(SIDE[x]+' '+Math.round(await saveOne(true))+'\u00b0');}
+        ov.remove();await load();renderMobility();toast('Saved '+done.join(', '));}
+      catch(e){both.disabled=false;}};
+    bar.prepend(both);
+  }
 };
 })();
