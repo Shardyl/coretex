@@ -299,10 +299,19 @@
       "angle": {
        "mode": "inside",
        "points": [
-        "point on the scapula line below the shoulder (bottom of the scapula)",
+        "trunk line below the shoulder (hip; Smith: bottom of the shoulder blade)",
         "centre of the shoulder",
         "elbow"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "hip",
+         "shoulder",
+         "elbow"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
       }
      }
     ],
@@ -327,10 +336,19 @@
       "angle": {
        "mode": "inside",
        "points": [
-        "point on the scapula line below the shoulder (bottom of the scapula)",
+        "trunk line below the shoulder (hip; Smith: bottom of the shoulder blade)",
         "centre of the shoulder",
         "elbow"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "hip",
+         "shoulder",
+         "elbow"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
       }
      }
     ],
@@ -354,10 +372,19 @@
       "angle": {
        "mode": "inside",
        "points": [
-        "point on the scapula line below the shoulder (bottom of the scapula)",
+        "trunk line below the shoulder (hip; Smith: bottom of the shoulder blade)",
         "centre of the shoulder",
         "elbow"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "hip",
+         "shoulder",
+         "elbow"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
       }
      }
     ],
@@ -383,10 +410,19 @@
       "angle": {
        "mode": "inside",
        "points": [
-        "point on the scapula line below the shoulder (bottom of the scapula)",
+        "trunk line below the shoulder (hip; Smith: bottom of the shoulder blade)",
         "centre of the shoulder",
         "elbow"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "hip",
+         "shoulder",
+         "elbow"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
       }
      }
     ],

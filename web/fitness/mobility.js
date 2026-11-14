@@ -622,6 +622,8 @@ window.mobAutoMeasure=async function(video,id,ov,btn,msg){
     say('Loading the pose model (first time only)...');
     if(!video.duration||!isFinite(video.duration))await new Promise(r=>video.addEventListener('loadedmetadata',r,{once:true}));
     const res=await poseScan(video,ps.sp,f=>say('Finding your joints... '+Math.round(f*100)+'%'));
+    // a one-sided test filmed one side per clip: the visible-side result belongs to the clip's own side
+    {const rec=mediaRec(id), t=testOf(rec);if(res.both&&t&&!t.sides.includes('both')&&rec&&t.sides.includes(rec.side)){res[rec.side]=res.both;delete res.both;}}
     const sides=Object.keys(res);
     if(!sides.length){say('Could not see you clearly enough in this clip. Pause on your best position and measure by hand.');btn.disabled=false;btn.style.opacity=1;return;}
     await seekTo(video,res[sides[0]].t);
