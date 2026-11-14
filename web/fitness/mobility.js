@@ -600,7 +600,9 @@ function poseCandidates(P,L){
   // "other:" = the other side's joint; "mid:" = halfway between both; "high:"/"low:" = whichever of the pair is higher
   // or lower in the frame. Seen side-on the model often swaps left and right, so the leg lift is read by geometry.
   // "level:A@B" = a point level with joint A, under joint B: a line parallel to the floor (pancake, internal rotation)
-  const get=(n,s)=>{if(n.startsWith('level:')){const [a2,b2]=n.slice(6).split('@'), pa=get(a2,s), pb=get(b2,s);
+  // "plumb:J" = a point straight below joint J in the frame: a true vertical with a level camera (Smith's Leahy line)
+  const get=(n,s)=>{if(n.startsWith('plumb:')){const q=get(n.slice(6),s);return{x:q.x,y:Math.min(1,q.y+0.25),visibility:q.visibility};}
+    if(n.startsWith('level:')){const [a2,b2]=n.slice(6).split('@'), pa=get(a2,s), pb=get(b2,s);
       return{x:pb.x,y:pa.y,visibility:Math.min(pa.visibility??1,pb.visibility??1)};}
     const [pre,j]=n.includes(':')?n.split(':'):['',n], A=L[LMI[j][0]], B=L[LMI[j][1]];
     if(pre==='mid')return{x:(A.x+B.x)/2,y:(A.y+B.y)/2,visibility:Math.min(A.visibility??1,B.visibility??1)};
