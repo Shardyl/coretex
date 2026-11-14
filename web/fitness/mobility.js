@@ -205,8 +205,12 @@ function upProgress(el,pct,txt,state){if(!el)return;const c=state==='fail'?'var(
   el.innerHTML=`<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:${c};margin-bottom:4px"><span>${esc(txt)}</span><span>${pct!=null?pct+'%':''}</span></div>
     <div style="height:8px;border-radius:4px;background:var(--surface2);overflow:hidden"><div style="height:100%;width:${pct!=null?pct:100}%;background:${c};transition:width .25s${state==='busy'?';animation:mobPulse 1s ease-in-out infinite':''}"></div></div>`;}
 if(!document.getElementById('mobKF')){const st=document.createElement('style');st.id='mobKF';st.textContent='@keyframes mobPulse{0%,100%{opacity:1}50%{opacity:.45}}';document.head.appendChild(st);}
+const TICK='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3l5 -6"/></svg>';
 function clipBtns(list,lr){
-  return list.map((x,k)=>`<button class="btn-sm" title="${esc(x.note||'')}" onclick="mobPlay('${x.id}','${x.mime}')">${x.source?'Measured still':(x.mime.startsWith('video')?'Video':'Photo')+' '+(k+1)}${lr&&x.side==='both'?' (both sides)':''} &middot; ${mb(x.bytes)}</button>`).join('');
+  return list.map((x,k)=>{const vid=x.mime.startsWith('video')&&!x.source;
+    const lab=x.source?'Measured still':(vid?'Video uploaded':'Photo uploaded')+(list.filter(y=>!y.source).length>1?' '+(k+1):'');
+    return `<button title="${esc(x.note||'')}" onclick="mobPlay('${x.id}','${x.mime}')" style="display:inline-flex;align-items:center;gap:7px;padding:6px 12px 6px 8px;border-radius:10px;border:1px solid ${x.source?'var(--border)':'var(--teal)'};background:${x.source?'transparent':'rgba(48,213,168,0.10)'};color:${x.source?'var(--ink2)':'var(--teal)'};font-size:12.5px;font-weight:800;cursor:pointer">
+      ${x.source?'':TICK}<span>${lab}${lr&&x.side==='both'?' (both sides)':''}</span><span style="font-weight:600;opacity:.75">${mb(x.bytes)}</span>${vid?'<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--teal)"><svg width="10" height="10" viewBox="0 0 24 24" fill="#fff" style="margin-left:1px" aria-hidden="true"><path d="M7 4v16l13 -8z"/></svg></span>':''}</button>`;}).join('');
 }
 const noteLines=list=>list.filter(x=>x.note&&!x.source).map(x=>`<div style="font-size:11px;color:var(--ink3);margin-top:4px">Clip note: ${esc(x.note)}</div>`).join('');
 
@@ -560,7 +564,7 @@ window.mobLessonN=i=>{const x=_lessons[i];if(x)mobLesson(x.c,x.s,x.y,x.n,x.v);};
 const lessonBtn=(x,label)=>{const s=x.lesson_slug||'', y=x.youtube||'', v=x.vimeo||'';
   if(!s&&!y&&!v)return '';
   const i=_lessons.push({c:s?(x.lesson_course||'mftk'):'',s,y,v,n:x.name})-1;
-  return `<button class="btn-sm" style="display:inline-flex;align-items:center;gap:5px;font-weight:700" onclick="event.stopPropagation();mobLessonN(${i})"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0" aria-hidden="true"><path d="M7 4v16l13 -8z"/></svg>${label||'Watch'}</button>`;};
+  return `<button class="btn-sm" style="display:inline-flex;align-items:center;gap:7px;font-weight:800;padding:4px 12px 4px 4px;border-radius:999px;border:1px solid var(--teal);color:var(--teal);background:transparent" onclick="event.stopPropagation();mobLessonN(${i})"><span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--teal);flex-shrink:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="#fff" aria-hidden="true" style="margin-left:2px"><path d="M7 4v16l13 -8z"/></svg></span>${label||'Watch'}</button>`;};
 
 // ---------- Tap to measure (owner, 8 Nov 2026; per-test angle definitions 9 Nov 2026) ----------
 // The frame (a paused video or a photo) is drawn on a canvas and he taps the points the measure's `angle` spec names.
