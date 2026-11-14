@@ -20,7 +20,7 @@ const msDone=id=>(_cali.milestones||[]).filter(m=>m.milestone===id);
 // the lesson player lives in mobility.js; handstand lessons use course "handstand"
 const _L=[];window.caliLessonN=i=>{const x=_L[i];if(x&&window.mobLesson)mobLesson(x.c,x.s,x.y,x.n,x.v);};
 const watch=(x,label)=>{if(!x||(!x.lesson_slug&&!x.youtube&&!x.vimeo))return '';const i=_L.push({c:x.lesson_slug?'handstand':'',s:x.lesson_slug||'',y:x.youtube||'',v:x.vimeo||'',n:x.name})-1;
-  return `<button class="btn-sm" onclick="event.stopPropagation();caliLessonN(${i})">${label||'Watch'}</button>`;};
+  return `<button class="btn-sm" style="display:inline-flex;align-items:center;gap:5px;font-weight:700" onclick="event.stopPropagation();caliLessonN(${i})"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0" aria-hidden="true"><path d="M7 4v16l13 -8z"/></svg>${label||'Watch'}</button>`;};
 
 window.renderCalisthenics=async function(sub){
   const el=document.getElementById('page-calisthenics-'+(sub||'program'));if(!el)return;

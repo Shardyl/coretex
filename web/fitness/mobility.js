@@ -197,6 +197,14 @@ function gapBlock(p){
 }
 
 // "(both sides)" only where a left/right test has one clip covering both; a single-measurement test says nothing
+// upload: one obvious button (icon, teal outline) and a real progress bar while it sends (owner 14 Nov 2026)
+const UP_ICON='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 9l5 -5l5 5"/><path d="M12 4l0 12"/></svg>';
+const upBtn=(label,pid,tid,sd)=>`<label style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;box-sizing:border-box;padding:12px 14px;border:2px dashed var(--teal);border-radius:10px;color:var(--teal);font-size:14px;font-weight:800;cursor:pointer;background:transparent">${UP_ICON}<span>${esc(label)}</span><input type="file" accept="video/*,image/*" style="display:none" onchange="mobUpload(this,'${pid}','${tid}','${sd}')"/></label>`;
+function upProgress(el,pct,txt,state){if(!el)return;const c=state==='fail'?'var(--red, #e5484d)':state==='done'?'var(--teal)':'var(--teal)';
+  el.style.cssText='display:block;width:100%;margin-top:6px';
+  el.innerHTML=`<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:${c};margin-bottom:4px"><span>${esc(txt)}</span><span>${pct!=null?pct+'%':''}</span></div>
+    <div style="height:8px;border-radius:4px;background:var(--surface2);overflow:hidden"><div style="height:100%;width:${pct!=null?pct:100}%;background:${c};transition:width .25s${state==='busy'?';animation:mobPulse 1s ease-in-out infinite':''}"></div></div>`;}
+if(!document.getElementById('mobKF')){const st=document.createElement('style');st.id='mobKF';st.textContent='@keyframes mobPulse{0%,100%{opacity:1}50%{opacity:.45}}';document.head.appendChild(st);}
 function clipBtns(list,lr){
   return list.map((x,k)=>`<button class="btn-sm" title="${esc(x.note||'')}" onclick="mobPlay('${x.id}','${x.mime}')">${x.source?'Measured still':(x.mime.startsWith('video')?'Video':'Photo')+' '+(k+1)}${lr&&x.side==='both'?' (both sides)':''} &middot; ${mb(x.bytes)}</button>`).join('');
 }
@@ -416,14 +424,14 @@ function renderPillar(el,p){
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
       ${t.lesson_slug||t.youtube||(t.extra_lessons||[]).length?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}${(t.extra_lessons||[]).map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}
       ${t.sides.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both,true)}
-        <label class="btn-sm" style="cursor:pointer">${t.one_clip?'+ Video or photo (one clip, both sides)':'+ Both sides in one clip'}<input type="file" accept="video/*,image/*" style="display:none" onchange="mobUpload(this,'${p.id}','${t.id}','both')"/></label>
+        ${upBtn(t.one_clip?'Upload video or photo (one clip, both sides)':'Upload both sides in one clip',p.id,t.id,'both')}
         <span id="mobup_${t.id}_both" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(both)}`:''}
       ${t.sides.map(sd=>{const cur=resFor(p.id,t.id,sd,day), med=mediaDay(t.id,sd);
         return `<div style="margin-top:10px;padding-top:8px;border-top:0.5px solid var(--border)">
           ${t.sides.length>1?`<div style="font-size:12px;font-weight:800;color:var(--ink2)">${SIDE[sd]}</div>`:''}
           ${t.measures.map(m=>inputFor(p,t,sd,m,cur)).join('')}
           ${t.one_clip&&!med.length?'':`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(med)}
-            ${t.one_clip?'':`<label class="btn-sm" style="cursor:pointer">+ Video or photo<input type="file" accept="video/*,image/*" style="display:none" onchange="mobUpload(this,'${p.id}','${t.id}','${sd}')"/></label>`}
+            ${t.one_clip?'':upBtn('Upload video or photo',p.id,t.id,sd)}
             <span id="mobup_${t.id}_${sd}" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(med)}`}</div>`;}).join('')}
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2);margin-top:10px"><input type="checkbox" id="mobprov_${t.id}"${prov?' checked':''}/> Provisional (needs a proper retest)</label>
       <button class="fd-btn" style="margin-top:8px" onclick="mobSave('${p.id}','${t.id}')">Save ${esc(t.name)}</button></div>`;}).join('')}
@@ -472,20 +480,22 @@ window.mobUpload=async function(inp,pid,tid,side){
   const st=document.getElementById(`mobup_${tid}_${side}`);
   const anyDays=[...new Set([...(_mob.results||[]),...(_mob.media||[])].filter(r=>r.pillar===pid).map(r=>r.date))].sort();
   const day=_mobDay||anyDays[anyDays.length-1]||today();
-  const say=t=>{if(st)st.textContent=t;};
+  const say=(t,p,s)=>upProgress(st,p,t,s);
   try{
-    say('Starting...');
+    say('Starting upload',0,'busy');
     const start=await syncApi('/api/fitness/mobility/media',{method:'POST',body:JSON.stringify({date:day,pillar:pid,test:tid,side,mime:f.type||'video/mp4',bytes:f.size})});
     if(!start||!start.id)throw new Error('start');
     const step=start.chunk||8000000;
     for(let i=0,off=0;off<f.size;i++,off+=step){
       const r=await fetch(API_BASE+'/api/fitness/mobility/media/'+start.id+'/'+i,{method:'PUT',headers:{'Authorization':'Bearer '+syncToken(),'Content-Type':'application/octet-stream'},body:f.slice(off,off+step)});
       if(!r.ok)throw new Error('chunk '+i);
-      say('Uploading '+Math.min(100,Math.round((off+step)/f.size*100))+'%');
+      say('Uploading '+(f.size>1e6?Math.round(f.size/1e6)+' MB':''),Math.min(100,Math.round((off+step)/f.size*100)),'busy');
     }
+    say('Finishing',100,'busy');
     await syncApi('/api/fitness/mobility/media/'+start.id+'/finish',{method:'POST'});
+    say('Uploaded',100,'done');
     await load();renderMobility();toast('Saved to Cortex');
-  }catch(e){say('Upload failed');toast('Upload failed. Try again on wifi.');}
+  }catch(e){say('Upload failed: tap upload to try again',null,'fail');toast('Upload failed. Try again on wifi.');}
   inp.value='';
 };
 
@@ -550,7 +560,7 @@ window.mobLessonN=i=>{const x=_lessons[i];if(x)mobLesson(x.c,x.s,x.y,x.n,x.v);};
 const lessonBtn=(x,label)=>{const s=x.lesson_slug||'', y=x.youtube||'', v=x.vimeo||'';
   if(!s&&!y&&!v)return '';
   const i=_lessons.push({c:s?(x.lesson_course||'mftk'):'',s,y,v,n:x.name})-1;
-  return `<button class="btn-sm" onclick="event.stopPropagation();mobLessonN(${i})">${label||'Watch'}</button>`;};
+  return `<button class="btn-sm" style="display:inline-flex;align-items:center;gap:5px;font-weight:700" onclick="event.stopPropagation();mobLessonN(${i})"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0" aria-hidden="true"><path d="M7 4v16l13 -8z"/></svg>${label||'Watch'}</button>`;};
 
 // ---------- Tap to measure (owner, 8 Nov 2026; per-test angle definitions 9 Nov 2026) ----------
 // The frame (a paused video or a photo) is drawn on a canvas and he taps the points the measure's `angle` spec names.
