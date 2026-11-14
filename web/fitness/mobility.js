@@ -463,8 +463,8 @@ function renderPillar(el,p){
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
       ${t.lesson_slug||t.youtube||(t.extra_lessons||[]).length?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}${(t.extra_lessons||[]).map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}
       ${lock?recordBlock(p,t,day):''}
-      ${!lock&&t.sides.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both,true)}
-        ${upBtn(t.one_clip?'Upload video or photo (one clip, both sides)':'Upload both sides in one clip',p.id,t.id,'both')}
+      ${!lock&&t.sides.length>1&&(t.one_clip||both.length)?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both,true)}
+        ${t.one_clip?upBtn('Upload video or photo (one clip, both sides)',p.id,t.id,'both'):''}
         <span id="mobup_${t.id}_both" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(both)}`:''}
       ${lock?'':t.sides.map(sd=>{const cur=resFor(p.id,t.id,sd,day), med=mediaDay(t.id,sd);
         return `<div style="margin-top:10px;padding-top:8px;border-top:0.5px solid var(--border)">
