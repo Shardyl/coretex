@@ -2142,7 +2142,11 @@
     "lesson_slug": "32-pike_assessment",
     "same_as": "pike.hip_ir",
     "marked": "ours",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "pike_4.jpg",
+     "caption": "Smith's form: on a box, knees together, feet swing out"
+    }
    }
   ],
   "questions": [],
