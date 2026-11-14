@@ -705,6 +705,7 @@ window.mobMeasure=function(src,id,ov,auto){
   const sel=(opts,cur)=>{const s=document.createElement('select');s.style.cssText='font-size:13px;width:auto';opts.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;if(v===cur)o.selected=true;s.appendChild(o);});return s;};
   const pick=sel(ms.map(x=>[x.key,x.label]),m.key);if(ms.length<2)pick.style.display='none';
   const autoSides=auto?Object.keys(auto.res).filter(s=>t.sides.includes(s)):[];
+  const _savedSides=new Set();
   const sides=t.sides, side=sel(sides.map(s=>[s,SIDE[s]]),autoSides[0]||(sides.includes(rec.side)?rec.side:sides[0]));if(sides.length<2)side.style.display='none';
   const loadAuto=async()=>{const r=auto&&auto.res[side.value];if(!r)return false;
     if(src.tagName==='VIDEO'&&Math.abs(src.currentTime-r.t)>0.05){await seekTo(src,r.t);frame.getContext('2d').drawImage(src,0,0,W,H);}
@@ -761,6 +762,11 @@ window.mobMeasure=function(src,id,ov,auto){
           await syncApi('/api/fitness/mobility/media/'+st.id+'/finish',{method:'POST'});}};
       await put(blob,note);
       await put(clean,CLEAN_NOTE+(sides.length>1?', '+SIDE[sd]:'')+(frameS!=null?', '+frameS+' s of the clip':''));
+      // both sides found in one clip: after saving one, go straight to the other (owner 14 Nov 2026)
+      _savedSides.add(sd);
+      const nxt=autoSides.find(x=>!_savedSides.has(x));
+      if(nxt){await load();side.value=nxt;await loadAuto();setTip();draw();save.disabled=false;save.textContent='Save angle';
+        toast('Saved '+Math.round(a)+'° '+SIDE[sd]+'. Now check '+SIDE[nxt]+'.');return;}
       ov.remove();await load();renderMobility();toast('Saved '+Math.round(a)+'° to '+t.name);
     }catch(e){save.disabled=false;save.textContent='Save angle';toast('Could not save. Check your connection.');}
   };
