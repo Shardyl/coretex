@@ -100,17 +100,28 @@ window.renderMobility=async function(){
 function todoBlock(items,max,title){
   if(!items.length)return '';
   return `<div class="card" style="padding:12px 14px;margin-bottom:12px"><div style="font-size:13px;font-weight:800;margin-bottom:6px">${title}</div>
-    ${items.slice(0,max).map(x=>`<div onclick="mobOpen('${x.p}','${x.t}')" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:0.5px solid var(--border);cursor:pointer;font-size:13px">
+    ${items.slice(0,max).map(x=>`<div onclick="${x.on||`mobOpen('${x.p}','${x.t||''}')`}" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:0.5px solid var(--border);cursor:pointer;font-size:13px">
       ${icon(ST[x.k].i,ST[x.k].c)}<span style="flex:1">${esc(x.txt)}</span>${icon('arrow','var(--ink3)',14)}</div>`).join('')}
     ${items.length>max?`<div style="font-size:11px;color:var(--ink3);margin-top:4px">and ${items.length-max} more</div>`:''}</div>`;
 }
 
+// focus pillars (owner, 14 Nov 2026): Next to do shows only these, plus any pillar with a running program
+const focusIds=()=>{const f=new Set(_mob.focus||['pancake','shoulder_flexion']);(_mob.programs||[]).forEach(x=>{if(x.status==='active')f.add(x.pillar);});return f;};
+function sessionTodos(p){const a=(_mob.programs||[]).find(x=>x.pillar===p.id&&x.status==='active');if(!a)return [];
+  const n=a.sessions_done||0, N=a.sessions_per_phase||6;
+  return [a.retest_due?{p:p.id,k:'prov',txt:`${p.name}: phase done, deload then retest`}
+    :{p:p.id,k:'done',txt:`${p.name}: session ${n+1} of ${N}`,on:`mobSessionOpen('${a.id}')`}];}
+window.mobFocus=async function(id,on){const f=new Set(_mob.focus||['pancake','shoulder_flexion']);on?f.add(id):f.delete(id);_mob.focus=[...f];
+  try{await syncApi('/api/fitness/mobility/focus',{method:'POST',body:JSON.stringify({pillars:_mob.focus})});}catch(e){toast('Could not save.');}renderMobility();};
 function renderList(el){
-  const all=[];_mob.pillars.forEach(p=>all.push(...todos(p)));
+  const F=focusIds(), all=[];
+  _mob.pillars.filter(p=>F.has(p.id)).forEach(p=>all.push(...sessionTodos(p)));
+  _mob.pillars.filter(p=>F.has(p.id)).forEach(p=>all.push(...todos(p)));
+  const order=[..._mob.pillars.filter(p=>F.has(p.id)),..._mob.pillars.filter(p=>!F.has(p.id))];
   el.innerHTML=`<div class="section-label">Flexibility pillars</div>
-    <div style="font-size:12px;color:var(--ink3);margin-bottom:12px">Matthew Smith's eight skills, in our assessment order. Each assessment is done cold and repeated at the end of every training block.</div>
+    <div style="font-size:12px;color:var(--ink3);margin-bottom:12px">Matthew Smith's eight skills. Your focus pillars are at the top; Next to do covers only those. Change focus inside any pillar.</div>
     ${todoBlock(all,6,'Next to do')}
-    ${_mob.pillars.map(p=>{
+    ${order.map((p,i)=>(i===F.size&&F.size<order.length?'<div class="section-label" style="margin-top:14px">Other pillars</div>':'')+(()=>{
       const s=pillarState(p), ready=s.total>0, g=ready?gapFor(p):null;
       const gtxt=g&&g.any?'Gap '+g.rows.filter(r=>r.gap!=null).map(r=>(g.ta.sides.length>1?r.side+' ':'')+r.gap+'°').join(' &middot; '):'';
       return `<div class="card" style="padding:12px 14px;margin-bottom:10px;${ready?'cursor:pointer':'opacity:0.55'}" ${ready?`onclick="mobOpen('${p.id}')"`:''}>
@@ -118,7 +129,7 @@ function renderList(el){
           ${ready?ring(s.done/s.total,s.status==='baseline'?'var(--teal)':'var(--amber)',s.done+'/'+s.total):ring(0,'var(--border)','&ndash;')}
           <div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800">${esc(p.name)}</span>${chip(s.status)}</div>
             <div style="font-size:12px;color:var(--ink3);margin-top:3px">${ready?`${s.total} tests &middot; ${s.last?'last assessed '+fd(s.last):'not assessed yet'}${gtxt?' &middot; <b style="color:var(--ink2)">'+gtxt+'</b>':''}`:'Tests added when we reach this assessment'}</div></div>
-          ${ready?icon('arrow','var(--ink3)',18):''}</div></div>`;}).join('')}`;
+          ${ready?icon('arrow','var(--ink3)',18):''}</div></div>`;})()).join('')}`;
 }
 
 window.mobOpen=function(id,tid){_mobView=id;_mobDay=null;renderMobility();
@@ -362,7 +373,8 @@ function renderPillar(el,p){
   const days=[...new Set((_mob.results||[]).filter(r=>r.pillar===p.id).map(r=>r.date))].sort();
   const mediaDay=(t,side)=>clipsOf(p.id,t).filter(m=>m.side===side&&m.date===day);
   el.innerHTML=`<button class="btn-sm" onclick="mobBack()" style="margin-bottom:10px">&lsaquo; All pillars</button>
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:18px;font-weight:800">${esc(p.name)}</span>${chip(s.status)}</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:18px;font-weight:800">${esc(p.name)}</span>${chip(s.status)}
+      <label style="margin-left:auto;display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink2)"><input type="checkbox" ${focusIds().has(p.id)?'checked':''} onchange="mobFocus('${p.id}',this.checked)"/>Focus pillar</label></div>
     ${programBlock(p)}
     ${gridBlock(p,s)}
     ${gapBlock(p)}

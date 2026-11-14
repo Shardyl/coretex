@@ -7436,6 +7436,12 @@ class MobilitySession(BaseModel):
     blocks: list | None = None
 
 
+@app.post("/api/fitness/mobility/focus")
+def fitness_mobility_focus(body: dict = Body(...), _: None = Depends(auth)) -> dict:
+    from . import fitness_mobility
+    return fitness_mobility.set_focus(list(body.get("pillars") or []))
+
+
 @app.post("/api/fitness/mobility/program/build")
 def fitness_mobility_build(body: MobilityBuild, _: None = Depends(auth)) -> dict:
     from . import fitness_program

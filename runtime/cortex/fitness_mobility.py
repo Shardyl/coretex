@@ -122,6 +122,17 @@ def drill_library() -> dict:
     return cur
 
 
+# The pillars he is working on now (owner, 14 Nov 2026): "Next to do" and the top of the list show only these (plus any
+# pillar with a running program); the rest stay browsable below. Setting fitness_mobility_focus.
+FOCUS_DEFAULT = ["pancake", "shoulder_flexion"]
+
+
+def set_focus(ids: list) -> dict:
+    known = {p["id"] for p in pillars()}
+    db.setting_set("fitness_mobility_focus", [i for i in ids if i in known])
+    return {"ok": True}
+
+
 def pillars() -> list:
     cur = db.setting_get("fitness_mobility_tests")
     if not cur:
@@ -145,7 +156,10 @@ def state() -> dict:
               "frame_s": float(r["frame_s"]) if r.get("frame_s") is not None else None, "source": r.get("source")}
              for r in db.query("select * from fitness.mobility_media where not deleted and complete order by created_at")]
     from . import fitness_program
-    return {"pillars": pillars(), "results": res, "media": media, "drills": drill_library().get("drills", []),
+    focus = db.setting_get("fitness_mobility_focus")
+    if not isinstance(focus, list):
+        focus = list(FOCUS_DEFAULT)
+    return {"focus": focus, "pillars": pillars(), "results": res, "media": media, "drills": drill_library().get("drills", []),
             **fitness_program.programs_state()}
 
 
