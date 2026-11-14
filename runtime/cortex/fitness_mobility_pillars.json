@@ -577,7 +577,7 @@
     "id": "lat_round",
     "name": "Lat length, rounded back (Test 3, position 2)",
     "camera": "Your set-up (14 Nov 2026): phone on the floor, PORTRAIT, side on (Smith: side on, phone on the floor).",
-    "cue": "Stick at shoulder width, palms up. Sit on the floor, round as much as possible, head between the knees (chest to knees ideally). Raise the stick keeping head-to-knee contact; contact lost = too far. Hold 3 s.",
+    "cue": "Stick at shoulder width, palms up. Sit on the floor, round as much as possible, head between the knees (chest to knees ideally). Raise the stick keeping head-to-knee contact; contact lost = too far. Hold 3 s. Measure from the bottom tip of the shoulder blade to the shoulder to the elbow (Smith).",
     "measures": [
      {
       "key": "angle",
@@ -587,7 +587,7 @@
       "angle": {
        "mode": "inside",
        "points": [
-        "along the rounded back towards the hip",
+        "bottom tip of the shoulder blade (Smith; the app starts it on the hip, drag it there)",
         "centre of the shoulder",
         "elbow"
        ],
