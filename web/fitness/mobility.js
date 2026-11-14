@@ -646,11 +646,12 @@ function bestHeld(arr,best,holdS,step){
   for(let i=0;i+n<=ok.length;i++){const w=ok.slice(i,i+n);
     if(w[w.length-1].t-w[0].t>holdS+step*2.5)continue;      // a gap in the run (frames dropped): not continuous
     if(w.filter(x=>x.pos!==false).length<0.8*w.length)continue;
-    const as=w.map(x=>x.a), spread=Math.max(...as)-Math.min(...as);if(spread>8)continue;
-    const med=as.slice().sort((a,b)=>a-b)[Math.floor(as.length/2)];
+    const as=w.map(x=>x.a), med=as.slice().sort((a,b)=>a-b)[Math.floor(as.length/2)];
+    if(as.filter(v=>Math.abs(v-med)<=6).length<0.8*as.length)continue;   // steady: 80% within 6 deg (owner 14 Nov)
     if(!win||(best==='min'?med<win.med:med>win.med))win={med,w};}
   if(!win)return null;
   const pick=win.w.reduce((a,b)=>Math.abs(b.a-win.med)<Math.abs(a.a-win.med)?b:a);
+  // (kept for both-sides: the window's time span lets the other arm be read over the same moment)
   return {...pick,held:[win.w[0].t,win.w[win.w.length-1].t],med:Math.round(win.med*10)/10};
 }
 function bestOf(arr,best){
@@ -674,6 +675,12 @@ async function poseScan(video,sp,prog,holdS){
     prog(t/dur);
   }
   const out={};Object.keys(series).forEach(s=>{const b=bestHeld(series[s],P.best,holdS||3,step);if(b)out[s]=b;});
+  if(P.side==='each'&&Object.keys(out).length===1&&series.L&&series.R){
+    const have=Object.keys(out)[0], miss=have==='L'?'R':'L', [a0,a1]=out[have].held;
+    const w=series[miss].filter(x=>x.t>=a0&&x.t<=a1&&x.vis>=VIS_MIN&&x.a!=null);
+    if(w.length>=3){const as=w.map(x=>x.a).sort((a,b)=>a-b), med=as[Math.floor(as.length/2)];
+      const pick=w.reduce((a,b)=>Math.abs(b.a-med)<Math.abs(a.a-med)?b:a);
+      out[miss]={...pick,held:[a0,a1],med:Math.round(med*10)/10,shared:true};}}
   return out;
 }
 window.mobPoseBest=bestOf;window.mobPoseCandidates=poseCandidates;
