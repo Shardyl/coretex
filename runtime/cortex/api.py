@@ -7416,6 +7416,36 @@ def fitness_mobility_media_delete(uid: str, _: None = Depends(auth)) -> dict:
     return fitness_mobility.media_delete(uid)
 
 
+# ---------- course library: Smith's lessons, private, inside the app (14 Nov 2026) ----------
+@app.get("/api/fitness/course/{course}/{slug}")
+def fitness_course_lesson(course: str, slug: str, _: None = Depends(auth)) -> dict:
+    """Our note for a lesson plus a short-lived signed link a <video> tag can stream (it cannot send the token)."""
+    from . import fitness_course
+    try:
+        out = fitness_course.lesson(course, slug)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if out["has_video"]:
+        exp = int(time.time()) + fitness_course.LINK_TTL
+        out["video_url"] = (f"/api/fitness/course/{course}/{slug}/video?e={exp}"
+                            f"&k={_sign(fitness_course.payload(course, slug, exp))}")
+    return out
+
+
+@app.get("/api/fitness/course/{course}/{slug}/video")
+def fitness_course_video(course: str, slug: str, e: int = 0, k: str = ""):
+    """Streams with Range (FileResponse), checked by the signed link instead of the bearer token."""
+    from . import fitness_course
+    try:
+        ok = e > time.time() and hmac.compare_digest(k, _sign(fitness_course.payload(course, slug, e)))
+        path = fitness_course.video_path(course, slug) if ok else None
+    except ValueError:
+        path = None
+    if not path:
+        raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(path, media_type="video/mp4", headers={"Cache-Control": "private, max-age=21600"})
+
+
 @app.post("/api/fitness/push/subscribe")
 def fitness_push_subscribe(body: PushSub, _: None = Depends(auth)) -> dict:
     """The Fitness PWA's own push subscription (app='fitness'): its reminders never reach, or come from, the cockpit."""

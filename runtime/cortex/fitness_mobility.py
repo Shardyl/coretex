@@ -50,7 +50,8 @@ _NERVE = ["1 Elevate leg", "2 Straighten knee", "3 Dorsiflex", "4 Adduct leg", "
 DEFAULT_PILLARS = [
     {"id": "shoulder_flexion", "name": "Shoulder flexion", "tests": []},
     {"id": "shoulder_extension", "name": "Shoulder extension", "tests": []},
-    {"id": "pike", "name": "Pike & head to toe", "lesson": PIKE_LESSON,
+    {"id": "pike", "name": "Pike & head to toe", "lesson": PIKE_LESSON, "lesson_slug": "32-pike_assessment",
+     "lesson_course": "mftk",
      "setup": "Barefoot or socks, no shoes, for every test. Test cold, no warm-up. Phone on the floor tilted slightly up, square to your hips; same spot every time. "
               "Camera position 1 for tests 1 to 4 (both sides, same angle); position 2 for test 5.",
      "tests": [
@@ -96,6 +97,28 @@ DEFAULT_PILLARS = [
 ]
 
 
+# Pancake and shoulder flexion (14 Nov 2026) come from the course notes as data (fitness_mobility_pillars.json): each
+# test is Smith's, its measures the ones his measuring-angles lesson reads. "questions" are the program builder's
+# non-test questions (sport, shoulder type, time budget, healthcare approval), answered once, not filmed.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_EXTRA = json.load(open(os.path.join(_HERE, "fitness_mobility_pillars.json"), encoding="utf-8"))
+DEFAULT_PILLARS = [_EXTRA.get(p["id"], p) for p in DEFAULT_PILLARS]
+
+# The drill library (14 Nov 2026): every pancake and shoulder drill from the notes, with its slot (technique /
+# isolated / main / attribute), method, the dose ONLY where a note states it, the depth marker to log, cues and the
+# lesson video. Seeded into setting fitness_mobility_drills once, then edited as data. The rules (pancake phase 1
+# tree, our shoulder rules) ride in the same file for the program builder.
+DRILLS_FILE = os.path.join(_HERE, "fitness_mobility_drills.json")
+
+
+def drill_library() -> dict:
+    cur = db.setting_get("fitness_mobility_drills")
+    if not cur:
+        cur = json.load(open(DRILLS_FILE, encoding="utf-8"))
+        db.setting_set("fitness_mobility_drills", cur)
+    return cur
+
+
 def pillars() -> list:
     cur = db.setting_get("fitness_mobility_tests")
     if not cur:
@@ -118,7 +141,7 @@ def state() -> dict:
               "mime": r["mime"], "bytes": r["bytes"], "note": r.get("note"),
               "frame_s": float(r["frame_s"]) if r.get("frame_s") is not None else None, "source": r.get("source")}
              for r in db.query("select * from fitness.mobility_media where not deleted and complete order by created_at")]
-    return {"pillars": pillars(), "results": res, "media": media}
+    return {"pillars": pillars(), "results": res, "media": media, "drills": drill_library().get("drills", [])}
 
 
 def save_results(day: str, pillar: str, test: str, side: str, values: dict, note: str = "",

@@ -1,0 +1,3089 @@
+{
+ "version": "2026-11-14",
+ "source": "Matthew Smith MFTK lesson notes, our words; numbers only where a note states them",
+ "drills": [
+  {
+   "id": "rolling_feet",
+   "name": "Rolling out the feet",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "isolated",
+   "method": "soft_tissue",
+   "components": [
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "64: by feel, one foot at a time; 82: a few minutes per foot"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Before/after pike or pancake test: did it help? (keep at session start only if it does)",
+    "options": null
+   },
+   "cues": [
+    "Dense ball (lacrosse, golf, massage ball)",
+    "Shift weight onto it to your limit",
+    "Linger on tense spots, pause or small back-and-forth",
+    "One foot at a time"
+   ],
+   "mistakes": [
+    "Ball too soft"
+   ],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "82-pancake-drill_rolling-out-feet",
+   "note_file": "82-pancake-drill_rolling-out-feet.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "single_leg_calf_stretch",
+   "name": "Single-leg standing calf stretch",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "isolated",
+   "method": "passive",
+   "components": [
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "1",
+    "reps": null,
+    "hold_s": "60 per angle (forward, turned out, turned in)",
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "64 parameters and example program; 60 says passive sets of 90 s or more work well"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Which foot angle bites most (forward / in / out) and depth felt",
+    "options": null
+   },
+   "cues": [
+    "Ball of the foot on a step, hold a rail with one hand",
+    "Lower the heel and actively pull the foot up",
+    "Cycle forward, turned in, turned out",
+    "Wear shoes",
+    "Do it before pike or pancake work if calves limit"
+   ],
+   "mistakes": [
+    "Bare feet (discomfort limits depth)"
+   ],
+   "progressions": [
+    "Ballistic/pulse work",
+    "If you do calf raises: 3-5 s pause at the bottom"
+   ],
+   "regressions": [],
+   "lesson_slug": "83-pancake-drill_standing-donkey-calf-stretches",
+   "note_file": "83-pancake-drill_standing-donkey-calf-stretches.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "donkey_calf_stretch",
+   "name": "Donkey calf stretch",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "isolated",
+   "method": "passive",
+   "components": [
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "no numbers in 83; 60 says passive sets of 90 s or more work well"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Foot angle that bites most and depth felt",
+    "options": null
+   },
+   "cues": [
+    "Bent over, hands on a support, ball of the foot elevated",
+    "Non-working knee bent out of the way, weight on the working leg",
+    "Same three foot angles",
+    "Wear shoes"
+   ],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "83-pancake-drill_standing-donkey-calf-stretches",
+   "note_file": "83-pancake-drill_standing-donkey-calf-stretches.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "tailors_pose",
+   "name": "Tailors pose (loaded)",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "isolated",
+   "method": "loaded",
+   "components": [
+    "adductors"
+   ],
+   "primary": [
+    "adductors"
+   ],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "3-4",
+    "reps": "8",
+    "hold_s": null,
+    "tempo": "2310",
+    "cr": null,
+    "rest_s": "60",
+    "source": "64 (side split builder uses 60-90 s rest)"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "5-10 kg per side (64); video 69 says about 8 kg per side is the usual minimum, sometimes more than 16 kg per side",
+    "how_to_choose": "Test range unloaded, then add weight until it takes you past the unloaded range; too heavy = you tense and lose depth"
+   },
+   "marker": {
+    "kind": "deg",
+    "label": "Film the bottom position and compare over time (tailors pose angle per note 63); log kg per side; flag 'use blocks' once calves touch",
+    "options": null
+   },
+   "cues": [
+    "Back against a wall",
+    "Soles together, feet in as close as comfortable",
+    "Weights on the knees, hands only stabilise",
+    "At the limit squeeze the glutes, pause at the bottom",
+    "Close with the adductors, not the hands"
+   ],
+   "mistakes": [
+    "Skipping the bottom position",
+    "Too heavy and tensing up"
+   ],
+   "progressions": [
+    "More range at the same weight first",
+    "When range stalls add reps or hold time",
+    "Calves reach floor: sit hips and feet on blocks",
+    "Side split focus: yoga block between the feet"
+   ],
+   "regressions": [],
+   "lesson_slug": "69-pancake-drill_tailors-pose",
+   "note_file": "69-pancake-drill_tailors-pose.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "tailors_pose_straight_arm_lifts",
+   "name": "Tailors pose straight arm lifts",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "attribute",
+   "method": "contract_relax",
+   "components": [
+    "adductors",
+    "pelvis_movement"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "C5 R5 (example)",
+    "rest_s": null,
+    "source": "70 gives the 5 s lift / 5 s relax example; no sets/reps/rest"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "2-5 kg (video 70)",
+    "how_to_choose": "Too little weight = nothing to push against"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Object marker pushed further forward each rep/set",
+    "options": null
+   },
+   "cues": [
+    "No wall; soles and heels together, feet close",
+    "Arms straight out in front with a light weight",
+    "Lift just off the floor, reach far forward (long, not high)",
+    "Lift by pressing the feet down and driving the knees apart",
+    "Stay in the pose between reps; stand and shake out between sets"
+   ],
+   "mistakes": [
+    "Lifting purely with the arms"
+   ],
+   "progressions": [
+    "Push the marker further"
+   ],
+   "regressions": [
+    "Not enough tilt: sit on blocks or a small stool"
+   ],
+   "lesson_slug": "70-pancake-drill_tailors-pose-straight-arm-lifts",
+   "note_file": "70-pancake-drill_tailors-pose-straight-arm-lifts.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "adductor_flyes",
+   "name": "Adductor flyes",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "isolated",
+   "method": "loaded",
+   "components": [
+    "adductors"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "71: no reps/sets/tempo/rest stated"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "Ankle weights as a progression (no kg stated)",
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "kg",
+    "label": "Ankle weight kg and pulse/hold seconds",
+    "options": null
+   },
+   "cues": [
+    "Lie on your back, legs vertical (wall or free)",
+    "Open the legs, actively pull apart and down with the glutes",
+    "Pulse at the bottom; rest between reps in the bottom, not at the top",
+    "Stay in the frontal plane"
+   ],
+   "mistakes": [
+    "Drifting out of line (film from the side)",
+    "Just hanging on the weight"
+   ],
+   "progressions": [
+    "Ankle weights",
+    "Freestanding (no wall)"
+   ],
+   "regressions": [
+    "Against a wall"
+   ],
+   "lesson_slug": "71-pancake-drill_adductor-flyes",
+   "note_file": "71-pancake-drill_adductor-flyes.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "side_split_slides_single_leg",
+   "name": "Side split slides, single leg",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "isolated",
+   "method": "contract_relax",
+   "components": [
+    "adductors"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "contract 3-5 s, then slide further = 1 rep",
+    "rest_s": null,
+    "source": "72: hold/reps 'prescribed' only"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "cm",
+    "label": "Distance the marker block is pushed, per side; support level (hands / hands to exit / none)",
+    "options": null
+   },
+   "cues": [
+    "Pad under the bent knee, hands on a stable support",
+    "Start with hips off to the side of the support",
+    "Stick the butt out, hips slightly behind the heel line",
+    "Slide out pushing the block; contract the inner thigh and press the knee into the pad to come out"
+   ],
+   "mistakes": [
+    "Leaning the chest forward",
+    "Hips tucking under (jammy feeling): stop and reset"
+   ],
+   "progressions": [
+    "Beat the block distance each session",
+    "Hand supported -> hands only to exit -> no hands"
+   ],
+   "regressions": [],
+   "lesson_slug": "72-pancake-drill_side-split-slides-single-leg",
+   "note_file": "72-pancake-drill_side-split-slides-single-leg.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "drop_stance_squat",
+   "name": "Drop stance squat",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "isolated",
+   "method": "loaded",
+   "components": [
+    "adductors"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "73: no sets/reps/tempo/rest stated"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": "Add weight to push deeper once elevation is gone"
+   },
+   "marker": {
+    "kind": "steps",
+    "label": "Working-leg elevation height (step count or cm) and load",
+    "options": null
+   },
+   "cues": [
+    "Wide straddle, feet slightly turned out",
+    "Drop onto one leg",
+    "Straight-leg foot flat and forward",
+    "Weaker side first, match the stronger side to it"
+   ],
+   "mistakes": [
+    "Straight-leg foot rolling up (Cossack variant, shifts to hamstrings)",
+    "Knee caving in"
+   ],
+   "progressions": [
+    "Decrease elevation to flat, then add weight"
+   ],
+   "regressions": [
+    "Elevate the working leg on a step"
+   ],
+   "lesson_slug": "73-pancake-drill_drop-stance-squats",
+   "note_file": "73-pancake-drill_drop-stance-squats.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "standing_pike_good_morning",
+   "name": "Standing pike good morning",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "isolated",
+   "method": "loaded",
+   "components": [
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "3-4",
+    "reps": "8",
+    "hold_s": null,
+    "tempo": "2310",
+    "cr": null,
+    "rest_s": "60-90",
+    "source": "64"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "About 5-10 kg first time (84); less is fine",
+    "how_to_choose": "Progressive underload; small barbell alternative; hold in front if overhead flexion limited"
+   },
+   "marker": {
+    "kind": "blocks",
+    "label": "Block stack height touched with the head at the bottom (round back); progress by lowering the stack",
+    "options": null
+   },
+   "cues": [
+    "Dumbbell on the upper back held with both hands",
+    "Stance at or slightly inside shoulder width, knees locked or fixed microbend",
+    "Hinge with a slight arch, then let the spine round and drop the head",
+    "Hold the bottom and contract the hip flexors",
+    "Push through toes and balls of the feet"
+   ],
+   "mistakes": [
+    "Microbend increasing during the rep"
+   ],
+   "progressions": [
+    "Lower the block stack",
+    "B-stance (note 43) or leg elevated (note 44) variations"
+   ],
+   "regressions": [
+    "Progressive underload"
+   ],
+   "lesson_slug": "84-pancake-drill_standing-pike-good-morning",
+   "note_file": "84-pancake-drill_standing-pike-good-morning.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "pike_good_morning_b_stance",
+   "name": "Pike good morning, B-stance",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "isolated",
+   "method": "loaded",
+   "components": [
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "43: tempo 'prescribed', no numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "Start lighter than the bilateral version",
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Variant, kg, reps per side, bottom-hold seconds",
+    "options": null
+   },
+   "cues": [
+    "Back big toe level with the front heel, feet about shoulder width",
+    "Front leg locked, back leg on the ball of the foot",
+    "Keep hips flat, no twist",
+    "Weaker side first, match the other side"
+   ],
+   "mistakes": [
+    "Hip twisting at the bottom"
+   ],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "43-pike-drill_pike-good-morning-b-stance",
+   "note_file": "43-pike-drill_pike-good-morning-b-stance.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "pike_good_morning_leg_elevated",
+   "name": "Pike good morning, leg elevated",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "isolated",
+   "method": "loaded",
+   "components": [
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "44: reps, often a pause on the final rep; no numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "A few kilos is often enough",
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "cm",
+    "label": "Box height (cm) and foot rotation/position",
+    "options": null
+   },
+   "cues": [
+    "Working heel on a box",
+    "Square hips",
+    "Travel forward toward the foot, not down to the knee",
+    "Contract hip flexors at the bottom; optional heel drive into the box"
+   ],
+   "mistakes": [
+    "Twisting the hips to cheat depth"
+   ],
+   "progressions": [
+    "Higher box = more gravity resisting"
+   ],
+   "regressions": [
+    "Lower box"
+   ],
+   "lesson_slug": "44-pike-drill_pike-good-morning-leg-elevated",
+   "note_file": "44-pike-drill_pike-good-morning-leg-elevated.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "straddle_jefferson_curl",
+   "name": "Straddle Jefferson curl",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "main",
+   "method": "loaded",
+   "components": [
+    "pelvis_movement",
+    "adductors",
+    "posterior_chain"
+   ],
+   "primary": [
+    "pelvis_movement"
+   ],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "3-4",
+    "reps": "5",
+    "hold_s": null,
+    "tempo": "6240",
+    "cr": null,
+    "rest_s": "90",
+    "source": "64"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "5-10 kg (64); video 68 says titrate up from 10 kg",
+    "how_to_choose": "Build gradually; no reason to exceed about 20% of deadlift 1RM"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Load kg and depth (no marker stated in 68)",
+    "options": null
+   },
+   "cues": [
+    "Stand on an elevated surface, feet a bit wider than shoulders, slight turnout",
+    "Toes do not curl over the edge",
+    "Tuck the chin, roll down vertebra by vertebra",
+    "At the bottom slip the weight past the feet, head dropped, contract hip flexors",
+    "Relax hip flexors, extend hip then spine to come up"
+   ],
+   "mistakes": [
+    "Looking up at the bottom"
+   ],
+   "progressions": [
+    "Longer hold at the bottom of the last rep"
+   ],
+   "regressions": [],
+   "lesson_slug": "68-pancake-drill_straddle-jefferson-curl",
+   "note_file": "68-pancake-drill_straddle-jefferson-curl.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "standing_pancake_lockouts",
+   "name": "Standing pancake lockouts",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "main",
+   "method": null,
+   "components": [
+    "pelvis_movement",
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "65 matrix only; greyed out, no video"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "No marker stated",
+    "options": null
+   },
+   "cues": [],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": null,
+   "note_file": "65-pancake_drill-matrix.md"
+  },
+  {
+   "id": "pancake_good_morning",
+   "name": "Pancake good morning (round back or straight back)",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "main",
+   "method": "loaded",
+   "components": [
+    "pelvis_movement",
+    "adductors",
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "3-4",
+    "reps": "6",
+    "hold_s": null,
+    "tempo": "3220",
+    "cr": null,
+    "rest_s": "60-90",
+    "source": "64 ('Round back good morning')"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "5-10 kg start (64); video 75 says most people need 8-12 kg",
+    "how_to_choose": "Test unloaded, add weight until it takes you deeper without tensing; plate on the upper back best"
+   },
+   "marker": {
+    "kind": "steps",
+    "label": "Touchpoint step reached + setup (elevation, block setting, feet elevation cm, load kg)",
+    "options": [
+     "block high: head",
+     "block high: nose",
+     "block high: chin",
+     "block middle: head",
+     "block middle: nose",
+     "block middle: chin",
+     "block low: head",
+     "block low: nose",
+     "block low: chin",
+     "floor: head",
+     "floor: nose",
+     "floor: chin",
+     "feet elevated: head",
+     "feet elevated: nose",
+     "feet elevated: chin",
+     "chest to floor",
+     "abdomen to floor",
+     "over pancake"
+    ]
+   },
+   "cues": [
+    "Width slightly narrower than max",
+    "Draw the biggest arc with the head: up, forward, then pull the hip forward",
+    "Round back: straight first, round at the end",
+    "Contract hip flexors in the bottom",
+    "Press the feet into the floor to come up",
+    "Full range, do not rest at the top"
+   ],
+   "mistakes": [
+    "Reaching down (spine not hip)",
+    "Lifting the chin to get the chest down",
+    "Forcing extra external rotation"
+   ],
+   "progressions": [
+    "More reps",
+    "Touchpoint ladder down the block settings to the floor",
+    "Elevate the feet 1-2 cm and repeat",
+    "Straight back for chest to floor"
+   ],
+   "regressions": [
+    "Hips elevated: high (sofa/chair) if about 90 deg or more, small step about 20 cm if about 70 deg"
+   ],
+   "lesson_slug": "75-pancake-drill_pancake-good-morning",
+   "note_file": "75-pancake-drill_pancake-good-morning.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "over_pancake_good_morning",
+   "name": "Over pancake good morning",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "main",
+   "method": "loaded",
+   "components": [
+    "pelvis_movement",
+    "adductors",
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "65 matrix; covered inside 75, no own numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "As pancake good morning"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Feet/leg elevation and touchpoint",
+    "options": null
+   },
+   "cues": [],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "75-pancake-drill_pancake-good-morning",
+   "note_file": "75-pancake-drill_pancake-good-morning.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "seated_good_morning",
+   "name": "Modified seated good morning (knees bent to knees straight)",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "main",
+   "method": "loaded",
+   "components": [
+    "pelvis_movement",
+    "adductors",
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "76: no sets/reps/tempo"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "About 5-12 kg is usually enough",
+    "how_to_choose": "Right weight = a bit more depth than without it"
+   },
+   "marker": {
+    "kind": "steps",
+    "label": "Touchpoint (block on bench, then bench) and feet-elevation height",
+    "options": [
+     "block: forehead",
+     "block: nose",
+     "block: chin",
+     "bench: forehead",
+     "bench: nose",
+     "bench: chin",
+     "chest (feet elevated)",
+     "abdomen (feet elevated)"
+    ]
+   },
+   "cues": [
+    "Sit on a bench, legs out to the sides, knees bent, weight on the upper back",
+    "Forward then down, biggest arc",
+    "Contract hip flexors at the bottom",
+    "Drive the feet into the floor to come up"
+   ],
+   "mistakes": [
+    "Dropping straight down",
+    "Knees caving in a lot"
+   ],
+   "progressions": [
+    "Elevate the feet",
+    "Straight back version"
+   ],
+   "regressions": [],
+   "lesson_slug": "76-pancake-drill_seated-good-morning",
+   "note_file": "76-pancake-drill_seated-good-morning.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "pancake_get_ups",
+   "name": "Pancake get ups",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "main",
+   "method": null,
+   "components": [
+    "adductors",
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "65 matrix only; greyed out, no video"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "No marker stated",
+    "options": null
+   },
+   "cues": [],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": null,
+   "note_file": "65-pancake_drill-matrix.md"
+  },
+  {
+   "id": "pancake_isometrics_hips_elevated",
+   "name": "Pancake isometrics, hips elevated",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "attribute",
+   "method": "isometric",
+   "components": [
+    "pelvis_movement",
+    "adductors",
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "65 matrix only; no dedicated note"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "No marker stated",
+    "options": null
+   },
+   "cues": [],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": null,
+   "note_file": "65-pancake_drill-matrix.md"
+  },
+  {
+   "id": "over_pancake_isometrics",
+   "name": "Over pancake isometrics, feet or leg elevated",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "attribute",
+   "method": "isometric",
+   "components": [
+    "pelvis_movement",
+    "adductors",
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "78: hold for time, no numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "Plate/dumbbell on the upper back or to the chest"
+   },
+   "marker": {
+    "kind": "blocks",
+    "label": "Feet height (blocks) / leg elevation, load kg, hold seconds",
+    "options": null
+   },
+   "cues": [
+    "For people already belly to floor",
+    "Lift the torso just off the floor and hold",
+    "Press down with the feet, reach forward with the top of the head"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Higher feet / lower torso",
+    "More weight",
+    "Longer holds",
+    "Wider width"
+   ],
+   "regressions": [
+    "Slightly narrower width"
+   ],
+   "lesson_slug": "78-pancake-drill_over-pancake-isometrics",
+   "note_file": "78-pancake-drill_over-pancake-isometrics.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "pancake_block_crush",
+   "name": "Pancake block crush",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "attribute",
+   "method": "contract_relax",
+   "components": [
+    "posterior_chain",
+    "compression"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "contract a few s (5 counted in demo), relax a few s",
+    "rest_s": null,
+    "source": "74: duration 'prescribed' only"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": "Intensity: start about 30%, ramp to about 80-90%"
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Block orientation (taller = less flexibility needed); box height for leg elevated",
+    "options": [
+     "upright",
+     "medium",
+     "flat"
+    ]
+   },
+   "cues": [
+    "Wedge a yoga block between thigh and torso",
+    "Push the torso down and the leg up",
+    "Seated versions need forward lean already; otherwise standing floor crush or leg elevated"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Lower block orientation",
+    "Higher box (leg elevated)"
+   ],
+   "regressions": [
+    "Taller block",
+    "Standing floor crush",
+    "Lower box"
+   ],
+   "lesson_slug": "74-pancake-drill_pancake-crush",
+   "note_file": "74-pancake-drill_pancake-crush.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "standing_pancake_hang",
+   "name": "Standing pancake hang, contract relax",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "attribute",
+   "method": "contract_relax",
+   "components": [
+    "pelvis_movement",
+    "adductors",
+    "posterior_chain"
+   ],
+   "primary": [
+    "pelvis_movement"
+   ],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "2-3",
+    "reps": "6",
+    "hold_s": null,
+    "tempo": null,
+    "cr": "C5 R5",
+    "rest_s": "90",
+    "source": "64 (67: usually 3-5 cycles per set; 08 example tempo 2320, 100 s rest)"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "5 kg (64)",
+    "how_to_choose": "Very little needed, can be none; less is more"
+   },
+   "marker": {
+    "kind": "blocks",
+    "label": "Stack of objects under you: set so you just cannot touch at the start, touch by the end (touched Y/N)",
+    "options": null
+   },
+   "cues": [
+    "Stand on two solid objects with a gap, straddle, feet slightly turned out",
+    "Contract hip flexors hard (75-90%) pulling to the floor 5 s",
+    "Relax and hang 5 s",
+    "Lift out slowly, rest out of the hang"
+   ],
+   "mistakes": [
+    "Using max weight"
+   ],
+   "progressions": [
+    "Lower the target stack",
+    "Optional longer hang after the last cycle"
+   ],
+   "regressions": [
+    "No weight"
+   ],
+   "lesson_slug": "67-pancake-drill_standing-pancake-hang-cr",
+   "note_file": "67-pancake-drill_standing-pancake-hang-cr.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "pancake_straight_arm_lifts",
+   "name": "Pancake straight arm lifts",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "attribute",
+   "method": "contract_relax",
+   "components": [
+    "pelvis_movement",
+    "adductors",
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "3-4",
+    "reps": "3",
+    "hold_s": null,
+    "tempo": null,
+    "cr": "C5 R5",
+    "rest_s": "60-90",
+    "source": "64"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "1-2 kg total (64); video 77 says about 0.5-3 kg per hand",
+    "how_to_choose": "Start light, progress by gradually heavier weights"
+   },
+   "marker": {
+    "kind": "kg",
+    "label": "Weight lifted (kg)",
+    "options": null
+   },
+   "cues": [
+    "Pancake, arms extended forward with light weights",
+    "Lift just a couple of inches off the floor, hold 5 s",
+    "Reach forward and away, not up",
+    "Relax 5 s with weights down",
+    "Width a bit narrower than max"
+   ],
+   "mistakes": [
+    "Lifting as high as possible"
+   ],
+   "progressions": [
+    "Heavier weights",
+    "Wider width"
+   ],
+   "regressions": [],
+   "lesson_slug": "77-pancake-drill_straight-arm-lifts",
+   "note_file": "77-pancake-drill_straight-arm-lifts.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "over_pancake_straight_arm_lifts",
+   "name": "Over pancake straight arm lifts",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "attribute",
+   "method": "contract_relax",
+   "components": [
+    "pelvis_movement",
+    "adductors",
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "3-4",
+    "reps": "3",
+    "hold_s": null,
+    "tempo": null,
+    "cr": "C5 R5",
+    "rest_s": "60-90",
+    "source": "64"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "1-2 kg (64)",
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "blocks",
+    "label": "Feet elevation: 1 inch or 1 block, then 2 blocks",
+    "options": [
+     "1 inch / 1 block",
+     "2 blocks"
+    ]
+   },
+   "cues": [
+    "As pancake straight arm lifts with the feet elevated"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Raise the feet from 1 to 2 blocks"
+   ],
+   "regressions": [],
+   "lesson_slug": "77-pancake-drill_straight-arm-lifts",
+   "note_file": "64-pancake_phase1-builder.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "pancake_lifts",
+   "name": "Pancake lifts (single or both legs)",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "attribute",
+   "method": "active",
+   "components": [
+    "compression"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": "2-3",
+    "reps": "6",
+    "hold_s": null,
+    "tempo": "1013",
+    "cr": null,
+    "rest_s": "60",
+    "source": "64"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": "Stalled lean: ankle weights; add load before reps"
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Hand reach marker on the leg for lean (per variation); seat height if elevated",
+    "options": [
+     "top of knee",
+     "bottom of knee",
+     "mid shin"
+    ]
+   },
+   "cues": [
+    "Hands press hard into the floor, torso leans forward",
+    "Lock the knees, lift the legs only a little",
+    "Max forward lean for the whole set, not leg height",
+    "Single leg: weaker side first, match reps and distance"
+   ],
+   "mistakes": [
+    "Chasing leg height"
+   ],
+   "progressions": [
+    "Hands further forward",
+    "More reps or a hold on the last rep",
+    "Bilateral, then off a block",
+    "Ankle weights"
+   ],
+   "regressions": [
+    "Single leg",
+    "Mechanical advantage (bent knees then straighten)",
+    "Elevate hips and hands (chair, sofa/stool, blocks, floor)"
+   ],
+   "lesson_slug": "79-pancake-drill_pancake-lifts",
+   "note_file": "79-pancake-drill_pancake-lifts.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "straddle_toes_to_bar",
+   "name": "Straddle toes to bar",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "attribute",
+   "method": "active",
+   "components": [
+    "compression"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "65 matrix only; greyed out"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "No marker stated",
+    "options": null
+   },
+   "cues": [],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": null,
+   "note_file": "65-pancake_drill-matrix.md"
+  },
+  {
+   "id": "hanging_stalder",
+   "name": "Hanging stalder",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "attribute",
+   "method": "active",
+   "components": [
+    "compression"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "65 matrix only; greyed out"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "No marker stated",
+    "options": null
+   },
+   "cues": [],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": null,
+   "note_file": "65-pancake_drill-matrix.md"
+  },
+  {
+   "id": "ballistic_pancake",
+   "name": "Ballistic pancake",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "attribute",
+   "method": "ballistic",
+   "components": [
+    "pelvis_movement",
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "65 matrix only; greyed out"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "No marker stated",
+    "options": null
+   },
+   "cues": [],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": null,
+   "note_file": "65-pancake_drill-matrix.md"
+  },
+  {
+   "id": "pancake_long_passive_holds",
+   "name": "Long passive holds",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "attribute",
+   "method": "passive",
+   "components": [
+    "pelvis_movement",
+    "adductors",
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "65 matrix; no own note (208 passive TUT 60-90 s is the general default)"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "No marker stated",
+    "options": null
+   },
+   "cues": [],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": null,
+   "note_file": "65-pancake_drill-matrix.md"
+  },
+  {
+   "id": "hip_er_good_morning",
+   "name": "Hip external rotation good morning",
+   "pillars": [
+    "pancake"
+   ],
+   "slot": "isolated",
+   "method": "loaded",
+   "components": [],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "81: no numbers"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": "Body weight or weighted",
+    "how_to_choose": "Just enough to push a bit deeper, not so much you tense up"
+   },
+   "marker": {
+    "kind": "steps",
+    "label": "Touchpoint step + bench angle / stack height",
+    "options": [
+     "shaka",
+     "thumbs up",
+     "two thumbs up",
+     "fist",
+     "four fingers",
+     "three fingers",
+     "two fingers",
+     "one finger",
+     "forehead to foot",
+     "nose to foot",
+     "chin to foot",
+     "chest to foot",
+     "abdomen to foot"
+    ]
+   },
+   "cues": [
+    "Working hip and knee at the same height, knee about 90 deg",
+    "Foot in the same spot each time",
+    "Hinge forward at the hips, round back mostly"
+   ],
+   "mistakes": [
+    "Knee pain: change height"
+   ],
+   "progressions": [
+    "Lower the bench angle or block height and repeat the ladder"
+   ],
+   "regressions": [
+    "Higher bench angle/stack"
+   ],
+   "lesson_slug": "81-pancake-drill_hip-er-good-mornings",
+   "note_file": "81-pancake-drill_hip-er-good-mornings.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "straps_band_routine",
+   "name": "Straps grip band routine",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "isolated",
+   "method": "passive",
+   "components": [
+    "lats",
+    "pec_major",
+    "subscap_teres_major",
+    "infraspinatus_teres_minor",
+    "scapular_retractors",
+    "external_rotators"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "152-154: no sets, reps or hold times; free-flow, can be daily"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": "Band tension and anchor height set intensity"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Direction (1-11), side, anchor height, band, passive/active, tight lines found",
+    "options": null
+   },
+   "cues": [
+    "Loop the band round a SOLID anchor",
+    "Hand through the loop, band behind the wrist, out between thumb and index finger",
+    "Walk back to set tension",
+    "Passive: let the band pull; active: pull the scapula opposite the band (usually down and back)",
+    "Find tight lines and stay until tension fades",
+    "Equal attention to both sides",
+    "Library 1: flexion straight arm",
+    "2: flexion bent arm (triceps)",
+    "3: extension straight arm",
+    "4: extension bent arm",
+    "5: horizontal adduction",
+    "6: horizontal abduction (pec)",
+    "7: flexion + side bend (lat)",
+    "8: scapula retraction",
+    "9: scapula protraction",
+    "10: internal rotation stretch (infraspinatus + teres minor)",
+    "11: external rotation stretch (subscapularis + teres major)",
+    "Variations: wrist sup/pron, scapula passive or fight, straight vs bent arm, effort direction, band tension, anchor height"
+   ],
+   "mistakes": [
+    "Weak anchor",
+    "Getting carried away on one arm"
+   ],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "152-shoulders-drill_straps-band-routine-overview",
+   "note_file": "152-shoulders-drill_straps-band-routine-overview.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "pillar_lat_stretch",
+   "name": "Pillar lat stretch",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "isolated",
+   "method": "passive",
+   "components": [
+    "lats"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "155: no hold time, reps or sets; 08 example pillar lat stretch 60 s -> 90 s -> 120 s"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Division (iliac/lumbar/thoracic), side, method; retest with lat test",
+    "options": null
+   },
+   "cues": [
+    "Post at your side, outside arm crosses in front high, inside arm at waist height",
+    "Supinated grip",
+    "Sink hips down and away, let the shoulder blade rise to the ear",
+    "Find your tightest line (iliac / lumbar / thoracic)",
+    "Posterior pelvic tilt deepens",
+    "CR: pull up slightly with anterior tilt, then relax scapula and tuck pelvis to sink"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Push the lower arm against the post"
+   ],
+   "regressions": [],
+   "lesson_slug": "155-shoulders-drill_pillar-lat-stretch",
+   "note_file": "155-shoulders-drill_pillar-lat-stretch.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "lat_stretch_standing_lying",
+   "name": "Lat stretch, standing (vertical bar) or lying (horizontal bar)",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "isolated",
+   "method": "passive",
+   "components": [
+    "lats"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": "60+",
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "156"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Setup vertical/horizontal, hold seconds per side",
+    "options": null
+   },
+   "cues": [
+    "Supinated grip",
+    "Vertical: outside arm at head height, inside arm at waist height; sink hips down and out",
+    "Twist and look under the arm for the tightest line",
+    "Horizontal: bar so the hips hang just above the floor",
+    "Or pull up slightly then relax the scapula to go deeper, for rounds"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Push the lower arm into the bar"
+   ],
+   "regressions": [],
+   "lesson_slug": "156-shoulders-drill_lat-stretch-standing-lying",
+   "note_file": "156-shoulders-drill_lat-stretch-standing-lying.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "pec_stretch_flyes",
+   "name": "Loaded pec stretch (pec stretch flyes)",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "isolated",
+   "method": "loaded",
+   "components": [
+    "pec_major"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "157: slow tempo with a bottom pause, no numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "Much lighter than normal flyes; start easy",
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "kg",
+    "label": "Dumbbell kg, bench flat/incline, floor touch yes/no",
+    "options": null
+   },
+   "cues": [
+    "Narrow bench, elbows slightly bent and fixed",
+    "Externally rotate on the way down, thumbs to the floor",
+    "Wrists end in line with the ears",
+    "Slow, pause at the bottom"
+   ],
+   "mistakes": [
+    "Normal fly arm path"
+   ],
+   "progressions": [
+    "Inclined bench (hardest)"
+   ],
+   "regressions": [
+    "Flat bench, dumbbell against the plate"
+   ],
+   "lesson_slug": "157-shoulders-drill_pec-stretch-loaded",
+   "note_file": "157-shoulders-drill_pec-stretch-loaded.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "wall_pec_stretch",
+   "name": "Wall pec stretch (passive, contract relax, lift-offs)",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "isolated",
+   "method": "contract_relax",
+   "components": [
+    "pec_major"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": "90+ (method 1)",
+    "tempo": null,
+    "cr": "C5 R5 near-max push (method 2)",
+    "rest_s": null,
+    "source": "158; round counts not given"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Method, arm straight/bent, rounds",
+    "options": null
+   },
+   "cues": [
+    "Straight arm, palm on the wall at about ear height",
+    "Drive the shoulder forward",
+    "Long hold: deeper on each out-breath",
+    "Lift-off: push, then try to lift the hand off without changing position (5 s on-screen)"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Bent arm isolates pecs more"
+   ],
+   "regressions": [
+    "Further from the wall = more forearm"
+   ],
+   "lesson_slug": "158-shoulders-drill_pec-stretch-passive-cr-liftoffs",
+   "note_file": "158-shoulders-drill_pec-stretch-passive-cr-liftoffs.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "inlocates_dislocates",
+   "name": "Inlocates and dislocates (stick)",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "main",
+   "method": "active",
+   "components": [
+    "pec_major",
+    "shoulder_rotation"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "159: no sets, reps or loads"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": "Stuck for a few sessions: add a plate to the centre of the stick"
+   },
+   "marker": {
+    "kind": "cm",
+    "label": "Grip width (tape mark or cm between hands), plate kg, even/uneven",
+    "options": null
+   },
+   "cues": [
+    "Fairly wide grip, pronated (start in front) or supinated (start behind)",
+    "Inlocate: roll the shoulders FORWARD as the arms go back",
+    "Dislocate: roll the shoulders BACKWARD",
+    "Progress at a pace where both shoulders move evenly"
+   ],
+   "mistakes": [
+    "Bent elbows",
+    "Hands sliding on the stick"
+   ],
+   "progressions": [
+    "Narrower grip",
+    "Plate on the stick"
+   ],
+   "regressions": [
+    "Wider grip",
+    "Less weight"
+   ],
+   "lesson_slug": "159-shoulders-drill_inlocates-dislocates",
+   "note_file": "159-shoulders-drill_inlocates-dislocates.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "er_contract_relax",
+   "name": "External rotation contract relax (band, elbow on knee)",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "isolated",
+   "method": "contract_relax",
+   "components": [
+    "subscap_teres_major"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "C8, relax a few s and breaths; then 15 s active ER",
+    "rest_s": null,
+    "source": "160; cycle count not given"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "deg",
+    "label": "ER angle (retest with ER length test)",
+    "options": null
+   },
+   "cues": [
+    "Seated, elbow on the knee, band anchored low pulling into ER",
+    "Pull into IR near max for 8 s",
+    "Relax, sink deeper, shuffle away to add tension",
+    "Finish: drop the band, actively externally rotate 15 s",
+    "Use before elbow-on-knee ER strength work"
+   ],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "160-shoulders-drill_er-contract-relax",
+   "note_file": "160-shoulders-drill_er-contract-relax.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "stick_er",
+   "name": "Stick external rotation",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "isolated",
+   "method": "contract_relax",
+   "components": [
+    "subscap_teres_major"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "161: hold and rounds not given"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "deg",
+    "label": "ER angle filmed from the same set (first or last) every few sessions",
+    "options": null
+   },
+   "cues": [
+    "Stick against the back of the forearm, hand wrapped round",
+    "Elbow 90 deg at about shoulder height",
+    "Bottom hand pulls into ER; hold, or CR against the stick",
+    "Finish: drop the stick and pull into the new range actively"
+   ],
+   "mistakes": [
+    "Poor grip at the start",
+    "Side bending"
+   ],
+   "progressions": [],
+   "regressions": [
+    "Internally rotate the stick to get the grip"
+   ],
+   "lesson_slug": "161-shoulders-drill_stick-er",
+   "note_file": "161-shoulders-drill_stick-er.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "overhead_stick_er",
+   "name": "Overhead stick external rotation",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "isolated",
+   "method": "contract_relax",
+   "components": [
+    "subscap_teres_major",
+    "overhead_er"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "162: reps, long hold or CR; no numbers"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Mode and depth",
+    "options": null
+   },
+   "cues": [
+    "Upper arm over a rail at about hip height, stick on the far side",
+    "Start internally rotated to get a solid grip",
+    "Sink the shoulder and lock in, then pull into ER without rising"
+   ],
+   "mistakes": [
+    "Letting the shoulder lift",
+    "Gripping the stick too high"
+   ],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "162-shoulders-drill_overhead-stick-er",
+   "note_file": "162-shoulders-drill_overhead-stick-er.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "ir_contract_relax",
+   "name": "Internal rotation band contract relax",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "isolated",
+   "method": "contract_relax",
+   "components": [
+    "infraspinatus_teres_minor"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "C8, relax deeper; then 15 s active IR",
+    "rest_s": null,
+    "source": "163; rounds 'several', no count"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "deg",
+    "label": "IR angle (retest with IR length test)",
+    "options": null
+   },
+   "cues": [
+    "Seated, knee up, band around the wrist through the leg",
+    "Shoulder pinned back throughout",
+    "Contract into ER 8 s, relax and let the band take you deeper",
+    "Finish: drop the band, actively internally rotate 15 s"
+   ],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "163-shoulders-drill_ir-contract-relax",
+   "note_file": "163-shoulders-drill_ir-contract-relax.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "sleeper_stretch",
+   "name": "Sleeper stretch",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "isolated",
+   "method": "contract_relax",
+   "components": [
+    "infraspinatus_teres_minor"
+   ],
+   "primary": [
+    "infraspinatus_teres_minor"
+   ],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "press 5 s, contract 5 s = 1 round, about 3-5 rounds; finish 8-15 s active IR = 1 set",
+    "rest_s": null,
+    "source": "164"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "deg",
+    "label": "IR angle (retest with IR length test)",
+    "options": null
+   },
+   "cues": [
+    "Lie on the working side, upper arm at a right angle to the body",
+    "Pivot into IR, assist with the free arm",
+    "Keep the shoulder pinned",
+    "Stop on pinching pain (our caution)"
+   ],
+   "mistakes": [
+    "Cheating with the shoulder rolling"
+   ],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "164-shoulders-drill_sleeper-stretch",
+   "note_file": "164-shoulders-drill_sleeper-stretch.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "hang_passive",
+   "name": "Passive hang",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "attribute",
+   "method": "passive",
+   "components": [
+    "overhead_flexion"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "165: no times, sets or reps"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Foot assistance",
+    "options": [
+     "feet on floor",
+     "less weight in the feet",
+     "tiptoes",
+     "full hang"
+    ]
+   },
+   "cues": [
+    "Grip with the thumb, start pronated",
+    "Relax, only the hands work, head sinks between the shoulders",
+    "Tuck the ribs slightly for flexibility focus"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Supinated, alternating grips",
+    "Swinging, brachiating, one arm"
+   ],
+   "regressions": [
+    "Feet on the floor"
+   ],
+   "lesson_slug": "165-shoulders-drill_hanging-passive-active",
+   "note_file": "165-shoulders-drill_hanging-passive-active.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "hang_active",
+   "name": "Active hang",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "attribute",
+   "method": "active",
+   "components": [
+    "overhead_flexion",
+    "scapular_depression"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "165: no times, sets or reps"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Foot assistance",
+    "options": [
+     "feet on floor",
+     "less weight in the feet",
+     "tiptoes",
+     "full hang"
+    ]
+   },
+   "cues": [
+    "Depress the scapulae, stay tall",
+    "Elbows locked, move only at the shoulder",
+    "Max space between shoulders and ears"
+   ],
+   "mistakes": [
+    "Bending the arms"
+   ],
+   "progressions": [
+    "Grip progressions"
+   ],
+   "regressions": [
+    "Feet on the floor"
+   ],
+   "lesson_slug": "165-shoulders-drill_hanging-passive-active",
+   "note_file": "165-shoulders-drill_hanging-passive-active.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "elbow_on_knee_er",
+   "name": "Elbow on knee external rotation",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "attribute",
+   "method": "strength",
+   "components": [
+    "external_rotators"
+   ],
+   "primary": [
+    "external_rotators"
+   ],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "166: pauses at the bottom and slow eccentrics, no numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "Start light, probably a few kg",
+    "how_to_choose": "Microplates: 4 -> 4.5 kg, not 4 -> 5"
+   },
+   "marker": {
+    "kind": "kg",
+    "label": "Load (0.5 kg steps), reps, position 90/135/180",
+    "options": null
+   },
+   "cues": [
+    "Elbow on the vastus medialis inside the knee, about 2 inches below the shoulder",
+    "Only the upper arm moves",
+    "Lower with control to the deepest bottom without the shoulder rolling forward",
+    "Gaze forward",
+    "Weaker side first, match reps"
+   ],
+   "mistakes": [
+    "Shoulder rolling forward at the bottom"
+   ],
+   "progressions": [
+    "Positions 180 -> 135 -> 90 across phases (90 hardest)",
+    "Prone/kneeling end range version (170)"
+   ],
+   "regressions": [
+    "180 position"
+   ],
+   "lesson_slug": "166-shoulders-strength_elbow-on-knee-er",
+   "note_file": "166-shoulders-strength_elbow-on-knee-er.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "powell_raise",
+   "name": "Powell raise",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "attribute",
+   "method": "strength",
+   "components": [
+    "rhomboids_rear_delts"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": "2020",
+    "cr": null,
+    "rest_s": null,
+    "source": "167 (favourite tempo)"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "Start light",
+    "how_to_choose": "0.5 kg steps"
+   },
+   "marker": {
+    "kind": "kg",
+    "label": "Load (0.5 kg steps), bench angle, reps",
+    "options": null
+   },
+   "cues": [
+    "Side-lying on a bench, knees bent forward",
+    "Retract the scapula to start each rep",
+    "Smooth arc in front of the face to vertical",
+    "Lower until the arm touches the bench edge, let it protract",
+    "Weaker side first"
+   ],
+   "mistakes": [
+    "Swinging",
+    "Form breaking"
+   ],
+   "progressions": [
+    "Bench angle changes",
+    "Prone version (170)"
+   ],
+   "regressions": [
+    "Floor, forearm supported"
+   ],
+   "lesson_slug": "167-shoulders-strength_powell-raises",
+   "note_file": "167-shoulders-strength_powell-raises.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "trap3_raise",
+   "name": "Trap-3 raise (lower trap)",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "attribute",
+   "method": "strength",
+   "components": [
+    "lower_traps",
+    "active_flexion"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": "6-12 per side",
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "168; active flexibility: pauses at the top, often 6 s holds; 208 active TUT 30 s"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "0.25 kg steps"
+   },
+   "marker": {
+    "kind": "kg",
+    "label": "Load (0.25 kg steps), bench angle, hold seconds, reps per side",
+    "options": null
+   },
+   "cues": [
+    "Bent over supported on a bench at 60 deg",
+    "Retract and depress the scapula, keep depression",
+    "Lift the arm overhead; must at least cover the ear",
+    "Reset each rep",
+    "Weaker side first; do not do more on the stronger side"
+   ],
+   "mistakes": [
+    "Range short of covering the ear"
+   ],
+   "progressions": [
+    "Heavier, short pauses for flexion strength",
+    "Prone/horizontal (170)"
+   ],
+   "regressions": [],
+   "lesson_slug": "168-shoulders-strength_trap3-trap1-raises",
+   "note_file": "168-shoulders-strength_trap3-trap1-raises.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "trap1_raise",
+   "name": "Trap-1 raise",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "attribute",
+   "method": "strength",
+   "components": [
+    "active_flexion"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": "6-12 per side",
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "168"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "0.25 kg steps"
+   },
+   "marker": {
+    "kind": "kg",
+    "label": "Load, reps per side",
+    "options": null
+   },
+   "cues": [
+    "Same setup as trap-3, scapula elevated and protracted, up and forward",
+    "Only after a trap-3-only phase; keep trap-3 volume higher"
+   ],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "168-shoulders-strength_trap3-trap1-raises",
+   "note_file": "168-shoulders-strength_trap3-trap1-raises.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "front_raise",
+   "name": "Dumbbell front raise",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "attribute",
+   "method": "strength",
+   "components": [
+    "serratus",
+    "active_flexion"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "169: no sets, reps, tempo or loads"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "Easy to go too heavy"
+   },
+   "marker": {
+    "kind": "kg",
+    "label": "Load, grip, position, elbow straight/bent",
+    "options": null
+   },
+   "cues": [
+    "Protract hard, push the shoulder forward, round the back",
+    "Lift with control to end range, slightly wider than shoulder width",
+    "Stop short of the bottom to keep tension"
+   ],
+   "mistakes": [
+    "Swinging"
+   ],
+   "progressions": [
+    "Bent elbow cross-body version"
+   ],
+   "regressions": [],
+   "lesson_slug": "169-shoulders-strength_front-raises",
+   "note_file": "169-shoulders-strength_front-raises.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "er_end_range_kneeling",
+   "name": "External rotation, kneeling end range (horizontal)",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "attribute",
+   "method": "strength",
+   "components": [
+    "external_rotators"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "170: no numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "Expect to drop weight a fair bit; none if too hard"
+   },
+   "marker": {
+    "kind": "kg",
+    "label": "Load; stop when range drops dramatically",
+    "options": null
+   },
+   "cues": [
+    "Kneeling, one hand on the floor, working elbow supported on a bench",
+    "Same execution as elbow on knee ER, now overloading the top"
+   ],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "170-shoulders-strength_horizontal-prone-variations",
+   "note_file": "170-shoulders-strength_horizontal-prone-variations.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "trap3_raise_prone",
+   "name": "Lower trap raise, prone/horizontal",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "attribute",
+   "method": "strength",
+   "components": [
+    "lower_traps",
+    "active_flexion"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "170: no numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "Expect to drop weight; microplates"
+   },
+   "marker": {
+    "kind": "kg",
+    "label": "Load; stop when range drops dramatically",
+    "options": null
+   },
+   "cues": [
+    "Hinge with head on an incline bench, or lie face down on a flat bench"
+   ],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "170-shoulders-strength_horizontal-prone-variations",
+   "note_file": "170-shoulders-strength_horizontal-prone-variations.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "powell_raise_prone",
+   "name": "Powell raise, prone/horizontal",
+   "pillars": [
+    "shoulder_flexion"
+   ],
+   "slot": "attribute",
+   "method": "strength",
+   "components": [
+    "rhomboids_rear_delts"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "170: no numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "Expect to drop weight; microplates"
+   },
+   "marker": {
+    "kind": "kg",
+    "label": "Load; stop when range drops dramatically",
+    "options": null
+   },
+   "cues": [
+    "Hinge with head supported, or face down on a flat bench"
+   ],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "170-shoulders-strength_horizontal-prone-variations",
+   "note_file": "170-shoulders-strength_horizontal-prone-variations.md",
+   "lesson_course": "mftk"
+  }
+ ],
+ "rules": {
+  "pancake_phase1": {
+   "questions": [
+    {
+     "id": "q1_calves_floor",
+     "text": "Did both calves make full contact with the floor in tailors pose?",
+     "options": [
+      {
+       "value": "no",
+       "label": "No"
+      },
+      {
+       "value": "yes",
+       "label": "Yes"
+      }
+     ],
+     "from_test": "tailors_pose.calves_floor"
+    },
+    {
+     "id": "q2_pancake_type",
+     "text": "Which is most similar to your pancake?",
+     "options": [
+      {
+       "value": "more_than_90",
+       "label": "More than 90 deg"
+      },
+      {
+       "value": "less_than_90",
+       "label": "Less than 90 deg"
+      },
+      {
+       "value": "head_to_floor",
+       "label": "Head to floor"
+      },
+      {
+       "value": "chest_to_floor",
+       "label": "Chest to floor"
+      }
+     ],
+     "from_test": "pancake_natural.band (auto: touchpoint forehead/nose/chin -> head_to_floor; chest/abs -> chest_to_floor; else angle >90 or <90)"
+    },
+    {
+     "id": "q3_lift_gap",
+     "text": "More than 20 deg difference between seated NARROW pancake and PANCAKE LIFT? (asked only for >90 / <90)",
+     "options": [
+      {
+       "value": "no",
+       "label": "No"
+      },
+      {
+       "value": "yes",
+       "label": "Yes"
+      }
+     ],
+     "from_test": "derived: abs(pancake_narrow.angle - pancake_lift.angle) > 20"
+    },
+    {
+     "id": "q4_sport",
+     "text": "Training pancake for a specific sport?",
+     "options": [
+      {
+       "value": "no",
+       "label": "No"
+      },
+      {
+       "value": "yes",
+       "label": "Yes"
+      }
+     ],
+     "from_test": "pancake_sport.sport (no -> no; anything else -> yes)"
+    }
+   ],
+   "always": [
+    {
+     "slot_code": "A1",
+     "drill_id": "rolling_feet",
+     "optional": true,
+     "why": "64: optional, start with them, drop later if no benefit"
+    },
+    {
+     "slot_code": "A2",
+     "drill_id": "single_leg_calf_stretch",
+     "optional": true,
+     "why": "64: optional, start with them, drop later if no benefit"
+    }
+   ],
+   "branches": [
+    {
+     "when": {
+      "q1_calves_floor": "no"
+     },
+     "add": [
+      {
+       "slot_code": "B1",
+       "drill_id": "tailors_pose"
+      }
+     ]
+    },
+    {
+     "when": {
+      "q1_calves_floor": "yes"
+     },
+     "add": [
+      {
+       "slot_code": "B1",
+       "drill_id": "standing_pike_good_morning"
+      }
+     ]
+    },
+    {
+     "when": {
+      "q2_pancake_type": "more_than_90"
+     },
+     "add": [
+      {
+       "slot_code": "C1",
+       "drill_id": "straddle_jefferson_curl"
+      }
+     ]
+    },
+    {
+     "when": {
+      "q2_pancake_type": "less_than_90"
+     },
+     "add": [
+      {
+       "slot_code": "C1",
+       "drill_id": "pancake_good_morning"
+      }
+     ]
+    },
+    {
+     "when": {
+      "q2_pancake_type": "head_to_floor"
+     },
+     "add": [
+      {
+       "slot_code": "C1",
+       "drill_id": "pancake_straight_arm_lifts"
+      },
+      {
+       "slot_code": "D1",
+       "drill_id": "pancake_lifts"
+      }
+     ]
+    },
+    {
+     "when": {
+      "q2_pancake_type": "chest_to_floor"
+     },
+     "add": [
+      {
+       "slot_code": "C1",
+       "drill_id": "over_pancake_straight_arm_lifts"
+      },
+      {
+       "slot_code": "D1",
+       "drill_id": "pancake_lifts"
+      }
+     ]
+    },
+    {
+     "when": {
+      "q2_pancake_type": "more_than_90",
+      "q3_lift_gap": "no"
+     },
+     "add": [
+      {
+       "slot_code": "D1",
+       "drill_id": "standing_pancake_hang"
+      }
+     ]
+    },
+    {
+     "when": {
+      "q2_pancake_type": "more_than_90",
+      "q3_lift_gap": "yes"
+     },
+     "add": [
+      {
+       "slot_code": "D1",
+       "drill_id": "pancake_lifts"
+      }
+     ]
+    },
+    {
+     "when": {
+      "q2_pancake_type": "less_than_90",
+      "q3_lift_gap": "no"
+     },
+     "add": [
+      {
+       "slot_code": "D1",
+       "drill_id": "standing_pancake_hang"
+      }
+     ]
+    },
+    {
+     "when": {
+      "q2_pancake_type": "less_than_90",
+      "q3_lift_gap": "yes"
+     },
+     "add": [
+      {
+       "slot_code": "D1",
+       "drill_id": "pancake_lifts"
+      }
+     ]
+    },
+    {
+     "when": {
+      "q4_sport": "no"
+     },
+     "add": [],
+     "note": "Train between natural and widest straddle"
+    },
+    {
+     "when": {
+      "q4_sport": "yes"
+     },
+     "add": [],
+     "note": "Pick the width most useful for the sport (press handstand = narrower; contemporary dance = wider)"
+    }
+   ],
+   "frequency": "Start once every 5 days; if you recover well and improve each session try every 4 days, then every 3. Poor recovery 6-7 days, average 3-5, superior 2-3. Rule: train when recovered.",
+   "notes": [
+    "Doses per drill come from the 64 parameter templates (see each drill's dose).",
+    "Example program (64): A1 calf stretching forward/in/out 60 s per angle x1; B1 tailors pose 8 x 3-4 2310 60 s; C1 straddle J-curl 5 x 3-4 6240 90 s; D1 pancake lifts 6 x 2-3 1013 60 s.",
+    "Phase 2: keep going with phase 1 until progress stops (usually 4-6 weeks), then write phase 2 with the drill matrix (65) and phase 2 builder (66).",
+    "Steps: drill selection (this tree) -> program parameters (templates) -> plan phase 1 (watch each drill video).",
+    "Same straddle width every retest within a phase."
+   ]
+  },
+  "shoulders_phase1": {
+   "marked": "ours, from the course notes, not Smith's hidden builder",
+   "derived": [
+    {
+     "id": "leahy_worst",
+     "formula": "min(leahy.L.angle, leahy.R.angle)"
+    },
+    {
+     "id": "active_flexion_worst",
+     "formula": "min(flexion_active.L.angle, flexion_active.R.angle)"
+    },
+    {
+     "id": "pva_gap",
+     "formula": "flexion_passive.angle - active_flexion_worst"
+    },
+    {
+     "id": "lat_diff",
+     "formula": "lat_length.wall - lat_length.round_back"
+    },
+    {
+     "id": "pec_worst",
+     "formula": "min(pec_major.L.angle, pec_major.R.angle) (fallback: pec_major_partner)"
+    },
+    {
+     "id": "er_worst",
+     "formula": "min(er_length.L.angle, er_length.R.angle) (signed)"
+    },
+    {
+     "id": "er15_minus_pec",
+     "formula": "(er_worst + 15) - pec_worst (named on form 151; how it is used is not visible)"
+    },
+    {
+     "id": "ir_worst",
+     "formula": "min(ir_length.L.angle, ir_length.R.angle)"
+    },
+    {
+     "id": "trap3_worst",
+     "formula": "min over sides of trap3_reps.reps_exact (fallback scale: 0 -> 0, 1-12 -> unknown vs 5, 12+ -> >=5, did_not_test -> null)"
+    },
+    {
+     "id": "eok_er_worst",
+     "formula": "min over sides of eok_er_reps.reps_exact (same fallback)"
+    },
+    {
+     "id": "powell_worst",
+     "formula": "min over sides of powell_reps.reps_exact"
+    },
+    {
+     "id": "fc_targets",
+     "formula": "149 calculator in code: push-up 1RM = bodyweight x elevation factor (flat 0.65, 30 cm 0.55, 60 cm 0.35, 90 cm 0.20) / rep factor; dip 1RM = (bodyweight + added) / rep factor; rep factor 1:1.00 2:0.95 3:0.90 4:0.87 5:0.85 6:0.83; targets push-up ER 10.70%, lower trap 11.60%, Powell 11.30%; dip ER 9.145%, lower trap 9.915%, Powell 9.658%; round 0.1"
+    },
+    {
+     "id": "weak_stabilisers",
+     "formula": "stabilisers (eok_er_worst, trap3_worst, powell_worst) under 5 reps at target, sorted ascending, take the lowest 1-2"
+    }
+   ],
+   "rules": [
+    {
+     "if": "healthcare_approval missing",
+     "then": [],
+     "why": "151 input 10: approval to train required"
+    },
+    {
+     "if": "leahy_worst >= 180",
+     "then": [
+      {
+       "slot_code": "B1",
+       "drill_id": "sleeper_stretch"
+      },
+      {
+       "slot_code": "B2",
+       "drill_id": "ir_contract_relax"
+      }
+     ],
+     "why": "141: 180 = full range, skip the other flexion tests and look at internal rotation and scapular strength; 151 also shows an 'elite range, re-check your test' message"
+    },
+    {
+     "if": "lat_diff > 0 (round back lower than wall) or lat_length.round_back < 180",
+     "then": [
+      {
+       "slot_code": "B1",
+       "drill_id": "lat_stretch_standing_lying"
+      }
+     ],
+     "why": "143: round-back lower than flat-back = tight lats, bigger gap = tighter, full = 180 rounded; drills 155/156 target lats (pillar_lat_stretch is the alternative)"
+    },
+    {
+     "if": "pec_worst < 45",
+     "then": [
+      {
+       "slot_code": "B2",
+       "drill_id": "wall_pec_stretch"
+      }
+     ],
+     "why": "144/150: full = at least 45 deg past the shoulder line; under 15 = likely limited by pec major in shoulder sports (raise priority); 158 targets pec (157 pec_stretch_flyes = loaded alternative)"
+    },
+    {
+     "if": "er_worst < 45",
+     "then": [
+      {
+       "slot_code": "B3",
+       "drill_id": "er_contract_relax"
+      }
+     ],
+     "why": "146: full = 45 past vertical; 5-10 past = minimum usable overhead (137: 15 enough for most overhead sports); short of vertical (< 0) = high priority; 160 stretches subscap/teres major (161 stick_er, 162 overhead_stick_er alternatives)"
+    },
+    {
+     "if": "ir_worst < 135",
+     "then": [
+      {
+       "slot_code": "B4",
+       "drill_id": "sleeper_stretch"
+      }
+     ],
+     "why": "148: full = 170 from horizontal, under 135 = train this range; 164 targets IR (163 ir_contract_relax alternative, also before ER strength when the bottom range is lacking)"
+    },
+    {
+     "if": "pec_minor tight on either side",
+     "then": [],
+     "why": "147 gives a yes/no result but no drill note targets pec minor specifically; flag only"
+    },
+    {
+     "if": "eok_er_worst < 5 and among the lowest 1-2 stabilisers",
+     "then": [
+      {
+       "slot_code": "C1",
+       "drill_id": "er_contract_relax"
+      },
+      {
+       "slot_code": "D1",
+       "drill_id": "elbow_on_knee_er"
+      }
+     ],
+     "why": "149: under 5 reps at target = train it, only the lowest 1-2; 160: do ER contract relax before elbow-on-knee ER"
+    },
+    {
+     "if": "trap3_worst < 5 and among the lowest 1-2 stabilisers",
+     "then": [
+      {
+       "slot_code": "D2",
+       "drill_id": "trap3_raise"
+      }
+     ],
+     "why": "149 threshold; 168 trap-3 trains lower traps (start with a trap-3-only phase)"
+    },
+    {
+     "if": "powell_worst < 5 and among the lowest 1-2 stabilisers",
+     "then": [
+      {
+       "slot_code": "D3",
+       "drill_id": "powell_raise"
+      }
+     ],
+     "why": "149 threshold; 167 targets rhomboids, mid traps, rear delts"
+    },
+    {
+     "if": "pva_gap large (threshold not stated in notes; user-set)",
+     "then": [
+      {
+       "slot_code": "D2",
+       "drill_id": "trap3_raise"
+      },
+      {
+       "slot_code": "D4",
+       "drill_id": "hang_active"
+      }
+     ],
+     "why": "142: active much less than passive = focus on active training; 25/28: big gap -> train the resisted end; 168: active flexibility = pauses at the top; 170/137: use horizontal/prone versions for end-range carry-over (trap3_raise_prone, er_end_range_kneeling)"
+    },
+    {
+     "if": "pva_gap small (about equal)",
+     "then": [
+      {
+       "slot_code": "A1",
+       "drill_id": "straps_band_routine"
+      }
+     ],
+     "why": "142: angle the same = work on range of motion; 25/28: small gap -> push range with passive/assisted work (the stretch rules above)"
+    },
+    {
+     "if": "shoulder_type == previous_injury",
+     "then": [
+      {
+       "slot_code": "D4",
+       "drill_id": "hang_active"
+      }
+     ],
+     "why": "165: past shoulder injury, consult a medical professional first; if cleared, start with active hangs"
+    },
+    {
+     "if": "shoulder_type == easier_strength_than_flexibility",
+     "then": [
+      {
+       "slot_code": "D4",
+       "drill_id": "hang_passive"
+      }
+     ],
+     "why": "165: stronger but stiff -> train passive (our mapping of the form answer onto this line)"
+    },
+    {
+     "if": "shoulder_type == easier_flexibility_than_strength",
+     "then": [
+      {
+       "slot_code": "D4",
+       "drill_id": "hang_active"
+      }
+     ],
+     "why": "165: flexible but weak -> active (our mapping of the form answer onto this line)"
+    },
+    {
+     "if": "time_budget starts with quick_20",
+     "then": [],
+     "why": "151 offers 'quick ~20 min on most limiting areas': ours = keep only the highest-priority stretch rule plus the weakest stabiliser"
+    }
+   ],
+   "default_program": [
+    {
+     "slot_code": "A1",
+     "drill_id": "straps_band_routine"
+    },
+    {
+     "slot_code": "B1",
+     "drill_id": "hang_active"
+    },
+    {
+     "slot_code": "C1",
+     "drill_id": "elbow_on_knee_er"
+    },
+    {
+     "slot_code": "C2",
+     "drill_id": "trap3_raise"
+    }
+   ],
+   "default_program_why": "137 recipe ends with strength-training weak patterns and adding hanging; 152 band routine as warm-up; 166 elbow-on-knee ER is 'almost always included'; 168 few people have strong enough lower traps without prior training; 165 long term use both hang types",
+   "dose_defaults": {
+    "source": "203-208 beginner rules, apply where a drill note gives no numbers",
+    "sets": {
+     "technique": "1",
+     "isolated": "2-3",
+     "main": "3-4",
+     "attribute": "2-3"
+    },
+    "rest_s": "60-90",
+    "tut_s_lower_bound": {
+     "passive": "60-90",
+     "loaded": "45",
+     "isometric": "20-40",
+     "contract_relax": "30-60",
+     "active": "30"
+    },
+    "reps_formula": "reps = round(TUT lower bound / sum of tempo digits)",
+    "tempo_rule": "lower 2 s+, pause 2-5 s in the stretched position, lift X-2 s, usually no pause in the non-stretched position"
+   }
+  }
+ },
+ "gaps": [
+  "Pancake test hold time: note 62 says 15 s for the three seated widths but the sheet text also says hold actively for 30 s.",
+  "Seated pike (62 item 5) has no measuring rule in note 63; no measure defined.",
+  "Phase 1 Q2 does not say which straddle width (narrow, natural or maximum) decides 'most similar to your pancake'; we default to natural.",
+  "Q2 exactly 90 deg is not covered (only more than / less than 90).",
+  "Q2 in note 64 has 'chest to floor' but not 'abs to floor'; note 66 adds abs to floor. We map abs touchpoint to chest_to_floor.",
+  "Q3 (>20 deg narrow vs lift): direction of the difference not stated; we use absolute difference. The two angles use different landmarks (63 items 1-3 vs item 6).",
+  "Q3 is only defined for the >90 / <90 branches; head-to-floor and chest-to-floor already get D1 pancake lifts.",
+  "Q4 (sport) changes width only, adds no drill.",
+  "Tailors pose: Q1 in 64 asks about CALVES touching; 66 asks about KNEES (about 180 deg). Left vs right imbalance check has no measuring method beyond the total angle.",
+  "Tailors pose start load conflicts: 64 says 5-10 kg per side, 69 says about 8 kg per side minimum.",
+  "Pancake good morning load: 64 start 5-10 kg vs 75 typical 8-12 kg; 75 elevation thresholds ('40 deg or more') are unclear.",
+  "Pancake straight arm lift load: 64 says 1-2 kg total vs 77 0.5-3 kg per hand.",
+  "Straddle J-curl start: 64 5-10 kg vs 68 'titrate up from 10 kg'. No progress marker stated in 68.",
+  "Over straight arm lifts has no dedicated note or video; dose from 64 only; lesson_slug points to 77 as the nearest video.",
+  "No numbers (sets/reps/tempo/rest/hold) in notes for: adductor flyes 71, side split slides 72 (only 3-5 s contraction), drop stance squats 73, block crush 74 (contract 'a few s'), seated good morning 76, over pancake isometrics 78, hip ER good mornings 81, donkey calf 83, B-stance 43, leg elevated 44.",
+  "Greyed matrix drills have no notes at all: standing pancake lockouts, pancake get ups, pancake isometrics hips elevated, straddle toes to bar, hanging stalder, ballistic pancake, long passive holds (method unknown for lockouts and get ups).",
+  "Matrix lists 'modified seated good morning, knees bent to knees straight' as greyed out, but note 76 (bent knee seated good morning) has a video; we mapped 76 to it.",
+  "Drills 70, 72, 81 are not on the drill matrix; their components/slots are our reading (81 components left empty).",
+  "Pancake lift test: hand position is not recorded as a number, so retests may not be comparable.",
+  "Pec major test plate weight differs: 150 says 1.25 kg, 144 says 2.5 kg.",
+  "Pec major angle sign (arm above vs below the shoulder line) and ER angle sign (short of vs past vertical) are not captured by the angle tool; user enters the sign.",
+  "Active flexion is tested per side but form 151 takes one number; we use the worse side.",
+  "Form 151 rep scale (0 / 1-12 / 12+) cannot resolve the 149 5-rep threshold; we added an exact reps field.",
+  "Form 151 has no Powell raise field though 149 tests it; the fourth calculator output (bent over lateral raise) coefficient is unconfirmed.",
+  "Passive vs active flexion: no numeric threshold for a 'big' gap in 142, 25 or 28.",
+  "How 151 uses 'ER + 15 minus pec major' and the shoulder type answer is not visible.",
+  "Shoulder drill notes give almost no numbers: band routine 152-154, pillar lat 155, flyes 157, inlocates 159, stick ER 161, overhead stick ER 162, hanging 165, elbow-on-knee ER 166 (tempo), front raises 169, prone variations 170; CR cycle counts missing in 160, 161, 163.",
+  "Pec minor (147) has a test but no targeted drill note.",
+  "No shoulder drill matrix or slot structure exists; shoulder slot assignments (e.g. inlocates as main) are ours.",
+  "Shoulder pillar has no single assessment video; lesson_slug set to 137 mechanics (covers the assessment order)."
+ ]
+}

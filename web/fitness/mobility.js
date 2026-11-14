@@ -173,6 +173,34 @@ function clipBtns(list){
 }
 const noteLines=list=>list.filter(x=>x.note&&!x.source).map(x=>`<div style="font-size:11px;color:var(--ink3);margin-top:4px">Clip note: ${esc(x.note)}</div>`).join('');
 
+// ---------- Drill library (owner, 14 Nov 2026) ----------
+// Every drill for the pillar from the course notes, grouped in Smith's session order (technique, isolated, main,
+// attribute). Doses show only where his notes state them; each opens its lesson video and our cues in the app.
+const SLOTS=[['technique','Technique','1 set, only where position matters'],['isolated','Isolated','2-3 sets, the weak link'],
+  ['main','Main (compound)','3-4 sets, brings it together'],['attribute','Specific attribute','2-3 sets: active, isometric, contract-relax']];
+const METHOD={passive:'Passive',loaded:'Loaded',isometric:'Isometric',contract_relax:'Contract-relax',active:'Active',
+  ballistic:'Ballistic',technique:'Technique',soft_tissue:'Soft tissue',strength:'Strength'};
+function doseTxt(d){if(!d)return '';const a=[];
+  if(d.sets)a.push(d.sets+' sets');if(d.reps)a.push(d.reps+' reps');if(d.hold_s)a.push(d.hold_s+' s hold');
+  if(d.tempo)a.push('tempo '+d.tempo);if(d.cr)a.push(d.cr);if(d.rest_s)a.push(d.rest_s+' s rest');return a.join(' &middot; ');}
+const listHtml=(t,xs)=>xs&&xs.length?`<div style="font-size:11px;font-weight:800;color:var(--ink3);margin-top:6px;text-transform:uppercase;letter-spacing:0.05em">${t}</div>${xs.map(x=>`<div style="font-size:12px;margin-top:2px">&bull; ${esc(x)}</div>`).join('')}`:'';
+function drillRow(x){const ds=doseTxt(x.dose);
+  return `<details style="border-top:0.5px solid var(--border);padding:7px 0"><summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px">
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">${esc(x.name)}${x.unilateral?' <span style="font-size:10px;color:var(--ink3)">each side</span>':''}</div>
+        <div style="font-size:11px;color:var(--ink3)">${esc(METHOD[x.method]||'Method not stated')}${ds?' &middot; '+ds:''}</div></div>
+      ${lessonBtn(x)}</summary>
+    <div style="padding:4px 0 2px 2px">
+      ${x.marker&&x.marker.label?`<div style="font-size:12px;margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--surface2)"><b>Log each session:</b> ${esc(x.marker.label)}</div>`:''}
+      ${x.load&&x.load.uses_weight?`<div style="font-size:12px;margin-top:4px"><b>Weight:</b> ${esc(x.load.start||'not stated')}${x.load.how_to_choose?' &middot; '+esc(x.load.how_to_choose):''}</div>`:''}
+      ${listHtml('Cues',x.cues)}${listHtml('Common mistakes',x.mistakes)}${listHtml('Progress by',x.progressions)}${listHtml('Make it easier',x.regressions)}
+      ${!ds?'<div style="font-size:11px;color:var(--ink3);margin-top:6px">His notes give no sets or reps for this drill; the program sets them from the design rules.</div>':''}</div></details>`;}
+function drillBlock(p){
+  const ds=(_mob.drills||[]).filter(x=>(x.pillars||[]).includes(p.id));if(!ds.length)return '';
+  return `<details class="card" style="padding:12px 14px;margin-bottom:12px"><summary style="cursor:pointer;font-size:13px;font-weight:800">Drill library &middot; ${ds.length} drills</summary>
+    <div style="font-size:11px;color:var(--ink3);margin:4px 0 2px">In session order. Tap a drill for cues; Watch plays the lesson.</div>
+    ${SLOTS.map(([k,n,h])=>{const xs=ds.filter(x=>x.slot===k);return xs.length?`<div style="margin-top:10px"><div style="font-size:12px;font-weight:800">${n} <span style="font-weight:400;color:var(--ink3)">${h}</span></div>${xs.map(drillRow).join('')}</div>`:'';}).join('')}</details>`;
+}
+
 function renderPillar(el,p){
   if(!p){_mobView='list';return renderList(el);}
   const s=pillarState(p);
@@ -185,8 +213,10 @@ function renderPillar(el,p){
     ${gridBlock(p,s)}
     ${gapBlock(p)}
     ${todoBlock(todos(p),8,'Still to do')}
+    ${drillBlock(p)}
     ${p.setup?`<div style="font-size:12px;color:var(--ink2);margin:6px 0 4px;line-height:1.5">${esc(p.setup)}</div>`:''}
-    ${p.lesson?`<a href="${esc(p.lesson)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--blue)">Open the lesson video</a>`:''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">${lessonBtn({name:p.name+' assessment',lesson_slug:p.lesson_slug,lesson_course:p.lesson_course,youtube:p.youtube},'Watch the assessment lesson')}
+      ${p.lesson?`<a href="${esc(p.lesson)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--blue)">On Smith's site</a>`:''}</div>
     <div style="display:flex;gap:8px;align-items:center;margin:12px 0">
       <label class="form-label" style="margin:0">Assessment date</label>
       <input type="date" value="${day}" max="${today()}" class="fd-input" style="width:auto;font-size:14px" onchange="mobDay(this.value)"/></div>
@@ -196,6 +226,7 @@ function renderPillar(el,p){
       <div style="font-size:14px;font-weight:800">${i+1}. ${esc(t.name)}${t.role?` <span style="font-size:10px;font-weight:700;color:var(--ink3)">${t.role==='active'?'ACTIVE':'PASSIVE'}</span>`:''}</div>
       ${t.camera?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--surface2)"><b>Camera:</b> ${esc(t.camera)}</div>`:''}
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
+      ${t.lesson_slug||t.youtube?`<div style="margin-top:6px">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}</div>`:''}
       ${t.sides.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both)}
         <label class="btn-sm" style="cursor:pointer">+ Both sides in one clip<input type="file" accept="video/*,image/*" style="display:none" onchange="mobUpload(this,'${p.id}','${t.id}','both')"/></label>
         <span id="mobup_${t.id}_both" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(both)}`:''}
@@ -294,6 +325,43 @@ window.mobPlay=async function(id,mime){
     ov.querySelector('#mobDel').onclick=async()=>{if(!confirm('Remove this clip?'))return;await fetch(API_BASE+'/api/fitness/mobility/media/'+encodeURIComponent(id),{method:'DELETE',headers:{'Authorization':'Bearer '+syncToken()}});ov.remove();await load();renderMobility();};
   }catch(e){console.warn('mobPlay',e);ov.innerHTML='<div style="color:#fff">Could not load it.</div>';setTimeout(()=>ov.remove(),1500);}
 };
+
+// ---------- Lesson viewer (owner, 14 Nov 2026) ----------
+// A drill or test names its lesson as {course, slug} (our private copy on Cortex, streamed through a short-lived
+// signed link) and/or {youtube} (played from YouTube). Our note for the lesson shows under the video.
+function noteHtml(md){
+  return String(md||'').split('\n').filter(l=>!/^Library:/.test(l)).map(l=>{
+    if(/^# /.test(l))return `<div style="font-size:14px;font-weight:800;margin:4px 0 6px">${esc(l.slice(2))}</div>`;
+    if(!l.trim())return '<div style="height:6px"></div>';
+    const s=esc(l).replace(/^App:/,'<b>App:</b>').replace(/^- /,'&bull; ');
+    return `<div style="margin:2px 0">${s}</div>`;}).join('');
+}
+window.mobLesson=async function(course,slug,yt,title){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.94);overflow-y:auto;padding:16px;box-sizing:border-box';
+  ov.innerHTML='<div style="color:#fff;font-size:13px;text-align:center;margin-top:40vh">Loading&hellip;</div>';
+  document.body.appendChild(ov);
+  const close=()=>{const v=ov.querySelector('video');if(v){v.pause();v.removeAttribute('src');v.load();}ov.remove();};
+  let L=null;
+  if(course&&slug){try{L=await syncApi('/api/fitness/course/'+encodeURIComponent(course)+'/'+encodeURIComponent(slug));}catch(e){L=null;}}
+  const vid=L&&L.video_url?`<video src="${API_BASE+L.video_url}" controls playsinline preload="metadata" style="width:100%;max-height:60vh;border-radius:10px;background:#000"></video>`
+    :yt?`<div style="position:relative;width:100%;padding-top:56.25%"><iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(yt)}?rel=0&playsinline=1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:10px"></iframe></div>`
+    :'<div style="color:#aaa;font-size:13px;padding:20px 0;text-align:center">No video for this one yet.</div>';
+  ov.innerHTML=`<div style="max-width:760px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">
+      <div style="color:#fff;font-size:15px;font-weight:800">${esc(title||'Lesson')}</div><button class="btn-sm" id="mobLClose">Close</button></div>
+    ${vid}
+    ${L&&L.note?`<div style="background:var(--surface);color:var(--ink);border-radius:10px;padding:12px 14px;margin-top:12px;font-size:12.5px;line-height:1.5">${noteHtml(L.note)}</div>`:''}</div>`;
+  ov.querySelector('#mobLClose').onclick=close;
+};
+// one button for any item that carries a lesson
+// (registered by index, so a name with an apostrophe cannot break the onclick)
+const _lessons=[];
+window.mobLessonN=i=>{const x=_lessons[i];if(x)mobLesson(x.c,x.s,x.y,x.n);};
+const lessonBtn=(x,label)=>{const s=x.lesson_slug||'', y=x.youtube||'';
+  if(!s&&!y)return '';
+  const i=_lessons.push({c:s?(x.lesson_course||'mftk'):'',s,y,n:x.name})-1;
+  return `<button class="btn-sm" onclick="event.stopPropagation();mobLessonN(${i})">${label||'Watch'}</button>`;};
 
 // ---------- Tap to measure (owner, 8 Nov 2026; per-test angle definitions 9 Nov 2026) ----------
 // The frame (a paused video or a photo) is drawn on a canvas and he taps the points the measure's `angle` spec names.

@@ -2498,6 +2498,31 @@ def _cases():
                 and len(e2t) == 1 and e2t[0]["options"][-1] == "Chin to toe" and len(fm._E2T) == 21
                 and fm._E2T[9] == "Elbow to toe" and "Head to bent thumbs up" in fm._E2T
                 and "CLEAN_NOTE" in js and "Clean frame" in js)
+    def _mob_library():
+        # 14 Nov 2026: pancake + shoulder tests and the drill library are data from the course notes; lessons play
+        # inside the app through a signed link, and a bad lesson id can never reach the filesystem
+        import json as _j
+        from . import fitness_course as fc, fitness_mobility as fm
+        P = {p["id"]: p for p in fm.DEFAULT_PILLARS}
+        lib = _j.load(open(fm.DRILLS_FILE, encoding="utf-8"))
+        ids = [d["id"] for d in lib["drills"]]
+        tree = lib["rules"]["pancake_phase1"]
+        used = [a["drill_id"] for a in tree["always"]] + [a["drill_id"] for b in tree["branches"] for a in b["add"]]
+        bad = 0
+        for s in ("../etc/passwd", "32-pike/../x", "", "x" * 200):
+            try:
+                fc._slug(s)
+            except ValueError:
+                bad += 1
+        js = open(_web + "/fitness/mobility.js", encoding="utf-8").read()
+        return (len(P["pancake"]["tests"]) >= 6 and len(P["shoulder_flexion"]["tests"]) >= 12
+                and P["pike"]["lesson_slug"] == "32-pike_assessment" and len(ids) == len(set(ids)) >= 40
+                and all(u in ids for u in used) and bad == 4 and fc._slug("67-pancake-drill_standing-pancake-hang-cr")
+                and all(fc._SLUG.fullmatch(d["lesson_slug"]) for d in lib["drills"] if d.get("lesson_slug"))
+                and not any(t["id"] in ("time_budget", "healthcare_approval") for t in P["shoulder_flexion"]["tests"])
+                and "mobLessonN" in js and "drillBlock" in js and "video_url" in js)
+    case("pancake and shoulder tests and every drill come from the course notes as data, each lesson plays inside the "
+         "app through a short-lived signed link, and a bad lesson id is refused", "course library 14 Nov", _mob_library)
     case("the fold and elbow/head scales are the program builder's own steps, and a measured frame is saved clean "
          "as well as marked up", "program builder form 9 Nov", _mob_form)
     case("the pike tests say no shoes, and the nerve test uses Smith's own level names and says stop at the first "

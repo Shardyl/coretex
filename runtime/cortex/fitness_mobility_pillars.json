@@ -1,0 +1,698 @@
+{
+ "pancake": {
+  "id": "pancake",
+  "name": "Pancake",
+  "setup": "No specific warm-up, just loosen up; barefoot; fitted clothes with ankles and hips visible. Film every position from the floor, phone tilted up against a wall/object, same spot and orientation every time, good light without strong backlight, whole body in frame. Record the whole set; hold positions statically with no momentum and never trade position for range; screenshot the lowest point for pancakes and tailors pose, the average hold for the pancake lift; add angles in a protractor app; save in a dated folder. Phase 1 builder needs measurements 1-4 (narrow, natural, maximum, tailors) plus the pancake lift for Q3.",
+  "tests": [
+   {
+    "id": "pancake_max",
+    "name": "Pancake, maximum width",
+    "sides": [
+     "both"
+    ],
+    "camera": "From the side, phone on the floor tilted up against a wall/object, same spot and orientation every time, whole body in frame",
+    "cue": "Sit in a straddle at MAXIMUM width (as wide as you can; your deepest mix of width and lean). Reach forward with the arms, round the spine, drop the head, lead with the chest to hinge at the pelvis. Hold actively, pulling down the whole time (no passive hanging), hold 15 s (sheet text also says 30 s). Screenshot the LOWEST point. If the head reaches the floor, record the touchpoint instead of the angle. Same width every retest within a phase.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Pancake angle (head not on the floor)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "point on the floor line toward the feet (feet and sit bones flat)",
+        "top of the thigh / middle of the trunk (hip)",
+        "furthest point of the upper back (if past 90 deg: highest point of the upper back)"
+       ]
+      }
+     },
+     {
+      "key": "touchpoint",
+      "label": "Touchpoint reached (if head touches)",
+      "kind": "choice",
+      "options": [
+       "none (head not on floor)",
+       "forehead",
+       "nose",
+       "chin",
+       "chest",
+       "abs"
+      ]
+     },
+     {
+      "key": "width_cm",
+      "label": "Straddle width used (record to repeat)",
+      "kind": "number",
+      "unit": "cm"
+     }
+    ]
+   },
+   {
+    "id": "pancake_natural",
+    "name": "Pancake, natural width",
+    "sides": [
+     "both"
+    ],
+    "camera": "From the side, phone on the floor tilted up against a wall/object, same spot and orientation every time, whole body in frame",
+    "cue": "Sit in a straddle at NATURAL width (comfortable). Reach forward with the arms, round the spine, drop the head, lead with the chest to hinge at the pelvis. Hold actively, pulling down the whole time (no passive hanging), hold 15 s (sheet text also says 30 s). Screenshot the LOWEST point. If the head reaches the floor, record the touchpoint instead of the angle. Same width every retest within a phase.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Pancake angle (head not on the floor)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "point on the floor line toward the feet (feet and sit bones flat)",
+        "top of the thigh / middle of the trunk (hip)",
+        "furthest point of the upper back (if past 90 deg: highest point of the upper back)"
+       ]
+      }
+     },
+     {
+      "key": "touchpoint",
+      "label": "Touchpoint reached (if head touches)",
+      "kind": "choice",
+      "options": [
+       "none (head not on floor)",
+       "forehead",
+       "nose",
+       "chin",
+       "chest",
+       "abs"
+      ]
+     },
+     {
+      "key": "width_cm",
+      "label": "Straddle width used (record to repeat)",
+      "kind": "number",
+      "unit": "cm"
+     },
+     {
+      "key": "band",
+      "label": "Which is most similar to your pancake? (phase 1 builder Q2)",
+      "kind": "choice",
+      "options": [
+       "more_than_90",
+       "less_than_90",
+       "head_to_floor",
+       "chest_to_floor"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "pancake_narrow",
+    "name": "Pancake, narrow width",
+    "sides": [
+     "both"
+    ],
+    "camera": "From the side, phone on the floor tilted up against a wall/object, same spot and orientation every time, whole body in frame",
+    "cue": "Sit in a straddle at NARROW width (a little straddle). Reach forward with the arms, round the spine, drop the head, lead with the chest to hinge at the pelvis. Hold actively, pulling down the whole time (no passive hanging), hold 15 s (sheet text also says 30 s). Screenshot the LOWEST point. If the head reaches the floor, record the touchpoint instead of the angle. Same width every retest within a phase.",
+    "role": "passive",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Pancake angle (head not on the floor)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "point on the floor line toward the feet (feet and sit bones flat)",
+        "top of the thigh / middle of the trunk (hip)",
+        "furthest point of the upper back (if past 90 deg: highest point of the upper back)"
+       ]
+      }
+     },
+     {
+      "key": "touchpoint",
+      "label": "Touchpoint reached (if head touches)",
+      "kind": "choice",
+      "options": [
+       "none (head not on floor)",
+       "forehead",
+       "nose",
+       "chin",
+       "chest",
+       "abs"
+      ]
+     },
+     {
+      "key": "width_cm",
+      "label": "Straddle width used (record to repeat)",
+      "kind": "number",
+      "unit": "cm"
+     }
+    ]
+   },
+   {
+    "id": "standing_pancake",
+    "name": "Standing pancake",
+    "sides": [
+     "both"
+    ],
+    "camera": "From the side, phone on the floor (front view for reference)",
+    "cue": "Natural straddle width (measure it to repeat). Fold reaching the hands to the floor, bend the arms if you reach it. PASSIVE: no pulling or pulsing, hang with gravity. Hold 30 s.",
+    "role": "passive",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Standing pancake angle",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "ankle bone",
+        "middle of the glute (around the hip socket)",
+        "top of the head (rounded back and limited: most rounded part of the upper back)"
+       ]
+      }
+     },
+     {
+      "key": "width_cm",
+      "label": "Straddle width used",
+      "kind": "number",
+      "unit": "cm"
+     }
+    ]
+   },
+   {
+    "id": "pancake_lift",
+    "name": "Pancake lift",
+    "sides": [
+     "both"
+    ],
+    "camera": "From the side, phone on the floor",
+    "cue": "Hands on the floor in front (closer = easier; choose a point you can hold 5 s), legs straight, knees locked, press the floor and lift both feet; slight forward lean if you can. Hold 5 s. Screenshot the AVERAGE hold, not the highest point. Cramping is common; leaning back is normal if your head cannot reach the floor.",
+    "role": "active",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Pancake lift angle",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "ankle bone",
+        "middle of the glute",
+        "top of the head (if the head is not neutral, follow the line of the back)"
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "id": "tailors_pose",
+    "name": "Tailors pose",
+    "sides": [
+     "both"
+    ],
+    "camera": "From the front, phone on the floor",
+    "cue": "Hips right up against a wall, soles touching including heels. No holding the feet or pressing the thighs. Pull the knees apart and down actively. Hold 15 s (strenuous). Screenshot the lowest point. If the legs touch the floor, put the feet on a block. Check left vs right.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Tailors pose angle (can reach 180 deg or more with feet on a block)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "middle of the left knee joint",
+        "middle of the ankles",
+        "middle of the right knee joint"
+       ]
+      }
+     },
+     {
+      "key": "calves_floor",
+      "label": "Did both calves make full contact with the floor? (phase 1 builder Q1)",
+      "kind": "choice",
+      "options": [
+       "no",
+       "yes"
+      ]
+     },
+     {
+      "key": "feet_on_block",
+      "label": "Feet on a block for this test",
+      "kind": "choice",
+      "options": [
+       "no",
+       "yes"
+      ]
+     }
+    ]
+   }
+  ],
+  "gap": {
+   "passive": {
+    "test": "pancake_narrow",
+    "measure": "angle"
+   },
+   "active": {
+    "test": "pancake_lift",
+    "measure": "angle"
+   }
+  },
+  "questions": [
+   {
+    "id": "pancake_sport",
+    "text": "Answer honestly. Press handstand = train a narrower width; contemporary dance = wider.",
+    "name": "Training pancake for a specific sport? (phase 1 builder Q4)",
+    "options": [
+     "no",
+     "press_handstand",
+     "contemporary_dance",
+     "other"
+    ]
+   }
+  ]
+ },
+ "shoulder_flexion": {
+  "id": "shoulder_flexion",
+  "name": "Shoulder flexion",
+  "lesson_slug": "137-shoulders_mechanics",
+  "setup": "No specific warm-up, just loosen up lightly. Film every position from the floor, phone tilted slightly up against an object/wall (easy to recreate), good light, plain background, whole body in frame, fitted clothes, record the whole hold. Hold each position 3 s with no momentum, never trade position for range. Screenshot the AVERAGE position held, not the peak; measure angles in an app. Stabiliser (force couple) tests: max 2 per session, spread over the start of the next few sessions.",
+  "tests": [
+   {
+    "id": "leahy",
+    "name": "Leahy stick test (Test 1)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone on the floor, tilted slightly up, from the side",
+    "cue": "Sit on a box, upright, high chest, look forward. Hold a stick at its CENTRE, palm up, in one hand. Arm locked, lift; the stick stays parallel to the floor. Elbow bends or stick twists = too far, lower and lift again. Hold 3 s. Screenshot the AVERAGE position. Both sides.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Leahy flexion angle (vertical up = 180)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "point on the scapula line below the shoulder (bottom of the scapula)",
+        "centre of the shoulder",
+        "elbow"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "141-shoulders_test1-leahy",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "flexion_passive",
+    "name": "Passive shoulder flexion (Test 2, lying)",
+    "sides": [
+     "both"
+    ],
+    "camera": "From the side, phone on the floor",
+    "cue": "Lie on the back, knees bent, tuck the pelvis so the low back is flat (check with a hand). Lower both arms overhead at shoulder width, aim to touch the whole arm to the floor without the back lifting. Hold 3 s. Faults: back arching, arms drifting apart.",
+    "role": "passive",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Passive flexion angle (arm vs scapula line)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "point on the scapula line below the shoulder (bottom of the scapula)",
+        "centre of the shoulder",
+        "elbow"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "142-shoulders_test2-active-vs-passive",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "flexion_wall",
+    "name": "Standing wall shoulder flexion (Test 2, perpendicular)",
+    "sides": [
+     "both"
+    ],
+    "camera": "From the side, phone on the floor",
+    "cue": "Back to the wall, feet about a foot away, slight knee bend, tuck the pelvis so the low back touches. Lift the arms overhead until the low back would leave the wall. (Not one of the measured items in note 150; optional.)",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Wall flexion angle",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "point on the scapula line below the shoulder (bottom of the scapula)",
+        "centre of the shoulder",
+        "elbow"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "142-shoulders_test2-active-vs-passive",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "flexion_active",
+    "name": "Active shoulder flexion (Test 2, kneeling)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "From the side, phone on the floor",
+    "cue": "Bent-over kneeling / all fours, pelvis tucked, back ROUNDED (not arched). Lift one arm as high as possible (aim level with the ear), arm straight, back unchanged. Hold 3 s. Each side. Option: hold 1-3 kg to test further.",
+    "role": "active",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Active flexion angle (arm vs scapula line, parallel to the floor)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "point on the scapula line below the shoulder (bottom of the scapula)",
+        "centre of the shoulder",
+        "elbow"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "142-shoulders_test2-active-vs-passive",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "lat_length",
+    "name": "Lat length test (Test 3)",
+    "sides": [
+     "both"
+    ],
+    "camera": "From the side, phone on the floor (both positions)",
+    "cue": "Stick at shoulder width, palms up. (1) Back to a wall, feet slightly away, knees slightly bent, posterior tilt so the low back presses in; raise the stick, stop the moment the low back breaks contact. (2) Sit on the floor, round as much as possible, head between the knees; raise the stick keeping head-to-knee contact. Hold 3 s each.",
+    "measures": [
+     {
+      "key": "wall",
+      "label": "Flat back (wall) angle",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "point on the scapula line below the shoulder (bottom of the scapula)",
+        "centre of the shoulder",
+        "elbow"
+       ]
+      }
+     },
+     {
+      "key": "round_back",
+      "label": "Round back (seated) angle",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "point on the scapula line below the shoulder (bottom of the scapula)",
+        "centre of the shoulder",
+        "elbow"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "143-shoulders_test3-lat",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "pec_major",
+    "name": "Pec major length test, solo (Test 4a)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "From BEHIND / head end, camera at bench height (you see only the front edge of the bench, not its top)",
+    "cue": "Lie on a narrow bench, small plates in each hand (1.25 kg per note 150; 2.5 kg in lesson 144), straight arms, thumbs pointing back the whole time. Lower the arms out to the sides slowly, hands in line with the ears or just above. Torso flat: a small low-back gap must not grow. Hold 3 s.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Degrees of the arm past (below) the shoulder line",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "flex",
+       "points": [
+        "centre of the opposite shoulder",
+        "middle of this shoulder",
+        "elbow"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "144-shoulders_test4a-pec-major",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "er_length",
+    "name": "External rotation length test (Test 5, subscapularis + teres major)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "From the FRONT, camera in line with the tested elbow and shoulder (elbow directly in front of the shoulder)",
+    "cue": "Sit on the floor, one knee up, elbow resting on the knee, upper arm at 90 deg to the body, elbow and both shoulders in one line, torso does not rotate. Externally rotate as if pulling back from the wrist. Hold 3 s. Short of vertical = NEGATIVE angle, past vertical = positive (enter the sign).",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Forearm angle from vertical (negative if short of vertical)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "vertical",
+       "points": [
+        "elbow centre",
+        "wrist centre"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "146-shoulders_test5-external-rotation",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "pec_minor",
+    "name": "Pec minor test (Test 6, partner, yes/no)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "None",
+    "cue": "Lie on the back, arms slightly out from the sides. Partner gently presses both shoulders toward the floor. Stretch felt once fully pressed = tight pec minor.",
+    "measures": [
+     {
+      "key": "tight",
+      "label": "Stretch felt when pressed",
+      "kind": "choice",
+      "options": [
+       "yes_tight",
+       "no_stretch"
+      ]
+     }
+    ],
+    "lesson_slug": "147-shoulders_test6-pec-minor",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "ir_length",
+    "name": "Internal rotation length test (Test 7, infraspinatus + teres minor)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone on the floor propped against a wall, side view, shoulders in line with the camera",
+    "cue": "Lie on the back, arms out so elbows and shoulders form one line, shoulders down, elbows bent 90, forearms up. Let the forearm rotate forward/down keeping 90 deg; shoulder must not lift off the floor; check the elbow has not slipped lower in the frame. Turn around for the other arm. Test gently.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Forearm angle from the horizontal floor line on the head side",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "point on the floor line on the head side of the elbow",
+        "elbow centre",
+        "wrist centre"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "148-shoulders_test7-internal-rotation",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "force_couple_push",
+    "name": "Force couple push test (push-up or dip 1-6 rep max)",
+    "sides": [
+     "both"
+    ],
+    "camera": "Film to count reps and check technique",
+    "cue": "Warm up 5-8 sets, max 5 reps each, rest 1-2 min, harder each set. Rest 5 min, then one set to failure landing in 1-6 reps at tempo 4010. Too easy: lower the push-up hands or add dip weight; failed or >6: rest 8 min, retest. Push-up: feet against a wall, hands by the chest, chest touches the floor/object, testing heights flat/30/60/90 cm only. Dip: only if you can do 1 full bodyweight dip; biceps touch forearms.",
+    "measures": [
+     {
+      "key": "method",
+      "label": "Test used",
+      "kind": "choice",
+      "options": [
+       "push_up",
+       "dip"
+      ]
+     },
+     {
+      "key": "bodyweight_kg",
+      "label": "Bodyweight",
+      "kind": "number",
+      "unit": "kg"
+     },
+     {
+      "key": "elevation",
+      "label": "Push-up hand elevation",
+      "kind": "choice",
+      "options": [
+       "90 cm",
+       "60 cm",
+       "30 cm",
+       "flat"
+      ]
+     },
+     {
+      "key": "added_kg",
+      "label": "Dip added weight",
+      "kind": "number",
+      "unit": "kg"
+     },
+     {
+      "key": "reps",
+      "label": "Reps achieved (1-6)",
+      "kind": "number",
+      "unit": "reps"
+     }
+    ],
+    "lesson_slug": "149-shoulders_force-couple-calculator",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "trap3_reps",
+    "name": "Lower trap (trap-3) raise reps at the force couple target",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "None",
+    "cue": "60 deg bent-over supported lower trap raise, nearest dumbbell to the calculator target, warm up 2-3 sets, AMRAP with 4 s lowering, strict. Rest about 15-20 s then the other side. Max 2 stabiliser tests per session.",
+    "measures": [
+     {
+      "key": "reps_exact",
+      "label": "Exact reps (needed for the 5-rep threshold)",
+      "kind": "number",
+      "unit": "reps"
+     }
+    ],
+    "lesson_slug": "168-shoulders-strength_trap3-trap1-raises",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "eok_er_reps",
+    "name": "Elbow-on-knee external rotation reps at the force couple target",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "None",
+    "cue": "135 deg elbow-on-knee dumbbell external rotation, nearest dumbbell to the calculator target, warm up 2-3 sets, AMRAP with 4 s lowering, strict. Rest about 15-20 s then the other side. Max 2 stabiliser tests per session.",
+    "measures": [
+     {
+      "key": "reps_exact",
+      "label": "Exact reps (needed for the 5-rep threshold)",
+      "kind": "number",
+      "unit": "reps"
+     }
+    ],
+    "lesson_slug": "166-shoulders-strength_elbow-on-knee-er",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "powell_reps",
+    "name": "Elbow-supported Powell raise reps at the force couple target (not on form 3.0)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "None",
+    "cue": "Elbow-supported Powell raise (rear delts and rhomboids), nearest dumbbell to the calculator target, AMRAP with 4 s lowering, strict. Max 2 stabiliser tests per session.",
+    "measures": [
+     {
+      "key": "reps_exact",
+      "label": "Reps at target",
+      "kind": "number",
+      "unit": "reps"
+     }
+    ],
+    "lesson_slug": "167-shoulders-strength_powell-raises",
+    "lesson_course": "mftk"
+   }
+  ],
+  "gap": {
+   "passive": {
+    "test": "flexion_passive",
+    "measure": "angle"
+   },
+   "active": {
+    "test": "flexion_active",
+    "measure": "angle"
+   }
+  },
+  "questions": [
+   {
+    "id": "shoulder_type",
+    "text": "Pick the one that fits best.",
+    "name": "Shoulder type (builder input 9)",
+    "options": [
+     "easier_strength_than_flexibility",
+     "easier_flexibility_than_strength",
+     "previous_injury",
+     "dont_know"
+    ]
+   },
+   {
+    "id": "time_budget",
+    "text": "How much time per session.",
+    "name": "Time budget (builder input 1)",
+    "options": [
+     "quick_20_most_limiting",
+     "quick_20_after_strength",
+     "comprehensive_60"
+    ]
+   },
+   {
+    "id": "healthcare_approval",
+    "text": "Required before training.",
+    "name": "Healthcare approval to train (builder input 10)",
+    "options": [
+     "yes_i_will",
+     "yes_i_have"
+    ]
+   }
+  ],
+  "lesson_course": "mftk"
+ }
+}
