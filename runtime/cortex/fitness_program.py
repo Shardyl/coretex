@@ -566,6 +566,20 @@ def target(item: dict, history: list) -> dict:
 # session's depth. The first drill of the session gets the full ladder, later drills the last two rungs. Warm-up sets
 # never count as program sets. Bridge adds his general spine + wrist warm-up before and a cool down after.
 WARMUP_LESSON = {"lesson_slug": "06-fundamentals_warm-up", "lesson_course": "mftk", "name": "How to warm up"}
+GENERAL_LESSONS = [
+    {"name": "How to warm up", "lesson_slug": "06-fundamentals_warm-up", "lesson_course": "mftk"},
+    {"name": "How to progress, session to session", "lesson_slug": "08-fundamentals_how-to-progress", "lesson_course": "mftk"},
+    {"name": "How should stretching feel?", "lesson_slug": "12-intermediate_how-should-stretching-feel", "lesson_course": "mftk"},
+    {"name": "Passive vs active flexibility", "lesson_slug": "25-types-of-flexibility_1-passive-vs-active", "lesson_course": "mftk"},
+    {"name": "Program design: order of exercise", "lesson_slug": "204-program-design_order-of-exercise", "lesson_course": "mftk"},
+    {"name": "Program design: tempo", "lesson_slug": "205-program-design_manipulating-tempo", "lesson_course": "mftk"},
+    {"name": "Program design: time under tension and reps", "lesson_slug": "206-program-design_tut-and-reps", "lesson_course": "mftk"},
+    {"name": "Mobility and flexibility for climbers", "youtube": "lvErtoi9NCY"},
+    {"name": "Tempo example: pull 4010", "youtube": "LYb2Zmonc0Y"}, {"name": "Tempo example: push 4010", "youtube": "HjU-N4xep78"},
+    {"name": "Tempo example: pull 3310", "youtube": "La0M4WSjWf4"}, {"name": "Tempo example: push 3310", "youtube": "iYtJX6W3dQc"},
+    {"name": "Tempo example: pull 3013", "youtube": "aRjE4FEC1OI"}, {"name": "Tempo example: push 3013", "youtube": "AW2kMeO-KNg"},
+    {"name": "Tempo example: pull 32-1 (eccentric only)", "youtube": "hTeoSi357os"},
+]
 BLOCKS = {
     "bridge": {
         "before": [
@@ -614,6 +628,7 @@ def programs_state() -> dict:
     out = _programs_state()
     out["program_pillars"] = program_pillars(fm.drill_library())
     out["warmup_lesson"] = WARMUP_LESSON
+    out["general_lessons"] = GENERAL_LESSONS
     out["blocks"] = BLOCKS
     for p in out["programs"]:
         if p["status"] == "active":

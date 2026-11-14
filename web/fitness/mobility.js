@@ -121,6 +121,8 @@ function renderList(el){
   el.innerHTML=`<div class="section-label">Flexibility pillars</div>
     <div style="font-size:12px;color:var(--ink3);margin-bottom:12px">Matthew Smith's eight skills. Your focus pillars are at the top; Next to do covers only those. Change focus inside any pillar.</div>
     ${todoBlock(all,6,'Next to do')}
+    ${(_mob.general_lessons||[]).length?`<details class="card" style="padding:12px 14px;margin-bottom:12px"><summary style="cursor:pointer;font-size:13px;font-weight:800">Key lessons &middot; ${_mob.general_lessons.length}</summary>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${_mob.general_lessons.map(x=>lessonBtn(x,x.name)).join('')}</div></details>`:''}
     ${order.map((p,i)=>(i===F.size&&F.size<order.length?'<div class="section-label" style="margin-top:14px">Other pillars</div>':'')+(()=>{
       const s=pillarState(p), ready=s.total>0, g=ready?gapFor(p):null;
       const gtxt=g&&g.any?'Gap '+g.rows.filter(r=>r.gap!=null).map(r=>(g.ta.sides.length>1?r.side+' ':'')+r.gap+'°').join(' &middot; '):'';
@@ -383,6 +385,7 @@ function renderPillar(el,p){
     ${p.setup?`<div style="font-size:12px;color:var(--ink2);margin:6px 0 4px;line-height:1.5">${esc(p.setup)}</div>`:''}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">${lessonBtn({name:p.name+' assessment',lesson_slug:p.lesson_slug,lesson_course:p.lesson_course,youtube:p.youtube},'Watch the assessment lesson')}
       ${p.lesson?`<a href="${esc(p.lesson)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--blue)">On Smith's site</a>`:''}</div>
+    ${(p.extra_lessons||[]).length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${p.extra_lessons.map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}
     <div style="display:flex;gap:8px;align-items:center;margin:12px 0">
       <label class="form-label" style="margin:0">Assessment date</label>
       <input type="date" value="${day}" max="${today()}" class="fd-input" style="width:auto;font-size:14px" onchange="mobDay(this.value)"/></div>
@@ -392,6 +395,7 @@ function renderPillar(el,p){
       <div style="font-size:14px;font-weight:800">${i+1}. ${esc(t.name)}${t.role?` <span style="font-size:10px;font-weight:700;color:var(--ink3)">${t.role==='active'?'ACTIVE':'PASSIVE'}</span>`:''}</div>
       ${t.camera?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--surface2)"><b>Camera:</b> ${esc(t.camera)}<div style="margin-top:4px;color:var(--ink3)">${CAM_TIP}</div></div>`:''}
       ${holdOf(t)?`<div style="font-size:13px;font-weight:800;margin-top:6px;color:var(--teal)">Hold ${esc(holdOf(t))} for it to count</div>`:''}
+      ${t.benchmark?`<div style="font-size:12px;margin-top:4px"><b>Benchmark:</b> ${esc(t.benchmark)}</div>`:''}
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
       ${t.lesson_slug||t.youtube?`<div style="margin-top:6px">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}</div>`:''}
       ${t.sides.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both)}

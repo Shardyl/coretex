@@ -577,7 +577,8 @@
      }
     ],
     "lesson_slug": "144-shoulders_test4a-pec-major",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "benchmark": "10 deg (red, poor) to 40 deg (green, good) below the shoulder line (Smith's builder form diagram)"
    },
    {
     "id": "er_length",
@@ -612,7 +613,8 @@
      }
     ],
     "lesson_slug": "146-shoulders_test5-external-rotation",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "benchmark": "-20 deg (red, poor) to 45 deg (green, good) (Smith's builder form diagram)"
    },
    {
     "id": "pec_minor",
@@ -1167,7 +1169,21 @@
     "measure": "angle"
    }
   },
-  "marked": "smith"
+  "marked": "smith",
+  "extra_lessons": [
+   {
+    "name": "Mechanics of a Side Split",
+    "youtube": "bJl4VSoESpo"
+   },
+   {
+    "name": "Theo Necker: side splits in one session",
+    "youtube": "NmOrGu3A7Ps"
+   },
+   {
+    "name": "How to not get stuck in your side splits, with Sondre Berg",
+    "youtube": "TG9ShMMavX4"
+   }
+  ]
  },
  "front_split": {
   "id": "front_split",
@@ -1188,21 +1204,21 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Passive front split angle (our angle: Smith's front split measuring lesson was not captured)",
+      "label": "Passive front split angle (Smith's own diagram, front split program builder form)",
       "kind": "number",
       "unit": "deg",
       "angle": {
        "mode": "inside",
        "points": [
-        "front ankle",
-        "middle of the hips",
-        "back ankle"
+        "front knee",
+        "centre of the hip",
+        "back knee"
        ],
        "pose": {
         "joints": [
-         "ankle",
+         "knee",
          "mid:hip",
-         "other:ankle"
+         "other:knee"
         ],
         "side": "visible",
         "best": "max"
@@ -1235,21 +1251,21 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Isometric front split angle (our angle: Smith's front split measuring lesson was not captured)",
+      "label": "Isometric front split angle (Smith's own diagram, front split program builder form)",
       "kind": "number",
       "unit": "deg",
       "angle": {
        "mode": "inside",
        "points": [
-        "front ankle",
-        "middle of the hips",
-        "back ankle"
+        "front knee",
+        "centre of the hip",
+        "back knee"
        ],
        "pose": {
         "joints": [
-         "ankle",
+         "knee",
          "mid:hip",
-         "other:ankle"
+         "other:knee"
         ],
         "side": "visible",
         "best": "max"
@@ -1278,15 +1294,15 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Couch stretch hips low angle (our angle: Smith's front split measuring lesson was not captured)",
+      "label": "Couch stretch hips low angle (Smith's own diagram, front split program builder form)",
       "kind": "number",
       "unit": "deg",
       "angle": {
        "mode": "inside",
        "points": [
-        "front knee",
+        "back knee",
         "centre of the hip",
-        "back knee"
+        "front knee"
        ],
        "pose": {
         "joints": [
@@ -1324,15 +1340,15 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Kneeling lunge angle (our angle: Smith's front split measuring lesson was not captured)",
+      "label": "Kneeling lunge angle (Smith's own diagram, front split program builder form)",
       "kind": "number",
       "unit": "deg",
       "angle": {
        "mode": "inside",
        "points": [
-        "front knee",
+        "back knee",
         "centre of the hip",
-        "back knee"
+        "front knee"
        ],
        "pose": {
         "joints": [
@@ -1351,7 +1367,7 @@
    },
    {
     "id": "fs_prone_knee_bend",
-    "name": "Prone knee bend (prone active hip extension)",
+    "name": "Prone active hip extension",
     "sides": [
      "L",
      "R"
@@ -1361,23 +1377,23 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Prone active hip extension angle (our angle: Smith's front split measuring lesson was not captured)",
+      "label": "Prone active hip extension angle (Smith's own diagram, front split program builder form)",
       "kind": "number",
       "unit": "deg",
       "angle": {
-       "mode": "flex",
+       "mode": "inside",
        "points": [
-        "hip",
-        "knee",
-        "ankle"
+        "knee of the lifted leg",
+        "centre of the hip",
+        "knee of the leg on the floor"
        ],
        "pose": {
         "joints": [
-         "hip",
-         "knee",
-         "ankle"
+         "high:knee",
+         "mid:hip",
+         "low:knee"
         ],
-        "side": "visible",
+        "side": "lifted",
         "best": "max"
        }
       }
@@ -1448,21 +1464,21 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Single-leg lift angle (our angle: Smith's front split measuring lesson was not captured)",
+      "label": "Single-leg lift angle (Smith's own diagram, front split program builder form)",
       "kind": "number",
       "unit": "deg",
       "angle": {
        "mode": "inside",
        "points": [
-        "standing foot",
-        "hip",
-        "lifted foot"
+        "knee of the lifted leg",
+        "centre of the hip",
+        "knee of the standing leg"
        ],
        "pose": {
         "joints": [
-         "low:ankle",
+         "high:knee",
          "mid:hip",
-         "high:ankle"
+         "low:knee"
         ],
         "side": "lifted",
         "best": "max"
@@ -1582,7 +1598,8 @@
     ],
     "lesson_slug": "146-shoulders_test5-external-rotation",
     "same_as": "shoulder_flexion.er_length",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "benchmark": "-20 deg (red, poor) to 45 deg (green, good) (Smith's builder form diagram)"
    },
    {
     "id": "pec_major",
@@ -1620,17 +1637,18 @@
     ],
     "lesson_slug": "144-shoulders_test4a-pec-major",
     "same_as": "shoulder_flexion.pec_major",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "benchmark": "10 deg (red, poor) to 40 deg (green, good) below the shoulder line (Smith's builder form diagram)"
    },
    {
     "id": "couch_stretch_low",
-    "name": "Couch stretch, hips low (bridge test 3)",
+    "name": "Couch stretch, hips high",
     "sides": [
      "L",
      "R"
     ],
     "camera": "Phone on the floor, same way every time, on the back-leg side",
-    "cue": "Back knee padded, as close to the wall as possible, foot up the wall, hips low, torso upright. Hold 10 s. Both legs.",
+    "cue": "Hips HIGH (torso upright, hips over the back knee), per Smith's bridge builder form. Back knee padded, as close to the wall as possible, foot up the wall, hips low, torso upright. Hold 10 s. Both legs.",
     "measures": [
      {
       "key": "angle",
@@ -1657,7 +1675,8 @@
      }
     ],
     "lesson_slug": "125-couch-stretch-hips-low",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "benchmark": "90 deg (red, poor), 150 deg (example), 190 deg (green, good) (Smith's builder form diagram)"
    },
    {
     "id": "kneeling_lunge",
@@ -1694,7 +1713,8 @@
      }
     ],
     "lesson_slug": "178-bridge_assessment",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "benchmark": "90 deg (red, poor), 154 deg (example), 190 deg (green, good) (Smith's builder form diagram)"
    },
    {
     "id": "bridge_level",
@@ -1784,7 +1804,8 @@
     "lesson_slug": "144-shoulders_test4a-pec-major",
     "same_as": "shoulder_flexion.pec_major",
     "marked": "ours",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "benchmark": "10 deg (red, poor) to 40 deg (green, good) below the shoulder line (Smith's builder form diagram)"
    },
    {
     "id": "dislocate_grip",
