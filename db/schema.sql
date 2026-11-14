@@ -603,6 +603,30 @@ create table if not exists fitness.cali_milestones (
 );
 grant select, insert, update, delete on fitness.cali_sessions, fitness.cali_milestones to cortex;
 
+-- Physio (cortex/fitness_physio.py, 14 Nov 2026): old injuries and niggles. Issues are DATA (setting
+-- fitness_physio); test results per day + side (same day replaces), sessions = drills ticked. Never hard-deleted.
+create table if not exists fitness.physio_results (
+    uid        text primary key,
+    day        date not null,
+    item       text not null,
+    test       text not null,
+    side       text not null,
+    value      numeric,
+    deleted    boolean not null default false,
+    created_at timestamptz not null default now()
+);
+create index if not exists physio_results_item_idx on fitness.physio_results (item, day);
+create table if not exists fitness.physio_sessions (
+    uid        text primary key,
+    day        date not null,
+    drills     jsonb not null,                    -- [{item, drill}]
+    minutes    numeric,
+    note       text,
+    deleted    boolean not null default false,
+    created_at timestamptz not null default now()
+);
+grant select, insert, update, delete on fitness.physio_results, fitness.physio_sessions to cortex;
+
 -- ---------------------------------------------------------------------------
 -- YOLO (cortex/yolo.py, 11 Nov 2026): the owner's boat maintenance + cost book.
 -- Personal project (Raffaelli Storm 46 Fly "YOLO"), NOT a company. Same sync

@@ -2591,6 +2591,36 @@ def _cases():
                         for m in t["measures"] if m.get("angle")))
     case("every pillar's program rules are data the engine evaluates, every drill has a warm-up ladder, and the "
          "handstand programs and milestones resolve", "whole app 14 Nov", _mob_all)
+
+    def _physio():
+        # 14 Nov 2026 (owner): the physio section's five ranked issues are data; every test has a known kind and a
+        # cue, a Mobility-hosted test points at a real pillar test with those measures, every lesson resolves, and
+        # the knee's caution is what Mobility shows
+        import json as _j
+        from . import fitness_mobility as fm, fitness_physio as ph, fitness_course as fcs
+        d = _j.load(open(ph.DATA_FILE, encoding="utf-8"))
+        its = sorted(d["items"], key=lambda i: i["rank"])
+        ranks = [i["rank"] for i in its] == [1, 2, 3, 4, 5] and its[0]["id"] == "calves" and its[1]["id"] == "foot_lift"
+        tests_ok = all(t.get("kind") in ph.KINDS and t.get("cue") and t.get("sides") for i in its for t in i["tests"])
+        mob_ok = True
+        for i in its:
+            for t in i["tests"]:
+                if t["kind"] != "mobility":
+                    continue
+                p = next((p for p in fm.DEFAULT_PILLARS if p["id"] == t["pillar"]), None)
+                mt = next((x for x in (p or {}).get("tests") or [] if x["id"] == t["test"]), None)
+                mob_ok = mob_ok and bool(mt) and set(t["measures"]) <= {m["key"] for m in mt["measures"]}
+        lessons = all(fcs.note(dr["lesson"]["course"], dr["lesson"]["slug"]) is not None or not os.path.isdir("/opt/cortex-knowledge")
+                      for i in its for dr in i["drills"] if dr.get("lesson"))
+        drill_ids = all(len({dr["id"] for dr in i["drills"]}) == len(i["drills"]) for i in its)
+        caution = any("knee" in (i.get("caution") or "") for i in its)
+        js = open(_web + "/fitness/physio.js", encoding="utf-8").read()
+        html = open(_web + "/fitness/index.html", encoding="utf-8").read()
+        return (ranks and tests_ok and mob_ok and lessons and drill_ids and caution and "window.renderPhysio" in js
+                and 'data-section="physio"' in html and "physio.js?v=" in html
+                and "physioBanner()" in open(_web + "/fitness/mobility.js", encoding="utf-8").read())
+    case("the physio section's ranked issues are data whose tests, Mobility links and lessons all resolve",
+         "physio 14 Nov", _physio)
     case("pancake and shoulder tests and every drill come from the course notes as data, each lesson plays inside the "
          "app through a short-lived signed link, and a bad lesson id is refused", "course library 14 Nov", _mob_library)
     case("the fold and elbow/head scales are the program builder's own steps, and a measured frame is saved clean "

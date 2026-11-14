@@ -1,0 +1,131 @@
+{
+ "intro": "Old injuries and niggles, ranked by the owner (14 Nov 2026). Each has its own tests, logged over time, and its own drills. Drills marked Smith come from his course; the rest are standard physio practice (ours). Nothing here is a diagnosis: the physio confirms what each one is.",
+ "weekly_target": {"sessions": 3, "minutes": "15-20", "when": "the evening mobility slot"},
+ "items": [
+  {
+   "id": "calves",
+   "rank": 1,
+   "name": "Calves: deep tenderness",
+   "area": "Both calves, top to bottom, deep in the muscle",
+   "summary": "Lifelong deep pain when pressed (thumbs, massage), no pain day to day. Childhood night cramps, none for years. Toe-biased movement (runs stairs on the forefoot), so the calves rarely work in their fully lengthened range.",
+   "likely": "Tight, high-tone calves sensitised to pressure, short from habitually working in mid to short range. The toe flexors start deep in the calf, so the feet and the tucked-toe kneel are probably part of the same chain.",
+   "goal": "Lower pressure tenderness and more ankle range: heavy, slow, full-range strength plus long-hold stretching.",
+   "progression": "Bodyweight for the first 2-3 weeks, then add load: the Achilles adapts more slowly than the muscle.",
+   "tests": [
+    {"id": "knee_to_wall", "name": "Knee to wall (ankle range)", "kind": "mobility", "pillar": "squat", "test": "knee_to_wall",
+     "measures": ["angle", "cm"], "better": "higher", "sides": ["L", "R"],
+     "cue": "Measured in Mobility (Squat pillar): shin angle from the clip, plus toe-to-wall distance. Around 10 cm or 35-45 deg is typical."},
+    {"id": "calf_pressure", "name": "Calf pressure tenderness", "kind": "scale", "better": "lower", "sides": ["L", "R"],
+     "cue": "Seated, calf relaxed. Thumb into the middle of the calf belly, same spot, firm steady pressure for 5 s. Score 0 (nothing) to 10 (worst). Same spot every week."}
+   ],
+   "drills": [
+    {"id": "calf_eccentric", "name": "Slow calf raise off a step (straight knee)", "dose": "3 x 8-15, 3 s down, 2 s pause in the full stretch at the bottom, up under control", "cues": ["Heel all the way below the step", "Single leg once both legs are easy", "Add a dumbbell after 2-3 weeks"], "source": "ours"},
+    {"id": "seated_calf", "name": "Seated calf raise (soleus)", "dose": "3 x 8-15, same slow tempo, pause at the bottom", "cues": ["Machine, or a barbell or dumbbells on the knees (towel padding)", "Balls of the feet on a platform, sink the heels"], "source": "smith", "lesson": {"course": "mftk", "slug": "60-pancake_mechanics-calf-stretching"}},
+    {"id": "calf_stretch_3", "name": "Single-leg calf stretch off a step, three angles", "dose": "60-90 s per angle: forward, turned in, turned out", "cues": ["Hold a rail, lower the heel, actively pull the foot up", "Wear shoes", "Which angle bites most changes: cycle all three"], "source": "smith", "lesson": {"course": "mftk", "slug": "83-pancake-drill_standing-donkey-calf-stretches"}},
+    {"id": "soleus_stretch", "name": "Bent-knee wall calf stretch (soleus)", "dose": "2 x 60 s each side", "cues": ["Back knee bent, heel down, sink the knee forward"], "source": "ours"},
+    {"id": "calf_pressure_soft", "name": "Gentle sustained pressure (not thumbs)", "dose": "30-60 s per spot at about 4/10, a few spots per calf", "cues": ["Rest the calf on a soft ball or roller and let the leg's weight sink in", "Never smash: hard pressure makes it more sensitive"], "source": "ours"}
+   ],
+   "tips": ["Heat first: steam room, sauna or a hot shower on the calves before stretching", "Walk heel to toe on purpose, stairs included, but keep running up stairs: it is good explosive work"],
+   "red_flags": ["Calves ache when walking and ease when you stop", "Toes or feet go white or blue in the cold", "A swollen, hot or red calf"],
+   "physio_questions": ["Assess ankle range and how I walk", "GP: foot pulses (family history of poor circulation; Lp(a) and homocysteine high in April 2026); next bloods: magnesium, CK, calcium"]
+  },
+  {
+   "id": "foot_lift",
+   "rank": 2,
+   "name": "Right foot lift: weakness after the nerve injury",
+   "area": "Front of the right ankle and top of the foot (tibialis anterior and the toe extensors)",
+   "summary": "Old crush injury to the nerve behind the right knee: the foot could not lift for about 6 weeks. Recovered for daily life, but the right tires much faster holding the foot up, cramps slightly on release, and the 'pop' (the tendons springing back on release from full dorsiflexion) was missing on the right until the muscle had been warmed up by tensing. Not getting weaker.",
+   "likely": "The nerve has healed; the muscle was never trained fully back, so endurance and clean on-off control lag. Matters long term for toe clearance and balance (falls).",
+   "goal": "Right side matches the left on the hold test, and the pop is there from cold.",
+   "progression": "Train the right harder (an extra set) until it matches the left; the left is the benchmark.",
+   "tests": [
+    {"id": "df_hold", "name": "Foot-lift hold to fatigue", "kind": "number", "unit": "s", "better": "higher", "sides": ["L", "R"],
+     "cue": "Seated, legs straight. Pull the foot up as far as it goes and hold. Stop when it drops or burns out. Seconds."},
+    {"id": "pop_cold", "name": "The pop from cold", "kind": "yesno", "better": "yes", "sides": ["R"],
+     "cue": "Before any warm-up: pull the right foot fully up, then release quickly. Do you feel the pop at the front?"}
+   ],
+   "drills": [
+    {"id": "tib_raise_band", "name": "Tibialis raises with a band", "dose": "3 x 12-15 each side, 2 s squeeze at the top; right side 1 extra set", "cues": ["Band round a post and the ball of the foot", "Small range: the work is the fully shortened top position"], "source": "smith", "lesson": {"course": "mftk", "slug": "41-pike-drill_tibialis-anterior-raises"}},
+    {"id": "wall_tib", "name": "Wall tib raises", "dose": "3 x 15-20", "cues": ["Back against a wall, heels 20-30 cm out", "Lift the toes as high as they go, lower slowly"], "source": "ours"},
+    {"id": "df_iso", "name": "Foot-lift holds", "dose": "3 x 30-45 s, right side first", "cues": ["Seated, pull the foot up hard and hold", "This is the endurance gap you felt"], "source": "ours"},
+    {"id": "toe_taps", "name": "Fast toe taps", "dose": "3 x 20 s", "cues": ["Seated, heel down, tap the forefoot as fast as you can"], "source": "ours"},
+    {"id": "sl_balance", "name": "Single-leg balance, right", "dose": "3 x 30 s; eyes closed once easy", "cues": ["Barefoot, soft knee", "Later: hops"], "source": "ours"}
+   ],
+   "tips": [],
+   "red_flags": ["The foot getting weaker", "Catching the toes or tripping", "Numbness on the top of the foot or between the first two toes"],
+   "physio_questions": []
+  },
+  {
+   "id": "shoulder",
+   "rank": 3,
+   "name": "Right shoulder: twinge under the side delt",
+   "area": "Deep under the middle of the right side deltoid",
+   "summary": "2-3 years ago: sudden severe deep throbbing pain out of nowhere, slept sitting up in a chair, strong painkillers for a few days, no lasting weakness. The physio did needling then. Now: a slight tightness on the barbell overhead press and a small twinge lifting the arm, in the same spot. Right active flexion and pec length are the worse side in the shoulder tests.",
+   "likely": "Possibly calcific tendinitis of the supraspinatus (the old episode fits it), with the tendon still irritated or some calcium left; a subacromial pinch overhead. Not diagnosed.",
+   "goal": "No twinge on the press, no painful arc.",
+   "progression": "The shoulder flexibility program carries on as planned. If the twinge has not settled after 6-8 weeks of logging, ask for a scan.",
+   "scan_after_weeks": 8,
+   "tests": [
+    {"id": "painful_arc", "name": "Painful arc", "kind": "yesno", "better": "no", "sides": ["R"],
+     "cue": "Raise the right arm slowly out to the side, thumb up, all the way overhead. Twinge between about shoulder height and just above that eases higher up?"},
+    {"id": "press_twinge", "name": "Overhead press twinge", "kind": "scale", "better": "lower", "sides": ["R"],
+     "cue": "After your pressing sets: how much did the spot bother you, 0 (nothing) to 10."}
+   ],
+   "drills": [
+    {"id": "sl_er", "name": "Side-lying external rotation", "dose": "3 x 12-15, slow, light", "cues": ["Towel under the elbow, elbow at the side", "Rotate the forearm up, 3 s down"], "source": "ours"},
+    {"id": "prone_y", "name": "Prone Y raise (lower trap)", "dose": "3 x 10, 2 s hold at the top", "cues": ["Face down, thumbs up, arms in a Y", "Lift from the shoulder blades, not the neck"], "source": "ours"},
+    {"id": "wall_slide", "name": "Scapular wall slides", "dose": "2 x 10", "cues": ["Forearms on the wall, slide up while the shoulder blades rotate up and wrap round"], "source": "ours"}
+   ],
+   "tips": ["The shoulder program's external rotation and trap-3 work is the same medicine"],
+   "red_flags": ["Night pain that wakes you", "Weakness lifting the arm", "Numbness or tingling down the arm"],
+   "physio_questions": ["Was the old needling dry needling, or ultrasound-guided?", "Is an ultrasound or X-ray worth it to check for a calcium deposit?", "Neck check: does tilting the head right and looking up bring on the delt feeling?"]
+  },
+  {
+   "id": "knee",
+   "rank": 4,
+   "name": "Right knee: behind the joint",
+   "area": "Dead centre at the back of the right knee, top of the calf",
+   "summary": "Flared early in the week of 9 Nov 2026 after stretching; has recurred a few times over the years. Hurts sitting back on the heels and in deep knee bending; squats on Wed 11 Nov did not aggravate it. No catching, locking or giving way. Settling.",
+   "likely": "A strained muscle or tendon behind the knee (popliteus or the top of the calf) irritated by end-range stretching; the meniscus is less likely with no mechanical symptoms.",
+   "goal": "Kneeling on the heels comfortable; then mark it resolved.",
+   "progression": "Squats are fine. Ease off deep PASSIVE knee bending on the right until kneeling is comfortable.",
+   "caution": "Right knee settling: ease off deep passive knee bending on the right (sitting back on the heels, couch stretch, deep squat holds). Squats are fine.",
+   "tests": [
+    {"id": "kneel_sitback", "name": "Kneeling sit-back discomfort", "kind": "scale", "better": "lower", "sides": ["R"],
+     "cue": "Kneel and sit back towards the heels as far as is comfortable. Discomfort behind the knee, 0 (none) to 10."}
+   ],
+   "drills": [
+    {"id": "heel_dig", "name": "Heel digs (hamstring isometric)", "dose": "5 x 10 s", "cues": ["Seated, knee slightly bent, dig the heel into the floor"], "source": "ours"},
+    {"id": "easy_squat", "name": "Bodyweight squats to a comfortable depth", "dose": "2 x 10", "cues": ["Stop short of any pain behind the knee"], "source": "ours"}
+   ],
+   "tips": [],
+   "red_flags": ["Visible swelling behind the knee", "Tightness or swelling spreading down the calf", "Catching, locking or giving way", "It flares every time you stretch"],
+   "physio_questions": ["If it recurs: check the popliteus and the back of the meniscus"]
+  },
+  {
+   "id": "feet",
+   "rank": 5,
+   "name": "Feet and toes: sole tenderness",
+   "area": "The middle of both soles; the toes",
+   "summary": "Soles very sore under thumb pressure, fine day to day (mostly barefoot, otherwise flat shoes). Kneeling on tucked toes is very painful; kneeling with the feet flat is fine.",
+   "likely": "Same chain as the calves: plantar fascia, the small foot muscles and the long toe flexors that start in the calf. Short and sensitised.",
+   "goal": "Kneel on tucked toes comfortably for 60 s; lower sole tenderness.",
+   "progression": "Hands take most of the weight at first, adding a little each week. While the right knee settles, a cushion between the heels and bum.",
+   "tests": [
+    {"id": "toe_kneel", "name": "Tucked-toe kneel", "kind": "number", "unit": "s", "better": "higher", "sides": ["both"],
+     "cue": "Kneel with the toes tucked under, sitting back with full weight. Seconds until you have to come off."},
+    {"id": "sole_pressure", "name": "Sole pressure tenderness", "kind": "scale", "better": "lower", "sides": ["L", "R"],
+     "cue": "Thumb into the middle of the sole, same spot, firm 5 s. 0 (nothing) to 10."}
+   ],
+   "drills": [
+    {"id": "toe_kneel_drill", "name": "Tucked-toe kneel, hands supporting", "dose": "3 x 30-60 s", "cues": ["Hands on the floor take the weight you need", "Cushion between heels and bum while the right knee settles"], "source": "ours"},
+    {"id": "toe_yoga", "name": "Toe control (big toe up, others down, then swap)", "dose": "3 x 10", "cues": ["Barefoot, seated or standing"], "source": "ours"},
+    {"id": "short_foot", "name": "Short foot holds", "dose": "3 x 10 s", "cues": ["Shorten the foot by lifting the arch, toes stay long and relaxed"], "source": "ours"},
+    {"id": "sole_ball", "name": "Gentle ball under the sole", "dose": "60 s each foot at about 4/10", "cues": ["Standing, let some weight sink in, slow"], "source": "ours"}
+   ],
+   "tips": ["The calf work covers the rest of this chain"],
+   "red_flags": ["Sharp heel pain on the first steps in the morning", "Numbness or burning in the soles"],
+   "physio_questions": []
+  }
+ ]
+}

@@ -7549,6 +7549,67 @@ def fitness_cali_current(body: dict = Body(...), _: None = Depends(auth)) -> dic
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# ---------- physio: old injuries and niggles, their tests and drills (14 Nov 2026) ----------
+class PhysioResult(BaseModel):
+    date: str
+    item: str
+    test: str
+    side: str
+    value: float | int | bool | str
+
+
+class PhysioSession(BaseModel):
+    date: str
+    drills: list
+    minutes: float | None = None
+    note: str | None = None
+
+
+@app.get("/api/fitness/physio")
+def fitness_physio_state(_: None = Depends(auth)) -> dict:
+    from . import fitness_physio
+    return fitness_physio.state()
+
+
+@app.post("/api/fitness/physio/result")
+def fitness_physio_result(body: PhysioResult, _: None = Depends(auth)) -> dict:
+    from . import fitness_physio
+    try:
+        return fitness_physio.save_result(body.date, body.item, body.test, body.side, body.value)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/fitness/physio/result/{uid}")
+def fitness_physio_result_delete(uid: str, _: None = Depends(auth)) -> dict:
+    from . import fitness_physio
+    return fitness_physio.delete_result(uid)
+
+
+@app.post("/api/fitness/physio/session")
+def fitness_physio_session(body: PhysioSession, _: None = Depends(auth)) -> dict:
+    from . import fitness_physio
+    try:
+        return fitness_physio.log_session(body.date, body.drills, body.minutes, body.note or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/fitness/physio/session/{uid}")
+def fitness_physio_session_delete(uid: str, _: None = Depends(auth)) -> dict:
+    from . import fitness_physio
+    return fitness_physio.delete_session(uid)
+
+
+@app.post("/api/fitness/physio/status")
+def fitness_physio_status(body: dict = Body(...), _: None = Depends(auth)) -> dict:
+    from . import fitness_physio
+    try:
+        return fitness_physio.set_status(str(body.get("item") or ""), str(body.get("status") or ""))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.get("/api/fitness/position/{name}")
 def fitness_position_img(name: str, _: None = Depends(auth)):
     """A test's correct-position picture (Smith's form photos / course pages), private on the box."""

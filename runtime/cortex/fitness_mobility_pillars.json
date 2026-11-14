@@ -2187,6 +2187,51 @@
      "caption": "Smith's form: on a box, knees together, feet swing out"
     },
     "one_clip": true
+   },
+   {
+    "id": "knee_to_wall",
+    "name": "Knee to wall (ankle range, weight-bearing lunge)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "From the SIDE of the tested leg, phone at shin height, landscape, 1.5-2 m away, the whole lower leg and foot in frame. One clip per side.",
+    "cue": "Face the wall, foot pointing straight at it. Push the knee forward to touch the wall with the heel flat. Slide the foot back until the heel just starts to lift, then hold the furthest position where the knee still touches and the heel stays down. Hold 3 s. Measure big toe to wall in cm.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Shin angle from vertical",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "vertical",
+       "points": [
+        "knee (centre)",
+        "ankle (centre)"
+       ],
+       "pose": {
+        "joints": [
+         "knee",
+         "ankle"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
+      }
+     },
+     {
+      "key": "cm",
+      "label": "Big toe to wall",
+      "kind": "number",
+      "unit": "cm"
+     }
+    ],
+    "benchmark": "Around 10 cm toe to wall, or a 35-45 deg shin angle, is typical",
+    "marked": "ours",
+    "position": {
+     "img": "squat_knee_to_wall.jpg",
+     "caption": "Heel down, knee touching the wall, foot slid back as far as the heel allows"
+    }
    }
   ],
   "questions": [],

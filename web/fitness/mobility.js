@@ -114,6 +114,7 @@ function sessionTodos(p){const a=(_mob.programs||[]).find(x=>x.pillar===p.id&&x.
     :{p:p.id,k:'done',txt:`${p.name}: session ${n+1} of ${N}`,on:`mobSessionOpen('${a.id}')`}];}
 window.mobFocus=async function(id,on){const f=new Set(_mob.focus||['pancake','shoulder_flexion']);on?f.add(id):f.delete(id);_mob.focus=[...f];
   try{await syncApi('/api/fitness/mobility/focus',{method:'POST',body:JSON.stringify({pillars:_mob.focus})});}catch(e){toast('Could not save.');}renderMobility();};
+const physioBanner=()=>(_mob.physio_cautions||[]).map(c=>`<div style="display:flex;gap:6px;align-items:flex-start;font-size:12px;margin-bottom:10px;padding:8px 10px;border-radius:8px;background:rgba(255,176,32,0.12)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" aria-hidden="true"><path d="M12 9v4"/><path d="M12 16v.01"/><path d="M10.4 3.9l-8 13.9a1.8 1.8 0 0 0 1.6 2.7h16a1.8 1.8 0 0 0 1.6 -2.7l-8 -13.9a1.8 1.8 0 0 0 -3.2 0z"/></svg><span><b>Physio:</b> ${esc(c.text)}</span></div>`).join('');
 function renderList(el){
   const F=focusIds(), all=[];
   _mob.pillars.filter(p=>F.has(p.id)).forEach(p=>all.push(...sessionTodos(p)));
@@ -121,6 +122,7 @@ function renderList(el){
   const order=[..._mob.pillars.filter(p=>F.has(p.id)),..._mob.pillars.filter(p=>!F.has(p.id))];
   el.innerHTML=`<div class="section-label">Flexibility pillars</div>
     <div style="font-size:12px;color:var(--ink3);margin-bottom:12px">Matthew Smith's eight skills. Your focus pillars are at the top; Next to do covers only those. Change focus inside any pillar.</div>
+    ${physioBanner()}
     ${todoBlock(all,6,'Next to do')}
     ${(_mob.general_lessons||[]).length?`<details class="card" style="padding:12px 14px;margin-bottom:12px"><summary style="cursor:pointer;font-size:13px;font-weight:800">Key lessons &middot; ${_mob.general_lessons.length}</summary>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${_mob.general_lessons.map(x=>lessonBtn(x,x.name)).join('')}</div></details>`:''}
@@ -323,6 +325,7 @@ function renderSession(el,id){
   const p=pillar(a.pillar);
   el.innerHTML=`<button class="btn-sm" onclick="mobOpen('${a.pillar}')" style="margin-bottom:10px">&lsaquo; ${esc(p?p.name:'Back')}</button>
     <div style="font-size:18px;font-weight:800">Session ${(a.sessions_done||0)+1} of ${a.sessions_per_phase||6}</div>
+    ${physioBanner()}
     <div style="font-size:12px;color:var(--ink3);margin:2px 0 8px">Warm up each drill first: 2-5 lighter sets until you reach 80-90% of last session's depth. If you can't get near it, rest another day.</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><label class="form-label" style="margin:0">Date</label><input id="mobSDay" type="date" value="${today()}" max="${today()}" class="fd-input" style="width:auto;font-size:14px"/></div>
     <div style="margin-bottom:10px">${lessonBtn(_mob.warmup_lesson||{},'How to warm up (lesson)')}</div>

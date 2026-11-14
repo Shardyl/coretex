@@ -44,8 +44,9 @@ body{font-family:-apple-system,system-ui,'Segoe UI',sans-serif;color:var(--ink);
 .export-btn{background:var(--teal);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer}
 .install-btn{background:var(--ink);color:var(--surface);border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
 /* Section switcher */
-.section-tabs{display:flex;gap:0;border-bottom:0.5px solid var(--border)}
-.section-tab{flex:1;background:none;border:none;padding:9px 4px 10px;font-size:12px;font-weight:600;cursor:pointer;color:var(--ink3);border-bottom:2.5px solid transparent;touch-action:manipulation}
+.section-tabs{display:flex;gap:0;border-bottom:0.5px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.section-tabs::-webkit-scrollbar{display:none}
+.section-tab{flex:1 0 auto;background:none;border:none;padding:9px 8px 10px;white-space:nowrap;font-size:12px;font-weight:600;cursor:pointer;color:var(--ink3);border-bottom:2.5px solid transparent;touch-action:manipulation}
 .section-tab.active{color:var(--teal);border-bottom-color:var(--teal)}
 /* Sub nav */
 .subnav{display:flex;gap:0;overflow-x:auto;scrollbar-width:none;border-bottom:0.5px solid var(--border)}
@@ -262,6 +263,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
       <button class="section-tab" data-section="cardio">Cardio</button>
       <button class="section-tab" data-section="mobility">Mobility</button>
       <button class="section-tab" data-section="calisthenics">Calisthenics</button>
+      <button class="section-tab" data-section="physio">Physio</button>
       <button class="section-tab" data-section="workouts">Workouts</button>
     </div>
     <div id="missionStrip"></div>
@@ -480,6 +482,10 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
     <div id="page-calisthenics-program" class="page" data-section="calisthenics"></div>
     <div id="page-calisthenics-tree" class="page" data-section="calisthenics"></div>
     <div id="page-calisthenics-library" class="page" data-section="calisthenics"></div>
+    <!-- ═══ PHYSIO (rendered by physio.js, 14 Nov 2026) ═══ -->
+    <div id="page-physio-issues" class="page" data-section="physio"></div>
+    <div id="page-physio-session" class="page" data-section="physio"></div>
+    <div id="page-physio-history" class="page" data-section="physio"></div>
 
     <div id="page-workouts-lifts" class="page" data-section="workouts">
       <div class="section-label">Lifting plans</div>
@@ -1001,7 +1007,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='175';                         // keep in step with CACHE in sw.js
+const APP_VERSION='176';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1565,10 +1571,11 @@ const SUBNAVS={
   food:[{label:'Today',key:'today'},{label:'Weight',key:'weight'},{label:'Fasting',key:'fasting'},{label:'Glucose',key:'glucose'},{label:'Recovery',key:'recovery'},{label:'Bloods',key:'bloods'},{label:'History',key:'history'},{label:'My foods',key:'foods'}],
   workouts:[{label:'Lifting',key:'lifts'},{label:'Cardio',key:'cardio'}],
   mobility:[{label:'Pillars',key:'pillars'}],
-  calisthenics:[{label:'Program',key:'program'},{label:'Skill tree',key:'tree'},{label:'Library',key:'library'}]
+  calisthenics:[{label:'Program',key:'program'},{label:'Skill tree',key:'tree'},{label:'Library',key:'library'}],
+  physio:[{label:'Issues',key:'issues'},{label:'Log session',key:'session'},{label:'History',key:'history'}]
 };
 let currentSection='food';
-let currentSubpage={lifts:'log',cardio:'log',food:'today',workouts:'lifts',mobility:'pillars',calisthenics:'program'};
+let currentSubpage={lifts:'log',cardio:'log',food:'today',workouts:'lifts',mobility:'pillars',calisthenics:'program',physio:'issues'};
 
 function showSection(section){
   currentSection=section;
@@ -1608,6 +1615,7 @@ function showPage(section,sub){
   if(section==='food'&&typeof renderFood==='function')renderFood(sub);
   if(section==='mobility'&&typeof renderMobility==='function')renderMobility();
   if(section==='calisthenics'&&typeof renderCalisthenics==='function')renderCalisthenics(sub);
+  if(section==='physio'&&typeof renderPhysio==='function')renderPhysio(sub);
 }
 
 // ─── LIFTING LOG ──────────────────────────────────────────────────────────────
@@ -3232,8 +3240,9 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=175"></script>
-<script src="mobility.js?v=175"></script>
-<script src="calisthenics.js?v=175"></script>
+<script src="food.js?v=176"></script>
+<script src="mobility.js?v=176"></script>
+<script src="calisthenics.js?v=176"></script>
+<script src="physio.js?v=176"></script>
 </body>
 </html>

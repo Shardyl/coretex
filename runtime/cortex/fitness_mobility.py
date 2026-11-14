@@ -161,8 +161,13 @@ def state() -> dict:
     focus = db.setting_get("fitness_mobility_focus")
     if not isinstance(focus, list):
         focus = list(FOCUS_DEFAULT)
+    try:   # an active physio issue's caution shows above the pillars and sessions (owner, 14 Nov 2026)
+        from . import fitness_physio
+        cautions = fitness_physio.cautions()
+    except Exception:
+        cautions = []
     return {"focus": focus, "pillars": pillars(), "results": res, "media": media, "drills": drill_library().get("drills", []),
-            **fitness_program.programs_state()}
+            "physio_cautions": cautions, **fitness_program.programs_state()}
 
 
 def save_results(day: str, pillar: str, test: str, side: str, values: dict, note: str = "",
