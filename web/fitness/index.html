@@ -1008,7 +1008,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='178';                         // keep in step with CACHE in sw.js
+const APP_VERSION='179';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1442,7 +1442,7 @@ function ensurePlyo(){
 function metricDef(name){const d=getExerciseDef(name);return d&&d.metric?d:null;}
 function metricVal(r,d){if(d.metric==='weight'){const v=parseFloat(String(r.weight||'').replace(/[^0-9.]/g,''));return isNaN(v)?null:v;}
   const xs=(r.sets||[]).map(v=>parseFloat(v)).filter(v=>!isNaN(v)&&v>0);return xs.length?Math.max(...xs):null;}
-const metricName=d=>d.metric==='weight'?'Box height':'Best jump';
+const metricName=d=>d.metric==='weight'?'Highest box':'Best jump';
 
 function getExerciseDef(name){
   const wk=(document.getElementById('wkSelect')||{}).value, w0=liftWorkouts.find(w=>w.id===wk), hit=w0&&w0.exercises.find(e=>e.name===name);
@@ -2083,7 +2083,7 @@ function renderLiftProgress(){
     if(!rows.length)return'';
     const md=metricDef(ex), mv=md?rows.map(r=>metricVal(r,md)).filter(v=>v!=null):[];
     const delta=md?(mv.length?Math.round((mv[mv.length-1]-mv[0])*10)/10:0):rows[rows.length-1].totalReps-rows[0].totalReps;
-    return`<div class="exercise-card" onclick="showLiftChart('${ex.replace(/'/g,"\\'")}')"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="ex-name">${ex}</div><div class="ex-meta">${rows.length} sessions · ${md?`${metricName(md)} best: ${mv.length?Math.max(...mv):'—'} cm`:`PR: ${fmtLoad(getPRLoad(ex).load)} kg`}</div></div><div class="ex-trend ${delta>=0?'up':'down'}">${delta>=0?'+':''}${delta}</div></div></div>`;
+    return`<div class="exercise-card" onclick="showLiftChart('${ex.replace(/'/g,"\\'")}')"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="ex-name">${ex}</div><div class="ex-meta">${rows.length} sessions · ${md?`${metricName(md)}: ${mv.length?Math.max(...mv):'—'} cm`:`PR: ${fmtLoad(getPRLoad(ex).load)} kg`}</div></div><div class="ex-trend ${delta>=0?'up':'down'}">${delta>=0?'+':''}${delta}</div></div></div>`;
   }).join('');
 }
 window.showLiftChart=function(ex){
@@ -3273,9 +3273,9 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=178"></script>
-<script src="mobility.js?v=178"></script>
-<script src="calisthenics.js?v=178"></script>
-<script src="physio.js?v=178"></script>
+<script src="food.js?v=179"></script>
+<script src="mobility.js?v=179"></script>
+<script src="calisthenics.js?v=179"></script>
+<script src="physio.js?v=179"></script>
 </body>
 </html>
