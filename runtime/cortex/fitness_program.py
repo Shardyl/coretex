@@ -266,7 +266,11 @@ def build(pillar: str, answers: dict | None = None) -> dict:
     elif pillar == "shoulder_flexion":
         a = dict(answers or {})
         items, notes, missing = _shoulder_items(lib, res, a)
-        missing = []                      # shoulders build from whatever is measured, and say what is not
+        if {"leahy_worst", "passive", "active_worst"} <= set(missing):
+            # assess first (Smith): at least the flexion tests before any program
+            return {"pillar": pillar, "ready": False, "answers": a, "items": [], "notes": [],
+                    "missing": [{"id": "flexion", "why": "measure the Leahy test or passive and active flexion first"}]}
+        missing = []                      # then build from whatever is measured, and say what is not
         rules = "our shoulder rules from the course notes"
     else:
         return {"pillar": pillar, "ready": False, "missing": [{"id": "pillar", "why": "no program rules for this pillar yet"}],
