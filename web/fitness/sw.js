@@ -1,6 +1,6 @@
 // Fitness PWA service worker.
 // Bump CACHE on every ship or the phone keeps serving the cached index.html.
-const CACHE = 'fitness-v174';
+const CACHE = 'fitness-v175';
 const ASSETS = [
   './',
   './index.html',

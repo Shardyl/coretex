@@ -63,7 +63,7 @@ function todos(p){
   pillarState(p).tests.forEach(({t,cells})=>{
     const by=k=>cells.filter(c=>c.st===k).map(c=>c.side), lr=s=>t.sides.length>1&&s.length?' ('+sidesTxt(s)+')':'';
     const e=by('empty'), f=by('filmed'), pa=cells.filter(c=>c.st==='partial'), pr=by('prov');
-    if(e.length)out.push({p:p.id,t:t.id,k:'empty',txt:`Film ${t.name}${lr(e)}`});
+    if(e.length)out.push({p:p.id,t:t.id,k:'empty',txt:`${t.no_media?'Answer':'Film'} ${t.name}${lr(e)}`});
     if(f.length)out.push({p:p.id,t:t.id,k:'filmed',txt:`Measure ${t.name}${lr(f)}, clip uploaded`});
     if(pa.length)out.push({p:p.id,t:t.id,k:'partial',txt:`Measure ${t.name}: ${pa[0].missing.map(m=>m.label.toLowerCase()).join(', ')}${lr(pa.map(c=>c.side))}${pa.some(c=>c.clips.length)?', clip uploaded':''}`});
     if(pr.length)out.push({p:p.id,t:t.id,k:'prov',txt:`Retest ${t.name}${lr(pr)}, provisional`});
@@ -455,7 +455,7 @@ function renderPillar(el,p){
       const lock=done&&!_mobEdit.has(t.id);
       return `<div class="card" id="mobt_${t.id}" style="padding:12px 14px;margin-bottom:10px;scroll-margin-top:70px">
       <div style="font-size:14px;font-weight:800">${i+1}. ${esc(t.name)}${t.role?` <span style="font-size:10px;font-weight:700;color:var(--ink3)">${t.role==='active'?'ACTIVE':'PASSIVE'}</span>`:''}</div>
-      ${t.camera?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--surface2)"><b>Camera:</b> ${esc(t.camera)}<div style="margin-top:4px;color:var(--ink3)">${CAM_TIP}</div></div>`:''}
+      ${t.camera&&!t.no_media?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--surface2)"><b>Camera:</b> ${esc(t.camera)}<div style="margin-top:4px;color:var(--ink3)">${CAM_TIP}</div></div>`:''}
       ${t.position?`<div style="margin-top:8px"><img data-pos="${esc(t.position.img)}" alt="Correct position" onclick="mobPosBig(this)" style="width:100%;max-width:420px;aspect-ratio:16/9;object-fit:contain;scroll-margin-top:90px;border-radius:8px;background:var(--surface2);cursor:zoom-in;display:block"/>
         <div style="font-size:11.5px;color:var(--ink2);margin-top:3px"><b>Correct position:</b> ${esc(t.position.caption||'')}</div></div>`:''}
       ${holdOf(t)?`<div style="font-size:13px;font-weight:800;margin-top:6px;color:var(--teal)">Hold ${esc(holdOf(t))} for it to count</div>`:''}
@@ -463,14 +463,14 @@ function renderPillar(el,p){
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
       ${t.lesson_slug||t.youtube||(t.extra_lessons||[]).length?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}${(t.extra_lessons||[]).map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}
       ${lock?recordBlock(p,t,day):''}
-      ${!lock&&t.sides.length>1&&(t.one_clip||both.length)?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both,true)}
+      ${!lock&&!t.no_media&&t.sides.length>1&&(t.one_clip||both.length)?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both,true)}
         ${t.one_clip?upBtn('Upload video or photo (one clip, both sides)',p.id,t.id,'both'):''}
         <span id="mobup_${t.id}_both" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(both)}`:''}
       ${lock?'':t.sides.map(sd=>{const cur=resFor(p.id,t.id,sd,day), med=mediaDay(t.id,sd);
         return `<div style="margin-top:10px;padding-top:8px;border-top:0.5px solid var(--border)">
           ${t.sides.length>1?`<div style="font-size:12px;font-weight:800;color:var(--ink2)">${SIDE[sd]}</div>`:''}
           ${t.measures.map(m=>inputFor(p,t,sd,m,cur)).join('')}
-          ${t.one_clip&&!med.length?'':`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(med)}
+          ${t.no_media||t.one_clip&&!med.length?'':`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(med)}
             ${t.one_clip?'':upBtn('Upload video or photo',p.id,t.id,sd)}
             <span id="mobup_${t.id}_${sd}" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(med)}`}</div>`;}).join('')}
       ${lock?'':`<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2);margin-top:10px"><input type="checkbox" id="mobprov_${t.id}"${prov?' checked':''}/> Provisional (needs a proper retest)</label>

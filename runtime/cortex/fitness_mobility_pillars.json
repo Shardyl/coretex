@@ -701,17 +701,16 @@
    },
    {
     "id": "pec_minor",
-    "name": "Pec minor test (Test 6, partner, yes/no)",
+    "name": "Pec minor test (Test 6, partner, yes or no)",
     "sides": [
      "L",
      "R"
     ],
-    "camera": "None",
     "cue": "Lie on the back, arms slightly out from the sides. Partner gently presses both shoulders toward the floor. Stretch felt once fully pressed = tight pec minor.",
     "measures": [
      {
       "key": "tight",
-      "label": "Stretch felt when pressed",
+      "label": "Stretch felt when fully pressed?",
       "kind": "choice",
       "options": [
        "Yes, tight",
@@ -725,7 +724,7 @@
      "img": "shoulder_flexion_pec_minor.jpg",
      "caption": "Lie on the back, arms slightly out, partner presses both shoulders down to the floor"
     },
-    "one_clip": true
+    "no_media": true
    },
    {
     "id": "ir_length",
