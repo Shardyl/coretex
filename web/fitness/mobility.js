@@ -617,13 +617,13 @@ function poseCandidates(P,L){
 const seekTo=(v,t)=>new Promise(res=>{let done=false;const fin=()=>{if(done)return;done=true;v.removeEventListener('seeked',fin);if(v.requestVideoFrameCallback){let ok=false;v.requestVideoFrameCallback(()=>{ok=true;res();});setTimeout(()=>{if(!ok)res();},400);}else res();};
   v.addEventListener('seeked',fin);setTimeout(fin,2000);v.currentTime=Math.min(t,Math.max(0,v.duration-0.05));});
 // ---------- position + hold (owner, 14 Nov 2026: it measured him getting into position, not the held position) ----------
-// posture: 'upright' = trunk within 35 deg of vertical; 'lying' = trunk within 30 deg of horizontal and the knees NOT
+// posture: 'upright' = trunk within 35 deg of vertical; 'lying' = trunk more than 45 deg from vertical and the knees NOT
 // well below the hips (lying, knees bent); 'all_fours' = trunk near horizontal and the knees well below the hips.
 function postureOf(L){
   const m=(a,b)=>({x:(L[a].x+L[b].x)/2,y:(L[a].y+L[b].y)/2}), sh=m(11,12), hp=m(23,24), kn=m(25,26);
   const dx=sh.x-hp.x, dy=sh.y-hp.y, len=Math.hypot(dx,dy)||1e-6, fromVert=Math.acos(Math.min(1,Math.abs(dy)/len))*180/Math.PI;
   const kneeBelow=(kn.y-hp.y)/len;
-  return {upright:fromVert<=35, horizontal:fromVert>=60, kneeBelow};
+  return {upright:fromVert<=35, horizontal:fromVert>=45, kneeBelow};
 }
 function postureOK(kind,L){if(!kind)return true;const p=postureOf(L);
   if(kind==='upright')return p.upright;
@@ -633,10 +633,13 @@ function postureOK(kind,L){if(!kind)return true;const p=postureOf(L);
 // the best HELD position: a run of frames lasting the test's hold time, all in the right posture, the angle steady
 // (spread <= 8 deg); its value is the median of the run (Smith: the average position held), its dots the frame nearest
 function bestHeld(arr,best,holdS,step){
-  const ok=arr.filter(x=>x.vis>=VIS_MIN&&x.a!=null&&x.pos!==false);
+  // posture is judged per window (80% of its frames), so one borderline frame cannot break a real hold (owner 14 Nov:
+  // all fours with a rounded back sits right on the old threshold and flickered)
+  const ok=arr.filter(x=>x.vis>=VIS_MIN&&x.a!=null);
   const n=Math.max(2,Math.round(holdS/step));let win=null;
   for(let i=0;i+n<=ok.length;i++){const w=ok.slice(i,i+n);
     if(w[w.length-1].t-w[0].t>holdS+step*2.5)continue;      // a gap in the run (frames dropped): not continuous
+    if(w.filter(x=>x.pos!==false).length<0.8*w.length)continue;
     const as=w.map(x=>x.a), spread=Math.max(...as)-Math.min(...as);if(spread>8)continue;
     const med=as.slice().sort((a,b)=>a-b)[Math.floor(as.length/2)];
     if(!win||(best==='min'?med<win.med:med>win.med))win={med,w};}
