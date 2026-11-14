@@ -687,6 +687,10 @@ window.mobAutoMeasure=async function(video,id,ov,btn,msg){
     const res=await poseScan(video,ps.sp,f=>say('Finding your held position... '+Math.round(f*100)+'%'),hs);
     // a one-sided test filmed one side per clip: the visible-side result belongs to the clip's own side
     {const rec=mediaRec(id), t=testOf(rec);if(res.both&&t&&!t.sides.includes('both')&&rec&&t.sides.includes(rec.side)){res[rec.side]=res.both;delete res.both;}}
+    // the pose model can mirror left/right in some views (lying, filmed along the body); he corrects it once with
+    // Swap and it is remembered for this test on this device (owner 14 Nov 2026, pec major)
+    {const t2=testOf(mediaRec(id));let sw=false;try{sw=localStorage.getItem('mobSwap_'+(t2&&t2.id))==='1';}catch(e){}
+     if(sw&&res.L&&res.R){const x=res.L;res.L=res.R;res.R=x;}}
     const sides=Object.keys(res);
     if(!sides.length){say('No steady '+hs+' s hold in the test position found in this clip. Check the set-up and hold, refilm, or pause on your held position and measure by hand.');btn.disabled=false;btn.style.opacity=1;return;}
     await seekTo(video,res[sides[0]].t);
@@ -787,7 +791,12 @@ window.mobMeasure=function(src,id,ov,auto){
       try{for(const x of autoSides){side.value=x;await loadAuto();setTip();draw();done.push(SIDE[x]+' '+Math.round(await saveOne(true))+'\u00b0');}
         ov.remove();await load();renderMobility();toast('Saved '+done.join(', '));}
       catch(e){both.disabled=false;}};
-    bar.prepend(both);
+    const swap=document.createElement('button');swap.className='btn-sm';swap.textContent='Swap left/right';
+    swap.onclick=async()=>{const x=auto.res.L;auto.res.L=auto.res.R;auto.res.R=x;
+      let on=false;try{on=localStorage.getItem('mobSwap_'+t.id)==='1';localStorage.setItem('mobSwap_'+t.id,on?'0':'1');}catch(e){}
+      both.textContent='Save both ('+autoSides.map(z=>SIDE[z]+' '+Math.round(auto.res[z].med!=null?auto.res[z].med:auto.res[z].a)+'\u00b0').join(', ')+')';
+      await loadAuto();setTip();draw();toast('Left and right swapped; remembered for this test');};
+    bar.prepend(both,swap);
   }
 };
 })();
