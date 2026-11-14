@@ -90,7 +90,7 @@ function renderSession(el){
       const warm=/wrist/.test(e.id||'');
       return `<div class="card" style="padding:12px 14px;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;font-weight:800;color:var(--teal)">${esc(it.code)}</span><div style="flex:1;font-size:14px;font-weight:800">${esc(e.name)}</div>${watch(e)}</div>
-        <div style="font-size:12px;margin-top:4px"><b>Target:</b> ${esc([it.reps,it.sets?it.sets+' sets':'',it.rest?'rest '+it.rest:''].filter(Boolean).join(' · '))}</div>
+        ${warm?'':`<div style="font-size:12px;margin-top:4px"><b>Target:</b> ${esc([it.reps,it.sets?it.sets+' sets':'',it.rest?'rest '+it.rest:''].filter(x=>x&&!/^-+( sets)?$/.test(x)&&x!=='rest -').join(' · '))}</div>`}
         ${last?`<div style="font-size:11px;color:var(--ink3);margin-top:2px">Last time (${fd(last.date)}): ${esc(last.it.sets.map(z=>z.hold_s!=null?z.hold_s+'s':z.reps+'').join(', '))}</div>`:''}
         ${warm?wristTicks(k):`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;margin-top:6px">${Array.from({length:n},(_,i)=>`<input id="cali_${k}_${i}" type="number" inputmode="decimal" class="fd-input" style="font-size:14px;padding:6px" placeholder="${hold?'s':'reps'} ${i+1}"/>`).join('')}</div>`}
         <input id="cali_${k}_note" class="fd-input" style="font-size:13px;margin-top:6px" placeholder="${warm?'Done? Any note':'Note (optional)'}"/>
