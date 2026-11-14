@@ -550,6 +550,35 @@ create table if not exists fitness.mobility_media (
     created_at timestamptz not null default now()
 );
 
+-- mobility programs + logged sessions (cortex/fitness_mobility.py, 14 Nov 2026). A program is one phase of one
+-- pillar: its drills in order with the dose (spec jsonb), built by code from the assessment, draft until he starts
+-- it. A session is one logged training day against a program: per drill the sets done, the depth marker, whether he
+-- went deeper than last time, a note. Soft deletes only.
+create table if not exists fitness.mobility_programs (
+    uid        text primary key,
+    pillar     text not null,
+    phase      integer not null default 1,
+    status     text not null default 'draft',     -- draft | active | done
+    started    date,
+    spec       jsonb not null,                    -- {items:[...], answers:{...}, notes:[...], built_from:{...}}
+    deleted    boolean not null default false,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+create index if not exists mobility_programs_pillar_idx on fitness.mobility_programs (pillar, status);
+create table if not exists fitness.mobility_sessions (
+    uid        text primary key,
+    program    text not null,
+    pillar     text not null,
+    day        date not null,
+    items      jsonb not null,                    -- [{code, drill_id, sets:[{reps,hold_s,kg}], marker, marker_num, deeper, note}]
+    note       text,
+    deleted    boolean not null default false,
+    created_at timestamptz not null default now()
+);
+create index if not exists mobility_sessions_program_idx on fitness.mobility_sessions (program, day);
+grant select, insert, update, delete on fitness.mobility_programs, fitness.mobility_sessions to cortex;
+
 -- ---------------------------------------------------------------------------
 -- YOLO (cortex/yolo.py, 11 Nov 2026): the owner's boat maintenance + cost book.
 -- Personal project (Raffaelli Storm 46 Fly "YOLO"), NOT a company. Same sync

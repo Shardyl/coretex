@@ -7416,6 +7416,70 @@ def fitness_mobility_media_delete(uid: str, _: None = Depends(auth)) -> dict:
     return fitness_mobility.media_delete(uid)
 
 
+# ---------- mobility programs + sessions (14 Nov 2026): built by code, draft until started ----------
+class MobilityBuild(BaseModel):
+    pillar: str
+    answers: dict | None = None
+
+
+class MobilityProgram(BaseModel):
+    pillar: str
+    spec: dict
+    activate: bool = False
+
+
+class MobilitySession(BaseModel):
+    program: str
+    date: str
+    items: list
+    note: str | None = None
+
+
+@app.post("/api/fitness/mobility/program/build")
+def fitness_mobility_build(body: MobilityBuild, _: None = Depends(auth)) -> dict:
+    from . import fitness_program
+    return fitness_program.build(body.pillar, body.answers or {})
+
+
+@app.post("/api/fitness/mobility/program")
+def fitness_mobility_program(body: MobilityProgram, _: None = Depends(auth)) -> dict:
+    from . import fitness_program
+    try:
+        return fitness_program.save(body.pillar, body.spec, body.activate)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/fitness/mobility/program/{uid}/start")
+def fitness_mobility_program_start(uid: str, _: None = Depends(auth)) -> dict:
+    from . import fitness_program
+    try:
+        return fitness_program.start(uid)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/fitness/mobility/program/{uid}")
+def fitness_mobility_program_discard(uid: str, _: None = Depends(auth)) -> dict:
+    from . import fitness_program
+    return fitness_program.discard(uid)
+
+
+@app.post("/api/fitness/mobility/session")
+def fitness_mobility_session(body: MobilitySession, _: None = Depends(auth)) -> dict:
+    from . import fitness_program
+    try:
+        return fitness_program.log_session(body.program, body.date, body.items, body.note or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/fitness/mobility/session/{uid}")
+def fitness_mobility_session_delete(uid: str, _: None = Depends(auth)) -> dict:
+    from . import fitness_program
+    return fitness_program.delete_session(uid)
+
+
 # ---------- course library: Smith's lessons, private, inside the app (14 Nov 2026) ----------
 @app.get("/api/fitness/course/{course}/{slug}")
 def fitness_course_lesson(course: str, slug: str, _: None = Depends(auth)) -> dict:

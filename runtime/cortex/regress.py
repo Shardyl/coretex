@@ -2521,6 +2521,34 @@ def _cases():
                 and all(fc._SLUG.fullmatch(d["lesson_slug"]) for d in lib["drills"] if d.get("lesson_slug"))
                 and not any(t["id"] in ("time_budget", "healthcare_approval") for t in P["shoulder_flexion"]["tests"])
                 and "mobLessonN" in js and "drillBlock" in js and "video_url" in js)
+    def _mob_program():
+        # 14 Nov 2026: Smith's pancake tree answered from the results by code; doses only from notes or his design
+        # rules; the progression ladder: deeper -> same dose, not deeper -> more time, then sets, then stalled;
+        # strength drills progress by load
+        import json as _j
+        from . import fitness_mobility as fm, fitness_program as fp
+        lib = _j.load(open(fm.DRILLS_FILE, encoding="utf-8"))
+        res = {"tailors_pose": {"both": {"calves_floor": "No"}}, "pancake_natural": {"both": {"angle": 100}},
+               "pancake_narrow": {"both": {"angle": 110}}, "pancake_lift": {"both": {"angle": 80}}}
+        a, missing = fp.pancake_answers(res, {"pancake_sport": "no"})
+        items, _ = fp._pancake_items(lib, a)
+        got = {i["code"]: i["drill_id"] for i in items}
+        a2, miss2 = fp.pancake_answers({}, {})
+        hold = {"dose": {"sets": "2", "hold_s": "60"}}
+        steps = [fp.target(hold, [{"deeper": "no"}] * k)["hold_s"] for k in range(1, 5)]
+        deeper = fp.target(hold, [{"deeper": "no"}, {"deeper": "yes", "marker": "3 blocks"}])
+        stren = {"method": "strength", "dose": {"sets": "3", "reps": "5-8"}}
+        up = fp.target(stren, [{"sets": [{"reps": 8, "kg": 2}, {"reps": 8, "kg": 2}]}])
+        rolling = fp.dose(next(d for d in lib["drills"] if d["id"] == "rolling_feet"))
+        return (a == {"q1_calves_floor": "no", "q2_pancake_type": "more_than_90", "q3_lift_gap": "yes",
+                      "pancake_sport": "no", "q4_sport": "no"} and not missing
+                and got.get("B1") == "tailors_pose" and got.get("C1") == "straddle_jefferson_curl"
+                and got.get("D1") == "pancake_lifts" and len(miss2) == 3
+                and steps == [75, 90, 105, 120] and deeper["hold_s"] == 60 and "3 blocks" in deeper["text"]
+                and up["step"] == "load" and not rolling.get("hold_s") and not rolling.get("reps"))
+    case("a pancake program is Smith's phase 1 tree answered from the results by code, and each drill's next target "
+         "follows his ladder: deeper keeps the dose, no new depth adds time, strength adds weight", "mobility programs 14 Nov",
+         _mob_program)
     case("pancake and shoulder tests and every drill come from the course notes as data, each lesson plays inside the "
          "app through a short-lived signed link, and a bad lesson id is refused", "course library 14 Nov", _mob_library)
     case("the fold and elbow/head scales are the program builder's own steps, and a measured frame is saved clean "

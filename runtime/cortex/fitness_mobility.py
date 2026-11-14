@@ -141,7 +141,9 @@ def state() -> dict:
               "mime": r["mime"], "bytes": r["bytes"], "note": r.get("note"),
               "frame_s": float(r["frame_s"]) if r.get("frame_s") is not None else None, "source": r.get("source")}
              for r in db.query("select * from fitness.mobility_media where not deleted and complete order by created_at")]
-    return {"pillars": pillars(), "results": res, "media": media, "drills": drill_library().get("drills", [])}
+    from . import fitness_program
+    return {"pillars": pillars(), "results": res, "media": media, "drills": drill_library().get("drills", []),
+            **fitness_program.programs_state()}
 
 
 def save_results(day: str, pillar: str, test: str, side: str, values: dict, note: str = "",
