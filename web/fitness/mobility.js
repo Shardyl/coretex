@@ -567,7 +567,7 @@ window.mobAngleAt=angleAt;window.mobReadAngle=readAngle;
 // "other:ankle" = the ankle of the other leg. He then accepts the points or drags one; the number is never a guess.
 const MP_VER='0.10.14', MP_BASE='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@'+MP_VER;
 const MP_MODEL='https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
-const LMI={shoulder:[11,12],hip:[23,24],knee:[25,26],ankle:[27,28],heel:[29,30],toe:[31,32]};
+const LMI={shoulder:[11,12],elbow:[13,14],wrist:[15,16],hip:[23,24],knee:[25,26],ankle:[27,28],heel:[29,30],toe:[31,32],ear:[7,8]};
 const VIS_MIN=0.35;
 let _poseP=null, _poseTs=0;
 function poseLoader(){
@@ -583,7 +583,10 @@ function hasPose(id){return !!poseSpecOf(testOf(mediaRec(id)));}
 function poseCandidates(P,L){
   // "other:" = the other side's joint; "mid:" = halfway between both; "high:"/"low:" = whichever of the pair is higher
   // or lower in the frame. Seen side-on the model often swaps left and right, so the leg lift is read by geometry.
-  const get=(n,s)=>{const [pre,j]=n.includes(':')?n.split(':'):['',n], A=L[LMI[j][0]], B=L[LMI[j][1]];
+  // "level:A@B" = a point level with joint A, under joint B: a line parallel to the floor (pancake, internal rotation)
+  const get=(n,s)=>{if(n.startsWith('level:')){const [a2,b2]=n.slice(6).split('@'), pa=get(a2,s), pb=get(b2,s);
+      return{x:pb.x,y:pa.y,visibility:Math.min(pa.visibility??1,pb.visibility??1)};}
+    const [pre,j]=n.includes(':')?n.split(':'):['',n], A=L[LMI[j][0]], B=L[LMI[j][1]];
     if(pre==='mid')return{x:(A.x+B.x)/2,y:(A.y+B.y)/2,visibility:Math.min(A.visibility??1,B.visibility??1)};
     if(pre==='high')return A.y<B.y?A:B; if(pre==='low')return A.y<B.y?B:A;
     return L[LMI[j][pre==='other'?1-s:s]];};

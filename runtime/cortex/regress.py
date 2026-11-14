@@ -2579,7 +2579,9 @@ def _cases():
         return (ok_rules and "side_split" in fp.program_pillars(lib) and refs and reqs and len(hs["stages"]) >= 6
                 and len(warm) == 4 and warm[0]["label"] == "Low" and sw[0]["do"].startswith("4 kg")
                 and not fp.warmup({"method": "soft_tissue", "dose": {}}, True) and gen["ready"] is False
-                and "bridge" in fp.BLOCKS)
+                and "bridge" in fp.BLOCKS
+                and all((m.get("angle") or {}).get("pose") for p in fm.DEFAULT_PILLARS for t in p.get("tests") or []
+                        for m in t["measures"] if m.get("angle")))
     case("every pillar's program rules are data the engine evaluates, every drill has a warm-up ladder, and the "
          "handstand programs and milestones resolve", "whole app 14 Nov", _mob_all)
     case("pancake and shoulder tests and every drill come from the course notes as data, each lesson plays inside the "

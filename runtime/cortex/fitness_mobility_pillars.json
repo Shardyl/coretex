@@ -24,7 +24,16 @@
         "point on the floor line toward the feet (feet and sit bones flat)",
         "top of the thigh / middle of the trunk (hip)",
         "furthest point of the upper back (if past 90 deg: highest point of the upper back)"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "level:hip@ankle",
+         "hip",
+         "shoulder"
+        ],
+        "side": "visible",
+        "best": "min"
+       }
       }
      },
      {
@@ -68,7 +77,16 @@
         "point on the floor line toward the feet (feet and sit bones flat)",
         "top of the thigh / middle of the trunk (hip)",
         "furthest point of the upper back (if past 90 deg: highest point of the upper back)"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "level:hip@ankle",
+         "hip",
+         "shoulder"
+        ],
+        "side": "visible",
+        "best": "min"
+       }
       }
      },
      {
@@ -113,7 +131,16 @@
         "point on the floor line toward the feet (feet and sit bones flat)",
         "top of the thigh / middle of the trunk (hip)",
         "furthest point of the upper back (if past 90 deg: highest point of the upper back)"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "level:hip@ankle",
+         "hip",
+         "shoulder"
+        ],
+        "side": "visible",
+        "best": "min"
+       }
       }
      },
      {
@@ -158,7 +185,16 @@
         "ankle bone",
         "middle of the glute (around the hip socket)",
         "top of the head (rounded back and limited: most rounded part of the upper back)"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "ankle",
+         "hip",
+         "ear"
+        ],
+        "side": "visible",
+        "best": "min"
+       }
       }
      },
      {
@@ -190,7 +226,16 @@
         "ankle bone",
         "middle of the glute",
         "top of the head (if the head is not neutral, follow the line of the back)"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "ankle",
+         "hip",
+         "ear"
+        ],
+        "side": "visible",
+        "best": "min"
+       }
       }
      }
     ]
@@ -215,7 +260,16 @@
         "middle of the left knee joint",
         "middle of the ankles",
         "middle of the right knee joint"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "knee",
+         "mid:ankle",
+         "other:knee"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
       }
      },
      {
@@ -449,7 +503,16 @@
         "point on the scapula line below the shoulder (bottom of the scapula)",
         "centre of the shoulder",
         "elbow"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "hip",
+         "shoulder",
+         "elbow"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
       }
      },
      {
@@ -463,7 +526,16 @@
         "point on the scapula line below the shoulder (bottom of the scapula)",
         "centre of the shoulder",
         "elbow"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "hip",
+         "shoulder",
+         "elbow"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
       }
      }
     ],
@@ -491,7 +563,16 @@
         "centre of the opposite shoulder",
         "middle of this shoulder",
         "elbow"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "other:shoulder",
+         "shoulder",
+         "elbow"
+        ],
+        "side": "each",
+        "best": "max"
+       }
       }
      }
     ],
@@ -518,7 +599,15 @@
        "points": [
         "elbow centre",
         "wrist centre"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "elbow",
+         "wrist"
+        ],
+        "side": "each",
+        "best": "max"
+       }
       }
      }
     ],
@@ -569,7 +658,16 @@
         "point on the floor line on the head side of the elbow",
         "elbow centre",
         "wrist centre"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "level:elbow@ear",
+         "elbow",
+         "wrist"
+        ],
+        "side": "each",
+        "best": "max"
+       }
       }
      }
     ],
@@ -785,7 +883,16 @@
         "left ankle bone",
         "centre point slightly above the hip (lines run along the centre of the thighs across the knees)",
         "right ankle bone"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "ankle",
+         "mid:hip",
+         "other:ankle"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
       }
      }
     ]
@@ -811,7 +918,16 @@
         "left ankle bone",
         "centre point slightly above the hip (lines run along the centre of the thighs across the knees)",
         "right ankle bone"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "ankle",
+         "mid:hip",
+         "other:ankle"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
       }
      }
     ]
@@ -836,7 +952,16 @@
         "middle of the left knee",
         "middle of the ankles",
         "middle of the right knee"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "knee",
+         "mid:ankle",
+         "other:knee"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
       }
      },
      {
@@ -880,7 +1005,16 @@
         "centre of the heel of the lifting leg (follow the Achilles)",
         "hip joint (where the lines through the centre of each leg meet)",
         "centre of the knee of the supporting leg"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "high:heel",
+         "mid:hip",
+         "low:knee"
+        ],
+        "side": "lifted",
+        "best": "max"
+       }
       }
      }
     ]
@@ -906,7 +1040,16 @@
         "ankle bone",
         "middle of the knee",
         "centre of the thigh where the femur meets the hip"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "ankle",
+         "knee",
+         "hip"
+        ],
+        "side": "each",
+        "best": "min"
+       }
       }
      }
     ]
@@ -931,7 +1074,16 @@
         "point on the horizontal (seated) line toward the feet",
         "top of the thigh / middle of the trunk",
         "highest point of the upper back (head dropped)"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "level:hip@ankle",
+         "hip",
+         "shoulder"
+        ],
+        "side": "visible",
+        "best": "min"
+       }
       }
      },
      {
@@ -1036,9 +1188,26 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Passive front split angle",
+      "label": "Passive front split angle (our angle: Smith's front split measuring lesson was not captured)",
       "kind": "number",
-      "unit": "deg"
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "front ankle",
+        "middle of the hips",
+        "back ankle"
+       ],
+       "pose": {
+        "joints": [
+         "ankle",
+         "mid:hip",
+         "other:ankle"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
+      }
      },
      {
       "key": "hip",
@@ -1066,9 +1235,26 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Isometric front split angle",
+      "label": "Isometric front split angle (our angle: Smith's front split measuring lesson was not captured)",
       "kind": "number",
-      "unit": "deg"
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "front ankle",
+        "middle of the hips",
+        "back ankle"
+       ],
+       "pose": {
+        "joints": [
+         "ankle",
+         "mid:hip",
+         "other:ankle"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
+      }
      },
      {
       "key": "width_cm",
@@ -1092,9 +1278,26 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Couch stretch hips low angle",
+      "label": "Couch stretch hips low angle (our angle: Smith's front split measuring lesson was not captured)",
       "kind": "number",
-      "unit": "deg"
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "front knee",
+        "centre of the hip",
+        "back knee"
+       ],
+       "pose": {
+        "joints": [
+         "knee",
+         "hip",
+         "other:knee"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
+      }
      },
      {
       "key": "knee_to_wall",
@@ -1121,9 +1324,26 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Kneeling lunge angle",
+      "label": "Kneeling lunge angle (our angle: Smith's front split measuring lesson was not captured)",
       "kind": "number",
-      "unit": "deg"
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "front knee",
+        "centre of the hip",
+        "back knee"
+       ],
+       "pose": {
+        "joints": [
+         "knee",
+         "hip",
+         "other:knee"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
+      }
      }
     ],
     "lesson_slug": "119-front-split_assessment",
@@ -1141,9 +1361,26 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Prone active hip extension angle",
+      "label": "Prone active hip extension angle (our angle: Smith's front split measuring lesson was not captured)",
       "kind": "number",
-      "unit": "deg"
+      "unit": "deg",
+      "angle": {
+       "mode": "flex",
+       "points": [
+        "hip",
+        "knee",
+        "ankle"
+       ],
+       "pose": {
+        "joints": [
+         "hip",
+         "knee",
+         "ankle"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
+      }
      }
     ],
     "lesson_slug": "119-front-split_assessment",
@@ -1211,9 +1448,26 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Single-leg lift angle",
+      "label": "Single-leg lift angle (our angle: Smith's front split measuring lesson was not captured)",
       "kind": "number",
-      "unit": "deg"
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "standing foot",
+        "hip",
+        "lifted foot"
+       ],
+       "pose": {
+        "joints": [
+         "low:ankle",
+         "mid:hip",
+         "high:ankle"
+        ],
+        "side": "lifted",
+        "best": "max"
+       }
+      }
      }
     ],
     "lesson_slug": "119-front-split_assessment",
@@ -1277,7 +1531,16 @@
         "point on the scapula line below the shoulder (bottom of the scapula)",
         "centre of the shoulder",
         "elbow"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "hip",
+         "shoulder",
+         "elbow"
+        ],
+        "side": "visible",
+        "best": "max"
+       }
       }
      }
     ],
@@ -1305,7 +1568,15 @@
        "points": [
         "elbow centre",
         "wrist centre"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "elbow",
+         "wrist"
+        ],
+        "side": "each",
+        "best": "max"
+       }
       }
      }
     ],
@@ -1334,7 +1605,16 @@
         "centre of the opposite shoulder",
         "middle of this shoulder",
         "elbow"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "other:shoulder",
+         "shoulder",
+         "elbow"
+        ],
+        "side": "each",
+        "best": "max"
+       }
       }
      }
     ],
@@ -1363,7 +1643,16 @@
         "front knee",
         "centre of the hip",
         "back knee"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "knee",
+         "hip",
+         "other:knee"
+        ],
+        "side": "each",
+        "best": "max"
+       }
       }
      }
     ],
@@ -1391,7 +1680,16 @@
         "front knee",
         "centre of the hip",
         "back knee"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "knee",
+         "hip",
+         "other:knee"
+        ],
+        "side": "each",
+        "best": "max"
+       }
       }
      }
     ],
@@ -1470,7 +1768,16 @@
         "centre of the opposite shoulder",
         "middle of this shoulder",
         "elbow"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "other:shoulder",
+         "shoulder",
+         "elbow"
+        ],
+        "side": "each",
+        "best": "max"
+       }
       }
      }
     ],
@@ -1539,7 +1846,16 @@
         "ankle",
         "knee",
         "centre of the hip"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "ankle",
+         "knee",
+         "hip"
+        ],
+        "side": "each",
+        "best": "min"
+       }
       }
      }
     ],
@@ -1596,7 +1912,15 @@
        "points": [
         "Knee",
         "Ankle"
-       ]
+       ],
+       "pose": {
+        "joints": [
+         "knee",
+         "ankle"
+        ],
+        "side": "each",
+        "best": "max"
+       }
       }
      }
     ],
