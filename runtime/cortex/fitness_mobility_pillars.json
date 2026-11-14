@@ -535,7 +535,7 @@
     "lesson_course": "mftk",
     "id": "lat_flat",
     "name": "Lat length, flat back (Test 3, position 1)",
-    "camera": "From the side, phone on the floor (Smith).",
+    "camera": "Your set-up (14 Nov 2026): phone on the floor, PORTRAIT, side on (Smith: side on, phone on the floor).",
     "cue": "Stick at shoulder width, palms up. Back to a wall, feet slightly away, knees slightly bent, posterior tilt so the low back presses in. Raise the stick; stop the moment the low back breaks contact. Hold 3 s.",
     "measures": [
      {
@@ -576,7 +576,7 @@
     "lesson_course": "mftk",
     "id": "lat_round",
     "name": "Lat length, rounded back (Test 3, position 2)",
-    "camera": "From the side, phone on the floor (Smith).",
+    "camera": "Your set-up (14 Nov 2026): phone on the floor, PORTRAIT, side on (Smith: side on, phone on the floor).",
     "cue": "Stick at shoulder width, palms up. Sit on the floor, round as much as possible, head between the knees (chest to knees ideally). Raise the stick keeping head-to-knee contact; contact lost = too far. Hold 3 s.",
     "measures": [
      {
@@ -615,7 +615,7 @@
      "L",
      "R"
     ],
-    "camera": "From BEHIND / head end, camera at bench height (you see only the front edge of the bench, not its top)",
+    "camera": "Your set-up (14 Nov 2026): lying on a 48 cm bench (piano stool); phone 60 cm above the floor, LANDSCAPE, standing upright and NOT tilted (parallel to you, not leaned against the wall). Smith: camera level with the bench.",
     "cue": "Lie on a narrow bench, small plates in each hand (1.25 kg per note 150; 2.5 kg in lesson 144), straight arms, thumbs pointing back the whole time. Lower the arms out to the sides slowly, hands in line with the ears or just above. Torso flat: a small low-back gap must not grow. Hold 3 s.",
     "measures": [
      {
@@ -1786,7 +1786,7 @@
      "L",
      "R"
     ],
-    "camera": "Camera at bench height (level with the bench), from behind / head end",
+    "camera": "Your set-up (14 Nov 2026): lying on a 48 cm bench (piano stool); phone 60 cm above the floor, LANDSCAPE, standing upright and NOT tilted (parallel to you, not leaned against the wall). Smith: camera level with the bench.",
     "cue": "Narrow bench or boxes; 1.25-1.5 kg plates. Arms up, thumbs back, lower thumbs-first towards the floor; hold max depth 3 s. Torso flat (feet on the bench helps); wrists in line with the ears. Plates hit the floor -> grip higher -> then elevate the setup.",
     "measures": [
      {
@@ -1970,7 +1970,7 @@
      "L",
      "R"
     ],
-    "camera": "From BEHIND / head end, camera at bench height (you see only the front edge of the bench, not its top)",
+    "camera": "Your set-up (14 Nov 2026): lying on a 48 cm bench (piano stool); phone 60 cm above the floor, LANDSCAPE, standing upright and NOT tilted (parallel to you, not leaned against the wall). Smith: camera level with the bench.",
     "cue": "Lie on a narrow bench, small plates in each hand (1.25-2.5 kg across the notes), straight arms, thumbs pointing back the whole time. Lower the arms out to the sides slowly, hands in line with the ears or just above. Torso flat: a small low-back gap must not grow. Hold 3 s.",
     "measures": [
      {
