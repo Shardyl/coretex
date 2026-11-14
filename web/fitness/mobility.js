@@ -626,6 +626,11 @@ function poseCandidates(P,L){
     return L[LMI[j][pre==='other'?1-s:s]];};
   const cand=s=>{const pts=P.joints.map(n=>get(n,s));return{pts,vis:Math.min(...pts.map(p=>p.visibility==null?1:p.visibility))};};
   const sd=s=>s===0?'L':'R';   // the model's left is HIS left, whichever way he faces the camera
+  if(P.side==='each'&&P.xside){
+    // Left/right by POSITION in the frame, not the model's guess (owner 14 Nov 2026: it mirrored on the pec test).
+    // xside 'left_is_left' = his left arm is on the left of the picture (filmed from the head end, lying on his back).
+    const a=cand(0), b=cand(1), mx=c=>c.pts.reduce((z,q)=>z+q.x,0)/c.pts.length, [lft,rgt]=mx(a)<=mx(b)?[a,b]:[b,a];
+    return P.xside==='left_is_left'?[{side:'L',...lft},{side:'R',...rgt}]:[{side:'R',...lft},{side:'L',...rgt}];}
   if(P.side==='each')return[0,1].map(s=>({side:sd(s),...cand(s)}));
   if(P.side==='lifted'){const s=L[LMI.ankle[0]].y<L[LMI.ankle[1]].y?0:1;return[{side:sd(s),...cand(s)}];}
   const a=cand(0),b=cand(1);return[{side:'both',...(a.vis>=b.vis?a:b)}];
@@ -691,6 +696,15 @@ async function poseScan(video,sp,prog,holdS){
     if(w.length>=3){const as=w.map(x=>x.a).sort((a,b)=>a-b), med=as[Math.floor(as.length/2)];
       const pick=w.reduce((a,b)=>Math.abs(b.a-med)<Math.abs(a.a-med)?b:a);
       out[miss]={...pick,held:[a0,a1],med:Math.round(med*10)/10,shared:true};}}
+  if(P.side==='each'&&out.L&&out.R){
+    const lo=Math.max(out.L.held[0],out.R.held[0]), hi=Math.min(out.L.held[1],out.R.held[1]);
+    const [w0,w1]=lo<=hi?[lo,hi]:out.L.held;
+    const inW=s=>series[s].filter(x=>x.t>=w0&&x.t<=w1&&x.vis>=VIS_MIN&&x.a!=null);
+    const med=a=>{const z=a.map(x=>x.a).sort((p,q)=>p-q);return z[Math.floor(z.length/2)];};
+    const wl=inW('L'), wr=inW('R');
+    if(wl.length&&wr.length){const ml=med(wl), mr=med(wr), byT={};wr.forEach(x=>byT[x.t]=x);
+      let best=null;wl.forEach(x=>{const y=byT[x.t];if(!y)return;const sc=Math.abs(x.a-ml)+Math.abs(y.a-mr);if(!best||sc<best.sc)best={sc,x,y};});
+      if(best){out.L={...best.x,held:[w0,w1],med:Math.round(ml*10)/10};out.R={...best.y,held:[w0,w1],med:Math.round(mr*10)/10};out._same=true;}}}
   return out;
 }
 window.mobPoseBest=bestOf;window.mobPoseCandidates=poseCandidates;
@@ -707,12 +721,61 @@ window.mobAutoMeasure=async function(video,id,ov,btn,msg){
     // the pose model can mirror left/right in some views (lying, filmed along the body); he corrects it once with
     // Swap and it is remembered for this test on this device (owner 14 Nov 2026, pec major)
     {const t2=testOf(mediaRec(id));let sw=false;try{sw=localStorage.getItem('mobSwap_'+(t2&&t2.id))==='1';}catch(e){}
-     if(sw&&res.L&&res.R){const x=res.L;res.L=res.R;res.R=x;}}
+     if(sw&&res.L&&res.R&&!(ps.sp.pose&&ps.sp.pose.xside)){const x=res.L;res.L=res.R;res.R=x;}}
     const sides=Object.keys(res);
     if(!sides.length){say('No steady '+hs+' s hold in the test position found in this clip. Check the set-up and hold, refilm, or pause on your held position and measure by hand.');btn.disabled=false;btn.style.opacity=1;return;}
     await seekTo(video,res[sides[0]].t);
+    if(res._same&&res.L&&res.R){mobMeasureBoth(video,id,ov,{m:ps.m,res});return;}
+    delete res._same;
     mobMeasure(video,id,ov,{m:ps.m,res});
   }catch(e){say('Auto-measure could not start ('+(e&&e.message||'error')+'). Measure by hand instead.');btn.disabled=false;btn.style.opacity=1;}
+};
+
+// ---------- both arms in one frame (owner 14 Nov 2026: "it should do two angles in one pic") ----------
+window.mobMeasureBoth=function(src,id,ov,auto){
+  const rec=mediaRec(id), t=testOf(rec), m=auto.m, sp=specOf(m);
+  const W=src.videoWidth, H=src.videoHeight, frameS=auto.res.L.t;
+  const maxW=Math.min(window.innerWidth-32,900), maxH=window.innerHeight*0.6, k=Math.min(maxW/W,maxH/H);
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  cv.style.cssText='width:'+Math.round(W*k)+'px;max-width:100%;height:auto;border-radius:8px;touch-action:none';
+  const ctx=cv.getContext('2d'), frame=document.createElement('canvas');frame.width=W;frame.height=H;frame.getContext('2d').drawImage(src,0,0,W,H);
+  const P={L:auto.res.L.pts.map(q=>({x:q.x,y:q.y})),R:auto.res.R.pts.map(q=>({x:q.x,y:q.y}))}, R0=Math.max(10,W/90), COL={L:'#30d5a8',R:'#ffb020'};
+  const tip=document.createElement('div');tip.style.cssText='color:#ddd;font-size:12px;margin-bottom:8px;text-align:center;max-width:560px';
+  tip.textContent='Held '+auto.res.L.held[0]+' to '+auto.res.L.held[1]+' s; both arms read from the same frame ('+frameS+' s). Left is green, right is amber. Drag any dot that is off, then save.';
+  const out=document.createElement('div');out.style.cssText='color:#fff;font-weight:800;font-size:15px;margin:10px 0 6px;text-align:center';
+  const ang=s=>readAngle(sp,P[s]);
+  const draw=()=>{ctx.drawImage(frame,0,0);['L','R'].forEach(s=>{const p=P[s];ctx.lineWidth=Math.max(3,W/300);ctx.strokeStyle=COL[s];
+      ctx.beginPath();ctx.moveTo(p[0].x,p[0].y);for(let i=1;i<p.length;i++)ctx.lineTo(p[i].x,p[i].y);ctx.stroke();
+      p.forEach((q,i)=>{ctx.beginPath();ctx.arc(q.x,q.y,R0,0,7);ctx.fillStyle=i===pivotOf(sp)?'#ffffff':COL[s];ctx.fill();});
+      const a=ang(s), pv=p[pivotOf(sp)];ctx.font='bold '+Math.round(W/26)+'px system-ui';ctx.lineWidth=Math.max(3,W/250);ctx.strokeStyle='#000';ctx.fillStyle=COL[s];
+      const lab=(s==='L'?'L ':'R ')+Math.round(a)+'\u00b0';ctx.strokeText(lab,pv.x-R0*3,pv.y-R0*2.5);ctx.fillText(lab,pv.x-R0*3,pv.y-R0*2.5);});
+    out.textContent='Left '+Math.round(ang('L'))+'\u00b0 \u00b7 Right '+Math.round(ang('R'))+'\u00b0';};
+  const pos=e=>{const b=cv.getBoundingClientRect();return{x:(e.clientX-b.left)/b.width*W,y:(e.clientY-b.top)/b.height*H};};
+  let drag=null;
+  cv.addEventListener('pointerdown',e=>{e.preventDefault();const q=pos(e);let best=null;
+    ['L','R'].forEach(s=>P[s].forEach((p,i)=>{const d=Math.hypot(p.x-q.x,p.y-q.y);if(d<R0*3&&(!best||d<best.d))best={s,i,d};}));drag=best;});
+  cv.addEventListener('pointermove',e=>{if(!drag)return;P[drag.s][drag.i]=pos(e);draw();});
+  cv.addEventListener('pointerup',()=>{drag=null;});cv.addEventListener('pointerleave',()=>{drag=null;});
+  const bar=document.createElement('div');bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center';
+  const provL=document.createElement('label');provL.style.cssText='color:#ddd;font-size:12px;display:flex;align-items:center;gap:4px';
+  const prov=document.createElement('input');prov.type='checkbox';provL.append(prov,'Provisional');
+  const save=document.createElement('button');save.className='btn-sm';save.textContent='Save both';save.style.cssText='background:var(--teal);color:#fff;border-color:var(--teal);font-weight:800';
+  const close=document.createElement('button');close.className='btn-sm';close.textContent='Cancel';close.onclick=()=>ov.remove();
+  ov.innerHTML='';ov.onclick=null;bar.append(save,provL,close);ov.append(tip,cv,out,bar);draw();
+  save.onclick=async()=>{save.disabled=true;save.textContent='Saving...';
+    try{const done=[];
+      for(const sd of ['L','R']){const a=Math.round(ang(sd)*10)/10, values={};let wasProv=false;
+        resFor(rec.pillar,rec.test,sd,rec.date).forEach(r=>{values[r.measure]=r.label!=null?r.label:r.value;if(r.provisional)wasProv=true;});
+        values[m.key]=a;
+        await syncApi('/api/fitness/mobility/result',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:sd,values,provisional:prov.checked||wasProv})});
+        done.push(SIDE[sd]+' '+Math.round(a)+'\u00b0');}
+      const put=async(b,n)=>{const st=await syncApi('/api/fitness/mobility/media',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:'both',mime:'image/jpeg',bytes:b.size,note:n,frame_s:frameS,source:id})});
+        if(st&&st.id){await fetch(API_BASE+'/api/fitness/mobility/media/'+st.id+'/0',{method:'PUT',headers:{'Authorization':'Bearer '+syncToken(),'Content-Type':'application/octet-stream'},body:b});
+          await syncApi('/api/fitness/mobility/media/'+st.id+'/finish',{method:'POST'});}};
+      await put(await new Promise(r=>cv.toBlob(r,'image/jpeg',0.85)),m.label+': '+done.join(', ')+', read at '+frameS+' s of the clip, auto-detected');
+      await put(await new Promise(r=>frame.toBlob(r,'image/jpeg',0.9)),CLEAN_NOTE+', '+frameS+' s of the clip');
+      ov.remove();await load();renderMobility();toast('Saved '+done.join(', '));
+    }catch(e){save.disabled=false;save.textContent='Save both';toast('Could not save. Check your connection.');}};
 };
 
 window.mobMeasure=function(src,id,ov,auto){

@@ -88,7 +88,8 @@ DEFAULT_PILLARS = [
                  "and still, then swing the foot outward.",
           "measures": [{"key": "deg", "label": "Rotation", "kind": "number", "unit": "deg",
                         "angle": {"mode": "vertical", "points": ["Knee", "Ankle"],
-                                  "pose": {"joints": ["knee", "ankle"], "side": "each", "best": "max"}}}]},
+                                  "pose": {"joints": ["knee", "ankle"], "side": "each", "best": "max",
+                                           "xside": "left_is_right"}}}]},
      ],
      # the active vs passive gap: the same shape, held by strength vs reached with help (both read as hip flexion)
      "gap": {"passive": {"test": "fold", "measure": "deg"}, "active": {"test": "leg_lift", "measure": "deg"}},

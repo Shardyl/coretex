@@ -2581,6 +2581,7 @@ def _cases():
                 and not fp.warmup({"method": "soft_tissue", "dose": {}}, True) and gen["ready"] is False
                 and "bridge" in fp.BLOCKS
                 and "function bestHeld(" in open(_web + "/fitness/mobility.js", encoding="utf-8").read()
+                and "window.mobMeasureBoth" in open(_web + "/fitness/mobility.js", encoding="utf-8").read()
                 and all((m.get("angle") or {}).get("pose") for p in fm.DEFAULT_PILLARS for t in p.get("tests") or []
                         for m in t["measures"] if m.get("angle")))
     case("every pillar's program rules are data the engine evaluates, every drill has a warm-up ladder, and the "
