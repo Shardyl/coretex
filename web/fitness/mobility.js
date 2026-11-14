@@ -413,11 +413,13 @@ function recordBlock(p,t,day){
     const how=still.length&&/auto-detected/.test(still[still.length-1].note||'')?'auto-measured':still.length?'measured on the clip':'typed in';
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:0.5px solid var(--border)">${icon('check','var(--teal)',18)}
       <div style="flex:1;min-width:0">${t.sides.length>1?`<div style="font-size:12px;font-weight:800;color:var(--ink2)">${SIDE[sd]}</div>`:''}${vals}
-        <div style="font-size:11px;color:var(--ink3)">${fd(day)} &middot; ${how}</div></div></div>`;}).join('');
+        <div style="font-size:11px;color:var(--ink3)">${fd(day)} &middot; ${how}</div>
+        ${t.sides.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">${clipBtns([...still.slice(-1),...allMed.filter(x=>!x.source&&x.side===sd)])}</div>`:''}</div></div>`;}).join('');
   const clips=allMed.filter(x=>!x.source), stills=allMed.filter(x=>x.source&&!String(x.note||'').startsWith('Clean frame'));
   const uniq=[...new Map(stills.map(x=>[x.side+'|'+x.note,x])).values()];
   return `<div style="margin-top:10px">${rows}
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">${clipBtns([...uniq,...clips])}</div>
+    ${(()=>{const shared=t.sides.length>1?[...uniq.filter(x=>x.side==='both'),...clips.filter(x=>x.side==='both')]:[...uniq,...clips];
+      return shared.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">${clipBtns(shared)}</div>`:'';})()}
     <button style="background:none;border:none;padding:6px 0;color:var(--ink3);font-size:12px;text-decoration:underline;cursor:pointer" onclick="mobEditToggle('${t.id}',true)">Redo or edit this test</button></div>`;
 }
 
