@@ -18,8 +18,8 @@ const prog=id=>(_cali.programs||[]).find(p=>p.id===id);
 const msOf=id=>(D().milestones||[]).find(m=>m.id===id);
 const msDone=id=>(_cali.milestones||[]).filter(m=>m.milestone===id);
 // the lesson player lives in mobility.js; handstand lessons use course "handstand"
-const _L=[];window.caliLessonN=i=>{const x=_L[i];if(x&&window.mobLesson)mobLesson(x.c,x.s,x.y,x.n);};
-const watch=(x,label)=>{if(!x||(!x.lesson_slug&&!x.youtube))return '';const i=_L.push({c:x.lesson_slug?'handstand':'',s:x.lesson_slug||'',y:x.youtube||'',n:x.name})-1;
+const _L=[];window.caliLessonN=i=>{const x=_L[i];if(x&&window.mobLesson)mobLesson(x.c,x.s,x.y,x.n,x.v);};
+const watch=(x,label)=>{if(!x||(!x.lesson_slug&&!x.youtube&&!x.vimeo))return '';const i=_L.push({c:x.lesson_slug?'handstand':'',s:x.lesson_slug||'',y:x.youtube||'',v:x.vimeo||'',n:x.name})-1;
   return `<button class="btn-sm" onclick="event.stopPropagation();caliLessonN(${i})">${label||'Watch'}</button>`;};
 
 window.renderCalisthenics=async function(sub){

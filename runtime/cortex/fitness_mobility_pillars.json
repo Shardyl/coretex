@@ -725,7 +725,19 @@
      }
     ],
     "lesson_slug": "149-shoulders_force-couple-calculator",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "extra_lessons": [
+     {
+      "name": "Push-up technique",
+      "lesson_slug": "149a-shoulders_force-couple_push-up-technique",
+      "lesson_course": "mftk"
+     },
+     {
+      "name": "Dip technique",
+      "lesson_slug": "149b-shoulders_force-couple_dip-technique",
+      "lesson_course": "mftk"
+     }
+    ]
    },
    {
     "id": "trap3_reps",

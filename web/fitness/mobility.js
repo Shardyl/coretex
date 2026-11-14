@@ -280,7 +280,7 @@ window.mobWarmCheck=function(k,v){const m=document.getElementById(`mobw_${k}_msg
 function blockCards(pid,when){const bs=((_mob.blocks||{})[pid]||{})[when]||[];
   return bs.map(b=>`<div class="card" style="padding:12px 14px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;font-size:14px;font-weight:800">${esc(b.name)}</div>${lessonBtn(b)}</div>
     <div style="font-size:12px;color:var(--ink3);margin:2px 0 4px">${esc(b.how)}</div>
-    ${b.options.map((o,i)=>`<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;padding:3px 0;cursor:pointer"><input type="checkbox" data-blk="${esc(b.id)}" value="${esc(o)}"/>${esc(o)}</label>`).join('')}</div>`).join('');}
+    ${b.options.map((o,i)=>{const nm=typeof o==='string'?o:o.name;return `<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;padding:3px 0;cursor:pointer"><input type="checkbox" data-blk="${esc(b.id)}" value="${esc(nm)}"/><span style="flex:1">${esc(nm)}</span>${typeof o==='object'?lessonBtn(o,'Demo'):''}</label>`;}).join('')}</div>`).join('');}
 
 function renderSession(el,id){
   const a=(_mob.programs||[]).find(x=>x.id===id);if(!a){_mobView='list';return renderList(el);}
@@ -397,7 +397,7 @@ function renderPillar(el,p){
       ${holdOf(t)?`<div style="font-size:13px;font-weight:800;margin-top:6px;color:var(--teal)">Hold ${esc(holdOf(t))} for it to count</div>`:''}
       ${t.benchmark?`<div style="font-size:12px;margin-top:4px"><b>Benchmark:</b> ${esc(t.benchmark)}</div>`:''}
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
-      ${t.lesson_slug||t.youtube?`<div style="margin-top:6px">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}</div>`:''}
+      ${t.lesson_slug||t.youtube||(t.extra_lessons||[]).length?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}${(t.extra_lessons||[]).map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}
       ${t.sides.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both)}
         <label class="btn-sm" style="cursor:pointer">+ Both sides in one clip<input type="file" accept="video/*,image/*" style="display:none" onchange="mobUpload(this,'${p.id}','${t.id}','both')"/></label>
         <span id="mobup_${t.id}_both" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(both)}`:''}
@@ -507,7 +507,7 @@ function noteHtml(md){
     const s=esc(l).replace(/^App:/,'<b>App:</b>').replace(/^- /,'&bull; ');
     return `<div style="margin:2px 0">${s}</div>`;}).join('');
 }
-window.mobLesson=async function(course,slug,yt,title){
+window.mobLesson=async function(course,slug,yt,title,vimeo){
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.94);overflow-y:auto;padding:16px;box-sizing:border-box';
   ov.innerHTML='<div style="color:#fff;font-size:13px;text-align:center;margin-top:40vh">Loading&hellip;</div>';
@@ -516,6 +516,7 @@ window.mobLesson=async function(course,slug,yt,title){
   let L=null;
   if(course&&slug){try{L=await syncApi('/api/fitness/course/'+encodeURIComponent(course)+'/'+encodeURIComponent(slug));}catch(e){L=null;}}
   const vid=L&&L.video_url?`<video src="${API_BASE+L.video_url}" controls playsinline preload="metadata" style="width:100%;max-height:60vh;border-radius:10px;background:#000"></video>`
+    :vimeo?`<div style="position:relative;width:100%;padding-top:56.25%"><iframe src="https://player.vimeo.com/video/${encodeURIComponent(vimeo)}?dnt=1" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:10px"></iframe></div>`
     :yt?`<div style="position:relative;width:100%;padding-top:56.25%"><iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(yt)}?rel=0&playsinline=1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:10px"></iframe></div>`
     :'<div style="color:#aaa;font-size:13px;padding:20px 0;text-align:center">No video for this one yet.</div>';
   ov.innerHTML=`<div style="max-width:760px;margin:0 auto">
@@ -528,10 +529,10 @@ window.mobLesson=async function(course,slug,yt,title){
 // one button for any item that carries a lesson
 // (registered by index, so a name with an apostrophe cannot break the onclick)
 const _lessons=[];
-window.mobLessonN=i=>{const x=_lessons[i];if(x)mobLesson(x.c,x.s,x.y,x.n);};
-const lessonBtn=(x,label)=>{const s=x.lesson_slug||'', y=x.youtube||'';
-  if(!s&&!y)return '';
-  const i=_lessons.push({c:s?(x.lesson_course||'mftk'):'',s,y,n:x.name})-1;
+window.mobLessonN=i=>{const x=_lessons[i];if(x)mobLesson(x.c,x.s,x.y,x.n,x.v);};
+const lessonBtn=(x,label)=>{const s=x.lesson_slug||'', y=x.youtube||'', v=x.vimeo||'';
+  if(!s&&!y&&!v)return '';
+  const i=_lessons.push({c:s?(x.lesson_course||'mftk'):'',s,y,v,n:x.name})-1;
   return `<button class="btn-sm" onclick="event.stopPropagation();mobLessonN(${i})">${label||'Watch'}</button>`;};
 
 // ---------- Tap to measure (owner, 8 Nov 2026; per-test angle definitions 9 Nov 2026) ----------
