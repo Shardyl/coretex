@@ -1,5 +1,5 @@
 {
- "version": "2026-11-14",
+ "version": "2026-11-14b",
  "source": "Matthew Smith MFTK lesson notes, our words; numbers only where a note states them",
  "drills": [
   {
@@ -152,7 +152,8 @@
    "id": "tailors_pose",
    "name": "Tailors pose (loaded)",
    "pillars": [
-    "pancake"
+    "pancake",
+    "side_split"
    ],
    "slot": "isolated",
    "method": "loaded",
@@ -263,7 +264,8 @@
    "id": "adductor_flyes",
    "name": "Adductor flyes",
    "pillars": [
-    "pancake"
+    "pancake",
+    "side_split"
    ],
    "slot": "isolated",
    "method": "loaded",
@@ -369,7 +371,8 @@
    "id": "drop_stance_squat",
    "name": "Drop stance squat",
    "pillars": [
-    "pancake"
+    "pancake",
+    "side_split"
    ],
    "slot": "isolated",
    "method": "loaded",
@@ -672,7 +675,8 @@
    "id": "pancake_good_morning",
    "name": "Pancake good morning (round back or straight back)",
    "pillars": [
-    "pancake"
+    "pancake",
+    "side_split"
    ],
    "slot": "main",
    "method": "loaded",
@@ -1052,7 +1056,8 @@
    "id": "standing_pancake_hang",
    "name": "Standing pancake hang, contract relax",
    "pillars": [
-    "pancake"
+    "pancake",
+    "side_split"
    ],
    "slot": "attribute",
    "method": "contract_relax",
@@ -1109,7 +1114,8 @@
    "id": "pancake_straight_arm_lifts",
    "name": "Pancake straight arm lifts",
    "pillars": [
-    "pancake"
+    "pancake",
+    "side_split"
    ],
    "slot": "attribute",
    "method": "contract_relax",
@@ -2564,6 +2570,1170 @@
    "lesson_slug": "170-shoulders-strength_horizontal-prone-variations",
    "note_file": "170-shoulders-strength_horizontal-prone-variations.md",
    "lesson_course": "mftk"
+  },
+  {
+   "id": "horse_stance_slides",
+   "name": "Horse stance slides",
+   "pillars": [
+    "side_split"
+   ],
+   "slot": "technique",
+   "method": "technique",
+   "components": [
+    "position",
+    "hip_flexors"
+   ],
+   "primary": [
+    "position"
+   ],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "1",
+    "reps": "10C (cluster: 1 rep, 10 s rest, repeat)",
+    "hold_s": null,
+    "tempo": "51-0",
+    "cr": null,
+    "rest_s": "60",
+    "source": "89 parameters (5 s lower into the split, 1 s pause, step up using the hands, no pause; rest 60 s before the B's); 98: low intensity, high number of reps"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Support used and which of the 5 setup cues held (no depth target)",
+    "options": null
+   },
+   "cues": [
+    "Support on a block, bench, chair or bar, arms straight",
+    "Sit back, pull the knees apart, arch the back, chest high, look forward",
+    "Feet close to or past the support",
+    "Slowly slide into a supported side split keeping anterior tilt",
+    "Focus on the downward eccentric; pause briefly at the bottom, step or push back up"
+   ],
+   "mistakes": [
+    "Head, hips and feet on one diagonal line (only balances because of the arms)"
+   ],
+   "progressions": [
+    "Slide to side split"
+   ],
+   "regressions": [],
+   "lesson_slug": "98-horse-stance-slides",
+   "note_file": "98-horse-stance-slides.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "slide_to_side_split",
+   "name": "Slide to side split",
+   "pillars": [
+    "side_split"
+   ],
+   "slot": "technique",
+   "method": "technique",
+   "components": [
+    "position"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "99: no numbers; quality over intensity, no rush"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Reps done; optional video self-check (tilt first, sit back second)",
+    "options": null
+   },
+   "cues": [
+    "Hands on a support, bent over slightly",
+    "Feet aligned with the hands (feels oddly far forward)",
+    "Slide the feet apart, tilt the hip forward first, then sit slightly back",
+    "Squeeze the hip flexors and arch the back, chest high",
+    "Step out of the bottom using the arms; shake off and repeat"
+   ],
+   "mistakes": [
+    "Pushing deeper than the correct position allows"
+   ],
+   "progressions": [],
+   "regressions": [
+    "Horse stance slides (it is normally the progression from them)"
+   ],
+   "lesson_slug": "99-slide-to-side-split",
+   "note_file": "99-slide-to-side-split.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "horse_stance_squats",
+   "name": "Horse stance squats",
+   "pillars": [
+    "side_split"
+   ],
+   "slot": "main",
+   "method": "loaded",
+   "components": [
+    "position",
+    "adductors",
+    "hip_flexors",
+    "tension"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "3-4",
+    "reps": "8",
+    "hold_s": null,
+    "tempo": "2310",
+    "cr": null,
+    "rest_s": "60-90",
+    "source": "89 parameters (find step width first; progress with weight and step width); 107: pauses at the bottom and an iso hold on the last rep build depth"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "Most people 4-12 kg goblet style, some need heavier (106)",
+    "how_to_choose": "A weight that pulls you deeper but not so heavy you tense up; experiment for the load that lets you go deepest (106). Plateau: progressive underload, same depth with less weight (107)"
+   },
+   "marker": {
+    "kind": "steps",
+    "label": "Step width (feet-together foot turns, typical 5/7/9), load kg, hips vs knee line",
+    "options": [
+     "hips above knee line",
+     "hips at knee line",
+     "hips below knee line"
+    ]
+   },
+   "cues": [
+    "Choose a step stance that sets the hips just above the knees",
+    "Knees pushed out, feet turned out (not ballet second)",
+    "Sit back, extend the spine, chest high, weight held at the chest",
+    "At the bottom pull the legs apart with the glutes (cramping-level squeeze)",
+    "Squeeze the adductors to lift, slight forward weight shift on the way up"
+   ],
+   "mistakes": [
+    "Squatting at a stance that loses the correct position"
+   ],
+   "progressions": [
+    "Hips break the knee line at a width, then widen the stance (5 -> 7 -> 9 steps)",
+    "Pause at the bottom, iso hold on the last rep"
+   ],
+   "regressions": [
+    "Drop the weight and hold the end iso at bodyweight"
+   ],
+   "lesson_slug": "106-horse-stance-squats-overview-positioning",
+   "note_file": "106-horse-stance-squats-overview-positioning.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "straight_leg_get_ups",
+   "name": "Straight leg get ups, hands free",
+   "pillars": [
+    "side_split"
+   ],
+   "slot": "main",
+   "method": "loaded",
+   "components": [
+    "adductors",
+    "tension",
+    "shortening_side"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "3-4",
+    "reps": "6 + (10 s)",
+    "hold_s": "10 (end of set)",
+    "tempo": "2013",
+    "cr": null,
+    "rest_s": "60-90",
+    "source": "89 parameters ('Loaded' group); 109: reps, often an iso hold at the end of the final rep"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "cm",
+    "label": "Box height (cm); feet shuffled wider in-set (y/n)",
+    "options": null
+   },
+   "cues": [
+    "Box height with a controlled lower and lift and no reliance on the arms",
+    "Arms crossed over the chest",
+    "Sit BACKWARDS onto the platform, hips behind the line of the feet",
+    "Keep anterior tilt and arched back as you rise",
+    "Minimal forward lean"
+   ],
+   "mistakes": [
+    "Dropping straight down",
+    "Pushing the hips forward into neutral at the top",
+    "Counterbalancing with the arms or extreme torso lean"
+   ],
+   "progressions": [
+    "Lower the box each session, eventually from the floor",
+    "Shuffle the feet out a few cm every couple of reps"
+   ],
+   "regressions": [],
+   "lesson_slug": "109-straight-leg-get-ups-hands-free",
+   "note_file": "109-straight-leg-get-ups-hands-free.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "straddle_ups_hands_assisted",
+   "name": "Straddle ups, hands assisted",
+   "pillars": [
+    "side_split"
+   ],
+   "slot": "main",
+   "method": "strength",
+   "components": [
+    "adductors",
+    "tension",
+    "shortening_side"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "top",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "110: no sets/reps/hold numbers stated"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "cm",
+    "label": "Start straddle width (cm); hand elevation (none/blocks); feet elevated (y/n)",
+    "options": null
+   },
+   "cues": [
+    "Start in a seated straddle, reasonably wide but not max",
+    "Lean forward just enough to load the hands, chest up",
+    "Push with the hands and drive with the legs into an isometric side split",
+    "Hands off, hold the top: feet flat, anterior tilt, arched back, hips slightly behind the feet",
+    "Reverse with control until the hands touch, then lower gently",
+    "Shoes or rubber matting for grip"
+   ],
+   "mistakes": [
+    "Folding like a pancake",
+    "Dropping on the way down"
+   ],
+   "progressions": [
+    "Elevate the feet (harder)",
+    "More range"
+   ],
+   "regressions": [
+    "Elevate the hands on blocks (easier)"
+   ],
+   "lesson_slug": "110-straight-leg-get-ups-straddle-ups-hands-assisted",
+   "note_file": "110-straight-leg-get-ups-straddle-ups-hands-assisted.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "kneeling_tilt_closed_hip",
+   "name": "Kneeling tilt, closed hip",
+   "pillars": [
+    "side_split"
+   ],
+   "slot": "attribute",
+   "method": "active",
+   "components": [
+    "hip_flexors",
+    "shortening_side"
+   ],
+   "primary": [
+    "shortening_side"
+   ],
+   "unilateral": true,
+   "stretch_at": "top",
+   "dose": {
+    "sets": "2-3",
+    "reps": "5",
+    "hold_s": null,
+    "tempo": "1113",
+    "cr": null,
+    "rest_s": "60",
+    "source": "89 parameters (1 s lower, 1 s rest on floor, 1 s lift, 3 s hold at top; weaker side first, 15 s, match); 111: reps with tempo or longer isometric holds at the top"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": "Optional ankle weight with the leg extended; move one weight along the leg to change leverage (111)"
+   },
+   "marker": {
+    "kind": "blocks",
+    "label": "Target height per leg (block stack or ring strap mark); leverage (bent/straight)",
+    "options": null
+   },
+   "cues": [
+    "All fours, sacrum flat to the floor (bowl on your back)",
+    "Abduct the leg; fine if the foot only lifts a little",
+    "Contract the glutes to lift; cramping is likely and wanted",
+    "Leg out to the side or slightly in front of the hip, never behind",
+    "Extend the foot away to the side",
+    "Film from behind and the side"
+   ],
+   "mistakes": [
+    "Pelvis opening/tilting",
+    "Leg going behind the hip line",
+    "Crunching the abs/obliques"
+   ],
+   "progressions": [
+    "Extend the leg (longer lever)",
+    "Ankle weights",
+    "Raise the target height each session"
+   ],
+   "regressions": [
+    "Bend the knee (shorter lever)"
+   ],
+   "lesson_slug": "112-kneeling-tilt-closed-hip",
+   "note_file": "112-kneeling-tilt-closed-hip.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "kneeling_tilt_open_hip",
+   "name": "Kneeling tilt, open hip",
+   "pillars": [
+    "side_split"
+   ],
+   "slot": "attribute",
+   "method": "active",
+   "components": [
+    "hip_flexors",
+    "shortening_side"
+   ],
+   "primary": [
+    "shortening_side"
+   ],
+   "unilateral": true,
+   "stretch_at": "top",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "111: no numbers; reps with tempo or longer isometric holds at the top"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": "Optional ankle weight with the leg extended; move it along the leg to change leverage (111)"
+   },
+   "marker": {
+    "kind": "blocks",
+    "label": "Target height per leg (block stack or ring strap mark); leverage (bent/straight)",
+    "options": null
+   },
+   "cues": [
+    "From all fours bring one leg out to the side, drop to the elbow on the opposite arm (87)",
+    "Lift the leg as high as possible, foot in line with or slightly in front of the hip, never behind",
+    "Squeeze the glutes"
+   ],
+   "mistakes": [
+    "Foot behind the hip"
+   ],
+   "progressions": [
+    "Extend the leg",
+    "Ankle weights",
+    "Raise the target height"
+   ],
+   "regressions": [
+    "Bend the knee"
+   ],
+   "lesson_slug": "111-kneeling-tilt-measuring-progression",
+   "note_file": "111-kneeling-tilt-measuring-progression.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "isometric_side_split",
+   "name": "Isometric side split",
+   "pillars": [
+    "side_split"
+   ],
+   "slot": "attribute",
+   "method": "isometric",
+   "components": [
+    "position",
+    "adductors",
+    "hip_flexors",
+    "tension"
+   ],
+   "primary": [
+    "tension"
+   ],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "2-3",
+    "reps": null,
+    "hold_s": "40-60",
+    "tempo": null,
+    "cr": null,
+    "rest_s": "60-90",
+    "source": "89 parameters (width you can just hold 40 s; progress width first, then time; should feel like a max hold); 113 on-screen example 45-60 s, 3 sets, 120 s rest"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "cm",
+    "label": "Width (tape measure, floor markings or step width); freestanding vs assisted",
+    "options": null
+   },
+   "cues": [
+    "High chest, arched back, anterior tilt, hips slightly behind the feet (about to sit on a low stool)",
+    "Hold a depth you can maintain for the programmed time",
+    "Grippy shoe/floor combo",
+    "Shaking is normal; push through unless pain"
+   ],
+   "mistakes": [
+    "Hands on the floor, objects, legs or hips (removes the work)"
+   ],
+   "progressions": [
+    "Hold the upper bound (60 s), then widen the feet",
+    "Depth first, strength when progress stalls"
+   ],
+   "regressions": [
+    "Beginners: use the arms to offload, but do not progress depth until freestanding"
+   ],
+   "lesson_slug": "113-isometric-side-split",
+   "note_file": "113-isometric-side-split.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "isometric_horse_stance",
+   "name": "Isometric horse stance",
+   "pillars": [
+    "side_split"
+   ],
+   "slot": "attribute",
+   "method": "isometric",
+   "components": [
+    "position",
+    "adductors",
+    "hip_flexors",
+    "tension"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "91 drill matrix only; no drill note or numbers"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "steps",
+    "label": "Step width and hold time",
+    "options": null
+   },
+   "cues": [],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": null,
+   "note_file": "91-side-split_drill-matrix.md"
+  },
+  {
+   "id": "isometric_drop_stance_hold",
+   "name": "Isometric drop stance hold",
+   "pillars": [
+    "side_split"
+   ],
+   "slot": "attribute",
+   "method": "isometric",
+   "components": [
+    "adductors",
+    "hip_flexors",
+    "tension"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "91 drill matrix only; no drill note or numbers"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Elevation, depth and hold time per side",
+    "options": null
+   },
+   "cues": [],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": null,
+   "note_file": "91-side-split_drill-matrix.md"
+  },
+  {
+   "id": "side_split_contract_relax",
+   "name": "Side split contract relax (CR / CRAC)",
+   "pillars": [
+    "side_split"
+   ],
+   "slot": "attribute",
+   "method": "contract_relax",
+   "components": [
+    "position",
+    "adductors"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "2-3",
+    "reps": "3",
+    "hold_s": null,
+    "tempo": null,
+    "cr": "CRAC: 5 s drive heels into the floor, 5 s relax deeper, 5 s try to lift the feet, 5 s relax = 1 rep; CR: 5 s contract, 5 s relax = 1 cycle; 75-90% effort",
+    "rest_s": "90",
+    "source": "89 parameters (agonist/antagonist CR 3 x 2-3, 90 s); 115: normally 3-5 cycles per set, rest about 1-3 min"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Method (CR/CRAC), cycles, hand support (y/n), end depth",
+    "options": null
+   },
+   "cues": [
+    "Set the proper triangle side split position first",
+    "Leaning forward to compensate: hands on parallettes",
+    "Internal cue, little visible movement",
+    "Antagonist: squeeze the glutes and pull the legs apart, intention to lift the feet",
+    "Use at the end of a session for new depth, or as a quick warm-up if you already have the split"
+   ],
+   "mistakes": [
+    "Losing the triangle position"
+   ],
+   "progressions": [
+    "Drop the parallette support"
+   ],
+   "regressions": [
+    "Hands on parallettes"
+   ],
+   "lesson_slug": "115-side-split-contract-relax",
+   "note_file": "115-side-split-contract-relax.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "supported_side_split",
+   "name": "Supported side split (long supported holds)",
+   "pillars": [
+    "side_split"
+   ],
+   "slot": "attribute",
+   "method": "passive",
+   "components": [
+    "adductors"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "Optional: push legs down into the blocks a few seconds, relax and sink (on-screen 3 s / 3 s); or antagonist CR (try to lift the legs off)",
+    "rest_s": null,
+    "source": "114: progress by duration; no hold numbers stated"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "cm",
+    "label": "Distance between support points (cm), support position (above/at/below knee), hips to floor (cm)",
+    "options": null
+   },
+   "cues": [
+    "Stack padded supports under the legs, usually around or just below the knee",
+    "Support the arms too unless close to the floor",
+    "Keep triangle position: anterior tilt, sit back, chest high, back arched",
+    "Deep breaths; on each exhale release and sink into the blocks"
+   ],
+   "mistakes": [
+    "Setup too hard so you tense",
+    "Collapsing forwards"
+   ],
+   "progressions": [
+    "Longer holds",
+    "Supports further out"
+   ],
+   "regressions": [
+    "Supports closer to the body centre"
+   ],
+   "lesson_slug": "114-supported-side-split",
+   "note_file": "114-supported-side-split.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "isometric_front_split",
+   "name": "Isometric front split",
+   "pillars": [
+    "front_split"
+   ],
+   "slot": "main",
+   "method": "isometric",
+   "components": [
+    "back_hip_extension",
+    "front_hip_flexion"
+   ],
+   "primary": [
+    "back_hip_extension"
+   ],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "122: find your distance and hold for time; no hold times given (121 specialist program uses 40-60 s x 3, 120 s rest)"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "cm",
+    "label": "Stance distance per side (tape or floor marker), hold time, version (hands free / assisted)",
+    "options": null
+   },
+   "cues": [
+    "Extended lunge, front knee bent; closer feet = easier",
+    "Back leg straight or very nearly straight the whole hold",
+    "Squeeze the back-leg glute to go deeper",
+    "Square hips: weight onto the little toe of the back foot, suck the front femur into the socket",
+    "Drive the back leg through the floor while the front leg pulls back",
+    "Shoes recommended"
+   ],
+   "mistakes": [
+    "Back knee bending (gone too far)",
+    "Hips turning out",
+    "Hands on the knees"
+   ],
+   "progressions": [
+    "Longer holds",
+    "Shuffle the feet slightly wider; beat last session"
+   ],
+   "regressions": [
+    "Assisted: tap two high supports for balance, torso upright",
+    "Feet closer"
+   ],
+   "lesson_slug": "122-isometric-front-split",
+   "note_file": "122-isometric-front-split.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "front_split_slides",
+   "name": "Front split slides",
+   "pillars": [
+    "front_split"
+   ],
+   "slot": "attribute",
+   "method": "contract_relax",
+   "components": [
+    "back_hip_extension",
+    "front_hip_flexion"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "Rapid contract relax at 50-75 BPM (1 beat = contract, brief pause, relax); alternatives: 8 reps at 2-3-1-0 with a 3 s pause at the bottom, or 8 s contract / 5 s relax at the bottom",
+    "rest_s": null,
+    "source": "123 (finisher at the end of a front split session; no set count prescribed)"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "cm",
+    "label": "Marker distance pushed per side; back-leg variant (wall/quad or kneeling/iliopsoas); BPM",
+    "options": null
+   },
+   "cues": [
+    "Supports either side at a height that holds you at the bottom; pad under the back knee",
+    "Slider under the front heel, marker in front of the front foot",
+    "Weaker side first",
+    "Front leg straight, hips square, separate train tracks",
+    "Escalator not elevator: hips down and forward",
+    "Up: press the back knee into the floor with the hip flexors",
+    "Feel hip flexors and hamstrings about equally"
+   ],
+   "mistakes": [
+    "Reaching the foot forward (twists the hips)",
+    "Momentum instead of contraction",
+    "Twisting the hips to cheat range"
+   ],
+   "progressions": [
+    "Hands free",
+    "Push the marker further each rep"
+   ],
+   "regressions": [
+    "Higher supports"
+   ],
+   "lesson_slug": "123-front-split-slides",
+   "note_file": "123-front-split-slides.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "blocked_hip_extension",
+   "name": "Blocked hip extension",
+   "pillars": [
+    "front_split"
+   ],
+   "slot": "attribute",
+   "method": "active",
+   "components": [
+    "back_hip_extension"
+   ],
+   "primary": [
+    "back_hip_extension"
+   ],
+   "unilateral": true,
+   "stretch_at": "top",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "Lift and hold 2-8 s contraction per rep",
+    "rest_s": null,
+    "source": "124: no sets/reps stated"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Block set-up (hip block height, blocks under knee, back foot elevated y/n), reps x seconds",
+    "options": null
+   },
+   "cues": [
+    "Split squat position, front knee as far over the toes as the ankle allows, hands on the front knee",
+    "Chest high and facing forward",
+    "Contact cue: hamstring to calf, or a block just under the back-leg upper thigh",
+    "Keep the contact while straightening the back knee",
+    "Squeeze the glutes almost to cramping"
+   ],
+   "mistakes": [
+    "Losing contact (hips lifting instead of extending)",
+    "Bending forward"
+   ],
+   "progressions": [
+    "Knee locks out fully: lower block; already lowest: elevate the back leg"
+   ],
+   "regressions": [
+    "Blocks under the back knee first"
+   ],
+   "lesson_slug": "124-blocked-hip-extension",
+   "note_file": "124-blocked-hip-extension.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "couch_stretch_hips_low",
+   "name": "Couch stretch, hips low",
+   "pillars": [
+    "front_split"
+   ],
+   "slot": "isolated",
+   "method": "loaded",
+   "components": [
+    "back_hip_extension",
+    "quads"
+   ],
+   "primary": [
+    "back_hip_extension"
+   ],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "Optional: contract hard a few seconds, relax slightly, repeat (no exact seconds)",
+    "rest_s": null,
+    "source": "125: active holds mostly recommended; no numbers given"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "Dumbbell over the shoulder on the back-leg side: enough to push you deeper, not so much you go less far; experiment (125)"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Dumbbell kg, method (active hold / passive hold / CR / low to high reps), seconds or reps",
+    "options": null
+   },
+   "cues": [
+    "Back foot pinned in a corner (preferred), wall or couch; pad under the knee",
+    "Hips low, torso upright",
+    "Front foot turned out 5-15 deg on its own track",
+    "Escalator not elevator",
+    "At the bottom posteriorly tilt: squeeze the back glute"
+   ],
+   "mistakes": [
+    "Front foot pointing straight forward",
+    "Leaning forward"
+   ],
+   "progressions": [
+    "Hips low to high couch stretch reps (intense)"
+   ],
+   "regressions": [
+    "Move the back knee further from the couch"
+   ],
+   "lesson_slug": "125-couch-stretch-hips-low",
+   "note_file": "125-couch-stretch-hips-low.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "couch_stretch_hips_high",
+   "name": "Couch stretch, hips high",
+   "pillars": [
+    "front_split"
+   ],
+   "slot": "isolated",
+   "method": null,
+   "components": [
+    "quads"
+   ],
+   "primary": [
+    "quads"
+   ],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "Contract hard a few seconds, relax slightly; 1-3 s rest between contractions is plenty",
+    "rest_s": null,
+    "source": "126: active holds mostly recommended; no hold numbers"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Contacts reached: thigh to calf, glute to heel, lower back to wall",
+    "options": [
+     "none",
+     "thigh to calf",
+     "glute to heel",
+     "lower back to wall"
+    ]
+   },
+   "cues": [
+    "Back foot pinned in a corner, pad under the knee, torso upright",
+    "Send the glutes toward the heel",
+    "Then posteriorly tilt: squeeze the back glute, try to touch the lower back to the wall",
+    "Good before hip-flexor focused work"
+   ],
+   "mistakes": [
+    "Torso leaning forward"
+   ],
+   "progressions": [
+    "Knee closer to the wall"
+   ],
+   "regressions": [
+    "Move the back knee further from the wall"
+   ],
+   "lesson_slug": "126-couch-stretch-hips-high",
+   "note_file": "126-couch-stretch-hips-high.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "reverse_nordic_curls",
+   "name": "Reverse Nordic curls",
+   "pillars": [
+    "front_split"
+   ],
+   "slot": "isolated",
+   "method": "strength",
+   "components": [
+    "quads"
+   ],
+   "primary": [
+    "quads"
+   ],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "127: no sets/reps given"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": "Past bodyweight: arms by sides -> on chest -> overhead"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Variant (band + ring height / object height / full BW), arm position",
+    "options": null
+   },
+   "cues": [
+    "Pad the knees",
+    "Kneel, push the hips forward and keep them extended (squeeze glutes)",
+    "Bend the knees and lean back, curve from knees to neck"
+   ],
+   "mistakes": [
+    "Hips breaking at the waist"
+   ],
+   "progressions": [
+    "Lower the band or a lighter band",
+    "Lower the object",
+    "Arms on chest, then overhead"
+   ],
+   "regressions": [
+    "Band assistance from above (ring strap)",
+    "Reach back to an object behind you"
+   ],
+   "lesson_slug": "127-reverse-nordic-curls",
+   "note_file": "127-reverse-nordic-curls.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "kneeling_needle",
+   "name": "Kneeling needle",
+   "pillars": [
+    "front_split"
+   ],
+   "slot": "attribute",
+   "method": "active",
+   "components": [
+    "back_hip_extension"
+   ],
+   "primary": [
+    "back_hip_extension"
+   ],
+   "unilateral": true,
+   "stretch_at": "top",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "128: reps, contract relax or longer hold; no numbers given"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": "Level 3: ankle weights on the straight leg"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Level (bent / straight / straight + ankle weight kg), floor or bench",
+    "options": [
+     "bent knee",
+     "straight leg",
+     "straight leg + ankle weight"
+    ]
+   },
+   "cues": [
+    "Forearms and knees, on the balls of the feet",
+    "Round the back to isolate the hip",
+    "Lift and squeeze hard, keep trying to lift higher",
+    "Cramping is normal: drop the leg, shake off, continue"
+   ],
+   "mistakes": [
+    "Arching the lower back to lift higher"
+   ],
+   "progressions": [
+    "Straight leg",
+    "Ankle weights"
+   ],
+   "regressions": [
+    "Bent knee",
+    "Elevated on a bench"
+   ],
+   "lesson_slug": "128-kneeling-needle",
+   "note_file": "128-kneeling-needle.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "split_squats",
+   "name": "Split squats",
+   "pillars": [
+    "front_split"
+   ],
+   "slot": "main",
+   "method": "loaded",
+   "components": [
+    "back_hip_extension",
+    "quads"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "134: no sets/reps given"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "Learn with dumbbells, later barbell (high bar or front rack, safety pins)"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Variant + elevation height (cm, constant per phase), load type + kg, heel wedge height",
+    "options": null
+   },
+   "cues": [
+    "Legs on separate tracks, front foot turned out 5-15 deg",
+    "Back foot on the ball of the foot",
+    "Front knee far over the toes, escalator not elevator",
+    "Back leg as straight as possible",
+    "Weaker leg first, match reps on the stronger side",
+    "Grippy floor and shoes"
+   ],
+   "mistakes": [
+    "90/90 leg position",
+    "Changing elevation heights mid-phase"
+   ],
+   "progressions": [
+    "Back foot elevated",
+    "Bulgarian",
+    "Both feet elevated",
+    "Barbell"
+   ],
+   "regressions": [
+    "Front foot elevated",
+    "Heel wedge under the front heel"
+   ],
+   "lesson_slug": "134-split-squats",
+   "note_file": "134-split-squats.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "rec_fem_pin_stretch",
+   "name": "Rec fem pin and stretch",
+   "pillars": [
+    "front_split"
+   ],
+   "slot": "isolated",
+   "method": "soft_tissue",
+   "components": [
+    "quads"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": "2-4 per spot",
+    "hold_s": "1-2 (end position)",
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "136: continue a few rounds or until improvement stops"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Before/after side photo in hips low couch stretch; spots treated; rounds",
+    "options": null
+   },
+   "cues": [
+    "Find the tight spot in a passive upright couch stretch",
+    "Lie prone on a foam roller on that spot, near body-weight pressure, no rolling",
+    "Bend the knee fully, pull the last bit with the arm, squeeze the glute into the boat position",
+    "Re-test, repeat; tightest spot first"
+   ],
+   "mistakes": [
+    "Rolling back and forth"
+   ],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "136-rec-fem-pin-stretch",
+   "note_file": "136-rec-fem-pin-stretch.md",
+   "lesson_course": "mftk"
   }
  ],
  "rules": {
@@ -3052,6 +4222,1061 @@
     "reps_formula": "reps = round(TUT lower bound / sum of tempo digits)",
     "tempo_rule": "lower 2 s+, pause 2-5 s in the stretched position, lift X-2 s, usually no pause in the non-stretched position"
    }
+  },
+  "side_split": {
+   "marked": "smith",
+   "source": "89 phase 1 builder (decision tree + parameters); 94 L/R imbalance; 93 combining with pancake (notes only); 92 phase 2 builder (notes only)",
+   "metrics": [
+    {
+     "id": "ds_worst",
+     "kind": "worst",
+     "test": "ss_drop_stance",
+     "measure": "angle"
+    },
+    {
+     "id": "ds_best",
+     "kind": "best",
+     "test": "ss_drop_stance",
+     "measure": "angle"
+    },
+    {
+     "id": "ds_lr_diff",
+     "kind": "absdiff",
+     "a": "ds_best",
+     "b": "ds_worst"
+    },
+    {
+     "id": "tailors_calves",
+     "kind": "label",
+     "test": "ss_tailors_pose",
+     "measure": "calves_floor"
+    },
+    {
+     "id": "pancake_touch",
+     "kind": "label",
+     "test": "ss_pancake",
+     "measure": "touchpoint"
+    },
+    {
+     "id": "pancake_angle",
+     "kind": "value",
+     "test": "ss_pancake",
+     "measure": "angle"
+    },
+    {
+     "id": "split_supported",
+     "kind": "value",
+     "test": "ss_triangle_supported",
+     "measure": "angle"
+    },
+    {
+     "id": "split_free",
+     "kind": "value",
+     "test": "ss_triangle_free",
+     "measure": "angle"
+    },
+    {
+     "id": "split_gap",
+     "kind": "absdiff",
+     "a": "split_supported",
+     "b": "split_free"
+    }
+   ],
+   "questions": [
+    "ss_q1_position",
+    "ss_q_tension"
+   ],
+   "require": [
+    "ds_worst",
+    "ds_best",
+    "ss_q1_position",
+    "tailors_calves",
+    "pancake_touch",
+    "ss_q_tension",
+    "split_supported",
+    "split_free"
+   ],
+   "always": [],
+   "rules": [
+    {
+     "when": [
+      {
+       "metric": "ds_lr_diff",
+       "op": ">",
+       "value": 10
+      }
+     ],
+     "add": [],
+     "note": "Left/right imbalance (drop stance differs by more than 10 deg): swap unilateral drills in (swap arrows on the flow chart, U drills in the matrix, e.g. horse stance squats -> drop stance squats), always start with the WEAKER side, only match reps on the stronger side, and for a big imbalance match the weaker side's range too. Set targets/elevation so both sides move through the same range.",
+     "why": "89 L/R check (more than 10 deg -> case study); 94 how to address it"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "in",
+       "value": [
+        "no",
+        "unsure"
+       ]
+      }
+     ],
+     "add": [
+      {
+       "code": "A1",
+       "drill_id": "horse_stance_slides"
+      }
+     ],
+     "note": "Unsure counts as No: practise the position through phase 1.",
+     "why": "89 Q1 NO -> A1 Horse stance slides"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "in",
+       "value": [
+        "no",
+        "unsure"
+       ]
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "no"
+      }
+     ],
+     "add": [
+      {
+       "code": "B1",
+       "drill_id": "tailors_pose"
+      },
+      {
+       "code": "B2",
+       "drill_id": "horse_stance_squats"
+      }
+     ],
+     "why": "89 Q1 NO, Q2 NO -> B1 Tailors pose + B2 Horse stance squats"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "in",
+       "value": [
+        "no",
+        "unsure"
+       ]
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "yes"
+      }
+     ],
+     "add": [
+      {
+       "code": "B1",
+       "drill_id": "horse_stance_squats"
+      },
+      {
+       "code": "C1",
+       "drill_id": "straight_leg_get_ups"
+      }
+     ],
+     "why": "89 Q1 NO, Q2 YES -> B1 Horse stance squats + C1 Straight leg get ups"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "no"
+      }
+     ],
+     "add": [
+      {
+       "code": "A1",
+       "drill_id": "tailors_pose"
+      },
+      {
+       "code": "A2",
+       "drill_id": "horse_stance_squats"
+      }
+     ],
+     "note": "A1/A2 alternate.",
+     "why": "89 Q1 YES, Q2 NO -> A1 Tailors pose + A2 Horse stance squats"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "yes"
+      }
+     ],
+     "add": [
+      {
+       "code": "A1",
+       "drill_id": "horse_stance_squats"
+      },
+      {
+       "code": "B1",
+       "drill_id": "straight_leg_get_ups"
+      }
+     ],
+     "why": "89 Q1 YES, Q2 YES -> A1 Horse stance squats + B1 Straight leg get ups"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "in",
+       "value": [
+        "no",
+        "unsure"
+       ]
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "no"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "==",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "pancake_angle",
+       "op": ">=",
+       "value": 45
+      }
+     ],
+     "add": [
+      {
+       "code": "C1",
+       "drill_id": "standing_pancake_hang"
+      }
+     ],
+     "why": "89 Q3: head does not touch, pancake angle not less than 45 deg -> Standing pancake hang (slot C1 on path Q1 NO, Q2 NO)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "in",
+       "value": [
+        "no",
+        "unsure"
+       ]
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "no"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "==",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "pancake_angle",
+       "op": "<",
+       "value": 45
+      }
+     ],
+     "add": [
+      {
+       "code": "C1",
+       "drill_id": "pancake_good_morning"
+      }
+     ],
+     "why": "89 Q3: head does not touch, pancake angle less than 45 deg -> Pancake good morning (slot C1 on path Q1 NO, Q2 NO)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "in",
+       "value": [
+        "no",
+        "unsure"
+       ]
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "no"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "!=",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "ss_q_tension",
+       "op": "==",
+       "value": "no"
+      }
+     ],
+     "add": [
+      {
+       "code": "C1",
+       "drill_id": "isometric_side_split"
+      }
+     ],
+     "why": "89 Q3: head touches, did not hold all drills for time (tension) -> Isometric hold (slot C1 on path Q1 NO, Q2 NO)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "in",
+       "value": [
+        "no",
+        "unsure"
+       ]
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "no"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "!=",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "ss_q_tension",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "split_gap",
+       "op": ">=",
+       "value": 20
+      }
+     ],
+     "add": [
+      {
+       "code": "C1",
+       "drill_id": "kneeling_tilt_closed_hip"
+      }
+     ],
+     "why": "89 Q3: head touches, held all, NOT less than 20 deg between hands-free and hands-supported split -> Kneeling tilt (or isometric hold) (slot C1 on path Q1 NO, Q2 NO)",
+     "note": "Alternative per 89: isometric hold (isometric_side_split) instead of kneeling tilt."
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "in",
+       "value": [
+        "no",
+        "unsure"
+       ]
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "no"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "!=",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "ss_q_tension",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "split_gap",
+       "op": "<",
+       "value": 20
+      }
+     ],
+     "add": [
+      {
+       "code": "C1",
+       "drill_id": "side_split_contract_relax"
+      }
+     ],
+     "why": "89 Q3: head touches, held all, less than 20 deg difference -> Contract relax (slot C1 on path Q1 NO, Q2 NO)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "in",
+       "value": [
+        "no",
+        "unsure"
+       ]
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "==",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "pancake_angle",
+       "op": ">=",
+       "value": 45
+      }
+     ],
+     "add": [
+      {
+       "code": "D1",
+       "drill_id": "standing_pancake_hang"
+      }
+     ],
+     "why": "89 Q3: head does not touch, pancake angle not less than 45 deg -> Standing pancake hang (slot D1 on path Q1 NO, Q2 YES)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "in",
+       "value": [
+        "no",
+        "unsure"
+       ]
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "==",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "pancake_angle",
+       "op": "<",
+       "value": 45
+      }
+     ],
+     "add": [
+      {
+       "code": "D1",
+       "drill_id": "pancake_good_morning"
+      }
+     ],
+     "why": "89 Q3: head does not touch, pancake angle less than 45 deg -> Pancake good morning (slot D1 on path Q1 NO, Q2 YES)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "in",
+       "value": [
+        "no",
+        "unsure"
+       ]
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "!=",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "ss_q_tension",
+       "op": "==",
+       "value": "no"
+      }
+     ],
+     "add": [
+      {
+       "code": "D1",
+       "drill_id": "isometric_side_split"
+      }
+     ],
+     "why": "89 Q3: head touches, did not hold all drills for time (tension) -> Isometric hold (slot D1 on path Q1 NO, Q2 YES)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "in",
+       "value": [
+        "no",
+        "unsure"
+       ]
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "!=",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "ss_q_tension",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "split_gap",
+       "op": ">=",
+       "value": 20
+      }
+     ],
+     "add": [
+      {
+       "code": "D1",
+       "drill_id": "kneeling_tilt_closed_hip"
+      }
+     ],
+     "why": "89 Q3: head touches, held all, NOT less than 20 deg between hands-free and hands-supported split -> Kneeling tilt (or isometric hold) (slot D1 on path Q1 NO, Q2 YES)",
+     "note": "Alternative per 89: isometric hold (isometric_side_split) instead of kneeling tilt."
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "in",
+       "value": [
+        "no",
+        "unsure"
+       ]
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "!=",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "ss_q_tension",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "split_gap",
+       "op": "<",
+       "value": 20
+      }
+     ],
+     "add": [
+      {
+       "code": "D1",
+       "drill_id": "side_split_contract_relax"
+      }
+     ],
+     "why": "89 Q3: head touches, held all, less than 20 deg difference -> Contract relax (slot D1 on path Q1 NO, Q2 YES)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "no"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "==",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "pancake_angle",
+       "op": ">=",
+       "value": 45
+      }
+     ],
+     "add": [
+      {
+       "code": "B1",
+       "drill_id": "standing_pancake_hang"
+      }
+     ],
+     "why": "89 Q3: head does not touch, pancake angle not less than 45 deg -> Standing pancake hang (slot B1 on path Q1 YES, Q2 NO)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "no"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "==",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "pancake_angle",
+       "op": "<",
+       "value": 45
+      }
+     ],
+     "add": [
+      {
+       "code": "B1",
+       "drill_id": "pancake_good_morning"
+      }
+     ],
+     "why": "89 Q3: head does not touch, pancake angle less than 45 deg -> Pancake good morning (slot B1 on path Q1 YES, Q2 NO)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "no"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "!=",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "ss_q_tension",
+       "op": "==",
+       "value": "no"
+      }
+     ],
+     "add": [
+      {
+       "code": "B1",
+       "drill_id": "isometric_side_split"
+      }
+     ],
+     "why": "89 Q3: head touches, did not hold all drills for time (tension) -> Isometric hold (slot B1 on path Q1 YES, Q2 NO)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "no"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "!=",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "ss_q_tension",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "split_gap",
+       "op": ">=",
+       "value": 20
+      }
+     ],
+     "add": [
+      {
+       "code": "B1",
+       "drill_id": "kneeling_tilt_closed_hip"
+      }
+     ],
+     "why": "89 Q3: head touches, held all, NOT less than 20 deg between hands-free and hands-supported split -> Kneeling tilt (or isometric hold) (slot B1 on path Q1 YES, Q2 NO)",
+     "note": "Alternative per 89: isometric hold (isometric_side_split) instead of kneeling tilt."
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "no"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "!=",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "ss_q_tension",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "split_gap",
+       "op": "<",
+       "value": 20
+      }
+     ],
+     "add": [
+      {
+       "code": "B1",
+       "drill_id": "side_split_contract_relax"
+      }
+     ],
+     "why": "89 Q3: head touches, held all, less than 20 deg difference -> Contract relax (slot B1 on path Q1 YES, Q2 NO)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "==",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "pancake_angle",
+       "op": ">=",
+       "value": 45
+      }
+     ],
+     "add": [
+      {
+       "code": "C1",
+       "drill_id": "standing_pancake_hang"
+      }
+     ],
+     "why": "89 Q3: head does not touch, pancake angle not less than 45 deg -> Standing pancake hang (slot C1 on path Q1 YES, Q2 YES)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "==",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "pancake_angle",
+       "op": "<",
+       "value": 45
+      }
+     ],
+     "add": [
+      {
+       "code": "C1",
+       "drill_id": "pancake_good_morning"
+      }
+     ],
+     "why": "89 Q3: head does not touch, pancake angle less than 45 deg -> Pancake good morning (slot C1 on path Q1 YES, Q2 YES)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "!=",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "ss_q_tension",
+       "op": "==",
+       "value": "no"
+      }
+     ],
+     "add": [
+      {
+       "code": "C1",
+       "drill_id": "isometric_side_split"
+      }
+     ],
+     "why": "89 Q3: head touches, did not hold all drills for time (tension) -> Isometric hold (slot C1 on path Q1 YES, Q2 YES)"
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "!=",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "ss_q_tension",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "split_gap",
+       "op": ">=",
+       "value": 20
+      }
+     ],
+     "add": [
+      {
+       "code": "C1",
+       "drill_id": "kneeling_tilt_closed_hip"
+      }
+     ],
+     "why": "89 Q3: head touches, held all, NOT less than 20 deg between hands-free and hands-supported split -> Kneeling tilt (or isometric hold) (slot C1 on path Q1 YES, Q2 YES)",
+     "note": "Alternative per 89: isometric hold (isometric_side_split) instead of kneeling tilt."
+    },
+    {
+     "when": [
+      {
+       "metric": "ss_q1_position",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "tailors_calves",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "pancake_touch",
+       "op": "!=",
+       "value": "none (head not on floor)"
+      },
+      {
+       "metric": "ss_q_tension",
+       "op": "==",
+       "value": "yes"
+      },
+      {
+       "metric": "split_gap",
+       "op": "<",
+       "value": 20
+      }
+     ],
+     "add": [
+      {
+       "code": "C1",
+       "drill_id": "side_split_contract_relax"
+      }
+     ],
+     "why": "89 Q3: head touches, held all, less than 20 deg difference -> Contract relax (slot C1 on path Q1 YES, Q2 YES)"
+    }
+   ],
+   "fallback": [],
+   "frequency": "Same as pancake: start every 5 days; if you recover well and improve, every 4 days, then every 3. Poor recovery 6-7 days, average 3-5, superior 2-3. Phase 1 until progress stops, usually 4-6 weeks.",
+   "notes": [
+    "Q3 slot letter depends on the path (89 says 'B, C or D depending on the path'): Q1 NO/Q2 NO -> C1 (matches the 89 example program), Q1 NO/Q2 YES -> D1, Q1 YES/Q2 NO -> B1, Q1 YES/Q2 YES -> C1.",
+    "Pancake angle (ss_pancake.angle) is only needed when the head does not touch the floor.",
+    "Example program (89): A1 Horse stance slides 10C x1 51-0 60 s; B1 Tailors pose 8 x 3-4 2310 60-90 s; B2 Horse stance squats 8 x 3-4 2310 60-90 s; C1 Standing pancake hang 6 x 2-3 C5 R5 90 s.",
+    "Side split doses for reused drills (89): Tailors pose 8 x 3-4, 2310, 60-90 s, 5-10 kg per side (depth not load). Drop stance squats 8 per side x 2-3, 2310, 45 s, weaker side first, 15 s, match reps, no weight to start, leg fully bent at the bottom. Pancake good morning 6 x 3-4, 3220, 60-90 s, 5-10 kg, do not rest at the top. Standing pancake hang 6 x 2-3, C5 R5, 90 s.",
+    "Combining with pancake (93): same session -> replace the final drill with ONE pancake drill by seated pancake: more than 45 deg standing pancake hang, less than 45 deg round back good morning (pancake_good_morning), head to floor straight arm lifts (pancake_straight_arm_lifts). Different sessions -> in the side split session answer YES to 'head touches the floor' (no pancake drills); in the pancake session answer YES to 'knees/calves touch in tailors pose'. Driven by question ss_combine_pancake; the app must apply these overrides.",
+    "Phase 2 (92): change the exercise via the drill matrix (91) or keep it and change the stimulus; one drill per group, do not use all groups, matrix order = execution order. L/R imbalance -> unilateral alternatives; no A1 needed once position is correct; tailors about 180 deg -> straight-knee adductor drills, else bent-knee; head touch / tension / 20 deg branches as phase 1 but by drill family (standing pancake, seated pancake, isometric, active, passive).",
+    "Specialist option (90): Side split overload, isometric side split hands free 40-60 s x 3, 120 s rest, 3-4x per week for 4 weeks, about 15 min, at the end of another session; warm-up 3-5 x 20 s getting wider; hold longer up to 60 s then widen; start next session at set 2 (ideally set 3) width; plateau: check recovery -> add 2.5-5 kg -> day off and retest -> new program.",
+    "Potential (95): one-off standing and prone single-leg tests to estimate potential (calves touching / flat / oversplit)."
+   ]
+  },
+  "front_split": {
+   "marked": "ours",
+   "source": "119 assessment, 120 Jotform inputs (logic hidden), drill notes 122-128, 134, 136; 121 for specialist notes",
+   "metrics": [
+    {
+     "id": "fs_passive_worst",
+     "kind": "worst",
+     "test": "fs_passive",
+     "measure": "angle"
+    },
+    {
+     "id": "fs_iso_worst",
+     "kind": "worst",
+     "test": "fs_isometric",
+     "measure": "angle"
+    },
+    {
+     "id": "fs_passive_vs_iso",
+     "kind": "diff",
+     "a": "fs_passive_worst",
+     "b": "fs_iso_worst"
+    },
+    {
+     "id": "fs_couch_worst",
+     "kind": "worst",
+     "test": "fs_couch_hips_low",
+     "measure": "angle"
+    },
+    {
+     "id": "fs_lunge_worst",
+     "kind": "worst",
+     "test": "fs_kneeling_lunge",
+     "measure": "angle"
+    },
+    {
+     "id": "fs_prone_ext_worst",
+     "kind": "worst",
+     "test": "fs_prone_knee_bend",
+     "measure": "angle"
+    },
+    {
+     "id": "fs_lift_worst",
+     "kind": "worst",
+     "test": "fs_single_leg_lift",
+     "measure": "angle"
+    },
+    {
+     "id": "fs_knee_wall",
+     "kind": "label",
+     "test": "fs_couch_hips_low",
+     "measure": "knee_to_wall"
+    },
+    {
+     "id": "fs_hip_mode",
+     "kind": "label",
+     "test": "fs_passive",
+     "measure": "hip"
+    }
+   ],
+   "questions": [
+    "fs_q_approval"
+   ],
+   "require": [
+    "fs_q_approval",
+    "fs_passive_worst",
+    "fs_iso_worst",
+    "fs_couch_worst",
+    "fs_lunge_worst",
+    "fs_prone_ext_worst",
+    "fs_lift_worst",
+    "fs_knee_wall"
+   ],
+   "always": [
+    {
+     "drill_id": "isometric_front_split",
+     "optional": false,
+     "why": "122: one of the most bang-for-buck front split drills, targets the back-leg hip flexors; also an assessment drill (119) and the 121 specialist protocol"
+    },
+    {
+     "drill_id": "couch_stretch_hips_low",
+     "optional": false,
+     "why": "125: primarily a hip flexor (iliopsoas) drill for the back leg; also a front split assessment position (119)"
+    },
+    {
+     "drill_id": "front_split_slides",
+     "optional": false,
+     "why": "123: trains front leg hamstrings and back leg hip flexors together; recommended as the session finisher"
+    },
+    {
+     "drill_id": "rec_fem_pin_stretch",
+     "optional": true,
+     "why": "136: treatment technique for the rectus femoris, measured with the hips low couch stretch"
+    }
+   ],
+   "rules": [
+    {
+     "when": [
+      {
+       "metric": "fs_knee_wall",
+       "op": "==",
+       "value": "no"
+      }
+     ],
+     "add": [
+      {
+       "drill_id": "couch_stretch_hips_high"
+      }
+     ],
+     "note": "Do it before the hips low couch stretch.",
+     "why": "119: note if the back knee cannot touch the wall in the couch stretch; 126: hips high couch stretch is the quad version, goal back knee close to the wall, often a good drill before hip-flexor work"
+    },
+    {
+     "when": [
+      {
+       "metric": "fs_hip_mode",
+       "op": "==",
+       "value": "open hip"
+      }
+     ],
+     "add": [],
+     "note": "Passive split was measured open hip: keep retests open hip so results compare, or retest closed hip (the stricter version).",
+     "why": "118: record closed or open hip so measurements are comparable"
+    }
+   ],
+   "fallback": [],
+   "frequency": null,
+   "notes": [
+    "Smith's front split builder (120) is a Jotform with hidden logic; only its inputs are known. Its hidden summary 'Front leg P vs A' (1 = work passive, 2 = work active) has no published threshold, so no passive/active rule is encoded; the metric fs_passive_vs_iso is computed for display.",
+    "Active back-leg hip extension drills (kneeling_needle 128, blocked_hip_extension 124), quad strength (reverse_nordic_curls 127) and split_squats (134) are defined for manual or later-phase selection; no note states which assessment result calls for them.",
+    "Weaker side first and match the stronger side (123, 134).",
+    "Specialist option (121): Front split overload, isometric front split hands free or lightly tapping, back leg straight, 40-60 s x 3, 120 s rest (up to 5 sets), 2-4x per week for 4 weeks, about 15 min at the end of another session; warm-up 3-5 x 20 s getting wider; every full 60 s add 2-5 cm next set; start next session at set 2 (ideally 3) width; cannot beat distance 3 sessions running -> check recovery, take the next session off; still stuck -> new program."
+   ]
   }
  },
  "gaps": [
@@ -3084,6 +5309,27 @@
   "Shoulder drill notes give almost no numbers: band routine 152-154, pillar lat 155, flyes 157, inlocates 159, stick ER 161, overhead stick ER 162, hanging 165, elbow-on-knee ER 166 (tempo), front raises 169, prone variations 170; CR cycle counts missing in 160, 161, 163.",
   "Pec minor (147) has a test but no targeted drill note.",
   "No shoulder drill matrix or slot structure exists; shoulder slot assignments (e.g. inlocates as main) are ours.",
-  "Shoulder pillar has no single assessment video; lesson_slug set to 137 mechanics (covers the assessment order)."
+  "Shoulder pillar has no single assessment video; lesson_slug set to 137 mechanics (covers the assessment order).",
+  "[data_splits.json] Side split: lesson notes 96, 97, 100-105, 108, 116, 117 do not exist in the lessons folder; no video dirs for 86-94 (side split pillar lesson_slug null).",
+  "[data_splits.json] Side split horse stance test (87 position 3): note 88 gives no measuring rule; no measure defined.",
+  "[data_splits.json] Side split pancake test (87 position 7): no 'band' question like the pancake pillar; 89 Q3 uses head touch + angle less than 45 deg. Exactly 45 deg routes to the standing pancake hang (89 asks 'less than 45?').",
+  "[data_splits.json] Side split 89 Q3 'less than 20 deg difference between hands-free and hands-supported' does not say which is subtracted; encoded as absolute difference.",
+  "[data_splits.json] Side split 89 Q3 slot letter per path is our reading of 'B, C or D depending on the path' (only the Q1 NO/Q2 NO -> C1 path is confirmed by the example program).",
+  "[data_splits.json] Side split 89 'Did you hold all drills for the stated time?' has no test field; asked as question ss_q_tension (we read 'drills' as the assessment positions).",
+  "[data_splits.json] Side split L/R imbalance (89/94): the swap to unilateral drills is a substitution, which the ruleset schema cannot express; emitted as a program note only.",
+  "[data_splits.json] Side split 93 (training with pancake) overrides are notes only; the ruleset has no slot-replacement or forced-answer mechanism.",
+  "[data_splits.json] Side split matrix drills with no drill note or numbers: isometric_horse_stance, isometric_drop_stance_hold (dose all null). Greyed-out matrix drills (standing tilt, inline split rolls) not defined.",
+  "[data_splits.json] Side split 89 parameters give no load for horse stance squats (106 says most people 4-12 kg).",
+  "[data_splits.json] Kneeling tilt open hip (111/87): no doses; 89 gives doses only for the closed hip version.",
+  "[data_splits.json] Straddle ups hands assisted (110), slide to side split (99), supported side split (114): no sets/reps/holds stated.",
+  "[data_splits.json] Front split: no 'measuring angles' note exists (119 says angles come in the next lesson; not captured), so no angle tap points are defined for any front split test.",
+  "[data_splits.json] Front split: lesson notes 129-133 and 135 do not exist; no video dirs for 118, 120, 121.",
+  "[data_splits.json] Front split 120 Jotform logic is hidden: no published thresholds for passive vs active, quad reduction, or hip flexion PvA; no rules use numeric thresholds. Quad reduction formula unknown, not computed.",
+  "[data_splits.json] Front split healthcare approval options: 120 does not list them; we used the pike form's 'Yes I have / Yes I will' (note 33).",
+  "[data_splits.json] Front split which leg names the side: 119 does not say; we label by front leg for splits/pike, back leg for couch stretch/lunge.",
+  "[data_splits.json] Front split L/R imbalance threshold: none stated (the 10 deg rule is side split only).",
+  "[data_splits.json] Front split frequency for the regular program: not stated in 119/120 (only the 121 specialist 2-4x/week).",
+  "[data_splits.json] Front split drill doses: 122, 124 (2-8 s contraction only), 125, 126, 127, 128, 134 give no sets/reps/holds.",
+  "[data_splits.json] Couch stretch hips high method left null: 126 recommends active holds, passive holds or CR (no single method)."
  ]
 }

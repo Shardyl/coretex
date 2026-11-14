@@ -195,7 +195,7 @@ function itemRow(it,showTarget){const t=it.target;
     ${!showTarget&&it.why?`<div style="font-size:11px;margin:3px 0 0 30px;color:var(--ink3)">${esc(it.why)}</div>`:''}
     ${(it.dose&&it.dose.filled&&it.dose.filled.length)?`<div style="font-size:10.5px;margin:2px 0 0 30px;color:var(--ink3)">${esc(it.dose.filled.join(', '))} from Smith's program design rules (his note gives none)</div>`:''}</div>`;}
 function programBlock(p){
-  if(!['pancake','shoulder_flexion'].includes(p.id))return '';
+  if(!(_mob.program_pillars||['pancake','shoulder_flexion']).includes(p.id))return '';
   const a=progOf(p.id), d=draftOf(p.id);
   if(a){const sp=a.spec, n=a.sessions_done||0, N=a.sessions_per_phase||6;
     return `<div class="card" style="padding:12px 14px;margin:12px 0">
@@ -231,7 +231,7 @@ function draftCard(sp,id,p){
 function sessionsList(a){const ss=(_mob.sessions||[]).filter(s=>s.program===a.id).slice().reverse();if(!ss.length)return '';
   return `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;font-weight:800">Sessions logged (${ss.length})</summary>
     ${ss.map(s=>`<div style="border-top:0.5px solid var(--border);padding:6px 0;font-size:12px"><div style="display:flex;justify-content:space-between"><b>${fd(s.date)}</b><button class="btn-sm" onclick="mobSessionDel('${s.id}')">Remove</button></div>
-      ${s.items.map(x=>`<div style="color:var(--ink2)">${esc(x.code)} ${esc(x.sets.map(setTxt).join(', '))}${x.marker?' &middot; '+esc(x.marker):''}${x.deeper==='yes'?' &middot; deeper':''}</div>`).join('')}
+      ${s.items.filter(x=>x.code!=='_blocks').map(x=>`<div style="color:var(--ink2)">${esc(x.code)} ${esc(x.sets.map(setTxt).join(', '))}${x.marker?' &middot; '+esc(x.marker):''}${x.deeper==='yes'?' &middot; deeper':''}${x.warmup&&x.warmup.of?' &middot; warm-up '+x.warmup.sets_done+'/'+x.warmup.of:''}</div>`).join('')}
       ${s.note?`<div style="color:var(--ink3)">${esc(s.note)}</div>`:''}</div>`).join('')}</details>`;}
 window.mobDraftClear=()=>{_mobDraft=null;renderMobility();};
 window.mobBuild=async function(pid){
@@ -253,6 +253,22 @@ window.mobSessionOpen=function(id){_mobView='session:'+id;renderMobility();windo
 // the session screen: one card per drill, target first, then what he did
 const nInt=x=>{const m=String(x==null?'':x).match(/[0-9]+/);return m?+m[0]:null;};
 const isHold=(it)=>{const t=it.target||{}, d=it.dose||{};return t.hold_s!=null||(!d.reps&&!!d.hold_s);};
+// warm-ups (lesson 06 cheatsheet): a ladder per drill to tick, then "reached ~85% of last session?"; bridge adds blocks
+function warmBlock(it,k){const rows=it.warmup||[];if(!rows.length)return '';
+  return `<div style="margin-top:8px;padding:8px;border-radius:6px;background:var(--surface2)">
+    <div style="font-size:11px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:0.05em">Warm-up first &middot; same set-up and tempo</div>
+    ${rows.map((r,i)=>`<label style="display:flex;align-items:flex-start;gap:8px;padding:4px 0;font-size:12.5px;cursor:pointer"><input type="checkbox" id="mobw_${k}_${i}" style="margin-top:2px"/>
+      <span><b>${esc(r.label)}:</b> ${esc(r.do)} <span style="color:var(--ink3)">&middot; rest ${esc(r.rest)}</span></span></label>`).join('')}
+    <div style="font-size:12px;margin-top:4px">Reached about 85% of last session's depth?</div>
+    <div style="display:flex;gap:6px;margin-top:4px">${[['yes','Yes'],['no','Not near it']].map(([v,l])=>`<label class="btn-sm" style="cursor:pointer;display:flex;gap:4px;align-items:center"><input type="radio" name="mobw_${k}_r" value="${v}" onchange="mobWarmCheck(${k},this.value)"/>${l}</label>`).join('')}</div>
+    <div id="mobw_${k}_msg"></div></div>`;}
+window.mobWarmCheck=function(k,v){const m=document.getElementById(`mobw_${k}_msg`);if(!m)return;
+  m.innerHTML=v==='no'?`<div style="font-size:12px;margin-top:6px;color:var(--amber)">${k<=1?"Smith: if you can't get near last session's range in the warm-up, you're not recovered. Take an extra rest day and come back.":'Fine to carry on lighter; note it.'}</div>`:'';};
+function blockCards(pid,when){const bs=((_mob.blocks||{})[pid]||{})[when]||[];
+  return bs.map(b=>`<div class="card" style="padding:12px 14px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;font-size:14px;font-weight:800">${esc(b.name)}</div>${lessonBtn(b)}</div>
+    <div style="font-size:12px;color:var(--ink3);margin:2px 0 4px">${esc(b.how)}</div>
+    ${b.options.map((o,i)=>`<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;padding:3px 0;cursor:pointer"><input type="checkbox" data-blk="${esc(b.id)}" value="${esc(o)}"/>${esc(o)}</label>`).join('')}</div>`).join('');}
+
 function renderSession(el,id){
   const a=(_mob.programs||[]).find(x=>x.id===id);if(!a){_mobView='list';return renderList(el);}
   const p=pillar(a.pillar);
@@ -260,6 +276,9 @@ function renderSession(el,id){
     <div style="font-size:18px;font-weight:800">Session ${(a.sessions_done||0)+1} of ${a.sessions_per_phase||6}</div>
     <div style="font-size:12px;color:var(--ink3);margin:2px 0 8px">Warm up each drill first: 2-5 lighter sets until you reach 80-90% of last session's depth. If you can't get near it, rest another day.</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><label class="form-label" style="margin:0">Date</label><input id="mobSDay" type="date" value="${today()}" max="${today()}" class="fd-input" style="width:auto;font-size:14px"/></div>
+    <div style="margin-bottom:10px">${lessonBtn(_mob.warmup_lesson||{},'How to warm up (lesson)')}</div>
+    ${blockCards(a.pillar,'before')}
+    <div id="mobWarnRest"></div>
     ${a.spec.items.map((it,k)=>{const t=it.target||{}, d=it.dose||{}, nS=Math.max(1,Math.min(6,t.sets||nInt(d.sets)||2));
       const hold=isHold(it), w=it.load&&it.load.uses_weight, sides=it.unilateral?['L','R']:[''], last=it.last;
       return `<div class="card" style="padding:12px 14px;margin-bottom:10px">
@@ -267,6 +286,8 @@ function renderSession(el,id){
         <div style="font-size:12px;margin-top:4px"><b>Today:</b> ${doseLine(it,t)}</div>
         ${t.text?`<div style="font-size:12px;color:var(--ink2);margin-top:2px">${esc(t.text)}</div>`:''}
         ${last?`<div style="font-size:11px;color:var(--ink3);margin-top:4px">Last time: ${esc(last.sets.map(setTxt).join(', '))}${last.marker?' &middot; <b>'+esc(last.marker)+'</b>':''}</div>`:''}
+        ${warmBlock(it,k)}
+        <div style="font-size:11px;font-weight:800;color:var(--ink3);margin-top:8px;text-transform:uppercase;letter-spacing:0.05em">Working sets</div>
         <table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:12px"><tr style="font-size:10px;color:var(--ink3)"><td style="width:28px">Set</td>${sides.map(sd=>`<td>${sd?SIDE[sd]+' ':''}${hold?'hold s':'reps'}</td>${w?`<td>${sd?sd+' ':''}kg</td>`:''}`).join('')}</tr>
           ${Array.from({length:nS},(_,i)=>`<tr><td style="padding:2px 0;color:var(--ink3)">${i+1}</td>${sides.map(sd=>`<td style="padding:2px 4px 2px 0"><input id="mobs_${k}_${i}_${sd||'x'}_v" type="number" inputmode="decimal" class="fd-input" style="font-size:14px;padding:6px" placeholder="${esc(hold?(t.hold_s==null?'':t.hold_s):(t.reps==null?'':t.reps))}"/></td>${w?`<td style="padding:2px 4px 2px 0"><input id="mobs_${k}_${i}_${sd||'x'}_kg" type="number" inputmode="decimal" class="fd-input" style="font-size:14px;padding:6px"/></td>`:''}`).join('')}</tr>`).join('')}</table>
         ${it.method!=='strength'?`<label class="form-label" style="margin-top:6px">Depth marker${it.marker&&it.marker.label?': '+esc(it.marker.label):''}</label>
@@ -274,6 +295,7 @@ function renderSession(el,id){
         <div style="display:flex;gap:6px;margin-top:6px">${[['yes','Deeper than last time'],['no','Not deeper']].map(([v,l])=>`<label class="btn-sm" style="cursor:pointer;display:flex;gap:4px;align-items:center"><input type="radio" name="mobs_${k}_deeper" value="${v}"/>${l}</label>`).join('')}</div>`:''}
         <input id="mobs_${k}_note" class="fd-input" style="font-size:13px;margin-top:6px" placeholder="Note (optional)"/>
         ${d.rest_s?`<button class="btn-sm" style="margin-top:6px" onclick="mobRest(${nInt(d.rest_s)||60})">Rest timer ${nInt(d.rest_s)||60} s</button>`:''}</div>`;}).join('')}
+    ${blockCards(a.pillar,'after')}
     <input id="mobSNote" class="fd-input" style="font-size:13px;margin-bottom:8px" placeholder="Session note (how it felt, sleep, soreness)"/>
     <button class="fd-btn" onclick="mobSessionSave('${a.id}')">Save session</button>`;
 }
@@ -284,8 +306,14 @@ window.mobSessionSave=async function(id){
       const kg=document.getElementById(`mobs_${k}_${i}_${sd}_kg`), row=hold?{hold_s:+v.value}:{reps:+v.value};
       if(kg&&kg.value!=='')row.kg=+kg.value;if(sd!=='x')row.side=sd;sets.push(row);});
     const mk=document.getElementById(`mobs_${k}_marker`), dp=document.querySelector(`input[name="mobs_${k}_deeper"]:checked`), nt=document.getElementById(`mobs_${k}_note`);
-    return {code:it.code,drill_id:it.drill_id,sets,marker:mk?mk.value:'',deeper:dp?dp.value:null,note:nt?nt.value:''};});
-  try{await syncApi('/api/fitness/mobility/session',{method:'POST',body:JSON.stringify({program:id,date:document.getElementById('mobSDay').value||today(),items,note:document.getElementById('mobSNote').value||''})});
+    const of=(it.warmup||[]).length, done=Array.from({length:of},(_,i)=>document.getElementById(`mobw_${k}_${i}`)).filter(e=>e&&e.checked).length;
+    const rr=document.querySelector(`input[name="mobw_${k}_r"]:checked`);
+    return {code:it.code,drill_id:it.drill_id,sets,marker:mk?mk.value:'',deeper:dp?dp.value:null,note:nt?nt.value:'',
+      warmup:{sets_done:done,of,reached:rr?rr.value:null}};});
+  const blocks=[];document.querySelectorAll('input[data-blk]').forEach(e=>{if(!e.checked)return;let b=blocks.find(x=>x.id===e.dataset.blk);if(!b)blocks.push(b={id:e.dataset.blk,picked:[]});b.picked.push(e.value);});
+  const skipped=items.filter(x=>x.sets.length&&x.warmup.of&&x.warmup.sets_done<x.warmup.of).map(x=>x.code);
+  if(skipped.length&&!confirm('Warm-up not completed for '+skipped.join(', ')+'. Save anyway?'))return;
+  try{await syncApi('/api/fitness/mobility/session',{method:'POST',body:JSON.stringify({program:id,date:document.getElementById('mobSDay').value||today(),items,blocks,note:document.getElementById('mobSNote').value||''})});
     await load();_mobView=a.pillar;renderMobility();window.scrollTo(0,0);toast('Session saved');}
   catch(e){toast('Could not save. Log at least one set or marker, and check your connection.');}
 };

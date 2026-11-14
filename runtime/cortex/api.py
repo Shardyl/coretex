@@ -7433,6 +7433,7 @@ class MobilitySession(BaseModel):
     date: str
     items: list
     note: str | None = None
+    blocks: list | None = None
 
 
 @app.post("/api/fitness/mobility/program/build")
@@ -7469,7 +7470,7 @@ def fitness_mobility_program_discard(uid: str, _: None = Depends(auth)) -> dict:
 def fitness_mobility_session(body: MobilitySession, _: None = Depends(auth)) -> dict:
     from . import fitness_program
     try:
-        return fitness_program.log_session(body.program, body.date, body.items, body.note or "")
+        return fitness_program.log_session(body.program, body.date, body.items, body.note or "", body.blocks)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -7478,6 +7479,68 @@ def fitness_mobility_session(body: MobilitySession, _: None = Depends(auth)) -> 
 def fitness_mobility_session_delete(uid: str, _: None = Depends(auth)) -> dict:
     from . import fitness_program
     return fitness_program.delete_session(uid)
+
+
+# ---------- calisthenics: the Handstand Toolkit programs, sessions, milestones (14 Nov 2026) ----------
+class CaliSession(BaseModel):
+    program: str
+    date: str
+    items: list
+    note: str | None = None
+
+
+class CaliMilestone(BaseModel):
+    milestone: str
+    date: str
+    value: float | None = None
+    note: str | None = None
+
+
+@app.get("/api/fitness/cali")
+def fitness_cali_state(_: None = Depends(auth)) -> dict:
+    from . import fitness_calisthenics
+    return fitness_calisthenics.state()
+
+
+@app.post("/api/fitness/cali/session")
+def fitness_cali_session(body: CaliSession, _: None = Depends(auth)) -> dict:
+    from . import fitness_calisthenics
+    try:
+        return fitness_calisthenics.log_session(body.program, body.date, body.items, body.note or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/fitness/cali/session/{uid}")
+def fitness_cali_session_delete(uid: str, _: None = Depends(auth)) -> dict:
+    from . import fitness_calisthenics
+    return fitness_calisthenics.delete_session(uid)
+
+
+@app.post("/api/fitness/cali/milestone")
+def fitness_cali_milestone(body: CaliMilestone, _: None = Depends(auth)) -> dict:
+    from . import fitness_calisthenics
+    try:
+        return fitness_calisthenics.log_milestone(body.milestone, body.date, body.value, body.note or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/fitness/cali/milestone/{uid}")
+def fitness_cali_milestone_delete(uid: str, _: None = Depends(auth)) -> dict:
+    from . import fitness_calisthenics
+    return fitness_calisthenics.delete_milestone(uid)
+
+
+@app.post("/api/fitness/cali/current")
+def fitness_cali_current(body: dict = Body(...), _: None = Depends(auth)) -> dict:
+    from . import fitness_calisthenics
+    try:
+        if "wrist" in body:
+            return fitness_calisthenics.set_wrist(list(body.get("wrist") or []))
+        return fitness_calisthenics.set_current(str(body.get("program") or ""))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ---------- course library: Smith's lessons, private, inside the app (14 Nov 2026) ----------

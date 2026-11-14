@@ -722,5 +722,496 @@
    }
   ],
   "lesson_course": "mftk"
+ },
+ "side_split": {
+  "id": "side_split",
+  "name": "Side split",
+  "setup": "Be honest; never trade position for range; hold statically, no momentum; no specific warm-up. Film from the floor (phone tilted up against an object/wall), good light, plain background, whole body, fitted clothes; record the whole hold. Screenshot the AVERAGE position for the triangle splits and kneeling tilt, the LOWEST point for tailors pose and drop stance. Measure angles in a protractor app (lines through the limb centres, follow the bones, do not overthink); save photos with the videos in a dated folder (e.g. 'Side Split Assessment 01.01.20'). Positioning for every split position: anterior pelvic tilt, sit back as onto a low stool, arched back, legs actively pulled apart (squeeze glutes), feet slightly turned out (between forward and 45 deg), look forward, high chest.",
+  "tests": [
+   {
+    "id": "ss_triangle_supported",
+    "name": "Triangle side split, hands supported",
+    "sides": [
+     "both"
+    ],
+    "camera": "Phone on the floor tilted up against an object/wall, good light, plain background, whole body in frame; film front and side; measure from the FRONT",
+    "cue": "Hands on a chair/stool/blocks, straight arms, feet in line with (or slightly past) the hands, sit back, high chest; shuffle into place. Hold 30 s. Screenshot the AVERAGE hold.",
+    "role": "passive",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Side split angle, hands supported",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "left ankle bone",
+        "centre point slightly above the hip (lines run along the centre of the thighs across the knees)",
+        "right ankle bone"
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "id": "ss_triangle_free",
+    "name": "Triangle side split, hands free",
+    "sides": [
+     "both"
+    ],
+    "camera": "Phone on the floor tilted up against an object/wall, good light, plain background, whole body in frame; film front and side; measure from the FRONT",
+    "cue": "From standing slide down; hands off the thighs; widest you can hold 30 s (be conservative; too wide, shorten and retry). Sit back, high chest, arched back, anterior pelvic tilt. Hold 30 s. Screenshot the AVERAGE hold.",
+    "role": "active",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Side split angle, hands free",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "left ankle bone",
+        "centre point slightly above the hip (lines run along the centre of the thighs across the knees)",
+        "right ankle bone"
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "id": "ss_tailors_pose",
+    "name": "Tailors pose",
+    "sides": [
+     "both"
+    ],
+    "camera": "Phone on the floor tilted up against an object/wall, good light, plain background, whole body in frame; film from the FRONT",
+    "cue": "Back to the wall, soles touching heel to toe, no hands on feet/thighs, pull the knees apart and down by contracting the glutes. Hold 15 s. Screenshot the LOWEST point. If the shins reach the floor, sit on a block with a block of equal height under the feet. Check left vs right.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Tailors pose angle (180 deg or more possible with blocks)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "middle of the left knee",
+        "middle of the ankles",
+        "middle of the right knee"
+       ]
+      }
+     },
+     {
+      "key": "calves_floor",
+      "label": "Did both calves make full contact with the floor? (phase 1 builder Q2)",
+      "kind": "choice",
+      "options": [
+       "no",
+       "yes"
+      ]
+     },
+     {
+      "key": "feet_on_block",
+      "label": "Sitting and feet on blocks for this test",
+      "kind": "choice",
+      "options": [
+       "no",
+       "yes"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "ss_kneeling_tilt_open",
+    "name": "Kneeling tilt, open hip",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone on the floor tilted up against an object/wall, good light, plain background, whole body in frame; film from BEHIND",
+    "cue": "From all fours bring one leg out to the side, drop to the elbow on the opposite arm, lift the leg as high as possible with the foot in line with or slightly in front of the hip (never behind), squeeze the glutes. Hold 15 s (may cramp). Screenshot the AVERAGE hold.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Kneeling tilt angle",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "centre of the heel of the lifting leg (follow the Achilles)",
+        "hip joint (where the lines through the centre of each leg meet)",
+        "centre of the knee of the supporting leg"
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "id": "ss_drop_stance",
+    "name": "Drop stance",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone on the floor tilted up against an object/wall, good light, plain background, whole body in frame; film front and side; measure from the FRONT",
+    "cue": "Stand wide, feet slightly out, lower over one leg; extended leg's foot flat and facing forward (do not rock onto the heel); chest high; arms forward to counterbalance if needed. Hold 30 s. Screenshot the LOWEST point. Both sides (left/right imbalance check).",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Drop stance angle (bent leg)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "ankle bone",
+        "middle of the knee",
+        "centre of the thigh where the femur meets the hip"
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "id": "ss_pancake",
+    "name": "Pancake (deepest width)",
+    "sides": [
+     "both"
+    ],
+    "camera": "Phone on the floor tilted up against an object/wall, good light, plain background, whole body in frame; film from the SIDE",
+    "cue": "Seated straddle at the width that lets you go deepest (not necessarily widest); reach forward, round the spine, drop the head, contract the hip flexors to pull deeper, feet relaxed. Hold 30 s. If the head reaches the floor record the touchpoint instead of the angle.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Pancake angle (head not on the floor)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "point on the horizontal (seated) line toward the feet",
+        "top of the thigh / middle of the trunk",
+        "highest point of the upper back (head dropped)"
+       ]
+      }
+     },
+     {
+      "key": "touchpoint",
+      "label": "Touchpoint reached (phase 1 builder Q3: does your head touch the floor?)",
+      "kind": "choice",
+      "options": [
+       "none (head not on floor)",
+       "forehead",
+       "nose",
+       "chin",
+       "chest",
+       "abs"
+      ]
+     }
+    ]
+   }
+  ],
+  "questions": [
+   {
+    "id": "ss_q1_position",
+    "name": "Triangle side split position",
+    "text": "Correct position in the triangle side split: hips behind the line of the ankles, arched back and high chest, anterior pelvic tilt? (Unsure counts as No: practise it through phase 1.)",
+    "options": [
+     {
+      "value": "no",
+      "label": "No"
+     },
+     {
+      "value": "unsure",
+      "label": "Unsure"
+     },
+     {
+      "value": "yes",
+      "label": "Yes"
+     }
+    ]
+   },
+   {
+    "id": "ss_q_tension",
+    "name": "Held every position for time",
+    "text": "Did you hold all assessment positions for the stated time?",
+    "options": [
+     {
+      "value": "no",
+      "label": "No"
+     },
+     {
+      "value": "yes",
+      "label": "Yes"
+     }
+    ]
+   },
+   {
+    "id": "ss_combine_pancake",
+    "name": "Training pancake too?",
+    "text": "Are you also training the pancake? (note 93)",
+    "options": [
+     {
+      "value": "side_split_only",
+      "label": "Side split only"
+     },
+     {
+      "value": "same_session",
+      "label": "Pancake in the same session"
+     },
+     {
+      "value": "different_sessions",
+      "label": "Pancake in different sessions"
+     }
+    ]
+   }
+  ],
+  "gap": {
+   "passive": {
+    "test": "ss_triangle_supported",
+    "measure": "angle"
+   },
+   "active": {
+    "test": "ss_triangle_free",
+    "measure": "angle"
+   }
+  },
+  "marked": "smith"
+ },
+ "front_split": {
+  "id": "front_split",
+  "name": "Front split",
+  "lesson_slug": "119-front-split_assessment",
+  "setup": "Cold, no warm-up. Front split = front hip flexion + back hip extension; either can limit. Phone ALWAYS on the floor, same orientation, camera perpendicular to the hips; no partner holding it higher. Square hips throughout. Order: passive front split and isometric front split (both sides), then couch stretch hips low, kneeling lunge and prone knee bend on one leg, repeat on the other leg, then single-leg pike touchpoints and single-leg lift on each side. Measure angles with a protractor app (Angulus on Android, Angle Meter 360 on iOS). Record open or closed hip so measurements stay comparable.",
+  "tests": [
+   {
+    "id": "fs_passive",
+    "name": "Passive front split",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone ALWAYS on the floor, same orientation, camera perpendicular to the hips (looking at the centre of the body); no partner holding it higher; back leg faces the camera for both sides",
+    "cue": "Set up back knee down, slide the front foot forward. Square hips (two lasers on the hip bones shining forward); hip turning out = your limit. Hands on the floor or supports allowed. Hold 30 s; record the AVERAGE depth. Turn round and repeat. Side = front leg.",
+    "role": "passive",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Passive front split angle",
+      "kind": "number",
+      "unit": "deg"
+     },
+     {
+      "key": "hip",
+      "label": "Hip position used (keep the same for comparable retests)",
+      "kind": "choice",
+      "options": [
+       "open hip",
+       "closed hip"
+      ]
+     }
+    ],
+    "lesson_slug": "119-front-split_assessment",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "fs_isometric",
+    "name": "Isometric front split",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone ALWAYS on the floor, same orientation, camera perpendicular to the hips (looking at the centre of the body); no partner holding it higher",
+    "cue": "Basically hands free; a wall or object for balance only, not to take weight. Pick a width you can only just hold 30 s. Hold 30 s; record the AVERAGE depth. Side = front leg.",
+    "role": "active",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Isometric front split angle",
+      "kind": "number",
+      "unit": "deg"
+     },
+     {
+      "key": "width_cm",
+      "label": "Stance distance (record to repeat)",
+      "kind": "number",
+      "unit": "cm"
+     }
+    ],
+    "lesson_slug": "119-front-split_assessment",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "fs_couch_hips_low",
+    "name": "Couch stretch, hips low",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone ALWAYS on the floor, same orientation, camera perpendicular to the hips (looking at the centre of the body); no partner holding it higher; camera on the back-leg side",
+    "cue": "Knee padded, knee as close to the wall as possible (note if it cannot touch), foot up the wall; hips low. Hold 15 s. Side = back leg.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Couch stretch hips low angle",
+      "kind": "number",
+      "unit": "deg"
+     },
+     {
+      "key": "knee_to_wall",
+      "label": "Could the back knee touch the wall?",
+      "kind": "choice",
+      "options": [
+       "no",
+       "yes"
+      ]
+     }
+    ],
+    "lesson_slug": "119-front-split_assessment",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "fs_kneeling_lunge",
+    "name": "Kneeling lunge",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone ALWAYS on the floor, same orientation, camera perpendicular to the hips (looking at the centre of the body); no partner holding it higher; camera on the back-leg side",
+    "cue": "From the couch stretch shuffle forward, back foot to the floor, hips low. Hold 15 s. Side = back leg.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Kneeling lunge angle",
+      "kind": "number",
+      "unit": "deg"
+     }
+    ],
+    "lesson_slug": "119-front-split_assessment",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "fs_prone_knee_bend",
+    "name": "Prone knee bend (prone active hip extension)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone ALWAYS on the floor, same orientation, camera perpendicular to the hips (looking at the centre of the body); no partner holding it higher",
+    "cue": "Lie face down, bend the knee, lift the foot as high as possible, foot roughly over the knee. Hold 15 s. Then repeat couch stretch, kneeling lunge and this on the other leg (move the camera).",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Prone active hip extension angle",
+      "kind": "number",
+      "unit": "deg"
+     }
+    ],
+    "lesson_slug": "119-front-split_assessment",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "fs_single_leg_pike",
+    "name": "Single-leg standing pike, touchpoints",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone ALWAYS on the floor, same orientation, camera perpendicular to the hips (looking at the centre of the body); no partner holding it higher",
+    "cue": "Front leg straight, foot dorsiflexed (big toe pulled back if possible), back leg bent or straight; hinge, lifting the rib cage over and down. Touch with the OPPOSITE hand across the body. Elbow ladder first, then head ladder. Cannot reach shaka: measure with a stick or table leg (hair tie marker). Hold 15 s. Side = front leg.",
+    "role": "passive",
+    "measures": [
+     {
+      "key": "touchpoint",
+      "label": "Elbow/head to toe touchpoint (21-step ladder)",
+      "kind": "choice",
+      "options": [
+       "elbow can't reach shaka",
+       "elbow to shaka",
+       "elbow to thumbs up",
+       "elbow to bent thumbs up",
+       "elbow to fist",
+       "elbow to 4 fingers",
+       "elbow to 3 fingers",
+       "elbow to 2 fingers",
+       "elbow to 1 finger",
+       "elbow to toe",
+       "head to shaka",
+       "head to thumbs up",
+       "head to bent thumbs up",
+       "head to fist",
+       "head to 4 fingers",
+       "head to 3 fingers",
+       "head to 2 fingers",
+       "head to 1 finger",
+       "head to toe",
+       "nose to toe",
+       "chin to toe"
+      ]
+     },
+     {
+      "key": "stick_cm",
+      "label": "If you cannot reach shaka: stick/table-leg marker distance",
+      "kind": "number",
+      "unit": "cm"
+     }
+    ],
+    "lesson_slug": "119-front-split_assessment",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "fs_single_leg_lift",
+    "name": "Single-leg lift (active hip flexion)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone ALWAYS on the floor, same orientation, camera perpendicular to the hips (looking at the centre of the body); no partner holding it higher",
+    "cue": "Straighten the standing leg, both legs straight, lift the leg forward and hold 15 s. Repeat single-leg pike and lift on the other side. Side = lifted leg.",
+    "role": "active",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Single-leg lift angle",
+      "kind": "number",
+      "unit": "deg"
+     }
+    ],
+    "lesson_slug": "119-front-split_assessment",
+    "lesson_course": "mftk"
+   }
+  ],
+  "questions": [
+   {
+    "id": "fs_q_approval",
+    "name": "Healthcare approval",
+    "text": "Do you have approval from a healthcare provider to train front splits?",
+    "options": [
+     {
+      "value": "yes_have",
+      "label": "Yes, I have"
+     },
+     {
+      "value": "yes_will",
+      "label": "Yes, I will"
+     }
+    ]
+   }
+  ],
+  "gap": {
+   "passive": {
+    "test": "fs_passive",
+    "measure": "angle"
+   },
+   "active": {
+    "test": "fs_isometric",
+    "measure": "angle"
+   }
+  },
+  "marked": "ours",
+  "lesson_course": "mftk"
  }
 }

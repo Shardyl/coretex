@@ -579,6 +579,30 @@ create table if not exists fitness.mobility_sessions (
 create index if not exists mobility_sessions_program_idx on fitness.mobility_sessions (program, day);
 grant select, insert, update, delete on fitness.mobility_programs, fitness.mobility_sessions to cortex;
 
+-- calisthenics (cortex/fitness_calisthenics.py, 14 Nov 2026): Smith's Handstand Toolkit programs as data; a logged
+-- session per training day against the current program; milestones (the skill tree's tests) logged when hit.
+-- Soft deletes only.
+create table if not exists fitness.cali_sessions (
+    uid        text primary key,
+    day        date not null,
+    program_id text not null,
+    items      jsonb not null,                    -- [{code, exercise_id, sets:[{hold_s|reps}], note}]
+    note       text,
+    deleted    boolean not null default false,
+    created_at timestamptz not null default now()
+);
+create index if not exists cali_sessions_day_idx on fitness.cali_sessions (day);
+create table if not exists fitness.cali_milestones (
+    uid          text primary key,
+    milestone_id text not null,
+    day          date not null,
+    value        numeric,
+    note         text,
+    deleted      boolean not null default false,
+    created_at   timestamptz not null default now()
+);
+grant select, insert, update, delete on fitness.cali_sessions, fitness.cali_milestones to cortex;
+
 -- ---------------------------------------------------------------------------
 -- YOLO (cortex/yolo.py, 11 Nov 2026): the owner's boat maintenance + cost book.
 -- Personal project (Raffaelli Storm 46 Fly "YOLO"), NOT a company. Same sync

@@ -1,0 +1,3691 @@
+{
+ "exercises": [
+  {
+   "id": "wrist_warm_up",
+   "name": "Wrist warm up",
+   "kind": "warmup",
+   "unit": null,
+   "cues": [
+    "Build your own from the wrist warm up library, exercises that feel good",
+    "Start with 5-10 reps each and experiment",
+    "Load management: start with a little weight in the hands, build gradually to full body weight",
+    "Take as long as you need (some need a couple of minutes, some more than ten)",
+    "Extra care in one arm work: a single wrist starts taking double the weight"
+   ],
+   "mistakes": [
+    "Rushing the warm up",
+    "Loading a full handstand before the wrists are ready"
+   ],
+   "lesson_slug": "13-your-wrists-matter-wrist-warm-up-and-prep",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "wall_tuck_bail",
+   "name": "Wall tuck bail",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Step up chest facing the wall, knees can bend",
+    "Only as high as comfortable, up to about 90 deg",
+    "Stay tucked and low; come down by stepping the hand, then each foot (hand, foot, foot)",
+    "High reps, one side only, so it becomes an automatic response"
+   ],
+   "mistakes": [],
+   "lesson_slug": null,
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "wall_tuck_hold",
+   "name": "Wall tuck hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Only once comfortable coming down",
+    "Tuck plank position, hold, elevate through the shoulders",
+    "Progress by bringing the hands closer to the wall"
+   ],
+   "mistakes": [],
+   "lesson_slug": null,
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "cartwheel_bail",
+   "name": "Cartwheel bail (terrible cartwheel)",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Start an arm's length from the wall, face away, hands on the floor directly beneath you",
+    "Walk the feet up the wall, straight arms the whole time, look at the floor between the hands",
+    "Pause at the highest comfortable point, then step one hand forward with a slight inward rotation; that hand brakes and guides the legs",
+    "Let the legs drop to one side, same side leg as the moving hand lands first, one foot at a time",
+    "Smooth and quiet landing; train one side only (the most natural one)",
+    "Keep repeating the same distance until smooth, then move the feet up first, then the hands, closer to the wall",
+    "Use a floor marker for the bail distance and decrease it a cm or two per session"
+   ],
+   "mistakes": [
+    "Pushing or kicking off the wall",
+    "Moving closer before the current distance is comfortable",
+    "Early faults that are OK: feet landing between you and the wall, wrong foot first, both feet together"
+   ],
+   "lesson_slug": "16-why-you-must-learn-how-to-fall-the-terrible-cartwh",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "split_leg_balance",
+   "name": "Split leg balance (chest to wall)",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Prerequisite: comfortable bail from a chest to wall handstand with hands about 30 cm from the wall",
+    "Walk up chest to wall, shift weight into the hands, slowly bring one foot away from the wall",
+    "Goal heavy to light: lighten the wall foot until all weight is in the hands and balance is in the fingers",
+    "Toe tap the wall instead of falling; count toe taps to track progress",
+    "Falling before 20 s = the set does not count (when the sheet sets 20 s+)"
+   ],
+   "mistakes": [
+    "Bringing the feet together",
+    "Letting the near-wall foot float away"
+   ],
+   "lesson_slug": "23-split-leg-balance",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "wall_split_leg_hold",
+   "name": "Wall split leg hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "One toe on the wall at all times",
+    "Look at the floor between the hands",
+    "Push hold time but keep enough energy to bail"
+   ],
+   "mistakes": [],
+   "lesson_slug": "23-split-leg-balance",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "heel_pulls",
+   "name": "Heel pulls",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Kick up back to wall (one of the few back to wall drills), hands about a palm's distance from the wall",
+    "Push into your best line, lock the body, push only with the fingertips to lever the heels off the wall",
+    "Aim is not to hold but to push off the wall with just the fingers; gaze at the floor",
+    "Scale by hand distance from the wall in tiny steps: closer = easier, further = harder"
+   ],
+   "mistakes": [
+    "Kicking or moving the feet off the wall",
+    "Bringing the top leg down on the back to wall kick up",
+    "Hands too close to the wall, bouncing back off it"
+   ],
+   "lesson_slug": "22-where-is-balance-heel-pulls",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "heel_pulls_to_hold",
+   "name": "Heel pulls to hold",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Back to wall, push into the fingers to lift away and hold as long as possible",
+    "Controlled heel pull; count only best-attempt reps",
+    "Hands closer to the wall = easier, further = much harder"
+   ],
+   "mistakes": [
+    "Kicking off the wall"
+   ],
+   "lesson_slug": "22-where-is-balance-heel-pulls",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "toe_pulls_to_hold",
+   "name": "Toe pulls to hold",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Chest to wall, push into the heels of the hands to lift off and hold",
+    "Count only best-attempt reps"
+   ],
+   "mistakes": [
+    "Kicking off the wall"
+   ],
+   "lesson_slug": null,
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "alignment_hold",
+   "name": "Alignment hold (chest to wall)",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Focus on alignment, check with video",
+    "Chest to wall hold at least 20 s per set"
+   ],
+   "mistakes": [],
+   "lesson_slug": "24-chest-to-wall-holds",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "chest_to_wall_hold",
+   "name": "Chest to wall hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Feet, hips and upper chest touching the wall; hips over shoulders over hands",
+    "Push tall, keep elevation, keep pressing into the floor; re-push when you catch yourself sinking",
+    "As a warm up: assess how you feel and check position, not an endurance set",
+    "As a finisher: push how long you hold form; use a timer",
+    "If you cannot hold 60 s on the wall you will not hold 60 s freestanding"
+   ],
+   "mistakes": [
+    "Making it a balancing drill (keep the feet on the wall)",
+    "Sinking out of shoulder elevation"
+   ],
+   "lesson_slug": "24-chest-to-wall-holds",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "basic_kick_up",
+   "name": "Basic kick up",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Swing the arms in from underneath and place the hands at the same time as you kick up",
+    "Kick up with split legs; stay in split leg when kicking up",
+    "Reach further than you think (test whether this cue works for you)",
+    "50/50 rule: for every kick that falls back to the feet, have one that falls over the top",
+    "Press with the fingers like brakes to catch in the middle, then gather into the target shape",
+    "3 kick ups a set; no balance in 3 attempts = rest; same leg, same spot, same orientation each time"
+   ],
+   "mistakes": [
+    "Floating to the top with no corrections then sinking back",
+    "Always falling to the same side (never finding equilibrium)",
+    "Changing the entry each attempt (adds variables)"
+   ],
+   "lesson_slug": "26-the-basic-kick-up-the-50-50-rule",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "top_end_isolations",
+   "name": "Top end isolations",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Start from a wall or box, top leg as in your basic kick up",
+    "Lift the lower leg and shift the weight until the lower foot floats up; do not kick",
+    "Arms come underneath, stack on top of the shoulders, maintain split leg, find balance then gather the feet",
+    "As many as possible before falling, minimum 3 to count the set",
+    "Later: bring the feet together slowly, film to check they gather equally"
+   ],
+   "mistakes": [
+    "Kicking"
+   ],
+   "lesson_slug": "25-top-range-end-isolations",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "five_second_game",
+   "name": "5 second game",
+   "kind": "game",
+   "unit": null,
+   "cues": [
+    "Build to a 5 s handstand in 5 kick ups: kick 1 = 1 s, kick 2 = 2 s ... kick 5 = 5 s",
+    "Fall over, fail to land on the feet, or miss the hold = back to 1",
+    "Must hit 5 feet-together handstands in a row (1, 2, 3, 4, 5 s) to finish",
+    "Added challenge: play with a friend, first to 5 s wins"
+   ],
+   "mistakes": [],
+   "lesson_slug": null,
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "freestanding_split_leg_hold",
+   "name": "Freestanding split leg hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Freestanding from the basic kick up",
+    "Pin the legs, focus on rebalancing with the fingers"
+   ],
+   "mistakes": [],
+   "lesson_slug": "26-the-basic-kick-up-the-50-50-rule",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "straddle_hold",
+   "name": "Straddle hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Jump into straddle or move from split leg, try both",
+    "See 4 kick ups you should know (kick up to straddle)"
+   ],
+   "mistakes": [],
+   "lesson_slug": "29-4-kick-ups-you-should-know",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "full_hold",
+   "name": "Full (straight) hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Balance in split leg, then gather the feet; timer starts when the feet are together",
+    "Balance is still found in split leg",
+    "Do not worry about the line until you can hold at least 40 s (unless it causes pain)"
+   ],
+   "mistakes": [],
+   "lesson_slug": "29-4-kick-ups-you-should-know",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "full_to_tuck_hold",
+   "name": "Full to tuck hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Shoulders try to close as you tuck: elevate and keep them open",
+    "Only as low as you can hold (maybe 90 deg at first)"
+   ],
+   "mistakes": [],
+   "lesson_slug": "32-you-need-to-tuck-more",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "level_1_shape_change",
+   "name": "Level 1 shape change",
+   "kind": "amrap",
+   "unit": "reps",
+   "cues": [
+    "One level 1 change for reps, then rest; can change each session",
+    "Quality over quantity",
+    "Rotate through all level 1 changes"
+   ],
+   "mistakes": [],
+   "lesson_slug": "31-shapes-that-will-help-you-improve",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "level_1_and_2_shape_change",
+   "name": "Level 1 and 2 shape change",
+   "kind": "amrap",
+   "unit": "reps",
+   "cues": [
+    "A different change from the previous set",
+    "Work level 1 weaknesses, add level 2 (suggest tuck)"
+   ],
+   "mistakes": [],
+   "lesson_slug": "31-shapes-that-will-help-you-improve",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "level_2_shape_and_hold",
+   "name": "Level 2 shape and hold",
+   "kind": "amrap",
+   "unit": "reps",
+   "cues": [
+    "Move into the level 2 shape and hold it 5-10 s",
+    "Can LIGHTLY use the wall at first"
+   ],
+   "mistakes": [],
+   "lesson_slug": "31-shapes-that-will-help-you-improve",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "tuck_hold",
+   "name": "Tuck hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Jump into tuck or transition from any kick up; freestanding",
+    "Upper back works: keep scapula elevation and shoulder flexion, shoulders over hands",
+    "Progress by longer holds and a deeper tuck",
+    "Wall toe taps allowed at first, aim freestanding (intermediate)"
+   ],
+   "mistakes": [
+    "Mechanical tuck: arching the spine and pushing the sternum out instead of elevating",
+    "Planching forwards to compensate for lack of shoulder flexion or upper back strength"
+   ],
+   "lesson_slug": "32-you-need-to-tuck-more",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "wall_tuck_slides",
+   "name": "Wall tuck slides",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Chest to wall about 30 cm away, slide the feet down the wall into tuck, using the wall as a guide",
+    "Use the wall as little as possible over time, weight and some balance in the hands",
+    "As deep as possible, push tall as the shoulders close",
+    "Not about speed; intensify with depth, reps or bottom pauses"
+   ],
+   "mistakes": [
+    "Leaning into the wall, taking pressure off the shoulders"
+   ],
+   "lesson_slug": "32-you-need-to-tuck-more",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "tuck_slides",
+   "name": "Tuck slides",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Too easy = slower tempo or longer pauses",
+    "Ultimate tuck = thighs touching ribs, knees together"
+   ],
+   "mistakes": [],
+   "lesson_slug": "32-you-need-to-tuck-more",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "basic_kick_up_and_hold",
+   "name": "Basic kick up and hold",
+   "kind": "accumulate",
+   "unit": "s",
+   "cues": [
+    "Collect 10 holds over the day, each at least PB / 3 (e.g. PB 21 s -> each hold at least 7 s)",
+    "Kick up anywhere; go for a max hold each time"
+   ],
+   "mistakes": [],
+   "lesson_slug": "26-the-basic-kick-up-the-50-50-rule",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "freestanding_max_hold",
+   "name": "Freestanding max hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Kick up split leg, gather, hold full; max hold while fresh",
+    "Fight for balance as long as you can, even past the target",
+    "Film the holds"
+   ],
+   "mistakes": [
+    "Giving up the save too early"
+   ],
+   "lesson_slug": "33-the-fight-learning-to-save",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "free_shape_changing",
+   "name": "Free shape changing",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Move between shapes continually for the set time",
+    "Include the hard ones"
+   ],
+   "mistakes": [],
+   "lesson_slug": "31-shapes-that-will-help-you-improve",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "level_3_shape_change",
+   "name": "Level 3 shape change",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Lowering into 7 is usually easier than lifting into 7",
+    "Heavily underbalanced: you will often land back on your feet; the 50/50 rule matters less"
+   ],
+   "mistakes": [],
+   "lesson_slug": "40-suffering-with-7s",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "seven_lifts",
+   "name": "Single/double leg seven lifts",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Start on a high surface (hip height or higher)",
+    "Lift so the toes float off by articulating the spine and pressing into the floor",
+    "Only start once the tuck is controlled; single leg 7 first, then double leg 7"
+   ],
+   "mistakes": [],
+   "lesson_slug": "40-suffering-with-7s",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "freestanding_hold",
+   "name": "Freestanding hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Warm up check: how you feel, warm up more if needed",
+    "20 s+ to count (where stated)"
+   ],
+   "mistakes": [],
+   "lesson_slug": null,
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "full_to_tuck_to_full",
+   "name": "Full to tuck to full",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Control, not speed",
+    "Bend hips and knees together into the tuck; big centre of mass change"
+   ],
+   "mistakes": [],
+   "lesson_slug": "32-you-need-to-tuck-more",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "seven_hold",
+   "name": "Single/double leg 7 hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Film to see when you are horizontal (often lower than you think)",
+    "Progress from single leg to double leg 7"
+   ],
+   "mistakes": [],
+   "lesson_slug": "40-suffering-with-7s",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "press_negative",
+   "name": "Press handstand negative (freestanding)",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Kick into straddle, pull the legs into the body, slowly round the spine, fight the forward lean",
+    "Lower as slowly as possible, smooth throughout (sheet: e.g. 10 s eccentric)",
+    "Rough guide: if you can lower over 30 s you could lift it",
+    "Dropping at the bottom = lower to blocks and reduce the height over time to reach the floor",
+    "Stop the session early if two consecutive reps lower in less than half the time of the first",
+    "Expect strong muscle soreness (DOMS) at first"
+   ],
+   "mistakes": [
+    "Collapsing forward instead of fighting the lean",
+    "Using a wall or spotter to block the lean"
+   ],
+   "lesson_slug": "45-top-down",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "head_looking_at_toes",
+   "name": "Head looking at toes (HLAT) hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Stack high with the traps and shift weight toward the fingers first",
+    "Bring the head through in one quick fluid motion (do not move it slowly)",
+    "Self-check: see hips and toes together = decent stack; cannot see hips = too piked; cannot see toes = hips too far forward",
+    "Upper back must work harder (more underbalance)"
+   ],
+   "mistakes": [
+    "Moving the head slowly"
+   ],
+   "lesson_slug": "41-head-looking-at-toes",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "hlat_full_to_tuck",
+   "name": "HLAT full to tuck",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Basic kick up, transition to tuck, balance, then change gaze to HLAT (knees here)",
+    "Staying HLAT, goal = full to tuck repeated"
+   ],
+   "mistakes": [],
+   "lesson_slug": "41-head-looking-at-toes",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "hlat_full_to_seven",
+   "name": "HLAT full to single/double leg 7",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Toward the HLAT 7 milestone",
+    "HLAT 7 = one of the most advanced two arm shapes, prerequisite for one arm"
+   ],
+   "mistakes": [],
+   "lesson_slug": "41-head-looking-at-toes",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "hlat_tuck_to_full",
+   "name": "HLAT tuck to HLAT full",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "In and out of tuck to full while looking at the toes, as many as possible"
+   ],
+   "mistakes": [],
+   "lesson_slug": "41-head-looking-at-toes",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "fast_shape_changing",
+   "name": "Fast all-level shape changing",
+   "kind": "skill",
+   "unit": null,
+   "cues": [
+    "Move as fast as possible into different positions; change direction, speed and intensity",
+    "Force drastic corrections and fight to stay up; final set is your own routine"
+   ],
+   "mistakes": [],
+   "lesson_slug": "38-intermediate-handstand-tips-tricks",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "flags_chest_to_wall",
+   "name": "Flags chest to wall",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Quality, not depth (sheet C); use a box or chairs to measure depth",
+    "Always return to centre",
+    "Depth version (sheet E): feels like strength, use an object lower down as a target"
+   ],
+   "mistakes": [],
+   "lesson_slug": "56-flagging-as-one-arm-handstand-prep",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "freestanding_flags",
+   "name": "Freestanding flags",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Start in a two arm straddle, fix the straddle, move slowly, crunch into your side to tilt into the flag",
+    "Close the gap between the thigh and the side of the body",
+    "Pause briefly in straddle between each flag",
+    "Quality and depth; toes to floor is a long-term goal with flexibility training"
+   ],
+   "mistakes": [
+    "Drifting the shoulder out to make the shift instead of bringing the bottom leg down",
+    "Dropping the foot into a pike"
+   ],
+   "lesson_slug": "56-flagging-as-one-arm-handstand-prep",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "chest_to_wall_press_negative",
+   "name": "Chest to wall press negative",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Find the right distance from the wall for your straddle; needs wall space"
+   ],
+   "mistakes": [],
+   "lesson_slug": null,
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "press_from_blocks",
+   "name": "Press from blocks",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Start at a height you could do on your worst day (maybe hip height at first)",
+    "Lower little by little each session; fail a height 3 times = go back up one",
+    "Prerequisite: a solid straddle handstand and consistent straddle to full transition",
+    "Push tall: shoulders to the ears; rock onto the toes, open the legs, roll the spine"
+   ],
+   "mistakes": [
+    "Blocking the shoulders (wall, spotter) so you never resist the lean yourself"
+   ],
+   "lesson_slug": "43-bottom-up",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "press_walks",
+   "name": "Press walks",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Quality over quantity, reset each rep",
+    "Start with forward walks; once all sets are clean replace early sets with backward walks until all are backward",
+    "Use the feet as little as possible; push, do not sink forward with the shoulders"
+   ],
+   "mistakes": [],
+   "lesson_slug": null,
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "press_negative_from_blocks",
+   "name": "Press negative from blocks (weak link)",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Select a height you can just press from, lift just enough to clear the block",
+    "Lower eccentrically as slowly as possible, fight the whole way",
+    "Cluster sets: 10-15 s rest between reps (sheet); lesson says 15 s"
+   ],
+   "mistakes": [],
+   "lesson_slug": "46-weak-link",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "straddle_press",
+   "name": "Straddle press",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Rock up onto the toes, open the legs, roll the spine while opening the shoulders, reach straddle handstand",
+    "Push tall throughout: scapular elevation is the platform",
+    "Normal to lose it in the session after first unlocking it"
+   ],
+   "mistakes": [
+    "Relying on core drills (specificity matters)"
+   ],
+   "lesson_slug": "42-mechanics-of-a-press-part-1",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "straddle_press_with_pike_negatives",
+   "name": "Straddle press with pike negatives",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Straddle press into full hold, then lower in pike, as slow and controlled as possible"
+   ],
+   "mistakes": [],
+   "lesson_slug": null,
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "pike_press",
+   "name": "Pike press",
+   "kind": "amrap",
+   "unit": "reps",
+   "cues": [
+    "Harder than the straddle press (legs much heavier)",
+    "Record the count in 25 min to track progress; rest enough between reps"
+   ],
+   "mistakes": [],
+   "lesson_slug": null,
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "trap_3_raise",
+   "name": "Trap-3 raise (unilateral, supported)",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Retract and depress the scapula, maintain depression, lift the arm overhead and up, reset the scapula every rep",
+    "Weaker side first, then match on the strong side; never more on the strong side",
+    "Arm must at least cover the ear",
+    "Most start with a 2-4 kg dumbbell; small (0.25 kg) increments help",
+    "Train trap-3 first and keep more trap-3 volume than trap-1"
+   ],
+   "mistakes": [],
+   "lesson_slug": "47-trap-3-trap-1-raises",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "trap_1_raise",
+   "name": "Trap-1 raise (unilateral, supported)",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Same set up as trap-3 but elevate and protract the scapula: up and forward",
+    "Closer to the press position"
+   ],
+   "mistakes": [],
+   "lesson_slug": "47-trap-3-trap-1-raises",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "db_front_raise",
+   "name": "DB front / planche raise",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Protract the scapula hard, lift the dumbbell high with control to end range",
+    "Lower and stop before the bottom to keep tension",
+    "Accessory only, to bring up lagging areas; no dose given"
+   ],
+   "mistakes": [
+    "Going too heavy and swinging"
+   ],
+   "lesson_slug": "48-db-front-planche-raises",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "weight_shift",
+   "name": "Weight shift",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "From two arm straddle shift to about 75% base hand / 25% assisting hand",
+    "Like the first part of a flag, stopping where you can enter fingertip support",
+    "Bottom leg typically hits or just breaks horizontal; at first go lower",
+    "Pin the legs; video is your best teacher"
+   ],
+   "mistakes": [
+    "Rushing past this foundation"
+   ],
+   "lesson_slug": "57-weight-shifting",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "fingertip_support_shift",
+   "name": "Fingertip support shift",
+   "kind": "reps",
+   "unit": "reps",
+   "cues": [
+    "Shift, find balance on fingertip support, back to two arm straddle"
+   ],
+   "mistakes": [
+    "Lifting the hand off"
+   ],
+   "lesson_slug": "58-fingertip-support",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "fingertip_support_hold",
+   "name": "Fingertip support hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Push the base hand to lift higher rather than bending and lifting the assisting hand",
+    "Hold as long as possible; record sets; expect many falls"
+   ],
+   "mistakes": [
+    "Lifting the hand off"
+   ],
+   "lesson_slug": "58-fingertip-support",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "straight_arm_support_hold",
+   "name": "Straight arm support hold",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Assisting arm out straight, a single finger on the floor",
+    "Only after a solid, repeatable fingertip support hold",
+    "Fingertip first; if solid, progress to straight arm support; keep recording"
+   ],
+   "mistakes": [],
+   "lesson_slug": "59-straight-arm-support",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "lift_off_hold",
+   "name": "Lift off hold (one arm)",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Micro lift from support: slightly tilt the wrist to lift the finger",
+    "Tap the floor if needed; fight to land back on two arms",
+    "Use small free arm movements to your advantage",
+    "Prep in straddle (shape order straddle, top leg bent, diamond, full)"
+   ],
+   "mistakes": [
+    "Going for glory: throwing the hand off and hoping"
+   ],
+   "lesson_slug": "60-going-for-glory",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "one_arm_handstand",
+   "name": "One arm handstand",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Push harder / taller (most common OAHS mistake is not pushing high enough)",
+    "Pin the legs",
+    "Lock the gaze on one tiny fixed point",
+    "Smaller corrections: undershoot rather than overshoot",
+    "Correction order: hand/fingers, then elbow, then shoulders/torso/legs"
+   ],
+   "mistakes": [
+    "Collapsing shoulder",
+    "Leg drift"
+   ],
+   "lesson_slug": "55-one-arm-handstand-prerequisites-with-kaio",
+   "youtube": "QCzyoJz55NI",
+   "milestone_test": true
+  },
+  {
+   "id": "frog_stand",
+   "name": "Frog stand",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Squat, hands shoulder width, inner thighs on the elbows, forearms vertical",
+    "Gently rock forward; lift one foot first",
+    "Press into the floor with the fingers to stop tipping forward",
+    "Hard floor, not a mat"
+   ],
+   "mistakes": [
+    "Jumping into position"
+   ],
+   "lesson_slug": "51-frog-and-crow-stand",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "crow_stand",
+   "name": "Crow stand",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Same as frog but knees placed on the elbows (high on the back of the upper arms)",
+    "Do not spend long here once you have some control if the goal is handstand"
+   ],
+   "mistakes": [
+    "Jumping into position"
+   ],
+   "lesson_slug": "51-frog-and-crow-stand",
+   "youtube": null,
+   "milestone_test": false
+  },
+  {
+   "id": "elbow_lever",
+   "name": "Elbow lever",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Elbows on the lumbar flanks beside the belly button; funnel: elbows closer than wrists",
+    "Hand orientation can vary while learning; long-term aim hands forwards",
+    "Imagine a string pulling the top of the head forward as the legs extend",
+    "Straddle is easier than legs together; hard floor",
+    "Goal: arched boat shape, legs and head lifted"
+   ],
+   "mistakes": [
+    "Kicking off the floor"
+   ],
+   "lesson_slug": "52-elbow-lever",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "croc",
+   "name": "Croc (one arm elbow lever)",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [
+    "Extra wrist warm up care",
+    "Elbow on the lumbar flank; legs pivot about 45 deg toward the balancing side",
+    "Chest and hips parallel to the floor; legs straddled wide",
+    "Support ladder: hand close, hand far, fingertip, straight arm single finger, tiny lift",
+    "Alternate sides between attempts"
+   ],
+   "mistakes": [
+    "Lifting the opposite hip and shoulder (that is QDR)",
+    "Swinging the arm off (going for glory)"
+   ],
+   "lesson_slug": "53-croc",
+   "youtube": null,
+   "milestone_test": true
+  },
+  {
+   "id": "qdr",
+   "name": "QDR (low balance)",
+   "kind": "hold",
+   "unit": "s",
+   "cues": [],
+   "mistakes": [],
+   "lesson_slug": null,
+   "youtube": null,
+   "milestone_test": true
+  }
+ ],
+ "stages": [
+  {
+   "id": "starter",
+   "name": "Starter",
+   "order": 1,
+   "programs": [
+    {
+     "id": "starter_1",
+     "name": "Starter 1.0 Building Blocks",
+     "purpose": "Wall tucks get you used to holding your weight upside down; the tuck teaches hips over shoulders; the cartwheel bail teaches how to fall.",
+     "frequency": "2-4 days per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": "-",
+       "sets": "-",
+       "rest": "-",
+       "tempo": null,
+       "notes": [
+        "Build your own from the warm up library, exercises that feel good"
+       ]
+      },
+      {
+       "code": "B",
+       "exercise_id": "wall_tuck_bail",
+       "reps": "5+",
+       "sets": "5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Step up chest facing the wall, knees can bend",
+        "Only as high as comfortable, up to about 90 deg",
+        "Practise coming down"
+       ]
+      },
+      {
+       "code": "C",
+       "exercise_id": "wall_tuck_hold",
+       "reps": "10-20 s hold",
+       "sets": "4-6",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Once comfortable coming down",
+        "Tuck plank position, hold, elevate through the shoulders",
+        "Progress hands closer to the wall"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "cartwheel_bail",
+       "reps": "1",
+       "sets": "15+",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Full tutorial in the toolkit",
+        "Fine if feet land behind hands",
+        "Train one side only",
+        "Small progressions, controlled landings"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "30 cm cartwheel bail from the wall.",
+      "milestone_id": "cartwheel_bail_30cm"
+     },
+     "film": false
+    },
+    {
+     "id": "starter_2",
+     "name": "Starter 2.0 Orientation",
+     "purpose": "Stay until the cartwheel bail is smooth, quiet, no fear of falling.",
+     "frequency": "3-4 times per week; train handstand BEFORE other training",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": [
+        "Keep experimenting with drills from the library"
+       ]
+      },
+      {
+       "code": "B",
+       "exercise_id": "cartwheel_bail",
+       "reps": "1",
+       "sets": "10-15",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "As quiet as possible on landing",
+        "One side only, the most natural one"
+       ]
+      },
+      {
+       "code": "C",
+       "exercise_id": "split_leg_balance",
+       "reps": "1",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Only if you can comfortably bail from a chest to wall handstand from 30 cm away"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "wall_split_leg_hold",
+       "reps": "<30 s",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "One toe on the wall at all times",
+        "Look at the floor between the hands",
+        "Push hold time but keep energy to bail"
+       ]
+      },
+      {
+       "code": "E",
+       "exercise_id": "heel_pulls",
+       "reps": "1",
+       "sets": "5+",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Enter back to wall (see video)",
+        "Hands closer to wall = easier",
+        "Do not kick off the wall",
+        "Aim is not to hold but to push off the wall with just the fingers",
+        "Gaze at the floor"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "Confident cartwheel bail chest to wall. (Milestone video.)",
+      "milestone_id": "cartwheel_bail_chest_to_wall"
+     },
+     "film": true
+    },
+    {
+     "id": "starter_3",
+     "name": "Starter 3.0 Tipping Point",
+     "purpose": "Progress the wall drills to the tipping point: holding balance floating a little away from the wall.",
+     "frequency": "2-4 times per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": [
+        "Focus on forearms and fingers, used intensively here"
+       ]
+      },
+      {
+       "code": "B",
+       "exercise_id": "cartwheel_bail",
+       "reps": "1",
+       "sets": "5-10",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Start from 30 cm / chest to wall",
+        "Fight the fall with the fingers to warm the forearms"
+       ]
+      },
+      {
+       "code": "C",
+       "exercise_id": "heel_pulls_to_hold",
+       "reps": "1 quality rep",
+       "sets": "5+",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Controlled heel pull and hold as long as possible",
+        "Hands closer = easier, further = much harder",
+        "Count only best-attempt reps"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "toe_pulls_to_hold",
+       "reps": "1 quality rep",
+       "sets": "5+",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Controlled toe pull and hold",
+        "Do not kick off the wall",
+        "Count only best-attempt reps"
+       ]
+      },
+      {
+       "code": "E",
+       "exercise_id": "split_leg_balance",
+       "reps": "20 s+",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Count toe taps against the wall to track progress",
+        "Falling before 20 s = set does not count"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "5 s split leg hold just away from the wall. Tip: film from the side to check split leg position and that the legs are not moving.",
+      "milestone_id": "split_leg_balance_wall_5s"
+     },
+     "film": true
+    }
+   ]
+  },
+  {
+   "id": "beginner_1",
+   "name": "Beginner level one",
+   "order": 2,
+   "programs": [
+    {
+     "id": "beginner_1_1",
+     "name": "Beginner 1 1.0 Finding Balance",
+     "purpose": "Starts on the wall (A, B, C) to explore balance in the fingers and body position, the best set up for leaving the wall.",
+     "frequency": "3-4 x per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": [
+        "Include joint prep for this program"
+       ]
+      },
+      {
+       "code": "B",
+       "exercise_id": "cartwheel_bail",
+       "reps": "1",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Start from 30 cm / chest to wall",
+        "Fight the fall with the fingers to warm the forearms"
+       ]
+      },
+      {
+       "code": "C1",
+       "exercise_id": "alignment_hold",
+       "reps": "20-45 s",
+       "sets": "2",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "C1, C2, C3 done consecutively",
+        "Focus on alignment, check with video",
+        "Chest to wall hold at least 20 s per set"
+       ]
+      },
+      {
+       "code": "C2",
+       "exercise_id": "heel_pulls_to_hold",
+       "reps": "1-3",
+       "sets": "2",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Back to wall, push into the fingers to lift away and hold"
+       ]
+      },
+      {
+       "code": "C3",
+       "exercise_id": "toe_pulls_to_hold",
+       "reps": "1-3",
+       "sets": "2",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Chest to wall, push into the heels of the hands to lift off and hold"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "split_leg_balance",
+       "reps": "20 s+",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Use the wall, count toe taps",
+        "Falling before 20 s = set does not count"
+       ]
+      },
+      {
+       "code": "E",
+       "exercise_id": "basic_kick_up",
+       "reps": "1-3",
+       "sets": "10+",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "See basic kick up video",
+        "50/50 rule",
+        "Limit the variables for faster progress"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "Freestanding 5 s split leg hold, on 3 different days.",
+      "milestone_id": "freestanding_split_leg_5s"
+     },
+     "film": true
+    },
+    {
+     "id": "beginner_1_2",
+     "name": "Beginner 1 2.0 Freestanding",
+     "purpose": "Learning to kick up and balance freestanding; stay in split leg when kicking up.",
+     "frequency": "3-6 x per week (higher frequency = faster progress when learning to kick up and balance)",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "chest_to_wall_hold",
+       "reps": "30-60 s",
+       "sets": "2",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Elevation, keep pressing into the floor",
+        "Always aim for 60 s, use a timer"
+       ]
+      },
+      {
+       "code": "C",
+       "exercise_id": "split_leg_balance",
+       "reps": null,
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "No reps stated on the sheet",
+        "Count toe taps",
+        "Falling before 20 s = set does not count",
+        "Come down with the terrible cartwheel (good practice)"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "top_end_isolations",
+       "reps": ">3",
+       "sets": "2-4",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "From a wall or block",
+        "Top leg as in your basic kick up",
+        "As many as possible before falling, minimum 3 to count the set"
+       ]
+      },
+      {
+       "code": "E",
+       "exercise_id": "basic_kick_up",
+       "reps": "1-3",
+       "sets": "10+",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "3 kick ups a set",
+        "No balance in 3 attempts = rest",
+        "Same leg each time (limit the variables)"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "15 s freestanding split leg hold.",
+      "milestone_id": "freestanding_split_leg_15s"
+     },
+     "film": false
+    },
+    {
+     "id": "beginner_1_3",
+     "name": "Beginner 1 3.0 Consistency",
+     "purpose": "Consistency; good rests and mindset are key.",
+     "frequency": "3-6 x per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "chest_to_wall_hold",
+       "reps": "60 s",
+       "sets": "2",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Elevation, push through the fingers"
+       ]
+      },
+      {
+       "code": "C",
+       "exercise_id": "split_leg_balance",
+       "reps": "20 s+",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Against the wall",
+        "Split leg to find balance before freestanding"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "top_end_isolations",
+       "reps": ">3",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Bring the feet together slowly to find the equilibrium",
+        "Film to check the feet gather equally"
+       ]
+      },
+      {
+       "code": "E",
+       "exercise_id": "five_second_game",
+       "reps": "until you reach 5 or are defeated",
+       "sets": "1",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Kick 1 = 1 s hold ... kick 5 = 5 s",
+        "Fall over, fail to land on the feet, or miss the hold = back to 1",
+        "Must hit 5 feet-together handstands in a row (1, 2, 3, 4, 5 s) to finish"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "15 s freestanding feet together hold (\"full\"). Added challenge: play the 5 second game with a friend, first to 5 s wins.",
+      "milestone_id": "straight_15s"
+     },
+     "film": true
+    }
+   ]
+  },
+  {
+   "id": "beginner_2",
+   "name": "Beginner level two",
+   "order": 3,
+   "programs": [
+    {
+     "id": "beginner_2_1",
+     "name": "Beginner 2 1.0 Starting Shapes",
+     "purpose": "Find balance in different positions.",
+     "frequency": "3-6 x per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "chest_to_wall_hold",
+       "reps": "20-60 s",
+       "sets": "2",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Check how you feel and your position",
+        "A warm up, not an endurance set"
+       ]
+      },
+      {
+       "code": "C1",
+       "exercise_id": "freestanding_split_leg_hold",
+       "reps": "5 s+",
+       "sets": "3-5",
+       "rest": "60 s",
+       "tempo": null,
+       "notes": [
+        "Freestanding from the basic kick up",
+        "C1-C3 done together before D"
+       ]
+      },
+      {
+       "code": "C2",
+       "exercise_id": "straddle_hold",
+       "reps": "5 s+",
+       "sets": "3-5",
+       "rest": "60 s",
+       "tempo": null,
+       "notes": [
+        "See Kick ups you should know",
+        "Jump into straddle or move from split leg, try both"
+       ]
+      },
+      {
+       "code": "C3",
+       "exercise_id": "full_hold",
+       "reps": "5 s+",
+       "sets": "3-5",
+       "rest": "60 s",
+       "tempo": null,
+       "notes": [
+        "Balance in split leg then gather the feet",
+        "Timer starts when the feet are together"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "full_to_tuck_hold",
+       "reps": "3 s+",
+       "sets": "5+",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Shoulders try to close as you tuck: elevate and keep them open",
+        "Only as low as you can hold (maybe 90 deg at first)"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "Level 1 shape holds: split leg, straddle and full 10 s each in one session.",
+      "milestone_id": "level_1_shape_holds"
+     },
+     "film": false
+    },
+    {
+     "id": "beginner_2_2",
+     "name": "Beginner 2 2.0 Shape Changing",
+     "purpose": "Basic two-arm coordination: keep centre of mass over the base while changing shape.",
+     "frequency": "3-6 x per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "freestanding_split_leg_hold",
+       "reps": "1",
+       "sets": "5-10",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Freestanding",
+        "Pin the legs, focus on rebalancing"
+       ]
+      },
+      {
+       "code": "C1",
+       "exercise_id": "level_1_shape_change",
+       "reps": "AMRAP",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "One level 1 change for reps then rest",
+        "Quality over quantity",
+        "Can change each session"
+       ]
+      },
+      {
+       "code": "C2",
+       "exercise_id": "level_1_shape_change",
+       "reps": "AMRAP",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "A different level 1 change"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "level_2_shape_and_hold",
+       "reps": "AMRAP",
+       "sets": "5-10",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Hold the shape 5-10 s",
+        "Can LIGHTLY use the wall at first"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "All level 1 shape changes for two consecutive reps each.",
+      "milestone_id": "level_1_shape_changes"
+     },
+     "film": false
+    },
+    {
+     "id": "beginner_2_3",
+     "name": "Beginner 2 3.0 Tuck",
+     "purpose": "Intensive tuck shape work toward the tuck milestone (\"You need to tuck more\").",
+     "frequency": "3-4 x per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "level_1_shape_change",
+       "reps": "AMRAP",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "C1",
+       "exercise_id": "level_1_and_2_shape_change",
+       "reps": "AMRAP",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "A different one"
+       ]
+      },
+      {
+       "code": "C2",
+       "exercise_id": "tuck_hold",
+       "reps": "AMRAP",
+       "sets": "5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Jump into tuck or transition from any kick up",
+        "Freestanding",
+        "Work toward 10+ s"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "wall_tuck_slides",
+       "reps": "AMRAP",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": "2221",
+       "notes": [
+        "2 s down, 2 s pause at bottom, 2 s up, 1 s pause at top",
+        "Use the wall less over time",
+        "As deep as possible, push tall as the shoulders close"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "15 s freestanding tuck.",
+      "milestone_id": "tuck_hold_milestone"
+     },
+     "film": false
+    },
+    {
+     "id": "beginner_2_4",
+     "name": "Beginner 2 4.0 Accumulation",
+     "purpose": "No sets and reps: accumulate over the day. Best program for hold time and consistency.",
+     "frequency": "Ideally 6 x per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "chest_to_wall_hold",
+       "reps": "accumulate 3 min",
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": [
+        "Max holds (e.g. 1:30 x 2 or 60 s x 3)",
+        "You need more than 60 s on the wall to hold 60 s freestanding"
+       ]
+      },
+      {
+       "code": "C",
+       "exercise_id": "basic_kick_up_and_hold",
+       "reps": "10 holds of (PB / 3)",
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": [
+        "e.g. PB 21 s -> each hold must be at least 7 s to count",
+        "All day to collect 10",
+        "Kick up anywhere",
+        "Go for a max hold each time"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "40 s freestanding full hold.",
+      "milestone_id": "straight_40s"
+     },
+     "film": false
+    },
+    {
+     "id": "beginner_2_5",
+     "name": "Beginner 2 5.0 Hitting the Minute",
+     "purpose": "Uses shape changes to learn to fight; film the holds.",
+     "frequency": "3-6 x per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "freestanding_max_hold",
+       "reps": "1",
+       "sets": "5-8",
+       "rest": "2 min+",
+       "tempo": null,
+       "notes": [
+        "Kick up split leg, gather, hold full",
+        "Max hold while fresh"
+       ]
+      },
+      {
+       "code": "C",
+       "exercise_id": "level_1_shape_change",
+       "reps": "3+",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "One change, 3 reps then rest"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "free_shape_changing",
+       "reps": "10 s+",
+       "sets": "8",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Move between shapes continually",
+        "Include the hard ones"
+       ]
+      },
+      {
+       "code": "E",
+       "exercise_id": "level_2_shape_and_hold",
+       "reps": "5 s+",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Hold 5-10 s"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "60 s handstand (milestone video).",
+      "milestone_id": "straight_60s"
+     },
+     "film": true
+    }
+   ]
+  },
+  {
+   "id": "intermediate",
+   "name": "Intermediate",
+   "order": 4,
+   "programs": [
+    {
+     "id": "intermediate_1",
+     "name": "Intermediate 1.0 Shape Shifting",
+     "purpose": "Entry: first 10 s tuck and minute handstand = intermediate. Shape shifting toward the first 7.",
+     "frequency": "3-4 days per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": [
+        "Build your own from the library"
+       ]
+      },
+      {
+       "code": "B",
+       "exercise_id": "free_shape_changing",
+       "reps": "20 s+",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Free level 1 shape changing",
+        "Play with level 1 shapes for 20 s+ to warm up"
+       ]
+      },
+      {
+       "code": "C",
+       "exercise_id": "free_shape_changing",
+       "reps": "20 s+",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Free level 1 and 2 shape changing",
+        "Work level 1 weaknesses; add level 2 (suggest tuck)"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "tuck_hold",
+       "reps": "10 s+",
+       "sets": "3",
+       "rest": "100 s",
+       "tempo": null,
+       "notes": [
+        "Wall toe taps allowed, aim freestanding",
+        "Enter via basic kick up or tuck-ups"
+       ]
+      },
+      {
+       "code": "E",
+       "exercise_id": "level_3_shape_change",
+       "reps": "5 s+",
+       "sets": "5",
+       "rest": "180 s",
+       "tempo": null,
+       "notes": [
+        "Lowering into 7 usually easier than lifting into 7",
+        "Heavily underbalanced, you will often land back on your feet, 50/50 rule matters less"
+       ]
+      },
+      {
+       "code": "F",
+       "exercise_id": "seven_lifts",
+       "reps": ">5",
+       "sets": "3",
+       "rest": "180 s",
+       "tempo": "X1X4",
+       "notes": [
+        "Sheet: tempo between reps X1X4",
+        "Start on a high surface (hip height or higher)",
+        "Lift so the toes float off by articulating the spine and pressing into the floor"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "Single leg 7, hold 5 s.",
+      "milestone_id": "single_leg_7_5s"
+     },
+     "film": false
+    },
+    {
+     "id": "intermediate_2",
+     "name": "Intermediate 2.0 Underbalance A",
+     "purpose": "Session A: scapular elevation and shoulder flexion strength while keeping hold endurance. Alternates with 3.0 Underbalance B.",
+     "frequency": "5 days per week: D1 A, D2 B, D3 off, D4 A, D5 B, D6 off, D7 repeat",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "freestanding_hold",
+       "reps": "20 s+",
+       "sets": "2",
+       "rest": "30-60 s",
+       "tempo": null,
+       "notes": [
+        "20 s+ to count"
+       ]
+      },
+      {
+       "code": "C",
+       "exercise_id": "full_to_tuck_to_full",
+       "reps": "<5",
+       "sets": "3-5",
+       "rest": "60 s",
+       "tempo": null,
+       "notes": [
+        "Control, not speed"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "seven_hold",
+       "reps": "5 s",
+       "sets": "3-5",
+       "rest": "60 s",
+       "tempo": null,
+       "notes": [
+        "Film to see when you are horizontal (often lower than you think)",
+        "Progress to double leg 7"
+       ]
+      },
+      {
+       "code": "E",
+       "exercise_id": "tuck_slides",
+       "reps": "<10 at 3210",
+       "sets": "3",
+       "rest": "60 s",
+       "tempo": "3210",
+       "notes": [
+        "3 s down, 2 s pause bottom, 1 s up, 0 top",
+        "Too easy = slower tempo / longer pauses",
+        "Ultimate tuck = thighs touching ribs, knees together"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "Double leg 7, hold 5 s.",
+      "milestone_id": "double_leg_7_5s"
+     },
+     "film": true
+    },
+    {
+     "id": "intermediate_3",
+     "name": "Intermediate 3.0 Underbalance B",
+     "purpose": "Toward the press handstand: slow the hardest parts (horizontal 7 and the bottom of the press).",
+     "frequency": "Same 5-day A/B schedule as Underbalance A",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "freestanding_hold",
+       "reps": "20 s+",
+       "sets": "2",
+       "rest": "30-60 s",
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "C",
+       "exercise_id": "press_negative",
+       "reps": "1",
+       "sets": "10",
+       "rest": "60-180 s",
+       "tempo": null,
+       "notes": [
+        "Lower as slowly as possible, smooth throughout",
+        "Dropping at the bottom = lower to blocks, reduce height over time to reach the floor",
+        "STOP the session early if two consecutive reps lower in less than half the time of the first (strength, not balance)",
+        "DELOAD every 3rd session: 6 sets instead of 10"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "Double leg 7, hold 5 s.",
+      "milestone_id": "double_leg_7_5s"
+     },
+     "film": false
+    },
+    {
+     "id": "intermediate_4",
+     "name": "Intermediate 4.0 Changing Gaze",
+     "purpose": "Head looking at toes (HLAT) is a prerequisite for the one arm handstand (high-level underbalance control and proprioception).",
+     "frequency": "not stated",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "freestanding_hold",
+       "reps": "20 s+",
+       "sets": "2",
+       "rest": "30-60 s",
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "C",
+       "exercise_id": "full_to_tuck_to_full",
+       "reps": "<5",
+       "sets": "3-5",
+       "rest": "60 s",
+       "tempo": null,
+       "notes": [
+        "Order of body parts into tuck: bend hips and knees together",
+        "Big centre of mass change"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "head_looking_at_toes",
+       "reps": "1",
+       "sets": "10",
+       "rest": "90 s",
+       "tempo": null,
+       "notes": [
+        "See the HLAT video"
+       ]
+      },
+      {
+       "code": "E",
+       "exercise_id": "hlat_full_to_tuck",
+       "reps": "1",
+       "sets": "3+",
+       "rest": "90 s",
+       "tempo": null,
+       "notes": [
+        "Basic kick up, transition to tuck, balance, then change gaze to HLAT (knees here)"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "HLAT in full for 15 s.",
+      "milestone_id": "hlat_15s"
+     },
+     "film": false
+    },
+    {
+     "id": "intermediate_5",
+     "name": "Intermediate 5.0 Two Arm Finesse",
+     "purpose": "HLAT as conditioning; final set is your own routine.",
+     "frequency": "not stated",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "freestanding_hold",
+       "reps": "30 s+",
+       "sets": "2",
+       "rest": "30-60 s",
+       "tempo": null,
+       "notes": [
+        "Check how you feel, warm up more if needed"
+       ]
+      },
+      {
+       "code": "C1",
+       "exercise_id": "head_looking_at_toes",
+       "reps": "<5",
+       "sets": "3-5",
+       "rest": "60 s",
+       "tempo": null,
+       "notes": [
+        "HLAT full holds",
+        "Move the head quickly, not slowly"
+       ]
+      },
+      {
+       "code": "C2",
+       "exercise_id": "hlat_full_to_tuck",
+       "reps": "2+",
+       "sets": "3-5",
+       "rest": "60 s",
+       "tempo": null,
+       "notes": [
+        "Staying HLAT, goal = full-tuck repeated"
+       ]
+      },
+      {
+       "code": "E",
+       "exercise_id": "hlat_full_to_seven",
+       "reps": "<10 at 3210",
+       "sets": "5",
+       "rest": "180 s",
+       "tempo": "3210",
+       "notes": [
+        "Toward the HLAT 7 milestone",
+        "Sheet has no D item"
+       ]
+      },
+      {
+       "code": "F",
+       "exercise_id": "fast_shape_changing",
+       "reps": "max",
+       "sets": "5",
+       "rest": "180 s",
+       "tempo": null,
+       "notes": [
+        "Shown as (F) on the sheet",
+        "Move as fast as possible into different positions",
+        "Own routine"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "HLAT double leg 7, hold 5 s.",
+      "milestone_id": "hlat_7_5s"
+     },
+     "film": false
+    },
+    {
+     "id": "intermediate_6",
+     "name": "Intermediate Flags",
+     "purpose": "Different weight in each hand while two arms stay stable; also an advanced two-arm variation. Boxes as a depth guide. (Sheet labels it 5.0 again; it is the sixth intermediate program.)",
+     "frequency": "not stated",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "chest_to_wall_hold",
+       "reps": "40 s+",
+       "sets": "2",
+       "rest": "30-60 s",
+       "tempo": null,
+       "notes": [
+        "Warm up check"
+       ]
+      },
+      {
+       "code": "C",
+       "exercise_id": "flags_chest_to_wall",
+       "reps": "3-4",
+       "sets": "3",
+       "rest": "60 s",
+       "tempo": null,
+       "notes": [
+        "Quality, not depth",
+        "Box or chairs to measure",
+        "Always return to centre"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "freestanding_flags",
+       "reps": "1 both sides",
+       "sets": "7+",
+       "rest": "60 s",
+       "tempo": null,
+       "notes": [
+        "Quality and depth",
+        "Toes to floor is a long-term goal with flexibility training"
+       ]
+      },
+      {
+       "code": "E",
+       "exercise_id": "flags_chest_to_wall",
+       "reps": "1 both sides",
+       "sets": "3",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Depth, feels like strength",
+        "Use an object as a target lower down"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "Flag below horizontal 5 s both sides. Extra challenge: flag with toes touching the floor.",
+      "milestone_id": "flags_below_horizontal_5s"
+     },
+     "film": false
+    }
+   ]
+  },
+  {
+   "id": "press",
+   "name": "Straddle and pike press",
+   "order": 5,
+   "programs": [
+    {
+     "id": "press_blocks",
+     "name": "Press From Blocks",
+     "purpose": "Press from an elevated surface (gym box, yoga blocks, furniture): trains the concentric phase, breaking inertia from the bottom.",
+     "frequency": "2-4 days per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": [
+        "Warm the forearms, include wrist flexion"
+       ]
+      },
+      {
+       "code": "B",
+       "exercise_id": "chest_to_wall_hold",
+       "reps": "20 s+",
+       "sets": "2",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Max holds, elevation"
+       ]
+      },
+      {
+       "code": "C",
+       "exercise_id": "chest_to_wall_press_negative",
+       "reps": "1",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Find the right distance from the wall for your straddle",
+        "Needs wall space"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "press_from_blocks",
+       "reps": "1",
+       "sets": "10",
+       "rest": "as needed, should be 180 s+",
+       "tempo": null,
+       "notes": [
+        "Start at a height you could do on your worst day (maybe hip height at first)",
+        "Lower little by little each session",
+        "Fail a height 3 times = go back up one"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "5 straddle presses in one session.",
+      "milestone_id": "straddle_press"
+     },
+     "film": false
+    },
+    {
+     "id": "press_walks",
+     "name": "Press Walks (extra)",
+     "purpose": "Add to another press program if the bottom of the press is the sticking point.",
+     "frequency": "Added to another press program",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "press_walks",
+       "reps": "5-7",
+       "sets": "5",
+       "rest": "as needed, 10 s between reps",
+       "tempo": null,
+       "notes": [
+        "Quality over quantity, reset each rep",
+        "Start forward walks; once all sets are clean start replacing early sets with backward walks until all are backward",
+        "Use the feet as little as possible",
+        "Push, do not sink forward with the shoulders"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": null,
+      "milestone_id": null
+     },
+     "film": false
+    },
+    {
+     "id": "press_negatives",
+     "name": "Press Negatives",
+     "purpose": "The eccentric is stronger, so you can fight in ranges you cannot reach concentrically.",
+     "frequency": "1 in 2 to 1 in 3 of your handstand training days (can combine with another program)",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": [
+        "Forearms, wrist flexion"
+       ]
+      },
+      {
+       "code": "B",
+       "exercise_id": "chest_to_wall_hold",
+       "reps": "10 s+",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "C",
+       "exercise_id": "press_negative",
+       "reps": "10 s eccentric",
+       "sets": "8",
+       "rest": "180 s",
+       "tempo": null,
+       "notes": [
+        "Kick up to straddle, lower to the ground in straddle over 10 s"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "press_negative_from_blocks",
+       "reps": "2-5 cluster",
+       "sets": "2",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Cluster = 10-15 s rest between reps",
+        "Targets the eccentric at the bottom of the press (hardest part)"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "5 straddle presses in one session.",
+      "milestone_id": "straddle_press"
+     },
+     "film": false
+    },
+    {
+     "id": "straddle_press",
+     "name": "Straddle Press",
+     "purpose": "Consistency once the straddle press is first achieved; it is common to lose it the next session.",
+     "frequency": "1:2 to 1:3 of handstand days",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "chest_to_wall_hold",
+       "reps": "20 s+",
+       "sets": "2",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "C",
+       "exercise_id": "press_negative",
+       "reps": "1",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Freestanding press negatives",
+        "Assess the day",
+        "Normal to find it hard just after unlocking"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "straddle_press",
+       "reps": "AMRAP",
+       "sets": "25 min",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Start around 1 rep every 2.5 min",
+        "Beat it each week"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "3-5 reps in 1 set of straddle press.",
+      "milestone_id": null
+     },
+     "film": false
+    },
+    {
+     "id": "straddle_pressing",
+     "name": "Straddle Pressing (toward 5 x 5)",
+     "purpose": "Build straddle press volume toward 5 x 5.",
+     "frequency": "1:2 to 1:3 of handstand days",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "chest_to_wall_hold",
+       "reps": "20 s+",
+       "sets": "2",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "C",
+       "exercise_id": "straddle_press",
+       "reps": "1",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Straddle press singles",
+        "Control and quality",
+        "Long rest 2-3 min"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "straddle_press",
+       "reps": "3-5",
+       "sets": "5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Feet touch just above the floor at the bottom, press back up",
+        "Record and beat each week",
+        "Film it"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "Straddle press 5 x 5.",
+      "milestone_id": null
+     },
+     "film": true
+    },
+    {
+     "id": "trap_raises_phase_1",
+     "name": "Trap Raises Phase 1",
+     "purpose": "Supplement to press training: active end range shoulder flexion strength. A phase lasts 6 sessions.",
+     "frequency": "End of session, up to 2 x per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "trap_3_raise",
+       "reps": "5-7",
+       "sets": "3",
+       "rest": "60-90 s",
+       "tempo": "3216",
+       "notes": [
+        "Unilateral 60 deg bent-over supported trap-3 raise",
+        "Get stronger, add weight or reps each session",
+        "Most start with a 2-4 kg dumbbell",
+        "6 s hold at the top"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "A phase lasts 6 sessions.",
+      "milestone_id": null
+     },
+     "film": false
+    },
+    {
+     "id": "trap_raises_phase_2",
+     "name": "Trap Raises Phase 2",
+     "purpose": "Supplement to press training. A phase lasts 6 sessions.",
+     "frequency": "End of session, up to 2 x per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "trap_3_raise",
+       "reps": "8-10",
+       "sets": "3-4",
+       "rest": "60-90 s",
+       "tempo": "3212",
+       "notes": [
+        "Unilateral 60 deg CHEST supported trap-3 raise"
+       ]
+      },
+      {
+       "code": "B",
+       "exercise_id": "trap_1_raise",
+       "reps": "8-10",
+       "sets": "1-2",
+       "rest": "60-90 s",
+       "tempo": "4010",
+       "notes": [
+        "Unilateral 60 deg chest supported trap-1 raise",
+        "See the trap raise video for trap 3 vs trap 1"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "A phase lasts 6 sessions.",
+      "milestone_id": null
+     },
+     "film": false
+    },
+    {
+     "id": "trap_raises_phase_3",
+     "name": "Trap Raises Phase 3",
+     "purpose": "Supplement to press training. A phase lasts 6 sessions.",
+     "frequency": "End of session, up to 2 x per week",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "trap_1_raise",
+       "reps": "6-8",
+       "sets": "1-2",
+       "rest": "60-90 s",
+       "tempo": "3111",
+       "notes": [
+        "Unilateral 45 deg bent-over supported trap-1 raise"
+       ]
+      },
+      {
+       "code": "B",
+       "exercise_id": "trap_3_raise",
+       "reps": "6-8",
+       "sets": "3-4",
+       "rest": "60-90 s",
+       "tempo": "3211",
+       "notes": [
+        "Unilateral 45 deg bent-over supported trap-3 raise",
+        "Sheet repeats the phase 1 reminder \"6 s hold at the top\", which does not match tempo 3211/3111"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "A phase lasts 6 sessions.",
+      "milestone_id": null
+     },
+     "film": false
+    },
+    {
+     "id": "pike_press",
+     "name": "Pike Press",
+     "purpose": "Auxiliary program to dial in the pike press. Harder than the straddle press (more leverage, legs much heavier).",
+     "frequency": "3-5 days per week (can pair with weight shifts if the other OAHS prerequisites are met)",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": [
+        "Forearms, wrist flexion"
+       ]
+      },
+      {
+       "code": "B",
+       "exercise_id": "freestanding_hold",
+       "reps": "30 s+",
+       "sets": "2",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Assess, elevation, find balance",
+        "Pike press is heavy"
+       ]
+      },
+      {
+       "code": "C",
+       "exercise_id": "straddle_press_with_pike_negatives",
+       "reps": "1",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Straddle press into full hold, then lower down in pike, as slow and controlled as possible"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "pike_press",
+       "reps": "AMRAP",
+       "sets": "25 min",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "As many as possible in 25 min",
+        "Record the count to track progress",
+        "Rest enough between reps"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": null,
+      "milestone_id": null
+     },
+     "film": false
+    }
+   ]
+  },
+  {
+   "id": "one_arm",
+   "name": "One arm handstand prep",
+   "order": 6,
+   "programs": [
+    {
+     "id": "one_arm_1",
+     "name": "OAHS 1.0 Weight Shifting",
+     "purpose": "The foundation; do not rush.",
+     "frequency": "Ideally 6 days per week shared with a press program, about 2/3 weight shifting to 1/3 press: D1 WS, D2 WS, D3 press, D4 off, D5 WS, D6 WS, D7 press/off",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": [
+        "Extra care: a single wrist starts taking double the weight"
+       ]
+      },
+      {
+       "code": "B",
+       "exercise_id": "head_looking_at_toes",
+       "reps": "10 s+",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Two-arm coordination and underbalance control"
+       ]
+      },
+      {
+       "code": "C",
+       "exercise_id": "hlat_tuck_to_full",
+       "reps": "2+",
+       "sets": "3-5",
+       "rest": "100 s",
+       "tempo": null,
+       "notes": [
+        "In and out of tuck to full, as many as possible"
+       ]
+      },
+      {
+       "code": "D",
+       "exercise_id": "weight_shift",
+       "reps": "5 s+",
+       "sets": "10-15",
+       "rest": "180 s",
+       "tempo": null,
+       "notes": [
+        "See Weight Shifts video and Top 10 tips for OAHS",
+        "Pin the legs",
+        "Video is your best teacher"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "Weight shift x2 both sides, three sessions in a row.",
+      "milestone_id": "weight_shifting_2x"
+     },
+     "film": true
+    },
+    {
+     "id": "one_arm_2",
+     "name": "OAHS 2.0 Fingertip Support",
+     "purpose": "First reduction of weight in the assisting hand; you will fall a lot; record sets. Do not lift the hand off.",
+     "frequency": "Split with your press program 2/3 to 1/3",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": [
+        "Extra care"
+       ]
+      },
+      {
+       "code": "B",
+       "exercise_id": "head_looking_at_toes",
+       "reps": "10 s+",
+       "sets": "3-5",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "C",
+       "exercise_id": "hlat_tuck_to_full",
+       "reps": "2+",
+       "sets": "3-5",
+       "rest": "100 s",
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "D",
+       "exercise_id": "weight_shift",
+       "reps": "2+",
+       "sets": "3-5",
+       "rest": "180 s",
+       "tempo": null,
+       "notes": [
+        "Dial in the basics"
+       ]
+      },
+      {
+       "code": "E",
+       "exercise_id": "fingertip_support_shift",
+       "reps": "1",
+       "sets": "5 each side",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Shift, find balance, back to two-arm straddle"
+       ]
+      },
+      {
+       "code": "F",
+       "exercise_id": "fingertip_support_hold",
+       "reps": "1",
+       "sets": "5 each side",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Hold as long as possible"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "Fingertip support 15 s both sides.",
+      "milestone_id": "fingertip_support_15s"
+     },
+     "film": true
+    },
+    {
+     "id": "one_arm_3",
+     "name": "OAHS 3.0 Straight Arm Support",
+     "purpose": "Consider multiple OAHS sessions per day; to get there faster, train several times a day and reduce volume elsewhere.",
+     "frequency": "not stated (multiple sessions per day suggested)",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "head_looking_at_toes",
+       "reps": "10 s+",
+       "sets": "3-5",
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "C",
+       "exercise_id": "hlat_tuck_to_full",
+       "reps": "2+",
+       "sets": "3-5",
+       "rest": "100 s",
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "E",
+       "exercise_id": "fingertip_support_shift",
+       "reps": "1",
+       "sets": "5 each side",
+       "rest": null,
+       "tempo": null,
+       "notes": [
+        "Sheet has no D item"
+       ]
+      },
+      {
+       "code": "F",
+       "exercise_id": "straight_arm_support_hold",
+       "reps": "1",
+       "sets": "5-10 each side",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Fingertip / straight arm support holds",
+        "Fingertip first; if solid, progress to straight arm support and hold",
+        "Keep recording"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "Straight arm support 15 s.",
+      "milestone_id": "straight_arm_support_15s"
+     },
+     "film": true
+    },
+    {
+     "id": "one_arm_4",
+     "name": "OAHS 4.0 Lift Off",
+     "purpose": "End goal: 5 s one arm handstand. \"Repetition is the mother of skill.\"",
+     "frequency": "6 days per week, split into multiple sessions per day",
+     "items": [
+      {
+       "code": "A",
+       "exercise_id": "wrist_warm_up",
+       "reps": null,
+       "sets": null,
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "B",
+       "exercise_id": "head_looking_at_toes",
+       "reps": "10 s+",
+       "sets": "3-5",
+       "rest": null,
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "C",
+       "exercise_id": "hlat_tuck_to_full",
+       "reps": "2+",
+       "sets": "3-5",
+       "rest": "100 s",
+       "tempo": null,
+       "notes": []
+      },
+      {
+       "code": "E",
+       "exercise_id": "fingertip_support_shift",
+       "reps": "1",
+       "sets": "5 each side",
+       "rest": null,
+       "tempo": null,
+       "notes": [
+        "Try to rep both sides",
+        "Sheet has no D item"
+       ]
+      },
+      {
+       "code": "F",
+       "exercise_id": "lift_off_hold",
+       "reps": "1",
+       "sets": "10+",
+       "rest": "as needed",
+       "tempo": null,
+       "notes": [
+        "Straight / lift off holds",
+        "Do not chuck the hand off: micro lift from fingertip support",
+        "Tap the floor if needed",
+        "Fight to land back on two arms"
+       ]
+      }
+     ],
+     "move_on": {
+      "text": "End goal: 5 s one arm handstand.",
+      "milestone_id": "one_arm_handstand_5s"
+     },
+     "film": false
+    }
+   ]
+  },
+  {
+   "id": "low_balances",
+   "name": "Low balances",
+   "order": 7,
+   "programs": []
+  }
+ ],
+ "milestones": [
+  {
+   "id": "cartwheel_bail_30cm",
+   "name": "Cartwheel bail 30 cm from wall",
+   "stage": "starter",
+   "target": {
+    "kind": "bool",
+    "value": null,
+    "unit": null,
+    "sides": "both"
+   },
+   "requires": [],
+   "lesson_slug": "16-why-you-must-learn-how-to-fall-the-terrible-cartwh",
+   "film": true,
+   "note": "Distance 30 cm is in cm, not s/reps, so stored as bool; app can log the cm separately."
+  },
+  {
+   "id": "split_leg_balance_wall_5s",
+   "name": "Split leg balance on wall hold 5 s",
+   "stage": "starter",
+   "target": {
+    "kind": "hold",
+    "value": 5,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "cartwheel_bail_30cm"
+   ],
+   "lesson_slug": "23-split-leg-balance",
+   "film": true,
+   "note": "Starter 3.0 wording: 5 s split leg hold just away from the wall."
+  },
+  {
+   "id": "cartwheel_bail_chest_to_wall",
+   "name": "Cartwheel bail chest to wall",
+   "stage": "starter",
+   "target": {
+    "kind": "bool",
+    "value": null,
+    "unit": null,
+    "sides": "both"
+   },
+   "requires": [
+    "cartwheel_bail_30cm"
+   ],
+   "lesson_slug": "16-why-you-must-learn-how-to-fall-the-terrible-cartwh",
+   "film": true,
+   "note": "Starter 2.0 move-on; sheet says milestone video."
+  },
+  {
+   "id": "freestanding_split_leg_5s",
+   "name": "Freestanding 5 s in split leg",
+   "stage": "beginner_1",
+   "target": {
+    "kind": "hold",
+    "value": 5,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "split_leg_balance_wall_5s",
+    "cartwheel_bail_chest_to_wall"
+   ],
+   "lesson_slug": "26-the-basic-kick-up-the-50-50-rule",
+   "film": true,
+   "note": "Sheet: on 3 different days."
+  },
+  {
+   "id": "freestanding_split_leg_15s",
+   "name": "Freestanding 15 s in split leg",
+   "stage": "beginner_1",
+   "target": {
+    "kind": "hold",
+    "value": 15,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "freestanding_split_leg_5s"
+   ],
+   "lesson_slug": "26-the-basic-kick-up-the-50-50-rule",
+   "film": true
+  },
+  {
+   "id": "straight_15s",
+   "name": "Straight 15 s",
+   "stage": "beginner_1",
+   "target": {
+    "kind": "hold",
+    "value": 15,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "freestanding_split_leg_15s"
+   ],
+   "lesson_slug": "29-4-kick-ups-you-should-know",
+   "film": true,
+   "note": "Sheet: 15 s freestanding feet together hold (full)."
+  },
+  {
+   "id": "level_1_shape_holds",
+   "name": "Level 1 shape holds",
+   "stage": "beginner_2",
+   "target": {
+    "kind": "hold",
+    "value": 10,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "straight_15s"
+   ],
+   "lesson_slug": "31-shapes-that-will-help-you-improve",
+   "film": true,
+   "note": "Split leg, straddle and full 10 s each in one session."
+  },
+  {
+   "id": "level_1_shape_changes",
+   "name": "Level 1 shape changes",
+   "stage": "beginner_2",
+   "target": {
+    "kind": "reps",
+    "value": 2,
+    "unit": "reps",
+    "sides": "both"
+   },
+   "requires": [
+    "level_1_shape_holds"
+   ],
+   "lesson_slug": "31-shapes-that-will-help-you-improve",
+   "film": true,
+   "note": "All level 1 shape changes for two consecutive reps each."
+  },
+  {
+   "id": "tuck_hold_milestone",
+   "name": "Tuck, knees in line with hips",
+   "stage": "beginner_2",
+   "target": {
+    "kind": "hold",
+    "value": 15,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "level_1_shape_changes"
+   ],
+   "lesson_slug": "32-you-need-to-tuck-more",
+   "film": true,
+   "note": "CONFLICT: program sheet B2 3.0 says 15 s freestanding tuck; skill tree node says 10 s; Intermediate 1.0 entry says first 10 s tuck. Value follows the program sheet."
+  },
+  {
+   "id": "straight_40s",
+   "name": "Straight 40 s",
+   "stage": "beginner_2",
+   "target": {
+    "kind": "hold",
+    "value": 40,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "straight_15s"
+   ],
+   "lesson_slug": null,
+   "film": true
+  },
+  {
+   "id": "straight_60s",
+   "name": "Straight 60 s",
+   "stage": "beginner_2",
+   "target": {
+    "kind": "hold",
+    "value": 60,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "straight_40s"
+   ],
+   "lesson_slug": "33-the-fight-learning-to-save",
+   "film": true,
+   "note": "Sheet: milestone video."
+  },
+  {
+   "id": "handstand_push_up_3",
+   "name": "Handstand push up 3 reps",
+   "stage": "beginner_2",
+   "target": {
+    "kind": "reps",
+    "value": 3,
+    "unit": "reps",
+    "sides": "both"
+   },
+   "requires": [
+    "straight_40s"
+   ],
+   "lesson_slug": null,
+   "film": true,
+   "note": "Dotted side link on the skill tree = another toolkit/pathway; no program for it in this toolkit."
+  },
+  {
+   "id": "single_leg_7_5s",
+   "name": "Single leg 7 5 s",
+   "stage": "intermediate",
+   "target": {
+    "kind": "hold",
+    "value": 5,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "tuck_hold_milestone",
+    "straight_60s"
+   ],
+   "lesson_slug": "40-suffering-with-7s",
+   "film": true
+  },
+  {
+   "id": "double_leg_7_5s",
+   "name": "Double leg 7 5 s",
+   "stage": "intermediate",
+   "target": {
+    "kind": "hold",
+    "value": 5,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "single_leg_7_5s"
+   ],
+   "lesson_slug": "40-suffering-with-7s",
+   "film": true
+  },
+  {
+   "id": "hlat_15s",
+   "name": "Head looking at toes 15 s",
+   "stage": "intermediate",
+   "target": {
+    "kind": "hold",
+    "value": 15,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "tuck_hold_milestone",
+    "straight_60s"
+   ],
+   "lesson_slug": "41-head-looking-at-toes",
+   "film": true,
+   "note": "Program 4.0 wording: HLAT in full for 15 s. Upstream link on the tree read as the Beginner 2 merge (uncertain)."
+  },
+  {
+   "id": "hlat_7_5s",
+   "name": "Head looking at toes 7 5 s",
+   "stage": "intermediate",
+   "target": {
+    "kind": "hold",
+    "value": 5,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "double_leg_7_5s",
+    "hlat_15s"
+   ],
+   "lesson_slug": "41-head-looking-at-toes",
+   "film": true,
+   "note": "Program 5.0 wording: HLAT double leg 7, hold 5 s."
+  },
+  {
+   "id": "flags_below_horizontal_5s",
+   "name": "Flags below horizontal both sides 5 s",
+   "stage": "intermediate",
+   "target": {
+    "kind": "hold",
+    "value": 5,
+    "unit": "s",
+    "sides": "each"
+   },
+   "requires": [
+    "tuck_hold_milestone",
+    "straight_60s"
+   ],
+   "lesson_slug": "56-flagging-as-one-arm-handstand-prep",
+   "film": true,
+   "note": "Upstream link of the flag branch read as the Beginner 2 merge (uncertain)."
+  },
+  {
+   "id": "flags_to_floor",
+   "name": "Flags to floor",
+   "stage": "intermediate",
+   "target": {
+    "kind": "bool",
+    "value": null,
+    "unit": null,
+    "sides": "each"
+   },
+   "requires": [
+    "flags_below_horizontal_5s"
+   ],
+   "lesson_slug": "56-flagging-as-one-arm-handstand-prep",
+   "film": true,
+   "note": "Dotted extra challenge: flag with toes touching the floor."
+  },
+  {
+   "id": "straddle_press",
+   "name": "Straddle press",
+   "stage": "press",
+   "target": {
+    "kind": "reps",
+    "value": 5,
+    "unit": "reps",
+    "sides": "both"
+   },
+   "requires": [
+    "double_leg_7_5s"
+   ],
+   "lesson_slug": "42-mechanics-of-a-press-part-1",
+   "film": true,
+   "note": "Program move-on: 5 straddle presses in one session. Later program targets (3-5 in one set, 5 x 5) are not separate tree nodes."
+  },
+  {
+   "id": "pike_press",
+   "name": "Pike press",
+   "stage": "press",
+   "target": {
+    "kind": "bool",
+    "value": null,
+    "unit": null,
+    "sides": "both"
+   },
+   "requires": [
+    "straddle_press"
+   ],
+   "lesson_slug": null,
+   "film": true,
+   "note": "No numeric target stated on the sheet or the tree."
+  },
+  {
+   "id": "stalder",
+   "name": "Stalder (coming soon)",
+   "stage": "press",
+   "target": {
+    "kind": "bool",
+    "value": null,
+    "unit": null,
+    "sides": "both"
+   },
+   "requires": [
+    "pike_press"
+   ],
+   "lesson_slug": null,
+   "film": true,
+   "note": "Dotted, coming soon on the skill tree; no program."
+  },
+  {
+   "id": "weight_shifting_2x",
+   "name": "Weight shifting 2x per side",
+   "stage": "one_arm",
+   "target": {
+    "kind": "reps",
+    "value": 2,
+    "unit": "reps",
+    "sides": "each"
+   },
+   "requires": [
+    "hlat_7_5s",
+    "flags_below_horizontal_5s"
+   ],
+   "lesson_slug": "57-weight-shifting",
+   "film": true,
+   "note": "Sheet: weight shift x2 both sides, three sessions in a row."
+  },
+  {
+   "id": "fingertip_support_15s",
+   "name": "Fingertip support 15 s",
+   "stage": "one_arm",
+   "target": {
+    "kind": "hold",
+    "value": 15,
+    "unit": "s",
+    "sides": "each"
+   },
+   "requires": [
+    "weight_shifting_2x"
+   ],
+   "lesson_slug": "58-fingertip-support",
+   "film": true
+  },
+  {
+   "id": "straight_arm_support_15s",
+   "name": "Straight arm support 15 s",
+   "stage": "one_arm",
+   "target": {
+    "kind": "hold",
+    "value": 15,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "fingertip_support_15s"
+   ],
+   "lesson_slug": "59-straight-arm-support",
+   "film": true,
+   "note": "Sheet does not say both sides for this one."
+  },
+  {
+   "id": "one_arm_handstand_5s",
+   "name": "One arm handstand 5 s",
+   "stage": "one_arm",
+   "target": {
+    "kind": "hold",
+    "value": 5,
+    "unit": "s",
+    "sides": "both"
+   },
+   "requires": [
+    "straight_arm_support_15s"
+   ],
+   "lesson_slug": "60-going-for-glory",
+   "film": true,
+   "note": "Sides not stated."
+  },
+  {
+   "id": "elbow_lever",
+   "name": "Elbow lever",
+   "stage": "low_balances",
+   "target": {
+    "kind": "bool",
+    "value": null,
+    "unit": null,
+    "sides": "both"
+   },
+   "requires": [
+    "fingertip_support_15s"
+   ],
+   "lesson_slug": "52-elbow-lever",
+   "film": true,
+   "note": "Low balances side box branches from fingertip support on the tree; no hold time stated."
+  },
+  {
+   "id": "croc",
+   "name": "Croc",
+   "stage": "low_balances",
+   "target": {
+    "kind": "bool",
+    "value": null,
+    "unit": null,
+    "sides": "both"
+   },
+   "requires": [
+    "elbow_lever"
+   ],
+   "lesson_slug": "53-croc",
+   "film": true,
+   "note": "Tree arrow elbow lever -> croc, but lesson 53 says two arm elbow lever is NOT a prerequisite for croc."
+  },
+  {
+   "id": "qdr",
+   "name": "QDR",
+   "stage": "low_balances",
+   "target": {
+    "kind": "bool",
+    "value": null,
+    "unit": null,
+    "sides": "both"
+   },
+   "requires": [
+    "croc"
+   ],
+   "lesson_slug": null,
+   "film": true,
+   "note": "No QDR lesson notes on the box."
+  }
+ ],
+ "shape_levels": [
+  {
+   "level": 1,
+   "items": [
+    "split leg <-> full",
+    "split leg <-> straddle",
+    "split leg <-> stag",
+    "full <-> fork",
+    "pike <-> straddle",
+    "full <-> straddle",
+    "full <-> stag",
+    "straddle <-> fork",
+    "pike straddle",
+    "straddle <-> diamond"
+   ],
+   "uncertain": true,
+   "note": "Text extraction scrambled the table; pairs are a best reading, verify against page 2 of the Beginner 2 PDF. Lesson 31 level 1 shapes: split leg, bull, fork, straddle, diamond, stag (legs counterweight each other, no underbalance)."
+  },
+  {
+   "level": 2,
+   "items": [
+    "split leg <-> tuck",
+    "full <-> pike straddle tuck",
+    "full <-> tuck",
+    "straddle <-> tuck",
+    "tuck <-> diamond",
+    "tuck <-> straddle"
+   ],
+   "uncertain": true,
+   "note": "Best reading (approx); tuck = both legs come down together, underbalance. 'tuck <-> straddle' duplicates 'straddle <-> tuck' in our reading."
+  },
+  {
+   "level": 3,
+   "items": [
+    "single leg 7",
+    "single leg 7 HLAT",
+    "double leg 7"
+   ],
+   "uncertain": false,
+   "note": "Beginner 2 sheet marks coming soon; Intermediate sheet says all 5 levels now have playlists."
+  },
+  {
+   "level": 4,
+   "items": [
+    "full HLAT",
+    "HLAT straddle",
+    "HLAT tuck"
+   ],
+   "uncertain": false,
+   "note": null
+  },
+  {
+   "level": 5,
+   "items": [
+    "HLAT 7",
+    "straddle top leg bent",
+    "flag",
+    "straddle flag"
+   ],
+   "uncertain": false,
+   "note": "Lesson 31 ladder labels level 5 'flags and twists'."
+  }
+ ],
+ "wrist_library": [
+  {
+   "id": "hands_forwards_wrist_circles",
+   "name": "Hands forwards wrist circles",
+   "cues": [
+    "On the floor, elbows straight, palms flat, fingers forward",
+    "Wide circles with the shoulders"
+   ],
+   "youtube": "6Stiyg6fMoM"
+  },
+  {
+   "id": "hands_inwards_side_leans",
+   "name": "Hands inwards side leans",
+   "cues": [
+    "Elbows straight, palms flat, fingers in",
+    "Lean sideways with shoulders in line"
+   ],
+   "youtube": "zVkS8SfgfeU"
+  },
+  {
+   "id": "hands_outwards_side_leans",
+   "name": "Hands outwards side leans",
+   "cues": [
+    "Hands closer than shoulder width",
+    "Lean far to the side, shoulders in line, palms flat, elbows locked"
+   ],
+   "youtube": "C-T-u8ESLhM"
+  },
+  {
+   "id": "hands_forwards_forward_leans",
+   "name": "Hands forwards forward leans",
+   "cues": [
+    "Elbows straight, palms flat",
+    "Lean forward as far as possible keeping palms flat and elbows straight"
+   ],
+   "youtube": "-b-QOnNeJto"
+  },
+  {
+   "id": "hands_back_backward_bends",
+   "name": "Hands back backward bends",
+   "cues": [
+    "Palms flat, elbows locked, lean back until you cannot keep that",
+    "Then gently bend the elbows, sinking the weight, to lift the palms off",
+    "Try side to side and contract-relax"
+   ],
+   "youtube": "gd0WGI-sH4I"
+  },
+  {
+   "id": "hand_circle_walks",
+   "name": "Hand circle walks",
+   "cues": [
+    "Start with hands facing as far back as possible, elbows locked",
+    "Walk the hands round until they face as far forward in the opposite rotation"
+   ],
+   "youtube": "4q_QzSkwAKM"
+  },
+  {
+   "id": "finger_pushups",
+   "name": "Finger push ups",
+   "cues": [
+    "Only with at least 90 deg wrist range",
+    "Fingers stay down while the palm lifts",
+    "Elbows straight"
+   ],
+   "youtube": "BbFcMrgPcZg"
+  },
+  {
+   "id": "wrist_clasped_rolls",
+   "name": "Wrist clasped rolls",
+   "cues": [
+    "Interlock hands, rotate alternate directions",
+    "Keep the rotation symmetrical"
+   ],
+   "youtube": "BqJk2kgPW58"
+  },
+  {
+   "id": "wrist_waves",
+   "name": "Wrist waves",
+   "cues": [
+    "Interlock hands, both directions",
+    "Knuckles follow the wrist, which follows the elbow"
+   ],
+   "youtube": "3-SKjfi_j6g"
+  },
+  {
+   "id": "interlocked_finger_wrist_flexor_stretch",
+   "name": "Interlocked finger wrist flexor stretch",
+   "cues": [],
+   "youtube": "q_BorF3RtC4"
+  },
+  {
+   "id": "wrist_circles",
+   "name": "Wrist circles",
+   "cues": [
+    "Full range, clockwise and anticlockwise",
+    "One or both wrists"
+   ],
+   "youtube": "dBpBPBXPYcQ"
+  },
+  {
+   "id": "wrist_flexor_stretch",
+   "name": "Wrist flexor stretch",
+   "cues": [],
+   "youtube": "5ZAUqtz9cDw"
+  },
+  {
+   "id": "finger_stack_with_knee_assist",
+   "name": "Finger stack with knee assist",
+   "cues": [],
+   "youtube": "PgInPHQ8KY8"
+  },
+  {
+   "id": "finger_stack_in_plank",
+   "name": "Finger stack in plank",
+   "cues": [],
+   "youtube": "jX6aTnP74bg"
+  },
+  {
+   "id": "hands_rotations",
+   "name": "Hands rotations",
+   "cues": [
+    "Hands flat, shoulders slightly back",
+    "Rotate through the karate chop edge to the back of the hand",
+    "Elbows may bend; keep pushing weight down throughout"
+   ],
+   "youtube": "x-0vsYcB990"
+  },
+  {
+   "id": "hands_back_backward_leans",
+   "name": "Hands back backward leans",
+   "cues": [
+    "Palms flat, elbows locked and pushing forward",
+    "Lean the shoulders back"
+   ],
+   "youtube": "r3zRr7fUfeo"
+  }
+ ],
+ "fear_of_falling": [
+  {
+   "step": 1,
+   "name": "Loading the wrists",
+   "what": "Wrist warm ups, gradually more weight, then a wall tuck hold. Goal: just support the body on the arms and get used to the wall.",
+   "measure": null
+  },
+  {
+   "step": 2,
+   "name": "Hand, foot, foot",
+   "what": "Wall tuck bail: stay tucked and low, get up on the wall, come down by stepping the hand, then each foot. High reps, one side only, so it becomes automatic.",
+   "measure": null
+  },
+  {
+   "step": 3,
+   "name": "Cartwheel bail",
+   "what": "Progress toward a chest to wall bail: extend the legs first, bail with straight legs, hands one step closer, walk in with the hands, tipping point, bail from chest to wall. Do not go closer or higher until that height is comfortable.",
+   "measure": "Bail distance from the wall in cm (floor marker), decreased fractionally each session (a cm or two)"
+  },
+  {
+   "step": 4,
+   "name": "Tipping point",
+   "what": "At about 30 cm from the wall the feet must go over or to the side, not between hands and wall: twist and cartwheel out, the hand guiding the feet round. Step back a distance if fear returns; rehearse the twist where comfortable.",
+   "measure": null
+  },
+  {
+   "step": 5,
+   "name": "Reactive not proactive",
+   "what": "Chest to wall bail: instead of choosing to fall, try to balance chest to wall (even a split second); when you overbalance by accident, bail reactively. Effectively a freestanding bail.",
+   "measure": null
+  },
+  {
+   "step": 6,
+   "name": "First freestanding bail",
+   "what": "Only new part is the kick up. Mission is not to hold: kick with more and more power until you just tip over the top; repeat until it is not scary.",
+   "measure": null
+  },
+  {
+   "step": 7,
+   "name": "The 50/50 rule",
+   "what": "Go into overbalance for every time you fall back in underbalance. Most people play it too safe; be brave. You learn how hard to kick to get the centre of mass over the hands.",
+   "measure": "Overbalance falls vs underbalance falls, aiming at about 50:50"
+  },
+  {
+   "step": 8,
+   "name": "Sticking the handstand (heel pulls)",
+   "what": "Learn how long you can wait before bailing; push with the fingers to slow the momentum and catch it. Heel pulls (the only back to wall drill) teach maximal finger push and wrist flexion strength.",
+   "measure": null
+  }
+ ],
+ "rules": {
+  "reading": "Notation as MFTK: A/B/C order; same letter with numbers (A1/A2) = circuit with rest between each; set ranges to self-regulate; '10+' = expected minimum; upper bound: raise intensity only once the upper limit is hit on all sets; AMRAP over a time period; 4-digit tempo = lower, bottom pause, lift, top pause (X = explosive, '-' = phase absent, C = controlled), metronome 60 bpm. Rest '-' or 'as needed' = rest as required, the default and most common protocol for handstands; a W:R ratio may be given (1:2 = 10 s work, 20 s rest). Handstand progress is non-linear: no session-to-session progression expectation, judge progress by skill tree milestones. Train handstand BEFORE other training (calm, focused mind, before fatiguing the nervous system). The toolkit is designed for the FLOOR (hard floor), not parallettes or mats. If a flexibility program includes shoulders or bridge, space those sessions and handstand sessions by at least 2 days.",
+  "frequency_notes": [
+   "Each program states its own frequency (see programs[].frequency); 'not stated' means the sheet gives none.",
+   "Beginner 1 2.0: higher frequency = faster progress when learning to kick up and balance.",
+   "Intermediate Underbalance A/B alternate on a 5-day pattern: D1 A, D2 B, D3 off, D4 A, D5 B, D6 off, D7 repeat.",
+   "OAHS 1.0: about 2/3 weight shifting to 1/3 press over 6 days: D1 WS, D2 WS, D3 press, D4 off, D5 WS, D6 WS, D7 press/off.",
+   "OAHS 3.0 and 4.0: multiple short sessions per day suggested.",
+   "Press negatives / straddle press programs: 1 in 2 to 1 in 3 of handstand training days.",
+   "Trap raises: end of session, up to 2 x per week; a phase lasts 6 sessions.",
+   "Grease the groove (lesson 12): spread work over short bursts through the day on ONE focus drill; strength moves use reps = RM/2 with at least 15 min rest; stop if technique drops; if you cannot keep the frequency, stick to one scheduled full program.",
+   "FAQ (general, both toolkits): start at one session per week per skill and increase only once you show you recover.",
+   "Shape/line work: do not worry about the line until a 40 s freestanding hold, unless the shape causes pain (lesson 28)."
+  ],
+  "sides_convention": "milestones[].target.sides: 'each' = must be met on each side (sheet says both sides / each side); 'both' = not side-specific or sides not stated.",
+  "key_videos_all_levels": [
+   "13-your-wrists-matter-wrist-warm-up-and-prep",
+   "20-hand-eye-and-scapula-position",
+   "26-the-basic-kick-up-the-50-50-rule"
+  ]
+ },
+ "gaps": [
+  "Lesson 55-one-arm-handstand-prerequisites-with-kaio has no notes file in lessons/ on the box; mapped to exercise one_arm_handstand by title only (with youtube QCzyoJz55NI); cues on that exercise come from lessons 54 and 62.",
+  "Skill tree videos with no lesson notes on the box: scapula anatomy (Beginner 2), how long does it take + examples, arguments for a straight line, 10 tips for a straight line, QDR, stalder / Mechanics of a press part 2 (49 is a placeholder).",
+  "Tuck milestone conflict: B2 3.0 sheet 15 s vs skill tree 10 s (knees in line with hips) vs Intermediate 1.0 entry 'first 10 s tuck'. JSON uses 15 s from the sheet.",
+  "Shape change level 1 and 2 pair tables are scrambled in the text extraction; need a screenshot of Beginner 2 PDF page 2 to verify.",
+  "Skill tree upstream links for the HLAT 15 s and flag branches are not explicit in our transcription; requires set to the Beginner 2 merge (tuck + straight 60 s).",
+  "Croc: tree arrow says elbow lever -> croc; lesson 53 says elbow lever is not a prerequisite.",
+  "Pike press: no move-on criterion or numeric milestone target; pike_press milestone is bool.",
+  "Press programs with move_on 3-5 reps in 1 set and 5 x 5 have no matching skill tree node (milestone_id null).",
+  "Intermediate 5.0, OAHS 3.0 and OAHS 4.0 sheets skip item D; the 6th intermediate program (Flags) is labelled 5.0 on the sheet.",
+  "Intermediate 4.0, 5.0, Flags and OAHS 3.0 sheets give no frequency.",
+  "Rest not shown for B HLAT and E fingertip shifts in OAHS 3.0/4.0 transcription (null).",
+  "Trap raise phase 3 sheet repeats '6 s hold at the top', inconsistent with tempos 3211/3111.",
+  "No lesson notes for: wall tuck bail, wall tuck hold, toe pulls, 5 second game, press walks, chest to wall press negatives, straddle press with pike negatives, pike press, QDR (lesson_slug null).",
+  "Wrist library: 4 playlist exercises have no cues in the PDF transcription: interlocked finger wrist flexor stretch, wrist flexor stretch, finger stack with knee assist, finger stack in plank.",
+  "Frog and crow stand: side link at the split leg balance node; lesson says it is not a milestone, so it is exercise-only (no milestone).",
+  "milestones[].film is true for all per the requested schema; the sheets explicitly ask for video only at cartwheel bail chest to wall and 60 s (milestone video); programs[].film records what each sheet says.",
+  "Tim's and Jamie's journeys, Matt's journey, Liv's journey are motivational only, not mapped to exercises."
+ ]
+}

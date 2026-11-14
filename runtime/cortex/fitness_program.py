@@ -256,6 +256,116 @@ def _code_items(items: list, lib: dict) -> list:
     return out
 
 
+# ---------- generic rule sets (14 Nov 2026): every other pillar's rules are DATA in the drill library ----------
+# A ruleset = metrics (read from results by code), require (what must be measured first), always / rules / fallback
+# drills. Conditions are {metric, op, value}; a condition on a metric that is not measured is false. Smith's published
+# trees are encoded exactly ("marked": "smith"); the rest are ours from the notes ("marked": "ours"), shown as such.
+RULE_KEYS = {"pancake": "pancake_phase1", "shoulder_flexion": "shoulders_phase1"}
+
+
+def ruleset(lib: dict, pillar: str) -> dict | None:
+    rs = (lib.get("rules") or {}).get(pillar)
+    return rs if isinstance(rs, dict) and "metrics" in rs else None
+
+
+def program_pillars(lib: dict) -> list:
+    return sorted(set(RULE_KEYS) | {k for k in (lib.get("rules") or {}) if ruleset(lib, k)})
+
+
+def metrics(rs: dict, res: dict, answers: dict) -> dict:
+    out: dict = {}
+    for q in rs.get("questions") or []:
+        if (answers or {}).get(q) not in (None, ""):
+            out[q] = answers[q]
+    for m in rs.get("metrics") or []:
+        k, v = m.get("kind"), None
+        if k == "value":
+            v = _val(res, m.get("test"), m.get("measure"))
+        elif k == "worst":
+            v = _worst(res, m.get("test"), m.get("measure"))
+        elif k == "best":
+            vs = [x for x in (_val(res, m.get("test"), m.get("measure"), s) for s in ("L", "R", "both")) if _n(x)]
+            v = max(vs) if vs else None
+        elif k == "label":
+            x = _val(res, m.get("test"), m.get("measure"))
+            v = str(x).lower() if x is not None else None
+        elif k in ("diff", "absdiff"):
+            a, b = out.get(m.get("a")), out.get(m.get("b"))
+            if _n(a) and _n(b):
+                v = abs(a - b) if k == "absdiff" else a - b
+        if v is not None:
+            out[m["id"]] = v
+    return out
+
+
+def _holds(c: dict, mv: dict) -> bool:
+    if c.get("metric") not in mv:
+        return False
+    x, op, y = mv[c["metric"]], c.get("op", "=="), c.get("value")
+    try:
+        if op == "in":
+            return x in (y or []) or str(x).lower() in [str(z).lower() for z in (y or [])]
+        if op in ("==", "!="):
+            eq = x == y or str(x).lower() == str(y).lower()
+            return eq if op == "==" else not eq
+        x, y = float(x), float(y)
+        return {"<": x < y, "<=": x <= y, ">": x > y, ">=": x >= y}[op]
+    except (TypeError, ValueError, KeyError):
+        return False
+
+
+def build_generic(pillar: str, lib: dict, rs: dict, res: dict, answers: dict) -> dict:
+    mv = metrics(rs, res, answers)
+    need = [r for r in rs.get("require") or [] if r not in mv]
+    if need:
+        pl = next((p for p in fm.pillars() if p["id"] == pillar), {})
+        tnames = {t["id"]: t["name"] for t in pl.get("tests") or []}
+        qnames = {q["id"]: q.get("name") or q["id"] for q in pl.get("questions") or []}
+        mtest = {m["id"]: m.get("test") for m in rs.get("metrics") or []}
+        why, seen = [], set()
+        for r in need:
+            txt = ("answer: " + qnames[r]) if r in qnames else ("measure " + tnames.get(mtest.get(r), str(mtest.get(r) or r)
+                                                                                         .replace("_", " ")))
+            if txt not in seen:
+                seen.add(txt)
+                why.append({"id": r, "why": txt})
+        return {"pillar": pillar, "ready": False, "answers": dict(answers or {}), "items": [], "notes": [], "missing": why}
+    by = {d["id"]: d for d in lib["drills"]}
+    items, notes, seen = [], [], set()
+
+    def add(x, why):
+        if x.get("drill_id") in by and x["drill_id"] not in seen:
+            seen.add(x["drill_id"])
+            items.append({k: v for k, v in {"code": x.get("code"), "drill_id": x["drill_id"],
+                                            "optional": bool(x.get("optional")), "why": why}.items() if v not in (None, "")})
+    for x in rs.get("always") or []:
+        add(x, x.get("why") or "always in this program")
+    for r in rs.get("rules") or []:
+        if all(_holds(c, mv) for c in r.get("when") or []):
+            for x in r.get("add") or []:
+                add(x, r.get("why") or "")
+            if r.get("note"):
+                notes.append(r["note"])
+    if not any(by[i["drill_id"]].get("slot") in ("main", "attribute") for i in items):
+        for x in rs.get("fallback") or []:
+            add(x, x.get("why") or "default when no weak link stands out")
+    if any(i.get("code") for i in items) and not all(i.get("code") for i in items):
+        for i in items:
+            i.pop("code", None)             # mixed: let the slot order decide every code
+    notes += list(rs.get("notes") or [])
+    if rs.get("marked") == "ours":
+        notes.append("These rules are ours, written from the course notes (Smith's own builder logic is not visible).")
+    missing_m = [m["id"] for m in rs.get("metrics") or [] if m["id"] not in mv]
+    if missing_m:
+        notes.append("Not measured yet, so not used: " + ", ".join(missing_m).replace("_", " ") + ".")
+    return {"pillar": pillar, "ready": bool(items), "answers": dict(answers or {}), "missing": [] if items else
+            [{"id": "nothing", "why": "no drill fits the results yet"}], "items": _code_items(items, lib),
+            "notes": notes, "rules": ("Smith's own builder, " if rs.get("marked") == "smith" else "our rules, ")
+            + str(rs.get("source") or ""), "frequency": rs.get("frequency")
+            or "1 session a week to start (FAQ: minimum effective dose)", "built_on": date.today().isoformat(),
+            "metrics": mv}
+
+
 def build(pillar: str, answers: dict | None = None) -> dict:
     """A DRAFT program from the latest results. Never saved here."""
     lib = fm.drill_library()
@@ -276,6 +386,8 @@ def build(pillar: str, answers: dict | None = None) -> dict:
                     "missing": [{"id": "flexion", "why": "measure the Leahy test or passive and active flexion first"}]}
         missing = []                      # then build from whatever is measured, and say what is not
         rules = "our shoulder rules from the course notes"
+    elif ruleset(lib, pillar):
+        return build_generic(pillar, lib, ruleset(lib, pillar), res, answers or {})
     else:
         return {"pillar": pillar, "ready": False, "missing": [{"id": "pillar", "why": "no program rules for this pillar yet"}],
                 "items": [], "notes": []}
@@ -301,7 +413,7 @@ def save(pillar: str, spec: dict, activate: bool = False) -> dict:
     return {"ok": True, "id": uid}
 
 
-def log_session(program: str, day: str, items: list, note: str = "") -> dict:
+def log_session(program: str, day: str, items: list, note: str = "", blocks: list | None = None) -> dict:
     p = db.one("select uid, pillar from fitness.mobility_programs where uid=%s and not deleted", (program,))
     if not p:
         raise ValueError("no such program")
@@ -317,11 +429,19 @@ def log_session(program: str, day: str, items: list, note: str = "") -> dict:
         deeper = it.get("deeper") if it.get("deeper") in ("yes", "no", "same") else None
         if not sets and not it.get("marker") and not deeper:
             continue
+        wu = it.get("warmup") if isinstance(it.get("warmup"), dict) else {}
+        warm = {"sets_done": int(wu.get("sets_done") or 0), "of": int(wu.get("of") or 0),
+                "reached": wu.get("reached") if wu.get("reached") in ("yes", "no") else None}
         clean.append({"code": str(it.get("code", ""))[:4], "drill_id": str(it.get("drill_id", ""))[:60], "sets": sets,
-                      "marker": str(it.get("marker") or "")[:120], "deeper": deeper, "note": str(it.get("note") or "")[:300]})
+                      "marker": str(it.get("marker") or "")[:120], "deeper": deeper, "note": str(it.get("note") or "")[:300],
+                      "warmup": warm})
     if not clean:
         raise ValueError("nothing logged")
     uid = f"ms_{secrets.token_hex(6)}"
+    blk = [{"id": str(b.get("id", ""))[:40], "picked": [str(x)[:60] for x in (b.get("picked") or [])][:8]}
+           for b in (blocks or []) if isinstance(b, dict)]
+    if blk:
+        clean.append({"code": "_blocks", "drill_id": "", "sets": [], "blocks": blk})
     db.execute("insert into fitness.mobility_sessions (uid, program, pillar, day, items, note) values (%s,%s,%s,%s,%s,%s)",
                (uid, program, p["pillar"], date.fromisoformat(day), Json(clean), (note or "")[:300] or None))
     return {"ok": True, "id": uid}
@@ -416,7 +536,68 @@ def target(item: dict, history: list) -> dict:
             "text": "This drill has run its course: retest and move to the next phase."}
 
 
+# ---------- warm-ups (lesson 06 + Training Cheatsheet, FAQ) ----------
+# Every drill is warmed up right before it, same set-up and tempo, intensity rising set by set, to about 85% of last
+# session's depth. The first drill of the session gets the full ladder, later drills the last two rungs. Warm-up sets
+# never count as program sets. Bridge adds his general spine + wrist warm-up before and a cool down after.
+WARMUP_LESSON = {"lesson_slug": "06-fundamentals_warm-up", "lesson_course": "mftk", "name": "How to warm up"}
+BLOCKS = {
+    "bridge": {
+        "before": [
+            {"id": "bridge_general", "name": "General spine warm-up", "lesson_slug": "176-bridge-general-warm-up",
+             "how": "Pick 1-2, 1-2 sets each, easy, no max range; lift as you fold.",
+             "options": ["8 direction spine movement", "Spine circles", "Cat cow"]},
+            {"id": "bridge_wrist", "name": "Wrist warm-up", "lesson_slug": "172-bridge_wrist-warm-up",
+             "how": "Pick 2-3, a couple of minutes each, loading the wrists progressively.",
+             "options": ["Finger extensions", "Wrist extension side to side", "Wrist extension forward and back",
+                         "Wrist raises", "Wrist 360 extension", "Wrist circles"]}],
+        "after": [
+            {"id": "bridge_cooldown", "name": "Cool down (spine reset)", "lesson_slug": "177-bridge-cooldown",
+             "how": "Pick 1-2, a few easy reps.", "options": ["Jefferson curl (5-10 kg)", "Round back pike hang", "Hanging"]}]},
+}
+
+
+def warmup(item: dict, first: bool) -> list:
+    """The warm-up ladder for one drill, from its type and last session (cheatsheet rows)."""
+    meth, d, last = item.get("method"), item.get("dose") or {}, item.get("last") or {}
+    if meth == "soft_tissue" or d.get("by_feel"):
+        return []
+    weighted = bool((item.get("load") or {}).get("uses_weight"))
+    if meth == "strength":
+        kg = max([s.get("kg") or 0 for s in last.get("sets") or []] or [0])
+        f = (lambda x: f"{round(kg * x * 2) / 2:g} kg") if kg else (lambda x: {0.5: "about half", 0.75: "about 3/4",
+                                                                               0.9: "about 90%"}[x] + " of working weight")
+        rows = [{"label": "Light", "do": f"{f(0.5)} x 5, both sides", "rest": "10-20 s"},
+                {"label": "Medium", "do": f"{f(0.75)} x 3", "rest": "10-20 s"},
+                {"label": "Heavy", "do": f"{f(0.9)} x 1-2", "rest": "then full rest"}]
+    elif d.get("hold_s") and not d.get("reps"):
+        rows = [{"label": "Low", "do": "10-20 s hold, easy depth", "rest": "10-20 s"},
+                {"label": "Medium/high", "do": "10-20 s hold, deeper", "rest": "30 s"},
+                {"label": "High", "do": "3-10 s at or near your working depth", "rest": "then full rest"}]
+    else:
+        w = lambda t: (", " + t) if weighted else ""
+        rows = [{"label": "Low", "do": "3-4 reps, deeper each rep" + w("no weight"), "rest": "10-20 s"}]
+        if weighted:
+            rows.append({"label": "Medium", "do": "3-4 reps, 50-100% of working weight", "rest": "10-20 s"})
+        rows += [{"label": "Medium/high", "do": "2-3 reps" + w("working weight") + ", push depth", "rest": "30 s"},
+                 {"label": "High", "do": "1-2 reps, close to last session's depth", "rest": "then full rest"}]
+    return rows if first else rows[-2:]
+
+
 def programs_state() -> dict:
+    """Programs, sessions and which pillars can build one."""
+    out = _programs_state()
+    out["program_pillars"] = program_pillars(fm.drill_library())
+    out["warmup_lesson"] = WARMUP_LESSON
+    out["blocks"] = BLOCKS
+    for p in out["programs"]:
+        if p["status"] == "active":
+            for k, it in enumerate(p["spec"].get("items", [])):
+                it["warmup"] = warmup(it, k == 0 or (k == 1 and p["spec"]["items"][0].get("optional")))
+    return out
+
+
+def _programs_state() -> dict:
     progs = [{"id": r["uid"], "pillar": r["pillar"], "phase": r["phase"], "status": r["status"],
               "started": r["started"].isoformat() if r["started"] else None, "spec": r["spec"]}
              for r in db.query("select * from fitness.mobility_programs where not deleted and status in ('draft','active') "

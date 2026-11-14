@@ -2549,6 +2549,39 @@ def _cases():
     case("a pancake program is Smith's phase 1 tree answered from the results by code, and each drill's next target "
          "follows his ladder: deeper keeps the dose, no new depth adds time, strength adds weight", "mobility programs 14 Nov",
          _mob_program)
+    def _mob_all():
+        # 14 Nov 2026 (owner: "the whole app fully ready"): every pillar's rules are data the engine evaluates; every
+        # drill gets a warm-up ladder (lesson 06); the handstand programs and milestones are data and every reference
+        # in them resolves
+        import json as _j
+        from . import fitness_mobility as fm, fitness_program as fp, fitness_calisthenics as fc
+        lib = _j.load(open(fm.DRILLS_FILE, encoding="utf-8"))
+        ids = {d["id"] for d in lib["drills"]}
+        ok_rules = True
+        for pid, rs in lib["rules"].items():
+            if not fp.ruleset(lib, pid):
+                continue
+            mids = {m["id"] for m in rs["metrics"]} | set(rs.get("questions") or [])
+            used = [a["drill_id"] for a in rs.get("always", [])] + [a["drill_id"] for r in rs.get("rules", [])
+                                                                   for a in r.get("add", [])]
+            ok_rules &= all(u in ids for u in used) and all(c["metric"] in mids for r in rs.get("rules", [])
+                                                           for c in r.get("when", []))
+        hs = _j.load(open(fc.DATA_FILE, encoding="utf-8"))
+        exs = {e["id"] for e in hs["exercises"]}
+        msi = {m["id"] for m in hs["milestones"]}
+        refs = all(i["exercise_id"] in exs for st in hs["stages"] for p in st["programs"] for i in p["items"])
+        reqs = all(r in msi for m in hs["milestones"] for r in m.get("requires") or [])
+        warm = fp.warmup({"method": "loaded", "dose": {"reps": "8"}, "load": {"uses_weight": True}}, True)
+        sw = fp.warmup({"method": "strength", "dose": {"reps": "5-8"}, "last": {"sets": [{"reps": 6, "kg": 8}]}}, True)
+        gen = fp.build_generic("x", {"drills": [{"id": "a", "name": "A", "slot": "main", "method": "passive"}]},
+                               {"metrics": [{"id": "t", "kind": "worst", "test": "t", "measure": "deg"}], "require": ["t"],
+                                "always": [{"drill_id": "a"}]}, {}, {})
+        return (ok_rules and "side_split" in fp.program_pillars(lib) and refs and reqs and len(hs["stages"]) >= 6
+                and len(warm) == 4 and warm[0]["label"] == "Low" and sw[0]["do"].startswith("4 kg")
+                and not fp.warmup({"method": "soft_tissue", "dose": {}}, True) and gen["ready"] is False
+                and "bridge" in fp.BLOCKS)
+    case("every pillar's program rules are data the engine evaluates, every drill has a warm-up ladder, and the "
+         "handstand programs and milestones resolve", "whole app 14 Nov", _mob_all)
     case("pancake and shoulder tests and every drill come from the course notes as data, each lesson plays inside the "
          "app through a short-lived signed link, and a bad lesson id is refused", "course library 14 Nov", _mob_library)
     case("the fold and elbow/head scales are the program builder's own steps, and a measured frame is saved clean "
