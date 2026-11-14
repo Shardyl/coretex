@@ -54,7 +54,8 @@
    "id": "single_leg_calf_stretch",
    "name": "Single-leg standing calf stretch",
    "pillars": [
-    "pancake"
+    "pancake",
+    "pike"
    ],
    "slot": "isolated",
    "method": "passive",
@@ -106,7 +107,8 @@
    "id": "donkey_calf_stretch",
    "name": "Donkey calf stretch",
    "pillars": [
-    "pancake"
+    "pancake",
+    "pike"
    ],
    "slot": "isolated",
    "method": "passive",
@@ -372,7 +374,8 @@
    "name": "Drop stance squat",
    "pillars": [
     "pancake",
-    "side_split"
+    "side_split",
+    "squat"
    ],
    "slot": "isolated",
    "method": "loaded",
@@ -425,7 +428,8 @@
    "id": "standing_pike_good_morning",
    "name": "Standing pike good morning",
    "pillars": [
-    "pancake"
+    "pancake",
+    "pike"
    ],
    "slot": "isolated",
    "method": "loaded",
@@ -479,7 +483,8 @@
    "id": "pike_good_morning_b_stance",
    "name": "Pike good morning, B-stance",
    "pillars": [
-    "pancake"
+    "pancake",
+    "pike"
    ],
    "slot": "isolated",
    "method": "loaded",
@@ -527,7 +532,8 @@
    "id": "pike_good_morning_leg_elevated",
    "name": "Pike good morning, leg elevated",
    "pillars": [
-    "pancake"
+    "pancake",
+    "pike"
    ],
    "slot": "isolated",
    "method": "loaded",
@@ -1506,6 +1512,7 @@
    "id": "straps_band_routine",
    "name": "Straps grip band routine",
    "pillars": [
+    "shoulder_extension",
     "shoulder_flexion"
    ],
    "slot": "isolated",
@@ -1673,6 +1680,7 @@
    "id": "pec_stretch_flyes",
    "name": "Loaded pec stretch (pec stretch flyes)",
    "pillars": [
+    "shoulder_extension",
     "shoulder_flexion"
    ],
    "slot": "isolated",
@@ -1725,6 +1733,8 @@
    "id": "wall_pec_stretch",
    "name": "Wall pec stretch (passive, contract relax, lift-offs)",
    "pillars": [
+    "bridge",
+    "shoulder_extension",
     "shoulder_flexion"
    ],
    "slot": "isolated",
@@ -1775,6 +1785,7 @@
    "id": "inlocates_dislocates",
    "name": "Inlocates and dislocates (stick)",
    "pillars": [
+    "shoulder_extension",
     "shoulder_flexion"
    ],
    "slot": "main",
@@ -1831,6 +1842,7 @@
    "id": "er_contract_relax",
    "name": "External rotation contract relax (band, elbow on knee)",
    "pillars": [
+    "bridge",
     "shoulder_flexion"
    ],
    "slot": "isolated",
@@ -3734,6 +3746,1874 @@
    "lesson_slug": "136-rec-fem-pin-stretch",
    "note_file": "136-rec-fem-pin-stretch.md",
    "lesson_course": "mftk"
+  },
+  {
+   "id": "bridge_wrist_warm_up",
+   "name": "Bridge wrist warm up",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "technique",
+   "method": "active",
+   "components": [
+    "wrists"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": "a couple of minutes per drill",
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "172: choose 2-3 of the 6 drills, a couple of minutes each, progressively loading"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Which 2-3 drills used",
+    "options": null
+   },
+   "cues": [
+    "Choose 2-3: finger extensions, wrist extension side to side, wrist extension forward and back, wrist raises, wrist 360 extension, wrist circles",
+    "Progressively load the joint and tissues"
+   ],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": null,
+   "note_file": "172-bridge_wrist-warm-up.md"
+  },
+  {
+   "id": "bridge_general_warm_up",
+   "name": "Bridge general spine warm up",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "technique",
+   "method": "active",
+   "components": [
+    "spine"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": "1-2",
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "176: pick 1-2 exercises, 1-2 sets each, before the first bridge drill's own warm up"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Which exercises (8 direction spine / spine circles / cat cow); no range logging",
+    "options": null
+   },
+   "cues": [
+    "Pick 1-2: 8 direction spine movement, spine circles, cat cow",
+    "Controlled, articulated, build up gradually",
+    "Do not max out range",
+    "Practise the arching principle: lift up as you fold"
+   ],
+   "mistakes": [
+    "Hip hinging instead of moving the spine (8 direction)"
+   ],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "176-bridge-general-warm-up",
+   "note_file": "176-bridge-general-warm-up.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "bridge_cooldown",
+   "name": "Bridge cool down (spinal flexion)",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "isolated",
+   "method": "passive",
+   "components": [
+    "spine"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": "1-2",
+    "reps": "a few",
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "177: a few reps of 1-2 drills after bridge training, easy"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "Jefferson curl ideally 5-10 kg",
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Which (Jefferson curl kg / pike hang / dead hang time, feet down allowed)",
+    "options": null
+   },
+   "cues": [
+    "Pick 1-2: Jefferson curl, round back pike hang, hanging",
+    "Spine reset, flexed positions that feel good",
+    "Not maxing out"
+   ],
+   "mistakes": [],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "177-bridge-cooldown",
+   "note_file": "177-bridge-cooldown.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "arching_couch_stretch",
+   "name": "Arching couch stretch",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "isolated",
+   "method": "isometric",
+   "components": [
+    "hip_extension",
+    "spinal_extension"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "187: hold for time, contract relax rounds, or reps with a few seconds at the bottom; no numbers"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Back knee distance to wall, head touchpoint height on the wall, head-to-toe milestone",
+    "options": null
+   },
+   "cues": [
+    "Back knee to the wall on padding, front foot slightly out",
+    "Sink hips, then lift out slightly",
+    "Max posterior pelvic tilt",
+    "Lift the bottom ribs away from the hips, arch from the upper back",
+    "Head LIGHTLY touches the wall, never press",
+    "Exit by flexing the spine, head last"
+   ],
+   "mistakes": [
+    "Dropping the belly forward and starting the arch from the neck"
+   ],
+   "progressions": [
+    "Slide the head further down the wall",
+    "Back knee closer to the wall",
+    "Head to toe = milestone"
+   ],
+   "regressions": [
+    "Press the front foot to lift the hips higher until the head reaches the wall"
+   ],
+   "lesson_slug": "187-arching-couch-stretch",
+   "note_file": "187-arching-couch-stretch.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "arching_lunge",
+   "name": "Arching lunge",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "isolated",
+   "method": "isometric",
+   "components": [
+    "hip_extension",
+    "spinal_extension",
+    "shoulder_flexion"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "188: holds, contract relax or reps; no numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "None until two arms cannot go further",
+    "how_to_choose": "Stick plus 0.5-2 kg; should pull you slightly deeper without collapsing the arch"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Arms (one / two), load kg, hand touchpoint height on the wall",
+    "options": null
+   },
+   "cues": [
+    "Pad the back knee, back foot against the wall",
+    "Max posterior pelvic tilt",
+    "Arms locked overhead, set back and fixed",
+    "Lift ribs from the hip bones first, then reach the hands back to the wall",
+    "Squeeze glutes, slide the hands down the wall"
+   ],
+   "mistakes": [
+    "Belly drops forward, arch starts from the neck"
+   ],
+   "progressions": [
+    "One hand on the knee -> two arms -> add 0.5-2 kg",
+    "Work down the wall"
+   ],
+   "regressions": [
+    "One arm on the knee"
+   ],
+   "lesson_slug": "188-arching-lunge",
+   "note_file": "188-arching-lunge.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "single_leg_glute_bridge",
+   "name": "Single leg glute bridge",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "isolated",
+   "method": "strength",
+   "components": [
+    "hip_extension"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "191: usually reps (prescribed number), long top hold an option; no numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "Plate on the working-side hip; add weight when all prescribed reps reach full height; go lighter if height drops"
+   },
+   "marker": {
+    "kind": "kg",
+    "label": "Load kg per side, full height every rep (Y/N)",
+    "options": null
+   },
+   "cues": [
+    "Working foot close to the butt, other knee to the sky",
+    "Drive the heel down, glutes to full hip extension",
+    "Push diagonally toward the head: escalator, not elevator",
+    "Squeeze again at the top, pause, lower"
+   ],
+   "mistakes": [
+    "Pressing up with the elbows",
+    "Load so heavy that hip height drops"
+   ],
+   "progressions": [
+    "Add weight"
+   ],
+   "regressions": [],
+   "lesson_slug": "191-single-leg-glute-bridge",
+   "note_file": "191-single-leg-glute-bridge.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "arching_standing_kneeling",
+   "name": "Arching, standing and kneeling",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "isolated",
+   "method": "active",
+   "components": [
+    "spinal_extension"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": "a few at the bottom of each rep",
+    "tempo": null,
+    "cr": "example C5 R5 (push into the support 5 s, relax in the arch 5 s)",
+    "rest_s": null,
+    "source": "193: reps with a few seconds at the bottom, one long hold, or contract relax; no set/rep numbers"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Head-leading wall touchpoint (hands-leading: target height cm/object)",
+    "options": [
+     "back of head",
+     "top of head",
+     "forehead",
+     "nose",
+     "chin"
+    ]
+   },
+   "cues": [
+    "Four variations: kneeling head leading (simplest), standing head leading, kneeling hands leading, standing hands leading",
+    "String of pearls: lift chin, neck, collarbones, chest, belly button up in turn",
+    "Up first, then over",
+    "Touch the wall lightly, never press",
+    "Squeeze glutes, legs straight",
+    "Exit by pulling with the abs, head last"
+   ],
+   "mistakes": [
+    "Crunching or dumping backwards",
+    "Knee bend driving the depth",
+    "Skipping the bottom hold"
+   ],
+   "progressions": [
+    "Lower the target when all sets are completed at a height"
+   ],
+   "regressions": [
+    "Start high and practise technique"
+   ],
+   "lesson_slug": "193-arching-standing-kneeling",
+   "note_file": "193-arching-standing-kneeling.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "cobra_thoracic_lumbar",
+   "name": "Cobra, thoracic (low) and lumbar (high)",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "isolated",
+   "method": "active",
+   "components": [
+    "spinal_extension",
+    "posterior_chain_strength"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "194: hold at the top or reps; no numbers"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Progression stage (then arm position: back / sides / one overhead / both overhead)",
+    "options": [
+     "hands assisting, hold at top",
+     "assisted reps (hands up, hands-free hold and lower)",
+     "hands free hold",
+     "hands free reps"
+    ]
+   },
+   "cues": [
+    "Low cobra = upper thoracic; high cobra (hips on a block ramp) = lumbar",
+    "Retract the shoulder blades",
+    "Drag ribs forward and away from the hips, then lift",
+    "Squeeze glutes, press hips down",
+    "Shallow breathing"
+   ],
+   "mistakes": [
+    "Cheating the lift with a diaphragm push"
+   ],
+   "progressions": [
+    "Arms back -> sides -> one overhead -> both overhead (forward on the lowering first)"
+   ],
+   "regressions": [
+    "Hands assisting the lift"
+   ],
+   "lesson_slug": "194-cobra-thoracic-lumbar",
+   "note_file": "194-cobra-thoracic-lumbar.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "leveraged_thoracic_extension",
+   "name": "Leveraged thoracic extension",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "isolated",
+   "method": "loaded",
+   "components": [
+    "thoracic_extension"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "195: holds at the bottom, reps with a few seconds at the bottom, or contract relax; no numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "Just enough to go deeper without tensing, light enough to lift out between reps; heavier works for holds"
+   },
+   "marker": {
+    "kind": "cm",
+    "label": "Stack height under the back and target height reached for (cm/object or floor)",
+    "options": null
+   },
+   "cues": [
+    "Stable stack (blocks, or foam roller on a platform) under the upper back",
+    "Arms to max shoulder flexion and lock them",
+    "Hips glued to the floor",
+    "Lift the bottom ribs away from the hips"
+   ],
+   "mistakes": [
+    "Lifting the hips to reach the floor"
+   ],
+   "progressions": [
+    "Floor reached easily -> raise the stack",
+    "Lower the target"
+   ],
+   "regressions": [
+    "Higher target"
+   ],
+   "lesson_slug": "195-leveraged-thoracic-extension",
+   "note_file": "195-leveraged-thoracic-extension.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "bridge_end_range_lifts",
+   "name": "Bridge end range lifts",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "attribute",
+   "method": "strength",
+   "components": [
+    "bridge_strength"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": "short pause at the top",
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "196: reps, push up, short hold, lower with control; no numbers"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "cm",
+    "label": "Platform height lifted from (cm / plates), wall-feet used",
+    "options": null
+   },
+   "cues": [
+    "Platform just high enough that you can only just lift off",
+    "Fire the hips first through the feet, shoulders follow almost immediately",
+    "Fingers toward the legs"
+   ],
+   "mistakes": [
+    "Starting with the arms",
+    "Lifting too slowly",
+    "Knees travelling forward (use a wall for the feet)"
+   ],
+   "progressions": [
+    "Progress the platform toward lifting from the floor, or use the double hip drive (note 196 wording ambiguous)"
+   ],
+   "regressions": [],
+   "lesson_slug": "196-bridge-end-range-lifts",
+   "note_file": "196-bridge-end-range-lifts.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "isometric_bridge",
+   "name": "Isometric bridge",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "main",
+   "method": "isometric",
+   "components": [
+    "bridge_position",
+    "thoracic_extension",
+    "shoulder_flexion",
+    "hip_extension"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "197: hold for time (endurance); no numbers"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Chest position (plus feet / hands elevation and feet-to-hands distance)",
+    "options": [
+     "behind hands",
+     "over hands",
+     "past hands"
+    ]
+   },
+   "cues": [
+    "Push tall: hands and feet into the floor",
+    "Expand in all directions",
+    "Hips up, shoulders elevated, armpits over the hands",
+    "Use the feet to push the chest over the hands",
+    "Squeeze glutes, contract the upper back"
+   ],
+   "mistakes": [
+    "Only driving across, not up and over",
+    "Arching only the lumbar"
+   ],
+   "progressions": [
+    "Feet elevated -> lower -> floor -> feet closer to hands -> narrow bridge -> hands elevated"
+   ],
+   "regressions": [
+    "Elevate the feet (174)"
+   ],
+   "lesson_slug": "197-isometric-bridge",
+   "note_file": "197-isometric-bridge.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "bridge_rocks",
+   "name": "Bridge rocks",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "attribute",
+   "method": "active",
+   "components": [
+    "bridge_position",
+    "thoracic_extension"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": "1-5 pause at the deepest point",
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "198: multiple reps per set, pause 1-5 s depending on the program"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Feet / hands elevation, feet-to-hands distance, pause s",
+    "options": null
+   },
+   "cues": [
+    "Same setup and entry as the isometric bridge",
+    "Push hands and feet down, expand, up then over",
+    "Straighten the legs to rock shoulders and chest over the hands",
+    "Pause deep, ease back slightly"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "As isometric bridge: reduce feet elevation, feet closer, narrow, hands elevated"
+   ],
+   "regressions": [
+    "Elevate the feet"
+   ],
+   "lesson_slug": "198-bridge-rocks",
+   "note_file": "198-bridge-rocks.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "bridge_heel_lifts",
+   "name": "Bridge heel lifts",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "attribute",
+   "method": "active",
+   "components": [
+    "bridge_position",
+    "thoracic_extension"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "199: hold the prescribed time per rep; no numbers"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "cm",
+    "label": "Feet-to-hands distance, hold s per rep",
+    "options": null
+   },
+   "cues": [
+    "Prerequisite: floor bridge (feet and hands down) with chest over the hands",
+    "Rise onto the toes, straighten the legs, push shoulders and chest further over",
+    "Lower the heels without losing the position"
+   ],
+   "mistakes": [
+    "Losing the chest-over-hands position as the heels come down"
+   ],
+   "progressions": [
+    "Walk the feet closer to the hands",
+    "Elevate the hands"
+   ],
+   "regressions": [],
+   "lesson_slug": "199-bridge-heel-lifts",
+   "note_file": "199-bridge-heel-lifts.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "bridge_balloon",
+   "name": "Bridge balloon",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "attribute",
+   "method": "contract_relax",
+   "components": [
+    "bridge_position"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "usually C5 R5 = 1 rep",
+    "rest_s": null,
+    "source": "200: contract and relax per prescribed tempo, usually 5 s each"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Rounds, feet / hands elevation",
+    "options": null
+   },
+   "cues": [
+    "Contract: squeeze an imagined balloon between upper back and hamstrings (shorten the back body)",
+    "Relax: expand in all directions, push hands and feet into the floor"
+   ],
+   "mistakes": [
+    "Cannot feel it: back off to an easier bridge, learn it, return"
+   ],
+   "progressions": [
+    "Feet closer to hands -> narrow bridge -> hands elevated"
+   ],
+   "regressions": [
+    "Feet elevated"
+   ],
+   "lesson_slug": "200-bridge-balloon",
+   "note_file": "200-bridge-balloon.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "rotations_into_bridge",
+   "name": "Rotations into bridge",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "technique",
+   "method": "technique",
+   "components": [
+    "bridge_entry"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "201: no numbers; train both sides equally"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Variant (wall / squat / crouch), side, 90+90 or 180, wall height reached",
+    "options": null
+   },
+   "cues": [
+    "Spin on the outside corner of the palm (pisiform), pressing into the support",
+    "Wall: just over arm's length, hands shoulder width, cross-step, rotate, second hand joins halfway",
+    "Floor: hips high, press through the shoulder, elevate the scapula"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Work down the wall to the floor",
+    "Learn both squat and crouch entries"
+   ],
+   "regressions": [
+    "Rotate 90 then another 90",
+    "Stand closer to the wall"
+   ],
+   "lesson_slug": "201-rotations-into-bridge",
+   "note_file": "201-rotations-into-bridge.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "bridge_pushups",
+   "name": "Bridge push ups",
+   "pillars": [
+    "bridge"
+   ],
+   "slot": "attribute",
+   "method": "strength",
+   "components": [
+    "bridge_strength",
+    "posterior_chain_strength",
+    "shoulder_flexors"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": "2-5 at the top",
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "202: reps with 2-5 s top pauses; last rep can end with an isometric bridge hold"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Touchpoint ladder step (standard)",
+    "options": [
+     "top of head to block(s)",
+     "top of head to floor",
+     "upper back touches (head tucked)",
+     "shoulders and hips touch together"
+    ]
+   },
+   "cues": [
+    "Hands close to the shoulders, feet near the hips",
+    "Fire hips first, shoulders follow",
+    "Elbows always above the wrists",
+    "Touch the marker and push back up",
+    "Thoracic ladder: head to block, head, forehead, nose to floor, feet against a wall"
+   ],
+   "mistakes": [
+    "Knees travelling forward on the thoracic ladder"
+   ],
+   "progressions": [
+    "Lower the touchpoint",
+    "Single leg bridge push up (long-term)",
+    "One arm bridge push up (long-term)"
+   ],
+   "regressions": [
+    "Higher block marker"
+   ],
+   "lesson_slug": "202-bridge-pushups",
+   "note_file": "202-bridge-pushups.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "head_to_toe_rcr",
+   "name": "Head to toe rapid contract relax (RCR)",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "attribute",
+   "method": "contract_relax",
+   "components": [
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "3-5",
+    "reps": "56 contractions",
+    "hold_s": null,
+    "tempo": "75 bpm (hard mode: 50 bpm with a pause at the bottom)",
+    "cr": "rapid: about 0.5-0.8 s contract, brief pause, relax and rebound slightly, per beat",
+    "rest_s": "as needed",
+    "source": "35 drill; 36 30-day protocol (stop when no progress 2 sets in a row, max 5 sets)"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Touchpoint reached this set (forward only within a set)",
+    "options": [
+     "stick / table leg",
+     "shaka",
+     "thumbs up",
+     "bent thumbs up",
+     "fist",
+     "4 fingers",
+     "3 fingers",
+     "2 fingers",
+     "1 finger",
+     "toe"
+    ]
+   },
+   "cues": [
+    "Start with the foot LOW (ball of the foot wedged, foot dorsiflexed), working leg straight",
+    "Hinge, head toward the toe, lift the ribs then place them further down",
+    "Contract with the hip flexors, no momentum",
+    "Same measuring arm every time, mirrored",
+    "Never go back a touchpoint inside a set"
+   ],
+   "mistakes": [
+    "Using momentum (that is ballistic, not RCR)",
+    "Pulling with the hands"
+   ],
+   "progressions": [
+    "Foot at about 90 deg (hip height)",
+    "Foot higher (after head to toe)",
+    "Active head to toe (no hands)"
+   ],
+   "regressions": [
+    "Elbow to a stick or table leg"
+   ],
+   "lesson_slug": "35-pike-specialist_rapid-contract-relax",
+   "note_file": "35-pike-specialist_rapid-contract-relax.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "pike_block_crush_leg_elevated",
+   "name": "Block crush, leg elevated",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "technique",
+   "method": "isometric",
+   "components": [
+    "compression"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": "1-2",
+    "reps": null,
+    "hold_s": "5-30, same time each leg",
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "37"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Block position",
+    "options": [
+     "armpit",
+     "chest",
+     "hip"
+    ]
+   },
+   "cues": [
+    "Leg up at about hip height, hips square to the leg",
+    "Yoga block between thigh and abdomen",
+    "Drive the torso down AND the leg up, ramp from about 20% to about 90%",
+    "Sweet spot a little short of end range"
+   ],
+   "mistakes": [
+    "Expecting it to make you more flexible (it is a technique drill)"
+   ],
+   "progressions": [
+    "Block lower toward the hip"
+   ],
+   "regressions": [
+    "Block at the chest or armpit"
+   ],
+   "lesson_slug": "37-pike-drill_block-crush-leg-elevated",
+   "note_file": "37-pike-drill_block-crush-leg-elevated.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "standing_block_crush",
+   "name": "Standing block crush",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "technique",
+   "method": "contract_relax",
+   "components": [
+    "compression"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "push down about 3 s, relax about 3 s (or one continuous hold)",
+    "rest_s": null,
+    "source": "38"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "blocks",
+    "label": "Block height (stack / floor / feet elevated by X cm), format, time",
+    "options": null
+   },
+   "cues": [
+    "Standing fold, straight legs, hands pressing down on blocks",
+    "Push comes from closing the torso-thigh gap (hip flexors, abs)"
+   ],
+   "mistakes": [
+    "Pushing with the arms"
+   ],
+   "progressions": [
+    "Lower blocks -> floor -> feet elevated"
+   ],
+   "regressions": [
+    "Higher stack"
+   ],
+   "lesson_slug": "38-pike-drill_standing-block-crush",
+   "note_file": "38-pike-drill_standing-block-crush.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "knee_extension_calf_stretch",
+   "name": "Knee extension calf stretch",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "isolated",
+   "method": "passive",
+   "components": [
+    "calves"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "40: hold for time or reps; no numbers (60: passive calf sets of 90 s or more work well)"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Slant board set-up (block config), hold s or reps, side",
+    "options": null
+   },
+   "cues": [
+    "Two yoga blocks as a slant board, hold a solid object",
+    "Bend the knee, push the hip forward",
+    "Keep the hip there and extend the knee, fight the knee back"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Steeper slant"
+   ],
+   "regressions": [
+    "Flatter slant"
+   ],
+   "lesson_slug": "40-pike-drill_knee-extension-calf-stretch",
+   "note_file": "40-pike-drill_knee-extension-calf-stretch.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "tibialis_raises",
+   "name": "Tibialis anterior raises",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "isolated",
+   "method": "strength",
+   "components": [
+    "dorsiflexors"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "41: no sets/reps/tempo; top hold per prescribed tempo"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "Band (sit further back / double loop / thicker) or a light kettlebell"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Variant (band / double loop / kettlebell kg / machine), reps, top hold s",
+    "options": null
+   },
+   "cues": [
+    "Band round the ball of the foot, working leg straight",
+    "Pull the foot up, hold the fully shortened top position"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Tighter or thicker band",
+    "Kettlebell on a bench for range at the bottom"
+   ],
+   "regressions": [],
+   "lesson_slug": "41-pike-drill_tibialis-anterior-raises",
+   "note_file": "41-pike-drill_tibialis-anterior-raises.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "standing_pike_hang",
+   "name": "Standing pike hang",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "attribute",
+   "method": "contract_relax",
+   "components": [
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "C5 R5 (or contract and fight for the whole hold)",
+    "rest_s": null,
+    "source": "45; stay in the hang the whole set"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "Heavy enough to pull you deeper, not so heavy you tense up"
+   },
+   "marker": {
+    "kind": "blocks",
+    "label": "Marker height to reach by the end of the set; platform height; stance",
+    "options": null
+   },
+   "cues": [
+    "Feet together or B-stance (less flexible side first)",
+    "Contract hip flexors, reach to the marker 5 s, relax 5 s in place"
+   ],
+   "mistakes": [
+    "Weight so heavy you tense up"
+   ],
+   "progressions": [
+    "Stand on a box",
+    "Lower the marker"
+   ],
+   "regressions": [
+    "Higher marker"
+   ],
+   "lesson_slug": "45-pike-drill_standing-pike-hang",
+   "note_file": "45-pike-drill_standing-pike-hang.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "jefferson_curl",
+   "name": "Jefferson curl",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "main",
+   "method": "loaded",
+   "components": [
+    "posterior_chain",
+    "spinal_flexion"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "46: reps with brief bottom holds, optional longer hold on the last rep; fewer reps than other loaded stretches; no numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "About 5 kg",
+    "how_to_choose": "Only a few kg more per training phase; never over 30% of deadlift 1RM; any pain = stop"
+   },
+   "marker": {
+    "kind": "kg",
+    "label": "Load kg, platform height, feet flat / balls elevated",
+    "options": null
+   },
+   "cues": [
+    "Stand on a box, toes not over the edge",
+    "Slight posterior tilt, tuck the chin, roll down vertebra by vertebra",
+    "Arms under the shoulders, head stays dropped",
+    "Bottom: contract hip flexors, crush belly to thighs",
+    "Reverse: hip, then spine, head last"
+   ],
+   "mistakes": [
+    "Looking up",
+    "Wide forward hinge instead of a roll"
+   ],
+   "progressions": [
+    "Unilateral B-stance version",
+    "Balls of the feet elevated (calves)"
+   ],
+   "regressions": [],
+   "lesson_slug": "46-pike-drill_jefferson-curl",
+   "note_file": "46-pike-drill_jefferson-curl.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "hanging_magnus",
+   "name": "Hanging magnus",
+   "pillars": [
+    "pike",
+    "squat"
+   ],
+   "slot": "isolated",
+   "method": "loaded",
+   "components": [
+    "adductor_magnus"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "CR hang option: C5 R5 at 70-90% effort",
+    "rest_s": null,
+    "source": "47: reps (straight or round back) or CR hang rounds; no set numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "A few kg",
+    "how_to_choose": "Enough to pull a little deeper"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Side, weight kg, box height, variant",
+    "options": null
+   },
+   "cues": [
+    "Foot of the stretched side up on a box, knee bent",
+    "Turn the knee out slightly, travel forward and down",
+    "Weaker side first"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Round back",
+    "Contract relax hang"
+   ],
+   "regressions": [
+    "Straight back"
+   ],
+   "lesson_slug": "47-pike-drill_hanging-magnus",
+   "note_file": "47-pike-drill_hanging-magnus.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "pike_lift_cracr",
+   "name": "Leg elevated pike lift (CRACR)",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "attribute",
+   "method": "active",
+   "components": [
+    "compression",
+    "posterior_chain"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": "1 rep: lean and drive the heel down 3-8 s, rest 3-5 s, lift the leg and hold 3-8 s, rest 3-5 s",
+    "rest_s": null,
+    "source": "48 (on-screen rep table; rounds not stated)"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "cm",
+    "label": "Object height (cm), lift able to hold 1-2 inches above",
+    "options": null
+   },
+   "cues": [
+    "Height you can lift 1-2 inches above with the standing leg straight",
+    "Ramp the heel drive from about 15% to 90%",
+    "Stand tall, lock both legs, squeeze the standing glute, then lift",
+    "Weakest side first, it sets the height"
+   ],
+   "mistakes": [
+    "Bending the standing leg to lift higher"
+   ],
+   "progressions": [
+    "Higher object (smaller steps near horizontal)"
+   ],
+   "regressions": [
+    "Lower object"
+   ],
+   "lesson_slug": "48-pike-drill_leg-elevated-pike-lift-cracr",
+   "note_file": "48-pike-drill_leg-elevated-pike-lift-cracr.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "seated_pike_active_lifts",
+   "name": "Seated pike / pancake active lifts",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "attribute",
+   "method": "active",
+   "components": [
+    "compression"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "49: time under tension per set is the key variable; set so you can just hold the final rep off the floor; no numbers"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Hand position (fingers before/past the knee), time under tension s per set",
+    "options": null
+   },
+   "cues": [
+    "Lift the legs while pressing hard into the floor and leaning",
+    "Hands further forward = harder",
+    "Same palms or fingertips every session",
+    "One variation per phase"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Move the hands further along the legs",
+    "Raise the feet"
+   ],
+   "regressions": [
+    "Sit on an object (hips elevated)"
+   ],
+   "lesson_slug": "49-pike-drill_seated-pike-pancake-active-lifts",
+   "note_file": "49-pike-drill_seated-pike-pancake-active-lifts.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "hanging_leg_raise",
+   "name": "Hanging leg raise",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "attribute",
+   "method": "active",
+   "components": [
+    "compression"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "51: reps and/or top pauses; no numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "None (bodyweight)",
+    "how_to_choose": "Ankle weights only when stuck or full reps too easy"
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Progression stage",
+    "options": [
+     "bent knee raises",
+     "extensions to straddle",
+     "extensions to pike",
+     "straddle toes to bar",
+     "pike toes to bar",
+     "pike toes to bar with ankle weights"
+    ]
+   },
+   "cues": [
+    "Shoulders slightly passive, near dead hang",
+    "Round the spine, knees to chest",
+    "Control the lowering"
+   ],
+   "mistakes": [
+    "Kipping or swinging",
+    "Head moving away from the shoulders (front lever style)"
+   ],
+   "progressions": [
+    "Next stage",
+    "More reps or longer top pause"
+   ],
+   "regressions": [
+    "Previous stage"
+   ],
+   "lesson_slug": "51-pike-drill_hanging-leg-raise",
+   "note_file": "51-pike-drill_hanging-leg-raise.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "b_stance_rotating_rdl",
+   "name": "B-stance rotating RDL",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "isolated",
+   "method": "loaded",
+   "components": [
+    "glutes_rotators"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "52: no sets/reps"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": null,
+    "how_to_choose": "Load it up (big muscles); straps if grip limits"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Dumbbell kg, reach point on the leg (or deficit height)",
+    "options": null
+   },
+   "cues": [
+    "About 70-80% of bodyweight on the front foot",
+    "Dumbbell in the hand opposite the front leg",
+    "Hinge, send the glute back, reach across toward the front foot",
+    "Weight toward the inner foot, knee stays in"
+   ],
+   "mistakes": [
+    "Knee turning out"
+   ],
+   "progressions": [
+    "Deficit (stand on a ledge)"
+   ],
+   "regressions": [],
+   "lesson_slug": "52-pike-drill_b-stance-rotating-rdl",
+   "note_file": "52-pike-drill_b-stance-rotating-rdl.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "glute_4_6_stretch",
+   "name": "Glute 4-6 HR stretch (lying pigeon)",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "isolated",
+   "method": "passive",
+   "components": [
+    "glutes_rotators"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "53: static hold or contract relax; no seconds stated"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Side, hold s or CR rounds",
+    "options": null
+   },
+   "cues": [
+    "Lie on your back, pull the knee toward the OPPOSITE shoulder",
+    "Other hand externally rotates the shin toward you",
+    "CR: push the foot out against the hand, relax and sink"
+   ],
+   "mistakes": [
+    "Letting the knee drift out to the side"
+   ],
+   "progressions": [],
+   "regressions": [],
+   "lesson_slug": "53-pike-drill_glute-4-6-hr-stretch",
+   "note_file": "53-pike-drill_glute-4-6-hr-stretch.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "sciatic_nerve_ankle",
+   "name": "Sciatic nerve floss, glide, tensioner (ankle)",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "isolated",
+   "method": null,
+   "components": [
+    "nerve"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": "tensioner: a few seconds",
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "54: floss rep = 2 glides; tensioner only 2-4 out of 10 intensity; no set numbers"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Variant reached",
+    "options": [
+     "floss",
+     "glide",
+     "tensioner"
+    ]
+   },
+   "cues": [
+    "Leg on an elevated object, adducted across and knee turned in",
+    "Floss: point foot + tuck chin, then dorsiflex + look up",
+    "Glide: neck still, alternate point and dorsiflex",
+    "Tensioner: dorsiflex AND tuck chin together, 2-4/10 only",
+    "Light tingling OK; any pain = stop"
+   ],
+   "mistakes": [
+    "Fighting for balance (use hands or a support)"
+   ],
+   "progressions": [
+    "Floss -> glide -> tensioner",
+    "More hip flexion and spine rounding"
+   ],
+   "regressions": [
+    "Stay upright"
+   ],
+   "lesson_slug": "54-pike-drill_sciatic-nerve-ankle-joint",
+   "note_file": "54-pike-drill_sciatic-nerve-ankle-joint.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "sciatic_nerve_knee",
+   "name": "Sciatic nerve floss, glide, tensioner (knee)",
+   "pillars": [
+    "pike"
+   ],
+   "slot": "isolated",
+   "method": null,
+   "components": [
+    "nerve"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "55: no reps, holds or intensity stated (54: tensioner about 2-4/10)"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": null
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Variant reached",
+    "options": [
+     "floss",
+     "glide",
+     "tensioner"
+    ]
+   },
+   "cues": [
+    "Sit on a box, soft block under the working thigh, foot hanging",
+    "Floss: knee straight + toes back + head back, then knee bent + head down",
+    "Glide: head fixed, bend and straighten the knee",
+    "Tensioner: straighten the knee and pull the head down together"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Lean forward and round the upper back"
+   ],
+   "regressions": [
+    "Stay upright, head neutral"
+   ],
+   "lesson_slug": "55-pike-drill_sciatic-nerve-knee-joint",
+   "note_file": "55-pike-drill_sciatic-nerve-knee-joint.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "hip_internal_rotation",
+   "name": "Hip internal rotation (prone, supine, seated)",
+   "pillars": [
+    "pike",
+    "squat"
+   ],
+   "slot": "isolated",
+   "method": "active",
+   "components": [
+    "hip_ir"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "56: reps with isometric pauses, optional 10 s overcoming isometric against a heavy band first; effort 8/10; no set/rep numbers"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "Prone with ankle weights first time",
+    "how_to_choose": "Ankle weights -> nothing -> band (prone); band or ankle weights seated"
+   },
+   "marker": {
+    "kind": "ladder",
+    "label": "Variation",
+    "options": [
+     "prone",
+     "supine",
+     "seated"
+    ]
+   },
+   "cues": [
+    "Block between the knees, about hip-socket width",
+    "Send the feet out hard for the whole time",
+    "L/R over about 15 deg apart: one side at a time to match"
+   ],
+   "mistakes": [],
+   "progressions": [
+    "Prone -> supine -> seated (passive to active)"
+   ],
+   "regressions": [
+    "Prone with ankle weights"
+   ],
+   "lesson_slug": "56-pike-drill_hip-internal-rotation",
+   "note_file": "56-pike-drill_hip-internal-rotation.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "horse_stance_squat",
+   "name": "Horse stance squat",
+   "pillars": [
+    "squat"
+   ],
+   "slot": "main",
+   "method": "loaded",
+   "components": [
+    "adductors",
+    "hip_flexion"
+   ],
+   "primary": [],
+   "unilateral": false,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": "3-4",
+    "reps": "8",
+    "hold_s": null,
+    "tempo": "2310",
+    "cr": null,
+    "rest_s": "60-90",
+    "source": "89 side split phase 1 parameters (applied to squat by us); 106-107: pauses and an end-of-set isometric are best for depth"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "Most people 4-12 kg (106)",
+    "how_to_choose": "A weight that pulls you deeper without tensing; plateau = progressive underload"
+   },
+   "marker": {
+    "kind": "steps",
+    "label": "Step width and hips vs knee line (above / at / below)",
+    "options": null
+   },
+   "cues": [
+    "Knees out, feet turned out (not ballet second)",
+    "Sit back, spine extended, chest high, weight at the chest",
+    "At the bottom pull the legs apart with the glutes",
+    "Squeeze the adductors to come up, slight forward weight shift"
+   ],
+   "mistakes": [
+    "Squatting at a width that loses the correct position"
+   ],
+   "progressions": [
+    "Hips break the knee line -> widen by a couple of steps (5 -> 7 -> 9)"
+   ],
+   "regressions": [
+    "Narrower stance",
+    "Bodyweight end hold"
+   ],
+   "lesson_slug": "106-horse-stance-squats-overview-positioning",
+   "note_file": "106-horse-stance-squats-overview-positioning.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "split_squat",
+   "name": "Split squat",
+   "pillars": [
+    "squat"
+   ],
+   "slot": "main",
+   "method": "strength",
+   "components": [
+    "knee_flexion",
+    "hip_extension",
+    "ankle_dorsiflexion"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": "bottom",
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "134: no sets/reps given"
+   },
+   "load": {
+    "uses_weight": true,
+    "start": "Learn with dumbbells",
+    "how_to_choose": "Barbell later (safety pins); straps if grip limits"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Variant + elevation cm (constant per phase), load kg, heel wedge height",
+    "options": null
+   },
+   "cues": [
+    "Legs on separate train tracks, front foot out 5-15 deg",
+    "Front knee far over the toes, escalator not elevator",
+    "Back leg as straight as possible",
+    "Weaker leg first, match reps"
+   ],
+   "mistakes": [
+    "90/90 stance",
+    "Front foot straight forward",
+    "Changing elevation height within a phase"
+   ],
+   "progressions": [
+    "Back foot elevated",
+    "Bulgarian",
+    "Both feet elevated",
+    "Reduce heel wedge as ankles improve"
+   ],
+   "regressions": [
+    "Front foot elevated",
+    "Front heel on a wedge or small plate"
+   ],
+   "lesson_slug": "134-split-squats",
+   "note_file": "134-split-squats.md",
+   "lesson_course": "mftk"
+  },
+  {
+   "id": "straps_band_shoulder_extension",
+   "name": "Straps band shoulder extension (directions 3-4)",
+   "pillars": [
+    "shoulder_extension"
+   ],
+   "slot": "isolated",
+   "method": "passive",
+   "components": [
+    "shoulder_extension"
+   ],
+   "primary": [],
+   "unilateral": true,
+   "stretch_at": null,
+   "dose": {
+    "sets": null,
+    "reps": null,
+    "hold_s": null,
+    "tempo": null,
+    "cr": null,
+    "rest_s": null,
+    "source": "152-154: no sets, reps or hold times; free-flow, stay on tight lines until tension fades"
+   },
+   "load": {
+    "uses_weight": false,
+    "start": null,
+    "how_to_choose": "Band tension and anchor height (anchor high to pull the arm further back)"
+   },
+   "marker": {
+    "kind": "text",
+    "label": "Direction (3 straight arm / 4 bent arm), side, anchor height, passive/active",
+    "options": null
+   },
+   "cues": [
+    "Straps grip: hand through the loop, band behind the wrist",
+    "3: straight arm behind the body, anchor high",
+    "4: bent arm, works well with the arm pulled across the body",
+    "Active: pull the scapula opposite the band",
+    "Equal time both sides"
+   ],
+   "mistakes": [
+    "Weak anchor"
+   ],
+   "progressions": [
+    "Fight the band (active)"
+   ],
+   "regressions": [],
+   "lesson_slug": "152-shoulders-drill_straps-band-routine-overview",
+   "note_file": "153-shoulders-drill_straps-band-routine-library.md",
+   "lesson_course": "mftk"
   }
  ],
  "rules": {
@@ -5277,6 +7157,550 @@
     "Weaker side first and match the stronger side (123, 134).",
     "Specialist option (121): Front split overload, isometric front split hands free or lightly tapping, back leg straight, 40-60 s x 3, 120 s rest (up to 5 sets), 2-4x per week for 4 weeks, about 15 min at the end of another session; warm-up 3-5 x 20 s getting wider; every full 60 s add 2-5 cm next set; start next session at set 2 (ideally 3) width; cannot beat distance 3 sessions running -> check recovery, take the next session off; still stuck -> new program."
    ]
+  },
+  "bridge": {
+   "marked": "ours",
+   "source": "171, 174-178, 187-202 (Smith's builder 179 is a Jotform; its logic is not visible); thresholds from 144/146",
+   "metrics": [
+    {
+     "id": "er_worst",
+     "kind": "worst",
+     "test": "er_length",
+     "measure": "angle"
+    },
+    {
+     "id": "pec_worst",
+     "kind": "worst",
+     "test": "pec_major",
+     "measure": "angle"
+    },
+    {
+     "id": "pec_minus_er",
+     "kind": "diff",
+     "a": "pec_worst",
+     "b": "er_worst"
+    },
+    {
+     "id": "couch_worst",
+     "kind": "worst",
+     "test": "couch_stretch_low",
+     "measure": "angle"
+    },
+    {
+     "id": "lunge_worst",
+     "kind": "worst",
+     "test": "kneeling_lunge",
+     "measure": "angle"
+    },
+    {
+     "id": "lunge_minus_couch",
+     "kind": "diff",
+     "a": "lunge_worst",
+     "b": "couch_worst"
+    },
+    {
+     "id": "bridge_level",
+     "kind": "label",
+     "test": "bridge_level",
+     "measure": "level"
+    },
+    {
+     "id": "leahy_worst",
+     "kind": "worst",
+     "test": "leahy",
+     "measure": "angle"
+    }
+   ],
+   "questions": [
+    "healthcare_approval"
+   ],
+   "require": [
+    "healthcare_approval",
+    "er_worst",
+    "pec_worst",
+    "couch_worst",
+    "lunge_worst",
+    "bridge_level"
+   ],
+   "always": [],
+   "rules": [
+    {
+     "when": [
+      {
+       "metric": "bridge_level",
+       "op": "==",
+       "value": "can't lift"
+      }
+     ],
+     "add": [
+      {
+       "drill_id": "bridge_end_range_lifts"
+      },
+      {
+       "drill_id": "single_leg_glute_bridge"
+      },
+      {
+       "drill_id": "arching_standing_kneeling"
+      }
+     ],
+     "note": "Enter with the double hip drive (175). Rotations into bridge on the wall can be used until you have a floor bridge (201).",
+     "why": "196: end range lifts are for those who cannot lift into a full bridge yet; 191: hip extension lifts you into the bridge; 193: arching is easier to scale and accessible to beginners"
+    },
+    {
+     "when": [
+      {
+       "metric": "bridge_level",
+       "op": "==",
+       "value": "chest before hands"
+      }
+     ],
+     "add": [
+      {
+       "drill_id": "isometric_bridge"
+      },
+      {
+       "drill_id": "bridge_rocks"
+      }
+     ],
+     "note": "Elevate the feet until the shoulders start just behind the wrist line and pushing with the feet brings the chest close to over the hands (174). Record the elevation; use it for every bridge drill.",
+     "why": "174/197/198: chest far from over the hands -> feet elevated isometric bridge and rocks teach the chest-over-hands motion"
+    },
+    {
+     "when": [
+      {
+       "metric": "bridge_level",
+       "op": "==",
+       "value": "chest above hands"
+      }
+     ],
+     "add": [
+      {
+       "drill_id": "isometric_bridge"
+      },
+      {
+       "drill_id": "bridge_heel_lifts"
+      }
+     ],
+     "note": "Next step: bring the feet closer to the hands (174, 197).",
+     "why": "197: refines the position once nothing blocks a basic bridge; 199: prerequisite is a floor bridge with the chest over the hands"
+    },
+    {
+     "when": [
+      {
+       "metric": "bridge_level",
+       "op": "==",
+       "value": "chest past hands"
+      }
+     ],
+     "add": [
+      {
+       "drill_id": "bridge_heel_lifts"
+      },
+      {
+       "drill_id": "bridge_balloon"
+      }
+     ],
+     "note": "Progress by elevating the hands on blocks against a wall; once shoulders are over the wrists, go higher (174).",
+     "why": "199/200: advanced depth drills; 174: hands elevation is the progression once the feet are on the floor"
+    },
+    {
+     "when": [
+      {
+       "metric": "er_worst",
+       "op": "<",
+       "value": 45
+      }
+     ],
+     "add": [
+      {
+       "drill_id": "er_contract_relax"
+      }
+     ],
+     "note": "171: limited shoulder flexion is a very common bridge limiter; if so, consider training shoulders first.",
+     "why": "146: full ER = 45 deg past vertical; bridge test 1 (178) is this test; 160 targets subscapularis / teres major"
+    },
+    {
+     "when": [
+      {
+       "metric": "er_worst",
+       "op": "<",
+       "value": 0
+      }
+     ],
+     "add": [],
+     "note": "Cannot reach vertical in external rotation: high priority to stretch subscapularis / teres major (146).",
+     "why": "146"
+    },
+    {
+     "when": [
+      {
+       "metric": "pec_worst",
+       "op": "<",
+       "value": 45
+      }
+     ],
+     "add": [
+      {
+       "drill_id": "wall_pec_stretch"
+      }
+     ],
+     "why": "144: full pec major = at least 45 deg past the body line; bridge test 2 (178) is this test; 158 targets pec major"
+    }
+   ],
+   "fallback": [
+    {
+     "drill_id": "isometric_bridge",
+     "why": "197: the base bridge drill"
+    }
+   ],
+   "frequency": null,
+   "notes": [
+    "Session shape: wrist warm up (172) and general spine warm up (176), the drills, then a cool down of 1-2 flexion drills (177, drill bridge_cooldown).",
+    "Hip and spine extension drills from the notes (arching couch stretch 187, arching lunge 188, cobra 194, leveraged thoracic extension 195) are in the library but no note says which test result calls for them, so no rule adds them.",
+    "Recording the feet / hands elevation used is the main way to track bridge progress (174).",
+    "Leahy (171): the course page turns it into 'bridge now or shoulders first', but the cut-off is not visible; shown as a metric only.",
+    "pec minus ER and kneeling lunge minus couch stretch are computed as on Smith's form (179); how his form uses them is not visible."
+   ]
+  },
+  "pike": {
+   "marked": "ours",
+   "source": "28 (stack model, PvA gap, nerve), 32-33 (tests, inputs), 35-56 (drills); Smith's builder 33 is a Jotform, logic not visible",
+   "metrics": [
+    {
+     "id": "fold_touch",
+     "kind": "worst_label",
+     "test": "fold",
+     "measure": "touch"
+    },
+    {
+     "id": "fold_deg",
+     "kind": "value",
+     "test": "fold",
+     "measure": "deg"
+    },
+    {
+     "id": "e2t_touch",
+     "kind": "worst_label",
+     "test": "elbow_head",
+     "measure": "touch"
+    },
+    {
+     "id": "lift_worst",
+     "kind": "worst",
+     "test": "leg_lift",
+     "measure": "deg"
+    },
+    {
+     "id": "lift_best",
+     "kind": "best",
+     "test": "leg_lift",
+     "measure": "deg"
+    },
+    {
+     "id": "pva_gap",
+     "kind": "diff",
+     "a": "fold_deg",
+     "b": "lift_worst"
+    },
+    {
+     "id": "nerve_level",
+     "kind": "worst_label",
+     "test": "nerve",
+     "measure": "level"
+    },
+    {
+     "id": "hip_ir_worst",
+     "kind": "worst",
+     "test": "hip_ir",
+     "measure": "deg"
+    },
+    {
+     "id": "hip_ir_best",
+     "kind": "best",
+     "test": "hip_ir",
+     "measure": "deg"
+    },
+    {
+     "id": "hip_ir_asym",
+     "kind": "diff",
+     "a": "hip_ir_best",
+     "b": "hip_ir_worst"
+    }
+   ],
+   "questions": [
+    "pike_approval"
+   ],
+   "require": [
+    "pike_approval",
+    "fold_touch",
+    "e2t_touch",
+    "lift_worst",
+    "nerve_level",
+    "hip_ir_worst"
+   ],
+   "always": [
+    {
+     "drill_id": "knee_extension_calf_stretch",
+     "optional": true,
+     "why": "28: calves are the silent limiter of the fold; 60: calf stretching is best done before pike work if calves limit (keep only if it helps)"
+    }
+   ],
+   "rules": [
+    {
+     "when": [
+      {
+       "metric": "nerve_level",
+       "op": "!=",
+       "value": "clear (no nerve feeling)"
+      }
+     ],
+     "add": [
+      {
+       "drill_id": "sciatic_nerve_ankle"
+      }
+     ],
+     "note": "Nerve work: floss, then glide, then tensioner (54); light tingling is fine, any pain = stop; tensioner only 2-4 out of 10.",
+     "why": "28/32: a nervy feeling at a level = sciatic nerve tension block; 28: many cases respond to nerve glides and tensioners; 54 is the drill"
+    },
+    {
+     "when": [
+      {
+       "metric": "hip_ir_asym",
+       "op": ">",
+       "value": 15
+      }
+     ],
+     "add": [
+      {
+       "drill_id": "hip_internal_rotation"
+      }
+     ],
+     "note": "Hip IR left and right differ by more than 15 deg: train one side at a time to match them (56).",
+     "why": "56: more than about 15 deg L/R difference -> unilateral hip IR work; 28: lacking hip IR can limit the fold"
+    }
+   ],
+   "fallback": [
+    {
+     "drill_id": "jefferson_curl",
+     "why": "28: assisted end pushes the range ceiling (46: loaded pike stretch); the gap threshold is not published, so both ends are trained"
+    },
+    {
+     "drill_id": "pike_lift_cracr",
+     "why": "28: resisted end makes the range strong; 48: one of the most effective active pike drills"
+    }
+   ],
+   "frequency": "28: typically 1-2 hours per week on a few targeted drills. RCR protocol (36): daily for 30 days, only after 3 pike phases, stopping other lower-body flexibility work.",
+   "notes": [
+    "PvA gap (28): fold hip flexion minus the worse standing leg lift. BIG gap -> train the resisted end (strength); SMALL gap -> train the assisted end (range). Smith gives no number for big or small, so no rule uses it yet; it is shown as a metric.",
+    "Hypermobile people must keep the gap small; strong-and-tight people should bias passive range (28).",
+    "Stack model (28): shrink any limiting block (calves, glutes/rotators, nerve, strength) to free range for the hamstrings.",
+    "Specialist: head to toe RCR 30-day protocol (36): A1 calf stretches 10 min x1, B1 head to toe RCR 56 touches x 3-5 sets at 75 bpm; plateau 5 sessions -> change foot elevation.",
+    "Unilateral drills: weaker side first, then match on the other side (43, 45, 47, 48, 52)."
+   ]
+  },
+  "shoulder_extension": {
+   "marked": "ours",
+   "source": "137, 144, 152-154, 157-159 and the free-video summary; Smith has no shoulder extension module",
+   "metrics": [
+    {
+     "id": "pec_worst",
+     "kind": "worst",
+     "test": "pec_major",
+     "measure": "angle"
+    },
+    {
+     "id": "grip_cm",
+     "kind": "value",
+     "test": "dislocate_grip",
+     "measure": "grip_cm"
+    }
+   ],
+   "questions": [],
+   "require": [
+    "pec_worst"
+   ],
+   "always": [],
+   "rules": [
+    {
+     "when": [
+      {
+       "metric": "pec_worst",
+       "op": "<",
+       "value": 45
+      }
+     ],
+     "add": [
+      {
+       "drill_id": "wall_pec_stretch"
+      }
+     ],
+     "why": "144: full pec major = at least 45 deg past the body line; 137: arm behind the body isolates pec major; 158 targets it"
+    },
+    {
+     "when": [
+      {
+       "metric": "pec_worst",
+       "op": "<",
+       "value": 15
+      }
+     ],
+     "add": [
+      {
+       "drill_id": "pec_stretch_flyes"
+      }
+     ],
+     "note": "Pec major under 15 deg: likely limited by pec major in shoulder sports (144).",
+     "why": "144 benchmark; 157 loaded pec stretch"
+    }
+   ],
+   "fallback": [
+    {
+     "drill_id": "inlocates_dislocates",
+     "why": "159: improves pec range and shoulder rotation through extension behind the body; track grip width"
+    },
+    {
+     "drill_id": "straps_band_shoulder_extension",
+     "why": "153: directions 3-4 are the shoulder extension band pulls"
+    }
+   ],
+   "frequency": null,
+   "notes": [
+    "Dislocate grip width: narrower = more range (159); no target width is stated, so it is tracked, not used in a rule.",
+    "These are our rules: Smith publishes no shoulder extension test or program."
+   ]
+  },
+  "squat": {
+   "marked": "ours",
+   "source": "56, 73, 89, 94, 106-107, 134; Smith has no squat module",
+   "metrics": [
+    {
+     "id": "drop_worst",
+     "kind": "worst",
+     "test": "drop_stance",
+     "measure": "angle"
+    },
+    {
+     "id": "drop_best",
+     "kind": "best",
+     "test": "drop_stance",
+     "measure": "angle"
+    },
+    {
+     "id": "drop_asym",
+     "kind": "diff",
+     "a": "drop_best",
+     "b": "drop_worst"
+    },
+    {
+     "id": "horse_steps",
+     "kind": "value",
+     "test": "horse_stance",
+     "measure": "steps"
+    },
+    {
+     "id": "horse_hips",
+     "kind": "label",
+     "test": "horse_stance",
+     "measure": "hips"
+    },
+    {
+     "id": "hip_ir_worst",
+     "kind": "worst",
+     "test": "hip_ir",
+     "measure": "deg"
+    },
+    {
+     "id": "hip_ir_best",
+     "kind": "best",
+     "test": "hip_ir",
+     "measure": "deg"
+    },
+    {
+     "id": "hip_ir_asym",
+     "kind": "diff",
+     "a": "hip_ir_best",
+     "b": "hip_ir_worst"
+    }
+   ],
+   "questions": [],
+   "require": [
+    "drop_worst",
+    "horse_hips"
+   ],
+   "always": [],
+   "rules": [
+    {
+     "when": [
+      {
+       "metric": "drop_asym",
+       "op": ">",
+       "value": 10
+      }
+     ],
+     "add": [
+      {
+       "drill_id": "drop_stance_squat"
+      }
+     ],
+     "note": "Left/right drop stance differ by more than 10 deg: weaker side first, match reps and range on the stronger side; elevate the feet so the weaker side can sit all the way down (94).",
+     "why": "94/89: more than 10 deg L/R drop stance difference -> unilateral work first (stated for side split / pancake; applied to squat by us)"
+    },
+    {
+     "when": [
+      {
+       "metric": "hip_ir_asym",
+       "op": ">",
+       "value": 15
+      }
+     ],
+     "add": [
+      {
+       "drill_id": "hip_internal_rotation"
+      }
+     ],
+     "note": "Hip IR left and right differ by more than 15 deg: train one side at a time (56).",
+     "why": "56: carries over to a deeper squat; more than about 15 deg L/R difference -> unilateral"
+    },
+    {
+     "when": [
+      {
+       "metric": "horse_hips",
+       "op": "==",
+       "value": "hips above knee line"
+      }
+     ],
+     "add": [],
+     "note": "Train horse stance at this step width until the hips break the knee line (106).",
+     "why": "106"
+    },
+    {
+     "when": [
+      {
+       "metric": "horse_hips",
+       "op": "==",
+       "value": "hips below knee line"
+      }
+     ],
+     "add": [],
+     "note": "Hips break the knee line: widen the stance by a couple of steps (106-107: 5 -> 7 -> 9).",
+     "why": "106-107"
+    }
+   ],
+   "fallback": [
+    {
+     "drill_id": "horse_stance_squat",
+     "why": "106: addresses nearly all attributes; the primary progression is depth through a wider stance (107)"
+    },
+    {
+     "drill_id": "split_squat",
+     "why": "134: strength in full knee flexion and hip extension; heel wedge if ankle range limits"
+    }
+   ],
+   "frequency": null,
+   "notes": [
+    "These are our rules: Smith has no squat module; tests and thresholds are borrowed from the side split, pancake and pike notes.",
+    "No ankle dorsiflexion test exists in the notes; split squat heel wedge height (134) is the only ankle proxy."
+   ]
   }
  },
  "gaps": [
@@ -5330,6 +7754,32 @@
   "[data_splits.json] Front split L/R imbalance threshold: none stated (the 10 deg rule is side split only).",
   "[data_splits.json] Front split frequency for the regular program: not stated in 119/120 (only the 121 specialist 2-4x/week).",
   "[data_splits.json] Front split drill doses: 122, 124 (2-8 s contraction only), 125, 126, 127, 128, 134 give no sets/reps/holds.",
-  "[data_splits.json] Couch stretch hips high method left null: 126 recommends active holds, passive holds or CR (no single method)."
+  "[data_splits.json] Couch stretch hips high method left null: 126 recommends active holds, passive holds or CR (no single method).",
+  "[data_bridge_pike.json] BRIDGE: Smith's builder (179) logic is hidden; all bridge rules are ours. The hidden 'P vs A' summary cannot be reproduced, so the bridge pillar has gap = null.",
+  "[data_bridge_pike.json] BRIDGE: Leahy readiness cut-off (171) is in the course page form, not stated; Leahy is a test and a metric only.",
+  "[data_bridge_pike.json] BRIDGE: no threshold in any note for couch stretch hips low or kneeling lunge, and the meaning of 'lunge minus couch' and 'pec minus ER' (179) is our inference; computed, not used in rules. Form also computes 'ER worst + 15' which our metric kinds cannot express.",
+  "[data_bridge_pike.json] BRIDGE: no note says which result calls for arching couch stretch, arching lunge, cobra or leveraged thoracic extension; in the library, not added by any rule.",
+  "[data_bridge_pike.json] BRIDGE: healthcare approval option labels are not captured for form 179; we copied 'Yes I have / Yes I will' from form 33.",
+  "[data_bridge_pike.json] BRIDGE: ER and pec major 45 deg thresholds come from the shoulder notes (144/146), not the bridge module.",
+  "[data_bridge_pike.json] BRIDGE: no frequency stated in the bridge notes (frequency null -> app default).",
+  "[data_bridge_pike.json] BRIDGE: no slot for warm up / cool down; warm ups use 'technique' (ordered first), cool down is a drill mentioned in notes but not auto-added (it would sort before the main work).",
+  "[data_bridge_pike.json] BRIDGE: hold times in the assessment: couch and lunge 10 s (178) while the front split assessment (119) uses 15 s for the same positions; we use 178's 10 s.",
+  "[data_bridge_pike.json] BRIDGE: 196 says 'raise the platform' to progress, which logically makes lifts easier; wording kept as ambiguous.",
+  "[data_bridge_pike.json] BRIDGE: bridge drill doses (sets, reps, hold times) are not stated in any bridge note except rocks pause 1-5 s, push up top pause 2-5 s, balloon C5 R5, warm up 1-2 sets.",
+  "[data_bridge_pike.json] BRIDGE: tests leahy, er_length, pec_major duplicate the shoulder_flexion tests (field same_as); results are stored per pillar, so the app must copy or share them.",
+  "[data_bridge_pike.json] PIKE: the PvA gap rule (28) has no number for big vs small, so no rule uses pva_gap; fallback trains one assisted (Jefferson curl) and one resisted (CRACR) drill.",
+  "[data_bridge_pike.json] PIKE: no threshold for low hip IR, low leg lift, fold level or elbow/head touchpoint; only nerve (any level felt) and hip IR asymmetry (>15 deg, 56) drive rules.",
+  "[data_bridge_pike.json] PIKE: metric kind 'label' reads one side only (L before R), so nerve_level and e2t_touch see the left side; a right-only nerve finding is missed. A 'worst_label' kind using the option order would fix it.",
+  "[data_bridge_pike.json] PIKE: fold.deg (hip flexion angle) is optional in the app, so pva_gap is often unmeasured.",
+  "[data_bridge_pike.json] PIKE: RCR protocol (36) prerequisite (3 completed pike phases) cannot be checked from results; it is a note only.",
+  "[data_bridge_pike.json] PIKE: most pike drill doses are 'prescribed' with no numbers (41, 43, 44, 46, 49, 51, 52, 53, 55); only 35/36 RCR, 37 block crush (5-30 s, 1-2 sets), 38 (3 s / 3 s), 45 (5 s / 5 s), 47 (C5 R5 at 70-90%), 48 (3-8 / 3-5 s cycle) give numbers.",
+  "[data_bridge_pike.json] PIKE: 54/55 nerve drills fit no method value; method null.",
+  "[data_bridge_pike.json] SHOULDER EXTENSION: Smith has no test or module; both tests are ours. The pec major test (144) is a horizontal abduction / extension-with-external-rotation test, the nearest the notes offer, not a pure shoulder extension measure.",
+  "[data_bridge_pike.json] SHOULDER EXTENSION: no target for dislocate grip width; tracked only.",
+  "[data_bridge_pike.json] SQUAT: no Smith module; the 10 deg drop stance threshold (94/89) and 15 deg hip IR threshold (56) are borrowed from other skills.",
+  "[data_bridge_pike.json] SQUAT: no ankle dorsiflexion test in the notes (60 and 40 give calf drills, not a measure); no squat-depth angle test.",
+  "[data_bridge_pike.json] SQUAT: horse stance 'steps' has no unit in the allowed list; unit null.",
+  "[data_bridge_pike.json] SQUAT: drop stance test hold time is not stated in 94.",
+  "[data_bridge_pike.json] SQUAT: horse stance squat dose is the side split phase 1 parameter set (89), applied to squat by us."
  ]
 }

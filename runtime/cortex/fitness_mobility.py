@@ -47,6 +47,8 @@ _NERVE = ["1 Elevate leg", "2 Straighten knee", "3 Dorsiflex", "4 Adduct leg", "
 # "high:"/"low:" whichever of the pair is higher/lower in the frame), side = "visible"
 # (one result, the side facing the camera), "each" (L and R) or "lifted" (the leg whose ankle is higher), best = max/min. Units: deg, cm, s. A test's "role" (active/passive) and the
 # pillar's "gap" pair make the active vs passive gap for any pillar.
+_PIKE_Q = [{"id": "pike_approval", "name": "Healthcare approval to train the forward fold", "text": "From the Touching Toes form (lesson 33).",
+            "options": [{"value": "yes_i_have", "label": "Yes, I have"}, {"value": "yes_i_will", "label": "Yes, I will"}]}]
 DEFAULT_PILLARS = [
     {"id": "shoulder_flexion", "name": "Shoulder flexion", "tests": []},
     {"id": "shoulder_extension", "name": "Shoulder extension", "tests": []},
@@ -88,7 +90,8 @@ DEFAULT_PILLARS = [
                                   "pose": {"joints": ["knee", "ankle"], "side": "each", "best": "max"}}}]},
      ],
      # the active vs passive gap: the same shape, held by strength vs reached with help (both read as hip flexion)
-     "gap": {"passive": {"test": "fold", "measure": "deg"}, "active": {"test": "leg_lift", "measure": "deg"}}},
+     "gap": {"passive": {"test": "fold", "measure": "deg"}, "active": {"test": "leg_lift", "measure": "deg"}},
+     "questions": _PIKE_Q},
     {"id": "pancake", "name": "Pancake", "tests": []},
     {"id": "side_split", "name": "Side split", "tests": []},
     {"id": "front_split", "name": "Front split", "tests": []},

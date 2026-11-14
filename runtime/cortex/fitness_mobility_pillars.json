@@ -1213,5 +1213,365 @@
   },
   "marked": "ours",
   "lesson_course": "mftk"
+ },
+ "bridge": {
+  "id": "bridge",
+  "name": "Bridge",
+  "lesson_slug": "178-bridge_assessment",
+  "setup": "Minimal warm-up. Phone on the floor, same way every time, for every test except the pec major test (camera at bench height). Screenshot left and right and add angles. The bridge program builder (179) needs tests 1-5: external rotation, pec major, couch stretch hips low, kneeling lunge, bridge level. The Leahy stick test is the separate 'am I ready' check (171): limited shoulder flexion is a very common bridge limiter; if so, train shoulders first. Shoulder ER and pec major are the same tests as the shoulder flexion pillar.",
+  "tests": [
+   {
+    "id": "leahy",
+    "name": "Leahy stick test (bridge readiness, as lesson 141)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone on the floor, tilted slightly up, from the side",
+    "cue": "Sit on a box, upright, high chest, look forward. Hold a stick at its CENTRE, palm up, in one hand. Arm locked, lift; the stick stays parallel to the floor. Elbow bends or stick twists = too far, lower and lift again. Hold 3 s. Both sides. Bridge use (171): the course page reads this result to advise direct bridge work or shoulders first.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Leahy flexion angle (vertical up = 180)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "point on the scapula line below the shoulder (bottom of the scapula)",
+        "centre of the shoulder",
+        "elbow"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "141-shoulders_test1-leahy",
+    "same_as": "shoulder_flexion.leahy",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "er_length",
+    "name": "Shoulder external rotation length test (bridge test 1, as lesson 146)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "From the FRONT, camera aligned with the tested arm (elbow directly in front of the shoulder from the camera view)",
+    "cue": "Seated on the floor, knee up, elbow on the knee, upper arm at a right angle to the body, elbow and both shoulders in one line. Rotate out to the limit as if pulling back from the wrist, hold a few seconds. Most common error: torso rotated so the elbow is not in front of the shoulder. Both sides. Short of vertical = NEGATIVE angle.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Forearm angle from vertical (negative if short of vertical)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "vertical",
+       "points": [
+        "elbow centre",
+        "wrist centre"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "146-shoulders_test5-external-rotation",
+    "same_as": "shoulder_flexion.er_length",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "pec_major",
+    "name": "Pec major length test (bridge test 2, as lesson 144)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Camera at bench height (level with the bench), from behind / head end",
+    "cue": "Narrow bench or boxes; 1.25-1.5 kg plates. Arms up, thumbs back, lower thumbs-first towards the floor; hold max depth 3 s. Torso flat (feet on the bench helps); wrists in line with the ears. Plates hit the floor -> grip higher -> then elevate the setup.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Degrees of the arm past (below) the shoulder line",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "flex",
+       "points": [
+        "centre of the opposite shoulder",
+        "middle of this shoulder",
+        "elbow"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "144-shoulders_test4a-pec-major",
+    "same_as": "shoulder_flexion.pec_major",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "couch_stretch_low",
+    "name": "Couch stretch, hips low (bridge test 3)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone on the floor, same way every time, on the back-leg side",
+    "cue": "Back knee padded, as close to the wall as possible, foot up the wall, hips low, torso upright. Hold 10 s. Both legs.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Hip angle between the thighs (acute inside angle)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "front knee",
+        "centre of the hip",
+        "back knee"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "125-couch-stretch-hips-low",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "kneeling_lunge",
+    "name": "Kneeling lunge (bridge test 4)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone on the floor, same way every time, side on",
+    "cue": "From the couch stretch shuffle forward, back foot to the floor, hips low. Hold 10 s. Both legs.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Hip angle between the thighs (acute inside angle)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "front knee",
+        "centre of the hip",
+        "back knee"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "178-bridge_assessment",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "bridge_level",
+    "name": "Bridge (bridge test 5)",
+    "sides": [
+     "both"
+    ],
+    "camera": "Phone on the floor perpendicular to the shoulders; tight clothes or top tucked in",
+    "cue": "Lie down, feet near the hips, hands by the head with fingers to the feet, hands about shoulder width (slightly wider only if the shoulders need it). Push up and walk the feet in. Cannot push up -> double hip drive (lift the hips, roll onto the head, adjust hands and feet, push up with momentum). Bring the shoulders and chest over the hands as much as possible; hold 15 s (or the highest position you can, e.g. head supported). Pick the category.",
+    "measures": [
+     {
+      "key": "level",
+      "label": "Bridge level",
+      "kind": "choice",
+      "options": [
+       "Can't lift",
+       "Chest before hands",
+       "Chest above hands",
+       "Chest past hands"
+      ]
+     }
+    ],
+    "lesson_slug": "178-bridge_assessment",
+    "lesson_course": "mftk"
+   }
+  ],
+  "questions": [
+   {
+    "id": "healthcare_approval",
+    "name": "Healthcare approval",
+    "text": "Do you have approval from your healthcare provider to train this skill?",
+    "options": [
+     {
+      "value": "yes_i_have",
+      "label": "Yes, I have"
+     },
+     {
+      "value": "yes_i_will",
+      "label": "Yes, I will get it"
+     }
+    ]
+   }
+  ],
+  "gap": null,
+  "marked": "smith",
+  "lesson_course": "mftk"
+ },
+ "shoulder_extension": {
+  "id": "shoulder_extension",
+  "name": "Shoulder extension",
+  "setup": "OURS: Smith has no shoulder extension module or test. Two checks the notes support: the pec major length test (144; 137: arm back behind the body isolates pec major; his free-video summary names it the nearest test) and the stick dislocate grip width (159, tracked with tape marks or cm between the hands). Same stick every time.",
+  "tests": [
+   {
+    "id": "pec_major",
+    "name": "Pec major length test (as lesson 144)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "From BEHIND / head end, camera at bench height (you see only the front edge of the bench, not its top)",
+    "cue": "Lie on a narrow bench, small plates in each hand (1.25-2.5 kg across the notes), straight arms, thumbs pointing back the whole time. Lower the arms out to the sides slowly, hands in line with the ears or just above. Torso flat: a small low-back gap must not grow. Hold 3 s.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Degrees of the arm past (below) the shoulder line",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "flex",
+       "points": [
+        "centre of the opposite shoulder",
+        "middle of this shoulder",
+        "elbow"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "144-shoulders_test4a-pec-major",
+    "same_as": "shoulder_flexion.pec_major",
+    "marked": "ours",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "dislocate_grip",
+    "name": "Stick dislocate grip width (ours, from lesson 159)",
+    "sides": [
+     "both"
+    ],
+    "camera": "None needed (measure the stick)",
+    "cue": "Same stick every time, tape marks on it. Take the stick over the head and behind with straight elbows, rolling the shoulders forward as the arms go back (inlocate) and back on the return (dislocate). Find the narrowest grip with straight elbows, no hands sliding and both shoulders moving evenly. Record the distance between the hands.",
+    "measures": [
+     {
+      "key": "grip_cm",
+      "label": "Grip width between the hands (narrower = more range)",
+      "kind": "number",
+      "unit": "cm"
+     },
+     {
+      "key": "grip",
+      "label": "Grip used",
+      "kind": "choice",
+      "options": [
+       "Pronated (stick starts in front)",
+       "Supinated (stick starts behind)"
+      ]
+     }
+    ],
+    "lesson_slug": "159-shoulders-drill_inlocates-dislocates",
+    "marked": "ours",
+    "lesson_course": "mftk"
+   }
+  ],
+  "questions": [],
+  "gap": null,
+  "marked": "ours"
+ },
+ "squat": {
+  "id": "squat",
+  "name": "Squat",
+  "setup": "OURS: Smith has no squat module. Checks the notes support: drop stance angle each side (94, left/right check), horse stance step width and hips vs knee line (106-107), hip internal rotation (56: carries over to a deeper squat; test as lesson 32). Phone on the floor, same spot every time, except hip IR (camera at box height).",
+  "tests": [
+   {
+    "id": "drop_stance",
+    "name": "Drop stance (Pu Bu) angle",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Phone on the floor, facing you, whole body in frame, same spot every time",
+    "cue": "Wide straddle, feet slightly turned out, drop onto one leg, straight-leg foot flat and forward (not rolled up). Sit as low as you can. Hold time not stated in the notes. Both sides.",
+    "measures": [
+     {
+      "key": "angle",
+      "label": "Knee angle of the bent leg (acute inside angle)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "inside",
+       "points": [
+        "ankle",
+        "knee",
+        "centre of the hip"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "73-pancake-drill_drop-stance-squats",
+    "marked": "ours",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "horse_stance",
+    "name": "Horse stance squat width and depth",
+    "sides": [
+     "both"
+    ],
+    "camera": "Phone on the floor, facing you, whole body in frame",
+    "cue": "Count steps from feet together: each turn of a foot = 1 step (toes out, heels out, alternating), then toes to your turnout. Typical start = 5 steps. Squat with knees out, feet turned out, sit back, spine extended, chest high. Note where the hips sit vs the knee line at the bottom.",
+    "measures": [
+     {
+      "key": "steps",
+      "label": "Step width (number of steps)",
+      "kind": "number"
+     },
+     {
+      "key": "hips",
+      "label": "Hips at the bottom",
+      "kind": "choice",
+      "options": [
+       "Hips above knee line",
+       "Hips at knee line",
+       "Hips below knee line"
+      ]
+     }
+    ],
+    "lesson_slug": "107-horse-stance-squats-how-to-measure-progress",
+    "marked": "ours",
+    "lesson_course": "mftk"
+   },
+   {
+    "id": "hip_ir",
+    "name": "Hip internal rotation length test (as lesson 32)",
+    "sides": [
+     "L",
+     "R"
+    ],
+    "camera": "Camera at BOX HEIGHT, level with the box seat, facing you from the front",
+    "cue": "Sit on a flat object, knees just over the edge, feet off the floor. Block or clasped hands between the knees, press the knees slightly together, sit upright, pull the feet out hard, knees stay at 90 deg.",
+    "measures": [
+     {
+      "key": "deg",
+      "label": "Rotation (shin vs vertical, acute inside angle)",
+      "kind": "number",
+      "unit": "deg",
+      "angle": {
+       "mode": "vertical",
+       "points": [
+        "Knee",
+        "Ankle"
+       ]
+      }
+     }
+    ],
+    "lesson_slug": "32-pike_assessment",
+    "same_as": "pike.hip_ir",
+    "marked": "ours",
+    "lesson_course": "mftk"
+   }
+  ],
+  "questions": [],
+  "gap": null,
+  "marked": "ours"
  }
 }

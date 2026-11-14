@@ -289,6 +289,17 @@ def metrics(rs: dict, res: dict, answers: dict) -> dict:
         elif k == "label":
             x = _val(res, m.get("test"), m.get("measure"))
             v = str(x).lower() if x is not None else None
+        elif k == "worst_label":
+            opts = []
+            for pl in fm.pillars():
+                for t in pl.get("tests") or []:
+                    if t["id"] == m.get("test"):
+                        opts = next((mm.get("options") or [] for mm in t.get("measures") or []
+                                     if mm["key"] == m.get("measure")), opts)
+            got = [str(x) for x in (_val(res, m.get("test"), m.get("measure"), sd) for sd in ("L", "R", "both"))
+                   if x is not None]
+            ranked = sorted(got, key=lambda x: opts.index(x) if x in opts else 999)
+            v = ranked[0].lower() if ranked else None
         elif k in ("diff", "absdiff"):
             a, b = out.get(m.get("a")), out.get(m.get("b"))
             if _n(a) and _n(b):
@@ -366,10 +377,24 @@ def build_generic(pillar: str, lib: dict, rs: dict, res: dict, answers: dict) ->
             "metrics": mv}
 
 
+def results_for(pillar: str, all_res: dict | None = None) -> dict:
+    """This pillar's latest results, plus any test marked same_as another pillar's test (measured once, used twice)."""
+    all_res = all_res if all_res is not None else latest()
+    res = dict(all_res.get(pillar, {}))
+    pl = next((p for p in fm.pillars() if p["id"] == pillar), {})
+    for t in pl.get("tests") or []:
+        src = t.get("same_as")
+        if src and t["id"] not in res and "." in src:
+            sp, st = src.split(".", 1)
+            if (all_res.get(sp) or {}).get(st):
+                res[t["id"]] = all_res[sp][st]
+    return res
+
+
 def build(pillar: str, answers: dict | None = None) -> dict:
     """A DRAFT program from the latest results. Never saved here."""
     lib = fm.drill_library()
-    res = latest().get(pillar, {})
+    res = results_for(pillar)
     notes: list = []
     if pillar == "pancake":
         a, missing = pancake_answers(res, answers or {})
