@@ -528,46 +528,66 @@
     }
    },
    {
-    "id": "lat_length",
-    "name": "Lat length test (Test 3)",
     "sides": [
      "both"
     ],
-    "camera": "From the side, phone on the floor (both positions)",
-    "cue": "Stick at shoulder width, palms up. (1) Back to a wall, feet slightly away, knees slightly bent, posterior tilt so the low back presses in; raise the stick, stop the moment the low back breaks contact. (2) Sit on the floor, round as much as possible, head between the knees; raise the stick keeping head-to-knee contact. Hold 3 s each.",
+    "lesson_slug": "143-shoulders_test3-lat",
+    "lesson_course": "mftk",
+    "id": "lat_flat",
+    "name": "Lat length, flat back (Test 3, position 1)",
+    "camera": "From the side, phone on the floor (Smith).",
+    "cue": "Stick at shoulder width, palms up. Back to a wall, feet slightly away, knees slightly bent, posterior tilt so the low back presses in. Raise the stick; stop the moment the low back breaks contact. Hold 3 s.",
     "measures": [
      {
-      "key": "wall",
-      "label": "Flat back (wall) angle",
+      "key": "angle",
+      "label": "Flat back angle",
       "kind": "number",
       "unit": "deg",
       "angle": {
        "mode": "inside",
        "points": [
-        "point on the scapula line below the shoulder (bottom of the scapula)",
+        "a point straight below the shoulder (your back is vertical on the wall)",
         "centre of the shoulder",
         "elbow"
        ],
        "pose": {
         "joints": [
-         "hip",
+         "plumb:shoulder",
          "shoulder",
          "elbow"
         ],
         "side": "visible",
-        "best": "max"
+        "best": "max",
+        "posture": "upright"
        }
       }
-     },
+     }
+    ],
+    "position": {
+     "img": "sh_lats_flat.jpg",
+     "caption": "Smith's form: back flat to the support, stick palms up"
+    }
+   },
+   {
+    "sides": [
+     "both"
+    ],
+    "lesson_slug": "143-shoulders_test3-lat",
+    "lesson_course": "mftk",
+    "id": "lat_round",
+    "name": "Lat length, rounded back (Test 3, position 2)",
+    "camera": "From the side, phone on the floor (Smith).",
+    "cue": "Stick at shoulder width, palms up. Sit on the floor, round as much as possible, head between the knees (chest to knees ideally). Raise the stick keeping head-to-knee contact; contact lost = too far. Hold 3 s.",
+    "measures": [
      {
-      "key": "round_back",
-      "label": "Round back (seated) angle",
+      "key": "angle",
+      "label": "Rounded back angle",
       "kind": "number",
       "unit": "deg",
       "angle": {
        "mode": "inside",
        "points": [
-        "point on the scapula line below the shoulder (bottom of the scapula)",
+        "along the rounded back towards the hip",
         "centre of the shoulder",
         "elbow"
        ],
@@ -583,11 +603,9 @@
       }
      }
     ],
-    "lesson_slug": "143-shoulders_test3-lat",
-    "lesson_course": "mftk",
     "position": {
-     "img": "sh_lats_flat.jpg",
-     "caption": "Smith's form: back flat against the support, then rounded"
+     "img": "sh_lats_rounded.jpg",
+     "caption": "Smith's form: rounded, head on the knees, stick palms up"
     }
    },
    {

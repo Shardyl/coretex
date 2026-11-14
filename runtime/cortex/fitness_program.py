@@ -113,7 +113,7 @@ def _shoulder_metrics(res: dict, given: dict) -> dict:
     m = {"leahy_worst": _worst(res, "leahy", "angle"), "active_worst": _worst(res, "flexion_active", "angle"),
          "passive": _val(res, "flexion_passive", "angle"), "pec_worst": _worst(res, "pec_major", "angle"),
          "er_worst": _worst(res, "er_length", "angle"), "ir_worst": _worst(res, "ir_length", "angle"),
-         "lat_wall": _val(res, "lat_length", "wall"), "lat_round": _val(res, "lat_length", "round_back"),
+         "lat_wall": _val(res, "lat_flat", "angle"), "lat_round": _val(res, "lat_round", "angle"),
          "trap3": _worst(res, "trap3_reps", "reps_exact"), "eok_er": _worst(res, "eok_er_reps", "reps_exact"),
          "powell": _worst(res, "powell_reps", "reps_exact"), "type": (given or {}).get("shoulder_type")}
     if isinstance(m["passive"], (int, float)) and isinstance(m["active_worst"], (int, float)):
