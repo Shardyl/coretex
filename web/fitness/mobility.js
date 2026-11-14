@@ -673,7 +673,8 @@ function poseCandidates(P,L){
   if(P.side==='each'&&P.xside){
     // Left/right by POSITION in the frame, not the model's guess (owner 14 Nov 2026: it mirrored on the pec test).
     // xside 'left_is_left' = his left arm is on the left of the picture (filmed from the head end, lying on his back).
-    const a=cand(0), b=cand(1), mx=c=>c.pts.reduce((z,q)=>z+q.x,0)/c.pts.length, [lft,rgt]=mx(a)<=mx(b)?[a,b]:[b,a];
+    const own=P.joints.map((n,i)=>n.startsWith('other:')?-1:i).filter(i=>i>=0);
+    const a=cand(0), b=cand(1), mx=c=>own.reduce((z,i)=>z+c.pts[i].x,0)/own.length, [lft,rgt]=mx(a)<=mx(b)?[a,b]:[b,a];
     return P.xside==='left_is_left'?[{side:'L',...lft},{side:'R',...rgt}]:[{side:'R',...lft},{side:'L',...rgt}];}
   if(P.side==='each')return[0,1].map(s=>({side:sd(s),...cand(s)}));
   if(P.side==='lifted'){const s=L[LMI.ankle[0]].y<L[LMI.ankle[1]].y?0:1;return[{side:sd(s),...cand(s)}];}
@@ -701,9 +702,9 @@ function bestHeld(arr,best,holdS,step){
   // posture is judged per window (80% of its frames), so one borderline frame cannot break a real hold (owner 14 Nov:
   // all fours with a rounded back sits right on the old threshold and flickered)
   const ok=arr.filter(x=>x.vis>=VIS_MIN&&x.a!=null);
-  const n=Math.max(2,Math.round(holdS/step));let win=null;
-  for(let i=0;i+n<=ok.length;i++){const w=ok.slice(i,i+n);
-    if(w[w.length-1].t-w[0].t>holdS+step*2.5)continue;      // a gap in the run (frames dropped): not continuous
+  const need=0.7*(holdS/step+1);let win=null;   // owner 14 Nov: the model loses an arm for a frame or two mid-hold
+  for(let i=0;i<ok.length;i++){const w=[];for(let j=i;j<ok.length&&ok[j].t<=ok[i].t+holdS+1e-6;j++)w.push(ok[j]);
+    if(w[w.length-1].t-w[0].t<holdS-step*1.5||w.length<need)continue;
     if(w.filter(x=>x.pos!==false).length<0.8*w.length)continue;
     const as=w.map(x=>x.a), med=as.slice().sort((a,b)=>a-b)[Math.floor(as.length/2)];
     if(as.filter(v=>Math.abs(v-med)<=6).length<0.8*as.length)continue;   // steady: 80% within 6 deg (owner 14 Nov)
@@ -730,10 +731,13 @@ async function poseScan(video,sp,prog,holdS){
     await seekTo(video,t);
     _cv.getContext('2d').drawImage(video,0,0,W,H);
     const r=lm.detect(_cv), L=r&&r.landmarks&&r.landmarks[0];
-    if(L){const pos=postureOK(P.posture,L);poseCandidates(P,L).forEach(c=>{const pts=c.pts.map(q=>({x:q.x*W,y:q.y*H}));(series[c.side]=series[c.side]||[]).push({t:Math.round(t*10)/10,a:readAngle(sp,pts),pts,vis:c.vis,pos});});}
+    if(L){const pos=postureOK(P.posture,L);poseCandidates(P,L).forEach(c=>{const pts=c.pts.map(q=>({x:q.x*W,y:q.y*H}));(series[c.side]=series[c.side]||[]).push({t:Math.round(t*10)/10,a:readAngle(sp,pts),pts,vis:c.vis,pos});});
+      if(P.range){for(const z of Object.values(series)){const q=z[z.length-1];if(q&&q.t===Math.round(t*10)/10&&(q.a<P.range[0]||q.a>P.range[1]))q.a=null;}}}
     prog(t/dur);
   }
-  const out={};Object.keys(series).forEach(s=>{const b=bestHeld(series[s],P.best,holdS||3,step);if(b)out[s]=b;});
+  const out={};Object.keys(series).forEach(s=>{let b=bestHeld(series[s],P.best,holdS||3,step);
+    if(!b){b=bestHeld(series[s],P.best,Math.max(1.2,(holdS||3)/2),step);if(b)b.short=true;}
+    if(b)out[s]=b;});
   if(P.side==='each'&&Object.keys(out).length===1&&series.L&&series.R){
     const have=Object.keys(out)[0], miss=have==='L'?'R':'L', [a0,a1]=out[have].held;
     const w=series[miss].filter(x=>x.t>=a0&&x.t<=a1&&x.vis>=VIS_MIN&&x.a!=null);
@@ -866,7 +870,7 @@ window.mobMeasure=function(src,id,ov,auto){
   const save=document.createElement('button');save.className='btn-sm';save.textContent='Save angle';save.style.cssText='background:var(--teal);color:#fff;border-color:var(--teal)';
   const reset=document.createElement('button');reset.className='btn-sm';reset.textContent='Start again';
   const close=document.createElement('button');close.className='btn-sm';close.textContent='Cancel';close.onclick=()=>ov.remove();
-  const setTip=()=>{if(auto&&auto.res[side.value]){const rr=auto.res[side.value];tip.textContent='Held '+rr.held[0]+' to '+rr.held[1]+' s (median of the hold '+Math.round(rr.med)+'°); shown at '+frameS+' s. Check the dots sit on your '+sp.points.join(', ').toLowerCase()+'; drag any that are off, then save.';return;}
+  const setTip=()=>{if(auto&&auto.res[side.value]){const rr=auto.res[side.value];tip.textContent=(rr.short?'The model only saw your arm steadily for part of the hold, so this is read from that stretch. Check the dots carefully. ':'')+'Held '+rr.held[0]+' to '+rr.held[1]+' s (median of the hold '+Math.round(rr.med)+'°); shown at '+frameS+' s. Check the dots sit on your '+sp.points.join(', ').toLowerCase()+'; drag any that are off, then save.';return;}
     tip.textContent='Tap '+sp.points.map((p,i)=>i===pivotOf(sp)?p+' (yellow)':p).join(', then ')+'. Drag a point to adjust it.'+(sp.mode==='vertical'?' The dashed line is straight down.':'');};
   const draw=()=>{ctx.drawImage(frame,0,0);ctx.lineWidth=Math.max(3,W/300);ctx.strokeStyle='#30d5a8';
     if(pts.length>1){ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.stroke();}

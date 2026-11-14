@@ -682,7 +682,11 @@
         ],
         "side": "each",
         "best": "max",
-        "xside": "left_is_right"
+        "xside": "left_is_right",
+        "range": [
+         -90,
+         90
+        ]
        }
       }
      }
@@ -1774,7 +1778,11 @@
         ],
         "side": "each",
         "best": "max",
-        "xside": "left_is_right"
+        "xside": "left_is_right",
+        "range": [
+         -90,
+         90
+        ]
        }
       }
      }

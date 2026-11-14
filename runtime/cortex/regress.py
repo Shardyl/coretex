@@ -2582,6 +2582,11 @@ def _cases():
                 and "bridge" in fp.BLOCKS
                 and "function bestHeld(" in open(_web + "/fitness/mobility.js", encoding="utf-8").read()
                 and "window.mobMeasureBoth" in open(_web + "/fitness/mobility.js", encoding="utf-8").read()
+                # ER 14 Nov: a hold survives frames the model lost; impossible readings are misses; short-hold fallback
+                and "const need=0.7*(holdS/step+1)" in open(_web + "/fitness/mobility.js", encoding="utf-8").read()
+                and "if(b)b.short=true" in open(_web + "/fitness/mobility.js", encoding="utf-8").read()
+                and all(t["measures"][0]["angle"]["pose"].get("range") == [-90, 90] for p in fm.DEFAULT_PILLARS
+                        for t in p.get("tests") or [] if t["id"] == "er_length")
                 and all((m.get("angle") or {}).get("pose") for p in fm.DEFAULT_PILLARS for t in p.get("tests") or []
                         for m in t["measures"] if m.get("angle")))
     case("every pillar's program rules are data the engine evaluates, every drill has a warm-up ladder, and the "
