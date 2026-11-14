@@ -57,7 +57,7 @@ DEFAULT_PILLARS = [
      "setup": "Barefoot or socks, no shoes, for every test. Test cold, no warm-up. Phone on the floor tilted slightly up, square to your hips; same spot every time. "
               "Camera position 1 for tests 1 to 4 (both sides, same angle); position 2 for test 5.",
      "tests": [
-         {"id": "fold", "name": "Standing Forward Fold", "sides": ["both"], "camera": "Position 1, side on",
+         {"id": "fold", "name": "Standing Forward Fold", "position": {"img": "pike_3.jpg", "caption": "Smith's form: on a platform, feet together, knees straight, fold"}, "sides": ["both"], "camera": "Position 1, side on",
           "cue": "Stand on a raised platform, feet together, knees straight, fold and slide the hands down. "
                  "Hold the end position for 5 seconds for it to count.",
           "measures": [{"key": "touch", "label": "Reach", "kind": "choice", "options": _TOUCH},
@@ -65,11 +65,11 @@ DEFAULT_PILLARS = [
                         "angle": {"mode": "flex", "points": ["Shoulder", "Hip", "Ankle"],
                                   "pose": {"joints": ["shoulder", "hip", "ankle"], "side": "visible", "best": "max"}}}],
           "role": "passive"},
-         {"id": "elbow_head", "name": "Elbow/Head To Toe", "sides": ["L", "R"], "camera": "Position 1, side on",
+         {"id": "elbow_head", "name": "Elbow/Head To Toe", "position": {"img": "pike_2.jpg", "caption": "Smith's form: toes on a block, fold over the straight leg"}, "sides": ["L", "R"], "camera": "Position 1, side on",
           "cue": "Front heel down, toes propped on a block, fold over the straight leg: elbow to toe, then head to toe. "
                  "Hold each for 5 seconds for it to count.",
           "measures": [{"key": "touch", "label": "Touchpoint", "kind": "choice", "options": _E2T}]},
-         {"id": "leg_lift", "name": "Standing Leg Lift", "sides": ["L", "R"], "camera": "Position 1, side on",
+         {"id": "leg_lift", "name": "Standing Leg Lift", "position": {"img": "pike_1.jpg", "caption": "Smith's form: back to the wall, straight leg up, no hands"}, "sides": ["L", "R"], "camera": "Position 1, side on",
           "cue": "Back to a wall, lift the straight leg as high as you can, no hands. Hold it for 5 seconds for it to "
                  "count. The active side of the pike.",
           "measures": [{"key": "deg", "label": "Hip flexion", "kind": "number", "unit": "deg",
@@ -77,12 +77,12 @@ DEFAULT_PILLARS = [
                                   "pose": {"joints": ["low:ankle", "mid:hip", "high:ankle"], "side": "lifted", "best": "max",
                                            "posture": "upright"}}}],
           "role": "active"},
-         {"id": "nerve", "name": "Sciatic Nerve Level", "sides": ["L", "R"], "camera": "Position 1 (filming optional)",
+         {"id": "nerve", "name": "Sciatic Nerve Level", "position": {"img": "pike_5.jpg", "caption": "Smith's form: foot up on a box, add the movements in order"}, "sides": ["L", "R"], "camera": "Position 1 (filming optional)",
           "cue": "Foot up on a box. Go through the 10 movements in order, adding one at a time and keeping the ones before. "
                  "Stop at the first nervy sensation and record that number. Level 10: pull on the foot to pull it all "
                  "together. No nervy sensation through all 10 = Clear.",
           "measures": [{"key": "level", "label": "Level reached", "kind": "choice", "options": _NERVE}]},
-         {"id": "hip_ir", "name": "Hip Internal Rotation Length Test", "sides": ["L", "R"],
+         {"id": "hip_ir", "name": "Hip Internal Rotation Length Test", "position": {"img": "pike_4.jpg", "caption": "Smith's form: on a box, knees together, feet swing out"}, "sides": ["L", "R"],
           "camera": "Position 2: camera at BOX HEIGHT, level with the box seat, facing you from the front. This is the only test not filmed from the floor (tests 1 to 4 are filmed with the phone on the floor).",
           "cue": "Sit on a box, knees bent at 90 degrees, a fist or a block between the knees to keep them together "
                  "and still, then swing the foot outward.",

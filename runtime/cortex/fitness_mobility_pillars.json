@@ -371,7 +371,11 @@
      }
     ],
     "lesson_slug": "141-shoulders_test1-leahy",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "sh_leahy.jpg",
+     "caption": "Smith's form: arm against the line straight down from the shoulder"
+    }
    },
    {
     "id": "flexion_passive",
@@ -409,7 +413,11 @@
      }
     ],
     "lesson_slug": "142-shoulders_test2-active-vs-passive",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "sh_passive_lying.jpg",
+     "caption": "Smith's form: lying, knees bent, low back flat, arms overhead"
+    }
    },
    {
     "id": "flexion_wall",
@@ -485,7 +493,11 @@
      }
     ],
     "lesson_slug": "142-shoulders_test2-active-vs-passive",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "sh_active.jpg",
+     "caption": "Smith's form: on all fours, back rounded, lift one straight arm"
+    }
    },
    {
     "id": "lat_length",
@@ -544,7 +556,11 @@
      }
     ],
     "lesson_slug": "143-shoulders_test3-lat",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "sh_lats_flat.jpg",
+     "caption": "Smith's form: back flat against the support, then rounded"
+    }
    },
    {
     "id": "pec_major",
@@ -582,7 +598,11 @@
     ],
     "lesson_slug": "144-shoulders_test4a-pec-major",
     "lesson_course": "mftk",
-    "benchmark": "10 deg (red, poor) to 40 deg (green, good) below the shoulder line (Smith's builder form diagram)"
+    "benchmark": "10 deg (red, poor) to 40 deg (green, good) below the shoulder line (Smith's builder form diagram)",
+    "position": {
+     "img": "sh_pec_bench.jpg",
+     "caption": "Smith's form: lying on a bench, elbows drop below the shoulder line"
+    }
    },
    {
     "id": "er_length",
@@ -618,7 +638,11 @@
     ],
     "lesson_slug": "146-shoulders_test5-external-rotation",
     "lesson_course": "mftk",
-    "benchmark": "-20 deg (red, poor) to 45 deg (green, good) (Smith's builder form diagram)"
+    "benchmark": "-20 deg (red, poor) to 45 deg (green, good) (Smith's builder form diagram)",
+    "position": {
+     "img": "sh_er.jpg",
+     "caption": "Smith's form: forearm against vertical (45 deg shown)"
+    }
    },
    {
     "id": "pec_minor",
@@ -761,7 +785,11 @@
      }
     ],
     "lesson_slug": "168-shoulders-strength_trap3-trap1-raises",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "sh_thumb20.jpg",
+     "caption": "Smith's form: bent over, chest supported, lift at the trap-3 angle"
+    }
    },
    {
     "id": "eok_er_reps",
@@ -781,7 +809,11 @@
      }
     ],
     "lesson_slug": "166-shoulders-strength_elbow-on-knee-er",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "sh_eok_er.jpg",
+     "caption": "Smith's form: elbow on the knee, rotate the dumbbell up"
+    }
    },
    {
     "id": "powell_reps",
@@ -1255,7 +1287,11 @@
      }
     ],
     "lesson_slug": "119-front-split_assessment",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "fs_passive.jpg",
+     "caption": "Smith's form: front knee, hip, back knee; hold 30 s"
+    }
    },
    {
     "id": "fs_isometric",
@@ -1300,7 +1336,11 @@
      }
     ],
     "lesson_slug": "119-front-split_assessment",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "fs_isometric.jpg",
+     "caption": "Smith's form: hands only for balance; hold 30 s"
+    }
    },
    {
     "id": "fs_couch_hips_low",
@@ -1347,7 +1387,11 @@
      }
     ],
     "lesson_slug": "119-front-split_assessment",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "fs_couch_low.jpg",
+     "caption": "Smith's form: back knee to the wall, hips low; hold 15 s"
+    }
    },
    {
     "id": "fs_kneeling_lunge",
@@ -1385,7 +1429,11 @@
      }
     ],
     "lesson_slug": "119-front-split_assessment",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "fs_lunge.jpg",
+     "caption": "Smith's form: back foot on the floor, hips low; hold 15 s"
+    }
    },
    {
     "id": "fs_prone_knee_bend",
@@ -1422,7 +1470,11 @@
      }
     ],
     "lesson_slug": "119-front-split_assessment",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "fs_prone_hip_ext.jpg",
+     "caption": "Smith's form: face down, lift the thigh; hold 15 s"
+    }
    },
    {
     "id": "fs_single_leg_pike",
@@ -1471,7 +1523,11 @@
      }
     ],
     "lesson_slug": "119-front-split_assessment",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "fs_single_leg_pike.jpg",
+     "caption": "Smith's form: fold over the straight front leg; hold 15 s"
+    }
    },
    {
     "id": "fs_single_leg_lift",
@@ -1510,7 +1566,11 @@
      }
     ],
     "lesson_slug": "119-front-split_assessment",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "fs_single_leg_lift.jpg",
+     "caption": "Smith's form: straight leg lifted forward; hold 15 s"
+    }
    }
   ],
   "questions": [
@@ -1586,7 +1646,11 @@
     ],
     "lesson_slug": "141-shoulders_test1-leahy",
     "same_as": "shoulder_flexion.leahy",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "sh_leahy.jpg",
+     "caption": "Smith's form: arm against the line straight down from the shoulder"
+    }
    },
    {
     "id": "er_length",
@@ -1623,7 +1687,11 @@
     "lesson_slug": "146-shoulders_test5-external-rotation",
     "same_as": "shoulder_flexion.er_length",
     "lesson_course": "mftk",
-    "benchmark": "-20 deg (red, poor) to 45 deg (green, good) (Smith's builder form diagram)"
+    "benchmark": "-20 deg (red, poor) to 45 deg (green, good) (Smith's builder form diagram)",
+    "position": {
+     "img": "br_er.jpg",
+     "caption": "Smith's form: -20 deg poor, 45 deg good"
+    }
    },
    {
     "id": "pec_major",
@@ -1662,7 +1730,11 @@
     "lesson_slug": "144-shoulders_test4a-pec-major",
     "same_as": "shoulder_flexion.pec_major",
     "lesson_course": "mftk",
-    "benchmark": "10 deg (red, poor) to 40 deg (green, good) below the shoulder line (Smith's builder form diagram)"
+    "benchmark": "10 deg (red, poor) to 40 deg (green, good) below the shoulder line (Smith's builder form diagram)",
+    "position": {
+     "img": "br_pec.jpg",
+     "caption": "Smith's form: 10 deg poor, 40 deg good below the shoulder line"
+    }
    },
    {
     "id": "couch_stretch_low",
@@ -1701,7 +1773,11 @@
     ],
     "lesson_slug": "125-couch-stretch-hips-low",
     "lesson_course": "mftk",
-    "benchmark": "90 deg (red, poor), 150 deg (example), 190 deg (green, good) (Smith's builder form diagram)"
+    "benchmark": "90 deg (red, poor), 150 deg (example), 190 deg (green, good) (Smith's builder form diagram)",
+    "position": {
+     "img": "br_couch_high.jpg",
+     "caption": "Smith's form: hips HIGH, torso upright; 90 poor, 190 good"
+    }
    },
    {
     "id": "kneeling_lunge",
@@ -1740,7 +1816,11 @@
     ],
     "lesson_slug": "178-bridge_assessment",
     "lesson_course": "mftk",
-    "benchmark": "90 deg (red, poor), 154 deg (example), 190 deg (green, good) (Smith's builder form diagram)"
+    "benchmark": "90 deg (red, poor), 154 deg (example), 190 deg (green, good) (Smith's builder form diagram)",
+    "position": {
+     "img": "br_lunge.jpg",
+     "caption": "Smith's form: 90 poor, 190 good"
+    }
    },
    {
     "id": "bridge_level",
@@ -1764,7 +1844,11 @@
      }
     ],
     "lesson_slug": "178-bridge_assessment",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "br_levels.jpg",
+     "caption": "Smith's form: can't lift / behind hands / above hands / past hands"
+    }
    }
   ],
   "questions": [
@@ -1831,7 +1915,11 @@
     "same_as": "shoulder_flexion.pec_major",
     "marked": "ours",
     "lesson_course": "mftk",
-    "benchmark": "10 deg (red, poor) to 40 deg (green, good) below the shoulder line (Smith's builder form diagram)"
+    "benchmark": "10 deg (red, poor) to 40 deg (green, good) below the shoulder line (Smith's builder form diagram)",
+    "position": {
+     "img": "sh_pec_bench.jpg",
+     "caption": "Smith's form: lying on a bench, elbows drop below the shoulder line"
+    }
    },
    {
     "id": "dislocate_grip",

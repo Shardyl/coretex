@@ -7549,6 +7549,17 @@ def fitness_cali_current(body: dict = Body(...), _: None = Depends(auth)) -> dic
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.get("/api/fitness/position/{name}")
+def fitness_position_img(name: str, _: None = Depends(auth)):
+    """A test's correct-position picture (Smith's form photos / course pages), private on the box."""
+    if not re.fullmatch(r"[a-z0-9_]{1,60}\.jpg", name or ""):
+        raise HTTPException(status_code=404, detail="not found")
+    path = os.path.join("/opt/cortex-data/fitness-course/files/positions", name)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=604800"})
+
+
 # ---------- course library: Smith's lessons, private, inside the app (14 Nov 2026) ----------
 @app.get("/api/fitness/course/{course}/{slug}")
 def fitness_course_lesson(course: str, slug: str, _: None = Depends(auth)) -> dict:

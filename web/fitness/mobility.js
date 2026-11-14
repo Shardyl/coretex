@@ -95,6 +95,7 @@ window.renderMobility=async function(){
   if(_mobView==='list')return renderList(el);
   if(String(_mobView).startsWith('session:'))return renderSession(el,String(_mobView).slice(8));
   renderPillar(el,pillar(_mobView));
+  loadPositions();
 };
 
 function todoBlock(items,max,title){
@@ -134,6 +135,13 @@ function renderList(el){
           ${ready?icon('arrow','var(--ink3)',18):''}</div></div>`;})()).join('')}`;
 }
 
+// position pictures are private: fetched with the token, cached as blobs for the session
+const _posCache={};
+async function loadPositions(){for(const im of document.querySelectorAll('img[data-pos]')){const n=im.dataset.pos;
+  try{if(!_posCache[n]){const r=await fetch(API_BASE+'/api/fitness/position/'+encodeURIComponent(n),{headers:{'Authorization':'Bearer '+syncToken()}});if(!r.ok)continue;_posCache[n]=URL.createObjectURL(await r.blob());}
+    im.src=_posCache[n];}catch(e){}}}
+window.mobPosBig=function(im){if(!im.src)return;const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.94);display:flex;align-items:center;justify-content:center;padding:10px';
+  ov.innerHTML=`<img src="${im.src}" style="max-width:100%;max-height:92vh;border-radius:8px"/>`;ov.onclick=()=>ov.remove();document.body.appendChild(ov);};
 window.mobOpen=function(id,tid){_mobView=id;_mobDay=null;renderMobility();
   setTimeout(()=>{const e=tid&&document.getElementById('mobt_'+tid);if(e)e.scrollIntoView({behavior:'smooth',block:'start'});else window.scrollTo(0,0);},30);};
 window.mobBack=function(){_mobView='list';renderMobility();};
@@ -395,6 +403,8 @@ function renderPillar(el,p){
       return `<div class="card" id="mobt_${t.id}" style="padding:12px 14px;margin-bottom:10px;scroll-margin-top:70px">
       <div style="font-size:14px;font-weight:800">${i+1}. ${esc(t.name)}${t.role?` <span style="font-size:10px;font-weight:700;color:var(--ink3)">${t.role==='active'?'ACTIVE':'PASSIVE'}</span>`:''}</div>
       ${t.camera?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--surface2)"><b>Camera:</b> ${esc(t.camera)}<div style="margin-top:4px;color:var(--ink3)">${CAM_TIP}</div></div>`:''}
+      ${t.position?`<div style="margin-top:8px"><img data-pos="${esc(t.position.img)}" alt="Correct position" onclick="mobPosBig(this)" style="width:100%;max-width:420px;border-radius:8px;background:var(--surface2);min-height:60px;cursor:zoom-in;display:block"/>
+        <div style="font-size:11.5px;color:var(--ink2);margin-top:3px"><b>Correct position:</b> ${esc(t.position.caption||'')}</div></div>`:''}
       ${holdOf(t)?`<div style="font-size:13px;font-weight:800;margin-top:6px;color:var(--teal)">Hold ${esc(holdOf(t))} for it to count</div>`:''}
       ${t.benchmark?`<div style="font-size:12px;margin-top:4px"><b>Benchmark:</b> ${esc(t.benchmark)}</div>`:''}
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
