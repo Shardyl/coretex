@@ -74,7 +74,8 @@ DEFAULT_PILLARS = [
                  "count. The active side of the pike.",
           "measures": [{"key": "deg", "label": "Hip flexion", "kind": "number", "unit": "deg",
                         "angle": {"mode": "inside", "points": ["Standing foot", "Hip", "Lifted foot"],
-                                  "pose": {"joints": ["low:ankle", "mid:hip", "high:ankle"], "side": "lifted", "best": "max"}}}],
+                                  "pose": {"joints": ["low:ankle", "mid:hip", "high:ankle"], "side": "lifted", "best": "max",
+                                           "posture": "upright"}}}],
           "role": "active"},
          {"id": "nerve", "name": "Sciatic Nerve Level", "sides": ["L", "R"], "camera": "Position 1 (filming optional)",
           "cue": "Foot up on a box. Go through the 10 movements in order, adding one at a time and keeping the ones before. "

@@ -364,7 +364,8 @@
          "elbow"
         ],
         "side": "visible",
-        "best": "max"
+        "best": "max",
+        "posture": "upright"
        }
       }
      }
@@ -401,7 +402,8 @@
          "elbow"
         ],
         "side": "visible",
-        "best": "max"
+        "best": "max",
+        "posture": "lying"
        }
       }
      }
@@ -437,7 +439,8 @@
          "elbow"
         ],
         "side": "visible",
-        "best": "max"
+        "best": "max",
+        "posture": "upright"
        }
       }
      }
@@ -475,7 +478,8 @@
          "elbow"
         ],
         "side": "visible",
-        "best": "max"
+        "best": "max",
+        "posture": "all_fours"
        }
       }
      }
@@ -905,7 +909,8 @@
          "other:ankle"
         ],
         "side": "visible",
-        "best": "max"
+        "best": "max",
+        "posture": "upright"
        }
       }
      }
@@ -940,7 +945,8 @@
          "other:ankle"
         ],
         "side": "visible",
-        "best": "max"
+        "best": "max",
+        "posture": "upright"
        }
       }
      }
@@ -1233,7 +1239,8 @@
          "other:knee"
         ],
         "side": "visible",
-        "best": "max"
+        "best": "max",
+        "posture": "upright"
        }
       }
      },
@@ -1280,7 +1287,8 @@
          "other:knee"
         ],
         "side": "visible",
-        "best": "max"
+        "best": "max",
+        "posture": "upright"
        }
       }
      },
@@ -1323,7 +1331,8 @@
          "other:knee"
         ],
         "side": "visible",
-        "best": "max"
+        "best": "max",
+        "posture": "upright"
        }
       }
      },
@@ -1369,7 +1378,8 @@
          "other:knee"
         ],
         "side": "visible",
-        "best": "max"
+        "best": "max",
+        "posture": "upright"
        }
       }
      }
@@ -1493,7 +1503,8 @@
          "low:knee"
         ],
         "side": "lifted",
-        "best": "max"
+        "best": "max",
+        "posture": "upright"
        }
       }
      }
@@ -1567,7 +1578,8 @@
          "elbow"
         ],
         "side": "visible",
-        "best": "max"
+        "best": "max",
+        "posture": "upright"
        }
       }
      }
@@ -1681,7 +1693,8 @@
          "other:knee"
         ],
         "side": "each",
-        "best": "max"
+        "best": "max",
+        "posture": "upright"
        }
       }
      }
@@ -1719,7 +1732,8 @@
          "other:knee"
         ],
         "side": "each",
-        "best": "max"
+        "best": "max",
+        "posture": "upright"
        }
       }
      }

@@ -603,6 +603,34 @@ function poseCandidates(P,L){
 }
 const seekTo=(v,t)=>new Promise(res=>{let done=false;const fin=()=>{if(done)return;done=true;v.removeEventListener('seeked',fin);if(v.requestVideoFrameCallback){let ok=false;v.requestVideoFrameCallback(()=>{ok=true;res();});setTimeout(()=>{if(!ok)res();},400);}else res();};
   v.addEventListener('seeked',fin);setTimeout(fin,2000);v.currentTime=Math.min(t,Math.max(0,v.duration-0.05));});
+// ---------- position + hold (owner, 14 Nov 2026: it measured him getting into position, not the held position) ----------
+// posture: 'upright' = trunk within 35 deg of vertical; 'lying' = trunk within 30 deg of horizontal and the knees NOT
+// well below the hips (lying, knees bent); 'all_fours' = trunk near horizontal and the knees well below the hips.
+function postureOf(L){
+  const m=(a,b)=>({x:(L[a].x+L[b].x)/2,y:(L[a].y+L[b].y)/2}), sh=m(11,12), hp=m(23,24), kn=m(25,26);
+  const dx=sh.x-hp.x, dy=sh.y-hp.y, len=Math.hypot(dx,dy)||1e-6, fromVert=Math.acos(Math.min(1,Math.abs(dy)/len))*180/Math.PI;
+  const kneeBelow=(kn.y-hp.y)/len;
+  return {upright:fromVert<=35, horizontal:fromVert>=60, kneeBelow};
+}
+function postureOK(kind,L){if(!kind)return true;const p=postureOf(L);
+  if(kind==='upright')return p.upright;
+  if(kind==='lying')return p.horizontal&&p.kneeBelow<0.3;
+  if(kind==='all_fours')return p.horizontal&&p.kneeBelow>=0.3;
+  return true;}
+// the best HELD position: a run of frames lasting the test's hold time, all in the right posture, the angle steady
+// (spread <= 8 deg); its value is the median of the run (Smith: the average position held), its dots the frame nearest
+function bestHeld(arr,best,holdS,step){
+  const ok=arr.filter(x=>x.vis>=VIS_MIN&&x.a!=null&&x.pos!==false);
+  const n=Math.max(2,Math.round(holdS/step));let win=null;
+  for(let i=0;i+n<=ok.length;i++){const w=ok.slice(i,i+n);
+    if(w[w.length-1].t-w[0].t>holdS+step*2.5)continue;      // a gap in the run (frames dropped): not continuous
+    const as=w.map(x=>x.a), spread=Math.max(...as)-Math.min(...as);if(spread>8)continue;
+    const med=as.slice().sort((a,b)=>a-b)[Math.floor(as.length/2)];
+    if(!win||(best==='min'?med<win.med:med>win.med))win={med,w};}
+  if(!win)return null;
+  const pick=win.w.reduce((a,b)=>Math.abs(b.a-win.med)<Math.abs(a.a-win.med)?b:a);
+  return {...pick,held:[win.w[0].t,win.w[win.w.length-1].t],med:Math.round(win.med*10)/10};
+}
 function bestOf(arr,best){
   const ok=arr.filter(x=>x.vis>=VIS_MIN&&x.a!=null);if(ok.length<3)return null;
   const sm=ok.map((x,i)=>{const w=ok.slice(Math.max(0,i-2),i+3).map(y=>y.a).sort((a,b)=>a-b);return w[Math.floor(w.length/2)];});
@@ -610,7 +638,7 @@ function bestOf(arr,best){
   let pick=bi;for(let i=Math.max(0,bi-2);i<=Math.min(ok.length-1,bi+2);i++)if(Math.abs(ok[i].a-sm[bi])<Math.abs(ok[pick].a-sm[bi]))pick=i;
   return ok[pick];
 }
-async function poseScan(video,sp,prog){
+async function poseScan(video,sp,prog,holdS){
   const lm=await poseLoader(), P=sp.pose, dur=video.duration, step=dur>40?0.25:0.2, W=video.videoWidth, H=video.videoHeight;
   const series={};video.pause();
   const _cv=document.createElement('canvas');_cv.width=W;_cv.height=H;
@@ -618,10 +646,10 @@ async function poseScan(video,sp,prog){
     await seekTo(video,t);
     _cv.getContext('2d').drawImage(video,0,0,W,H);
     const r=lm.detect(_cv), L=r&&r.landmarks&&r.landmarks[0];
-    if(L)poseCandidates(P,L).forEach(c=>{const pts=c.pts.map(q=>({x:q.x*W,y:q.y*H}));(series[c.side]=series[c.side]||[]).push({t:Math.round(t*10)/10,a:readAngle(sp,pts),pts,vis:c.vis});});
+    if(L){const pos=postureOK(P.posture,L);poseCandidates(P,L).forEach(c=>{const pts=c.pts.map(q=>({x:q.x*W,y:q.y*H}));(series[c.side]=series[c.side]||[]).push({t:Math.round(t*10)/10,a:readAngle(sp,pts),pts,vis:c.vis,pos});});}
     prog(t/dur);
   }
-  const out={};Object.keys(series).forEach(s=>{const b=bestOf(series[s],P.best);if(b)out[s]=b;});
+  const out={};Object.keys(series).forEach(s=>{const b=bestHeld(series[s],P.best,holdS||3,step);if(b)out[s]=b;});
   return out;
 }
 window.mobPoseBest=bestOf;window.mobPoseCandidates=poseCandidates;
@@ -631,11 +659,12 @@ window.mobAutoMeasure=async function(video,id,ov,btn,msg){
   try{
     say('Loading the pose model (first time only)...');
     if(!video.duration||!isFinite(video.duration))await new Promise(r=>video.addEventListener('loadedmetadata',r,{once:true}));
-    const res=await poseScan(video,ps.sp,f=>say('Finding your joints... '+Math.round(f*100)+'%'));
+    const hs=parseFloat(holdOf(testOf(mediaRec(id))))||3;
+    const res=await poseScan(video,ps.sp,f=>say('Finding your held position... '+Math.round(f*100)+'%'),hs);
     // a one-sided test filmed one side per clip: the visible-side result belongs to the clip's own side
     {const rec=mediaRec(id), t=testOf(rec);if(res.both&&t&&!t.sides.includes('both')&&rec&&t.sides.includes(rec.side)){res[rec.side]=res.both;delete res.both;}}
     const sides=Object.keys(res);
-    if(!sides.length){say('Could not see you clearly enough in this clip. Pause on your best position and measure by hand.');btn.disabled=false;btn.style.opacity=1;return;}
+    if(!sides.length){say('No steady '+hs+' s hold in the test position found in this clip. Check the set-up and hold, refilm, or pause on your held position and measure by hand.');btn.disabled=false;btn.style.opacity=1;return;}
     await seekTo(video,res[sides[0]].t);
     mobMeasure(video,id,ov,{m:ps.m,res});
   }catch(e){say('Auto-measure could not start ('+(e&&e.message||'error')+'). Measure by hand instead.');btn.disabled=false;btn.style.opacity=1;}
@@ -667,7 +696,7 @@ window.mobMeasure=function(src,id,ov,auto){
   const save=document.createElement('button');save.className='btn-sm';save.textContent='Save angle';save.style.cssText='background:var(--teal);color:#fff;border-color:var(--teal)';
   const reset=document.createElement('button');reset.className='btn-sm';reset.textContent='Start again';
   const close=document.createElement('button');close.className='btn-sm';close.textContent='Cancel';close.onclick=()=>ov.remove();
-  const setTip=()=>{if(auto&&auto.res[side.value]){tip.textContent='Auto-detected at '+frameS+' s. Check the dots sit on your '+sp.points.join(', ').toLowerCase()+'; drag any that are off, then save.';return;}
+  const setTip=()=>{if(auto&&auto.res[side.value]){const rr=auto.res[side.value];tip.textContent='Held '+rr.held[0]+' to '+rr.held[1]+' s (median of the hold '+Math.round(rr.med)+'°); shown at '+frameS+' s. Check the dots sit on your '+sp.points.join(', ').toLowerCase()+'; drag any that are off, then save.';return;}
     tip.textContent='Tap '+sp.points.map((p,i)=>i===pivotOf(sp)?p+' (yellow)':p).join(', then ')+'. Drag a point to adjust it.'+(sp.mode==='vertical'?' The dashed line is straight down.':'');};
   const draw=()=>{ctx.drawImage(frame,0,0);ctx.lineWidth=Math.max(3,W/300);ctx.strokeStyle='#30d5a8';
     if(pts.length>1){ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.stroke();}
