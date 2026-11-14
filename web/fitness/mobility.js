@@ -207,10 +207,16 @@ function upProgress(el,pct,txt,state){if(!el)return;const c=state==='fail'?'var(
 if(!document.getElementById('mobKF')){const st=document.createElement('style');st.id='mobKF';st.textContent='@keyframes mobPulse{0%,100%{opacity:1}50%{opacity:.45}}';document.head.appendChild(st);}
 const TICK='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3l5 -6"/></svg>';
 function clipBtns(list,lr){
-  return list.map((x,k)=>{const vid=x.mime.startsWith('video')&&!x.source;
-    const lab=x.source?'Measured still':(vid?'Video uploaded':'Photo uploaded')+(list.filter(y=>!y.source).length>1?' '+(k+1):'');
-    return `<button title="${esc(x.note||'')}" onclick="mobPlay('${x.id}','${x.mime}')" style="display:inline-flex;align-items:center;gap:7px;padding:6px 12px 6px 8px;border-radius:10px;border:1px solid ${x.source?'var(--border)':'var(--teal)'};background:${x.source?'transparent':'rgba(48,213,168,0.10)'};color:${x.source?'var(--ink2)':'var(--teal)'};font-size:12.5px;font-weight:800;cursor:pointer">
-      ${x.source?'':TICK}<span>${lab}${lr&&x.side==='both'?' (both sides)':''}</span><span style="font-weight:600;opacity:.75">${mb(x.bytes)}</span>${vid?'<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--teal)"><svg width="10" height="10" viewBox="0 0 24 24" fill="#fff" style="margin-left:1px" aria-hidden="true"><path d="M7 4v16l13 -8z"/></svg></span>':''}</button>`;}).join('');
+  // once measured, the measured still is the thing (green); the clip drops to a small "original video" link, kept for
+  // re-measuring (owner 14 Nov 2026). Before measuring, the uploaded clip is the highlighted item.
+  const measured=list.some(y=>y.source&&!String(y.note||'').startsWith('Clean frame'));
+  const shown=list.filter(y=>!(y.source&&String(y.note||'').startsWith('Clean frame')));
+  const hi=x=>measured?(x.source):(!x.source);
+  return shown.sort((a,b)=>(hi(b)?1:0)-(hi(a)?1:0)).map((x,k)=>{const vid=x.mime.startsWith('video')&&!x.source;
+    if(measured&&!x.source)return `<button title="${esc(x.note||'')}" onclick="mobPlay('${x.id}','${x.mime}')" style="background:none;border:none;padding:4px 2px;color:var(--ink3);font-size:11.5px;text-decoration:underline;cursor:pointer">original ${vid?'video':'photo'} &middot; ${mb(x.bytes)}</button>`;
+    const lab=x.source?'Measured still':(vid?'Video uploaded':'Photo uploaded');
+    return `<button title="${esc(x.note||'')}" onclick="mobPlay('${x.id}','${x.mime}')" style="display:inline-flex;align-items:center;gap:7px;padding:6px 12px 6px 8px;border-radius:10px;border:1px solid var(--teal);background:rgba(48,213,168,0.10);color:var(--teal);font-size:12.5px;font-weight:800;cursor:pointer">
+      ${TICK}<span>${lab}${!x.source&&lr&&x.side==='both'?' (both sides)':''}</span><span style="font-weight:600;opacity:.75">${mb(x.bytes)}</span>${vid?'<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--teal)"><svg width="10" height="10" viewBox="0 0 24 24" fill="#fff" style="margin-left:1px" aria-hidden="true"><path d="M7 4v16l13 -8z"/></svg></span>':''}</button>`;}).join('');
 }
 const noteLines=list=>list.filter(x=>x.note&&!x.source).map(x=>`<div style="font-size:11px;color:var(--ink3);margin-top:4px">Clip note: ${esc(x.note)}</div>`).join('');
 
