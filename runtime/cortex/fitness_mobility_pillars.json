@@ -497,19 +497,19 @@
     "measures": [
      {
       "key": "angle",
-      "label": "Active flexion angle (arm vs scapula line, parallel to the floor)",
+      "label": "Active flexion angle (arm vs the line along your back)",
       "kind": "number",
       "unit": "deg",
       "angle": {
        "mode": "inside",
        "points": [
-        "a point level with the shoulder, towards the hips (horizontal, Smith's line)",
+        "along the back to the hip (the trunk / scapula line)",
         "centre of the shoulder",
         "elbow"
        ],
        "pose": {
         "joints": [
-         "level:shoulder@hip",
+         "hip",
          "shoulder",
          "elbow"
         ],

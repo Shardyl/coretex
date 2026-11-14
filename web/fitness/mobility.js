@@ -658,7 +658,9 @@ async function poseScan(video,sp,prog,holdS){
   const lm=await poseLoader(), P=sp.pose, dur=video.duration, step=dur>40?0.25:0.2, W=video.videoWidth, H=video.videoHeight;
   const series={};video.pause();
   const _cv=document.createElement('canvas');_cv.width=W;_cv.height=H;
-  for(let k=0;k*step<dur;k++){const t=Math.round(k*step*1000)/1000;
+  // skip the first 5 s (getting into position, owner 14 Nov) when the clip still leaves room for the hold after it
+  const t0=dur>=(holdS||3)+7?5:0;
+  for(let k=Math.round(t0/step);k*step<dur;k++){const t=Math.round(k*step*1000)/1000;
     await seekTo(video,t);
     _cv.getContext('2d').drawImage(video,0,0,W,H);
     const r=lm.detect(_cv), L=r&&r.landmarks&&r.landmarks[0];
