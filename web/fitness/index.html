@@ -259,7 +259,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
     </div>
     <div class="section-tabs">
       <button class="section-tab active" data-section="food">Food</button>
-      <button class="section-tab" data-section="lifts">Lifting</button>
+      <button class="section-tab" data-section="lifts">Strength</button>
       <button class="section-tab" data-section="cardio">Cardio</button>
       <button class="section-tab" data-section="mobility">Mobility</button>
       <button class="section-tab" data-section="calisthenics">Calisthenics</button>
@@ -274,7 +274,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
 
     <!-- ═══ LIFTING PAGES ═══ -->
     <div id="page-lifts-log" class="page active" data-section="lifts">
-      <div class="section-label">New lifting session</div>
+      <div class="section-label">New strength session</div>
       <div class="card">
         <div class="form-group">
           <label class="form-label">Workout</label>
@@ -327,7 +327,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
     </div>
 
     <div id="page-lifts-history" class="page" data-section="lifts">
-      <div class="section-label">Lifting history</div>
+      <div class="section-label">Strength history</div>
       <div style="display:flex;gap:8px;margin-bottom:8px">
         <select id="histWk" style="flex:1;font-size:14px"><option value="all">All workouts</option></select>
         <select id="histEx" style="flex:1;font-size:14px"><option value="all">All exercises</option></select>
@@ -488,7 +488,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
     <div id="page-physio-history" class="page" data-section="physio"></div>
 
     <div id="page-workouts-lifts" class="page" data-section="workouts">
-      <div class="section-label">Lifting plans</div>
+      <div class="section-label">Strength plans</div>
       <div id="wkList"></div>
       <button class="btn-add" id="addWorkoutBtn">+ New lifting plan</button>
     </div>
@@ -953,6 +953,7 @@ function loadAll(){
     liftWorkouts=wks;
   }else liftWorkouts=DEFAULT_LIFT_WORKOUTS.map(w=>JSON.parse(JSON.stringify(w)));}
   catch(e){liftWorkouts=DEFAULT_LIFT_WORKOUTS.map(w=>JSON.parse(JSON.stringify(w)));}
+  try{if(ensurePlyo())setTimeout(()=>saveLiftWorkouts(),0);}catch(e){}
 
   // Cardio
   try{const d=localStorage.getItem(CARDIO_SESS_KEY);if(d)cardioSessions=JSON.parse(d);
@@ -1007,7 +1008,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='177';                         // keep in step with CACHE in sw.js
+const APP_VERSION='178';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1282,6 +1283,7 @@ function applyServerState(state,force){
     sets:s.sets||[],isManual:!!(s.readings&&Object.keys(s.readings).length)})),liftSessions);
   if(state.cardioSessions)cardioSessions=mergeById(state.cardioSessions,cardioSessions);
   if(state.plans&&state.plans.length)liftWorkouts=mergeById(state.plans,liftWorkouts);
+  try{if(ensurePlyo())setTimeout(()=>saveLiftWorkouts(),0);}catch(e){}
   if(state.cardioPresets&&state.cardioPresets.length)cardioExercises=mergeById(state.cardioPresets,cardioExercises);
   if(state.bodyweight)bodyweightLog=mergeById(state.bodyweight,bodyweightLog,'date').map(b=>Object.assign({id:'bw_'+b.date},b));
   if(state.vo2)vo2Records=mergeById(state.vo2,vo2Records);
@@ -1387,6 +1389,7 @@ function liftKg(r){
   return null;
 }
 function liftLoad(r){
+  if(metricDef(r.exercise))return null;      // a jump is scored in cm, never as kg x reps
   const kg=liftKg(r), reps=parseFloat(r.totalReps)||0;
   if(kg===null||!reps)return null;
   return Math.round(kg*reps*10)/10;
@@ -1414,6 +1417,33 @@ function isLoadPR(r){
 function unresolvedBWCount(){
   return liftSessions.filter(s=>!s.isManual&&s.totalReps>0&&liftKg(s)===null).length;
 }
+// ─── PLYOMETRICS (owner, 14 Nov 2026) ─────────────────────────────────────────
+// Explosive work lives in the Power & Core plan. An exercise with `metric` is measured in cm, not kg load:
+// metric 'weight' = the weight field holds the measure (box height); metric 'best' = each set is one attempt in cm and
+// the session's score is the best attempt (broad jump, vertical jump). Added to his plan by ensurePlyo(), which only
+// ever adds what is missing (plans sync as a whole document, so a server-side edit could be overwritten by a phone).
+const PLYO_ADD=[
+  {id:'pc_broad',name:'Standing Broad Jump',sets:3,metric:'best',unit:'cm',per:'cm',rest:'60-90 s, full rest',wtLabel:'Weight (leave blank)',
+   cue:'Two feet, swing the arms, jump as far as you can and stick the landing. Log each jump in cm, start line to heels.'},
+  {id:'pc_vert',name:'Vertical Jump (wall reach)',sets:3,metric:'best',unit:'cm',per:'cm',rest:'60 s, full rest',wtLabel:'Weight (leave blank)',
+   cue:'Chalk the fingertips and mark your standing reach. Jump and touch as high as you can. Log touch minus standing reach, in cm.'},
+  {id:'pc_slhop',name:'Single-Leg Hops (right leg first)',sets:3,range:[8,12],per:'hops a leg',step:'hop forward and back over a line, back to 8',rest:'60 s',wtLabel:'Weight (leave blank)',
+   cue:'Small quiet hops on the ball of the foot, stiff ankle. The right is the weaker side (foot lift): match it to the left.'},
+  {id:'pc_clap',name:'Clap Push-Ups',sets:3,range:[3,6],per:'reps',step:'feet up on a 30 cm box, back to 3',rest:'90 s, full rest',wtLabel:'Weight (BW)',
+   cue:'Explode up, clap, land soft with bent arms. End the set when a rep slows down.'}
+];
+function ensurePlyo(){
+  const w=liftWorkouts.find(x=>x.id==='wk_power_core');if(!w||!Array.isArray(w.exercises))return false;
+  let ch=false;const bi=w.exercises.findIndex(x=>x.id==='pc_box');let at=bi>=0?bi+1:w.exercises.length;
+  PLYO_ADD.forEach(e=>{if(!w.exercises.some(x=>x.id===e.id||x.name===e.name)){w.exercises.splice(at,0,JSON.parse(JSON.stringify(e)));at++;ch=true;}else at=Math.max(at,w.exercises.findIndex(x=>x.id===e.id||x.name===e.name)+1);});
+  const bj=w.exercises.find(x=>x.id==='pc_box');if(bj&&bj.metric!=='weight'){bj.metric='weight';bj.unit='cm';ch=true;}
+  return ch;
+}
+function metricDef(name){const d=getExerciseDef(name);return d&&d.metric?d:null;}
+function metricVal(r,d){if(d.metric==='weight'){const v=parseFloat(String(r.weight||'').replace(/[^0-9.]/g,''));return isNaN(v)?null:v;}
+  const xs=(r.sets||[]).map(v=>parseFloat(v)).filter(v=>!isNaN(v)&&v>0);return xs.length?Math.max(...xs):null;}
+const metricName=d=>d.metric==='weight'?'Box height':'Best jump';
+
 function getExerciseDef(name){
   const wk=(document.getElementById('wkSelect')||{}).value, w0=liftWorkouts.find(w=>w.id===wk), hit=w0&&w0.exercises.find(e=>e.name===name);
   if(hit)return hit;
@@ -1569,7 +1599,7 @@ const SUBNAVS={
   lifts:[{label:'Log',key:'log'},{label:'History',key:'history'},{label:'Reports',key:'reports'},{label:'Progress',key:'progress'}],
   cardio:[{label:'Log',key:'log'},{label:'History',key:'history'},{label:'Reports',key:'reports'},{label:'Progress',key:'progress'}],
   food:[{label:'Today',key:'today'},{label:'Weight',key:'weight'},{label:'Fasting',key:'fasting'},{label:'Glucose',key:'glucose'},{label:'Recovery',key:'recovery'},{label:'Bloods',key:'bloods'},{label:'History',key:'history'},{label:'My foods',key:'foods'}],
-  workouts:[{label:'Lifting',key:'lifts'},{label:'Cardio',key:'cardio'}],
+  workouts:[{label:'Strength',key:'lifts'},{label:'Cardio',key:'cardio'}],
   mobility:[{label:'Pillars',key:'pillars'}],
   calisthenics:[{label:'Program',key:'program'},{label:'Skill tree',key:'tree'},{label:'Library',key:'library'}],
   physio:[{label:'Issues',key:'issues'},{label:'Log session',key:'session'},{label:'History',key:'history'}]
@@ -1755,7 +1785,7 @@ function renderLastBox(){
   const chips=lastSets.map((v,i)=>`<div class="last-set-chip" style="${i===lastSets.length-1?'border:1.5px solid var(--amber);color:var(--amber)':''}">S${i+1} ${v}</div>`).join('');
   box.innerHTML=`<div class="last-session">
     <div class="last-session-head">Last: ${fmtDateFull(last.date)}${isPR?' <span class="tag tag-amber">PR</span>':''}</div>
-    <div style="font-size:13px;color:var(--ink);margin-bottom:7px">${last.weight}${last.weight!=='BW'&&last.weight!=='—'?' kg':''} · ${last.totalReps} reps${liftLoad(last)!==null?` · <span style="font-weight:700">${fmtLoad(liftLoad(last))} kg load</span>`:''}</div>
+    <div style="font-size:13px;color:var(--ink);margin-bottom:7px">${exDef&&exDef.metric==='best'?`Best ${metricVal(last,exDef)} cm`:`${last.weight}${last.weight!=='BW'&&last.weight!=='—'?' kg':''} · ${last.totalReps} reps`}${liftLoad(last)!==null?` · <span style="font-weight:700">${fmtLoad(liftLoad(last))} kg load</span>`:''}</div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:${hasSavedTarget?'10px':'0'}">${chips}</div>
     ${hasSavedTarget?`<div style="background:var(--amber-light);border-radius:7px;padding:8px 10px"><div style="font-size:10px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Your saved target</div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${nt.wt?`<span style="font-size:13px;font-weight:700;color:var(--ink)">${nt.wt}${nt.wt!=='BW'?' kg':''}</span><span style="color:var(--ink3)">·</span>`:''} ${nt.sets?`<span style="font-size:14px;font-weight:800;color:var(--ink)">${nt.sets.join(' / ')}</span>`:''} ${nt.note?`<span style="font-size:12px;color:var(--ink2);font-style:italic">${nt.note}</span>`:''}</div></div>`:''}
   </div>`;
@@ -2051,8 +2081,9 @@ function renderLiftProgress(){
   document.getElementById('liftExList').innerHTML=allEx.map(ex=>{
     const rows=liftSessions.filter(s=>s.exercise===ex).sort((a,b)=>new Date(a.date)-new Date(b.date));
     if(!rows.length)return'';
-    const delta=rows[rows.length-1].totalReps-rows[0].totalReps;
-    return`<div class="exercise-card" onclick="showLiftChart('${ex.replace(/'/g,"\\'")}')"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="ex-name">${ex}</div><div class="ex-meta">${rows.length} sessions · PR: ${fmtLoad(getPRLoad(ex).load)} kg</div></div><div class="ex-trend ${delta>=0?'up':'down'}">${delta>=0?'+':''}${delta}</div></div></div>`;
+    const md=metricDef(ex), mv=md?rows.map(r=>metricVal(r,md)).filter(v=>v!=null):[];
+    const delta=md?(mv.length?Math.round((mv[mv.length-1]-mv[0])*10)/10:0):rows[rows.length-1].totalReps-rows[0].totalReps;
+    return`<div class="exercise-card" onclick="showLiftChart('${ex.replace(/'/g,"\\'")}')"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="ex-name">${ex}</div><div class="ex-meta">${rows.length} sessions · ${md?`${metricName(md)} best: ${mv.length?Math.max(...mv):'—'} cm`:`PR: ${fmtLoad(getPRLoad(ex).load)} kg`}</div></div><div class="ex-trend ${delta>=0?'up':'down'}">${delta>=0?'+':''}${delta}</div></div></div>`;
   }).join('');
 }
 window.showLiftChart=function(ex){
@@ -2060,15 +2091,15 @@ window.showLiftChart=function(ex){
   const area=document.getElementById('liftChartArea');area.style.display='';
   const isDark=matchMedia('(prefers-color-scheme:dark)').matches;
   const tc=isDark?'#5DCAA5':'#1D9E75',gc=isDark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)',txc=isDark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)';
-  area.innerHTML=`<div class="chart-section"><div class="chart-hdr"><div class="chart-title">${ex}</div><button class="chart-close" onclick="document.getElementById('liftChartArea').style.display='none'">close</button></div><div class="chart-toggle" id="lct"><button class="active" onclick="switchLiftM('totalReps',this)">Total reps</button><button onclick="switchLiftM('bestSet',this)">Best set</button></div><div style="position:relative;width:100%;height:210px"><canvas id="lpc" role="img" aria-label="Progress for ${ex}"></canvas></div><div style="font-size:11px;color:var(--ink3);margin-top:8px;text-align:center">${rows.length} sessions from ${fmtDate(rows[0].date)}</div></div>`;
-  window._lcd={rows,tc,gc,txc,m:'totalReps'};buildLiftChart();
+  area.innerHTML=`<div class="chart-section"><div class="chart-hdr"><div class="chart-title">${ex}</div><button class="chart-close" onclick="document.getElementById('liftChartArea').style.display='none'">close</button></div><div class="chart-toggle" id="lct">${metricDef(ex)?`<button class="active">${metricName(metricDef(ex))} (cm)</button>`:`<button class="active" onclick="switchLiftM('totalReps',this)">Total reps</button><button onclick="switchLiftM('bestSet',this)">Best set</button>`}</div><div style="position:relative;width:100%;height:210px"><canvas id="lpc" role="img" aria-label="Progress for ${ex}"></canvas></div><div style="font-size:11px;color:var(--ink3);margin-top:8px;text-align:center">${rows.length} sessions from ${fmtDate(rows[0].date)}</div></div>`;
+  window._lcd={rows,tc,gc,txc,m:metricDef(ex)?'metric':'totalReps',md:metricDef(ex)};buildLiftChart();
   area.scrollIntoView({behavior:'smooth',block:'nearest'});
 };
 window.switchLiftM=function(m,btn){window._lcd.m=m;document.querySelectorAll('#lct button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');buildLiftChart();};
 function buildLiftChart(){
-  const{rows,tc,gc,txc,m}=window._lcd;
+  const{rows,tc,gc,txc,m,md}=window._lcd;
   if(liftChart){liftChart.destroy();liftChart=null;}
-  liftChart=new Chart(document.getElementById('lpc'),{type:'line',data:{labels:rows.map(r=>fmtDate(r.date)),datasets:[{label:m,data:rows.map(r=>m==='bestSet'?(r.bestSet||Math.max(...(r.sets||[0]))):r.totalReps),borderColor:tc,backgroundColor:tc+'18',borderWidth:2.5,pointRadius:3.5,pointBackgroundColor:tc,fill:true,tension:0.35}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:txc,font:{size:10},maxRotation:45},grid:{color:gc}},y:{ticks:{color:txc,font:{size:11}},grid:{color:gc}}}}});
+  liftChart=new Chart(document.getElementById('lpc'),{type:'line',data:{labels:rows.map(r=>fmtDate(r.date)),datasets:[{label:m,data:rows.map(r=>m==='metric'?metricVal(r,md):m==='bestSet'?(r.bestSet||Math.max(...(r.sets||[0]))):r.totalReps),borderColor:tc,backgroundColor:tc+'18',borderWidth:2.5,pointRadius:3.5,pointBackgroundColor:tc,fill:true,tension:0.35}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:txc,font:{size:10},maxRotation:45},grid:{color:gc}},y:{ticks:{color:txc,font:{size:11}},grid:{color:gc}}}}});
 }
 
 // ─── CARDIO LOG ───────────────────────────────────────────────────────────────
@@ -3242,9 +3273,9 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=177"></script>
-<script src="mobility.js?v=177"></script>
-<script src="calisthenics.js?v=177"></script>
-<script src="physio.js?v=177"></script>
+<script src="food.js?v=178"></script>
+<script src="mobility.js?v=178"></script>
+<script src="calisthenics.js?v=178"></script>
+<script src="physio.js?v=178"></script>
 </body>
 </html>

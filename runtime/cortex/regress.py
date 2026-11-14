@@ -2621,6 +2621,16 @@ def _cases():
                 and "physioBanner()" in open(_web + "/fitness/mobility.js", encoding="utf-8").read())
     case("the physio section's ranked issues are data whose tests, Mobility links and lessons all resolve",
          "physio 14 Nov", _physio)
+
+    def _plyo():
+        # 14 Nov 2026 (owner): plyometrics live in Strength (was Lifting); a jump is scored in cm, never as kg load,
+        # and the exercises are added to his plan only where missing (plans sync as one document)
+        h = open(_web + "/fitness/index.html", encoding="utf-8").read()
+        return ('data-section="lifts">Strength<' in h and "function ensurePlyo(" in h and "id:'pc_broad'" in h
+                and "if(metricDef(r.exercise))return null;" in h and "if(ensurePlyo())" in h
+                and h.count("try{if(ensurePlyo())") == 2)
+    case("plyometric jumps are measured in cm in the Strength section and added to the plan only where missing",
+         "plyo 14 Nov", _plyo)
     case("pancake and shoulder tests and every drill come from the course notes as data, each lesson plays inside the "
          "app through a short-lived signed link, and a bad lesson id is refused", "course library 14 Nov", _mob_library)
     case("the fold and elbow/head scales are the program builder's own steps, and a measured frame is saved clean "
