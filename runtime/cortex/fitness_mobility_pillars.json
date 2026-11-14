@@ -55,7 +55,11 @@
       "kind": "number",
       "unit": "cm"
      }
-    ]
+    ],
+    "position": {
+     "img": "pancake_pancake_max.jpg",
+     "caption": "Legs as wide as you can, reach forward, round the spine, drop the head, pull down actively"
+    }
    },
    {
     "id": "pancake_natural",
@@ -108,7 +112,11 @@
       "kind": "number",
       "unit": "cm"
      }
-    ]
+    ],
+    "position": {
+     "img": "pancake_pancake_natural.jpg",
+     "caption": "Comfortable straddle width, reach forward, round the spine, drop the head, pull down actively"
+    }
    },
    {
     "id": "pancake_narrow",
@@ -162,7 +170,11 @@
       "kind": "number",
       "unit": "cm"
      }
-    ]
+    ],
+    "position": {
+     "img": "pancake_pancake_narrow.jpg",
+     "caption": "Small straddle, reach forward, round the spine, drop the head, pull down actively"
+    }
    },
    {
     "id": "standing_pancake",
@@ -203,7 +215,11 @@
       "kind": "number",
       "unit": "cm"
      }
-    ]
+    ],
+    "position": {
+     "img": "pancake_standing_pancake.jpg",
+     "caption": "Natural straddle width, fold and hang passively, round the spine, drop the head"
+    }
    },
    {
     "id": "pancake_lift",
@@ -238,7 +254,11 @@
        }
       }
      }
-    ]
+    ],
+    "position": {
+     "img": "pancake_pancake_lift.jpg",
+     "caption": "Hands on the floor in front, legs straight and knees locked, press down and lift both feet, slight forward lean"
+    }
    },
    {
     "id": "tailors_pose",
@@ -290,7 +310,11 @@
        "Yes"
       ]
      }
-    ]
+    ],
+    "position": {
+     "img": "pancake_tailors_pose.jpg",
+     "caption": "Hips and back against the wall, soles together, hands off, pull knees apart and down"
+    }
    }
   ],
   "gap": {
@@ -454,7 +478,11 @@
      }
     ],
     "lesson_slug": "142-shoulders_test2-active-vs-passive",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "shoulder_flexion_flexion_wall.jpg",
+     "caption": "Back flat to the wall, arms straight overhead, low back stays on the wall"
+    }
    },
    {
     "id": "flexion_active",
@@ -665,7 +693,11 @@
      }
     ],
     "lesson_slug": "147-shoulders_test6-pec-minor",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "shoulder_flexion_pec_minor.jpg",
+     "caption": "Lie on the back, arms slightly out, partner presses both shoulders down to the floor"
+    }
    },
    {
     "id": "ir_length",
@@ -702,7 +734,11 @@
      }
     ],
     "lesson_slug": "148-shoulders_test7-internal-rotation",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "shoulder_flexion_ir_length.jpg",
+     "caption": "Lie on the back, elbow level with the shoulder and bent 90, forearm up, then let it rotate down without the shoulder lifting"
+    }
    },
    {
     "id": "force_couple_push",
@@ -765,7 +801,11 @@
       "lesson_slug": "149b-shoulders_force-couple_dip-technique",
       "lesson_course": "mftk"
      }
-    ]
+    ],
+    "position": {
+     "img": "shoulder_flexion_force_couple_push.jpg",
+     "caption": "Feet against an object, hands beside the chest, forearms vertical, body straight"
+    }
    },
    {
     "id": "trap3_reps",
@@ -833,7 +873,11 @@
      }
     ],
     "lesson_slug": "167-shoulders-strength_powell-raises",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "shoulder_flexion_powell_reps.jpg",
+     "caption": "Side-lying on the floor, propped on the other arm, slight elbow bend, raise the dumbbell in an arc"
+    }
    }
   ],
   "gap": {
@@ -946,7 +990,11 @@
        }
       }
      }
-    ]
+    ],
+    "position": {
+     "img": "side_split_ss_triangle_supported.jpg",
+     "caption": "Hands on a support with straight arms, feet in line with the hands, sit back, chest high"
+    }
    },
    {
     "id": "ss_triangle_free",
@@ -982,7 +1030,11 @@
        }
       }
      }
-    ]
+    ],
+    "position": {
+     "img": "side_split_ss_triangle_free.jpg",
+     "caption": "Hands off the thighs, sit back, chest high, feet slightly turned out, legs pulled apart"
+    }
    },
    {
     "id": "ss_tailors_pose",
@@ -1034,7 +1086,11 @@
        "yes"
       ]
      }
-    ]
+    ],
+    "position": {
+     "img": "side_split_ss_tailors_pose.jpg",
+     "caption": "Back against the wall, soles together, hands off, pull knees apart and down with the glutes"
+    }
    },
    {
     "id": "ss_kneeling_tilt_open",
@@ -1069,7 +1125,11 @@
        }
       }
      }
-    ]
+    ],
+    "position": {
+     "img": "side_split_ss_kneeling_tilt_open.jpg",
+     "caption": "On the opposite elbow, lift the leg out to the side as high as possible, foot level with or ahead of the hip, squeeze the glutes"
+    }
    },
    {
     "id": "ss_drop_stance",
@@ -1104,7 +1164,11 @@
        }
       }
      }
-    ]
+    ],
+    "position": {
+     "img": "side_split_ss_drop_stance.jpg",
+     "caption": "Wide stance, drop over one leg, straight leg foot flat and facing forward, chest high"
+    }
    },
    {
     "id": "ss_pancake",
@@ -1151,7 +1215,11 @@
        "abs"
       ]
      }
-    ]
+    ],
+    "position": {
+     "img": "side_split_ss_pancake.jpg",
+     "caption": "Straddle at your deepest width, round the spine, drop the head, actively pull in, feet relaxed"
+    }
    }
   ],
   "questions": [
@@ -1948,7 +2016,11 @@
     ],
     "lesson_slug": "159-shoulders-drill_inlocates-dislocates",
     "marked": "ours",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "shoulder_extension_dislocate_grip.jpg",
+     "caption": "Stick held in front, wide even grip, straight elbows; mark hand positions on the stick"
+    }
    }
   ],
   "questions": [],
@@ -1996,7 +2068,11 @@
     ],
     "lesson_slug": "73-pancake-drill_drop-stance-squats",
     "marked": "ours",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "squat_drop_stance.jpg",
+     "caption": "Wide stance, drop over one leg, straight leg foot flat and facing forward, chest high"
+    }
    },
    {
     "id": "horse_stance",
@@ -2025,7 +2101,11 @@
     ],
     "lesson_slug": "107-horse-stance-squats-how-to-measure-progress",
     "marked": "ours",
-    "lesson_course": "mftk"
+    "lesson_course": "mftk",
+    "position": {
+     "img": "squat_horse_stance.jpg",
+     "caption": "Feet turned out, knees pushed out over the feet, weight at the chest, hips sink to knee level, chest high"
+    }
    },
    {
     "id": "hip_ir",
