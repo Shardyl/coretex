@@ -23,7 +23,7 @@
        "points": [
         "a point on the floor line toward your feet (it snaps level with the hip)",
         "top of the thigh / middle of the trunk (hip)",
-        "furthest point of the upper back (if past 90 deg: highest point of the upper back)"
+        "the apex of the arc of your upper back (same point every retest)"
        ],
        "pose": {
         "joints": [
@@ -83,7 +83,7 @@
        "points": [
         "a point on the floor line toward your feet (it snaps level with the hip)",
         "top of the thigh / middle of the trunk (hip)",
-        "furthest point of the upper back (if past 90 deg: highest point of the upper back)"
+        "the apex of the arc of your upper back (same point every retest)"
        ],
        "pose": {
         "joints": [
@@ -144,7 +144,7 @@
        "points": [
         "a point on the floor line toward your feet (it snaps level with the hip)",
         "top of the thigh / middle of the trunk (hip)",
-        "furthest point of the upper back (if past 90 deg: highest point of the upper back)"
+        "the apex of the arc of your upper back (same point every retest)"
        ],
        "pose": {
         "joints": [
@@ -205,7 +205,7 @@
        "points": [
         "ankle bone",
         "middle of the glute (around the hip socket)",
-        "top of the head (rounded back and limited: most rounded part of the upper back)"
+        "the apex of the arc of your upper back (same point every retest)"
        ],
        "pose": {
         "joints": [
