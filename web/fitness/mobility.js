@@ -518,7 +518,7 @@ function renderPillar(el,p){
         <div style="font-size:11.5px;color:var(--ink2);margin-top:3px"><b>Correct position:</b> ${esc(t.position.caption||'')}</div></div>`:''}
       ${holdOf(t)?`<div style="font-size:13px;font-weight:800;margin-top:6px;color:var(--teal)">Hold ${esc(holdOf(t))} for it to count</div>`:''}
       ${t.benchmark?`<div style="font-size:12px;margin-top:4px"><b>Benchmark:</b> ${esc(t.benchmark)}</div>`:''}
-      ${t.tempo?tempoGraphic(t.tempo):''}
+      ${t.tempo?tempoGraphic(t.tempo)+(t.tempo_note?`<div style="font-size:11px;color:var(--ink3);margin-top:2px">${esc(t.tempo_note)}</div>`:''):''}
       ${fcBlock(p,t)}
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
       ${t.lesson_slug||t.youtube||(t.extra_lessons||[]).length?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}${(t.extra_lessons||[]).map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}

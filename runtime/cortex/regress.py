@@ -2669,6 +2669,12 @@ def _cases():
                   and next(t for p in fm.DEFAULT_PILLARS for t in p["tests"] if t["id"] == "force_couple_push")["tempo"] == "4010")
          (open(_web + "/fitness/index.html", encoding="utf-8").read(), open(_web + "/fitness/mobility.js", encoding="utf-8").read(),
           open(_web + "/fitness/calisthenics.js", encoding="utf-8").read(), __import__("cortex.fitness_mobility", fromlist=["x"])))
+    case("the three force couple stabiliser tests show the 4010 tempo with our-reading note and ask for the reps "
+         "managed at the target weight", "stabiliser tempo 15 Nov",
+         lambda: (lambda fm: all(t["tempo"] == "4010" and t["tempo_note"].startswith("Our reading")
+                  and t["measures"][0]["label"] == "Reps you managed at the target weight"
+                  for p in fm.DEFAULT_PILLARS for t in p["tests"] if t["id"] in ("trap3_reps", "eok_er_reps", "powell_reps")))
+         (__import__("cortex.fitness_mobility", fromlist=["x"])))
     case("back buttons in Mobility and Calisthenics are the big full-width bigBack button, never the small link",
          "big back button 15 Nov",
          lambda: (lambda h, m, c: "window.bigBack=(onclick,label)=>" in h and "bigBack('mobBack()','All pillars')" in m

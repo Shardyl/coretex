@@ -897,7 +897,7 @@
     "measures": [
      {
       "key": "reps_exact",
-      "label": "Exact reps (needed for the 5-rep threshold)",
+      "label": "Reps you managed at the target weight",
       "kind": "number",
       "unit": "reps"
      }
@@ -907,7 +907,9 @@
     "position": {
      "img": "sh_thumb20.jpg",
      "caption": "Smith's form: bent over, chest supported, lift at the trap-3 angle"
-    }
+    },
+    "tempo": "4010",
+    "tempo_note": "Our reading: Smith gives the 4 s lowering for this test; the rest matches his dip and push-up test tempo."
    },
    {
     "id": "eok_er_reps",
@@ -921,7 +923,7 @@
     "measures": [
      {
       "key": "reps_exact",
-      "label": "Exact reps (needed for the 5-rep threshold)",
+      "label": "Reps you managed at the target weight",
       "kind": "number",
       "unit": "reps"
      }
@@ -931,7 +933,9 @@
     "position": {
      "img": "sh_eok_er.jpg",
      "caption": "Smith's form: elbow on the knee, rotate the dumbbell up"
-    }
+    },
+    "tempo": "4010",
+    "tempo_note": "Our reading: Smith gives the 4 s lowering for this test; the rest matches his dip and push-up test tempo."
    },
    {
     "id": "powell_reps",
@@ -945,7 +949,7 @@
     "measures": [
      {
       "key": "reps_exact",
-      "label": "Reps at target",
+      "label": "Reps you managed at the target weight",
       "kind": "number",
       "unit": "reps"
      }
@@ -955,7 +959,9 @@
     "position": {
      "img": "shoulder_flexion_powell_reps.jpg",
      "caption": "Side-lying on the floor, propped on the other arm, slight elbow bend, raise the dumbbell in an arc"
-    }
+    },
+    "tempo": "4010",
+    "tempo_note": "Our reading: Smith gives the 4 s lowering for this test; the rest matches his dip and push-up test tempo."
    }
   ],
   "gap": {
