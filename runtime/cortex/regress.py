@@ -2682,6 +2682,10 @@ def _cases():
                 and "def _to_mp4(uid: str)" in src and set(fm.CUES) >= {"get_ready", "hold", "done", "n1", "n3"}
                 and "screen.orientation.lock('landscape')" in m and "unland();ov.remove();" in m
                 and "await openCam();await land();" in m and "'Try camera again'" in m)
+    case("the pancake floor line is held level with the hip in both measure screens (level: true)", "level floor 15 Nov",
+         lambda: (lambda m, fm: m.count("if(sp.level&&") == 2 and all(t["measures"][0]["angle"].get("level") is True
+                  for p in fm.DEFAULT_PILLARS for t in p["tests"] if t["id"] in ("pancake_max", "pancake_natural", "pancake_narrow")))
+         (open(_web + "/fitness/mobility.js", encoding="utf-8").read(), __import__("cortex.fitness_mobility", fromlist=["x"])))
     case("a test can be filmed in the app: countdown, the hold called out, auto-stop, upload, MP4 kept, and auto-measure "
          "reads only the recorded hold", "in-app recorder 15 Nov", _recorder)
     case("every pancake test's picture is Smith's filming guide with his lines and notes, and the pillar opens his "

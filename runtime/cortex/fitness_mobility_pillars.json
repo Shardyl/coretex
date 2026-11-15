@@ -21,7 +21,7 @@
       "angle": {
        "mode": "inside",
        "points": [
-        "point on the floor line toward the feet (feet and sit bones flat)",
+        "a point on the floor line toward your feet (it snaps level with the hip)",
         "top of the thigh / middle of the trunk (hip)",
         "furthest point of the upper back (if past 90 deg: highest point of the upper back)"
        ],
@@ -33,7 +33,8 @@
         ],
         "side": "visible",
         "best": "min"
-       }
+       },
+       "level": true
       }
      },
      {
@@ -78,7 +79,7 @@
       "angle": {
        "mode": "inside",
        "points": [
-        "point on the floor line toward the feet (feet and sit bones flat)",
+        "a point on the floor line toward your feet (it snaps level with the hip)",
         "top of the thigh / middle of the trunk (hip)",
         "furthest point of the upper back (if past 90 deg: highest point of the upper back)"
        ],
@@ -90,7 +91,8 @@
         ],
         "side": "visible",
         "best": "min"
-       }
+       },
+       "level": true
       }
      },
      {
@@ -136,7 +138,7 @@
       "angle": {
        "mode": "inside",
        "points": [
-        "point on the floor line toward the feet (feet and sit bones flat)",
+        "a point on the floor line toward your feet (it snaps level with the hip)",
         "top of the thigh / middle of the trunk (hip)",
         "furthest point of the upper back (if past 90 deg: highest point of the upper back)"
        ],
@@ -148,7 +150,8 @@
         ],
         "side": "visible",
         "best": "min"
-       }
+       },
+       "level": true
       }
      },
      {

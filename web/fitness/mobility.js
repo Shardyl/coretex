@@ -1012,7 +1012,7 @@ window.mobMeasureBoth=function(src,id,ov,auto){
   tip.textContent='Held '+auto.res.L.held[0]+' to '+auto.res.L.held[1]+' s; both arms read from the same frame ('+frameS+' s). Left is green, right is amber. Drag any dot that is off, then save.';
   const out=document.createElement('div');out.style.cssText='color:#fff;font-weight:800;font-size:15px;margin:10px 0 6px;text-align:center';
   const ang=s=>readAngle(sp,P[s]);
-  const draw=()=>{ctx.drawImage(frame,0,0);['L','R'].forEach(s=>{const p=P[s];ctx.lineWidth=Math.max(3,W/300);ctx.strokeStyle=COL[s];
+  const draw=()=>{ctx.drawImage(frame,0,0);['L','R'].forEach(s=>{const p=P[s];if(sp.level&&p.length>=2)p[0].y=p[1].y;ctx.lineWidth=Math.max(3,W/300);ctx.strokeStyle=COL[s];
       ctx.beginPath();ctx.moveTo(p[0].x,p[0].y);for(let i=1;i<p.length;i++)ctx.lineTo(p[i].x,p[i].y);ctx.stroke();
       if(sp.mode==='floor'&&p.length>1)floorStub(ctx,p[0],p[1],R0);
       p.forEach((q,i)=>{ctx.beginPath();ctx.arc(q.x,q.y,R0,0,7);ctx.fillStyle=i===pivotOf(sp)?'#ffffff':COL[s];ctx.fill();});
@@ -1075,8 +1075,10 @@ window.mobMeasure=function(src,id,ov,auto){
   const reset=document.createElement('button');reset.className='btn-sm';reset.textContent='Start again';
   const close=document.createElement('button');close.className='btn-sm';close.textContent='Cancel';close.onclick=()=>ov.remove();
   const setTip=()=>{if(auto&&auto.res[side.value]){const rr=auto.res[side.value];tip.textContent=(rr.short?'The model only saw your arm steadily for part of the hold, so this is read from that stretch. Check the dots carefully. ':'')+'Held '+rr.held[0]+' to '+rr.held[1]+' s (median of the hold '+Math.round(rr.med)+'°); shown at '+frameS+' s. Check the dots sit on your '+sp.points.join(', ').toLowerCase()+'; drag any that are off, then save.';return;}
-    tip.textContent='Tap '+sp.points.map((p,i)=>i===pivotOf(sp)?p+' (yellow)':p).join(', then ')+'. Drag a point to adjust it.'+(sp.mode==='vertical'?' The dashed line is straight down.':sp.mode==='floor'?' The dashed line is the floor, level with your elbow.':'');};
-  const draw=()=>{ctx.drawImage(frame,0,0);ctx.lineWidth=Math.max(3,W/300);ctx.strokeStyle='#30d5a8';
+    tip.textContent='Tap '+sp.points.map((p,i)=>i===pivotOf(sp)?p+' (yellow)':p).join(', then ')+'. Drag a point to adjust it.'+(sp.mode==='vertical'?' The dashed line is straight down.':sp.mode==='floor'?' The dashed line is the floor, level with your elbow.':sp.level?' The floor line snaps flat: put its dot anywhere on the side of your feet.':'');};
+  // `level` (owner 15 Nov 2026): the first point is a floor point; it is held level with the vertex (point 2), so the
+  // floor line is always flat, by hand or auto; only which side it points to is his to choose
+  const draw=()=>{ctx.drawImage(frame,0,0);if(sp.level&&pts.length>=2)pts[0].y=pts[1].y;ctx.lineWidth=Math.max(3,W/300);ctx.strokeStyle='#30d5a8';
     if(pts.length>1){ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.stroke();}
     if(sp.mode==='up_signed'&&pts.length){const L=pts[1]?Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y):H/4;
       ctx.save();ctx.setLineDash([R,R*0.8]);ctx.strokeStyle='#ffffff';ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);ctx.lineTo(pts[0].x,pts[0].y-L);ctx.stroke();ctx.restore();}
