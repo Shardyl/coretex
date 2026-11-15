@@ -163,6 +163,7 @@ function markMet(sid,p){const sides=p.sides==='each'?['L','R']:['both'];
   return sides.every(sd=>(_cali.goal_tests||[]).some(t=>t.skill===sid&&t.test===p.id&&t.side===sd&&t.filmed&&t.value>=p.value&&(!(p.sets>1)||t.all_sets)));}
 function rungState(sid,n){const L=lad(sid);return L.passed.includes(n)?'passed':L.current===n?'current':'ahead';}
 
+const goalN=s=>{const rs=s.rungs||[];const g=rs.find(x=>x.goal)||rs[rs.length-1];return g?g.n:1;};
 function renderGoalsView(el){
   if(_goalView.startsWith('skill:'))return renderSkill(el,_goalView.slice(6));
   if(_goalView.startsWith('day:'))return renderLadderDay(el,_goalView.slice(4));
@@ -177,7 +178,7 @@ function renderGoalsView(el){
     ${sk.map(s=>{const L=lad(s.id), cur=L.current, r=(s.rungs||[]).find(x=>x.n===cur)||(s.rungs||[])[s.rungs.length-1], done=cur==null;
       return `<div class="card" onclick="caliGoal('skill:${s.id}')" style="padding:12px 14px;margin-bottom:10px;cursor:pointer">
         <div style="display:flex;gap:12px;align-items:center">
-          <div style="width:96px;flex-shrink:0">${cgImg(s.id,r.n,true)}</div>
+          <div style="width:110px;flex-shrink:0;position:relative">${cgImg(s.id,goalN(s),true)}<span style="position:absolute;left:5px;top:5px;font-size:9.5px;font-weight:800;letter-spacing:0.06em;color:#fff;background:rgba(0,0,0,0.55);border-radius:999px;padding:1px 7px">GOAL</span></div>
           <div style="flex:1;min-width:0">
             <div style="font-size:15px;font-weight:800">${esc(s.name)}</div>
             <div style="font-size:11.5px;color:var(--ink3)">Goal: ${esc(s.goal)}</div>
