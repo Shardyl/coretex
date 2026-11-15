@@ -269,13 +269,22 @@ function renderSkill(el,sid){
     <div style="font-size:12px;color:var(--ink2);margin-top:4px">${esc(s.why||'')}</div>
     <div style="font-size:11.5px;color:var(--ink3);margin-top:2px">Kit: ${esc(s.equipment||'')} · ${L.passed.length} of ${L.total} rungs passed</div>
     <div style="display:flex;gap:6px;margin:10px 0 6px;flex-wrap:wrap">${(s.rungs||[]).map(r=>{const st=rungState(sid,r.n);
-      return `<button class="btn-sm" onclick="caliRungJump('${sid}:${r.n}')" style="font-weight:800;${st==='current'?'border-color:var(--amber);color:var(--amber)':st==='passed'?'border-color:var(--teal);color:var(--teal)':''}">${r.goal?'Goal':r.n}</button>`;}).join('')}</div>
+      const c=st==='current'?'var(--amber)':st==='passed'?'var(--teal)':'';
+      return `<button class="btn-sm" data-rb="${sid}:${r.n}" data-c="${c}" onclick="caliRungJump('${sid}:${r.n}')" style="font-weight:800;${c?'border-color:'+c+';color:'+c:''}">${r.goal?'Goal':r.n}</button>`;}).join('')}</div>
     <div style="font-size:11px;color:var(--ink3);margin-bottom:6px">Swipe through every rung, including the ones ahead.</div>
     <div id="cgCarousel" style="display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px;-webkit-overflow-scrolling:touch">
       ${(s.rungs||[]).map(r=>rungCard(s,r).replace('<div ','<div data-rung="'+sid+':'+r.n+'" ')).join('')}</div>`;
   loadCg();
-  setTimeout(()=>{const k=_passOpen||(L.current!=null?sid+':'+L.current:sid+':'+(s.rungs[s.rungs.length-1].n));caliRungJump(k,true);},40);
+  setTimeout(()=>{const k=_passOpen||(L.current!=null?sid+':'+L.current:sid+':'+(s.rungs[s.rungs.length-1].n));caliRungJump(k,true);rungInView();},40);
+  const box=document.getElementById('cgCarousel');let raf=0;
+  if(box)box.addEventListener('scroll',()=>{clearTimeout(raf);raf=setTimeout(rungInView,60);},{passive:true});
 }
+// highlight the button of the rung card nearest the middle of the carousel: filled = the one you are looking at
+function rungInView(){const box=document.getElementById('cgCarousel');if(!box)return;
+  const mid=box.scrollLeft+box.clientWidth/2;let best=null,bd=1e9;
+  box.querySelectorAll('[data-rung]').forEach(c=>{const d=Math.abs(c.offsetLeft-box.offsetLeft+c.clientWidth/2-mid);if(d<bd){bd=d;best=c.dataset.rung;}});
+  document.querySelectorAll('[data-rb]').forEach(b=>{const on=b.dataset.rb===best, c=b.dataset.c;
+    b.style.background=on?'var(--teal)':'';b.style.color=on?'#fff':c;b.style.borderColor=on?'var(--teal)':c;});}
 window.caliRungJump=(k,instant)=>{const c=[...document.querySelectorAll('#cgCarousel [data-rung]')].find(x=>x.dataset.rung===k);
   const box=document.getElementById('cgCarousel');if(c&&box)box.scrollTo({left:c.offsetLeft-box.offsetLeft-(box.clientWidth-c.clientWidth)/2,behavior:instant?'auto':'smooth'});};
 

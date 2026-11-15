@@ -2682,6 +2682,9 @@ def _cases():
                 and "def _to_mp4(uid: str)" in src and set(fm.CUES) >= {"get_ready", "hold", "done", "n1", "n3"}
                 and "screen.orientation.lock('landscape')" in m and "unland();ov.remove();" in m
                 and "await openCam();await land();" in m and "'Try camera again'" in m)
+    case("the rung number buttons follow the card in view while swiping (it stayed on 1)", "rung buttons follow swipe 15 Nov",
+         lambda: (lambda m: "function rungInView()" in m and "data-rb=" in m and "addEventListener('scroll'" in m)
+         (open(_web + "/fitness/calisthenics.js", encoding="utf-8").read()))
     case("the calisthenics goals page shows each skill's final goal picture (the perfect form), labelled GOAL",
          "goal picture on goals page 15 Nov",
          lambda: (lambda m: "cgImg(s.id,goalN(s),true)" in m and "const goalN=s=>" in m and ">GOAL</span>" in m)
