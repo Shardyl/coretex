@@ -2029,6 +2029,8 @@ while a local change is queued — a pull once erased a cardio session seconds a
 
 **Fitness v199 (15 Nov 2026): a test missing a needed field refuses to save.** The dip result went in with bodyweight + reps and no "Test used", so the calculator showed nothing. `mobSave` now runs `needed()` on what was typed (show_if and either/or groups respected), outlines each missing field red with "Needed before this can save", scrolls to the first and toasts "Not saved. Missing: ...". Angle fields are exempt (Auto-measure fills them); a side left wholly empty is skipped. Case: "required fields refuse save 15 Nov".
 
+**Fitness v200 (15 Nov 2026): force couple targets are real dumbbells.** "Nobody has 11 kg": each stabiliser target rounds to the nearest `calculator.dumbbell_step_kg` (2, live setting + repo json), a dead heat rounding UP so the test is never easier; the exact target still shows beside it. Case: "dumbbell rounding 15 Nov".
+
 ### Health Connect bridge (Android, `android/health-bridge/`, 4 Oct 2026)
 - Kotlin app `uk.coretex.healthbridge` ("Cortex Health Bridge") on Rashad's S24: reads Samsung
   Health via Android Health Connect (READ only) and POSTs to `POST /api/fitness/health` with

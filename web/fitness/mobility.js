@@ -478,8 +478,10 @@ function fcCalc(p){
   let load;if(dip)load=bw+add;else{const ef=C.pushup_elevation[g('elevation').label];
     if(ef==null)return{ft,C,d,err:'Pick the push-up hand height on the push test to calculate the targets.'};load=bw*ef;}
   const orm=load/rf, pct=C.pct[dip?'dip':'push'], tg={};
-  Object.entries(C.targets).forEach(([tid,k])=>{tg[tid]=Math.round(orm*pct[k]*10)/10;});
-  return{ft,C,d,dip,reps,orm,tg};
+  const step=parseFloat(C.dumbbell_step_kg)||2, db={};
+  Object.entries(C.targets).forEach(([tid,k])=>{const x=orm*pct[k];tg[tid]=Math.round(x*10)/10;
+    db[tid]=Math.max(step,Math.round((Math.floor(x/step+0.5+1e-9))*step*10)/10);});
+  return{ft,C,d,dip,reps,orm,tg,db,step};
 }
 window.mobFcCalc=fcCalc;
 function fcBlock(p,t){
@@ -489,7 +491,7 @@ function fcBlock(p,t){
   const box=h=>`<div style="font-size:12.5px;margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--surface2);line-height:1.5">${h}</div>`;
   if(c.err)return box(esc(c.err));
   const src=`from your ${c.dip?'dip':'push-up'} test on ${esc(c.d)}, ${c.reps} rep${c.reps>1?'s':''}`;
-  if(isStab)return box(`<b>Target: ${c.tg[t.id]} kg for ${c.C.pass_reps} reps</b> (${src}). Use the nearest dumbbell, 4 s lowering, as many strict reps as you can. ${c.C.pass_reps}+ reps = not limiting your shoulder range.`);
+  if(isStab)return box(`<b>Use the ${c.db[t.id]} kg dumbbell for ${c.C.pass_reps} reps</b> (exact target ${c.tg[t.id]} kg, rounded to the nearest ${c.step} kg; ${src}). 4 s lowering, as many strict reps as you can. ${c.C.pass_reps}+ reps = not limiting your shoulder range.`);
   const repsOf=(tid,sd)=>{const r=(_mob.results||[]).filter(x=>x.pillar===p.id&&x.test===tid&&x.side===sd&&x.measure==='reps_exact').sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0).pop();
     return r&&r.value!=null?Math.round(parseFloat(r.value)):null;};
   const rows=[], low=[], untested=[];
@@ -498,11 +500,11 @@ function fcBlock(p,t){
     const cells=per.map(x=>x.n==null?`<span style="color:var(--ink3)">${x.sd} not tested</span>`:`<span style="color:${x.n>=c.C.pass_reps?'var(--teal)':'var(--amber)'};font-weight:700">${x.sd} ${x.n}</span>`).join(' &middot; ');
     const tested=per.filter(x=>x.n!=null);if(!tested.length)untested.push(nm);
     const worst=tested.length?Math.min(...tested.map(x=>x.n)):null;if(worst!=null&&worst<c.C.pass_reps)low.push({nm,worst});
-    rows.push(`<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><span>${esc(nm)}: <b>${c.tg[tid]} kg</b></span><span>${cells}</span></div>`);});
+    rows.push(`<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><span>${esc(nm)}: <b>${c.db[tid]} kg</b> <span style="color:var(--ink3);font-size:11px">(exact ${c.tg[tid]})</span></span><span>${cells}</span></div>`);});
   low.sort((a,b)=>a.worst-b.worst);
   const verdict=low.length?`<b>Train:</b> ${low.slice(0,2).map(x=>esc(x.nm)+' ('+x.worst+' reps)').join(', ')}${low.length>2?', the weakest two of '+low.length+' under '+c.C.pass_reps:''}.`
     :untested.length?'':`<b>No stabiliser is limiting your range</b> (all ${c.C.pass_reps}+ reps).`;
-  return box(`<b>Stabiliser targets for ${c.C.pass_reps} reps</b> (${src}; estimated 1RM ${Math.round(c.orm*10)/10} kg)<div style="margin-top:4px;display:grid;gap:3px">${rows.join('')}</div>`
+  return box(`<b>Stabiliser targets for ${c.C.pass_reps} reps</b> (${src}; estimated 1RM ${Math.round(c.orm*10)/10} kg; dumbbells rounded to the nearest ${c.step} kg)<div style="margin-top:4px;display:grid;gap:3px">${rows.join('')}</div>`
     +(verdict?`<div style="margin-top:6px">${verdict}</div>`:'')+(untested.length?`<div style="margin-top:4px;color:var(--ink3)">Still to test: ${untested.map(esc).join(', ')} (max 2 a session).</div>`:''));
 }
 

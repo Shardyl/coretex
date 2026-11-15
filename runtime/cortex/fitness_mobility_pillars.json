@@ -922,7 +922,8 @@
       "trap3_reps": "Trap-3 raise",
       "powell_reps": "Powell raise"
      },
-     "pass_reps": 5
+     "pass_reps": 5,
+     "dumbbell_step_kg": 2
     },
     "tempo": "4010"
    },
