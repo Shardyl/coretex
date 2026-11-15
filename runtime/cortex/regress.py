@@ -2682,6 +2682,12 @@ def _cases():
                 and "def _to_mp4(uid: str)" in src and set(fm.CUES) >= {"get_ready", "hold", "done", "n1", "n3"}
                 and "screen.orientation.lock('landscape')" in m and "unland();ov.remove();" in m
                 and "await openCam();await land();" in m and "'Try camera again'" in m)
+    case("typed mobility values survive a redraw (an upload finishing wiped the dip numbers) and an empty save says so, "
+         "never 'Saved'", "typed values kept 15 Nov",
+         lambda: (lambda m: "const _mobTyped={};" in m and "mobKeepTyped();" in m and "renderPillar(el,pillar(_mobView));mobRestoreTyped();" in m
+                  and "mobForgetTyped(tid);_mobEdit.delete(tid)" in m and "toast('Nothing filled in, so nothing was saved')" in m
+                  and "if(!saved){toast(" in m)
+         (open(_web + "/fitness/mobility.js", encoding="utf-8").read()))
     case("weight RAG: amber up to 1 kg over, red beyond, on today's pace, weekly checkpoints, recap and 7-day avg",
          "weight amber 1 kg 15 Nov",
          lambda: (lambda f: "const AMBER_KG=1.0;" in f and f.count("AMBER_KG?") + f.count("<=AMBER_KG") >= 4

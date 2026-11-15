@@ -95,13 +95,24 @@ function ring(f,c,txt){const r=15,C=2*Math.PI*r;
 const CHIP={none:['Tests not added yet','var(--ink3)'],start:['Not started','var(--ink3)'],progress:['In progress','var(--amber)'],baseline:['Baseline done','var(--teal)']};
 const chip=k=>`<span style="font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:${CHIP[k][1]};border:1px solid ${CHIP[k][1]};border-radius:10px;padding:1px 7px;white-space:nowrap">${CHIP[k][0]}</span>`;
 
+// TYPED VALUES SURVIVE A REDRAW (owner 15 Nov 2026): an upload, a save elsewhere or a re-measure redraws the page,
+// which used to wipe fields typed but not saved yet. Changed fields are kept per input id until that test saves.
+const _mobTyped={};
+const mobKeepTyped=()=>{document.querySelectorAll('#page-mobility-pillars input[id^="mob_"],#page-mobility-pillars select[id^="mob_"]').forEach(e=>{
+  const changed=e.tagName==='SELECT'?[...e.options].some(o=>o.selected!==o.defaultSelected):e.value!==e.defaultValue;
+  if(changed)_mobTyped[e.id]=e.value;});};
+const mobRestoreTyped=()=>{const touched=new Set();Object.keys(_mobTyped).forEach(id=>{const e=document.getElementById(id);
+  if(e&&e.value!==_mobTyped[id]){e.value=_mobTyped[id];const m=id.match(/^mob_(.+)_(L|R|both)_[^_]+(?:_[^_]+)*$/);if(m)touched.add(m[1]+'|'+m[2]);}});
+  if(_mobView!=='list'&&!String(_mobView).startsWith('session:'))touched.forEach(k=>{const [tid,sd]=k.split('|');try{mobShowIf(_mobView,tid,sd);}catch(e){}});};
+const mobForgetTyped=tid=>Object.keys(_mobTyped).forEach(id=>{if(id.startsWith('mob_'+tid+'_'))delete _mobTyped[id];});
 window.renderMobility=async function(){
   const el=document.getElementById('page-mobility-pillars');if(!el)return;
+  mobKeepTyped();
   if(!_mob){el.innerHTML='<div class="fd-note" style="padding:20px 0">Loading&hellip;</div>';await load();}
   if(!_mob){el.innerHTML='<div class="fd-note" style="padding:20px 0">Could not reach Cortex.</div>';return;}
   if(_mobView==='list')return renderList(el);
   if(String(_mobView).startsWith('session:'))return renderSession(el,String(_mobView).slice(8));
-  renderPillar(el,pillar(_mobView));
+  renderPillar(el,pillar(_mobView));mobRestoreTyped();
   loadPositions();
 };
 
@@ -424,7 +435,7 @@ function drillBlock(p){
 }
 
 const _mobEdit=new Set();
-window.mobEditToggle=(id,on)=>{on?_mobEdit.add(id):_mobEdit.delete(id);renderMobility();
+window.mobEditToggle=(id,on)=>{if(!on)mobForgetTyped(id);on?_mobEdit.add(id):_mobEdit.delete(id);renderMobility();
   setTimeout(()=>{const e=document.getElementById('mobt_'+id);if(e)e.scrollIntoView({block:'start'});},40);};
 // the recorded result: per side the number(s), when, how (auto or by hand), its still; editing is a deliberate tap
 function recordBlock(p,t,day){
@@ -580,11 +591,15 @@ window.mobSave=async function(pid,tid){
   const day=_mobDay||anyDays[anyDays.length-1]||today();
   const provisional=false;   // no provisional results (owner 15 Nov 2026)
   try{
-    for(const s of t.sides){
-      const values={};t.measures.forEach(m=>{if(!showIf(m,domGet(t,s)))return;const e=document.getElementById(`mob_${t.id}_${s}_${m.key}`);if(e&&e.value!=='')values[m.key]=m.kind==='number'?+e.value:e.value;});
-      await syncApi('/api/fitness/mobility/result',{method:'POST',body:JSON.stringify({date:day,pillar:pid,test:tid,side:s,values,provisional})});
-    }
-    _mobEdit.delete(tid);await load();renderMobility();toast('Saved');
+    const per=t.sides.map(s=>{const values={};t.measures.forEach(m=>{if(!showIf(m,domGet(t,s)))return;const e=document.getElementById(`mob_${t.id}_${s}_${m.key}`);if(e&&e.value!=='')values[m.key]=m.kind==='number'?+e.value:e.value;});return [s,values];});
+    // nothing filled in is not a save (owner 15 Nov 2026: an empty save said "Saved" and stored nothing)
+    if(!per.some(([,v])=>Object.keys(v).length)){toast('Nothing filled in, so nothing was saved');return;}
+    let saved=0;
+    for(const [s,values] of per){if(!Object.keys(values).length)continue;
+      const r=await syncApi('/api/fitness/mobility/result',{method:'POST',body:JSON.stringify({date:day,pillar:pid,test:tid,side:s,values,provisional})});
+      saved+=(r&&r.saved)||0;}
+    if(!saved){toast('Nothing was saved. Check the fields and try again.');return;}
+    mobForgetTyped(tid);_mobEdit.delete(tid);await load();renderMobility();toast('Saved');
   }catch(e){toast('Could not save. Check your connection.');}
 };
 
