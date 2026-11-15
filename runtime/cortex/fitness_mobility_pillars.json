@@ -237,7 +237,7 @@
      "both"
     ],
     "camera": "From the side, phone on the floor",
-    "cue": "Hands on the floor in front (closer = easier; choose a point you can hold 5 s), legs straight, knees locked, press the floor and lift both feet; slight forward lean if you can. Hold 5 s. Screenshot the AVERAGE hold, not the highest point. Cramping is common; leaning back is normal if your head cannot reach the floor.",
+    "cue": "Hands on the floor in front (closer = easier; choose a point you can hold 5 s), legs straight, knees locked, press the floor and lift both feet; slight forward lean if you can. Hold 5 s. Screenshot the AVERAGE hold, not the highest point. Cramping is common; leaning back is normal if your head cannot reach the floor. Width: Smith gives none; his reference photo shows about a natural straddle with the hands between the legs (his lifts lesson: a bit narrower than max). Tape it inner heel to inner heel and repeat it every retest.",
     "role": "active",
     "measures": [
      {
@@ -262,6 +262,12 @@
         "best": "min"
        }
       }
+     },
+     {
+      "key": "width_cm",
+      "label": "Straddle width, inner heel to inner heel (record to repeat)",
+      "kind": "number",
+      "unit": "cm"
      }
     ],
     "position": {
