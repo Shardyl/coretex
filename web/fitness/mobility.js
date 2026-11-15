@@ -623,14 +623,19 @@ window.mobRecord=async function(pid,tid,side){
   const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:10000;background:#000;color:#fff;overflow:hidden';
   ov.innerHTML=`<div style="position:absolute;inset:0"><video playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video>
     <div data-big style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;padding:0 16px;text-shadow:0 2px 14px #000"></div>
-    <div style="position:absolute;top:8px;left:10px;right:10px;font-size:13px;font-weight:800;text-shadow:0 1px 6px #000">${esc(t.name)}${side!=='both'?' &middot; '+SIDE[side]:''} &middot; hold ${holdS} s</div>
-    <div data-rec style="position:absolute;top:30px;left:10px;display:none;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#ff5a5a"><span style="width:10px;height:10px;border-radius:50%;background:#ff3b3b"></span>REC</div></div>
+    <button data-back aria-label="Back" style="position:absolute;top:8px;left:8px;z-index:2;width:46px;height:46px;border-radius:50%;border:none;background:rgba(0,0,0,0.5);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6l6 6"/></svg></button>
+    <div style="position:absolute;top:20px;left:64px;right:10px;font-size:13px;font-weight:800;text-shadow:0 1px 6px #000">${esc(t.name)}${side!=='both'?' &middot; '+SIDE[side]:''} &middot; hold ${holdS} s</div>
+    <div data-rec style="position:absolute;top:40px;left:64px;display:none;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#ff5a5a"><span style="width:10px;height:10px;border-radius:50%;background:#ff3b3b"></span>REC</div></div>
     <div data-bar style="position:absolute;left:0;right:0;bottom:0;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;padding:14px 10px 16px;background:linear-gradient(to top,rgba(0,0,0,0.7),rgba(0,0,0,0))"></div>`;
   document.body.appendChild(ov);
-  const fs=(async()=>{try{if(ov.requestFullscreen&&!document.fullscreenElement)await ov.requestFullscreen({navigationUI:'hide'});}catch(e){}})();
-  const land=async()=>{try{await fs;}catch(e){}if(!(screen.orientation&&screen.orientation.lock))return;
+  // v194 (owner 15 Nov 2026): no true full screen unless the phone insists: Android shows its own "to exit full screen"
+  // banner every time. Ask for rotation first; only if that is refused go full screen and ask again.
+  const land=async()=>{if(!(screen.orientation&&screen.orientation.lock))return;
+    try{await screen.orientation.lock('any');return;}catch(e){}
+    try{if(ov.requestFullscreen&&!document.fullscreenElement)await ov.requestFullscreen({navigationUI:'hide'});}catch(e){}
     try{await screen.orientation.lock('any');}catch(e){try{await screen.orientation.lock('landscape');}catch(x){}}};
   const v=ov.querySelector('video'), big=ov.querySelector('[data-big]'), bar=ov.querySelector('[data-bar]'), dot=ov.querySelector('[data-rec]');
+  ov.querySelector('[data-back]').onclick=()=>cleanup();
   let stream=null, rec=null, chunks=[], wake=null, timers=[], stopped=false;
   const cleanup=()=>{stopped=true;timers.forEach(clearTimeout);try{if(rec&&rec.state!=='inactive'){rec.onstop=null;rec.stop();}}catch(e){}
     try{stream&&stream.getTracks().forEach(x=>x.stop());}catch(e){}try{wake&&wake.release();}catch(e){}unland();ov.remove();};
