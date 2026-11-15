@@ -2677,7 +2677,7 @@ def _cases():
         src = open(__file__.replace("regress.py", "fitness_mobility.py"), encoding="utf-8").read()
         return (next(p for p in fm.DEFAULT_PILLARS if p["id"] == "pancake").get("recorder") is True
                 and "window.mobRecord=async function(pid,tid,side)" in m and "'In-app recording, hold '+a+'-'+b+' s'" in m
-                and "async function poseScan(video,sp,prog,holdS,win)" in m and "hold ([\d.]+)-([\d.]+) s" in m
+                and "async function poseScan(video,sp,prog,holdS,win)" in m and r"hold ([\d.]+)-([\d.]+) s" in m
                 and m.index("'video/mp4;codecs=avc1'") < m.index("'video/webm;codecs=vp9'")
                 and "def _to_mp4(uid: str)" in src and set(fm.CUES) >= {"get_ready", "hold", "done", "n1", "n3"})
     case("a test can be filmed in the app: countdown, the hold called out, auto-stop, upload, MP4 kept, and auto-measure "
