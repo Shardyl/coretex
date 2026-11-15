@@ -2680,7 +2680,8 @@ def _cases():
                 and "async function poseScan(video,sp,prog,holdS,win)" in m and r"hold ([\d.]+)-([\d.]+) s" in m
                 and m.index("'video/mp4;codecs=avc1'") < m.index("'video/webm;codecs=vp9'")
                 and "def _to_mp4(uid: str)" in src and set(fm.CUES) >= {"get_ready", "hold", "done", "n1", "n3"}
-                and "screen.orientation.lock('landscape')" in m and "unland();ov.remove();" in m)
+                and "screen.orientation.lock('landscape')" in m and "unland();ov.remove();" in m
+                and "await openCam();await land();" in m and "'Try camera again'" in m)
     case("a test can be filmed in the app: countdown, the hold called out, auto-stop, upload, MP4 kept, and auto-measure "
          "reads only the recorded hold", "in-app recorder 15 Nov", _recorder)
     case("every pancake test's picture is Smith's filming guide with his lines and notes, and the pillar opens his "

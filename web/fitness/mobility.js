@@ -627,16 +627,22 @@ window.mobRecord=async function(pid,tid,side){
     <div data-rec style="position:absolute;top:30px;left:10px;display:none;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#ff5a5a"><span style="width:10px;height:10px;border-radius:50%;background:#ff3b3b"></span>REC</div></div>
     <div data-bar style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;padding:10px"></div>`;
   document.body.appendChild(ov);
-  const land=(async()=>{try{if(ov.requestFullscreen&&!document.fullscreenElement)await ov.requestFullscreen({navigationUI:'hide'});}catch(e){}
-    try{if(screen.orientation&&screen.orientation.lock)await screen.orientation.lock('landscape');}catch(e){}})();
+  const fs=(async()=>{try{if(ov.requestFullscreen&&!document.fullscreenElement)await ov.requestFullscreen({navigationUI:'hide'});}catch(e){}})();
+  const land=async()=>{try{await fs;if(screen.orientation&&screen.orientation.lock)await screen.orientation.lock('landscape');}catch(e){}};
   const v=ov.querySelector('video'), big=ov.querySelector('[data-big]'), bar=ov.querySelector('[data-bar]'), dot=ov.querySelector('[data-rec]');
   let stream=null, rec=null, chunks=[], wake=null, timers=[], stopped=false;
   const cleanup=()=>{stopped=true;timers.forEach(clearTimeout);try{if(rec&&rec.state!=='inactive'){rec.onstop=null;rec.stop();}}catch(e){}
     try{stream&&stream.getTracks().forEach(x=>x.stop());}catch(e){}try{wake&&wake.release();}catch(e){}unland();ov.remove();};
   function unland(){try{screen.orientation&&screen.orientation.unlock&&screen.orientation.unlock();}catch(e){}
     try{if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen();}catch(e){}}
-  const openCam=async()=>{try{stream&&stream.getTracks().forEach(x=>x.stop());}catch(e){}
-    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}}});v.srcObject=stream;};
+  const openCam=async()=>{try{stream&&stream.getTracks().forEach(x=>x.stop());}catch(e){}stream=null;
+    const tries=[{facingMode:facing,width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},{facingMode:facing},true];
+    let err=null;
+    for(let round=0;round<2&&!stream;round++){for(const vc of tries){try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:vc});break;}
+        catch(e){err=e;if(e&&e.name==='NotAllowedError')throw e;}}
+      if(!stream)await new Promise(r=>setTimeout(r,700));}
+    if(!stream)throw err||new Error('no camera');
+    v.srcObject=stream;try{await v.play();}catch(e){}};
   const show=(main,sub,col)=>{big.innerHTML=`${main!==''?`<div style="font-size:min(30vw,32vh);font-weight:900;line-height:1;color:${col||'#fff'}">${main}</div>`:''}${sub?`<div style="font-size:20px;font-weight:800;margin-top:8px">${sub}</div>`:''}`;};
   const btn=(label,fn,primary)=>{const b=document.createElement('button');b.className='btn-sm';b.textContent=label;
     b.style.cssText='font-size:15px;font-weight:800;padding:10px 16px;'+(primary?'background:var(--teal);color:#fff;border-color:var(--teal)':'');b.onclick=fn;return b;};
@@ -646,9 +652,12 @@ window.mobRecord=async function(pid,tid,side){
   const flip=btn('Switch camera',async()=>{facing=facing==='user'?'environment':'user';try{localStorage.setItem('mobRecFacing',facing);}catch(e){}
     try{await openCam();}catch(e){toast('That camera is not available');}});
   bar.append(sel,flip,btn('Start',()=>run(),true),btn('Cancel',cleanup));
-  await land;
-  try{await openCam();show('','Set the phone, check you are in frame, then tap Start');}
-  catch(e){show('','Camera blocked. Allow camera access for this app, then try again.');}
+  const camFail=e=>{const n=e&&e.name||'';show('',n==='NotAllowedError'?'Camera permission is off for this app. Allow it in the browser site settings, then try again.'
+      :n==='NotReadableError'||n==='AbortError'?'The camera is busy (another app or tab may be using it). Close it and try again.'
+      :'The camera did not start ('+esc(n||(e&&e.message)||'unknown')+').');
+    const again=btn('Try camera again',async()=>{again.remove();try{await openCam();await land();show('','Set the phone, check you are in frame, then tap Start');}catch(x){camFail(x);}},true);bar.prepend(again);};
+  try{await openCam();await land();show('','Set the phone, check you are in frame, then tap Start');}
+  catch(e){camFail(e);}
   loadCues();
   const at=(sec,fn)=>timers.push(setTimeout(()=>{if(!stopped)fn();},Math.round(sec*1000)));
   async function run(){
