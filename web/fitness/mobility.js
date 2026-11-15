@@ -626,11 +626,17 @@ function angleAt(a,b,c){const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y];
   const d=(v1[0]*v2[0]+v1[1]*v2[1])/(Math.hypot(v1[0],v1[1])*Math.hypot(v2[0],v2[1])||1);return Math.acos(Math.max(-1,Math.min(1,d)))*180/Math.PI;}
 function fromVertical(a,b){const dx=b.x-a.x,dy=b.y-a.y,l=Math.hypot(dx,dy)||1;return Math.acos(Math.max(-1,Math.min(1,dy/l)))*180/Math.PI;}
 const specOf=m=>(m&&m.angle)||{mode:'inside',points:['First point','The joint','Last point']};
-const nPts=sp=>sp.mode==='vertical'?2:3;   // up_signed: elbow, wrist, other shoulder
-const pivotOf=sp=>(sp.mode==='vertical'||sp.mode==='up_signed')?0:1;
+const nPts=sp=>(sp.mode==='vertical'||sp.mode==='floor')?2:3;   // up_signed: elbow, wrist, other shoulder
+const pivotOf=sp=>(sp.mode==='vertical'||sp.mode==='up_signed'||sp.mode==='floor')?0:1;
+// "floor" = elbow then wrist: the forearm's angle from the flat floor line on the far side of the elbow (Smith's IR
+// protractor: forearm straight up 90, flat on the floor 180). The line is level with the elbow, drawn by code.
+const floorAngle=(e,w)=>Math.min(180,270-fromVertical(e,w));
+const floorStub=(ctx,e,w,dash)=>{const L=Math.hypot(w.x-e.x,w.y-e.y),dir=w.x>=e.x?-1:1;ctx.save();ctx.setLineDash([dash,dash*0.8]);
+  ctx.strokeStyle='#ffffff';ctx.beginPath();ctx.moveTo(e.x,e.y);ctx.lineTo(e.x+dir*L,e.y);ctx.stroke();ctx.restore();};
 function readAngle(sp,pts){
   if(pts.length<nPts(sp))return null;
   if(sp.mode==='vertical')return fromVertical(pts[0],pts[1]);
+  if(sp.mode==='floor')return floorAngle(pts[0],pts[1]);
   if(sp.mode==='up_signed'){const e=pts[0],w=pts[1],o=pts[2],dx=w.x-e.x,dy=w.y-e.y,l=Math.hypot(dx,dy)||1;
     const a=Math.acos(Math.max(-1,Math.min(1,-dy/l)))*180/Math.PI, out=Math.sign(e.x-o.x)||1;
     return (dx*out>=0?1:-1)*a;}
@@ -762,6 +768,7 @@ window.mobPoseBest=bestOf;window.mobPoseCandidates=poseCandidates;
 window.mobAutoMeasure=async function(video,id,ov,btn,msg){
   const ps=poseSpecOf(testOf(mediaRec(id)));if(!ps||!video)return;
   btn.disabled=true;btn.style.opacity=0.5;const say=t=>{if(msg)msg.textContent=t;};
+  let wake=null;try{if(navigator.wakeLock)wake=await navigator.wakeLock.request('screen');}catch(e){}
   try{
     say('Loading the pose model (first time only)...');
     if(!video.duration||!isFinite(video.duration))await new Promise(r=>video.addEventListener('loadedmetadata',r,{once:true}));
@@ -782,6 +789,7 @@ window.mobAutoMeasure=async function(video,id,ov,btn,msg){
     delete res._same;
     mobMeasure(video,id,ov,{m:ps.m,res});
   }catch(e){say('Auto-measure could not start ('+(e&&e.message||'error')+'). Measure by hand instead.');btn.disabled=false;btn.style.opacity=1;}
+  finally{try{if(wake)wake.release();}catch(e){}}
 };
 
 // ---------- both arms in one frame (owner 14 Nov 2026: "it should do two angles in one pic") ----------
@@ -812,6 +820,7 @@ window.mobMeasureBoth=function(src,id,ov,auto){
   const ang=s=>readAngle(sp,P[s]);
   const draw=()=>{ctx.drawImage(frame,0,0);['L','R'].forEach(s=>{const p=P[s];ctx.lineWidth=Math.max(3,W/300);ctx.strokeStyle=COL[s];
       ctx.beginPath();ctx.moveTo(p[0].x,p[0].y);for(let i=1;i<p.length;i++)ctx.lineTo(p[i].x,p[i].y);ctx.stroke();
+      if(sp.mode==='floor'&&p.length>1)floorStub(ctx,p[0],p[1],R0);
       p.forEach((q,i)=>{ctx.beginPath();ctx.arc(q.x,q.y,R0,0,7);ctx.fillStyle=i===pivotOf(sp)?'#ffffff':COL[s];ctx.fill();});
       const a=ang(s), pv=p[pivotOf(sp)];ctx.font='bold '+Math.round(W/26)+'px system-ui';ctx.lineWidth=Math.max(3,W/250);ctx.strokeStyle='#000';ctx.fillStyle=COL[s];
       const lab=(s==='L'?'L ':'R ')+Math.round(a)+'\u00b0';ctx.strokeText(lab,pv.x-R0*3,pv.y-R0*2.5);ctx.fillText(lab,pv.x-R0*3,pv.y-R0*2.5);});
@@ -874,13 +883,14 @@ window.mobMeasure=function(src,id,ov,auto){
   const reset=document.createElement('button');reset.className='btn-sm';reset.textContent='Start again';
   const close=document.createElement('button');close.className='btn-sm';close.textContent='Cancel';close.onclick=()=>ov.remove();
   const setTip=()=>{if(auto&&auto.res[side.value]){const rr=auto.res[side.value];tip.textContent=(rr.short?'The model only saw your arm steadily for part of the hold, so this is read from that stretch. Check the dots carefully. ':'')+'Held '+rr.held[0]+' to '+rr.held[1]+' s (median of the hold '+Math.round(rr.med)+'°); shown at '+frameS+' s. Check the dots sit on your '+sp.points.join(', ').toLowerCase()+'; drag any that are off, then save.';return;}
-    tip.textContent='Tap '+sp.points.map((p,i)=>i===pivotOf(sp)?p+' (yellow)':p).join(', then ')+'. Drag a point to adjust it.'+(sp.mode==='vertical'?' The dashed line is straight down.':'');};
+    tip.textContent='Tap '+sp.points.map((p,i)=>i===pivotOf(sp)?p+' (yellow)':p).join(', then ')+'. Drag a point to adjust it.'+(sp.mode==='vertical'?' The dashed line is straight down.':sp.mode==='floor'?' The dashed line is the floor, level with your elbow.':'');};
   const draw=()=>{ctx.drawImage(frame,0,0);ctx.lineWidth=Math.max(3,W/300);ctx.strokeStyle='#30d5a8';
     if(pts.length>1){ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.stroke();}
     if(sp.mode==='up_signed'&&pts.length){const L=pts[1]?Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y):H/4;
       ctx.save();ctx.setLineDash([R,R*0.8]);ctx.strokeStyle='#ffffff';ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);ctx.lineTo(pts[0].x,pts[0].y-L);ctx.stroke();ctx.restore();}
     if(sp.mode==='vertical'&&pts.length){const L=pts[1]?Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y):H/4;
       ctx.save();ctx.setLineDash([R,R*0.8]);ctx.strokeStyle='#ffffff';ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);ctx.lineTo(pts[0].x,pts[0].y+L);ctx.stroke();ctx.restore();}
+    if(sp.mode==='floor'&&pts.length>1)floorStub(ctx,pts[0],pts[1],R);
     pts.forEach((p,i)=>{ctx.beginPath();ctx.arc(p.x,p.y,R,0,7);ctx.fillStyle=i===pivotOf(sp)?'#ffc53d':'#30d5a8';ctx.fill();});
     const a=readAngle(sp,pts);
     if(a!=null){ctx.font='bold '+Math.round(W/22)+'px system-ui';ctx.fillStyle='#fff';ctx.strokeStyle='#000';ctx.lineWidth=Math.max(3,W/250);

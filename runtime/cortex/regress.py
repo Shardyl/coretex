@@ -2631,6 +2631,21 @@ def _cases():
                 and h.count("try{if(ensurePlyo())") == 2)
     case("plyometric jumps are measured in cm in the Strength section and added to the plan only where missing",
          "plyo 14 Nov", _plyo)
+
+    def _ir_floor():
+        # 15 Nov 2026 (owner): IR length is elbow to wrist against a floor line drawn flat from the elbow (no head point),
+        # forearm up = 90, flat = 180; the screen stays on while auto-measure reads the frames
+        m = open(_web + "/fitness/mobility.js", encoding="utf-8").read()
+        fm = __import__("cortex.fitness_mobility", fromlist=["x"])
+        ir = next(t for p in fm.DEFAULT_PILLARS for t in p["tests"] if t["id"] == "ir_length")
+        ang = ir["measures"][0]["angle"]
+        return (ang["mode"] == "floor" and ang["pose"]["joints"] == ["elbow", "wrist"]
+                and "const floorAngle=(e,w)=>Math.min(180,270-fromVertical(e,w));" in m
+                and "if(sp.mode==='floor')return floorAngle(pts[0],pts[1]);" in m
+                and "navigator.wakeLock.request('screen')" in m and "wake.release()" in m
+                and "closed fists" in ir["cue"])
+    case("internal rotation length reads elbow to wrist against a floor line from the elbow, and the screen stays on "
+         "during auto-measure", "IR floor line 15 Nov", _ir_floor)
     case("pancake and shoulder tests and every drill come from the course notes as data, each lesson plays inside the "
          "app through a short-lived signed link, and a bad lesson id is refused", "course library 14 Nov", _mob_library)
     case("the fold and elbow/head scales are the program builder's own steps, and a measured frame is saved clean "

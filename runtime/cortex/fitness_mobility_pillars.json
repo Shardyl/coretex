@@ -734,23 +734,21 @@
      "R"
     ],
     "camera": "Phone on the floor, landscape, about 2 m away, filmed straight down the middle: elbows and shoulders in one line pointing at the camera. Side-on hides the elbow behind the body (your setup since 15 Nov 2026)",
-    "cue": "Lie on the back, arms out so elbows and shoulders form one line, shoulders down, elbows bent 90, forearms up. Let the forearm rotate forward/down keeping 90 deg; shoulder must not lift off the floor; check the elbow has not slipped lower in the frame. Turn around for the other arm. Test gently.",
+    "cue": "Lie on the back, arms out so elbows and shoulders form one line, shoulders down, elbows bent 90, forearms up. Let the forearm rotate forward/down keeping 90 deg; shoulder must not lift off the floor; check the elbow has not slipped lower in the frame. Turn around for the other arm. Test gently. Make closed fists so the wrist reads clearly and the fingers are not mistaken for it (your setup since 15 Nov 2026).",
     "measures": [
      {
       "key": "angle",
-      "label": "Forearm angle from the horizontal floor line on the head side",
+      "label": "Forearm angle from the floor line (elbow to wrist)",
       "kind": "number",
       "unit": "deg",
       "angle": {
-       "mode": "inside",
+       "mode": "floor",
        "points": [
-        "point on the floor line on the head side of the elbow",
         "elbow centre",
         "wrist centre"
        ],
        "pose": {
         "joints": [
-         "level:elbow@ear",
          "elbow",
          "wrist"
         ],
