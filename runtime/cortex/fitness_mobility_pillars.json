@@ -798,13 +798,15 @@
        "60 cm",
        "30 cm",
        "flat"
-      ]
+      ],
+      "optional": true
      },
      {
       "key": "added_kg",
       "label": "Dip added weight",
       "kind": "number",
-      "unit": "kg"
+      "unit": "kg",
+      "optional": true
      },
      {
       "key": "reps",
@@ -830,6 +832,46 @@
     "position": {
      "img": "shoulder_flexion_force_couple_push.jpg",
      "caption": "Feet against an object, hands beside the chest, forearms vertical, body straight"
+    },
+    "calculator": {
+     "source": "Smith lesson 149 (modified Poliquin structural balance), decoded from his calculator 11 Nov 2026",
+     "rep_factor": {
+      "1": 1.0,
+      "2": 0.95,
+      "3": 0.9,
+      "4": 0.87,
+      "5": 0.85,
+      "6": 0.83
+     },
+     "pushup_elevation": {
+      "flat": 0.65,
+      "30 cm": 0.55,
+      "60 cm": 0.35,
+      "90 cm": 0.2
+     },
+     "pct": {
+      "push": {
+       "er": 0.107,
+       "trap3": 0.116,
+       "powell": 0.113
+      },
+      "dip": {
+       "er": 0.09145,
+       "trap3": 0.09915,
+       "powell": 0.09658
+      }
+     },
+     "targets": {
+      "eok_er_reps": "er",
+      "trap3_reps": "trap3",
+      "powell_reps": "powell"
+     },
+     "names": {
+      "eok_er_reps": "External rotation (elbow on knee)",
+      "trap3_reps": "Trap-3 raise",
+      "powell_reps": "Powell raise"
+     },
+     "pass_reps": 5
     }
    },
    {

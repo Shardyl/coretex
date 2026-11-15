@@ -39,7 +39,7 @@ const fmtV=(m,r)=>!r?'':(r.label!=null?r.label:(r.value!=null?(m.unit==='deg'?Ma
 function cellState(p,t,side){
   const days=[...new Set(resFor(p.id,t.id,side).map(r=>r.date))].sort(), d=days[days.length-1]||null;
   const rs=d?resFor(p.id,t.id,side,d):[];
-  const have=t.measures.filter(m=>rs.some(r=>r.measure===m.key)), missing=t.measures.filter(m=>!have.includes(m));
+  const have=t.measures.filter(m=>rs.some(r=>r.measure===m.key)), missing=t.measures.filter(m=>!have.includes(m)&&!m.optional);
   const clips=clipsOf(p.id,t.id).filter(x=>!x.source&&(x.side===side||x.side==='both'));
   const prov=rs.some(r=>r.provisional);
   const st=have.length&&!missing.length?(prov?'prov':'done'):have.length?(prov?'prov':'partial'):clips.length?'filmed':'empty';
@@ -429,6 +429,51 @@ function recordBlock(p,t,day){
     <button style="background:none;border:none;padding:6px 0;color:var(--ink3);font-size:12px;text-decoration:underline;cursor:pointer" onclick="mobEditToggle('${t.id}',true)">Redo or edit this test</button></div>`;
 }
 
+// ---------- Force couple calculator (Smith lesson 149, decoded 11 Nov 2026; built 15 Nov 2026, owner) ----------
+// The numbers are DATA on the push test (`calculator`): rep factors, push-up hand-height factors, the % of the estimated
+// 1RM for each stabiliser. Code computes; nothing is guessed. Push-up load = bodyweight x hand-height factor; dip load =
+// bodyweight + added weight; 1RM = load / rep factor; target for 5 reps = 1RM x the stabiliser's %, to 0.1 kg.
+function fcCalc(p){
+  const ft=p.tests.find(x=>x.calculator);if(!ft)return null;const C=ft.calculator;
+  const rs=(_mob.results||[]).filter(r=>r.pillar===p.id&&r.test===ft.id);
+  const days=[...new Set(rs.filter(r=>r.measure==='reps').map(r=>r.date))].sort(), d=days[days.length-1];
+  if(!d)return{ft,C,err:'Do the force couple push test first: its result sets the dumbbell weight for each stabiliser test.'};
+  const g=k=>rs.find(r=>r.date===d&&r.measure===k)||{};
+  const dip=g('method').label==='Dip', bw=parseFloat(g('bodyweight_kg').value), reps=Math.round(parseFloat(g('reps').value)), add=parseFloat(g('added_kg').value)||0;
+  const rf=C.rep_factor[String(reps)];
+  if(!rf)return{ft,C,d,err:'The push test needs 1 to 6 reps to calculate (logged '+reps+'). Make it harder and retest.'};
+  if(!(bw>0))return{ft,C,d,err:'Add your bodyweight to the push test to calculate the targets.'};
+  let load;if(dip)load=bw+add;else{const ef=C.pushup_elevation[g('elevation').label];
+    if(ef==null)return{ft,C,d,err:'Pick the push-up hand height on the push test to calculate the targets.'};load=bw*ef;}
+  const orm=load/rf, pct=C.pct[dip?'dip':'push'], tg={};
+  Object.entries(C.targets).forEach(([tid,k])=>{tg[tid]=Math.round(orm*pct[k]*10)/10;});
+  return{ft,C,d,dip,reps,orm,tg};
+}
+window.mobFcCalc=fcCalc;
+function fcBlock(p,t){
+  const isPush=!!t.calculator, isStab=!isPush&&p.tests.some(x=>x.calculator&&x.calculator.targets[t.id]);
+  if(!isPush&&!isStab)return '';
+  const c=fcCalc(p);if(!c)return '';
+  const box=h=>`<div style="font-size:12.5px;margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--surface2);line-height:1.5">${h}</div>`;
+  if(c.err)return box(esc(c.err));
+  const src=`from your ${c.dip?'dip':'push-up'} test on ${esc(c.d)}, ${c.reps} rep${c.reps>1?'s':''}`;
+  if(isStab)return box(`<b>Target: ${c.tg[t.id]} kg for ${c.C.pass_reps} reps</b> (${src}). Use the nearest dumbbell, 4 s lowering, as many strict reps as you can. ${c.C.pass_reps}+ reps = not limiting your shoulder range.`);
+  const repsOf=(tid,sd)=>{const r=(_mob.results||[]).filter(x=>x.pillar===p.id&&x.test===tid&&x.side===sd&&x.measure==='reps_exact').sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0).pop();
+    return r&&r.value!=null?Math.round(parseFloat(r.value)):null;};
+  const rows=[], low=[], untested=[];
+  Object.keys(c.C.targets).forEach(tid=>{const st=p.tests.find(x=>x.id===tid);if(!st)return;const nm=(c.C.names||{})[tid]||st.name;
+    const per=st.sides.map(sd=>({sd,n:repsOf(tid,sd)}));
+    const cells=per.map(x=>x.n==null?`<span style="color:var(--ink3)">${x.sd} not tested</span>`:`<span style="color:${x.n>=c.C.pass_reps?'var(--teal)':'var(--amber)'};font-weight:700">${x.sd} ${x.n}</span>`).join(' &middot; ');
+    const tested=per.filter(x=>x.n!=null);if(!tested.length)untested.push(nm);
+    const worst=tested.length?Math.min(...tested.map(x=>x.n)):null;if(worst!=null&&worst<c.C.pass_reps)low.push({nm,worst});
+    rows.push(`<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><span>${esc(nm)}: <b>${c.tg[tid]} kg</b></span><span>${cells}</span></div>`);});
+  low.sort((a,b)=>a.worst-b.worst);
+  const verdict=low.length?`<b>Train:</b> ${low.slice(0,2).map(x=>esc(x.nm)+' ('+x.worst+' reps)').join(', ')}${low.length>2?', the weakest two of '+low.length+' under '+c.C.pass_reps:''}.`
+    :untested.length?'':`<b>No stabiliser is limiting your range</b> (all ${c.C.pass_reps}+ reps).`;
+  return box(`<b>Stabiliser targets for ${c.C.pass_reps} reps</b> (${src}; estimated 1RM ${Math.round(c.orm*10)/10} kg)<div style="margin-top:4px;display:grid;gap:3px">${rows.join('')}</div>`
+    +(verdict?`<div style="margin-top:6px">${verdict}</div>`:'')+(untested.length?`<div style="margin-top:4px;color:var(--ink3)">Still to test: ${untested.map(esc).join(', ')} (max 2 a session).</div>`:''));
+}
+
 function renderPillar(el,p){
   if(!p){_mobView='list';return renderList(el);}
   const s=pillarState(p);
@@ -454,7 +499,7 @@ function renderPillar(el,p){
     ${p.tests.map((t,i)=>{const both=t.sides.length>1?mediaDay(t.id,'both'):[];
       const prov=t.sides.some(sd=>resFor(p.id,t.id,sd,day).some(r=>r.provisional));
       // measured = a record, not a form (owner 14 Nov 2026); "Redo or edit" unlocks it
-      const done=t.sides.every(sd=>{const c=resFor(p.id,t.id,sd,day);return t.measures.every(m=>c.some(r=>r.measure===m.key));});
+      const done=t.sides.every(sd=>{const c=resFor(p.id,t.id,sd,day);return t.measures.filter(m=>!m.optional).every(m=>c.some(r=>r.measure===m.key));});
       const lock=done&&!_mobEdit.has(t.id);
       return `<div class="card" id="mobt_${t.id}" style="padding:12px 14px;margin-bottom:10px;scroll-margin-top:70px">
       <div style="font-size:14px;font-weight:800">${i+1}. ${esc(t.name)}${t.role?` <span style="font-size:10px;font-weight:700;color:var(--ink3)">${t.role==='active'?'ACTIVE':'PASSIVE'}</span>`:''}</div>
@@ -463,6 +508,7 @@ function renderPillar(el,p){
         <div style="font-size:11.5px;color:var(--ink2);margin-top:3px"><b>Correct position:</b> ${esc(t.position.caption||'')}</div></div>`:''}
       ${holdOf(t)?`<div style="font-size:13px;font-weight:800;margin-top:6px;color:var(--teal)">Hold ${esc(holdOf(t))} for it to count</div>`:''}
       ${t.benchmark?`<div style="font-size:12px;margin-top:4px"><b>Benchmark:</b> ${esc(t.benchmark)}</div>`:''}
+      ${fcBlock(p,t)}
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
       ${t.lesson_slug||t.youtube||(t.extra_lessons||[]).length?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}${(t.extra_lessons||[]).map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}
       ${lock?recordBlock(p,t,day):''}

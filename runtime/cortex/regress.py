@@ -2646,6 +2646,23 @@ def _cases():
                 and "closed fists" in ir["cue"])
     case("internal rotation length reads elbow to wrist against a floor line from the elbow, and the screen stays on "
          "during auto-measure", "IR floor line 15 Nov", _ir_floor)
+
+    def _fc_calc():
+        # 15 Nov 2026 (owner): Smith's force couple calculator, numbers as data, computed by code; his own examples
+        # (100 kg flat 6 reps -> 8.4/9.1/8.8; 100 kg dip +20 kg 1 rep -> 11.0/11.9/11.6) must reproduce
+        m = open(_web + "/fitness/mobility.js", encoding="utf-8").read()
+        fm = __import__("cortex.fitness_mobility", fromlist=["x"])
+        fc = next(t for p in fm.DEFAULT_PILLARS for t in p["tests"] if t["id"] == "force_couple_push")
+        C = fc["calculator"]
+        def tg(load, reps, kind):
+            orm = load / C["rep_factor"][str(reps)]
+            return [round(orm * C["pct"][kind][k] * 10) / 10 for k in ("er", "trap3", "powell")]
+        return (tg(100 * C["pushup_elevation"]["flat"], 6, "push") == [8.4, 9.1, 8.8]
+                and tg(120, 1, "dip") == [11.0, 11.9, 11.6]
+                and set(C["targets"]) == {"eok_er_reps", "trap3_reps", "powell_reps"} and C["pass_reps"] == 5
+                and "function fcCalc(p)" in m and "${fcBlock(p,t)}" in m and "!m.optional" in m)
+    case("the force couple calculator turns the push test into each stabiliser's dumbbell target exactly as Smith's "
+         "calculator does, and names the weakest one or two under 5 reps", "force couple calculator 15 Nov", _fc_calc)
     case("pancake and shoulder tests and every drill come from the course notes as data, each lesson plays inside the "
          "app through a short-lived signed link, and a bad lesson id is refused", "course library 14 Nov", _mob_library)
     case("the fold and elbow/head scales are the program builder's own steps, and a measured frame is saved clean "
