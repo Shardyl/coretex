@@ -34,10 +34,10 @@ window.renderCalisthenics=async function(sub){
 const rerender=()=>{const s=(typeof currentSubpage!=='undefined'&&currentSubpage.calisthenics)||'program';renderCalisthenics(s);};
 
 // ---------- Program ----------
-function itemLine(it){const e=ex(it.exercise_id);const bits=[it.reps,it.sets?it.sets+' sets':'',it.rest?'rest '+it.rest:'',it.tempo?'tempo '+it.tempo:''].filter(x=>x&&!/^-+( sets)?$/.test(x)&&x!=='rest -');
+function itemLine(it){const e=ex(it.exercise_id);const bits=[it.reps,it.sets?it.sets+' sets':'',it.rest?'rest '+it.rest:''].filter(x=>x&&!/^-+( sets)?$/.test(x)&&x!=='rest -');
   return `<div style="border-top:0.5px solid var(--border);padding:8px 0">
     <div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:800;color:var(--teal);width:24px">${esc(it.code)}</span>
-      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">${esc(e.name)}</div><div style="font-size:11px;color:var(--ink3)">${esc(bits.join(' · '))}</div></div>${watch(e)}</div>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">${esc(e.name)}</div><div style="font-size:11px;color:var(--ink3)">${esc(bits.join(' · '))}</div>${it.tempo&&!/^-+$/.test(String(it.tempo))?tempoGraphic(it.tempo):''}</div>${watch(e)}</div>
     ${(it.notes||[]).length?`<div style="margin:3px 0 0 32px">${it.notes.map(n=>`<div style="font-size:11.5px;color:var(--ink2)">&bull; ${esc(n)}</div>`).join('')}</div>`:''}
     ${e.id==='wrist_warm_up'||/wrist/.test(e.id||'')?wristLine():''}</div>`;}
 function wristLine(){const ids=_cali.wrist||[], lib=D().wrist_library||[];

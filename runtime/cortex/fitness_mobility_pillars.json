@@ -772,7 +772,7 @@
      "both"
     ],
     "camera": "Film to count reps and check technique",
-    "cue": "Warm up 5-8 sets, max 5 reps each, rest 1-2 min, harder each set. Rest 5 min, then one set to failure landing in 1-6 reps at tempo 4010. Too easy: lower the push-up hands or add dip weight; failed or >6: rest 8 min, retest. Push-up: feet against a wall, hands by the chest, chest touches the floor/object, testing heights flat/30/60/90 cm only. Dip: only if you can do 1 full bodyweight dip; biceps touch forearms.",
+    "cue": "Warm up 5-8 sets, max 5 reps each, rest 1-2 min, harder each set. Rest 5 min, then one set to failure landing in 1-6 reps at the tempo above (4 s down, no pause, 1 s up, no pause). Too easy: lower the push-up hands or add dip weight; failed or >6: rest 8 min, retest. Push-up: feet against a wall, hands by the chest, chest touches the floor/object, testing heights flat/30/60/90 cm only. Dip: only if you can do 1 full bodyweight dip; biceps touch forearms.",
     "measures": [
      {
       "key": "method",
@@ -872,7 +872,8 @@
       "powell_reps": "Powell raise"
      },
      "pass_reps": 5
-    }
+    },
+    "tempo": "4010"
    },
    {
     "id": "trap3_reps",

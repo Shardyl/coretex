@@ -235,8 +235,8 @@ const draftOf=pid=>(_mob.programs||[]).find(x=>x.pillar===pid&&x.status==='draft
 const setTxt=z=>(z.side?z.side+' ':'')+(z.reps!=null?z.reps+'r':'')+(z.hold_s!=null?z.hold_s+'s':'')+(z.kg?' @'+z.kg+'kg':'');
 function doseLine(it,t){const d=it.dose||{}, sets=t&&t.sets||d.sets, reps=t&&t.reps!=null?t.reps:d.reps, hold=t&&t.hold_s!=null?t.hold_s:d.hold_s;
   const a=[];if(d.by_feel)a.push('by feel');else if(sets)a.push(sets+(String(sets)==='1'?' set':' sets'));if(reps)a.push(reps+(d.cr?' rounds':' reps'));if(hold)a.push(hold+' s hold');
-  if(d.tempo)a.push('tempo '+d.tempo);if(d.cr)a.push(d.cr);if(d.rest_s)a.push(d.rest_s+' s rest');
-  return esc(a.join(' · '))+(it.unilateral?' &middot; each side':'');}
+  if(d.cr)a.push(d.cr);if(d.rest_s)a.push(d.rest_s+' s rest');
+  return esc(a.join(' · '))+(it.unilateral?' &middot; each side':'')+(d.tempo?tempoGraphic(d.tempo):'');}
 function itemRow(it,showTarget){const t=it.target;
   return `<div style="border-top:0.5px solid var(--border);padding:8px 0">
     <div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:800;color:var(--teal);width:22px">${esc(it.code)}</span>
@@ -387,7 +387,7 @@ const METHOD={passive:'Passive',loaded:'Loaded',isometric:'Isometric',contract_r
   ballistic:'Ballistic',technique:'Technique',soft_tissue:'Soft tissue',strength:'Strength'};
 function doseTxt(d){if(!d)return '';const a=[];
   if(d.sets)a.push(d.sets+' sets');if(d.reps)a.push(d.reps+' reps');if(d.hold_s)a.push(d.hold_s+' s hold');
-  if(d.tempo)a.push('tempo '+d.tempo);if(d.cr)a.push(d.cr);if(d.rest_s)a.push(d.rest_s+' s rest');return a.join(' &middot; ');}
+  if(d.cr)a.push(d.cr);if(d.rest_s)a.push(d.rest_s+' s rest');return a.join(' &middot; ')+(d.tempo?tempoGraphic(d.tempo):'');}
 const listHtml=(t,xs)=>xs&&xs.length?`<div style="font-size:11px;font-weight:800;color:var(--ink3);margin-top:6px;text-transform:uppercase;letter-spacing:0.05em">${t}</div>${xs.map(x=>`<div style="font-size:12px;margin-top:2px">&bull; ${esc(x)}</div>`).join('')}`:'';
 function drillRow(x){const ds=doseTxt(x.dose);
   return `<details style="border-top:0.5px solid var(--border);padding:7px 0"><summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px">
@@ -508,6 +508,7 @@ function renderPillar(el,p){
         <div style="font-size:11.5px;color:var(--ink2);margin-top:3px"><b>Correct position:</b> ${esc(t.position.caption||'')}</div></div>`:''}
       ${holdOf(t)?`<div style="font-size:13px;font-weight:800;margin-top:6px;color:var(--teal)">Hold ${esc(holdOf(t))} for it to count</div>`:''}
       ${t.benchmark?`<div style="font-size:12px;margin-top:4px"><b>Benchmark:</b> ${esc(t.benchmark)}</div>`:''}
+      ${t.tempo?tempoGraphic(t.tempo):''}
       ${fcBlock(p,t)}
       ${t.cue?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;line-height:1.45">${esc(t.cue)}</div>`:''}
       ${t.lesson_slug||t.youtube||(t.extra_lessons||[]).length?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}${(t.extra_lessons||[]).map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}

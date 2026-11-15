@@ -1008,7 +1008,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='181';                         // keep in step with CACHE in sw.js
+const APP_VERSION='182';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1417,6 +1417,21 @@ function isLoadPR(r){
 function unresolvedBWCount(){
   return liftSessions.filter(s=>!s.isManual&&s.totalReps>0&&liftKg(s)===null).length;
 }
+// ─── TEMPO GRAPHIC (owner, 15 Nov 2026) ───────────────────────────────────────
+// Every tempo code shows the same way, everywhere: four big digits at one fixed size, each with a short line under it
+// (down, pause at the bottom, up, pause at the top). X = explosive. Anything that is not a 4-place code is shown as text.
+window.tempoGraphic=function(code){
+  const c=String(code==null?'':code).trim().toUpperCase(), e=x=>String(x).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  if(!c)return '';
+  if(!/^[0-9X]{4}$/.test(c))return `<div style="display:inline-block;margin:6px 0 2px;padding:6px 10px;border-radius:8px;background:var(--surface2);font-size:12px;color:var(--ink)"><b>Tempo:</b> ${e(code)}</div>`;
+  const lab=(d,i)=>i===0?(d==='X'?'fast down':d+' s down'):i===1?(d==='0'?'no pause':d==='X'?'bounce':d+' s pause'):i===2?(d==='X'?'explode up':d+' s up'):(d==='0'?'no pause':d==='X'?'no pause':d+' s at top');
+  return `<div style="display:flex;align-items:stretch;gap:4px;margin:6px 0 2px;max-width:320px" aria-label="Tempo ${c}">
+    <div style="display:flex;align-items:center;font-size:10px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:0.05em;writing-mode:vertical-rl;transform:rotate(180deg)">Tempo</div>
+    ${[...c].map((d,i)=>`<div style="flex:1;min-width:58px;text-align:center;padding:4px 2px 5px;border-radius:8px;background:var(--surface2)">
+      <div style="font-size:26px;line-height:1.1;font-weight:800;color:var(--teal);font-variant-numeric:tabular-nums">${d}</div>
+      <div style="font-size:10px;line-height:1.2;color:var(--ink2);margin-top:1px">${lab(d,i)}</div></div>`).join('')}</div>`;
+};
+
 // ─── PLYOMETRICS (owner, 14 Nov 2026) ─────────────────────────────────────────
 // Explosive work lives in the Power & Core plan. An exercise with `metric` is measured in cm, not kg load:
 // metric 'weight' = the weight field holds the measure (box height); metric 'best' = each set is one attempt in cm and
@@ -3273,9 +3288,9 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=181"></script>
-<script src="mobility.js?v=181"></script>
-<script src="calisthenics.js?v=181"></script>
-<script src="physio.js?v=181"></script>
+<script src="food.js?v=182"></script>
+<script src="mobility.js?v=182"></script>
+<script src="calisthenics.js?v=182"></script>
+<script src="physio.js?v=182"></script>
 </body>
 </html>
