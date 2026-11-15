@@ -2660,7 +2660,7 @@ def _cases():
         return (tg(100 * C["pushup_elevation"]["flat"], 6, "push") == [8.4, 9.1, 8.8]
                 and tg(120, 1, "dip") == [11.0, 11.9, 11.6]
                 and set(C["targets"]) == {"eok_er_reps", "trap3_reps", "powell_reps"} and C["pass_reps"] == 5
-                and "function fcCalc(p)" in m and "${fcBlock(p,t)}" in m and "!m.optional" in m)
+                and "function fcCalc(p)" in m and "${fcBlock(p,t)}" in m)
     case("every tempo code shows as the same four-digit graphic with a line under each number, in mobility, "
          "calisthenics and on the force couple test", "tempo graphic 15 Nov",
          lambda: (lambda h, m, c, fm: "window.tempoGraphic=function(code)" in h and "s down" in h
@@ -2669,6 +2669,13 @@ def _cases():
                   and next(t for p in fm.DEFAULT_PILLARS for t in p["tests"] if t["id"] == "force_couple_push")["tempo"] == "4010")
          (open(_web + "/fitness/index.html", encoding="utf-8").read(), open(_web + "/fitness/mobility.js", encoding="utf-8").read(),
           open(_web + "/fitness/calisthenics.js", encoding="utf-8").read(), __import__("cortex.fitness_mobility", fromlist=["x"])))
+    case("a measure that depends on a choice (show_if) is shown, saved and required only when it applies: Dip hides the "
+         "push-up hand height, Push up hides the dip weight", "show_if fields 15 Nov",
+         lambda: (lambda m, fm: "const showIf=(m,get)=>" in m and "window.mobShowIf=function" in m
+                  and "if(!showIf(m,domGet(t,s)))return;" in m and "missing=needed(t,rs)" in m
+                  and {x["key"]: x.get("show_if") for x in next(t for p in fm.DEFAULT_PILLARS for t in p["tests"]
+                       if t["id"] == "force_couple_push")["measures"]}["elevation"] == {"measure": "method", "in": ["Push up"]})
+         (open(_web + "/fitness/mobility.js", encoding="utf-8").read(), __import__("cortex.fitness_mobility", fromlist=["x"])))
     case("the force couple calculator turns the push test into each stabiliser's dumbbell target exactly as Smith's "
          "calculator does, and names the weakest one or two under 5 reps", "force couple calculator 15 Nov", _fc_calc)
     case("pancake and shoulder tests and every drill come from the course notes as data, each lesson plays inside the "

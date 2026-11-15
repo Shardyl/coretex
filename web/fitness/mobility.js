@@ -31,6 +31,11 @@ async function load(){
   return _mob;
 }
 const pillar=id=>(_mob&&_mob.pillars||[]).find(p=>p.id===id);
+// A measure can depend on a choice in the same test: `show_if` {measure:'method', in:['Dip']} (or not_in). It is shown,
+// saved, required and listed only when it applies (owner 15 Nov 2026: pick Dip and the push-up hand height goes).
+const showIf=(m,get)=>{const c=m&&m.show_if;if(!c)return true;const v=get(c.measure);return c.in?c.in.includes(v):c.not_in?!c.not_in.includes(v):true;};
+const fromRes=rs=>k=>{const r=rs.find(x=>x.measure===k);return r?(r.label!=null?r.label:r.value):undefined;};
+const needed=(t,rs)=>t.measures.filter(m=>!m.optional&&showIf(m,fromRes(rs)));
 const resFor=(p,t,side,day)=>(_mob.results||[]).filter(r=>r.pillar===p&&r.test===t&&r.side===side&&(!day||r.date===day));
 const clipsOf=(p,t)=>(_mob.media||[]).filter(m=>m.pillar===p&&m.test===t);
 const fmtV=(m,r)=>!r?'':(r.label!=null?r.label:(r.value!=null?(m.unit==='deg'?Math.round(r.value):r1(r.value))+(UNIT[m.unit]||''):''));
@@ -39,7 +44,7 @@ const fmtV=(m,r)=>!r?'':(r.label!=null?r.label:(r.value!=null?(m.unit==='deg'?Ma
 function cellState(p,t,side){
   const days=[...new Set(resFor(p.id,t.id,side).map(r=>r.date))].sort(), d=days[days.length-1]||null;
   const rs=d?resFor(p.id,t.id,side,d):[];
-  const have=t.measures.filter(m=>rs.some(r=>r.measure===m.key)), missing=t.measures.filter(m=>!have.includes(m)&&!m.optional);
+  const have=t.measures.filter(m=>rs.some(r=>r.measure===m.key)), missing=needed(t,rs).filter(m=>!have.includes(m));
   const clips=clipsOf(p.id,t.id).filter(x=>!x.source&&(x.side===side||x.side==='both'));
   const prov=rs.some(r=>r.provisional);
   const st=have.length&&!missing.length?(prov?'prov':'done'):have.length?(prov?'prov':'partial'):clips.length?'filmed':'empty';
@@ -161,12 +166,17 @@ window.mobDay=function(v){_mobDay=v||today();renderMobility();};
 function inputFor(p,t,side,m,cur){
   const id=`mob_${t.id}_${side}_${m.key}`;
   const v=cur.find(r=>r.measure===m.key);
-  if(m.kind==='choice')return `<label class="form-label" style="margin-top:6px">${esc(m.label)}</label>
-    <select id="${id}" style="width:100%;font-size:14px"><option value="">Not done</option>${m.options.map(o=>`<option${v&&v.label===o?' selected':''}>${esc(o)}</option>`).join('')}</select>`;
+  const wrap=h=>`<div id="mobw_${t.id}_${side}_${m.key}"${showIf(m,fromRes(cur))?'':' style="display:none"'}>${h}</div>`;
+  const drives=t.measures.some(x=>x.show_if&&x.show_if.measure===m.key);
+  if(m.kind==='choice')return wrap(`<label class="form-label" style="margin-top:6px">${esc(m.label)}</label>
+    <select id="${id}" style="width:100%;font-size:14px"${drives?` onchange="mobShowIf('${p.id}','${t.id}','${side}')"`:''}><option value="">Not done</option>${m.options.map(o=>`<option${v&&v.label===o?' selected':''}>${esc(o)}</option>`).join('')}</select>`);
   const u=m.unit==='deg'?'degrees':m.unit==='s'?'seconds':m.unit;
-  return `<label class="form-label" style="margin-top:6px">${esc(m.label)}${u?' ('+esc(u)+')':''}</label>
-    <input id="${id}" type="number" step="any" inputmode="decimal" class="fd-input" style="font-size:15px" value="${v&&v.value!=null?v.value:''}" placeholder="${m.angle?'measure it on the video, or type it':''}"/>`;
+  return wrap(`<label class="form-label" style="margin-top:6px">${esc(m.label)}${u?' ('+esc(u)+')':''}</label>
+    <input id="${id}" type="number" step="any" inputmode="decimal" class="fd-input" style="font-size:15px" value="${v&&v.value!=null?v.value:''}" placeholder="${m.angle?'measure it on the video, or type it':''}"/>`);
 }
+const domGet=(t,side)=>k=>{const e=document.getElementById(`mob_${t.id}_${side}_${k}`);return e&&e.value!==''?e.value:undefined;};
+window.mobShowIf=function(pid,tid,side){const p=pillar(pid), t=p&&p.tests.find(x=>x.id===tid);if(!t)return;
+  t.measures.forEach(m=>{if(!m.show_if)return;const w=document.getElementById(`mobw_${t.id}_${side}_${m.key}`);if(w)w.style.display=showIf(m,domGet(t,side))?'':'none';});};
 
 function gridBlock(p,s){
   const two=p.tests.some(t=>t.sides.length>1);
@@ -413,7 +423,7 @@ window.mobEditToggle=(id,on)=>{on?_mobEdit.add(id):_mobEdit.delete(id);renderMob
 function recordBlock(p,t,day){
   const allMed=(_mob.media||[]).filter(m=>m.pillar===p.id&&m.test===t.id&&m.date===day);
   const rows=t.sides.map(sd=>{const c=resFor(p.id,t.id,sd,day);
-    const vals=t.measures.map(m=>{const r=c.find(x=>x.measure===m.key);return `<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+    const vals=t.measures.filter(m=>showIf(m,fromRes(c))).map(m=>{const r=c.find(x=>x.measure===m.key);return `<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
         ${t.measures.length>1?`<span style="font-size:11px;color:var(--ink3)">${esc(m.label)}</span>`:''}<span style="font-size:20px;font-weight:800;color:var(--teal)">${esc(fmtV(m,r))}</span>${r&&r.provisional?'<span style="font-size:10px;color:var(--amber);font-weight:800">PROVISIONAL</span>':''}</div>`;}).join('');
     const still=allMed.filter(x=>x.source&&!String(x.note||'').startsWith('Clean frame')&&(x.side===sd||x.side==='both'));
     const how=still.length&&/auto-detected/.test(still[still.length-1].note||'')?'auto-measured':still.length?'measured on the clip':'typed in';
@@ -499,7 +509,7 @@ function renderPillar(el,p){
     ${p.tests.map((t,i)=>{const both=t.sides.length>1?mediaDay(t.id,'both'):[];
       const prov=t.sides.some(sd=>resFor(p.id,t.id,sd,day).some(r=>r.provisional));
       // measured = a record, not a form (owner 14 Nov 2026); "Redo or edit" unlocks it
-      const done=t.sides.every(sd=>{const c=resFor(p.id,t.id,sd,day);return t.measures.filter(m=>!m.optional).every(m=>c.some(r=>r.measure===m.key));});
+      const done=t.sides.every(sd=>{const c=resFor(p.id,t.id,sd,day);return needed(t,c).every(m=>c.some(r=>r.measure===m.key));});
       const lock=done&&!_mobEdit.has(t.id);
       return `<div class="card" id="mobt_${t.id}" style="padding:12px 14px;margin-bottom:10px;scroll-margin-top:70px">
       <div style="font-size:14px;font-weight:800">${i+1}. ${esc(t.name)}${t.role?` <span style="font-size:10px;font-weight:700;color:var(--ink3)">${t.role==='active'?'ACTIVE':'PASSIVE'}</span>`:''}</div>
@@ -559,7 +569,7 @@ window.mobSave=async function(pid,tid){
   const pe=document.getElementById('mobprov_'+tid), provisional=!!(pe&&pe.checked);
   try{
     for(const s of t.sides){
-      const values={};t.measures.forEach(m=>{const e=document.getElementById(`mob_${t.id}_${s}_${m.key}`);if(e&&e.value!=='')values[m.key]=m.kind==='number'?+e.value:e.value;});
+      const values={};t.measures.forEach(m=>{if(!showIf(m,domGet(t,s)))return;const e=document.getElementById(`mob_${t.id}_${s}_${m.key}`);if(e&&e.value!=='')values[m.key]=m.kind==='number'?+e.value:e.value;});
       await syncApi('/api/fitness/mobility/result',{method:'POST',body:JSON.stringify({date:day,pillar:pid,test:tid,side:s,values,provisional})});
     }
     _mobEdit.delete(tid);await load();renderMobility();toast('Saved');
