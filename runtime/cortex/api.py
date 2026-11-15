@@ -7559,6 +7559,62 @@ def fitness_cali_current(body: dict = Body(...), _: None = Depends(auth)) -> dic
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# ---------- calisthenics skill ladders (15 Nov 2026): pass tests, ladder sessions, guide images ----------
+class CaliGoalTest(BaseModel):
+    skill: str
+    rung: int
+    test: str
+    side: str = "both"
+    value: float
+    date: str
+    all_sets: bool = False
+    filmed: bool = False
+    note: str | None = None
+
+
+class CaliLadderSession(BaseModel):
+    week_day: str
+    date: str
+    items: list
+    note: str | None = None
+
+
+@app.post("/api/fitness/cali/goal-test")
+def fitness_cali_goal_test(body: CaliGoalTest, _: None = Depends(auth)) -> dict:
+    from . import fitness_calisthenics
+    try:
+        return fitness_calisthenics.log_goal_test(body.skill, body.rung, body.test, body.side, body.value, body.date,
+                                                  body.all_sets, body.filmed, body.note or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/fitness/cali/goal-test/{uid}")
+def fitness_cali_goal_test_delete(uid: str, _: None = Depends(auth)) -> dict:
+    from . import fitness_calisthenics
+    return fitness_calisthenics.delete_goal_test(uid)
+
+
+@app.post("/api/fitness/cali/ladder-session")
+def fitness_cali_ladder_session(body: CaliLadderSession, _: None = Depends(auth)) -> dict:
+    from . import fitness_calisthenics
+    try:
+        return fitness_calisthenics.log_ladder_session(body.week_day, body.date, body.items, body.note or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/fitness/cali/img/{name}")
+def fitness_cali_img(name: str, _: None = Depends(auth)):
+    """A rung's AI guide image of the owner (private on the box, never public)."""
+    if not re.fullmatch(r"cg_[a-z_]{2,30}_\d{1,2}\.jpg", name or ""):
+        raise HTTPException(status_code=404, detail="not found")
+    path = os.path.join("/opt/cortex-data/fitness-course/files/cali", name)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+
+
 # ---------- physio: old injuries and niggles, their tests and drills (14 Nov 2026) ----------
 class PhysioResult(BaseModel):
     date: str

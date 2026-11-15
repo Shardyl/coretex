@@ -602,6 +602,24 @@ create table if not exists fitness.cali_milestones (
     created_at   timestamptz not null default now()
 );
 grant select, insert, update, delete on fitness.cali_sessions, fitness.cali_milestones to cortex;
+-- Skill ladder pass tests (15 Nov 2026): one row per pass mark attempt; a rung passes on value >= mark, filmed,
+-- all sets where the mark has sets (fitness_calisthenics.rung_passed). Never hard-deleted.
+create table if not exists fitness.cali_goal_tests (
+    uid        text primary key,
+    day        date not null,
+    skill      text not null,
+    rung       integer not null,
+    test       text not null,
+    side       text not null default 'both',
+    value      numeric,
+    all_sets   boolean not null default false,
+    filmed     boolean not null default false,
+    note       text,
+    deleted    boolean not null default false,
+    created_at timestamptz not null default now()
+);
+create index if not exists cali_goal_tests_skill_idx on fitness.cali_goal_tests (skill, rung);
+grant select, insert, update, delete on fitness.cali_goal_tests to cortex;
 
 -- Physio (cortex/fitness_physio.py, 14 Nov 2026): old injuries and niggles. Issues are DATA (setting
 -- fitness_physio); test results per day + side (same day replaces), sessions = drills ticked. Never hard-deleted.

@@ -2682,6 +2682,21 @@ def _cases():
                 and "def _to_mp4(uid: str)" in src and set(fm.CUES) >= {"get_ready", "hold", "done", "n1", "n3"}
                 and "screen.orientation.lock('landscape')" in m and "unland();ov.remove();" in m
                 and "await openCam();await land();" in m and "'Try camera again'" in m)
+    case("a calisthenics rung passes only when every pass mark is met on every side, all sets where it has sets, and "
+         "FILMED; the current rung is the lowest not passed", "skill ladders 15 Nov",
+         lambda: (lambda fc: (lambda g, t: (
+             fc.rung_passed(g, [], "x") is False
+             and fc.rung_passed(g, [t("a", "both", 10, True, True), t("b", "L", 15, False, True), t("b", "R", 15, False, True)], "x") is True
+             and fc.rung_passed(g, [t("a", "both", 10, True, False), t("b", "L", 15, False, True), t("b", "R", 15, False, True)], "x") is False
+             and fc.rung_passed(g, [t("a", "both", 10, False, True), t("b", "L", 15, False, True), t("b", "R", 15, False, True)], "x") is False
+             and fc.rung_passed(g, [t("a", "both", 10, True, True), t("b", "L", 15, False, True)], "x") is False
+             and fc.rung_passed(g, [t("a", "both", 9, True, True), t("b", "L", 15, False, True), t("b", "R", 15, False, True)], "x") is False
+             and len(__import__("json").load(open(fc.GOALS_FILE, encoding="utf-8"))["skills"]) == 5))(
+             {"pass": [{"id": "a", "kind": "reps", "value": 10, "sets": 3, "sides": "both"},
+                       {"id": "b", "kind": "hold", "value": 15, "sets": 1, "sides": "each"}]},
+             lambda test, side, value, all_sets, filmed: {"skill": "x", "test": test, "side": side, "value": value,
+                                                          "all_sets": all_sets, "filmed": filmed}))
+         (__import__("cortex.fitness_calisthenics", fromlist=["x"])))
     case("force couple targets round to a real dumbbell (nearest 2 kg step, a tie goes up), exact target still shown",
          "dumbbell rounding 15 Nov",
          lambda: (lambda m, fm: "db[tid]=Math.max(step," in m and "Use the ${c.db[t.id]} kg dumbbell" in m

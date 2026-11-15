@@ -479,6 +479,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
 
     <!-- ═══ MOBILITY (rendered by mobility.js, 8 Nov 2026) ═══ -->
     <div id="page-mobility-pillars" class="page" data-section="mobility"></div>
+    <div id="page-calisthenics-goals" class="page" data-section="calisthenics"></div>
     <div id="page-calisthenics-program" class="page" data-section="calisthenics"></div>
     <div id="page-calisthenics-tree" class="page" data-section="calisthenics"></div>
     <div id="page-calisthenics-library" class="page" data-section="calisthenics"></div>
@@ -1008,7 +1009,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='200';                         // keep in step with CACHE in sw.js
+const APP_VERSION='201';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1619,11 +1620,11 @@ const SUBNAVS={
   food:[{label:'Today',key:'today'},{label:'Weight',key:'weight'},{label:'Fasting',key:'fasting'},{label:'Glucose',key:'glucose'},{label:'Recovery',key:'recovery'},{label:'Bloods',key:'bloods'},{label:'History',key:'history'},{label:'My foods',key:'foods'}],
   workouts:[{label:'Strength',key:'lifts'},{label:'Cardio',key:'cardio'}],
   mobility:[{label:'Pillars',key:'pillars'}],
-  calisthenics:[{label:'Program',key:'program'},{label:'Skill tree',key:'tree'},{label:'Library',key:'library'}],
+  calisthenics:[{label:'Goals',key:'goals'},{label:'Handstand',key:'program'},{label:'Skill tree',key:'tree'},{label:'Library',key:'library'}],
   physio:[{label:'Issues',key:'issues'},{label:'Log session',key:'session'},{label:'History',key:'history'}]
 };
 let currentSection='food';
-let currentSubpage={lifts:'log',cardio:'log',food:'today',workouts:'lifts',mobility:'pillars',calisthenics:'program',physio:'issues'};
+let currentSubpage={lifts:'log',cardio:'log',food:'today',workouts:'lifts',mobility:'pillars',calisthenics:'goals',physio:'issues'};
 
 function showSection(section){
   currentSection=section;
@@ -3291,9 +3292,9 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=200"></script>
-<script src="mobility.js?v=200"></script>
-<script src="calisthenics.js?v=200"></script>
-<script src="physio.js?v=200"></script>
+<script src="food.js?v=201"></script>
+<script src="mobility.js?v=201"></script>
+<script src="calisthenics.js?v=201"></script>
+<script src="physio.js?v=201"></script>
 </body>
 </html>

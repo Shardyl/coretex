@@ -1,0 +1,2815 @@
+{
+ "version": 1,
+ "skills": [
+  {
+   "id": "hspu",
+   "name": "Handstand push-up",
+   "goal": "Freestanding handstand push-up on parallettes, 5 reps",
+   "why": "The bodyweight version of your shoulder press, built on the handstand. Smith's Handstand Toolkit runs the balance side.",
+   "equipment": "Floor, a clear wall, parallettes",
+   "film": "Side-on, whole body in frame",
+   "rungs": [
+    {
+     "n": 1,
+     "name": "Pike push-up",
+     "pass": [
+      {
+       "id": "pike_pu",
+       "name": "Pike push-ups",
+       "kind": "reps",
+       "value": 10,
+       "sets": 3,
+       "sides": "both"
+      },
+      {
+       "id": "wall_plank",
+       "name": "Wall plank hold",
+       "kind": "hold",
+       "value": 30,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Hips high, legs straight, weight forward into the hands",
+      "Head travels in front of the hands, elbows tucked at about 45 degrees",
+      "Push up and out through the shoulder blades at the top"
+     ],
+     "drills": [
+      {
+       "name": "Pike push-up",
+       "dose": "3 x 6-10",
+       "kind": "reps",
+       "tempo": "3010",
+       "rest_s": 90,
+       "youtube": "257mEsu8lXg@605"
+      },
+      {
+       "name": "Wall plank (feet on the wall, body flat)",
+       "dose": "3 x 20-30 s",
+       "kind": "hold",
+       "rest_s": 60
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        440,
+        650
+       ],
+       "neck": [
+        472,
+        620
+       ],
+       "shoulder": [
+        500,
+        595
+       ],
+       "elbow": [
+        486,
+        695
+       ],
+       "wrist": [
+        472,
+        795
+       ],
+       "hip": [
+        690,
+        410
+       ],
+       "knee": [
+        770,
+        590
+       ],
+       "ankle": [
+        845,
+        770
+       ],
+       "toe": [
+        890,
+        795
+       ]
+      },
+      "floor": 800
+     },
+     "scene": "a pike push-up at the top: hands on the floor, arms straight, hips raised high into an upside-down V, legs straight, feet on the floor, head between the arms looking back at his feet"
+    },
+    {
+     "n": 2,
+     "name": "Chest-to-wall handstand",
+     "pass": [
+      {
+       "id": "c2w",
+       "name": "Chest-to-wall handstand",
+       "kind": "hold",
+       "value": 60,
+       "sets": 1,
+       "sides": "both"
+      },
+      {
+       "id": "elev_pike_pu",
+       "name": "Elevated pike push-ups",
+       "kind": "reps",
+       "value": 8,
+       "sets": 3,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Walk the feet up the wall and the hands in close, 10-20 cm from the wall",
+      "Ribs in, bum squeezed, push tall through the shoulders",
+      "Ears covered by the arms"
+     ],
+     "drills": [
+      {
+       "name": "Chest-to-wall hold",
+       "dose": "3-5 x 20-60 s",
+       "kind": "hold",
+       "rest_s": 90,
+       "lesson_slug": "24-chest-to-wall-holds"
+      },
+      {
+       "name": "Elevated pike push-up (feet on a box)",
+       "dose": "3 x 5-8",
+       "kind": "reps",
+       "tempo": "3010",
+       "rest_s": 120
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        560,
+        650
+       ],
+       "neck": [
+        560,
+        615
+       ],
+       "shoulder": [
+        560,
+        590
+       ],
+       "elbow": [
+        560,
+        690
+       ],
+       "wrist": [
+        560,
+        795
+       ],
+       "hip": [
+        560,
+        380
+       ],
+       "knee": [
+        560,
+        230
+       ],
+       "ankle": [
+        560,
+        80
+       ],
+       "toe": [
+        565,
+        40
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "wall",
+        600
+       ]
+      ]
+     },
+     "scene": "a chest-to-wall handstand: upside down, hands on the floor about 15 cm from the wall, arms straight and by his ears, body in a straight vertical line with his chest and toes lightly touching the wall, facing the wall"
+    },
+    {
+     "n": 3,
+     "name": "Toe pulls and partial wall HSPU",
+     "pass": [
+      {
+       "id": "toe_pull_hold",
+       "name": "Split-leg balance on the wall",
+       "kind": "hold",
+       "value": 5,
+       "sets": 1,
+       "sides": "both",
+       "smith": "split_leg_balance_wall_5s"
+      },
+      {
+       "id": "wall_hspu_part",
+       "name": "Wall HSPU, partial range",
+       "kind": "reps",
+       "value": 5,
+       "sets": 3,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Pull the toes off the wall with the fingers, not by bending",
+      "Find the balance point, then touch back down softly",
+      "HSPU: lower under control, only as far as you can press back"
+     ],
+     "drills": [
+      {
+       "name": "Toe pulls to hold",
+       "dose": "5 x 3-5",
+       "kind": "reps",
+       "rest_s": 60
+      },
+      {
+       "name": "Wall HSPU to a cushion (partial)",
+       "dose": "3 x 3-5",
+       "kind": "reps",
+       "tempo": "3010",
+       "rest_s": 120
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        540,
+        650
+       ],
+       "neck": [
+        540,
+        615
+       ],
+       "shoulder": [
+        540,
+        590
+       ],
+       "elbow": [
+        540,
+        690
+       ],
+       "wrist": [
+        540,
+        795
+       ],
+       "hip": [
+        545,
+        380
+       ],
+       "knee": [
+        560,
+        230
+       ],
+       "ankle": [
+        575,
+        85
+       ],
+       "toe": [
+        598,
+        50
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "wall",
+        600
+       ]
+      ]
+     },
+     "scene": "a handstand facing the wall with only his toes lightly touching it as he pulls them away, body almost vertical and balanced over his straight arms"
+    },
+    {
+     "n": 4,
+     "name": "Freestanding handstand",
+     "pass": [
+      {
+       "id": "free_15",
+       "name": "Freestanding straight handstand",
+       "kind": "hold",
+       "value": 15,
+       "sets": 1,
+       "sides": "both",
+       "smith": "straight_15s"
+      },
+      {
+       "id": "wall_hspu_full",
+       "name": "Wall HSPU, full range",
+       "kind": "reps",
+       "value": 5,
+       "sets": 3,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Kick up softly, catch the balance with the fingers",
+      "Straight line wrists, shoulders, hips, ankles",
+      "Smith's Toolkit sets your handstand practice"
+     ],
+     "drills": [
+      {
+       "name": "Kick-up and hold",
+       "dose": "accumulate 2-3 min",
+       "kind": "hold",
+       "lesson_slug": "26-the-basic-kick-up-the-50-50-rule"
+      },
+      {
+       "name": "Wall HSPU, full range (back to the wall)",
+       "dose": "3 x 3-5",
+       "kind": "reps",
+       "tempo": "3010",
+       "rest_s": 120
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        600,
+        650
+       ],
+       "neck": [
+        600,
+        615
+       ],
+       "shoulder": [
+        600,
+        590
+       ],
+       "elbow": [
+        600,
+        690
+       ],
+       "wrist": [
+        600,
+        795
+       ],
+       "hip": [
+        600,
+        380
+       ],
+       "knee": [
+        600,
+        230
+       ],
+       "ankle": [
+        600,
+        80
+       ],
+       "toe": [
+        600,
+        40
+       ]
+      },
+      "floor": 800
+     },
+     "scene": "a freestanding handstand in the middle of the room: perfectly straight vertical line, arms locked by his ears, legs together, toes pointed, nothing touching but his hands"
+    },
+    {
+     "n": 5,
+     "name": "Solid handstand and deficit HSPU",
+     "pass": [
+      {
+       "id": "free_60",
+       "name": "Freestanding straight handstand",
+       "kind": "hold",
+       "value": 60,
+       "sets": 1,
+       "sides": "both",
+       "smith": "straight_60s"
+      },
+      {
+       "id": "def_hspu",
+       "name": "Deficit wall HSPU on parallettes",
+       "kind": "reps",
+       "value": 5,
+       "sets": 3,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Head goes below the hands between the parallettes",
+      "Elbows track forward, not flared",
+      "Full lockout at the top"
+     ],
+     "drills": [
+      {
+       "name": "Freestanding max hold",
+       "dose": "5 x max",
+       "kind": "hold",
+       "rest_s": 90,
+       "lesson_slug": "33-the-fight-learning-to-save"
+      },
+      {
+       "name": "Deficit wall HSPU on parallettes",
+       "dose": "4 x 3-5",
+       "kind": "reps",
+       "tempo": "3010",
+       "rest_s": 150
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        545,
+        760
+       ],
+       "neck": [
+        545,
+        735
+       ],
+       "shoulder": [
+        545,
+        715
+       ],
+       "elbow": [
+        480,
+        690
+       ],
+       "wrist": [
+        545,
+        690
+       ],
+       "hip": [
+        548,
+        500
+       ],
+       "knee": [
+        552,
+        350
+       ],
+       "ankle": [
+        556,
+        200
+       ],
+       "toe": [
+        560,
+        160
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "parallette",
+        545,
+        690
+       ],
+       [
+        "wall",
+        595
+       ]
+      ]
+     },
+     "scene": "the bottom of a deficit handstand push-up against a wall: hands gripping two parallettes, elbows bent, head lowered down between the bars below hand level, back and heels against the wall, body vertical"
+    },
+    {
+     "n": 6,
+     "name": "Goal: freestanding HSPU on parallettes",
+     "goal": true,
+     "pass": [
+      {
+       "id": "free_hspu",
+       "name": "Freestanding HSPU on parallettes",
+       "kind": "reps",
+       "value": 5,
+       "sets": 1,
+       "sides": "both",
+       "smith": "handstand_push_up_3"
+      }
+     ],
+     "cues": [
+      "Smith's milestone on the way: 3 freestanding HSPU",
+      "Stay stacked, lower slowly, press straight up"
+     ],
+     "drills": [
+      {
+       "name": "Freestanding HSPU",
+       "dose": "5 x 1-3",
+       "kind": "reps",
+       "tempo": "3010",
+       "rest_s": 180
+      },
+      {
+       "name": "Deficit wall HSPU",
+       "dose": "3 x 5",
+       "kind": "reps",
+       "tempo": "3010",
+       "rest_s": 150
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        600,
+        650
+       ],
+       "neck": [
+        600,
+        625
+       ],
+       "shoulder": [
+        600,
+        605
+       ],
+       "elbow": [
+        540,
+        650
+       ],
+       "wrist": [
+        600,
+        690
+       ],
+       "hip": [
+        602,
+        395
+       ],
+       "knee": [
+        602,
+        245
+       ],
+       "ankle": [
+        602,
+        95
+       ],
+       "toe": [
+        602,
+        55
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "parallette",
+        600,
+        690
+       ]
+      ]
+     },
+     "scene": "a freestanding handstand push-up halfway down on two parallettes: elbows bent about 90 degrees, body a straight vertical line, legs together pointing up, no wall"
+    }
+   ]
+  },
+  {
+   "id": "lsit_press",
+   "name": "L-sit to press handstand",
+   "goal": "L-sit, press up to a handstand, hold 10 s",
+   "why": "Compression, straight-arm strength and the handstand in one move. Your pancake and pike work feed straight into it.",
+   "equipment": "Parallettes, a box or bench",
+   "film": "Side-on",
+   "rungs": [
+    {
+     "n": 1,
+     "name": "Tuck sit",
+     "pass": [
+      {
+       "id": "tuck_sit",
+       "name": "Tuck sit on parallettes",
+       "kind": "hold",
+       "value": 20,
+       "sets": 1,
+       "sides": "both"
+      },
+      {
+       "id": "hollow",
+       "name": "Hollow body hold",
+       "kind": "hold",
+       "value": 45,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Push the floor away, shoulders down from the ears",
+      "Knees to chest, bum off the floor",
+      "Arms locked"
+     ],
+     "drills": [
+      {
+       "name": "Tuck sit",
+       "dose": "4 x 10-20 s",
+       "kind": "hold",
+       "rest_s": 60
+      },
+      {
+       "name": "Hollow body hold",
+       "dose": "3 x 30-45 s",
+       "kind": "hold",
+       "rest_s": 60,
+       "youtube": "257mEsu8lXg@444"
+      },
+      {
+       "name": "Compact leg lifts",
+       "dose": "3 x 8-12",
+       "kind": "reps",
+       "tempo": "2111",
+       "rest_s": 60,
+       "youtube": "257mEsu8lXg@924"
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        610,
+        400
+       ],
+       "neck": [
+        610,
+        440
+       ],
+       "shoulder": [
+        612,
+        465
+       ],
+       "elbow": [
+        612,
+        585
+       ],
+       "wrist": [
+        612,
+        700
+       ],
+       "hip": [
+        632,
+        705
+       ],
+       "knee": [
+        520,
+        620
+       ],
+       "ankle": [
+        560,
+        745
+       ],
+       "toe": [
+        530,
+        760
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "parallette",
+        612,
+        700
+       ]
+      ]
+     },
+     "scene": "a tuck sit on parallettes, facing left: arms straight pushing down, body lifted so his bottom is off the floor at hand height, knees pulled up to his chest, feet off the floor"
+    },
+    {
+     "n": 2,
+     "name": "One-leg L-sit",
+     "pass": [
+      {
+       "id": "one_leg_l",
+       "name": "One-leg L-sit",
+       "kind": "hold",
+       "value": 15,
+       "sets": 1,
+       "sides": "each"
+      }
+     ],
+     "cues": [
+      "Straight leg locked, toes pointed, at hip height",
+      "Other knee tucked",
+      "Swap legs every set"
+     ],
+     "drills": [
+      {
+       "name": "One-leg L-sit",
+       "dose": "4 x 8-15 s each",
+       "kind": "hold",
+       "rest_s": 60
+      },
+      {
+       "name": "Seated pike leg lifts",
+       "dose": "3 x 10",
+       "kind": "reps",
+       "tempo": "1111",
+       "rest_s": 60
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        650,
+        400
+       ],
+       "neck": [
+        650,
+        440
+       ],
+       "shoulder": [
+        650,
+        465
+       ],
+       "elbow": [
+        650,
+        585
+       ],
+       "wrist": [
+        650,
+        700
+       ],
+       "hip": [
+        665,
+        705
+       ],
+       "knee": [
+        480,
+        705
+       ],
+       "ankle": [
+        300,
+        705
+       ],
+       "toe": [
+        262,
+        698
+       ],
+       "knee2": [
+        560,
+        620
+       ],
+       "ankle2": [
+        600,
+        745
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "parallette",
+        650,
+        700
+       ]
+      ]
+     },
+     "scene": "a one-leg L-sit on parallettes: arms straight, body lifted, one leg straight out in front at hip height, the other knee tucked to the chest"
+    },
+    {
+     "n": 3,
+     "name": "L-sit",
+     "pass": [
+      {
+       "id": "lsit",
+       "name": "L-sit",
+       "kind": "hold",
+       "value": 20,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Both legs straight and together, level with the hips",
+      "Push down hard, chest proud",
+      "Point the toes"
+     ],
+     "drills": [
+      {
+       "name": "L-sit",
+       "dose": "5 x 8-20 s",
+       "kind": "hold",
+       "rest_s": 90
+      },
+      {
+       "name": "Compression lifts (seated, hands by the knees)",
+       "dose": "3 x 8",
+       "kind": "reps",
+       "tempo": "1111",
+       "rest_s": 60
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        650,
+        400
+       ],
+       "neck": [
+        650,
+        440
+       ],
+       "shoulder": [
+        650,
+        465
+       ],
+       "elbow": [
+        650,
+        585
+       ],
+       "wrist": [
+        650,
+        700
+       ],
+       "hip": [
+        665,
+        705
+       ],
+       "knee": [
+        480,
+        705
+       ],
+       "ankle": [
+        300,
+        705
+       ],
+       "toe": [
+        262,
+        698
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "parallette",
+        650,
+        700
+       ]
+      ]
+     },
+     "scene": "a full L-sit on parallettes: arms straight, body upright, both legs straight together held horizontal in front at hip height, toes pointed"
+    },
+    {
+     "n": 4,
+     "name": "High straddle L",
+     "pass": [
+      {
+       "id": "high_l",
+       "name": "High straddle L, legs above horizontal",
+       "kind": "hold",
+       "value": 10,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Legs wide and straight, lifted above the hips",
+      "Lean the shoulders back a little",
+      "Your pancake range sets how high"
+     ],
+     "drills": [
+      {
+       "name": "High straddle L",
+       "dose": "5 x 5-10 s",
+       "kind": "hold",
+       "rest_s": 90
+      },
+      {
+       "name": "Straddle compression lifts",
+       "dose": "3 x 8",
+       "kind": "reps",
+       "tempo": "1111",
+       "rest_s": 60
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        690,
+        395
+       ],
+       "neck": [
+        685,
+        435
+       ],
+       "shoulder": [
+        680,
+        460
+       ],
+       "elbow": [
+        665,
+        580
+       ],
+       "wrist": [
+        650,
+        700
+       ],
+       "hip": [
+        660,
+        700
+       ],
+       "knee": [
+        510,
+        610
+       ],
+       "ankle": [
+        360,
+        520
+       ],
+       "toe": [
+        325,
+        498
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "parallette",
+        650,
+        700
+       ]
+      ]
+     },
+     "scene": "a high straddle L-sit on parallettes: arms straight, torso leaning back slightly, legs straight and spread wide in a straddle, lifted above horizontal (feet higher than the hips)"
+    },
+    {
+     "n": 5,
+     "name": "Press from a box",
+     "pass": [
+      {
+       "id": "box_press",
+       "name": "Press to handstand from a box",
+       "kind": "reps",
+       "value": 5,
+       "sets": 1,
+       "sides": "both"
+      },
+      {
+       "id": "free_30",
+       "name": "Freestanding handstand",
+       "kind": "hold",
+       "value": 30,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Shoulders lean forward over the hands, hips rise over the shoulders",
+      "Tuck first, then straddle as it gets easier",
+      "Smith's press lessons cover this"
+     ],
+     "drills": [
+      {
+       "name": "Press from a box (tuck, then straddle)",
+       "dose": "5 x 2-3",
+       "kind": "reps",
+       "rest_s": 120,
+       "lesson_slug": "43-bottom-up"
+      },
+      {
+       "name": "Press negatives",
+       "dose": "3 x 3",
+       "kind": "reps",
+       "tempo": "5000",
+       "rest_s": 120,
+       "lesson_slug": "45-top-down"
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        540,
+        700
+       ],
+       "neck": [
+        548,
+        668
+       ],
+       "shoulder": [
+        555,
+        640
+       ],
+       "elbow": [
+        575,
+        720
+       ],
+       "wrist": [
+        590,
+        795
+       ],
+       "hip": [
+        620,
+        400
+       ],
+       "knee": [
+        470,
+        380
+       ],
+       "ankle": [
+        520,
+        260
+       ],
+       "toe": [
+        500,
+        235
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "box",
+        700,
+        900,
+        650
+       ]
+      ]
+     },
+     "scene": "halfway through a tuck press to handstand: hands on the floor, arms straight, shoulders leaning forward over the hands, hips lifted up above the shoulders, knees tucked, feet just lifted off a low box behind him"
+    },
+    {
+     "n": 6,
+     "name": "Goal: L-sit to press handstand",
+     "goal": true,
+     "pass": [
+      {
+       "id": "lsit_press",
+       "name": "L-sit, press to handstand, hold",
+       "kind": "hold",
+       "value": 10,
+       "sets": 1,
+       "sides": "both"
+      },
+      {
+       "id": "straddle_press5",
+       "name": "Straddle presses",
+       "kind": "reps",
+       "value": 5,
+       "sets": 1,
+       "sides": "both",
+       "smith": "straddle_press"
+      }
+     ],
+     "cues": [
+      "L-sit, lean, lift the hips, straddle up, close the legs",
+      "Smith's milestone on the way: 5 straddle presses"
+     ],
+     "drills": [
+      {
+       "name": "Straddle press",
+       "dose": "5 x 1-3",
+       "kind": "reps",
+       "rest_s": 150,
+       "lesson_slug": "42-mechanics-of-a-press-part-1"
+      },
+      {
+       "name": "L-sit",
+       "dose": "3 x 15 s",
+       "kind": "hold",
+       "rest_s": 90
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        560,
+        610
+       ],
+       "neck": [
+        566,
+        580
+       ],
+       "shoulder": [
+        572,
+        555
+       ],
+       "elbow": [
+        588,
+        625
+       ],
+       "wrist": [
+        600,
+        700
+       ],
+       "hip": [
+        650,
+        330
+       ],
+       "knee": [
+        520,
+        300
+       ],
+       "ankle": [
+        395,
+        280
+       ],
+       "toe": [
+        360,
+        282
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "parallette",
+        600,
+        700
+       ]
+      ]
+     },
+     "scene": "the middle of a straddle press to handstand on parallettes: arms straight, shoulders leaning forward over the hands, hips stacked high above the shoulders, legs straight and wide in a straddle, almost horizontal"
+    }
+   ]
+  },
+  {
+   "id": "planche",
+   "name": "Planche",
+   "goal": "Full planche, 5 s",
+   "why": "The hardest straight-arm push hold. A multi-year goal: the straddle planche is a big win on its own.",
+   "equipment": "Parallettes or floor",
+   "film": "Side-on, camera at hand height",
+   "rungs": [
+    {
+     "n": 1,
+     "name": "Planche lean",
+     "pass": [
+      {
+       "id": "lean",
+       "name": "Planche lean, shoulders well past the hands",
+       "kind": "hold",
+       "value": 30,
+       "sets": 1,
+       "sides": "both"
+      },
+      {
+       "id": "pppu",
+       "name": "Pseudo-planche push-ups",
+       "kind": "reps",
+       "value": 8,
+       "sets": 3,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Hands turned slightly out, arms locked",
+      "Shoulders travel forward past the hands",
+      "Protract: round the upper back a little, body tight"
+     ],
+     "drills": [
+      {
+       "name": "Planche lean",
+       "dose": "4 x 15-30 s",
+       "kind": "hold",
+       "rest_s": 90,
+       "youtube": "257mEsu8lXg@546"
+      },
+      {
+       "name": "Pseudo-planche push-up",
+       "dose": "3 x 5-8",
+       "kind": "reps",
+       "tempo": "3010",
+       "rest_s": 120
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        360,
+        600
+       ],
+       "neck": [
+        395,
+        620
+       ],
+       "shoulder": [
+        420,
+        630
+       ],
+       "elbow": [
+        452,
+        715
+       ],
+       "wrist": [
+        480,
+        795
+       ],
+       "hip": [
+        670,
+        670
+       ],
+       "knee": [
+        860,
+        715
+       ],
+       "ankle": [
+        1050,
+        760
+       ],
+       "toe": [
+        1080,
+        795
+       ]
+      },
+      "floor": 800
+     },
+     "scene": "a planche lean: straight-arm push-up plank on the floor, body straight, shoulders leaning far forward so they are well in front of his hands, up on his toes"
+    },
+    {
+     "n": 2,
+     "name": "Frog stand to crow",
+     "pass": [
+      {
+       "id": "crow",
+       "name": "Crow stand",
+       "kind": "hold",
+       "value": 30,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Knees on the back of the upper arms, elbows bent",
+      "Lean forward until the feet float",
+      "Look a little in front of the hands"
+     ],
+     "drills": [
+      {
+       "name": "Frog stand",
+       "dose": "4 x 15-30 s",
+       "kind": "hold",
+       "rest_s": 60,
+       "lesson_slug": "51-frog-and-crow-stand"
+      },
+      {
+       "name": "Crow stand",
+       "dose": "4 x 10-30 s",
+       "kind": "hold",
+       "rest_s": 60,
+       "lesson_slug": "51-frog-and-crow-stand"
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        430,
+        640
+       ],
+       "neck": [
+        465,
+        625
+       ],
+       "shoulder": [
+        495,
+        615
+       ],
+       "elbow": [
+        510,
+        700
+       ],
+       "wrist": [
+        530,
+        795
+       ],
+       "hip": [
+        640,
+        560
+       ],
+       "knee": [
+        520,
+        660
+       ],
+       "ankle": [
+        640,
+        700
+       ],
+       "toe": [
+        680,
+        690
+       ]
+      },
+      "floor": 800
+     },
+     "scene": "a crow stand: squatting forward onto his hands on the floor, elbows bent, knees resting on the backs of his upper arms, feet lifted off the floor, balanced on his hands"
+    },
+    {
+     "n": 3,
+     "name": "Tuck planche",
+     "pass": [
+      {
+       "id": "tuck_pl",
+       "name": "Tuck planche",
+       "kind": "hold",
+       "value": 15,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Arms locked, shoulders in front of the hands",
+      "Round the upper back, hips at shoulder height",
+      "Knees tight to the chest"
+     ],
+     "drills": [
+      {
+       "name": "Tuck planche",
+       "dose": "6 x 5-15 s",
+       "kind": "hold",
+       "rest_s": 120
+      },
+      {
+       "name": "Planche lean",
+       "dose": "3 x 20 s",
+       "kind": "hold",
+       "rest_s": 90
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        455,
+        455
+       ],
+       "neck": [
+        500,
+        462
+       ],
+       "shoulder": [
+        530,
+        468
+       ],
+       "elbow": [
+        562,
+        585
+       ],
+       "wrist": [
+        590,
+        700
+       ],
+       "hip": [
+        790,
+        470
+       ],
+       "knee": [
+        640,
+        545
+       ],
+       "ankle": [
+        770,
+        585
+       ],
+       "toe": [
+        810,
+        600
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "parallette",
+        590,
+        700
+       ]
+      ]
+     },
+     "scene": "a tuck planche on parallettes: balanced only on straight arms, torso horizontal, upper back rounded, knees tucked under the chest, feet off the floor"
+    },
+    {
+     "n": 4,
+     "name": "Advanced tuck planche",
+     "pass": [
+      {
+       "id": "adv_tuck_pl",
+       "name": "Advanced tuck planche",
+       "kind": "hold",
+       "value": 15,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Back flat, hips pushed back level with the shoulders",
+      "Knees bent about 90 degrees, thighs away from the chest",
+      "Lean more to balance"
+     ],
+     "drills": [
+      {
+       "name": "Advanced tuck planche",
+       "dose": "6 x 5-15 s",
+       "kind": "hold",
+       "rest_s": 120
+      },
+      {
+       "name": "Tuck planche push-up",
+       "dose": "3 x 3-5",
+       "kind": "reps",
+       "tempo": "2010",
+       "rest_s": 150
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        440,
+        470
+       ],
+       "neck": [
+        485,
+        478
+       ],
+       "shoulder": [
+        515,
+        482
+       ],
+       "elbow": [
+        552,
+        592
+       ],
+       "wrist": [
+        590,
+        700
+       ],
+       "hip": [
+        780,
+        482
+       ],
+       "knee": [
+        880,
+        590
+       ],
+       "ankle": [
+        1040,
+        585
+       ],
+       "toe": [
+        1080,
+        590
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "parallette",
+        590,
+        700
+       ]
+      ]
+     },
+     "scene": "an advanced tuck planche on parallettes: balanced on straight arms, back flat and horizontal, hips level with the shoulders, thighs pointing down and back, knees bent about 90 degrees, shins horizontal behind him, feet off the floor"
+    },
+    {
+     "n": 5,
+     "name": "Straddle planche",
+     "pass": [
+      {
+       "id": "straddle_pl",
+       "name": "Straddle planche",
+       "kind": "hold",
+       "value": 8,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Legs straight and wide, body horizontal",
+      "Squeeze the glutes, point the toes",
+      "Wider straddle = easier"
+     ],
+     "drills": [
+      {
+       "name": "Straddle planche",
+       "dose": "6 x 3-8 s",
+       "kind": "hold",
+       "rest_s": 150
+      },
+      {
+       "name": "Advanced tuck planche",
+       "dose": "3 x 12 s",
+       "kind": "hold",
+       "rest_s": 120
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        420,
+        480
+       ],
+       "neck": [
+        465,
+        488
+       ],
+       "shoulder": [
+        495,
+        492
+       ],
+       "elbow": [
+        545,
+        598
+       ],
+       "wrist": [
+        590,
+        700
+       ],
+       "hip": [
+        760,
+        500
+       ],
+       "knee": [
+        930,
+        505
+       ],
+       "ankle": [
+        1100,
+        510
+       ],
+       "toe": [
+        1140,
+        512
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "parallette",
+        590,
+        700
+       ]
+      ]
+     },
+     "scene": "a straddle planche on parallettes: body held horizontal above the floor on straight arms, shoulders in front of the hands, legs straight and spread wide apart, toes pointed"
+    },
+    {
+     "n": 6,
+     "name": "Goal: full planche",
+     "goal": true,
+     "pass": [
+      {
+       "id": "full_pl",
+       "name": "Full planche",
+       "kind": "hold",
+       "value": 5,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Legs together, body one straight horizontal line",
+      "This is years of work: celebrate each rung"
+     ],
+     "drills": [
+      {
+       "name": "Full planche attempts",
+       "dose": "6 x 2-5 s",
+       "kind": "hold",
+       "rest_s": 180
+      },
+      {
+       "name": "Straddle planche",
+       "dose": "3 x 8 s",
+       "kind": "hold",
+       "rest_s": 150
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        420,
+        480
+       ],
+       "neck": [
+        465,
+        488
+       ],
+       "shoulder": [
+        495,
+        492
+       ],
+       "elbow": [
+        545,
+        598
+       ],
+       "wrist": [
+        590,
+        700
+       ],
+       "hip": [
+        760,
+        500
+       ],
+       "knee": [
+        930,
+        505
+       ],
+       "ankle": [
+        1100,
+        510
+       ],
+       "toe": [
+        1140,
+        512
+       ]
+      },
+      "floor": 800,
+      "props": [
+       [
+        "parallette",
+        590,
+        700
+       ]
+      ]
+     },
+     "scene": "a full planche on parallettes: whole body held perfectly straight and horizontal above the floor on straight arms, legs together, toes pointed"
+    }
+   ]
+  },
+  {
+   "id": "front_lever",
+   "name": "Front lever",
+   "goal": "Full front lever, 10 s",
+   "why": "The classic straight-arm pull. Builds the lats and upper back that balance all the pushing.",
+   "equipment": "Pull-up bar (garden bar, or the gym until then)",
+   "film": "Side-on",
+   "rungs": [
+    {
+     "n": 1,
+     "name": "Active hang and pull-ups",
+     "pass": [
+      {
+       "id": "active_hang",
+       "name": "Active hang",
+       "kind": "hold",
+       "value": 30,
+       "sets": 1,
+       "sides": "both"
+      },
+      {
+       "id": "pullups8",
+       "name": "Strict pull-ups",
+       "kind": "reps",
+       "value": 8,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Shoulders pulled down away from the ears",
+      "Ribs in, legs together",
+      "Pull-ups: chest to the bar, full hang at the bottom"
+     ],
+     "drills": [
+      {
+       "name": "Scapula pull-ups",
+       "dose": "3 x 8",
+       "kind": "reps",
+       "tempo": "2111",
+       "rest_s": 60,
+       "youtube": "257mEsu8lXg@65"
+      },
+      {
+       "name": "Active hang",
+       "dose": "3 x 20-30 s",
+       "kind": "hold",
+       "rest_s": 60
+      },
+      {
+       "name": "Pull-ups",
+       "dose": "4 x 4-8",
+       "kind": "reps",
+       "tempo": "2010",
+       "rest_s": 120,
+       "youtube": "257mEsu8lXg@290"
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        600,
+        330
+       ],
+       "neck": [
+        600,
+        365
+       ],
+       "shoulder": [
+        600,
+        390
+       ],
+       "elbow": [
+        600,
+        255
+       ],
+       "wrist": [
+        600,
+        120
+       ],
+       "hip": [
+        600,
+        640
+       ],
+       "knee": [
+        600,
+        820
+       ],
+       "ankle": [
+        600,
+        1000
+       ],
+       "toe": [
+        605,
+        1040
+       ]
+      },
+      "props": [
+       [
+        "bar",
+        450,
+        750,
+        120
+       ]
+      ]
+     },
+     "scene": "an active hang from a pull-up bar: arms straight overhead, shoulders pulled down and engaged, body straight, legs together, feet clear of the floor"
+    },
+    {
+     "n": 2,
+     "name": "Tuck front lever",
+     "pass": [
+      {
+       "id": "tuck_fl",
+       "name": "Tuck front lever",
+       "kind": "hold",
+       "value": 15,
+       "sets": 1,
+       "sides": "both"
+      },
+      {
+       "id": "fl_raise",
+       "name": "Front lever raises",
+       "kind": "reps",
+       "value": 5,
+       "sets": 3,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Arms straight, pull the bar down towards the hips",
+      "Back horizontal, knees to chest",
+      "Hips level with the shoulders"
+     ],
+     "drills": [
+      {
+       "name": "Tuck front lever",
+       "dose": "6 x 5-15 s",
+       "kind": "hold",
+       "rest_s": 120
+      },
+      {
+       "name": "Front lever raises",
+       "dose": "3 x 3-5",
+       "kind": "reps",
+       "tempo": "3010",
+       "rest_s": 120,
+       "youtube": "257mEsu8lXg@707"
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        430,
+        380
+       ],
+       "neck": [
+        470,
+        375
+       ],
+       "shoulder": [
+        500,
+        372
+       ],
+       "elbow": [
+        550,
+        245
+       ],
+       "wrist": [
+        600,
+        120
+       ],
+       "hip": [
+        760,
+        372
+       ],
+       "knee": [
+        620,
+        300
+       ],
+       "ankle": [
+        740,
+        270
+       ],
+       "toe": [
+        780,
+        268
+       ]
+      },
+      "props": [
+       [
+        "bar",
+        450,
+        750,
+        120
+       ]
+      ]
+     },
+     "scene": "a tuck front lever hanging from a pull-up bar: arms straight, body held horizontal face-up below the bar, back flat, knees tucked tight to the chest"
+    },
+    {
+     "n": 3,
+     "name": "Advanced tuck front lever",
+     "pass": [
+      {
+       "id": "adv_tuck_fl",
+       "name": "Advanced tuck front lever",
+       "kind": "hold",
+       "value": 15,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Flat back, hips pushed out level",
+      "Knees bent about 90 degrees",
+      "Squeeze the bar down"
+     ],
+     "drills": [
+      {
+       "name": "Advanced tuck front lever",
+       "dose": "6 x 5-15 s",
+       "kind": "hold",
+       "rest_s": 120
+      },
+      {
+       "name": "Front lever negatives",
+       "dose": "3 x 3",
+       "kind": "reps",
+       "tempo": "5000",
+       "rest_s": 150
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        430,
+        380
+       ],
+       "neck": [
+        470,
+        375
+       ],
+       "shoulder": [
+        500,
+        372
+       ],
+       "elbow": [
+        550,
+        245
+       ],
+       "wrist": [
+        600,
+        120
+       ],
+       "hip": [
+        760,
+        372
+       ],
+       "knee": [
+        860,
+        270
+       ],
+       "ankle": [
+        1010,
+        280
+       ],
+       "toe": [
+        1050,
+        282
+       ]
+      },
+      "props": [
+       [
+        "bar",
+        450,
+        750,
+        120
+       ]
+      ]
+     },
+     "scene": "an advanced tuck front lever on a pull-up bar: arms straight, back flat and horizontal face-up, hips level, thighs angled up, knees bent about 90 degrees"
+    },
+    {
+     "n": 4,
+     "name": "One-leg front lever",
+     "pass": [
+      {
+       "id": "one_leg_fl",
+       "name": "One-leg front lever",
+       "kind": "hold",
+       "value": 10,
+       "sets": 1,
+       "sides": "each"
+      }
+     ],
+     "cues": [
+      "One leg straight in line with the body, the other tucked",
+      "Swap legs every set"
+     ],
+     "drills": [
+      {
+       "name": "One-leg front lever",
+       "dose": "6 x 5-10 s each",
+       "kind": "hold",
+       "rest_s": 120
+      },
+      {
+       "name": "Advanced tuck front lever",
+       "dose": "3 x 12 s",
+       "kind": "hold",
+       "rest_s": 120
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        430,
+        380
+       ],
+       "neck": [
+        470,
+        375
+       ],
+       "shoulder": [
+        500,
+        372
+       ],
+       "elbow": [
+        550,
+        245
+       ],
+       "wrist": [
+        600,
+        120
+       ],
+       "hip": [
+        760,
+        372
+       ],
+       "knee": [
+        940,
+        372
+       ],
+       "ankle": [
+        1110,
+        372
+       ],
+       "toe": [
+        1150,
+        372
+       ],
+       "knee2": [
+        860,
+        270
+       ],
+       "ankle2": [
+        1010,
+        280
+       ]
+      },
+      "props": [
+       [
+        "bar",
+        450,
+        750,
+        120
+       ]
+      ]
+     },
+     "scene": "a one-leg front lever on a pull-up bar: arms straight, body horizontal face-up, one leg straight out in line with the body, the other knee bent"
+    },
+    {
+     "n": 5,
+     "name": "Straddle front lever",
+     "pass": [
+      {
+       "id": "straddle_fl",
+       "name": "Straddle front lever",
+       "kind": "hold",
+       "value": 10,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Both legs straight and wide",
+      "Body one horizontal line",
+      "Glutes and lats on"
+     ],
+     "drills": [
+      {
+       "name": "Straddle front lever",
+       "dose": "6 x 4-10 s",
+       "kind": "hold",
+       "rest_s": 150
+      },
+      {
+       "name": "Front lever raises, straddle",
+       "dose": "3 x 3",
+       "kind": "reps",
+       "tempo": "3010",
+       "rest_s": 150
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        430,
+        380
+       ],
+       "neck": [
+        470,
+        375
+       ],
+       "shoulder": [
+        500,
+        372
+       ],
+       "elbow": [
+        550,
+        245
+       ],
+       "wrist": [
+        600,
+        120
+       ],
+       "hip": [
+        760,
+        372
+       ],
+       "knee": [
+        940,
+        372
+       ],
+       "ankle": [
+        1110,
+        372
+       ],
+       "toe": [
+        1150,
+        372
+       ]
+      },
+      "props": [
+       [
+        "bar",
+        450,
+        750,
+        120
+       ]
+      ]
+     },
+     "scene": "a straddle front lever on a pull-up bar: arms straight, whole body horizontal face-up below the bar, legs straight and spread wide"
+    },
+    {
+     "n": 6,
+     "name": "Goal: full front lever",
+     "goal": true,
+     "pass": [
+      {
+       "id": "full_fl",
+       "name": "Full front lever",
+       "kind": "hold",
+       "value": 10,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Legs together, body straight and horizontal",
+      "Shoulders, hips and ankles in one line"
+     ],
+     "drills": [
+      {
+       "name": "Full front lever attempts",
+       "dose": "6 x 3-10 s",
+       "kind": "hold",
+       "rest_s": 180
+      },
+      {
+       "name": "Straddle front lever",
+       "dose": "3 x 10 s",
+       "kind": "hold",
+       "rest_s": 150
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        430,
+        380
+       ],
+       "neck": [
+        470,
+        375
+       ],
+       "shoulder": [
+        500,
+        372
+       ],
+       "elbow": [
+        550,
+        245
+       ],
+       "wrist": [
+        600,
+        120
+       ],
+       "hip": [
+        760,
+        372
+       ],
+       "knee": [
+        940,
+        372
+       ],
+       "ankle": [
+        1110,
+        372
+       ],
+       "toe": [
+        1150,
+        372
+       ]
+      },
+      "props": [
+       [
+        "bar",
+        450,
+        750,
+        120
+       ]
+      ]
+     },
+     "scene": "a full front lever on a pull-up bar: arms straight, whole body held perfectly straight and horizontal face-up below the bar, legs together"
+    }
+   ]
+  },
+  {
+   "id": "muscle_up",
+   "name": "Muscle-up",
+   "goal": "3 strict bar muscle-ups",
+   "why": "Pull and push in one move: from hanging below the bar to pressing out above it.",
+   "equipment": "Pull-up bar",
+   "film": "Side-on",
+   "rungs": [
+    {
+     "n": 1,
+     "name": "Pull-ups and false grip",
+     "pass": [
+      {
+       "id": "pullups10",
+       "name": "Strict pull-ups",
+       "kind": "reps",
+       "value": 10,
+       "sets": 1,
+       "sides": "both"
+      },
+      {
+       "id": "false_grip",
+       "name": "False-grip hang",
+       "kind": "hold",
+       "value": 20,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Full hang to chin over the bar",
+      "False grip: wrist over the bar, heel of the hand on top"
+     ],
+     "drills": [
+      {
+       "name": "Pull-ups",
+       "dose": "4 x 6-10",
+       "kind": "reps",
+       "tempo": "2010",
+       "rest_s": 120,
+       "youtube": "257mEsu8lXg@290"
+      },
+      {
+       "name": "False-grip hang",
+       "dose": "3 x 10-20 s",
+       "kind": "hold",
+       "rest_s": 60
+      },
+      {
+       "name": "Body-weight curls",
+       "dose": "3 x 8-12",
+       "kind": "reps",
+       "tempo": "2010",
+       "rest_s": 60,
+       "youtube": "257mEsu8lXg@751"
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        600,
+        90
+       ],
+       "neck": [
+        600,
+        140
+       ],
+       "shoulder": [
+        600,
+        170
+       ],
+       "elbow": [
+        650,
+        230
+       ],
+       "wrist": [
+        600,
+        120
+       ],
+       "hip": [
+        600,
+        420
+       ],
+       "knee": [
+        600,
+        600
+       ],
+       "ankle": [
+        600,
+        780
+       ],
+       "toe": [
+        605,
+        815
+       ]
+      },
+      "props": [
+       [
+        "bar",
+        450,
+        750,
+        120
+       ]
+      ]
+     },
+     "scene": "the top of a strict pull-up: chin above the bar, elbows bent and pulled down, body straight, legs together"
+    },
+    {
+     "n": 2,
+     "name": "Chest-to-bar pull-ups",
+     "pass": [
+      {
+       "id": "c2b",
+       "name": "Chest-to-bar pull-ups",
+       "kind": "reps",
+       "value": 5,
+       "sets": 3,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Pull the bar to the lower chest",
+      "Lean back slightly at the top, elbows drive down and back"
+     ],
+     "drills": [
+      {
+       "name": "Chest-to-bar pull-ups",
+       "dose": "4 x 3-5",
+       "kind": "reps",
+       "tempo": "1010",
+       "rest_s": 150
+      },
+      {
+       "name": "Explosive pull-ups",
+       "dose": "3 x 3",
+       "kind": "reps",
+       "tempo": "X010",
+       "rest_s": 120
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        560,
+        60
+       ],
+       "neck": [
+        575,
+        100
+       ],
+       "shoulder": [
+        590,
+        130
+       ],
+       "elbow": [
+        660,
+        170
+       ],
+       "wrist": [
+        600,
+        120
+       ],
+       "hip": [
+        650,
+        380
+       ],
+       "knee": [
+        690,
+        560
+       ],
+       "ankle": [
+        720,
+        735
+       ],
+       "toe": [
+        735,
+        770
+       ]
+      },
+      "props": [
+       [
+        "bar",
+        450,
+        750,
+        120
+       ]
+      ]
+     },
+     "scene": "the top of a chest-to-bar pull-up: his chest touching the bar, head above it, elbows pulled down and back, body leaning back slightly"
+    },
+    {
+     "n": 3,
+     "name": "Straight-bar dips",
+     "pass": [
+      {
+       "id": "sb_dips",
+       "name": "Straight-bar dips",
+       "kind": "reps",
+       "value": 10,
+       "sets": 3,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Support above the bar, lean the chest forward",
+      "Lower until the bar is at the chest, press back to locked arms"
+     ],
+     "drills": [
+      {
+       "name": "Straight-bar dips",
+       "dose": "4 x 6-10",
+       "kind": "reps",
+       "tempo": "2010",
+       "rest_s": 120
+      },
+      {
+       "name": "Straight-bar support hold",
+       "dose": "3 x 20 s",
+       "kind": "hold",
+       "rest_s": 60
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        560,
+        20
+       ],
+       "neck": [
+        575,
+        55
+       ],
+       "shoulder": [
+        590,
+        80
+       ],
+       "elbow": [
+        680,
+        100
+       ],
+       "wrist": [
+        600,
+        120
+       ],
+       "hip": [
+        650,
+        320
+       ],
+       "knee": [
+        630,
+        490
+       ],
+       "ankle": [
+        640,
+        660
+       ],
+       "toe": [
+        640,
+        700
+       ]
+      },
+      "props": [
+       [
+        "bar",
+        450,
+        750,
+        120
+       ]
+      ]
+     },
+     "scene": "the bottom of a straight-bar dip: he is above a single straight bar with his hands on it, elbows bent and pointing back, chest leaning forward over the bar, legs hanging below"
+    },
+    {
+     "n": 4,
+     "name": "Muscle-up negatives",
+     "pass": [
+      {
+       "id": "mu_neg",
+       "name": "Slow muscle-up negatives",
+       "kind": "reps",
+       "value": 3,
+       "sets": 3,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "Start in support above the bar",
+      "Lower through the transition as slowly as you can",
+      "Band-assisted reps also count as practice"
+     ],
+     "drills": [
+      {
+       "name": "Muscle-up negative",
+       "dose": "4 x 2-3",
+       "kind": "reps",
+       "tempo": "5000",
+       "rest_s": 150
+      },
+      {
+       "name": "Band-assisted muscle-up",
+       "dose": "3 x 3",
+       "kind": "reps",
+       "tempo": "1010",
+       "rest_s": 150
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        545,
+        70
+       ],
+       "neck": [
+        565,
+        105
+       ],
+       "shoulder": [
+        585,
+        130
+       ],
+       "elbow": [
+        640,
+        95
+       ],
+       "wrist": [
+        600,
+        120
+       ],
+       "hip": [
+        640,
+        360
+       ],
+       "knee": [
+        650,
+        530
+       ],
+       "ankle": [
+        660,
+        700
+       ],
+       "toe": [
+        665,
+        740
+       ]
+      },
+      "props": [
+       [
+        "bar",
+        450,
+        750,
+        120
+       ]
+      ]
+     },
+     "scene": "the transition of a bar muscle-up: chest coming over the bar, hands rotating on top of the bar, elbows high and bent, shoulders above the bar"
+    },
+    {
+     "n": 5,
+     "name": "Goal: strict bar muscle-up",
+     "goal": true,
+     "pass": [
+      {
+       "id": "mu3",
+       "name": "Strict bar muscle-ups",
+       "kind": "reps",
+       "value": 3,
+       "sets": 1,
+       "sides": "both"
+      }
+     ],
+     "cues": [
+      "No kip: pull high, lean over, press out",
+      "Finish in a locked support above the bar"
+     ],
+     "drills": [
+      {
+       "name": "Muscle-up",
+       "dose": "5 x 1-3",
+       "kind": "reps",
+       "rest_s": 180
+      },
+      {
+       "name": "Chest-to-bar pull-ups",
+       "dose": "3 x 5",
+       "kind": "reps",
+       "tempo": "1010",
+       "rest_s": 120
+      }
+     ],
+     "pose": {
+      "kp": {
+       "head": [
+        590,
+        -230
+       ],
+       "neck": [
+        590,
+        -190
+       ],
+       "shoulder": [
+        590,
+        -160
+       ],
+       "elbow": [
+        595,
+        -20
+       ],
+       "wrist": [
+        600,
+        120
+       ],
+       "hip": [
+        595,
+        100
+       ],
+       "knee": [
+        595,
+        280
+       ],
+       "ankle": [
+        600,
+        450
+       ],
+       "toe": [
+        605,
+        490
+       ]
+      },
+      "props": [
+       [
+        "bar",
+        450,
+        750,
+        120
+       ]
+      ]
+     },
+     "scene": "the finish of a bar muscle-up: supported above the bar on straight locked arms, the bar at his hips, body upright, legs straight below"
+    }
+   ]
+  }
+ ],
+ "warmups": [
+  {
+   "id": "wrist",
+   "name": "Wrist prep",
+   "note": "5 minutes, every session and on rest days. Start with a little weight in the hands and build to full bodyweight (Smith). Log wrist pain 0-10.",
+   "items": [
+    {
+     "name": "Front rocks (fingers forward)",
+     "dose": "30-45 s",
+     "kind": "hold",
+     "youtube": "257mEsu8lXg@114"
+    },
+    {
+     "name": "Side rocks (fingers out)",
+     "dose": "30-45 s",
+     "kind": "hold",
+     "youtube": "257mEsu8lXg@130"
+    },
+    {
+     "name": "Reverse rocks (fingers back)",
+     "dose": "30-45 s",
+     "kind": "hold",
+     "youtube": "257mEsu8lXg@139"
+    },
+    {
+     "name": "False-grip fist rocks",
+     "dose": "30-45 s",
+     "kind": "hold",
+     "youtube": "257mEsu8lXg@146"
+    },
+    {
+     "name": "Around the worlds (on the fists)",
+     "dose": "30-45 s",
+     "kind": "hold",
+     "youtube": "257mEsu8lXg@151"
+    },
+    {
+     "name": "Finger push-ups (strength, build slowly)",
+     "dose": "2 x 5-10",
+     "kind": "reps"
+    }
+   ]
+  },
+  {
+   "id": "scap",
+   "name": "Shoulder blade prep",
+   "note": "Before every upper session.",
+   "items": [
+    {
+     "name": "Scapula push-ups",
+     "dose": "2 x 8-12",
+     "kind": "reps",
+     "youtube": "257mEsu8lXg@46"
+    },
+    {
+     "name": "Scapula pull-ups (on a bar)",
+     "dose": "2 x 8",
+     "kind": "reps",
+     "youtube": "257mEsu8lXg@65"
+    },
+    {
+     "name": "Scapula wall slides",
+     "dose": "2 x 10",
+     "kind": "reps",
+     "youtube": "257mEsu8lXg@77"
+    },
+    {
+     "name": "Hollow body hold",
+     "dose": "2 x 30 s",
+     "kind": "hold",
+     "youtube": "257mEsu8lXg@444"
+    }
+   ]
+  }
+ ],
+ "week": [
+  {
+   "day": "Tue",
+   "name": "Upper A",
+   "skills": [
+    "hspu",
+    "lsit_press",
+    "muscle_up"
+   ],
+   "extra": [
+    {
+     "name": "Rows (table or bar)",
+     "dose": "3 x 8-12",
+     "kind": "reps",
+     "tempo": "2011",
+     "rest_s": 90,
+     "youtube": "257mEsu8lXg@290"
+    },
+    {
+     "name": "Side raises, light dumbbells",
+     "dose": "3 x 12-15",
+     "kind": "reps",
+     "tempo": "2011",
+     "rest_s": 60
+    }
+   ]
+  },
+  {
+   "day": "Thu",
+   "name": "Upper B",
+   "skills": [
+    "hspu",
+    "planche",
+    "front_lever"
+   ],
+   "extra": [
+    {
+     "name": "Diamond push-ups (vest when easy)",
+     "dose": "3 x 8-15",
+     "kind": "reps",
+     "tempo": "3010",
+     "rest_s": 90,
+     "youtube": "257mEsu8lXg@618"
+    },
+    {
+     "name": "Body-weight curls",
+     "dose": "3 x 8-12",
+     "kind": "reps",
+     "tempo": "2010",
+     "rest_s": 60,
+     "youtube": "257mEsu8lXg@751"
+    }
+   ]
+  },
+  {
+   "day": "Sat",
+   "name": "Lower and core",
+   "skills": [
+    "lsit_press"
+   ],
+   "extra": [
+    {
+     "name": "Bulgarian split squats",
+     "dose": "3 x 6-10 each",
+     "kind": "reps",
+     "tempo": "3010",
+     "rest_s": 90
+    },
+    {
+     "name": "Step-ups, slow lowering",
+     "dose": "3 x 8 each",
+     "kind": "reps",
+     "tempo": "3010",
+     "rest_s": 90
+    },
+    {
+     "name": "Negative pistol squats",
+     "dose": "3 x 3-5 each",
+     "kind": "reps",
+     "tempo": "4010",
+     "rest_s": 90
+    },
+    {
+     "name": "Calf raises on a step (calf physio)",
+     "dose": "3 x 12-15",
+     "kind": "reps",
+     "tempo": "3111",
+     "rest_s": 60
+    },
+    {
+     "name": "Hollow body hold",
+     "dose": "3 x 30-45 s",
+     "kind": "hold",
+     "rest_s": 60
+    }
+   ]
+  },
+  {
+   "day": "Sun",
+   "name": "Upper C (no handstand)",
+   "skills": [
+    "planche",
+    "front_lever",
+    "muscle_up"
+   ],
+   "extra": [
+    {
+     "name": "Weighted push-ups (vest)",
+     "dose": "3 x 6-10",
+     "kind": "reps",
+     "tempo": "3010",
+     "rest_s": 120
+    },
+    {
+     "name": "Side raises, light dumbbells",
+     "dose": "3 x 12-15",
+     "kind": "reps",
+     "tempo": "2011",
+     "rest_s": 60
+    }
+   ]
+  }
+ ],
+ "week_note": "Draft for January 2027. Handstand days stay at least 2 days from the shoulder flexibility session (Sunday evening). Pull work needs the garden bar; until then use rows and the Monday gym visit.",
+ "next_tier": [
+  {
+   "name": "One-arm pull-up",
+   "gate": "15-20 strict pull-ups, or a pull-up with about 40% of bodyweight added, plus archer pull-ups"
+  },
+  {
+   "name": "One-arm handstand",
+   "gate": "Smith's one arm programs, after a solid 60 s handstand",
+   "smith": "one_arm_handstand_5s"
+  },
+  {
+   "name": "Ring skills (ring muscle-up, iron cross)",
+   "gate": "Rings once the garden bar is up; ring basics first"
+  },
+  {
+   "name": "90 degree push-up",
+   "gate": "Freestanding HSPU and a straddle planche"
+  },
+  {
+   "name": "Back lever and human flag",
+   "gate": "Moderate: can slot in sooner",
+   "smith": "flags_below_horizontal_5s"
+  }
+ ],
+ "mobility_goals": [
+  {
+   "name": "Pancake",
+   "goal": "Chest to the floor at a wide straddle"
+  },
+  {
+   "name": "Shoulder flexion",
+   "goal": "180 degrees active overhead on both arms, upper arms by the ears, ribs not flaring: a straight-line handstand"
+  }
+ ]
+}
