@@ -2669,6 +2669,19 @@ def _cases():
                   and next(t for p in fm.DEFAULT_PILLARS for t in p["tests"] if t["id"] == "force_couple_push")["tempo"] == "4010")
          (open(_web + "/fitness/index.html", encoding="utf-8").read(), open(_web + "/fitness/mobility.js", encoding="utf-8").read(),
           open(_web + "/fitness/calisthenics.js", encoding="utf-8").read(), __import__("cortex.fitness_mobility", fromlist=["x"])))
+    def _recorder():
+        # 15 Nov 2026 (owner): film the test inside the app with a get-ready countdown, the test's own hold called out,
+        # auto-stop and upload; auto-measure reads only the recorded hold window; WebM is converted to MP4 on the box
+        m = open(_web + "/fitness/mobility.js", encoding="utf-8").read()
+        fm = __import__("cortex.fitness_mobility", fromlist=["x"])
+        src = open(__file__.replace("regress.py", "fitness_mobility.py"), encoding="utf-8").read()
+        return (next(p for p in fm.DEFAULT_PILLARS if p["id"] == "pancake").get("recorder") is True
+                and "window.mobRecord=async function(pid,tid,side)" in m and "'In-app recording, hold '+a+'-'+b+' s'" in m
+                and "async function poseScan(video,sp,prog,holdS,win)" in m and "hold ([\d.]+)-([\d.]+) s" in m
+                and m.index("'video/mp4;codecs=avc1'") < m.index("'video/webm;codecs=vp9'")
+                and "def _to_mp4(uid: str)" in src and set(fm.CUES) >= {"get_ready", "hold", "done", "n1", "n3"})
+    case("a test can be filmed in the app: countdown, the hold called out, auto-stop, upload, MP4 kept, and auto-measure "
+         "reads only the recorded hold", "in-app recorder 15 Nov", _recorder)
     case("every pancake test's picture is Smith's filming guide with his lines and notes, and the pillar opens his "
          "assessment and measuring pages", "pancake filming guides 15 Nov",
          lambda: (lambda m, fm: (lambda pk: pk["sheets"]["pages"][0] == "pancake_sheet_a01.jpg" and len(pk["sheets"]["pages"]) == 20

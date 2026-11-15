@@ -7401,6 +7401,16 @@ def fitness_mobility_media_finish(uid: str, _: None = Depends(auth)) -> dict:
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.get("/api/fitness/cue/{name}")
+def fitness_cue(name: str, _: None = Depends(auth)):
+    """A spoken cue for the in-app test recorder (pre-generated mp3)."""
+    from . import fitness_mobility
+    p = fitness_mobility.cue_path(name)
+    if not p:
+        raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(p, media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=2592000"})
+
+
 @app.get("/api/fitness/mobility/media/{uid}")
 def fitness_mobility_media_get(uid: str, _: None = Depends(auth)):
     from . import fitness_mobility

@@ -534,14 +534,14 @@ function renderPillar(el,p){
       ${t.lesson_slug||t.youtube||(t.extra_lessons||[]).length?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}${(t.extra_lessons||[]).map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}
       ${lock?recordBlock(p,t,day):''}
       ${!lock&&!t.no_media&&t.sides.length>1&&(t.one_clip||both.length)?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both,true)}
-        ${t.one_clip?upBtn(formOnly(t)?'Film your form (optional, one clip, both sides)':'Upload video or photo (one clip, both sides)',p.id,t.id,'both'):''}
+        ${t.one_clip?(recOK(p,t)?recBtn(p.id,t.id,'both','Record in the app (both sides)'):'')+upBtn(formOnly(t)?'Film your form (optional, one clip, both sides)':'Upload video or photo (one clip, both sides)',p.id,t.id,'both'):''}
         <span id="mobup_${t.id}_both" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(both)}`:''}
       ${lock?'':t.sides.map(sd=>{const cur=resFor(p.id,t.id,sd,day), med=mediaDay(t.id,sd);
         return `<div style="margin-top:10px;padding-top:8px;border-top:0.5px solid var(--border)">
           ${t.sides.length>1?`<div style="font-size:12px;font-weight:800;color:var(--ink2)">${SIDE[sd]}</div>`:''}
           ${t.measures.map(m=>inputFor(p,t,sd,m,cur)).join('')}
           ${t.no_media||t.one_clip&&!med.length?'':`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(med)}
-            ${t.one_clip?'':upBtn(formOnly(t)?'Film your form (optional)':'Upload video or photo',p.id,t.id,sd)}
+            ${t.one_clip?'':(recOK(p,t)?recBtn(p.id,t.id,sd):'')+upBtn(formOnly(t)?'Film your form (optional)':(recOK(p,t)?'Or upload a video or photo':'Upload video or photo'),p.id,t.id,sd)}
             <span id="mobup_${t.id}_${sd}" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(med)}`}</div>`;}).join('')}
       ${lock?'':`
       <button class="fd-btn" style="margin-top:8px" onclick="mobSave('${p.id}','${t.id}')">Save ${esc(t.name)}</button>
@@ -584,6 +584,95 @@ window.mobSave=async function(pid,tid){
     }
     _mobEdit.delete(tid);await load();renderMobility();toast('Saved');
   }catch(e){toast('Could not save. Check your connection.');}
+};
+
+
+// ---------- In-app recorder (owner 15 Nov 2026) ----------
+// Films the test inside the app on a pillar/test marked `recorder`: front camera at 1x by default, the screen kept on, a
+// get-ready countdown, then the test's own hold timed and called out (pre-generated ElevenLabs cues, beeps, the phone's
+// voice as a fallback), recording stops 2 s after "Done" and uploads into the test and side. The clip note carries the
+// hold window ("hold 10-25 s"), so Auto-measure reads only that stretch. The preview is NOT mirrored: it shows what the
+// saved video shows. MP4 is asked for first; a WebM-only phone is converted to MP4 on the box.
+const recOK=(p,t)=>!!t&&!t.no_media&&!!((p&&p.recorder)||t.recorder)&&!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.MediaRecorder);
+const REC_ICON='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 10l4.553 -2.276a1 1 0 0 1 1.447 .894v6.764a1 1 0 0 1 -1.447 .894l-4.553 -2.276v-4z"/><path d="M3 8a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z"/></svg>';
+const recBtn=(pid,tid,sd,label)=>`<button onclick="mobRecord('${pid}','${tid}','${sd}')" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;box-sizing:border-box;padding:12px 14px;margin-bottom:6px;border:2px solid var(--teal);border-radius:10px;color:#fff;background:var(--teal);font-size:14px;font-weight:800;cursor:pointer">${REC_ICON}<span>${esc(label||'Record in the app')}</span></button>`;
+const _cues={};
+async function loadCues(){for(const n of ['get_ready','hold','done','n1','n2','n3','n4','n5','n6','n7','n8','n9','n10']){if(_cues[n])continue;
+  try{const r=await fetch(API_BASE+'/api/fitness/cue/'+n,{headers:{'Authorization':'Bearer '+syncToken()}});if(r.ok)_cues[n]=URL.createObjectURL(await r.blob());}catch(e){}}}
+const CUE_WORDS={get_ready:'Get into position',hold:'Hold',done:'Done. Relax.'};
+function cue(n){try{if(_cues[n]){new Audio(_cues[n]).play().catch(()=>{});return;}
+  const w=CUE_WORDS[n]||(n[0]==='n'?String(+n.slice(1)):'');if(w&&window.speechSynthesis)speechSynthesis.speak(new SpeechSynthesisUtterance(w));}catch(e){}}
+let _ac=null;
+function beep(f,ms){try{_ac=_ac||new (window.AudioContext||window.webkitAudioContext)();const o=_ac.createOscillator(),g=_ac.createGain();o.frequency.value=f;o.connect(g);g.connect(_ac.destination);
+  g.gain.setValueAtTime(0.3,_ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,_ac.currentTime+ms/1000);o.start();o.stop(_ac.currentTime+ms/1000);}catch(e){}}
+const recMime=()=>['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(m=>{try{return MediaRecorder.isTypeSupported(m);}catch(e){return false;}})||'';
+const holdSecs=t=>{const m=String(holdOf(t)||'').match(/(\d+)(?:-(\d+))?/);return m?+(m[2]||m[1]):5;};
+async function uploadRecorded(blob,type,pid,tid,side,day,note,prog){
+  const st=await syncApi('/api/fitness/mobility/media',{method:'POST',body:JSON.stringify({date:day,pillar:pid,test:tid,side,mime:type,bytes:blob.size,note})});
+  if(!st||!st.id)throw new Error('start');const step=st.chunk||8000000;
+  for(let i=0,off=0;off<blob.size;i++,off+=step){
+    const r=await fetch(API_BASE+'/api/fitness/mobility/media/'+st.id+'/'+i,{method:'PUT',headers:{'Authorization':'Bearer '+syncToken(),'Content-Type':'application/octet-stream'},body:blob.slice(off,off+step)});
+    if(!r.ok)throw new Error('chunk '+i);prog(Math.min(100,Math.round((off+step)/blob.size*100)));}
+  await syncApi('/api/fitness/mobility/media/'+st.id+'/finish',{method:'POST'});return st.id;}
+window.mobRecord=async function(pid,tid,side){
+  const p=pillar(pid), t=p&&p.tests.find(x=>x.id===tid);if(!t)return;
+  const holdS=holdSecs(t);let prep=10, facing='user';
+  try{prep=+(localStorage.getItem('mobRecPrep')||10)||10;facing=localStorage.getItem('mobRecFacing')||'user';}catch(e){}
+  const anyDays=[...new Set([...(_mob.results||[]),...(_mob.media||[])].filter(r=>r.pillar===pid).map(r=>r.date))].sort();
+  const day=_mobDay||anyDays[anyDays.length-1]||today();
+  const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:10000;background:#000;display:flex;flex-direction:column;color:#fff';
+  ov.innerHTML=`<div style="position:relative;flex:1;min-height:0"><video playsinline muted autoplay style="width:100%;height:100%;object-fit:contain;background:#000"></video>
+    <div data-big style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;padding:0 16px;text-shadow:0 2px 14px #000"></div>
+    <div style="position:absolute;top:8px;left:10px;right:10px;font-size:13px;font-weight:800;text-shadow:0 1px 6px #000">${esc(t.name)}${side!=='both'?' &middot; '+SIDE[side]:''} &middot; hold ${holdS} s</div>
+    <div data-rec style="position:absolute;top:30px;left:10px;display:none;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#ff5a5a"><span style="width:10px;height:10px;border-radius:50%;background:#ff3b3b"></span>REC</div></div>
+    <div data-bar style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;padding:10px"></div>`;
+  document.body.appendChild(ov);
+  const v=ov.querySelector('video'), big=ov.querySelector('[data-big]'), bar=ov.querySelector('[data-bar]'), dot=ov.querySelector('[data-rec]');
+  let stream=null, rec=null, chunks=[], wake=null, timers=[], stopped=false;
+  const cleanup=()=>{stopped=true;timers.forEach(clearTimeout);try{if(rec&&rec.state!=='inactive'){rec.onstop=null;rec.stop();}}catch(e){}
+    try{stream&&stream.getTracks().forEach(x=>x.stop());}catch(e){}try{wake&&wake.release();}catch(e){}ov.remove();};
+  const openCam=async()=>{try{stream&&stream.getTracks().forEach(x=>x.stop());}catch(e){}
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}}});v.srcObject=stream;};
+  const show=(main,sub,col)=>{big.innerHTML=`${main!==''?`<div style="font-size:min(30vw,32vh);font-weight:900;line-height:1;color:${col||'#fff'}">${main}</div>`:''}${sub?`<div style="font-size:20px;font-weight:800;margin-top:8px">${sub}</div>`:''}`;};
+  const btn=(label,fn,primary)=>{const b=document.createElement('button');b.className='btn-sm';b.textContent=label;
+    b.style.cssText='font-size:15px;font-weight:800;padding:10px 16px;'+(primary?'background:var(--teal);color:#fff;border-color:var(--teal)':'');b.onclick=fn;return b;};
+  const sel=document.createElement('select');sel.style.cssText='font-size:14px;width:auto';
+  [5,10,15,20,30].forEach(x=>{const o=document.createElement('option');o.value=x;o.textContent=x+' s to get ready';if(x===prep)o.selected=true;sel.appendChild(o);});
+  sel.onchange=()=>{prep=+sel.value;try{localStorage.setItem('mobRecPrep',prep);}catch(e){}};
+  const flip=btn('Switch camera',async()=>{facing=facing==='user'?'environment':'user';try{localStorage.setItem('mobRecFacing',facing);}catch(e){}
+    try{await openCam();}catch(e){toast('That camera is not available');}});
+  bar.append(sel,flip,btn('Start',()=>run(),true),btn('Cancel',cleanup));
+  try{await openCam();show('','Set the phone, check you are in frame, then tap Start');}
+  catch(e){show('','Camera blocked. Allow camera access for this app, then try again.');}
+  loadCues();
+  const at=(sec,fn)=>timers.push(setTimeout(()=>{if(!stopped)fn();},Math.round(sec*1000)));
+  async function run(){
+    if(!stream)return;
+    try{_ac=_ac||new (window.AudioContext||window.webkitAudioContext)();_ac.resume();}catch(e){}
+    try{if(navigator.wakeLock)wake=await navigator.wakeLock.request('screen');}catch(e){}
+    bar.innerHTML='';bar.append(btn('Stop and discard',cleanup));
+    const mime=recMime();chunks=[];
+    try{rec=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:8000000}:{videoBitsPerSecond:8000000});}catch(e){rec=new MediaRecorder(stream);}
+    rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data);};
+    rec.start(1000);dot.style.display='flex';
+    cue('get_ready');
+    for(let k=prep;k>0;k--)at(prep-k,()=>{show(k,'Get into position','#ffd166');if(k<=3){if(k<prep)cue('n'+k);beep(660,150);}});
+    at(prep,()=>{cue('hold');beep(990,350);});
+    for(let k=holdS;k>0;k--)at(prep+holdS-k,()=>{show(k,'Hold','#30d5a8');if(k<=3&&k<holdS)cue('n'+k);});
+    at(prep+holdS,()=>{show('Done','Relax');cue('done');beep(990,600);});
+    at(prep+holdS+2,()=>finish(prep,prep+holdS));
+  }
+  function finish(a,b){
+    if(stopped)return;dot.style.display='none';
+    rec.onstop=()=>{const type=(rec.mimeType||'video/webm').split(';')[0];const blob=new Blob(chunks,{type});
+      try{stream.getTracks().forEach(x=>x.stop());}catch(e){}
+      const send=async()=>{bar.innerHTML='';
+        try{await uploadRecorded(blob,type,pid,tid,side,day,'In-app recording, hold '+a+'-'+b+' s',pc=>show('','Saving the clip '+pc+'%'));
+          try{wake&&wake.release();}catch(e){}stopped=true;ov.remove();await load();renderMobility();toast('Recorded and saved. Tap the clip, then Auto-measure.');}
+        catch(e){show('','Upload failed. Check your connection.');bar.append(btn('Try again',send,true),btn('Discard',cleanup));}};
+      send();};
+    rec.stop();
+  }
 };
 
 window.mobUpload=async function(inp,pid,tid,side){
@@ -813,19 +902,20 @@ function bestOf(arr,best){
   let pick=bi;for(let i=Math.max(0,bi-2);i<=Math.min(ok.length-1,bi+2);i++)if(Math.abs(ok[i].a-sm[bi])<Math.abs(ok[pick].a-sm[bi]))pick=i;
   return ok[pick];
 }
-async function poseScan(video,sp,prog,holdS){
+async function poseScan(video,sp,prog,holdS,win){
   const lm=await poseLoader(), P=sp.pose, dur=video.duration, step=dur>40?0.25:0.2, W=video.videoWidth, H=video.videoHeight;
   const series={};video.pause();
   const _cv=document.createElement('canvas');_cv.width=W;_cv.height=H;
   // skip the first 5 s (getting into position, owner 14 Nov) when the clip still leaves room for the hold after it
-  const t0=dur>=(holdS||3)+7?5:0;
-  for(let k=Math.round(t0/step);k*step<dur;k++){const t=Math.round(k*step*1000)/1000;
+  // an in-app recording knows when the hold was: read only that stretch (plus half a second each side)
+  const t0=win?Math.max(0,win[0]-0.5):dur>=(holdS||3)+7?5:0, tEnd=win?Math.min(dur,win[1]+0.5):dur;
+  for(let k=Math.round(t0/step);k*step<tEnd;k++){const t=Math.round(k*step*1000)/1000;
     await seekTo(video,t);
     _cv.getContext('2d').drawImage(video,0,0,W,H);
     const r=lm.detect(_cv), L=r&&r.landmarks&&r.landmarks[0];
     if(L){const pos=postureOK(P.posture,L);poseCandidates(P,L).forEach(c=>{const pts=c.pts.map(q=>({x:q.x*W,y:q.y*H}));(series[c.side]=series[c.side]||[]).push({t:Math.round(t*10)/10,a:readAngle(sp,pts),pts,vis:c.vis,pos});});
       if(P.range){for(const z of Object.values(series)){const q=z[z.length-1];if(q&&q.t===Math.round(t*10)/10&&(q.a<P.range[0]||q.a>P.range[1]))q.a=null;}}}
-    prog(t/dur);
+    prog(Math.min(1,(t-t0)/Math.max(0.1,tEnd-t0)));
   }
   const out={};Object.keys(series).forEach(s=>{let b=bestHeld(series[s],P.best,holdS||3,step);
     if(!b){b=bestHeld(series[s],P.best,Math.max(1.2,(holdS||3)/2),step);if(b)b.short=true;}
@@ -856,7 +946,8 @@ window.mobAutoMeasure=async function(video,id,ov,btn,msg){
     say('Loading the pose model (first time only)...');
     if(!video.duration||!isFinite(video.duration))await new Promise(r=>video.addEventListener('loadedmetadata',r,{once:true}));
     const hs=parseFloat(holdOf(testOf(mediaRec(id))))||3;
-    const res=await poseScan(video,ps.sp,f=>say('Finding your held position... '+Math.round(f*100)+'%'),hs);
+    const wm=String((mediaRec(id)||{}).note||'').match(/hold ([\d.]+)-([\d.]+) s/);
+    const res=await poseScan(video,ps.sp,f=>say('Finding your held position... '+Math.round(f*100)+'%'),hs,wm?[+wm[1],+wm[2]]:null);
     // a one-sided test filmed one side per clip: the visible-side result belongs to the clip's own side
     {const rec=mediaRec(id), t=testOf(rec);if(res.both&&t&&!t.sides.includes('both')&&rec&&t.sides.includes(rec.side)){res[rec.side]=res.both;delete res.both;}}
     // the pose model can mirror left/right in some views (lying, filmed along the body); he corrects it once with

@@ -376,7 +376,8 @@
     "pancake_sheet_m08.jpg",
     "pancake_sheet_m09.jpg"
    ]
-  }
+  },
+  "recorder": true
  },
  "shoulder_flexion": {
   "id": "shoulder_flexion",

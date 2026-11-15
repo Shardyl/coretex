@@ -16,6 +16,8 @@ import json
 import os
 import re
 import secrets
+import subprocess
+import threading
 from datetime import date
 
 from . import db
@@ -264,7 +266,51 @@ def media_finish(uid: str) -> dict:
         raise ValueError("upload incomplete")
     os.replace(part, os.path.join(MEDIA_DIR, r["file"]))
     db.execute("update fitness.mobility_media set complete=true where uid=%s", (uid,))
+    if r["file"].endswith(".webm"):
+        threading.Thread(target=_to_mp4, args=(uid,), daemon=True).start()
     return {"ok": True, "id": uid}
+
+
+def _to_mp4(uid: str) -> None:
+    """A clip recorded in the app on a phone that only records WebM is converted to MP4 (owner 15 Nov 2026: the stored
+    files are MP4). Runs after the upload has finished, so the WebM plays (and auto-measures) meanwhile; the row is
+    switched only once the MP4 exists, and the WebM is removed only after that."""
+    r = db.one("select file from fitness.mobility_media where uid=%s and not deleted and complete", (uid,))
+    if not r or not r["file"].endswith(".webm"):
+        return
+    src = os.path.join(MEDIA_DIR, r["file"])
+    out_name = r["file"][:-5] + ".mp4"
+    out = os.path.join(MEDIA_DIR, out_name)
+    try:
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", src, "-an", "-c:v", "libx264", "-preset", "veryfast",
+                        "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out + ".tmp.mp4"],
+                       check=True, timeout=900)
+        os.replace(out + ".tmp.mp4", out)
+        os.chmod(out, 0o600)
+        db.execute("update fitness.mobility_media set file=%s, mime='video/mp4', bytes=%s where uid=%s",
+                   (out_name, os.path.getsize(out), uid))
+        os.remove(src)
+    except Exception as e:  # the WebM stays as it was; nothing is lost
+        print(f"[fitness] webm to mp4 failed for {uid}: {e}")
+        try:
+            os.remove(out + ".tmp.mp4")
+        except OSError:
+            pass
+
+
+# Spoken cues for the in-app recorder (owner 15 Nov 2026): a FIXED set generated once with ElevenLabs
+# (bin script make_fitness_cues.py) and served from the box, so a test never waits on a live voice call.
+CUE_DIR = "/opt/cortex-data/fitness-course/files/cues"
+CUES = {"get_ready": "Get into position.", "hold": "Hold.", "done": "Done. Relax.",
+        **{f"n{i}": w for i, w in enumerate(["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+                                             "Ten"], start=1)}}
+
+
+def cue_path(name: str) -> str | None:
+    if name not in CUES:
+        return None
+    p = os.path.join(CUE_DIR, name + ".mp3")
+    return p if os.path.isfile(p) else None
 
 
 def media_path(uid: str) -> tuple[str, str] | None:
