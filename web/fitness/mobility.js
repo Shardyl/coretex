@@ -627,10 +627,14 @@ window.mobRecord=async function(pid,tid,side){
     <div data-rec style="position:absolute;top:30px;left:10px;display:none;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#ff5a5a"><span style="width:10px;height:10px;border-radius:50%;background:#ff3b3b"></span>REC</div></div>
     <div data-bar style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;padding:10px"></div>`;
   document.body.appendChild(ov);
+  const land=(async()=>{try{if(ov.requestFullscreen&&!document.fullscreenElement)await ov.requestFullscreen({navigationUI:'hide'});}catch(e){}
+    try{if(screen.orientation&&screen.orientation.lock)await screen.orientation.lock('landscape');}catch(e){}})();
   const v=ov.querySelector('video'), big=ov.querySelector('[data-big]'), bar=ov.querySelector('[data-bar]'), dot=ov.querySelector('[data-rec]');
   let stream=null, rec=null, chunks=[], wake=null, timers=[], stopped=false;
   const cleanup=()=>{stopped=true;timers.forEach(clearTimeout);try{if(rec&&rec.state!=='inactive'){rec.onstop=null;rec.stop();}}catch(e){}
-    try{stream&&stream.getTracks().forEach(x=>x.stop());}catch(e){}try{wake&&wake.release();}catch(e){}ov.remove();};
+    try{stream&&stream.getTracks().forEach(x=>x.stop());}catch(e){}try{wake&&wake.release();}catch(e){}unland();ov.remove();};
+  function unland(){try{screen.orientation&&screen.orientation.unlock&&screen.orientation.unlock();}catch(e){}
+    try{if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen();}catch(e){}}
   const openCam=async()=>{try{stream&&stream.getTracks().forEach(x=>x.stop());}catch(e){}
     stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}}});v.srcObject=stream;};
   const show=(main,sub,col)=>{big.innerHTML=`${main!==''?`<div style="font-size:min(30vw,32vh);font-weight:900;line-height:1;color:${col||'#fff'}">${main}</div>`:''}${sub?`<div style="font-size:20px;font-weight:800;margin-top:8px">${sub}</div>`:''}`;};
@@ -642,6 +646,7 @@ window.mobRecord=async function(pid,tid,side){
   const flip=btn('Switch camera',async()=>{facing=facing==='user'?'environment':'user';try{localStorage.setItem('mobRecFacing',facing);}catch(e){}
     try{await openCam();}catch(e){toast('That camera is not available');}});
   bar.append(sel,flip,btn('Start',()=>run(),true),btn('Cancel',cleanup));
+  await land;
   try{await openCam();show('','Set the phone, check you are in frame, then tap Start');}
   catch(e){show('','Camera blocked. Allow camera access for this app, then try again.');}
   loadCues();
@@ -668,7 +673,7 @@ window.mobRecord=async function(pid,tid,side){
       try{stream.getTracks().forEach(x=>x.stop());}catch(e){}
       const send=async()=>{bar.innerHTML='';
         try{await uploadRecorded(blob,type,pid,tid,side,day,'In-app recording, hold '+a+'-'+b+' s',pc=>show('','Saving the clip '+pc+'%'));
-          try{wake&&wake.release();}catch(e){}stopped=true;ov.remove();await load();renderMobility();toast('Recorded and saved. Tap the clip, then Auto-measure.');}
+          try{wake&&wake.release();}catch(e){}stopped=true;unland();ov.remove();await load();renderMobility();toast('Recorded and saved. Tap the clip, then Auto-measure.');}
         catch(e){show('','Upload failed. Check your connection.');bar.append(btn('Try again',send,true),btn('Discard',cleanup));}};
       send();};
     rec.stop();
