@@ -2027,6 +2027,8 @@ while a local change is queued — a pull once erased a cardio session seconds a
 
 **Fitness v198 (15 Nov 2026): typed values survive a redraw.** The force couple dip numbers were lost: he typed them, uploaded the form clip, the upload's `load()+renderMobility()` redrew the page and wiped the boxes, and Save then posted empty values, stored nothing (`saved: 0`) and still toasted "Saved". Now `renderMobility` keeps every changed `mob_*` field in `_mobTyped` and restores it after drawing (re-running `mobShowIf`); a test's entries are dropped on its save or on cancelling its edit (`mobForgetTyped`). `mobSave` refuses an empty save and checks the server's `saved` count. Case: "typed values kept 15 Nov".
 
+**Fitness v199 (15 Nov 2026): a test missing a needed field refuses to save.** The dip result went in with bodyweight + reps and no "Test used", so the calculator showed nothing. `mobSave` now runs `needed()` on what was typed (show_if and either/or groups respected), outlines each missing field red with "Needed before this can save", scrolls to the first and toasts "Not saved. Missing: ...". Angle fields are exempt (Auto-measure fills them); a side left wholly empty is skipped. Case: "required fields refuse save 15 Nov".
+
 ### Health Connect bridge (Android, `android/health-bridge/`, 4 Oct 2026)
 - Kotlin app `uk.coretex.healthbridge` ("Cortex Health Bridge") on Rashad's S24: reads Samsung
   Health via Android Health Connect (READ only) and POSTs to `POST /api/fitness/health` with

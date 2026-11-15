@@ -594,6 +594,20 @@ window.mobSave=async function(pid,tid){
     const per=t.sides.map(s=>{const values={};t.measures.forEach(m=>{if(!showIf(m,domGet(t,s)))return;const e=document.getElementById(`mob_${t.id}_${s}_${m.key}`);if(e&&e.value!=='')values[m.key]=m.kind==='number'?+e.value:e.value;});return [s,values];});
     // nothing filled in is not a save (owner 15 Nov 2026: an empty save said "Saved" and stored nothing)
     if(!per.some(([,v])=>Object.keys(v).length)){toast('Nothing filled in, so nothing was saved');return;}
+    document.querySelectorAll('[data-mobmiss]').forEach(x=>x.remove());
+    t.measures.forEach(m=>t.sides.forEach(sd=>{const e=document.getElementById(`mob_${t.id}_${sd}_${m.key}`);if(e)e.style.outline='';}));
+    const miss=[];
+    per.forEach(([sd,values])=>{if(!Object.keys(values).length)return;
+      const rs=Object.keys(values).map(k=>({measure:k,value:values[k],label:typeof values[k]==='string'?values[k]:null}));
+      needed(t,rs).filter(m=>!m.angle&&!(m.key in values)).forEach(m=>miss.push([sd,m]));});
+    if(miss.length){
+      miss.forEach(([sd,m])=>{const e=document.getElementById(`mob_${t.id}_${sd}_${m.key}`);if(!e)return;
+        e.style.outline='2px solid var(--red)';e.style.outlineOffset='1px';
+        const n=document.createElement('div');n.setAttribute('data-mobmiss','1');n.style.cssText='font-size:12px;font-weight:800;color:var(--red);margin-top:3px';
+        n.textContent='Needed before this can save';e.insertAdjacentElement('afterend',n);});
+      const first=document.getElementById(`mob_${t.id}_${miss[0][0]}_${miss[0][1].key}`);if(first)first.scrollIntoView({block:'center'});
+      const names=miss.map(([sd,m])=>m.label+(t.sides.length>1?' ('+SIDE[sd]+')':''));
+      toast('Not saved. Missing: '+names.join(', '));return;}
     let saved=0;
     for(const [s,values] of per){if(!Object.keys(values).length)continue;
       const r=await syncApi('/api/fitness/mobility/result',{method:'POST',body:JSON.stringify({date:day,pillar:pid,test:tid,side:s,values,provisional})});

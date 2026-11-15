@@ -2682,6 +2682,11 @@ def _cases():
                 and "def _to_mp4(uid: str)" in src and set(fm.CUES) >= {"get_ready", "hold", "done", "n1", "n3"}
                 and "screen.orientation.lock('landscape')" in m and "unland();ov.remove();" in m
                 and "await openCam();await land();" in m and "'Try camera again'" in m)
+    case("a mobility test with a needed field empty is refused, the missing fields named in the toast and outlined red; "
+         "angle fields are exempt (Auto-measure fills them)", "required fields refuse save 15 Nov",
+         lambda: (lambda m: "needed(t,rs).filter(m=>!m.angle&&!(m.key in values))" in m and "toast('Not saved. Missing: '" in m
+                  and "outline='2px solid var(--red)'" in m)
+         (open(_web + "/fitness/mobility.js", encoding="utf-8").read()))
     case("typed mobility values survive a redraw (an upload finishing wiped the dip numbers) and an empty save says so, "
          "never 'Saved'", "typed values kept 15 Nov",
          lambda: (lambda m: "const _mobTyped={};" in m and "mobKeepTyped();" in m and "renderPillar(el,pillar(_mobView));mobRestoreTyped();" in m
