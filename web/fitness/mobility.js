@@ -224,8 +224,8 @@ const TICK='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="
 function clipBtns(list,lr){
   // once measured, the measured still is the thing (green); the clip drops to a small "original video" link, kept for
   // re-measuring (owner 14 Nov 2026). Before measuring, the uploaded clip is the highlighted item.
-  const measured=list.some(y=>y.source&&!String(y.note||'').startsWith('Clean frame'));
-  const shown=list.filter(y=>!(y.source&&String(y.note||'').startsWith('Clean frame')));
+  const measured=list.some(y=>y.source&&!isThumb(y)&&!String(y.note||'').startsWith('Clean frame'));
+  const shown=list.filter(y=>!isThumb(y)&&!(y.source&&String(y.note||'').startsWith('Clean frame')));
   const hi=x=>measured?(x.source):(!x.source);
   return shown.sort((a,b)=>(hi(b)?1:0)-(hi(a)?1:0)).map((x,k)=>{const vid=x.mime.startsWith('video')&&!x.source;
     if(measured&&!x.source)return `<button title="${esc(x.note||'')}" onclick="mobPlay('${x.id}','${x.mime}')" style="background:none;border:none;padding:4px 2px;color:var(--ink3);font-size:11.5px;text-decoration:underline;cursor:pointer">original ${vid?'video':'photo'} &middot; ${mb(x.bytes)}</button>`;
@@ -425,13 +425,17 @@ function recordBlock(p,t,day){
   const rows=t.sides.map(sd=>{const c=resFor(p.id,t.id,sd,day);
     const vals=t.measures.filter(m=>showIf(m,fromRes(c))).map(m=>{const r=c.find(x=>x.measure===m.key);return `<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
         ${t.measures.length>1?`<span style="font-size:11px;color:var(--ink3)">${esc(m.label)}</span>`:''}<span style="font-size:20px;font-weight:800;color:var(--teal)">${esc(fmtV(m,r))}</span>${r&&r.provisional?'<span style="font-size:10px;color:var(--amber);font-weight:800">PROVISIONAL</span>':''}</div>`;}).join('');
-    const still=allMed.filter(x=>x.source&&!String(x.note||'').startsWith('Clean frame')&&(x.side===sd||x.side==='both'));
-    const how=still.length&&/auto-detected/.test(still[still.length-1].note||'')?'auto-measured':still.length?'measured on the clip':'typed in';
+    const still=allMed.filter(x=>x.source&&!isThumb(x)&&!String(x.note||'').startsWith('Clean frame')&&(x.side===sd||x.side==='both'));
+    const fo=formOnly(t), mine=x=>x.side===sd||x.side==='both';
+    const fthumb=fo?(allMed.filter(x=>isThumb(x)&&mine(x)).pop()||allMed.filter(x=>!x.source&&String(x.mime).startsWith('image')&&mine(x)).pop()):null;
+    const fclip=fthumb?(fthumb.source?allMed.find(x=>x.id===fthumb.source):fthumb):null;
+    const how=still.length&&/auto-detected/.test(still[still.length-1].note||'')?'auto-measured':still.length?'measured on the clip':fthumb?'typed in, form clip saved':'typed in';
     const th=still.length?still[still.length-1]:null;
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:0.5px solid var(--border)">${icon('check','var(--teal)',18)}
       <div style="flex:1;min-width:0">${t.sides.length>1?`<div style="font-size:12px;font-weight:800;color:var(--ink2)">${SIDE[sd]}</div>`:''}${vals}
         <div style="font-size:11px;color:var(--ink3)">${fd(day)} &middot; ${how}</div></div>
-      ${th?`<img data-thumb="${esc(th.id)}" alt="Measured still" onclick="mobPlay('${th.id}','${th.mime}')" style="width:96px;height:72px;object-fit:cover;border-radius:8px;background:var(--surface2);border:1px solid var(--teal);cursor:pointer;flex-shrink:0"/>`:''}</div>`;}).join('');
+      ${th?`<img data-thumb="${esc(th.id)}" alt="Measured still" onclick="mobPlay('${th.id}','${th.mime}')" style="width:96px;height:72px;object-fit:cover;border-radius:8px;background:var(--surface2);border:1px solid var(--teal);cursor:pointer;flex-shrink:0"/>`:''}
+      ${!th&&fthumb?`<div onclick="mobPlay('${esc((fclip||fthumb).id)}','${esc((fclip||fthumb).mime)}')" title="Form clip" style="position:relative;width:96px;height:72px;flex-shrink:0;cursor:pointer"><img data-thumb="${esc(fthumb.id)}" alt="Form clip" style="width:96px;height:72px;object-fit:cover;border-radius:8px;background:var(--surface2);border:1px solid var(--teal)"/>${fclip&&String(fclip.mime).startsWith('video')?'<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,0.55)"><svg width="12" height="12" viewBox="0 0 24 24" fill="#fff" style="margin-left:2px" aria-hidden="true"><path d="M7 4v16l13 -8z"/></svg></span>':''}</div>`:''}</div>`;}).join('');
   const clips=allMed.filter(x=>!x.source), stills=allMed.filter(x=>x.source&&!String(x.note||'').startsWith('Clean frame'));
   const uniq=[...new Map(stills.map(x=>[x.side+'|'+x.note,x])).values()];
   return `<div style="margin-top:10px">${rows}
@@ -524,14 +528,14 @@ function renderPillar(el,p){
       ${t.lesson_slug||t.youtube||(t.extra_lessons||[]).length?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${lessonBtn({name:t.name,lesson_slug:t.lesson_slug,lesson_course:t.lesson_course,youtube:t.youtube},'Watch how')}${(t.extra_lessons||[]).map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}
       ${lock?recordBlock(p,t,day):''}
       ${!lock&&!t.no_media&&t.sides.length>1&&(t.one_clip||both.length)?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(both,true)}
-        ${t.one_clip?upBtn('Upload video or photo (one clip, both sides)',p.id,t.id,'both'):''}
+        ${t.one_clip?upBtn(formOnly(t)?'Film your form (optional, one clip, both sides)':'Upload video or photo (one clip, both sides)',p.id,t.id,'both'):''}
         <span id="mobup_${t.id}_both" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(both)}`:''}
       ${lock?'':t.sides.map(sd=>{const cur=resFor(p.id,t.id,sd,day), med=mediaDay(t.id,sd);
         return `<div style="margin-top:10px;padding-top:8px;border-top:0.5px solid var(--border)">
           ${t.sides.length>1?`<div style="font-size:12px;font-weight:800;color:var(--ink2)">${SIDE[sd]}</div>`:''}
           ${t.measures.map(m=>inputFor(p,t,sd,m,cur)).join('')}
           ${t.no_media||t.one_clip&&!med.length?'':`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(med)}
-            ${t.one_clip?'':upBtn('Upload video or photo',p.id,t.id,sd)}
+            ${t.one_clip?'':upBtn(formOnly(t)?'Film your form (optional)':'Upload video or photo',p.id,t.id,sd)}
             <span id="mobup_${t.id}_${sd}" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(med)}`}</div>`;}).join('')}
       ${lock?'':`
       <button class="fd-btn" style="margin-top:8px" onclick="mobSave('${p.id}','${t.id}')">Save ${esc(t.name)}</button>
@@ -594,6 +598,11 @@ window.mobUpload=async function(inp,pid,tid,side){
     }
     say('Finishing',100,'busy');
     await syncApi('/api/fitness/mobility/media/'+start.id+'/finish',{method:'POST'});
+    {const tt=pillar(pid)&&pillar(pid).tests.find(x=>x.id===tid);
+     if(formOnly(tt)&&String(f.type||'video/mp4').startsWith('video')){try{say('Making the thumbnail',100,'busy');const th=await clipThumb(f);
+       if(th&&th.blob){const s2=await syncApi('/api/fitness/mobility/media',{method:'POST',body:JSON.stringify({date:day,pillar:pid,test:tid,side,mime:'image/jpeg',bytes:th.blob.size,note:THUMB_NOTE,frame_s:Math.round(th.t*10)/10,source:start.id})});
+         if(s2&&s2.id){await fetch(API_BASE+'/api/fitness/mobility/media/'+s2.id+'/0',{method:'PUT',headers:{'Authorization':'Bearer '+syncToken(),'Content-Type':'application/octet-stream'},body:th.blob});
+           await syncApi('/api/fitness/mobility/media/'+s2.id+'/finish',{method:'POST'});}}}catch(e){}}}
     say('Uploaded',100,'done');
     await load();renderMobility();toast('Saved to Cortex');
   }catch(e){say('Upload failed: tap upload to try again',null,'fail');toast('Upload failed. Try again on wifi.');}
@@ -670,6 +679,17 @@ const lessonBtn=(x,label)=>{const s=x.lesson_slug||'', y=x.youtube||'', v=x.vime
 // plumb line. Saving writes it into that test's measure for the day and the chosen side (other values kept), with
 // the provisional flag, and uploads the marked-up frame as a still carrying the clip and the second it came from.
 const CLEAN_NOTE='Clean frame, no angle lines';
+// FORM CLIPS (owner 15 Nov 2026): a test with nothing measured from the video (reps, choices) still takes an optional
+// clip as a record of technique for review (Smith, a coach, a report). On upload the phone makes a small thumbnail
+// from the clip and stores it as a still noted THUMB_NOTE with `source` = the clip; the saved result shows it, a tap plays.
+const THUMB_NOTE='Form clip thumbnail';
+const isThumb=x=>String(x&&x.note||'').startsWith(THUMB_NOTE);
+const formOnly=t=>!!t&&!t.no_media&&angleMeasures(t).length===0;
+async function clipThumb(file){const u=URL.createObjectURL(file);try{const v=document.createElement('video');v.muted=true;v.playsInline=true;v.preload='auto';v.src=u;
+  await new Promise((res,rej)=>{v.onloadeddata=res;v.onerror=rej;setTimeout(rej,15000);});
+  const t=Math.min(1.5,(v.duration||3)/3);await new Promise(res=>{v.onseeked=res;v.currentTime=t;setTimeout(res,3000);});
+  const k=Math.min(1,640/(v.videoWidth||640)), c=document.createElement('canvas');c.width=Math.round((v.videoWidth||640)*k);c.height=Math.round((v.videoHeight||360)*k);
+  c.getContext('2d').drawImage(v,0,0,c.width,c.height);return{blob:await new Promise(r=>c.toBlob(r,'image/jpeg',0.8)),t};}finally{URL.revokeObjectURL(u);}}
 // the hold time pulled out of the cue so it cannot be missed (owner, 14 Nov 2026: it was buried at the end)
 const holdOf=t=>{const m=String(t&&t.cue||'').match(/hold(?: (?:it|each|the [a-z ]+?))?(?: for)? ([0-9]+(?:-[0-9]+)? ?(?:s|sec|seconds))/i);return m?m[1].replace(/ ?(sec|seconds)$/,' s'):'';};
 // Distance and lens (owner, 14 Nov 2026): Smith gives no distance, only 'whole body in frame, same spot every time';

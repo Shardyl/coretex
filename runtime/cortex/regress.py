@@ -2669,6 +2669,12 @@ def _cases():
                   and next(t for p in fm.DEFAULT_PILLARS for t in p["tests"] if t["id"] == "force_couple_push")["tempo"] == "4010")
          (open(_web + "/fitness/index.html", encoding="utf-8").read(), open(_web + "/fitness/mobility.js", encoding="utf-8").read(),
           open(_web + "/fitness/calisthenics.js", encoding="utf-8").read(), __import__("cortex.fitness_mobility", fromlist=["x"])))
+    case("a test with nothing measured from the video takes an optional form clip: the upload says so, the phone makes a "
+         "thumbnail still from it, and the saved result shows the thumbnail that plays the clip", "form clips 15 Nov",
+         lambda: (lambda m: "const formOnly=t=>!!t&&!t.no_media&&angleMeasures(t).length===0;" in m
+                  and "async function clipThumb(file)" in m and "note:THUMB_NOTE" in m and "Film your form (optional)" in m
+                  and "!isThumb(y)" in m and "typed in, form clip saved" in m)
+         (open(_web + "/fitness/mobility.js", encoding="utf-8").read()))
     case("the three force couple stabiliser tests show the 4010 tempo with our-reading note and ask for the reps "
          "managed at the target weight", "stabiliser tempo 15 Nov",
          lambda: (lambda fm: all(t["tempo"] == "4010" and t["tempo_note"].startswith("Our reading")
