@@ -151,6 +151,11 @@ async function loadPositions(){for(const im of document.querySelectorAll('img[da
     try{if(!_posCache['m:'+n]){const r=await fetch(API_BASE+'/api/fitness/mobility/media/'+encodeURIComponent(n),{headers:{'Authorization':'Bearer '+syncToken()}});if(!r.ok)continue;_posCache['m:'+n]=URL.createObjectURL(await r.blob());}
       im.src=_posCache['m:'+n];}catch(e){}}
   if(_scrollTo){setTimeout(()=>{scrollTarget(false);_scrollTo=null;},120);}}
+window.mobSheets=function(pid){const p=pillar(pid);if(!p||!p.sheets)return;
+  const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.95);overflow-y:auto;padding:12px 8px 40px;box-sizing:border-box';
+  ov.innerHTML=`<div style="position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;z-index:1"><div style="color:#fff;font-weight:800;font-size:14px">${esc(p.sheets.label||"Smith's instructions")}</div><button class="btn-sm" onclick="this.closest('div[data-sheets]').remove()" style="font-weight:800">Close</button></div>`
+    +p.sheets.pages.map(n=>`<img data-pos="${esc(n)}" alt="Smith's sheet page" style="display:block;width:100%;max-width:900px;margin:0 auto 10px;border-radius:6px;background:#222;min-height:120px"/>`).join('');
+  ov.dataset.sheets='1';document.body.appendChild(ov);loadPositions();};
 window.mobPosBig=function(im){if(!im.src)return;const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.94);display:flex;align-items:center;justify-content:center;padding:10px';
   ov.innerHTML=`<img src="${im.src}" style="max-width:100%;max-height:92vh;border-radius:8px"/>`;ov.onclick=()=>ov.remove();document.body.appendChild(ov);};
 // the position pictures load after the page draws; scroll again once they are in so the target does not get pushed
@@ -172,7 +177,7 @@ function inputFor(p,t,side,m,cur){
     <select id="${id}" style="width:100%;font-size:14px"${drives?` onchange="mobShowIf('${p.id}','${t.id}','${side}')"`:''}><option value="">Not done</option>${m.options.map(o=>`<option${v&&v.label===o?' selected':''}>${esc(o)}</option>`).join('')}</select>`);
   const u=m.unit==='deg'?'degrees':m.unit==='s'?'seconds':m.unit;
   return wrap(`<label class="form-label" style="margin-top:6px">${esc(m.label)}${u?' ('+esc(u)+')':''}</label>
-    <input id="${id}" type="number" step="any" inputmode="decimal" class="fd-input" style="font-size:15px" value="${v&&v.value!=null?v.value:''}" placeholder="${m.angle?'measure it on the video, or type it':''}"/>`);
+    <input id="${id}" type="number" step="any" inputmode="decimal" class="fd-input" style="font-size:15px" value="${v&&v.value!=null?v.value:''}" placeholder="${m.angle?'Upload your video, then Auto-measure (type only if measuring by hand)':''}"/>`);
 }
 const domGet=(t,side)=>k=>{const e=document.getElementById(`mob_${t.id}_${side}_${k}`);return e&&e.value!==''?e.value:undefined;};
 window.mobShowIf=function(pid,tid,side){const p=pillar(pid), t=p&&p.tests.find(x=>x.id===tid);if(!t)return;
@@ -507,6 +512,7 @@ function renderPillar(el,p){
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">${lessonBtn({name:p.name+' assessment',lesson_slug:p.lesson_slug,lesson_course:p.lesson_course,youtube:p.youtube},'Watch the assessment lesson')}
       ${p.lesson?`<a href="${esc(p.lesson)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--blue)">On Smith's site</a>`:''}</div>
     ${(p.extra_lessons||[]).length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${p.extra_lessons.map(x=>lessonBtn(x,x.name)).join('')}</div>`:''}
+    ${p.sheets&&(p.sheets.pages||[]).length?`<button class="btn-sm" onclick="mobSheets('${p.id}')" style="display:inline-flex;align-items:center;gap:7px;margin-top:8px;font-weight:800;padding:6px 14px;border-radius:999px;border:1px solid var(--teal);color:var(--teal);background:transparent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>${esc(p.sheets.label||"Read Smith's instructions")}</button>`:''}
     <div style="display:flex;gap:8px;align-items:center;margin:12px 0">
       <label class="form-label" style="margin:0">Assessment date</label>
       <input type="date" value="${day}" max="${today()}" class="fd-input" style="width:auto;font-size:14px" onchange="mobDay(this.value)"/></div>

@@ -2669,6 +2669,15 @@ def _cases():
                   and next(t for p in fm.DEFAULT_PILLARS for t in p["tests"] if t["id"] == "force_couple_push")["tempo"] == "4010")
          (open(_web + "/fitness/index.html", encoding="utf-8").read(), open(_web + "/fitness/mobility.js", encoding="utf-8").read(),
           open(_web + "/fitness/calisthenics.js", encoding="utf-8").read(), __import__("cortex.fitness_mobility", fromlist=["x"])))
+    case("every pancake test's picture is Smith's filming guide with his lines and notes, and the pillar opens his "
+         "assessment and measuring pages", "pancake filming guides 15 Nov",
+         lambda: (lambda m, fm: (lambda pk: pk["sheets"]["pages"][0] == "pancake_sheet_a01.jpg" and len(pk["sheets"]["pages"]) == 20
+                  and all(t["position"]["img"].startswith("pancake_film_") and t["position"]["caption"].startswith("FILM FROM THE")
+                          for t in pk["tests"] if t["id"] in ("pancake_max", "pancake_natural", "pancake_narrow",
+                                                               "standing_pancake", "pancake_lift", "tailors_pose"))
+                  and "window.mobSheets=function(pid)" in m and "then Auto-measure" in m)
+                  (next(p for p in fm.DEFAULT_PILLARS if p["id"] == "pancake")))
+         (open(_web + "/fitness/mobility.js", encoding="utf-8").read(), __import__("cortex.fitness_mobility", fromlist=["x"])))
     case("a test with nothing measured from the video takes an optional form clip: the upload says so, the phone makes a "
          "thumbnail still from it, and the saved result shows the thumbnail that plays the clip", "form clips 15 Nov",
          lambda: (lambda m: "const formOnly=t=>!!t&&!t.no_media&&angleMeasures(t).length===0;" in m

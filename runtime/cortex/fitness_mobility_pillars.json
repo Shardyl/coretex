@@ -57,8 +57,8 @@
      }
     ],
     "position": {
-     "img": "pancake_pancake_max.jpg",
-     "caption": "Legs as wide as you can, reach forward, round the spine, drop the head, pull down actively"
+     "img": "pancake_film_angles.jpg",
+     "caption": "FILM FROM THE SIDE, phone on the floor, legs as WIDE as you can. Smith's lines: one flat along the floor towards your feet, the centre point at the top of the thigh / middle of the trunk, the other to the furthest point of your upper back (if you are past 90 deg, to the highest point). Left: sitting back; right: leaning forward. Tape your width heel to heel."
     }
    },
    {
@@ -114,8 +114,8 @@
      }
     ],
     "position": {
-     "img": "pancake_pancake_natural.jpg",
-     "caption": "Comfortable straddle width, reach forward, round the spine, drop the head, pull down actively"
+     "img": "pancake_film_angles.jpg",
+     "caption": "FILM FROM THE SIDE, phone on the floor, a COMFORTABLE straddle. Smith's lines: one flat along the floor towards your feet, the centre point at the top of the thigh / middle of the trunk, the other to the furthest point of your upper back (if you are past 90 deg, to the highest point). Left: sitting back; right: leaning forward. Tape your width heel to heel."
     }
    },
    {
@@ -172,8 +172,8 @@
      }
     ],
     "position": {
-     "img": "pancake_pancake_narrow.jpg",
-     "caption": "Small straddle, reach forward, round the spine, drop the head, pull down actively"
+     "img": "pancake_film_angles.jpg",
+     "caption": "FILM FROM THE SIDE, phone on the floor, a SMALL straddle. Smith's lines: one flat along the floor towards your feet, the centre point at the top of the thigh / middle of the trunk, the other to the furthest point of your upper back (if you are past 90 deg, to the highest point). Left: sitting back; right: leaning forward. Tape your width heel to heel."
     }
    },
    {
@@ -217,8 +217,8 @@
      }
     ],
     "position": {
-     "img": "pancake_standing_pancake.jpg",
-     "caption": "Natural straddle width, fold and hang passively, round the spine, drop the head"
+     "img": "pancake_film_standing.jpg",
+     "caption": "FILM FROM THE SIDE, natural straddle width. Smith's lines: from the ankle bone up through the leg to the middle of the glute (around the hip socket), then to the top of the head. If your back is rounded and you cannot lean far, to the most rounded point of the upper back instead. Use the lowest point."
     }
    },
    {
@@ -256,8 +256,8 @@
      }
     ],
     "position": {
-     "img": "pancake_pancake_lift.jpg",
-     "caption": "Hands on the floor in front, legs straight and knees locked, press down and lift both feet, slight forward lean"
+     "img": "pancake_film_lift.jpg",
+     "caption": "FILM FROM THE SIDE. Smith's lines: from the ankle bone along the leg to the middle of the glute, then to the top of the head (if your head is not neutral, follow the line of your back). Use the AVERAGE position you held, not the highest point."
     }
    },
    {
@@ -312,8 +312,8 @@
      }
     ],
     "position": {
-     "img": "pancake_tailors_pose.jpg",
-     "caption": "Hips and back against the wall, soles together, hands off, pull knees apart and down"
+     "img": "pancake_film_tailors.jpg",
+     "caption": "FILM FROM THE FRONT, phone on the floor, hips against the wall. Smith's lines run along each shin, meeting in the middle of the ankles and ending in the middle of each knee. Use the lowest point and check left against right."
     }
    }
   ],
@@ -351,7 +351,32 @@
      }
     ]
    }
-  ]
+  ],
+  "sheets": {
+   "label": "Read Smith's instructions",
+   "pages": [
+    "pancake_sheet_a01.jpg",
+    "pancake_sheet_a02.jpg",
+    "pancake_sheet_a03.jpg",
+    "pancake_sheet_a04.jpg",
+    "pancake_sheet_a05.jpg",
+    "pancake_sheet_a06.jpg",
+    "pancake_sheet_a07.jpg",
+    "pancake_sheet_a08.jpg",
+    "pancake_sheet_a09.jpg",
+    "pancake_sheet_a10.jpg",
+    "pancake_sheet_a11.jpg",
+    "pancake_sheet_m01.jpg",
+    "pancake_sheet_m02.jpg",
+    "pancake_sheet_m03.jpg",
+    "pancake_sheet_m04.jpg",
+    "pancake_sheet_m05.jpg",
+    "pancake_sheet_m06.jpg",
+    "pancake_sheet_m07.jpg",
+    "pancake_sheet_m08.jpg",
+    "pancake_sheet_m09.jpg"
+   ]
+  }
  },
  "shoulder_flexion": {
   "id": "shoulder_flexion",
