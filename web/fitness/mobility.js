@@ -617,18 +617,19 @@ async function uploadRecorded(blob,type,pid,tid,side,day,note,prog){
 window.mobRecord=async function(pid,tid,side){
   const p=pillar(pid), t=p&&p.tests.find(x=>x.id===tid);if(!t)return;
   const holdS=holdSecs(t);let prep=10, facing='user';
-  try{prep=+(localStorage.getItem('mobRecPrep')||10)||10;facing=localStorage.getItem('mobRecFacing')||'user';}catch(e){}
+  try{prep=+(localStorage.getItem('mobRecPrep20')||20)||20;facing=localStorage.getItem('mobRecFacing')||'user';}catch(e){}
   const anyDays=[...new Set([...(_mob.results||[]),...(_mob.media||[])].filter(r=>r.pillar===pid).map(r=>r.date))].sort();
   const day=_mobDay||anyDays[anyDays.length-1]||today();
-  const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:10000;background:#000;display:flex;flex-direction:column;color:#fff';
-  ov.innerHTML=`<div style="position:relative;flex:1;min-height:0"><video playsinline muted autoplay style="width:100%;height:100%;object-fit:contain;background:#000"></video>
+  const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:10000;background:#000;color:#fff;overflow:hidden';
+  ov.innerHTML=`<div style="position:absolute;inset:0"><video playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000"></video>
     <div data-big style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;padding:0 16px;text-shadow:0 2px 14px #000"></div>
     <div style="position:absolute;top:8px;left:10px;right:10px;font-size:13px;font-weight:800;text-shadow:0 1px 6px #000">${esc(t.name)}${side!=='both'?' &middot; '+SIDE[side]:''} &middot; hold ${holdS} s</div>
     <div data-rec style="position:absolute;top:30px;left:10px;display:none;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#ff5a5a"><span style="width:10px;height:10px;border-radius:50%;background:#ff3b3b"></span>REC</div></div>
-    <div data-bar style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;padding:10px"></div>`;
+    <div data-bar style="position:absolute;left:0;right:0;bottom:0;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;padding:14px 10px 16px;background:linear-gradient(to top,rgba(0,0,0,0.7),rgba(0,0,0,0))"></div>`;
   document.body.appendChild(ov);
   const fs=(async()=>{try{if(ov.requestFullscreen&&!document.fullscreenElement)await ov.requestFullscreen({navigationUI:'hide'});}catch(e){}})();
-  const land=async()=>{try{await fs;if(screen.orientation&&screen.orientation.lock)await screen.orientation.lock('landscape');}catch(e){}};
+  const land=async()=>{try{await fs;}catch(e){}if(!(screen.orientation&&screen.orientation.lock))return;
+    try{await screen.orientation.lock('any');}catch(e){try{await screen.orientation.lock('landscape');}catch(x){}}};
   const v=ov.querySelector('video'), big=ov.querySelector('[data-big]'), bar=ov.querySelector('[data-bar]'), dot=ov.querySelector('[data-rec]');
   let stream=null, rec=null, chunks=[], wake=null, timers=[], stopped=false;
   const cleanup=()=>{stopped=true;timers.forEach(clearTimeout);try{if(rec&&rec.state!=='inactive'){rec.onstop=null;rec.stop();}}catch(e){}
@@ -648,7 +649,7 @@ window.mobRecord=async function(pid,tid,side){
     b.style.cssText='font-size:15px;font-weight:800;padding:10px 16px;'+(primary?'background:var(--teal);color:#fff;border-color:var(--teal)':'');b.onclick=fn;return b;};
   const sel=document.createElement('select');sel.style.cssText='font-size:14px;width:auto';
   [5,10,15,20,30].forEach(x=>{const o=document.createElement('option');o.value=x;o.textContent=x+' s to get ready';if(x===prep)o.selected=true;sel.appendChild(o);});
-  sel.onchange=()=>{prep=+sel.value;try{localStorage.setItem('mobRecPrep',prep);}catch(e){}};
+  sel.onchange=()=>{prep=+sel.value;try{localStorage.setItem('mobRecPrep20',prep);}catch(e){}};
   const flip=btn('Switch camera',async()=>{facing=facing==='user'?'environment':'user';try{localStorage.setItem('mobRecFacing',facing);}catch(e){}
     try{await openCam();}catch(e){toast('That camera is not available');}});
   bar.append(sel,flip,btn('Start',()=>run(),true),btn('Cancel',cleanup));
