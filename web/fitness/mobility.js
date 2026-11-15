@@ -35,7 +35,9 @@ const pillar=id=>(_mob&&_mob.pillars||[]).find(p=>p.id===id);
 // saved, required and listed only when it applies (owner 15 Nov 2026: pick Dip and the push-up hand height goes).
 const showIf=(m,get)=>{const c=m&&m.show_if;if(!c)return true;const v=get(c.measure);return c.in?c.in.includes(v):c.not_in?!c.not_in.includes(v):true;};
 const fromRes=rs=>k=>{const r=rs.find(x=>x.measure===k);return r?(r.label!=null?r.label:r.value):undefined;};
-const needed=(t,rs)=>t.measures.filter(m=>!m.optional&&showIf(m,fromRes(rs)));
+const needed=(t,rs)=>{const base=t.measures.filter(m=>!m.optional&&showIf(m,fromRes(rs)));
+  return base.filter(m=>{if(!m.group)return true;const g=t.measures.filter(x=>x.group===m.group);
+    return !g.some(x=>rs.some(r=>r.measure===x.key))&&g[0]===m;});};
 const resFor=(p,t,side,day)=>(_mob.results||[]).filter(r=>r.pillar===p&&r.test===t&&r.side===side&&(!day||r.date===day));
 const clipsOf=(p,t)=>(_mob.media||[]).filter(m=>m.pillar===p&&m.test===t);
 const fmtV=(m,r)=>!r?'':(r.label!=null?r.label:(r.value!=null?(m.unit==='deg'?Math.round(r.value):r1(r.value))+(UNIT[m.unit]||''):''));
@@ -428,7 +430,7 @@ window.mobEditToggle=(id,on)=>{on?_mobEdit.add(id):_mobEdit.delete(id);renderMob
 function recordBlock(p,t,day){
   const allMed=(_mob.media||[]).filter(m=>m.pillar===p.id&&m.test===t.id&&m.date===day);
   const rows=t.sides.map(sd=>{const c=resFor(p.id,t.id,sd,day);
-    const vals=t.measures.filter(m=>showIf(m,fromRes(c))).map(m=>{const r=c.find(x=>x.measure===m.key);return `<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+    const vals=t.measures.filter(m=>showIf(m,fromRes(c))&&(!m.group||c.some(x=>x.measure===m.key))).map(m=>{const r=c.find(x=>x.measure===m.key);return `<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
         ${t.measures.length>1?`<span style="font-size:11px;color:var(--ink3)">${esc(m.label)}</span>`:''}<span style="font-size:20px;font-weight:800;color:var(--teal)">${esc(fmtV(m,r))}</span>${r&&r.provisional?'<span style="font-size:10px;color:var(--amber);font-weight:800">PROVISIONAL</span>':''}</div>`;}).join('');
     const still=allMed.filter(x=>x.source&&!isThumb(x)&&!String(x.note||'').startsWith('Clean frame')&&(x.side===sd||x.side==='both'));
     const fo=formOnly(t), mine=x=>x.side===sd||x.side==='both';
@@ -526,7 +528,7 @@ function renderPillar(el,p){
       ${t.camera&&!t.no_media?`<div style="font-size:12px;color:var(--ink2);margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--surface2)"><b>Camera:</b> ${esc(t.camera)}<div style="margin-top:4px;color:var(--ink3)">${CAM_TIP}</div></div>`:''}
       ${t.position?`<div style="margin-top:8px"><img data-pos="${esc(t.position.img)}" alt="Correct position" onclick="mobPosBig(this)" style="width:100%;max-width:420px;aspect-ratio:16/9;object-fit:contain;scroll-margin-top:90px;border-radius:8px;background:var(--surface2);cursor:zoom-in;display:block"/>
         <div style="font-size:11.5px;color:var(--ink2);margin-top:3px"><b>Correct position:</b> ${esc(t.position.caption||'')}</div></div>`:''}
-      ${holdOf(t)?`<div style="font-size:13px;font-weight:800;margin-top:6px;color:var(--teal)">Hold ${esc(holdOf(t))} for it to count</div>`:''}
+      ${holdOf(t)?holdGraphic(holdOf(t)):''}
       ${t.benchmark?`<div style="font-size:12px;margin-top:4px"><b>Benchmark:</b> ${esc(t.benchmark)}</div>`:''}
       ${t.tempo?tempoGraphic(t.tempo)+(t.tempo_note?`<div style="font-size:11px;color:var(--ink3);margin-top:2px">${esc(t.tempo_note)}</div>`:''):''}
       ${fcBlock(p,t)}
@@ -806,6 +808,13 @@ async function clipThumb(file){const u=URL.createObjectURL(file);try{const v=doc
   const k=Math.min(1,640/(v.videoWidth||640)), c=document.createElement('canvas');c.width=Math.round((v.videoWidth||640)*k);c.height=Math.round((v.videoHeight||360)*k);
   c.getContext('2d').drawImage(v,0,0,c.width,c.height);return{blob:await new Promise(r=>c.toBlob(r,'image/jpeg',0.8)),t};}finally{URL.revokeObjectURL(u);}}
 // the hold time pulled out of the cue so it cannot be missed (owner, 14 Nov 2026: it was buried at the end)
+// the hold as a big graphic at the tempo graphic's size (owner 15 Nov 2026: a reference before and after the test)
+const holdGraphic=h=>{const m=String(h).match(/^([0-9]+(?:-[0-9]+)?) ?s$/);const n=m?m[1]:h;
+  return `<div style="display:flex;align-items:stretch;gap:4px;margin:8px 0 2px;max-width:320px" aria-label="Hold ${esc(h)}">
+    <div style="display:flex;align-items:center;font-size:10px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:0.05em;writing-mode:vertical-rl;transform:rotate(180deg)">Hold</div>
+    <div style="flex:1;min-width:58px;text-align:center;padding:4px 8px 5px;border-radius:8px;background:var(--surface2)">
+      <div style="font-size:26px;line-height:1.1;font-weight:800;color:var(--teal);font-variant-numeric:tabular-nums">${esc(n)}</div>
+      <div style="font-size:10px;line-height:1.2;color:var(--ink2);margin-top:1px">seconds held for it to count</div></div></div>`;};
 const holdOf=t=>{const m=String(t&&t.cue||'').match(/hold(?: (?:it|each|the [a-z ]+?))?(?: for)? ([0-9]+(?:-[0-9]+)? ?(?:s|sec|seconds))/i);return m?m[1].replace(/ ?(sec|seconds)$/,' s'):'';};
 // Distance and lens (owner, 14 Nov 2026): Smith gives no distance, only 'whole body in frame, same spot every time';
 // this is OUR guidance from camera geometry, labelled as such in the app.

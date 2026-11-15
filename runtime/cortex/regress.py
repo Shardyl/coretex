@@ -2682,6 +2682,12 @@ def _cases():
                 and "def _to_mp4(uid: str)" in src and set(fm.CUES) >= {"get_ready", "hold", "done", "n1", "n3"}
                 and "screen.orientation.lock('landscape')" in m and "unland();ov.remove();" in m
                 and "await openCam();await land();" in m and "'Try camera again'" in m)
+    case("measures sharing a group are alternatives (pancake angle or touchpoint completes the test) and the hold "
+         "shows as a big graphic", "either/or + hold graphic 15 Nov",
+         lambda: (lambda m, fm: "const needed=(t,rs)=>{" in m and "g[0]===m" in m and "holdGraphic(holdOf(t))" in m
+                  and all(sum(1 for x in t["measures"] if x.get("group") == "depth") == 2
+                          for p in fm.DEFAULT_PILLARS for t in p["tests"] if t["id"] in ("pancake_max", "pancake_natural", "pancake_narrow", "ss_pancake")))
+         (open(_web + "/fitness/mobility.js", encoding="utf-8").read(), __import__("cortex.fitness_mobility", fromlist=["x"])))
     case("the pancake floor line is held level with the hip in both measure screens (level: true)", "level floor 15 Nov",
          lambda: (lambda m, fm: m.count("if(sp.level&&") == 2 and all(t["measures"][0]["angle"].get("level") is True
                   for p in fm.DEFAULT_PILLARS for t in p["tests"] if t["id"] in ("pancake_max", "pancake_natural", "pancake_narrow")))

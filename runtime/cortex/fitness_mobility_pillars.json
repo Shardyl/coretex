@@ -35,7 +35,8 @@
         "best": "min"
        },
        "level": true
-      }
+      },
+      "group": "depth"
      },
      {
       "key": "touchpoint",
@@ -48,7 +49,8 @@
        "chin",
        "chest",
        "abs"
-      ]
+      ],
+      "group": "depth"
      },
      {
       "key": "width_cm",
@@ -93,7 +95,8 @@
         "best": "min"
        },
        "level": true
-      }
+      },
+      "group": "depth"
      },
      {
       "key": "touchpoint",
@@ -106,7 +109,8 @@
        "chin",
        "chest",
        "abs"
-      ]
+      ],
+      "group": "depth"
      },
      {
       "key": "width_cm",
@@ -152,7 +156,8 @@
         "best": "min"
        },
        "level": true
-      }
+      },
+      "group": "depth"
      },
      {
       "key": "touchpoint",
@@ -165,7 +170,8 @@
        "chin",
        "chest",
        "abs"
-      ]
+      ],
+      "group": "depth"
      },
      {
       "key": "width_cm",
@@ -1313,7 +1319,8 @@
         "side": "visible",
         "best": "min"
        }
-      }
+      },
+      "group": "depth"
      },
      {
       "key": "touchpoint",
@@ -1326,7 +1333,8 @@
        "chin",
        "chest",
        "abs"
-      ]
+      ],
+      "group": "depth"
      }
     ],
     "position": {
