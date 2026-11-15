@@ -52,14 +52,14 @@
      },
      {
       "key": "width_cm",
-      "label": "Straddle width used (record to repeat)",
+      "label": "Straddle width, inner heel to inner heel (record to repeat)",
       "kind": "number",
       "unit": "cm"
      }
     ],
     "position": {
      "img": "pancake_film_angles.jpg",
-     "caption": "FILM FROM THE SIDE, phone on the floor, legs as WIDE as you can. Smith's lines: one flat along the floor towards your feet, the centre point at the top of the thigh / middle of the trunk, the other to the furthest point of your upper back (if you are past 90 deg, to the highest point). Left: sitting back; right: leaning forward. Tape your width heel to heel."
+     "caption": "FILM FROM THE SIDE, phone on the floor, legs as WIDE as you can. Smith's lines: one flat along the floor towards your feet, the centre point at the top of the thigh / middle of the trunk, the other to the furthest point of your upper back (if you are past 90 deg, to the highest point). Left: sitting back; right: leaning forward. Tape your width inner heel to inner heel."
     }
    },
    {
@@ -110,14 +110,14 @@
      },
      {
       "key": "width_cm",
-      "label": "Straddle width used (record to repeat)",
+      "label": "Straddle width, inner heel to inner heel (record to repeat)",
       "kind": "number",
       "unit": "cm"
      }
     ],
     "position": {
      "img": "pancake_film_angles.jpg",
-     "caption": "FILM FROM THE SIDE, phone on the floor, a COMFORTABLE straddle. Smith's lines: one flat along the floor towards your feet, the centre point at the top of the thigh / middle of the trunk, the other to the furthest point of your upper back (if you are past 90 deg, to the highest point). Left: sitting back; right: leaning forward. Tape your width heel to heel."
+     "caption": "FILM FROM THE SIDE, phone on the floor, a COMFORTABLE straddle. Smith's lines: one flat along the floor towards your feet, the centre point at the top of the thigh / middle of the trunk, the other to the furthest point of your upper back (if you are past 90 deg, to the highest point). Left: sitting back; right: leaning forward. Tape your width inner heel to inner heel."
     }
    },
    {
@@ -169,14 +169,14 @@
      },
      {
       "key": "width_cm",
-      "label": "Straddle width used (record to repeat)",
+      "label": "Straddle width, inner heel to inner heel (record to repeat)",
       "kind": "number",
       "unit": "cm"
      }
     ],
     "position": {
      "img": "pancake_film_angles.jpg",
-     "caption": "FILM FROM THE SIDE, phone on the floor, a SMALL straddle. Smith's lines: one flat along the floor towards your feet, the centre point at the top of the thigh / middle of the trunk, the other to the furthest point of your upper back (if you are past 90 deg, to the highest point). Left: sitting back; right: leaning forward. Tape your width heel to heel."
+     "caption": "FILM FROM THE SIDE, phone on the floor, a SMALL straddle. Smith's lines: one flat along the floor towards your feet, the centre point at the top of the thigh / middle of the trunk, the other to the furthest point of your upper back (if you are past 90 deg, to the highest point). Left: sitting back; right: leaning forward. Tape your width inner heel to inner heel."
     }
    },
    {
@@ -214,7 +214,7 @@
      },
      {
       "key": "width_cm",
-      "label": "Straddle width used",
+      "label": "Straddle width, inner heel to inner heel (record to repeat)",
       "kind": "number",
       "unit": "cm"
      }
