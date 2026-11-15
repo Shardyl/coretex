@@ -621,7 +621,7 @@ window.mobRecord=async function(pid,tid,side){
   const anyDays=[...new Set([...(_mob.results||[]),...(_mob.media||[])].filter(r=>r.pillar===pid).map(r=>r.date))].sort();
   const day=_mobDay||anyDays[anyDays.length-1]||today();
   const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:10000;background:#000;color:#fff;overflow:hidden';
-  ov.innerHTML=`<div style="position:absolute;inset:0"><video playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000"></video>
+  ov.innerHTML=`<div style="position:absolute;inset:0"><video playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video>
     <div data-big style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;padding:0 16px;text-shadow:0 2px 14px #000"></div>
     <div style="position:absolute;top:8px;left:10px;right:10px;font-size:13px;font-weight:800;text-shadow:0 1px 6px #000">${esc(t.name)}${side!=='both'?' &middot; '+SIDE[side]:''} &middot; hold ${holdS} s</div>
     <div data-rec style="position:absolute;top:30px;left:10px;display:none;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#ff5a5a"><span style="width:10px;height:10px;border-radius:50%;background:#ff3b3b"></span>REC</div></div>
