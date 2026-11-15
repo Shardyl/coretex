@@ -333,7 +333,7 @@ function blockCards(pid,when){const bs=((_mob.blocks||{})[pid]||{})[when]||[];
 function renderSession(el,id){
   const a=(_mob.programs||[]).find(x=>x.id===id);if(!a){_mobView='list';return renderList(el);}
   const p=pillar(a.pillar);
-  el.innerHTML=`<button class="btn-sm" onclick="mobOpen('${a.pillar}')" style="margin-bottom:10px">&lsaquo; ${esc(p?p.name:'Back')}</button>
+  el.innerHTML=`${bigBack(`mobOpen('${a.pillar}')`,esc(p?p.name:'Back'))}
     <div style="font-size:18px;font-weight:800">Session ${(a.sessions_done||0)+1} of ${a.sessions_per_phase||6}</div>
     ${physioBanner()}
     <div style="font-size:12px;color:var(--ink3);margin:2px 0 8px">Warm up each drill first: 2-5 lighter sets until you reach 80-90% of last session's depth. If you can't get near it, rest another day.</div>
@@ -491,7 +491,7 @@ function renderPillar(el,p){
   const day=_mobDay||anyDays[anyDays.length-1]||today();
   const days=[...new Set((_mob.results||[]).filter(r=>r.pillar===p.id).map(r=>r.date))].sort();
   const mediaDay=(t,side)=>clipsOf(p.id,t).filter(m=>m.side===side&&m.date===day);
-  el.innerHTML=`<button class="btn-sm" onclick="mobBack()" style="margin-bottom:10px">&lsaquo; All pillars</button>
+  el.innerHTML=`${bigBack('mobBack()','All pillars')}
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:18px;font-weight:800">${esc(p.name)}</span>${chip(s.status)}
       <label style="margin-left:auto;display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink2)"><input type="checkbox" ${focusIds().has(p.id)?'checked':''} onchange="mobFocus('${p.id}',this.checked)"/>Focus pillar</label></div>
     ${programBlock(p)}

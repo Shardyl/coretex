@@ -83,7 +83,7 @@ const isHold=it=>{const e=ex(it.exercise_id);return e.kind==='hold'||/\bs\b|hold
 window.caliSessionOpen=()=>{_caliView='session';rerender();window.scrollTo(0,0);};
 function renderSession(el){
   const p=prog(_cali.current);if(!p){_caliView='program';return renderProgram(el);}
-  el.innerHTML=`<button class="btn-sm" onclick="caliBack()" style="margin-bottom:10px">&lsaquo; ${esc(p.name)}</button>
+  el.innerHTML=`${bigBack('caliBack()',esc(p.name))}
     <div style="font-size:18px;font-weight:800">Log a session</div>
     <div style="display:flex;gap:8px;align-items:center;margin:8px 0 10px"><label class="form-label" style="margin:0">Date</label><input id="caliDay" type="date" value="${today()}" max="${today()}" class="fd-input" style="width:auto;font-size:14px"/></div>
     ${(p.items||[]).map((it,k)=>{const e=ex(it.exercise_id), hold=isHold(it), n=Math.max(1,Math.min(12,nInt(it.sets)||1)), last=lastFor(p.id,it.code);
