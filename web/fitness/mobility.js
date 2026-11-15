@@ -192,7 +192,7 @@ function gridBlock(p,s){
         <td style="padding:6px 0;font-weight:700">${i+1}. ${esc(t.name)}${t.role?`<div style="font-size:10px;color:var(--ink3);font-weight:600">${t.role==='active'?'Active':'Passive'}</div>`:''}</td>
         ${t.sides.length>1?cells.map(c=>cell(c)).join(''):cell(cells[0],two)}</tr>`).join('')}
     </table>
-    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:10.5px;color:var(--ink3)">${['done','filmed','partial','prov','empty'].map(k=>`<span style="display:flex;align-items:center;gap:3px">${icon(ST[k].i,ST[k].c,12)}${ST[k].t}</span>`).join('')}</div></div>`;
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:10.5px;color:var(--ink3)">${['done','filmed','partial','empty'].map(k=>`<span style="display:flex;align-items:center;gap:3px">${icon(ST[k].i,ST[k].c,12)}${ST[k].t}</span>`).join('')}</div></div>`;
 }
 
 function gapBlock(p){
@@ -533,7 +533,7 @@ function renderPillar(el,p){
           ${t.no_media||t.one_clip&&!med.length?'':`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${clipBtns(med)}
             ${t.one_clip?'':upBtn('Upload video or photo',p.id,t.id,sd)}
             <span id="mobup_${t.id}_${sd}" style="font-size:11px;color:var(--ink3)"></span></div>${noteLines(med)}`}</div>`;}).join('')}
-      ${lock?'':`<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2);margin-top:10px"><input type="checkbox" id="mobprov_${t.id}"${prov?' checked':''}/> Provisional (needs a proper retest)</label>
+      ${lock?'':`
       <button class="fd-btn" style="margin-top:8px" onclick="mobSave('${p.id}','${t.id}')">Save ${esc(t.name)}</button>
       ${done?`<button class="btn-sm" style="margin-top:6px" onclick="mobEditToggle('${t.id}',false)">Cancel</button>`:''}`}</div>`;}).join('')}
     ${days.length?historyBlock(p,days):''}`;
@@ -566,7 +566,7 @@ window.mobSave=async function(pid,tid){
   const p=pillar(pid), t=p.tests.find(x=>x.id===tid);
   const anyDays=[...new Set([...(_mob.results||[]),...(_mob.media||[])].filter(r=>r.pillar===pid).map(r=>r.date))].sort();
   const day=_mobDay||anyDays[anyDays.length-1]||today();
-  const pe=document.getElementById('mobprov_'+tid), provisional=!!(pe&&pe.checked);
+  const provisional=false;   // no provisional results (owner 15 Nov 2026)
   try{
     for(const s of t.sides){
       const values={};t.measures.forEach(m=>{if(!showIf(m,domGet(t,s)))return;const e=document.getElementById(`mob_${t.id}_${s}_${m.key}`);if(e&&e.value!=='')values[m.key]=m.kind==='number'?+e.value:e.value;});
@@ -891,17 +891,16 @@ window.mobMeasureBoth=function(src,id,ov,auto){
   cv.addEventListener('pointerup',()=>{drag=null;loupe.hide();});cv.addEventListener('pointerleave',()=>{drag=null;loupe.hide();});
   new MutationObserver((m,o)=>{if(!document.body.contains(ov)){loupe.remove();o.disconnect();}}).observe(document.body,{childList:true});
   const bar=document.createElement('div');bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center';
-  const provL=document.createElement('label');provL.style.cssText='color:#ddd;font-size:12px;display:flex;align-items:center;gap:4px';
-  const prov=document.createElement('input');prov.type='checkbox';provL.append(prov,'Provisional');
+  const prov={checked:false};   // no provisional results (owner 15 Nov 2026)
   const save=document.createElement('button');save.className='btn-sm';save.textContent='Save both';save.style.cssText='background:var(--teal);color:#fff;border-color:var(--teal);font-weight:800';
   const close=document.createElement('button');close.className='btn-sm';close.textContent='Cancel';close.onclick=()=>ov.remove();
-  ov.innerHTML='';ov.onclick=null;bar.append(save,provL,close);ov.append(tip,cv,out,bar);draw();
+  ov.innerHTML='';ov.onclick=null;bar.append(save,close);ov.append(tip,cv,out,bar);draw();
   save.onclick=async()=>{save.disabled=true;save.textContent='Saving...';
     try{const done=[];
       for(const sd of ['L','R']){const a=Math.round(ang(sd)), values={};let wasProv=false;
         resFor(rec.pillar,rec.test,sd,rec.date).forEach(r=>{values[r.measure]=r.label!=null?r.label:r.value;if(r.provisional)wasProv=true;});
         values[m.key]=a;
-        await syncApi('/api/fitness/mobility/result',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:sd,values,provisional:prov.checked||wasProv})});
+        await syncApi('/api/fitness/mobility/result',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:sd,values,provisional:false})});
         done.push(SIDE[sd]+' '+Math.round(a)+'\u00b0');}
       const put=async(b,n)=>{const st=await syncApi('/api/fitness/mobility/media',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:'both',mime:'image/jpeg',bytes:b.size,note:n,frame_s:frameS,source:id})});
         if(st&&st.id){await fetch(API_BASE+'/api/fitness/mobility/media/'+st.id+'/0',{method:'PUT',headers:{'Authorization':'Bearer '+syncToken(),'Content-Type':'application/octet-stream'},body:b});
@@ -934,8 +933,7 @@ window.mobMeasure=function(src,id,ov,auto){
   const loadAuto=async()=>{const r=auto&&auto.res[side.value];if(!r)return false;
     if(src.tagName==='VIDEO'&&Math.abs(src.currentTime-r.t)>0.05){await seekTo(src,r.t);frame.getContext('2d').drawImage(src,0,0,W,H);}
     frameS=r.t;pts.length=0;r.pts.forEach(q=>pts.push({x:q.x,y:q.y}));moved=false;return true;};
-  const provL=document.createElement('label');provL.style.cssText='color:#ddd;font-size:12px;display:flex;align-items:center;gap:4px';
-  const prov=document.createElement('input');prov.type='checkbox';provL.append(prov,'Provisional');
+  const prov={checked:false};   // no provisional results (owner 15 Nov 2026)
   const save=document.createElement('button');save.className='btn-sm';save.textContent='Save angle';save.style.cssText='background:var(--teal);color:#fff;border-color:var(--teal)';
   const reset=document.createElement('button');reset.className='btn-sm';reset.textContent='Start again';
   const close=document.createElement('button');close.className='btn-sm';close.textContent='Cancel';close.onclick=()=>ov.remove();
@@ -968,7 +966,7 @@ window.mobMeasure=function(src,id,ov,auto){
   new MutationObserver((m,o)=>{if(!document.body.contains(ov)){loupe.remove();o.disconnect();}}).observe(document.body,{childList:true});
   cv.addEventListener('pointerleave',()=>{drag=-1;loupe.hide();});
   ov.innerHTML='';ov.onclick=null;
-  bar.append(pick,side,provL,save,reset,close);ov.append(tip,cv,out,bar);
+  bar.append(pick,side,save,reset,close);ov.append(tip,cv,out,bar);
   if(auto){const found=autoSides.length>1?'Found '+autoSides.map(s=>SIDE[s]+' '+Math.round(auto.res[s].a)+'°').join(', ')+'. Switch side to check each.':'';
     if(found){const o=document.createElement('div');o.style.cssText='color:#aaa;font-size:11px;margin-top:6px;text-align:center';o.textContent=found;ov.append(o);}
     loadAuto().then(()=>{setTip();draw();});}else{setTip();draw();}
@@ -979,7 +977,7 @@ window.mobMeasure=function(src,id,ov,auto){
     values[key]=a;
     save.disabled=true;save.textContent='Saving...';
     try{
-      await syncApi('/api/fitness/mobility/result',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:sd,values,provisional:prov.checked||wasProv})});
+      await syncApi('/api/fitness/mobility/result',{method:'POST',body:JSON.stringify({date:rec.date,pillar:rec.pillar,test:rec.test,side:sd,values,provisional:false})});
       const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.85));
       const how=auto&&auto.res[sd]?(moved?', auto-detected then adjusted by hand':', auto-detected'):'';
       const note=m.label+' '+Math.round(a)+'°'+(sides.length>1?', '+SIDE[sd]:'')+(frameS!=null?', read at '+frameS+' s of the clip':'')+how;

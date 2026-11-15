@@ -2669,6 +2669,11 @@ def _cases():
                   and next(t for p in fm.DEFAULT_PILLARS for t in p["tests"] if t["id"] == "force_couple_push")["tempo"] == "4010")
          (open(_web + "/fitness/index.html", encoding="utf-8").read(), open(_web + "/fitness/mobility.js", encoding="utf-8").read(),
           open(_web + "/fitness/calisthenics.js", encoding="utf-8").read(), __import__("cortex.fitness_mobility", fromlist=["x"])))
+    case("no provisional tick box anywhere in Mobility: every saved result is final (owner: right, or do it again)",
+         "no provisional 15 Nov",
+         lambda: (lambda m: "Provisional (needs a proper retest)" not in m and "provL" not in m and "mobprov_" not in m
+                  and m.count("provisional:false})") == 2 and "const provisional=false;" in m)
+         (open(_web + "/fitness/mobility.js", encoding="utf-8").read()))
     case("a measure that depends on a choice (show_if) is shown, saved and required only when it applies: Dip hides the "
          "push-up hand height, Push up hides the dip weight", "show_if fields 15 Nov",
          lambda: (lambda m, fm: "const showIf=(m,get)=>" in m and "window.mobShowIf=function" in m
