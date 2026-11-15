@@ -2682,6 +2682,11 @@ def _cases():
                 and "def _to_mp4(uid: str)" in src and set(fm.CUES) >= {"get_ready", "hold", "done", "n1", "n3"}
                 and "screen.orientation.lock('landscape')" in m and "unland();ov.remove();" in m
                 and "await openCam();await land();" in m and "'Try camera again'" in m)
+    case("weight RAG: amber up to 1 kg over, red beyond, on today's pace, weekly checkpoints, recap and 7-day avg",
+         "weight amber 1 kg 15 Nov",
+         lambda: (lambda f: "const AMBER_KG=1.0;" in f and f.count("AMBER_KG?") + f.count("<=AMBER_KG") >= 4
+                  and "d<=0.2?RAG.a" not in f and "avg-target<=0.3" not in f)
+         (open(_web + "/fitness/food.js", encoding="utf-8").read()))
     case("measures sharing a group are alternatives (pancake angle or touchpoint completes the test) and the hold "
          "shows as a big graphic", "either/or + hold graphic 15 Nov",
          lambda: (lambda m, fm: "const needed=(t,rs)=>{" in m and "g[0]===m" in m and "holdGraphic(holdOf(t))" in m

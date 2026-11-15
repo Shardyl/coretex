@@ -882,15 +882,15 @@ function missionWeeks(m){
   for(;d<=m.goalDate;d=shiftDay(d,7)){
     const target=Math.round((m.startKg-total*missionDays(m.startDate,d)/span)*10)/10;
     const raw=avgBetween(all,shiftDay(d,-6),d), avg=raw==null?null:Math.round(raw*10)/10;   // judge on the 1-decimal figure he sees
-    const state=d>today?'future':(avg==null?'nodata':(avg<=target?'hit':(avg-target<=0.3?'close':'miss')));
+    const state=d>today?'future':(avg==null?'nodata':(avg<=target?'hit':(avg-target<=AMBER_KG?'close':'miss')));
     out.push({date:d,target,avg,state,current:d>=today&&shiftDay(d,-6)<=today});
   }
   return out;
 }
 // NOW is judged against TODAY's point on the straight line (owner, 12 Oct 2026), not Sunday's checkpoint:
-// on or under pace green, up to 0.2 kg over amber, more red. Both sides rounded to the 1 decimal he sees.
+// on or under pace green, up to AMBER_KG (1 kg, owner 15 Nov 2026) over amber, more red. Both sides rounded to the 1 decimal he sees.
 // Sunday recap (owner, 18 Oct 2026): once Sunday's weigh-in is in, the week is over. Show how it went and the next
-// target straight away. Verdict uses the checkpoint bands (hit by 0.3+ = smashed, on/under = done, 0.3 over = just short).
+// target straight away. Verdict uses the checkpoint bands (hit by 0.3+ = smashed, on/under = done, up to AMBER_KG over = just short).
 // Deficit = the 7 days up to this morning's weigh-in (last Sunday to Saturday, owner 18 Oct 2026), days with both food and watch data only.
 function weekRecap(m,wk){
   const today=localDay(new Date());
@@ -899,7 +899,7 @@ function weekRecap(m,wk){
   if(!weighIns().some(w=>w.date===today))return null;
   const w=wk[i], next=wk[i+1]||null;if(w.avg==null)return null;
   const diff=Math.round((w.avg-w.target)*10)/10;
-  const v=diff<=-0.3?{t:'Smashed it',c:RAG.g}:diff<=0?{t:'Done it',c:RAG.g}:diff<=0.3?{t:'Just short',c:RAG.a}:{t:'Missed it',c:RAG.r};
+  const v=diff<=-0.3?{t:'Smashed it',c:RAG.g}:diff<=0?{t:'Done it',c:RAG.g}:diff<=AMBER_KG?{t:'Just short',c:RAG.a}:{t:'Missed it',c:RAG.r};
   let def=0,n=0;
   for(let k=1;k<=7;k++){const d=shiftDay(today,-k),e=entriesFor(d),b=fullDayBurn(d);if(e.length&&b!=null){def+=b-totals(e).kcal;n++;}}
   return {w,next,diff,v,def:n?Math.round(def):null,perDay:n?Math.round(def/n):null,n};
@@ -913,7 +913,10 @@ function recapLines(r){
       <span style="color:var(--ink2)">${r.def!=null?`7-day deficit <b style="color:${ragDeficit(r.perDay)}">${fmtN(r.def)} kcal</b>${r.n<7?' ('+r.n+' days)':''}`:''}</span>
       ${r.next?`<span>Next <b style="color:var(--teal);font-size:13px">${r.next.target} kg</b> by Sun ${fmtDate(r.next.date)}</span>`:''}</div>`;
 }
-function ragPace(s){if(s.cur==null||s.paceKg==null)return 'inherit';const d=Math.round((r1(s.cur)-r1(s.paceKg))*10)/10;return d<=0?RAG.g:d<=0.2?RAG.a:RAG.r;}
+// weight RAG bands (owner 15 Nov 2026): on or under = green, up to 1 kg over = amber, more than 1 kg over = red,
+// for today's pace point, the weekly checkpoints, the Sunday recap and the 7-day average alike
+const AMBER_KG=1.0;
+function ragPace(s){if(s.cur==null||s.paceKg==null)return 'inherit';const d=Math.round((r1(s.cur)-r1(s.paceKg))*10)/10;return d<=0?RAG.g:d<=AMBER_KG?RAG.a:RAG.r;}
 window.renderMission=function(){
   const el=document.getElementById('missionStrip');if(!el)return;
   const s=missionStats();
@@ -1854,7 +1857,7 @@ function renderWeight(){
         ${w.src==='log'?`<button class="hist-del" onclick="event.stopPropagation();foodDelWeight('${w.date}')">&times;</button>`:''}</div>`).join('')||'<div class="fd-note">No weigh-ins yet.</div>'}
     </div>
     <div class="card"><div class="fd-row" style="margin-top:0">
-      <div class="fd-cell"><div class="v">${a7!=null?ragSpan(r1(a7),(()=>{const m=foodTargets.mission;if(!m||!m.startDate)return '';const cw=missionWeeks(m).find(w=>w.current);if(!cw)return '';const v=r1(a7);return v<=cw.target?RAG.g:v-cw.target<=0.3?RAG.a:RAG.r;})()):'—'}</div><div class="l">7-day avg</div></div>
+      <div class="fd-cell"><div class="v">${a7!=null?ragSpan(r1(a7),(()=>{const m=foodTargets.mission;if(!m||!m.startDate)return '';const cw=missionWeeks(m).find(w=>w.current);if(!cw)return '';const v=r1(a7);return v<=cw.target?RAG.g:v-cw.target<=AMBER_KG?RAG.a:RAG.r;})()):'—'}</div><div class="l">7-day avg</div></div>
       <div class="fd-cell"><div class="v">${chip(diff(a7,p7))}</div><div class="l">vs last week</div></div>
       <div class="fd-cell"><div class="v">${chip(diff(a7,a30))}</div><div class="l">vs 30 days ago</div></div>
     </div><div class="fd-note" style="margin:8px 0 0">Daily weight swings with water and food, so judge progress by the 7-day average.</div>${projectWeek()}</div>
