@@ -1129,6 +1129,22 @@ def _cases():
     case("a step for someone else is done with them, or is a To do; a greeting must match the To line",
          "Dubai Police card 1471, 25 Oct", _step_for_a_person)
 
+    def _an_email_opens_with_a_greeting():
+        real = ("I hope you're well. I wanted to add something to our last note on Sharjah Sustainable City II: "
+                "please take a look at the latest piece we've created.\n\nThe quotation SEN-2026-0057 is still with you.")
+        src = inspect.getsource(engine._ensure_clean_email_inner)
+        return (engine._missing_greeting(real)
+                and engine._missing_greeting("Thanks for getting in touch.")
+                and not engine._missing_greeting("Hello Sarah,\n\nI hope you're well.")
+                and not engine._missing_greeting("Dear Colonel Ibrahim,\n\nI hope you are well.")
+                and not engine._missing_greeting("Good morning, Adham, I hope you're keeping well.")
+                and not engine._missing_greeting("Hi,\n\nThanks.")
+                and not engine._missing_greeting("\n\nHello Dominik,\n\nThanks.")
+                and not engine._missing_greeting("")          # empty is the empty-body guard's job
+                and "_missing_greeting(draft)" in src and "NO GREETING" in src)
+    case("an email opens with a greeting: a draft with none is redrafted once before the Inbox",
+         "Shurooq card 1796, 16 Nov 2026", _an_email_opens_with_a_greeting)
+
     def _signed_name_is_theirs():
         from . import api, engine
         msg = ("Hello, my name is John DiBartolo, and I'm a producer here in Brazil. What's the cost per minute?\n\n"

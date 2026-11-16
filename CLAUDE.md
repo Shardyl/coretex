@@ -470,6 +470,18 @@ for a link/invite (`_owner_set_slot`); a reply still needs the client to have ag
 Pre-booked attendee-less as before; the guest is invited on approval. Regress case: "an email we compose books its
 meeting...". Still open: a slot already pre-booked is not MOVED when he reschedules it on the card.
 
+## An email opens with a greeting (owner, 16 Nov 2026)
+
+Card 1796, an automatic closing chase to Sarah at Shurooq (deal 183), opened "I hope you're well." with no
+"Hello Sarah," at all. The drafter writes the greeting itself (`_EMAIL_BODY_RULE`) and nothing checked that it
+did: `_greeting_mismatch` only judges a greeting that EXISTS. `engine._missing_greeting(draft)` (first non-empty
+line against `_ANY_GREETING`: hello/hi/hey/dear/good morning.../salam/marhaba and a few others) now runs in
+`_ensure_clean_email_inner`, so every email path (first draft, chases, corrections) redrafts ONCE with "NO
+GREETING" feedback before the card reaches the Inbox. His correction words win: a correction that mentions the
+greeting is never second-guessed. Not an approval block (a deliberate no-greeting email stays possible). Regress
+case: "an email opens with a greeting...". The card itself was redrafted through `apply_correction` and the
+Atlantis link it repeated (already sent 1 Nov) was dropped.
+
 ## A card that cannot send says so up front (owner, 5 Nov 2026)
 
 Card 1648 (Y23 Films, John DiBartolo from y23films@gmail.com) looked ready, and Approve silently did nothing: the

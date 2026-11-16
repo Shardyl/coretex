@@ -3852,6 +3852,18 @@ def _self_named(message: str) -> list[str]:
     return out
 
 
+_ANY_GREETING = re.compile(
+    r"^\s*(?:hello|hi|hey|dear|good\s+(?:morning|afternoon|evening|day)|greetings|salam|salaam|assalam\w*|"
+    r"as-salaam\w*|marhaba|bonjour|hola|ciao|guten\s+tag|olá|ola)\b", re.I)
+
+
+def _missing_greeting(draft: str) -> bool:
+    """True when an email body opens with no greeting at all (card 1796: "I hope you're well." to Sarah).
+    Deterministic, the first non-empty line only. An empty draft is the empty-body guard's job, not this one."""
+    first = next((ln for ln in (draft or "").splitlines() if ln.strip()), "")
+    return bool(first) and not _ANY_GREETING.match(first)
+
+
 def _greeting_mismatch(draft: str, req: dict) -> str:
     """'' unless the email GREETS a known person who is not who it is addressed to (card 651: "Hello Mai" on
     an email to Hussein Osman). Deterministic: the greeted first name against the To name and address;
@@ -3989,6 +4001,16 @@ def _ensure_clean_email_inner(skill: dict, company: dict, dreq: dict, draft: str
                 "two actions to set', 'OWNER TO CONFIRM'). The email body must contain ONLY the message "
                 "the client reads. Remove every non-client line; reminders and internal work are handled "
                 "by the system, never written into the email."])
+    except Exception:  # noqa: BLE001
+        pass
+    try:   # NO GREETING AT ALL: one redraft here (card 1796, 16 Nov 2026: a chase to Sarah opened "I hope you're
+        # well." with no "Hello Sarah," and nothing caught it). His own words on the card win: a correction that
+        # talks about the greeting is never second-guessed.
+        if draft and _missing_greeting(draft) and not re.search(r"greet|hello|salutation|\bdear\b", owner or "", re.I):
+            draft = worker.draft(skill, company, dreq, prev_draft=draft, manager_feedback=[
+                "Your draft has NO GREETING. An email opens with a greeting to the person it is addressed to, "
+                "on its own line, in the company's usual form (e.g. 'Hello Sarah,'), then the message. Keep "
+                "everything else exactly as it is."])
     except Exception:  # noqa: BLE001
         pass
     try:   # greeting someone who is not the recipient: one redraft here; the approval gate is the guarantee
