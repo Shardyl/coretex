@@ -181,6 +181,7 @@ def pull() -> dict:
                "date": r["day"].isoformat(), "duration": r["duration"], "avgHR": _num(r["avg_hr"]),
                "maxHR": _num(r["max_hr"]), "calories": _num(r["calories"]), "extra": r["extra"],
                "nextTarget": r["next_target"], "notes": r["notes"], "watch": r.get("watch"),
+               "machineTag": r.get("machine_tag"),
                "startAt": _hs.get((r.get("watch") or {}).get("uid"))}
               for r in db.query("select * from fitness.cardio_sessions where not deleted order by day")]
     vo2 = [{"id": r["uid"], "date": r["day"].isoformat(), "value": float(r["value"]),
@@ -316,19 +317,45 @@ def hr_trace(uid: str) -> dict:
         pts = [p for p in pts if p[0] <= float(r["trim_min"]) * 60]
     out = {"uid": uid, "start": r["start_at"].isoformat(), "points": pts, **_hr_analyse(pts)}
     # The previous session on the same preset that has a trace, for the side-by-side (owner, 3 Nov 2026).
-    c = db.one("select preset_uid, preset_name, day from fitness.cardio_sessions where not deleted and watch->>'uid' = %s",
-               (uid,))
+    c = db.one("select preset_uid, preset_name, day, extra, machine_tag from fitness.cardio_sessions "
+               "where not deleted and watch->>'uid' = %s", (uid,))
     if c:
         out["preset"], out["day"] = c["preset_name"], c["day"].isoformat()
-        p = db.one("select c.day, h.hr, h.trim_min from fitness.cardio_sessions c join fitness.health_sessions h "
-                   "on h.uid = c.watch->>'uid' where not c.deleted and c.preset_uid = %s and c.day < %s "
-                   "and h.hr is not null order by c.day desc limit 1", (c["preset_uid"], c["day"]))
+        out["machine"] = c.get("machine_tag")
+        cands = db.query("select c.day, c.extra, c.machine_tag, h.hr, h.trim_min from fitness.cardio_sessions c "
+                         "join fitness.health_sessions h on h.uid = c.watch->>'uid' where not c.deleted "
+                         "and c.preset_uid = %s and c.day < %s and h.hr is not null order by c.day desc limit 40",
+                         (c["preset_uid"], c["day"]))
+        # like for like first (owner, 16 Nov 2026): same machine and same settings, else the latest on the preset
+        p = next((x for x in cands if _like_for_like(c, x)), None)
+        like = p is not None
+        p = p or (cands[0] if cands else None)
         if p:
             pp = sorted(p["hr"] if isinstance(p["hr"], list) else json.loads(p["hr"]))
             if p.get("trim_min"):
                 pp = [x for x in pp if x[0] <= float(p["trim_min"]) * 60]
-            out["prev"] = {"day": p["day"].isoformat(), **_hr_analyse(pp)}
+            out["prev"] = {"day": p["day"].isoformat(), "like": like, "machine": p.get("machine_tag"),
+                           **_hr_analyse(pp)}
     return out
+
+
+def _like_for_like(a: dict, b: dict) -> bool:
+    """Same machine tag (case-insensitive) and the same non-distance settings, compared as numbers."""
+    if (a.get("machine_tag") or "").strip().lower() != (b.get("machine_tag") or "").strip().lower():
+        return False
+    if not (a.get("machine_tag") or "").strip():
+        return False
+
+    def norm(e):
+        out = {}
+        for k, v in (e or {}).items():
+            try:
+                out[str(k)] = round(float(v), 2)
+            except (TypeError, ValueError):
+                if str(v).strip():
+                    out[str(k)] = str(v).strip().lower()
+        return out
+    return norm(a.get("extra")) == norm(b.get("extra"))
 
 
 def _hr_analyse(pts: list) -> dict:
@@ -758,19 +785,24 @@ def _push_inner(doc: dict, source: str = "app") -> dict:
         _ex(
             "insert into fitness.cardio_sessions (uid, preset_uid, preset_name, day, duration, "
             "minutes, avg_hr, max_hr, calories, distance_km, m_per_beat, extra, next_target, notes, "
-            "deleted, watch) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "deleted, watch, machine_tag) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
             "on conflict (uid) do update set preset_uid=excluded.preset_uid, "
             "preset_name=excluded.preset_name, day=excluded.day, duration=excluded.duration, "
             "minutes=excluded.minutes, avg_hr=excluded.avg_hr, max_hr=excluded.max_hr, "
             "calories=excluded.calories, distance_km=excluded.distance_km, "
             "m_per_beat=excluded.m_per_beat, extra=excluded.extra, next_target=excluded.next_target, "
             "notes=excluded.notes, deleted=cardio_sessions.deleted or excluded.deleted, "
-            "watch=coalesce(excluded.watch, cardio_sessions.watch), updated_at=now()",
+            "watch=coalesce(excluded.watch, cardio_sessions.watch), "
+            # machine tag (owner, 16 Nov 2026): absent/null = keep what the server has (an older phone copy never
+            # blanks a tag), "" = cleared on purpose
+            "machine_tag=case when excluded.machine_tag is null then cardio_sessions.machine_tag "
+            "else nullif(excluded.machine_tag, '') end, updated_at=now()",
             (r["id"], r.get("exerciseId"), r.get("exerciseName"), d, r.get("duration"), mins,
              avg_hr, _num(r.get("maxHR")), _num(r.get("calories")), dist, mpb, Json(extra),
              Json(r.get("nextTarget")) if r.get("nextTarget") is not None else None,
              r.get("notes"), bool(r.get("deleted")),
-             Json(r["watch"]) if isinstance(r.get("watch"), dict) else None))
+             Json(r["watch"]) if isinstance(r.get("watch"), dict) else None,
+             (str(r["machineTag"]).strip()[:80] if r.get("machineTag") is not None else None)))
         counts["cardioSessions"] += 1
 
     for r in doc.get("vo2") or doc.get("vo2Records") or []:
@@ -1098,6 +1130,13 @@ def _settings_for(preset_uid: str) -> dict:
     return _last_settings(preset_uid) or dict(_DEFAULT_SETTINGS.get(preset_uid, {}))
 
 
+def _last_machine(preset_uid: str) -> str | None:
+    """The machine tag of his last tagged session on this preset (owner, 16 Nov 2026: defaults to the one used last)."""
+    row = db.one("select machine_tag from fitness.cardio_sessions where preset_uid=%s and not deleted "
+                 "and machine_tag is not null order by day desc limit 1", (preset_uid,))
+    return (row or {}).get("machine_tag")
+
+
 def _last_settings(preset_uid: str) -> dict:
     """Settings from the owner's last session on this preset, distance dropped (he does not log it)."""
     row = db.one("select extra from fitness.cardio_sessions where preset_uid=%s and not deleted "
@@ -1140,13 +1179,13 @@ def _refresh_grown(since: date | None = None) -> int:
         new_uid = f"{base}|r{int(ver) + 1 if ver.isdigit() else 2}"
         db.execute(
             "insert into fitness.cardio_sessions (uid, preset_uid, preset_name, day, duration, minutes, avg_hr, max_hr, "
-            "calories, distance_km, m_per_beat, extra, next_target, notes, watch) "
-            "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (uid) do nothing",
+            "calories, distance_km, m_per_beat, extra, next_target, notes, watch, machine_tag) "
+            "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict (uid) do nothing",
             (new_uid, r["preset_uid"], r["preset_name"], r["day"], _dur(hm), round(hm, 2),
              round(float(r["h_avg"])) if r["h_avg"] is not None else r["avg_hr"], hmax if hmax is not None else r["max_hr"],
              round(float(r["h_kcal"])) if r["h_kcal"] is not None else r["calories"], r["distance_km"], r["m_per_beat"],
              Json(r["extra"] or {}), Json(r["next_target"]) if r["next_target"] is not None else None, r["notes"],
-             Json(r["watch"])))
+             Json(r["watch"]), r.get("machine_tag")))
         db.execute("update fitness.cardio_sessions set deleted=true, updated_at=now() where uid=%s", (r["uid"],))
         n += 1
     return n
@@ -1249,7 +1288,7 @@ def reconcile_watch(since: date | None = None) -> dict:
         watch.update(confirmed=conf, settings=how)
         db.execute(
             "insert into fitness.cardio_sessions (uid, preset_uid, preset_name, day, duration, minutes, avg_hr, "
-            "max_hr, calories, extra, notes, watch) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "max_hr, calories, extra, notes, watch, machine_tag) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
             "on conflict (uid) do nothing",
             ("w:" + s["uid"], preset, presets.get(preset, {}).get("name") or _PRESETS_WATCH.get(preset, ("",))[0],
              s["day"], _dur(mins), round(mins, 2),
@@ -1257,7 +1296,7 @@ def reconcile_watch(since: date | None = None) -> dict:
              round(float(s["max_hr"])) if s["max_hr"] is not None else None,
              round(float(s["kcal"])) if s["kcal"] is not None else None,
              Json(extra), "From watch" + ("" if conf or how != "prefilled" else ", check settings"),
-             Json(watch)))
+             Json(watch), _last_machine(preset) if how == "prefilled" else None))
         n["created_new" if new else "created_history"] += 1
     return n
 

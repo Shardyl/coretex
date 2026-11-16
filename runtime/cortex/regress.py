@@ -2698,6 +2698,15 @@ def _cases():
                 and "def _to_mp4(uid: str)" in src and set(fm.CUES) >= {"get_ready", "hold", "done", "n1", "n3"}
                 and "screen.orientation.lock('landscape')" in m and "unland();ov.remove();" in m
                 and "await openCam();await land();" in m and "'Try camera again'" in m)
+    case("cardio records are like for like: same machine tag and same settings; an untagged session on a tagged "
+         "preset is never a record", "machine tags 16 Nov",
+         lambda: (lambda m, f, p: "function cardioPRFlags" in m and "(tagged&&!a.tag)" in m and "sameSettings(a.set,b.set)" in m
+                  and "cardioHistMach" in m and "machineTag:machineSelValue('cardioMachine')" in m
+                  and "machineSelectHtml('wcMach'" in f and "machine_tag=case when excluded.machine_tag is null" in p
+                  and "def _like_for_like" in p and '"machineTag": r.get("machine_tag")' in p)
+         (open(_web + "/fitness/index.html", encoding="utf-8").read(),
+          open(_web + "/fitness/food.js", encoding="utf-8").read(),
+          open(_web + "/../runtime/cortex/fitness.py", encoding="utf-8").read()))
     case("the rung number buttons follow the card in view while swiping (it stayed on 1)", "rung buttons follow swipe 15 Nov",
          lambda: (lambda m: "function rungInView()" in m and "data-rb=" in m and "addEventListener('scroll'" in m)
          (open(_web + "/fitness/calisthenics.js", encoding="utf-8").read()))

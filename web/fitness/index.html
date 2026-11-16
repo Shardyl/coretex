@@ -371,6 +371,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
           <label class="form-label">Session</label>
           <select id="cardioExSelect"><option value="">Choose session...</option></select>
         </div>
+        <div id="cardioMachineBox"></div>
         <div id="cardioLastBox" style="display:none"></div>
         <div class="two-col form-group">
           <div><label class="form-label">Date</label><input type="date" id="cardioDateIn"/></div>
@@ -412,10 +413,16 @@ select:focus,input:focus,textarea:focus{border-color:var(--teal);box-shadow:0 0 
     <div id="page-cardio-history" class="page" data-section="cardio">
       <div id="zone2Week"></div>
       <div class="section-label">Cardio history</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <select id="cardioHistEx" style="flex:1;font-size:14px"><option value="all">All sessions</option></select>
-        <input type="text" id="cardioHistSearch" placeholder="Search..." style="flex:1;font-size:14px"/>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <select id="cardioHistLoc" style="flex:1;min-width:0;font-size:14px"><option value="all">All locations</option></select>
+        <select id="cardioHistEx" style="flex:1;min-width:0;font-size:14px"><option value="all">All sessions</option></select>
       </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <select id="cardioHistMach" style="flex:1;min-width:0;font-size:14px"><option value="all">All machines</option></select>
+        <select id="cardioHistSet" style="flex:1;min-width:0;font-size:14px"><option value="all">All settings</option></select>
+      </div>
+      <input type="text" id="cardioHistSearch" placeholder="Search notes..." style="width:100%;font-size:14px;margin-bottom:12px"/>
+      <div id="cardioHistSummary"></div>
       <div id="cardioHistList"></div>
     </div>
 
@@ -1009,7 +1016,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='203';                         // keep in step with CACHE in sw.js
+const APP_VERSION='204';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1569,43 +1576,87 @@ function cardioEff(r,exDef){
   if(!km||!mins||!hr)return null;
   return Math.round(km*1000/(hr*mins)*1000)/1000;
 }
-// A session is a PR when nothing else in the same preset did at-least-as-hard
-// settings at an equal-or-lower average heart rate. This is the Pareto frontier
-// of "least heart rate for most work", so dropping the treadmill to 12.2 km/h
-// can never manufacture a PR against a 12.5 km/h session.
-// Zone 2 presets (owner, 18 Oct 2026): avg HR is the marker, and a tie on avg HR goes to the lower peak (it did not run away at the end).
+// RECORDS ARE LIKE FOR LIKE (owner, 16 Nov 2026): the same preset (location + machine type), the same MACHINE
+// (session.machineTag, e.g. "second from the right of the sign") and the same settings within jitter. Machines at one
+// gym differ ("way harder than the middle machine"), so a session on another machine or at other settings is never
+// compared. Marker: a 4x4 is ranked on its top heart rate (the last interval's peak), lower wins, tie on lower avg;
+// steady sessions on avg HR, tie on the lower peak. On a preset that tags machines, an untagged session (11 May) and
+// a session with no settings recorded are left out. One session in its group is a baseline, not a record.
 function isZone2(exDef){return !!exDef&&!exDef.isHIIT&&/zone\s*2/i.test(exDef.name||'');}
+const locKey=s=>String(s||'').trim().toLowerCase();
+function cEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function sameSettings(a,b){
+  if(a.length!==b.length)return false;
+  for(let k=0;k<a.length;k++){const x=a[k].value,y=b[k].value;
+    if(x===null&&y===null)continue;if(x===null||y===null)return false;
+    if(Math.abs(x-y)>(a[k].tol||0)+1e-9)return false;}
+  return true;
+}
+const noSettings=set=>set.length>0&&set.every(s=>s.value===null);
+function settingsLabel(set){
+  if(!set.length)return 'No settings';
+  if(noSettings(set))return 'Settings not recorded';
+  return set.map(s=>`${s.label.replace(/\s*\(.*?\)\s*/g,' ').trim()} ${s.value===null?'?':s.value}`).join(', ');
+}
+function prMarker(r,ex){const hr=parseFloat(r.avgHR),mx=parseFloat(r.maxHR),h=isNaN(hr)?null:hr,m=isNaN(mx)?null:mx;
+  return ex&&ex.isHIIT?[m,h]:[h,m];}
 function cardioPRFlags(sessions,exDef){
-  const z2=isZone2(exDef);
-  const scored=sessions.map(r=>({hr:parseFloat(r.avgHR),max:parseFloat(r.maxHR),set:cardioSettings(r,exDef)}));
-  const rated=scored.filter(s=>s.hr&&!isNaN(s.hr));
-  // One session is not a record, it is a baseline.
-  if(rated.length<2)return sessions.map(()=>false);
-  return scored.map((a,i)=>{
-    if(!a.hr||isNaN(a.hr))return false;
-    for(let j=0;j<scored.length;j++){
-      if(i===j)continue;
-      const b=scored[j];
-      if(!b.hr||isNaN(b.hr))continue;
-      // b must be at least as hard on every comparable setting...
-      let atLeastAsHard=true, strictlyBetter=false;
-      for(let k=0;k<a.set.length;k++){
-        const av=a.set[k]?.value, bv=b.set[k]?.value, tol=a.set[k]?.tol||0;
-        if(av===null||bv===null||av===undefined||bv===undefined)continue;
-        if(Math.abs(bv-av)<=tol+1e-9)continue;   // same setting within jitter (epsilon: 12.5-12.2 is not exactly 0.3)
-        if(bv<av){atLeastAsHard=false;break;}
-        strictlyBetter=true;
-      }
-      if(!atLeastAsHard)continue;
-      // ...at an equal or lower heart rate, and better somewhere.
-      if(b.hr>a.hr)continue;
-      if(b.hr<a.hr)strictlyBetter=true;
-      if(strictlyBetter)return false;
-      if(z2&&b.hr===a.hr&&!isNaN(a.max)&&!isNaN(b.max)&&a.max!==b.max){if(b.max<a.max)return false;continue;}  // Zone 2: lower peak wins the tie
-      if(b.hr===a.hr&&j<i)return false;          // identical session: keep the first
+  const tagged=sessions.some(s=>s.machineTag);
+  const sc=sessions.map(r=>({set:cardioSettings(r,exDef),m:prMarker(r,exDef),tag:locKey(r.machineTag)}));
+  return sc.map((a,i)=>{
+    if(a.m[0]===null||(tagged&&!a.tag)||noSettings(a.set))return false;
+    let peers=0;
+    for(let j=0;j<sc.length;j++){
+      if(i===j)continue;const b=sc[j];
+      if(b.m[0]===null||b.tag!==a.tag||noSettings(b.set)||!sameSettings(a.set,b.set))continue;
+      peers++;
+      if(b.m[0]<a.m[0])return false;
+      if(b.m[0]===a.m[0]){const x=a.m[1],y=b.m[1];
+        if(x!==null&&y!==null&&y<x)return false;
+        if((x===null||y===null||x===y)&&j<i)return false;}   // identical: the first one holds it
     }
-    return true;
+    return peers>0;
   });
+}
+// Machines are named per LOCATION and machine type, from the tags already used there, newest first.
+function machinesAt(loc,type){
+  const seen=new Map();
+  cardioSessions.slice().sort((a,b)=>a.date<b.date?1:-1).forEach(r=>{
+    const ex=getCardioExDef(r.exerciseId);if(!ex||!r.machineTag)return;
+    if(locKey(ex.location)!==locKey(loc)||(type&&locKey(ex.machine)!==locKey(type)))return;
+    if(!seen.has(locKey(r.machineTag)))seen.set(locKey(r.machineTag),r.machineTag);
+  });
+  return [...seen.values()];
+}
+function lastMachineFor(exId){const r=cardioSessions.filter(s=>s.exerciseId===exId&&s.machineTag).sort((a,b)=>a.date<b.date?1:-1)[0];return r?r.machineTag:'';}
+function machineSelectHtml(id,exId,cur){
+  const ex=getCardioExDef(exId);if(!ex)return '';
+  const list=machinesAt(ex.location,ex.machine);
+  if(cur&&!list.some(m=>locKey(m)===locKey(cur)))list.unshift(cur);
+  return `<div class="form-group"><label class="form-label">Machine${ex.location?' at '+cEsc(ex.location):''}</label>
+    <select id="${id}" onchange="machineSelChange('${id}')"><option value="">Not tagged</option>
+    ${list.map(m=>`<option value="${cEsc(m)}" ${locKey(m)===locKey(cur)?'selected':''}>${cEsc(m)}</option>`).join('')}
+    <option value="__new">Add a new machine...</option></select>
+    <input type="text" id="${id}New" placeholder="e.g. second from the right of the sign" style="display:none;margin-top:6px"/></div>`;
+}
+window.machineSelChange=function(id){const s=document.getElementById(id),n=document.getElementById(id+'New');
+  if(n){n.style.display=s.value==='__new'?'':'none';if(s.value==='__new')n.focus();}};
+function machineSelValue(id){const s=document.getElementById(id);if(!s)return undefined;
+  if(s.value==='__new')return (document.getElementById(id+'New').value||'').trim();return s.value;}
+// Settings groups of a preset's sessions: each session joins the first group whose settings match within jitter.
+function settingsGroups(rows,ex){
+  const g=[];
+  rows.forEach(r=>{const set=cardioSettings(r,ex);let k=g.find(x=>sameSettings(x.set,set));
+    if(!k){k={set,label:settingsLabel(set),rows:[]};g.push(k);}k.rows.push(r);});
+  return g;
+}
+// The record for one like-for-like group (same preset, machine and settings), or null.
+function likeRecord(exId,tag,set){
+  const ex=getCardioExDef(exId);
+  const rows=cardioSessions.filter(s=>s.exerciseId===exId).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const f=cardioPRFlags(rows,ex);
+  const i=rows.findIndex((r,k)=>f[k]&&locKey(r.machineTag)===locKey(tag)&&sameSettings(cardioSettings(r,ex),set));
+  return i<0?null:rows[i];
 }
 function bestCardioEff(sessions,exDef){
   let best=null,bestV=null;
@@ -2171,9 +2222,11 @@ function renderCardioLastBox(exId){
     ?fields.map((f,i)=>last.extra[i]!==undefined&&last.extra[i]!==''?`${f.label}: ${last.extra[i]}`:'').filter(Boolean).join(' · ')
     :(last.extra?Object.entries(last.extra).filter(([,v])=>v).map(([k,v])=>`${k}: ${v}`).join(' · '):'');
 
+  const lset=cardioSettings(last,ex), rec=likeRecord(exId,last.machineTag,lset);
+  const recLine=rec?`<div style="font-size:12px;color:var(--ink2);margin-bottom:6px"><b>Record${last.machineTag?' on '+cEsc(last.machineTag):''}</b> at ${cEsc(settingsLabel(lset))}: ${ex.isHIIT?(rec.maxHR+' bpm max'):(rec.avgHR+' bpm avg')} (${fmtDate(rec.date)})</div>`:'';
   box.style.display='';
   box.innerHTML=`<div class="last-session blue">
-    <div class="last-session-head">Last: ${fmtDateFull(last.date)}</div>
+    <div class="last-session-head">Last: ${fmtDateFull(last.date)}${last.machineTag?' &middot; '+cEsc(last.machineTag):''}</div>
     <div style="font-size:13px;color:var(--ink);margin-bottom:${extraSummary?'6px':'0'}">
       ${last.duration?`<span style="font-weight:700">${last.duration}</span> · `:''}
       ${last.avgHR?`<span style="color:var(--blue)">${last.avgHR} bpm avg</span> · `:''}
@@ -2181,6 +2234,7 @@ function renderCardioLastBox(exId){
       ${last.calories?`${last.calories} kcal`:''}
     </div>
     ${extraSummary?`<div style="font-size:12px;color:var(--ink2);margin-bottom:6px">${extraSummary}</div>`:''}
+    ${recLine}
     ${last.notes?`<div style="font-size:11px;color:var(--ink3);font-style:italic;margin-bottom:6px">${last.notes}</div>`:''}
     ${hasSavedTarget?`<div style="background:var(--blue-light);border-radius:7px;padding:8px 10px;border:0.5px solid rgba(24,95,165,0.2)">
       <div style="font-size:10px;font-weight:800;color:var(--blue-dark);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Your target</div>
@@ -2198,6 +2252,7 @@ function clearCardioForm(){
   document.getElementById('cardioLastBox').style.display='none';
   ['cardioDuration','cardioAvgHR','cardioMaxHR','cardioCalories','cardioNotesIn','cardioNtDuration','cardioNtHR','cardioNtNote'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('cardioProtocolFields').innerHTML='';
+  const mb=document.getElementById('cardioMachineBox');if(mb)mb.innerHTML='';
 }
 
 function getCardioExtra(){
@@ -2261,18 +2316,30 @@ function renderZone2Week(){
 }
 function renderCardioHistory(){
   try{renderZone2Week();}catch(e){}
-  const exFilter=document.getElementById('cardioHistEx').value;
   const q=(document.getElementById('cardioHistSearch').value||'').toLowerCase();
-  // Populate filter
-  const sel=document.getElementById('cardioHistEx');
-  const cur=sel.value;
-  sel.innerHTML='<option value="all">All sessions</option>'+cardioExercises.map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
-  sel.value=cur||'all';
+  // Filters (owner, 16 Nov 2026): location -> session -> machine -> settings, so the record shown is like for like.
+  const fill=(id,opts,all)=>{const el=document.getElementById(id),cur=el.value;
+    el.innerHTML=`<option value="all">${all}</option>`+opts.map(o=>`<option value="${cEsc(o[0])}">${cEsc(o[1])}</option>`).join('');
+    el.value=opts.some(o=>o[0]===cur)?cur:'all';return el.value;};
+  const locs=[];cardioExercises.forEach(e=>{if(e.location&&!locs.some(l=>locKey(l)===locKey(e.location)))locs.push(e.location);});
+  const loc=fill('cardioHistLoc',locs.sort().map(l=>[locKey(l),l]),'All locations');
+  const exs=cardioExercises.filter(e=>loc==='all'||locKey(e.location)===loc);
+  const exFilter=fill('cardioHistEx',exs.map(e=>[e.id,e.name]),'All sessions');
+  const exSel=exFilter==='all'?null:getCardioExDef(exFilter);
   let rows=[...cardioSessions].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(loc!=='all')rows=rows.filter(r=>{const e=getCardioExDef(r.exerciseId);return e&&locKey(e.location)===loc;});
   if(exFilter!=='all')rows=rows.filter(r=>r.exerciseId===exFilter);
+  const machs=[];rows.forEach(r=>{if(r.machineTag&&!machs.some(m=>locKey(m)===locKey(r.machineTag)))machs.push(r.machineTag);});
+  const mach=fill('cardioHistMach',machs.map(m=>[locKey(m),m]).concat(rows.some(r=>!r.machineTag)?[['__none','Not tagged']]:[]),'All machines');
+  if(mach==='__none')rows=rows.filter(r=>!r.machineTag);else if(mach!=='all')rows=rows.filter(r=>locKey(r.machineTag)===mach);
+  const groups=exSel?settingsGroups(rows.slice().reverse(),exSel):[];
+  const setSel=document.getElementById('cardioHistSet');setSel.disabled=!exSel;
+  const setF=fill('cardioHistSet',groups.map(g=>[g.label,g.label+' ('+g.rows.length+')']),exSel?'All settings':'Pick a session first');
+  if(exSel&&setF!=='all'){const g=groups.find(x=>x.label===setF);rows=g?rows.filter(r=>g.rows.includes(r)):rows;}
   if(q)rows=rows.filter(r=>(r.notes||'').toLowerCase().includes(q)||(r.exerciseName||'').toLowerCase().includes(q));
+  renderCardioHistSummary(exSel,mach,setF,rows);
   const el=document.getElementById('cardioHistList');
-  if(!rows.length){el.innerHTML='<div style="text-align:center;padding:3rem;color:var(--ink3)">No cardio sessions yet</div>';return;}
+  if(!rows.length){el.innerHTML='<div style="text-align:center;padding:3rem;color:var(--ink3)">No sessions match</div>';return;}
   // PR flags are computed per preset, so a 30-min session never competes with a 67-min one
   const prSet=new Set();
   [...new Set(cardioSessions.map(s=>s.exerciseId))].forEach(exId=>{
@@ -2297,12 +2364,13 @@ function renderCardioHistory(){
         <div class="hist-ex" style="color:var(--blue)">${r.exerciseName||r.exerciseId}</div>
         <div class="hist-sets">${r.duration||'—'} · ${isZone2(ex)?(r.maxHR?'peak '+r.maxHR+' bpm':''):(r.avgHR?r.avgHR+' bpm avg':'')} ${r.calories?'· '+r.calories+' kcal':''}</div>
         ${extraStr?`<div class="hist-sets" style="margin-top:2px">${extraStr}</div>`:''}
+        <div class="hist-sets" style="margin-top:2px">${r.machineTag?'Machine: '+cEsc(r.machineTag):'<span style="color:var(--ink3)">Machine not tagged</span>'}${r.watch?'':` <button class="btn-sm" style="margin-left:6px" onclick="event.stopPropagation();editWatchCardio('${r.id}')">Edit</button>`}</div>
         ${r.notes&&!/^From watch/.test(r.notes)?`<div class="hist-note">${r.notes}</div>`:''}
         ${r.watch?`<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <span class="tag ${r.watch.confirmed?'tag-blue':'tag-amber'}" style="font-size:9px">${r.watch.confirmed?'Watch':'From watch, check settings'}</span>
           ${r.watch.warmup_min?`<span style="font-size:11px;color:var(--ink3)">+ ${Math.round(r.watch.warmup_min)} min warm-up</span>`:''}
           ${r.watch.settings==='not recorded'?`<span style="font-size:11px;color:var(--ink3)">settings not recorded</span>`:''}
-          ${!r.watch.confirmed||r.watch.settings!=='manual'?`<button class="btn-sm" onclick="event.stopPropagation();editWatchCardio('${r.id}')">${r.watch.confirmed?'Edit':'Check'}</button>`:''}
+          <button class="btn-sm" onclick="event.stopPropagation();editWatchCardio('${r.id}')">${r.watch.confirmed?'Edit':'Check'}</button>
           ${r.watch.uid?`<button class="btn-sm" onclick="event.stopPropagation();openHrView('${r.watch.uid}')">Heart rate</button>`:''}
         </div>`:''}
       </div>
@@ -2312,6 +2380,27 @@ function renderCardioHistory(){
       </div>
     </div>`;
   }).join('');
+}
+// The like-for-like summary over the filtered rows: record, latest and the change, only once preset AND settings are
+// picked (a record across machines or settings is the thing he asked never to see).
+function renderCardioHistSummary(ex,mach,setF,rows){
+  const el=document.getElementById('cardioHistSummary');if(!el)return;
+  if(!ex){el.innerHTML='';return;}
+  if(setF==='all'||mach==='all'){el.innerHTML=`<div class="report-card" style="font-size:12px;color:var(--ink2);margin-bottom:12px">Pick a machine and a settings group to see your record like for like.</div>`;return;}
+  const asc=rows.slice().sort((a,b)=>new Date(a.date)-new Date(b.date)).filter(r=>prMarker(r,ex)[0]!==null);
+  if(!asc.length){el.innerHTML='';return;}
+  const key=ex.isHIIT?'maxHR':'avgHR', lbl=ex.isHIIT?'max HR':'avg HR';
+  const best=asc.reduce((b,r)=>{const m=prMarker(r,ex),n=prMarker(b,ex);return m[0]<n[0]||(m[0]===n[0]&&m[1]!==null&&n[1]!==null&&m[1]<n[1])?r:b;},asc[0]);
+  const first=asc[0], last=asc[asc.length-1], d=Math.round(last[key]-first[key]);
+  const untagged=mach==='__none';
+  el.innerHTML=`<div class="report-card" style="margin-bottom:12px;padding:12px 14px">
+    <div style="font-size:10px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">${untagged?'Not tagged: not a record group':'Like for like record'}</div>
+    <div style="font-size:12px;color:var(--ink2);margin-bottom:8px">${cEsc(ex.location||'')}${untagged?'':' &middot; '+cEsc(asc[0].machineTag||'')} &middot; ${cEsc(setF)}</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px">
+      <div><div style="font-size:20px;font-weight:800">${best[key]}</div><div style="color:var(--ink3)">best ${lbl}, ${fmtDate(best.date)}</div></div>
+      <div><div style="font-size:20px;font-weight:800">${last[key]}</div><div style="color:var(--ink3)">latest, ${fmtDate(last.date)}</div></div>
+      ${asc.length>1?`<div><div style="font-size:20px;font-weight:800;color:${d<=0?'var(--teal)':'var(--red)'}">${d>0?'+':''}${d}</div><div style="color:var(--ink3)">since ${fmtDate(first.date)} (${asc.length} sessions)</div></div>`:''}
+    </div></div>`;
 }
 // ---------- Heart-rate trace of a watch session (29 Oct 2026, Bridge 1.4.0) ----------
 // Fetched on demand from /api/fitness/hr/<uid>: the 5-second trace, minutes per zone and the efforts (each 4x4
@@ -2365,7 +2454,7 @@ window.openHrView=async function(uid){
       <td style="text-align:right">${mmss(e.seconds)}</td>
       <td style="text-align:right">${e.peak}${p?dlt(e.peak,p.peak,v=>v):''}</td>
       <td style="text-align:right">${mmss(e.z5Seconds)}${p?dlt(e.z5Seconds,p.z5Seconds,mmss):''}</td></tr>`;}).join('');
-  const prevNote=d.prev?`Changes are against your previous session on ${fmtDate(d.prev.day)} (${d.prev.zones[5]||0} min in zone 5 then, ${d.zones[5]||0} now).`:'No earlier session on this preset has a heart-rate trace to compare with yet.';
+  const prevNote=d.prev?`Changes are against your previous session on ${fmtDate(d.prev.day)}${d.prev.like?' on the same machine at the same settings':', which was NOT on the same machine at the same settings, so it is not like for like'} (${d.prev.zones[5]||0} min in zone 5 then, ${d.zones[5]||0} now).`:'No earlier session on this preset has a heart-rate trace to compare with yet.';
   // On a desktop browser the view keeps phone proportions in a centred column instead of filling the window (owner, 3 Nov 2026).
   ov.innerHTML=`<div style="max-width:520px;margin:0 auto">`+head+`
     <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${bands}${axes}${marks}${z5}${segs}</svg>
@@ -2425,21 +2514,21 @@ window.showCardioDetail=function(exId){
       </div>
       ${prIdx.length?`
       <div class="report-card" style="margin-bottom:16px;padding:14px">
-        <div style="font-size:10px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Personal record${prIdx.length>1?'s':''} — lowest HR for the work done</div>
-        ${prIdx.slice().sort((a,b)=>(parseFloat(sessions[a].avgHR)||999)-(parseFloat(sessions[b].avgHR)||999)).slice(0,4).map(i=>{
+        <div style="font-size:10px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Personal record${prIdx.length>1?'s':''}, like for like</div>
+        ${prIdx.slice().sort((a,b)=>new Date(sessions[b].date)-new Date(sessions[a].date)).slice(0,6).map(i=>{
           const r=sessions[i];
-          const st=cardioSettings(r,ex).filter(s=>s.value!==null).map(s=>`${s.label} ${s.value}`).join(' · ');
+          const st=(r.machineTag?cEsc(r.machineTag)+' · ':'')+cEsc(settingsLabel(cardioSettings(r,ex)));
           const e=cardioEff(r,ex);
           return`<div style="padding:7px 0;border-bottom:0.5px solid var(--border)">
             <div style="display:flex;align-items:baseline;gap:8px">
-              <div style="font-size:22px;font-weight:800;color:var(--ink);line-height:1.1">${r.avgHR}<span style="font-size:12px;font-weight:700;color:var(--ink3)"> bpm</span></div>
+              <div style="font-size:22px;font-weight:800;color:var(--ink);line-height:1.1">${ex&&ex.isHIIT?r.maxHR:r.avgHR}<span style="font-size:12px;font-weight:700;color:var(--ink3)"> bpm ${ex&&ex.isHIIT?'max':'avg'}</span></div>
               <div style="font-size:12px;color:var(--ink2);font-weight:600">${fmtDateFull(r.date)}</div>
               ${e!==null?`<div style="font-size:11px;color:var(--ink3);margin-left:auto">${e.toFixed(2)} m/beat</div>`:''}
             </div>
             ${st?`<div style="font-size:11px;color:var(--ink3);margin-top:2px">${st}</div>`:''}
           </div>`;}).join('')}
         <div style="margin-top:9px;font-size:11px;color:var(--ink3);font-style:italic;line-height:1.45">
-          A session only counts as a PR if nothing else hit an equal or lower average HR at settings at least as hard${settingLabels.length?' ('+settingLabels.join(', ')+')':''}. Easing the machine off can never manufacture a record.${prIdx.length>1?' Several sessions are listed because they are not directly comparable: each was the best at its own settings.':''}
+          A record only counts sessions on the same machine at the same settings${settingLabels.length?' ('+settingLabels.join(', ')+')':''}${ex&&ex.isHIIT?', ranked on the top heart rate (the last interval)':', ranked on the average heart rate'}. Sessions with no machine tag or no settings recorded are left out.${prIdx.length>1?' Each record listed is the best of its own machine and settings.':''}
         </div>
       </div>`:''}
       ${hrSessions.length>1?`
@@ -2467,6 +2556,7 @@ window.showCardioDetail=function(exId){
             <div style="font-size:13px;font-weight:700;color:var(--ink)">${r.duration||'—'} ${r.avgHR?'· <span style="color:var(--blue)">'+r.avgHR+' bpm</span>':''}</div>
             ${r.calories||r.maxHR||rEff!==null?`<div style="font-size:11px;color:var(--ink3);margin-top:1px">${[r.calories?r.calories+' kcal':'',r.maxHR?(isZone2(ex)?'peak ':'max ')+r.maxHR+' bpm':'',rEff!==null?rEff.toFixed(2)+' m/beat':''].filter(Boolean).join(' · ')}</div>`:''}
             ${extraStr?`<div style="font-size:11px;color:var(--ink3);margin-top:2px">${extraStr}</div>`:''}
+            <div style="font-size:11px;color:var(--ink3);margin-top:2px">${r.machineTag?'Machine: '+cEsc(r.machineTag):'Machine not tagged'}</div>
             ${r.notes?`<div style="font-size:11px;color:var(--ink3);font-style:italic;margin-top:2px">${r.notes}</div>`:''}
           </div>
           <div style="text-align:right">
@@ -3041,15 +3131,15 @@ function exportXLSX(){
     const extraHeaders=fields.map(f=>f.label);
     const prF=cardioPRFlags(rows,ex);
     const ws=XLSX.utils.aoa_to_sheet([
-      ['Date','Duration','Mins','Avg HR','Max HR','Calories',...extraHeaders,'m/beat','PR','Notes','Target'],
+      ['Date','Machine','Duration','Mins','Avg HR','Max HR','Calories',...extraHeaders,'m/beat','PR','Notes','Target'],
       ...rows.map((r,i)=>{
         const extraVals=fields.map((_,fi)=>r.extra?.[fi]??'');
-        return[r.date,r.duration,parseDurationMin(r.duration)!==null?Math.round(parseDurationMin(r.duration)*10)/10:'',r.avgHR,r.maxHR,r.calories,...extraVals,cardioEff(r,ex)??'',prF[i]?'PR':'',r.notes,
+        return[r.date,r.machineTag||'',r.duration,parseDurationMin(r.duration)!==null?Math.round(parseDurationMin(r.duration)*10)/10:'',r.avgHR,r.maxHR,r.calories,...extraVals,cardioEff(r,ex)??'',prF[i]?'PR':'',r.notes,
           r.nextTarget?[r.nextTarget.duration,r.nextTarget.hr?r.nextTarget.hr+' bpm avg':'',r.nextTarget.note||''].filter(Boolean).join(' · '):''
         ];
       })
     ]);
-    ws['!cols']=[12,10,7,8,8,10,...fields.map(()=>12),9,5,30,30].map(w=>({wch:w}));
+    ws['!cols']=[12,22,10,7,8,8,10,...fields.map(()=>12),9,5,30,30].map(w=>({wch:w}));
     let sn=ex.name.substring(0,31);if(used.has(sn))sn=sn.substring(0,28)+'_'+(used.size);
     used.add(sn);XLSX.utils.book_append_sheet(wb,ws,sn);
   });
@@ -3161,6 +3251,7 @@ function init(){
   document.getElementById('cardioExSelect').addEventListener('change',()=>{
     const id=document.getElementById('cardioExSelect').value;
     renderCardioProtocolFields(id);
+    document.getElementById('cardioMachineBox').innerHTML=id?machineSelectHtml('cardioMachine',id,lastMachineFor(id)):'';
     renderCardioLastBox(id);
   });
 
@@ -3182,7 +3273,7 @@ function init(){
       date,duration,avgHR:parseFloat(avgHR)||null,
       maxHR:parseFloat(document.getElementById('cardioMaxHR').value)||null,
       calories:parseFloat(document.getElementById('cardioCalories').value)||null,
-      extra:getCardioExtra(),nextTarget,
+      extra:getCardioExtra(),nextTarget,machineTag:machineSelValue('cardioMachine')||null,
       notes:document.getElementById('cardioNotesIn').value.trim()
     });
     saveCardio();toast('Session saved!');clearCardioForm();populateCardioExDropdown();
@@ -3195,6 +3286,7 @@ function init(){
   document.getElementById('histEx').addEventListener('change',renderLiftHistory);
   document.getElementById('histSearch').addEventListener('input',renderLiftHistory);
   document.getElementById('cardioHistEx').addEventListener('change',renderCardioHistory);
+  ['cardioHistLoc','cardioHistMach','cardioHistSet'].forEach(id=>document.getElementById(id).addEventListener('change',renderCardioHistory));
   document.getElementById('cardioHistSearch').addEventListener('input',renderCardioHistory);
 
   document.getElementById('exportBtn').addEventListener('click',exportXLSX);
@@ -3292,9 +3384,9 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=203"></script>
-<script src="mobility.js?v=203"></script>
-<script src="calisthenics.js?v=203"></script>
-<script src="physio.js?v=203"></script>
+<script src="food.js?v=204"></script>
+<script src="mobility.js?v=204"></script>
+<script src="calisthenics.js?v=204"></script>
+<script src="physio.js?v=204"></script>
 </body>
 </html>

@@ -1962,24 +1962,31 @@ window.editWatchCardio=function(id){
     return f.map((x,i)=>/distance/i.test(x.label)?'':`<div class="form-group"><label class="form-label">${esc(x.label)}</label>
       <input type="number" step="any" id="wcF${i}" value="${esc((r.extra||{})[i]??'')}"/></div>`).join('')||'<div class="fd-note">This preset has no settings to fill.</div>';
   };
-  openModal('Check session',`
-    <div class="fd-note" style="margin-top:0">${fmtDate(r.date)} &middot; ${r.duration||''} &middot; avg ${r.avgHR??'—'} / max ${r.maxHR??'—'} bpm${r.calories?' &middot; '+r.calories+' kcal':''} (from your watch)</div>
-    <div class="form-group"><label class="form-label">Session</label><select id="wcPreset" onchange="document.getElementById('wcFields').innerHTML=window._wcFields(this.value)">${opts}</select></div>
+  // The machine at the location (owner, 16 Nov 2026), defaulting to the one used last on that preset.
+  const machFor=exId=>machineSelectHtml('wcMach',exId,exId===r.exerciseId?(r.machineTag||lastMachineFor(exId)):lastMachineFor(exId));
+  openModal(r.watch&&!r.watch.confirmed?'Check session':'Edit session',`
+    <div class="fd-note" style="margin-top:0">${fmtDate(r.date)} &middot; ${r.duration||''} &middot; avg ${r.avgHR??'—'} / max ${r.maxHR??'—'} bpm${r.calories?' &middot; '+r.calories+' kcal':''}${r.watch?' (from your watch)':''}</div>
+    <div class="form-group"><label class="form-label">Session</label><select id="wcPreset" onchange="document.getElementById('wcFields').innerHTML=window._wcFields(this.value);document.getElementById('wcMachBox').innerHTML=window._wcMach(this.value)">${opts}</select></div>
+    <div id="wcMachBox">${machFor(r.exerciseId)}</div>
     <div id="wcFields">${fieldsFor(r.exerciseId)}</div>
     <div class="form-group"><label class="form-label">Notes</label><textarea id="wcNotes" style="height:60px;resize:none" placeholder="Machine, how it felt, anything to remember">${esc(/^From watch/.test(r.notes||'')?'':(r.notes||''))}</textarea></div>`,
   function(){
     const exId=document.getElementById('wcPreset').value, ex=getCardioExDef(exId);
     const extra={};
     ((ex&&ex.manualFields)||[]).forEach((x,i)=>{const el=document.getElementById('wcF'+i);if(el&&el.value!=='')extra[i]=el.value;});
+    const keep=Object.assign({},r.extra||{});   // distance is not on this form: keep what the entry already had
+    ((ex&&ex.manualFields)||[]).forEach((x,i)=>{if(/distance/i.test(x.label)&&keep[i]!==undefined&&extra[i]===undefined)extra[i]=keep[i];});
+    if(r.exerciseId!==exId)Object.keys(extra).forEach(k=>{if(!((ex&&ex.manualFields)||[])[k])delete extra[k];});
     r.exerciseId=exId;r.exerciseName=ex?ex.name:r.exerciseName;r.extra=extra;
-    r.watch=Object.assign({},r.watch||{},{confirmed:true,settings:Object.keys(extra).length?'manual':(r.watch&&r.watch.settings)||'not recorded'});
+    const mt=machineSelValue('wcMach');if(mt!==undefined)r.machineTag=mt;   // "" = not tagged, sent so the server clears it
+    if(r.watch)r.watch=Object.assign({},r.watch,{confirmed:true,settings:Object.keys(extra).length?'manual':r.watch.settings||'not recorded'});
     const nt=(document.getElementById('wcNotes').value||'').trim();
-    r.notes=nt||'From watch';
+    r.notes=nt||(r.watch?'From watch':'');
     saveCardio();closeModal();
     if(typeof renderCardioHistory==='function')renderCardioHistory();
     toast('Session saved');
   });
-  window._wcFields=fieldsFor;
+  window._wcFields=fieldsFor;window._wcMach=machFor;
 };
 
 // ---------- My foods ----------

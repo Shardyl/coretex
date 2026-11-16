@@ -210,6 +210,8 @@ create index if not exists cardio_sessions_day_idx on fitness.cardio_sessions (d
 -- link to the watch workout this entry came from or was matched to (fitness.reconcile_watch):
 -- {uid, warmup_uid?, warmup_min?, confirmed, settings: prefilled|not recorded|manual}
 alter table fitness.cardio_sessions add column if not exists watch jsonb;
+-- which machine at the location (owner, 16 Nov 2026): records and history filters compare like for like
+alter table fitness.cardio_sessions add column if not exists machine_tag text;
 
 -- lab / test VO2 max results (71.4 in May 2026). Also never carried by the export.
 create table if not exists fitness.vo2 (
