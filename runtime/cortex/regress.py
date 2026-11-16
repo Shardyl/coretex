@@ -2698,6 +2698,9 @@ def _cases():
                 and "def _to_mp4(uid: str)" in src and set(fm.CUES) >= {"get_ready", "hold", "done", "n1", "n3"}
                 and "screen.orientation.lock('landscape')" in m and "unland();ov.remove();" in m
                 and "await openCam();await land();" in m and "'Try camera again'" in m)
+    case("steam room calories never count in the cardio reports total", "steam kcal 16 Nov",
+         lambda: (lambda m: "cardioSessions.filter(s=>!isSteam(s))" in m and "const isSteam=" in m)
+         (open(_web + "/fitness/index.html", encoding="utf-8").read()))
     case("cardio records are like for like: same machine tag and same settings; an untagged session on a tagged "
          "preset is never a record", "machine tags 16 Nov",
          lambda: (lambda m, f, p: "function cardioPRFlags" in m and "(tagged&&!a.tag)" in m

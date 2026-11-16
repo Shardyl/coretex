@@ -1016,7 +1016,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='205';                         // keep in step with CACHE in sw.js
+const APP_VERSION='206';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -2602,6 +2602,9 @@ function buildCardioDetailChart(){
 }
 
 // ─── CARDIO REPORTS ───────────────────────────────────────────────────────────
+// Steam room sessions stay in the log (time in the heat, glucose heat flags) but their calories are heat, not work
+// (owner, 16 Nov 2026), so they never count in a calorie total. The Food page burn already skips them.
+const isSteam=s=>s&&(s.exerciseId==='id_steam'||/steam/i.test(s.exerciseName||''));
 let hrChart=null;
 function renderCardioReports(){
   // VO2 widget
@@ -2614,7 +2617,7 @@ function renderCardioReports(){
 
   document.getElementById('cardioOverview').innerHTML=`
     <div class="metric blue"><div class="metric-val">${cardioSessions.length}</div><div class="metric-lbl">Sessions</div></div>
-    <div class="metric"><div class="metric-val">${cardioSessions.reduce((a,s)=>a+(parseFloat(s.calories)||0),0).toLocaleString()}</div><div class="metric-lbl">Total kcal</div></div>`;
+    <div class="metric"><div class="metric-val">${Math.round(cardioSessions.filter(s=>!isSteam(s)).reduce((a,s)=>a+(parseFloat(s.calories)||0),0)).toLocaleString()}</div><div class="metric-lbl">Total kcal (no steam)</div></div>`;
 
   const today=new Date();today.setHours(0,0,0,0);
   const cardioDates=new Set(cardioSessions.map(s=>s.date));
@@ -3386,9 +3389,9 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=205"></script>
-<script src="mobility.js?v=205"></script>
-<script src="calisthenics.js?v=205"></script>
-<script src="physio.js?v=205"></script>
+<script src="food.js?v=206"></script>
+<script src="mobility.js?v=206"></script>
+<script src="calisthenics.js?v=206"></script>
+<script src="physio.js?v=206"></script>
 </body>
 </html>
