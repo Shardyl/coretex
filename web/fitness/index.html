@@ -1016,7 +1016,7 @@ function saveBodyweight(){store(BW_KEY,bodyweightLog);if(typeof queueSync==='fun
 // Sync is whole-document: the dataset is a few hundred rows, there is one device, and a full
 // push/pull is far easier to reason about than field-level merge. The server upserts by id and
 // never hard-deletes, so a partial push can never wipe history.
-const APP_VERSION='204';                         // keep in step with CACHE in sw.js
+const APP_VERSION='205';                         // keep in step with CACHE in sw.js
 // The app now lives on its own hostname, so API calls go to the box by absolute URL (the
 // cockpit's CORS regex already allows *.coretex.uk). Auth is a long-lived device key delivered
 // once via the setup link's #k= fragment — stored locally, stripped from the URL, never typed.
@@ -1543,8 +1543,10 @@ const OUTPUT_FIELD=/distance|calor/i;
 // session, and without a tolerance that noise invents false records.
 function settingTolerance(label){
   if(/cadence|rpm/i.test(label))return 2;
-  if(/speed/i.test(label))return 0.3;   // real progressions step 0.5 km/h; absorb sub-step nudges
-  if(/incline|grade/i.test(label))return 0.5;
+  // Speed and incline are typed, not measured, so like for like means the SAME number (owner, 16 Nov 2026: 12.2 and
+  // 12.5 km/h are different intensities; the old 0.3 tolerance merged them).
+  if(/speed/i.test(label))return 0.05;
+  if(/incline|grade/i.test(label))return 0.1;
   if(/resist|level/i.test(label))return 0.5;
   return 0;
 }
@@ -3384,9 +3386,9 @@ window.openInstallHelp=async function(){
 
 init();
 </script>
-<script src="food.js?v=204"></script>
-<script src="mobility.js?v=204"></script>
-<script src="calisthenics.js?v=204"></script>
-<script src="physio.js?v=204"></script>
+<script src="food.js?v=205"></script>
+<script src="mobility.js?v=205"></script>
+<script src="calisthenics.js?v=205"></script>
+<script src="physio.js?v=205"></script>
 </body>
 </html>

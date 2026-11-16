@@ -2700,7 +2700,8 @@ def _cases():
                 and "await openCam();await land();" in m and "'Try camera again'" in m)
     case("cardio records are like for like: same machine tag and same settings; an untagged session on a tagged "
          "preset is never a record", "machine tags 16 Nov",
-         lambda: (lambda m, f, p: "function cardioPRFlags" in m and "(tagged&&!a.tag)" in m and "sameSettings(a.set,b.set)" in m
+         lambda: (lambda m, f, p: "function cardioPRFlags" in m and "(tagged&&!a.tag)" in m
+                  and "if(/speed/i.test(label))return 0.05;" in m and "sameSettings(a.set,b.set)" in m
                   and "cardioHistMach" in m and "machineTag:machineSelValue('cardioMachine')" in m
                   and "machineSelectHtml('wcMach'" in f and "machine_tag=case when excluded.machine_tag is null" in p
                   and "def _like_for_like" in p and '"machineTag": r.get("machine_tag")' in p)
