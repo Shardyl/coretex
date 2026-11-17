@@ -2698,6 +2698,25 @@ def _cases():
                 and "def _to_mp4(uid: str)" in src and set(fm.CUES) >= {"get_ready", "hold", "done", "n1", "n3"}
                 and "screen.orientation.lock('landscape')" in m and "unland();ov.remove();" in m
                 and "await openCam();await land();" in m and "'Try camera again'" in m)
+    case("the shoulder builder skips the lats when round-back beats flat-back, adds Smith's example-phase drills for a "
+         "short pec and short ER, and trap-3 for a big active gap", "shoulder rules 17 Nov",
+         lambda: (lambda fp, lib: (lambda ids: "lat_stretch_standing_lying" not in ids
+                  and {"wall_pec_stretch", "pec_stretch_flyes", "er_contract_relax", "stick_er", "trap3_raise",
+                       "elbow_on_knee_er", "powell_raise"} <= set(ids)
+                  and next(x for x in lib["drills"] if x["id"] == "pec_stretch_flyes")["dose"]["tempo"] == "3310")
+                  ([i["drill_id"] for i in fp._shoulder_items(lib, {
+                      "leahy": {"L": {"angle": 135.5}, "R": {"angle": 140.7}},
+                      "flexion_passive": {"both": {"angle": 170.5}},
+                      "flexion_active": {"L": {"angle": 162.2}, "R": {"angle": 151.2}},
+                      "lat_flat": {"both": {"angle": 147.1}}, "lat_round": {"both": {"angle": 173}},
+                      "pec_major": {"L": {"angle": 30.7}, "R": {"angle": 24.2}},
+                      "er_length": {"L": {"angle": 12}, "R": {"angle": 13}},
+                      "ir_length": {"L": {"angle": 145}, "R": {"angle": 143}},
+                      "trap3_reps": {"L": {"reps_exact": 9}, "R": {"reps_exact": 9}},
+                      "eok_er_reps": {"L": {"reps_exact": 2}, "R": {"reps_exact": 4}},
+                      "powell_reps": {"L": {"reps_exact": 3}, "R": {"reps_exact": 4}}}, {})[0]]))
+                  (__import__("cortex.fitness_program", fromlist=["x"]),
+                   __import__("json").load(open(os.path.join(os.path.dirname(__file__), "fitness_mobility_drills.json"), encoding="utf-8"))))
     case("steam room calories never count in the cardio reports total", "steam kcal 16 Nov",
          lambda: (lambda m: "cardioSessions.filter(s=>!isSteam(s))" in m and "const isSteam=" in m)
          (open(_web + "/fitness/index.html", encoding="utf-8").read()))

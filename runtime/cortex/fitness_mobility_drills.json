@@ -1692,13 +1692,13 @@
    "unilateral": false,
    "stretch_at": "bottom",
    "dose": {
-    "sets": null,
-    "reps": null,
+    "sets": "2-3",
+    "reps": "8",
     "hold_s": null,
-    "tempo": null,
+    "tempo": "3310",
     "cr": null,
-    "rest_s": null,
-    "source": "157: slow tempo with a bottom pause, no numbers"
+    "rest_s": "60+",
+    "source": "04: Smith's example shoulder phase one, B1 (8 reps 3310, 2-3 sets, 60 s+); 157"
    },
    "load": {
     "uses_weight": true,
@@ -1901,13 +1901,13 @@
    "unilateral": true,
    "stretch_at": null,
    "dose": {
-    "sets": null,
-    "reps": null,
+    "sets": "2-3",
+    "reps": "6-8",
     "hold_s": null,
     "tempo": null,
-    "cr": null,
-    "rest_s": null,
-    "source": "161: hold and rounds not given"
+    "cr": "C5 R5",
+    "rest_s": "60+",
+    "source": "04: Smith's example shoulder phase one, A1 (6-8 reps C5s/R5s, 2-3 sets, 60 s+); 161"
    },
    "load": {
     "uses_weight": false,
@@ -2097,13 +2097,13 @@
    "unilateral": false,
    "stretch_at": null,
    "dose": {
-    "sets": null,
+    "sets": "2-3",
     "reps": null,
-    "hold_s": null,
+    "hold_s": "30-60",
     "tempo": null,
     "cr": null,
-    "rest_s": null,
-    "source": "165: no times, sets or reps"
+    "rest_s": "60-90",
+    "source": "04: Smith's example shoulder phase one, C1 your hanging variation (under 60 s, 2-3 sets, 60-90 s)"
    },
    "load": {
     "uses_weight": false,
@@ -2153,13 +2153,13 @@
    "unilateral": false,
    "stretch_at": null,
    "dose": {
-    "sets": null,
+    "sets": "2-3",
     "reps": null,
-    "hold_s": null,
+    "hold_s": "30-60",
     "tempo": null,
     "cr": null,
-    "rest_s": null,
-    "source": "165: no times, sets or reps"
+    "rest_s": "60-90",
+    "source": "04: Smith's example shoulder phase one, C1 your hanging variation (under 60 s, 2-3 sets, 60-90 s); 208 active TUT 30 s"
    },
    "load": {
     "uses_weight": false,
@@ -2321,13 +2321,13 @@
    "unilateral": true,
    "stretch_at": null,
    "dose": {
-    "sets": null,
-    "reps": "6-12 per side",
+    "sets": "2-3",
+    "reps": "8",
     "hold_s": null,
-    "tempo": null,
+    "tempo": "3111",
     "cr": null,
-    "rest_s": null,
-    "source": "168; active flexibility: pauses at the top, often 6 s holds; 208 active TUT 30 s"
+    "rest_s": "90+",
+    "source": "04: Smith's example shoulder phase one, B2 60 deg lower trap raise (8 reps 3111, 2-3 sets, 90 s+); 168: 6-12 per side, top holds for active flexibility"
    },
    "load": {
     "uses_weight": true,

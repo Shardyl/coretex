@@ -129,10 +129,21 @@ def _n(x):
 
 
 SHOULDER_RULES = [
-    (lambda m: _n(m["lat_wall"]) and _n(m["lat_round"]) and (m["lat_round"] < m["lat_wall"] or m["lat_round"] < 180),
+    # Lats only when rounding the back LOWERS the range (143: "round-back range lower than flat-back = tight lats").
+    # The old "or round < 180" put lat work in every program short of perfect (owner's 14 Nov: round 173 > flat 147,
+    # so the lats are not what limits him). 17 Nov 2026.
+    (lambda m: _n(m["lat_wall"]) and _n(m["lat_round"]) and m["lat_round"] < m["lat_wall"],
      ["lat_stretch_standing_lying"], "lats: round-back flexion lower than flat-back (lesson 143)"),
-    (lambda m: _n(m["pec_worst"]) and m["pec_worst"] < 45, ["wall_pec_stretch"], "pec major under 45 deg past the shoulder line (144/150)"),
-    (lambda m: _n(m["er_worst"]) and m["er_worst"] < 45, ["er_contract_relax"], "external rotation short (146)"),
+    # Short pec major / short ER: the passive drill plus the drill Smith's own example phase one uses for it (lesson 04:
+    # A1 stick ER, B1 loaded pec stretch flye).
+    (lambda m: _n(m["pec_worst"]) and m["pec_worst"] < 45, ["wall_pec_stretch", "pec_stretch_flyes"],
+     "pec major under 45 deg past the shoulder line (144/150); loaded flye as in Smith's example phase one (04)"),
+    (lambda m: _n(m["er_worst"]) and m["er_worst"] < 45, ["er_contract_relax", "stick_er"],
+     "external rotation short (146); stick ER as in Smith's example phase one (04)"),
+    # Active much less than passive -> focus on active training (142). "Much" is our line: 15 deg. Trap-3 with top
+    # holds is the active overhead strength drill (168), also in Smith's example phase one (04, B2).
+    (lambda m: _n(m.get("pva_gap")) and m["pva_gap"] >= 15, ["trap3_raise"],
+     "active flexion 15+ deg under passive: active overhead work (142/168)"),
     (lambda m: _n(m["ir_worst"]) and m["ir_worst"] < 135, ["sleeper_stretch"], "internal rotation short (148)"),
     (lambda m: _n(m["leahy_worst"]) and m["leahy_worst"] >= 180, ["sleeper_stretch", "ir_contract_relax"],
      "full Leahy flexion: work internal rotation and scapula strength instead (141)"),
