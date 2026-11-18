@@ -195,6 +195,20 @@ def _drop_invented_dates(x, source: str, dropped: list):
 _MONEY = re.compile(r"\bAED\b|\bdirhams?\b|\bVAT\b|\bSEN-\d{4}-\d{4}\b", re.I)
 
 
+_PRODUCT_FILMS = re.compile(r"\b(\d{1,3})\s+(?:individual\s+)?product\s+(?:films?|videos?)\b", re.I)
+
+
+def product_film_count(brief: dict | None) -> int:
+    """A SERIES OF PRODUCT FILMS GETS ITS OWN SECTION (owner, 18 Nov 2026, Calidus deal 211: "start with the main
+    film scripts, then a separate section in that deck for the 20 products"). The count is READ from the brief's
+    own deliverables and summary ("20 product films"), never asked of a model. 0 = no series, no section."""
+    b = brief or {}
+    text = " ".join([str(x) for x in (b.get("deliverables") or [])] + [str(b.get("summary") or ""),
+                                                                      str(b.get("project") or "")])
+    counts = [int(m.group(1)) for m in _PRODUCT_FILMS.finditer(text)]
+    return max(counts) if counts and max(counts) >= 2 else 0
+
+
 def _strip_money(x, dropped: list):
     """Prices, totals, VAT and quotation numbers are printed by CODE from the quotation. The first dry run's
     writer copied 'AED 119,900' out of the deal record onto a deck whose own quote came to 124,850."""
@@ -1037,6 +1051,18 @@ class Job:
                 'cards; needs up to 4 cells; close 2 cards and 3 steps.',
                 "MEDIA LIBRARY CATEGORY SLUGS (samples.categories may use ONLY these): "
                 + ", ".join(deck.library_slugs(co["id"])),
+                (f"PRODUCT FILMS SECTION: this job also includes a series of {pf} individual product films. Add "
+                 'a top-level "products" key presenting them as ONE series, after the hero film: {"products": '
+                 '{"heading": "", "intro": "1-2 sentences", "approach": [{"title": "", "body": ""}], "capture": '
+                 '{"heading": "", "cols": [{"title": "", "stat": "", "body": ""}]}, "template": {"heading": "", '
+                 '"phases": [{"when": "time range", "title": "", "body": ""}]}, "layers": {"heading": "", "cols": '
+                 '[{"title": "", "stat": "", "body": ""}]}}}. approach = 3 cards on how the series is made; capture '
+                 "= up to 4 columns on the capture days (one per site where the material names them); template = "
+                 "up to 5 phases, the beat-by-beat structure every product film follows, in the hero film's visual "
+                 "language; layers = up to 4 columns (the data and graphics layer, and the product groups with "
+                 "example products named in the material). Name only products the material names; never write a "
+                 "specification value (range, speed, crew, payload): say the values come from the client's spec "
+                 "sheets." if (pf := product_film_count(self.s.get("brief"))) else ""),
             ])),
             (f"PREVIOUS COPY (revise it: change exactly what the owner's feedback asks, keep the rest word for word):"
              f"\n{json.dumps(prev, ensure_ascii=False)}\n\nOWNER'S FEEDBACK:\n{feedback}\n\n" if prev else "")
@@ -1053,6 +1079,39 @@ class Job:
         self.log("copy: written")
 
     # ---------------------------------------------------------------- 8 render + check
+    def _product_pages(self, d, n: int, bgi) -> int:
+        """The product-film series as its own section after the hero film: approach, capture days, the template
+        every film follows, the data layer and product groups. Only when the brief carries a series AND the
+        writer produced the section; any part it left out is simply not printed. Returns the next page number."""
+        pr = (self.s.get("copy") or {}).get("products") or {}
+        pf = product_film_count(self.s.get("brief"))
+        if not pf or not (pr.get("approach") or (pr.get("template") or {}).get("phases")):
+            return n
+        sect = "The product films"
+        if pr.get("approach"):
+            d.cards(f"{n:02d} · The product films", pr.get("heading") or f"{pf} product films, one series",
+                    pr["approach"][:3], [pr["intro"]] if pr.get("intro") else None, section=sect)
+            d.with_bg(bgi(2))
+            n += 1
+        cap = pr.get("capture") or {}
+        if cap.get("cols"):
+            d.strip(f"{n:02d} · Capture", cap.get("heading") or "The capture days", "", cap["cols"][:4], section=sect)
+            d.with_bg(bgi(3))
+            n += 1
+        tpl = pr.get("template") or {}
+        if tpl.get("phases"):
+            d.phases(f"{n:02d} · Every product film", tpl.get("heading") or "One structure, every product",
+                     tpl["phases"][:5], None, section=sect)
+            d.with_bg(bgi(4))
+            n += 1
+        lay = pr.get("layers") or {}
+        if lay.get("cols"):
+            d.strip(f"{n:02d} · Data and product groups", lay.get("heading") or "The data layer", "",
+                    lay["cols"][:4], section=sect)
+            d.with_bg(bgi(5))
+            n += 1
+        return n
+
     def render(self, version: int, compact: bool = False) -> dict:
         co, c = self.co, self.s["concept"]
         cp = {k: (self.s["copy"].get(k) or {}) for k in (           # a section the writer left out renders empty,
@@ -1155,6 +1214,7 @@ class Job:
                         cp["tiles"].get("body") or "" if pi == 0 else "", chunk,
                         cp["tiles"].get("note") or "" if pi == len(pages) - 1 else "", sect)
                 n += 1
+        n = self._product_pages(d, n, bgi)
         d.strip(f"{n:02d} · Look and feel", cp["look"].get("heading"), "", (cp["look"].get("cols") or [])[:4])
         d.with_bg(bgi(4))
         n += 1

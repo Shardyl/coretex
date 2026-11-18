@@ -339,6 +339,18 @@ time (the first was the reminder date-phrase regex, where "31 August" never pars
 scripts with the file-writing tool, and a case now scans every runtime source file for control
 characters.
 
+## A product-film series is its own section of the creative deck (owner, 18 Nov 2026)
+
+Calidus (deal 211) wanted the hero film AND 20 product films in ONE proposal: "start with the main film
+scripts ... then a separate section in that deck for the products". The creative deck had a fixed page set, so a
+card reply could not add it. Now `creative.product_film_count(brief)` reads the series size BY CODE from the
+brief's deliverables/summary ("20 product films"; 0 for a single film or a named one-off). When it is 2 or more,
+`stage_copy` asks the writer for a `products` section (approach cards, capture-day columns, the beat template every
+product film follows, the data layer and product groups; no spec values, those come from the client's sheets) and
+`Job._product_pages` prints up to four pages after the hero film's storyboard, voice over and tiles, before Look and
+feel. Nothing prints when the writer left it out. A reply on an existing card picks it up on the copy re-run.
+Regress case: "a series of product films gets its own deck section...".
+
 ## Client approval decks are a Talk tool (owner, 12 Nov 2026)
 
 Gino asked Cortex for a Qabilah/DSO approval deck three times on 11 Nov and got three STORYBOARDS

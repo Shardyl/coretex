@@ -1573,6 +1573,23 @@ def _cases():
          and "creative.set_email" in inspect.getsource(engine._draft_proposal_email)
          and "approve_in_set" in inspect.getsource(engine._execute))
 
+    # --- a series of product films gets its own section after the hero film (owner, 18 Nov 2026, Calidus 211)
+    def _product_section():
+        calidus = {"deliverables": ["20 product films, one per product (13 video shoot combined with AI, 7 AI only), "
+                                    "40 seconds to 1 minute each", "Corporate/hero film running across many products"],
+                   "summary": "an IDEX 2027 content package of 20 product films plus a corporate film"}
+        single = {"deliverables": ["One 60 second brand film"], "summary": "a hero film for the launch"}
+        named = {"deliverables": ["A Wahash product film"], "summary": ""}
+        job = _crv.Job.__new__(_crv.Job)
+        job.s = {"brief": calidus, "copy": {}}
+        untouched = job._product_pages(None, 7, lambda i: None) == 7     # no section written: nothing printed
+        return (_crv.product_film_count(calidus) == 20 and _crv.product_film_count(single) == 0
+                and _crv.product_film_count(named) == 0 and untouched
+                and "self._product_pages(d, n, bgi)" in inspect.getsource(_crv.Job.render)
+                and "product_film_count(self.s.get(\"brief\"))" in inspect.getsource(_crv.Job.stage_copy))
+    case("a series of product films gets its own deck section, counted from the brief by code", "Calidus deal 211",
+         _product_section)
+
     # --- health check: his notices are actionable, repairs are a log, repeats are root causes (owner, 18 Oct)
     from . import invariants as _inv, flow as _flow
 
