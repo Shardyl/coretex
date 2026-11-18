@@ -2717,6 +2717,10 @@ def _cases():
                       "powell_reps": {"L": {"reps_exact": 3}, "R": {"reps_exact": 4}}}, {})[0]]))
                   (__import__("cortex.fitness_program", fromlist=["x"]),
                    __import__("json").load(open(os.path.join(os.path.dirname(__file__), "fitness_mobility_drills.json"), encoding="utf-8"))))
+    case("the Food section opens with its Add food button, above the entries", "add food on top 18 Nov",
+         lambda: (lambda f: (lambda c: c.index("fd-actions-top") < c.index("sorted.map(e=>"))
+                  (f[f.index("function foodCard(list)"):f.index("window.foodPressStart")]))
+         (open(_web + "/fitness/food.js", encoding="utf-8").read()))
     case("steam room calories never count in the cardio reports total", "steam kcal 16 Nov",
          lambda: (lambda m: "cardioSessions.filter(s=>!isSteam(s))" in m and "const isSteam=" in m)
          (open(_web + "/fitness/index.html", encoding="utf-8").read()))

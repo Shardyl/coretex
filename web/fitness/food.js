@@ -180,6 +180,7 @@ const css=`
 @media (prefers-reduced-motion:reduce){.fd-ecg path{animation:none}}
 .fd-vo2{font-family:'Orbitron',system-ui,sans-serif;font-size:27px;font-weight:900;line-height:1.1;letter-spacing:0.01em;color:var(--teal);background:linear-gradient(90deg,var(--teal),var(--blue));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .fd-actions{display:flex;gap:8px;margin-top:10px}
+.fd-actions-top{margin:8px 0 10px}
 .fd-act{flex:1;min-height:46px;border-radius:var(--radius);font-size:14px;font-weight:800;cursor:pointer;background:var(--surface);color:var(--ink);border:0.5px solid var(--border2)}
 .fd-act.main{background:var(--teal);color:#fff;border:none}
 .fd-act.danger{background:none;color:var(--red);border:1px solid var(--red)}
@@ -1152,14 +1153,14 @@ function foodCard(list){
   const sel=foodSel.size>0;
   return `<div class="fd-meal">
     <div class="fd-meal-h"><b>${sel?foodSel.size+' selected':'Food'}</b><span>${sel?'<a href="#" onclick="foodSelClear();return false" style="color:var(--ink3)">Cancel</a>':(list.length?fmtN(t.kcal)+' kcal &middot; '+fmtN(t.protein)+' g P':'')}</span></div>
+    <div class="fd-actions fd-actions-top">${sel
+      ?`<button class="fd-act danger" onclick="foodSelDelete()">Delete ${foodSel.size}</button><button class="fd-act main" onclick="foodSelSaveMeal()">Save as meal</button>`
+      :`<button class="fd-act main" onclick="foodOpenAdd('food')">+ Add food</button><button class="fd-act" onclick="foodOpenMeals()">+ Add a meal</button>`}</div>
     ${sorted.map(e=>`<div class="fd-entry${foodSel.has(e.id)?' sel':''}" data-id="${e.id}"
         onpointerdown="foodPressStart('${e.id}')" onpointerup="foodPressEnd()" onpointerleave="foodPressEnd()" onpointercancel="foodPressEnd()" oncontextmenu="return false"
         onclick="foodEntryTap('${e.id}')">
       <div><div class="n">${esc(e.name)}</div><div class="q">${e.at?tOf(e.at)+' &middot; ':'planned &middot; '}${unitText(e)}${e.protein!=null?(e.qtyG!=null?' &middot; ':'')+r1(e.protein)+' g protein':''}${e.notes==='photo estimate'?' &middot; <span style="color:var(--amber)">photo estimate</span>':''}</div></div>
       <div class="k">${fmtN(e.kcal)}</div></div>`).join('')}
-    <div class="fd-actions">${sel
-      ?`<button class="fd-act danger" onclick="foodSelDelete()">Delete ${foodSel.size}</button><button class="fd-act main" onclick="foodSelSaveMeal()">Save as meal</button>`
-      :`<button class="fd-act main" onclick="foodOpenAdd('food')">+ Add food</button><button class="fd-act" onclick="foodOpenMeals()">+ Add a meal</button>`}</div>
     ${!sel&&list.length?`<div class="fd-note" style="margin:6px 0 0;text-align:center">Press and hold an item to select it</div>`:''}
   </div>`;
 }
