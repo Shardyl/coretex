@@ -29,7 +29,12 @@ STAGES: dict[str, dict] = {
     "Completed":     {"group": "closed", "rhythm": None,        "cancel_on_entry": True,  "correspondence": True},
     "Dormant":       {"group": "closed", "rhythm": "revival",   "cancel_on_entry": True,  "correspondence": True},
     "Lost":          {"group": "closed", "rhythm": None,        "cancel_on_entry": True,  "correspondence": False},
+    # REJECTED (owner, 19 Nov 2026): WE turned it down because it did not qualify. Lost = THEY said no. Behaves like
+    # Lost (no contact, Cortex's reminders cancelled, new mail is a fresh enquiry) but is its own record.
+    "Rejected":      {"group": "closed", "rhythm": None,        "cancel_on_entry": True,  "correspondence": False},
 }
+
+ENDED = ("Lost", "Rejected")     # closed for good: no further business on this deal, whoever said no
 
 SALES = tuple(s for s, v in STAGES.items() if v["group"] == "sales")                    # Opportunity, Quote
 DELIVERY = ("Booked", "Production", "Delivered", "Final Payment", "Recurring")         # live project work

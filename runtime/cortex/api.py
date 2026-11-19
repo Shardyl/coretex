@@ -2253,6 +2253,7 @@ def crm_deal_company(id: int, body: AssignAccountBody, u: dict = Depends(current
 
 class ProjectStageBody(BaseModel):
     stage: str
+    reason: str = ""                 # why it was Rejected (or Lost), kept on the deal timeline
 
 
 @app.post("/api/crm/project/{id}/stage")
@@ -2260,7 +2261,7 @@ def crm_project_stage(id: int, body: ProjectStageBody, u: dict = Depends(current
     _guard_deal(u, id)
     if body.stage not in crm.DEAL_STAGES:
         raise HTTPException(status_code=400, detail=f"stage must be one of {crm.DEAL_STAGES}")
-    r = crm.set_project_stage(id, body.stage, actor="owner")
+    r = crm.set_project_stage(id, body.stage, actor=_person(u), reason=body.reason)
     if not r:
         raise HTTPException(status_code=404, detail="deal not found")
     return r
@@ -2358,6 +2359,7 @@ def crm_opportunities(company: str | None = None, u: dict = Depends(current_user
     _next_moves(rows)
     dormant = run([crm.DORMANT_STAGE])
     lost = run([crm.LOST_STAGE])
+    rejected = run([crm.REJECTED_STAGE])      # we turned it down (owner, 19 Nov 2026), its own section under Lost
     fparams = [crm.FORECAST_STAGES] + (p if f else [])
     total = db.one(f"select coalesce(sum(value),0) v, count(*) n from crm_projects where {' and '.join(base)}", tuple(fparams))
     cur = db.query(f"select coalesce(nullif(currency,''),'AED') c, coalesce(sum(value),0) v from crm_projects "
@@ -2367,7 +2369,8 @@ def crm_opportunities(company: str | None = None, u: dict = Depends(current_user
         if r.get("starred") and r.get("value"):
             c = (r.get("currency") or "AED") or "AED"
             star_cur[c] = star_cur.get(c, 0.0) + float(r["value"] or 0)
-    return {"opportunities": rows, "dormant": dormant, "lost": lost, "total_value": float(total["v"] or 0),
+    return {"opportunities": rows, "dormant": dormant, "lost": lost, "rejected": rejected,
+            "total_value": float(total["v"] or 0),
             "count": total["n"],
             "currencies": {r["c"]: float(r["v"] or 0) for r in cur if float(r["v"] or 0) > 0},
             "starred_currencies": star_cur, "starred_count": sum(1 for r in rows if r.get("starred"))}
@@ -4168,7 +4171,9 @@ SKILL_TOOLS = [
         "search": {"type": "string", "description": "words from the deal title or client name, when no deal_id"},
         "title": {"type": "string", "description": "the new title, e.g. 'iTellu - learning app film'"},
         "value": {"type": "number"}, "currency": {"type": "string"},
-        "stage": {"type": "string", "description": "only when he names the stage"},
+        "stage": {"type": "string", "description": "only when he names the stage. 'Rejected' = WE turned it down "
+                  "because it did not qualify; 'Lost' = THEY said no"},
+        "stage_reason": {"type": "string", "description": "why, in his words, when the stage is Rejected or Lost"},
         "organisation": {"type": "string", "description": "the CLIENT organisation's real name"},
         "add_contacts": {"type": "array", "items": {"type": "object", "properties": {
             "email": {"type": "string"}, "name": {"type": "string"}, "role": {"type": "string"},
@@ -4189,7 +4194,7 @@ SKILL_TOOLS = [
                        "10am', 'tomorrow', 'in 3 days')"},
         "chase_every_days": {"type": "integer", "description": "his own chase rhythm from then on, in days"},
         "not_interested": {"type": "boolean", "description": "true when he is NOT INTERESTED in the opportunity (a "
-                           "tender or enquiry we will not pursue): closes it as Lost, not pursued, cancels everything "
+                           "tender or enquiry we will not pursue): closes it as Rejected (we turned it down), cancels everything "
                            "Cortex raised for it, and a repeat of it raises nothing. Nothing is sent."},
         "star": {"type": "boolean", "description": "true to STAR the opportunity (about to close: it goes to the top "
                  "of the Opportunities screen and into the starred value), false to unstar it"}}}},
@@ -4443,7 +4448,7 @@ def _talk_deal(inp: dict) -> tuple:
         rows = db.query("select p.id, p.title from crm_projects p left join crm_accounts a on a.id=p.account_id where "
                         "regexp_replace(lower(p.title), '[^a-z0-9]', '', 'g') like %s or "
                         "regexp_replace(lower(coalesce(a.name,'')), '[^a-z0-9]', '', 'g') like %s "
-                        "order by (p.stage in ('Lost','Dormant')), p.id desc limit 4", (_k, _k)) if len(_k) > 4 else []
+                        "order by (p.stage in ('Lost','Rejected','Dormant')), p.id desc limit 4", (_k, _k)) if len(_k) > 4 else []
         if len(rows) == 1:
             did = rows[0]["id"]
         elif rows:
@@ -4600,7 +4605,7 @@ def _update_opportunity(inp: dict) -> str:
     stage = (inp.get("stage") or "").strip()
     if stage:
         if stage in crm.DEAL_STAGES:
-            crm.set_project_stage(did, stage, actor="owner")
+            crm.set_project_stage(did, stage, actor="owner, via Talk", reason=inp.get("stage_reason") or "")
             done.append(f"stage {stage}")
         else:
             done.append(f"stage NOT changed: '{stage}' is not one of {', '.join(crm.DEAL_STAGES)}")
@@ -4777,7 +4782,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                 "regexp_replace(lower(p.title), '[^a-z0-9]', '', 'g') like %s or "
                 "regexp_replace(lower(coalesce(a.name,'')), '[^a-z0-9]', '', 'g') like %s or "
                 "regexp_replace(lower(coalesce(p.contact_email,'')||coalesce(p.contacts::text,'')), '[^a-z0-9]', '', 'g') "
-                "like %s order by (p.stage in ('Lost','Dormant')), p.id desc limit 6", (_k, _k, _k)) if len(_k) > 4 else []
+                "like %s order by (p.stage in ('Lost','Rejected','Dormant')), p.id desc limit 6", (_k, _k, _k)) if len(_k) > 4 else []
         else:
             return "Give me the deal number or words from its title."
         if not rows and words:
@@ -4794,7 +4799,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
         if len(rows) > 1:
             # SAY HOW MANY ARE OPEN (13 Oct 2026: Talk was given Shama's three deals, opened #130 only and told the owner
             # there was ONE open opportunity, missing the Ramadan deal created an hour earlier)
-            _open = [r for r in rows if r.get("stage") not in ("Lost", "Completed", "Dormant")]
+            _open = [r for r in rows if r.get("stage") not in ("Lost", "Rejected", "Completed", "Dormant")]
             _shut = [r for r in rows if r not in _open]
             return (f"{len(rows)} deals match: {len(_open)} OPEN, {len(_shut)} closed. Account for EVERY open one in your "
                     "answer (name each), and open one with deal_id when you need its detail.\nOPEN: " + json.dumps(
@@ -5317,7 +5322,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             rows = db.query("select p.id, p.title from crm_projects p left join crm_accounts a on a.id=p.account_id where "
                             "regexp_replace(lower(p.title), '[^a-z0-9]', '', 'g') like %s or "
                             "regexp_replace(lower(coalesce(a.name,'')), '[^a-z0-9]', '', 'g') like %s "
-                            "order by (p.stage in ('Lost','Dormant')), p.id desc limit 4", (_k, _k)) if len(_k) > 4 else []
+                            "order by (p.stage in ('Lost','Rejected','Dormant')), p.id desc limit 4", (_k, _k)) if len(_k) > 4 else []
             if len(rows) == 1:
                 did = rows[0]["id"]
             elif rows:

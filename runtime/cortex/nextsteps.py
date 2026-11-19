@@ -491,7 +491,7 @@ def _replan(deal_id: int, source: str, material: str, *, by: str = "", company_i
         if len(material) < 12:
             return []
         d = db.one("select id, title, stage, company from crm_projects where id=%s", (int(deal_id),))
-        if not d or d["stage"] in ("Lost", "Completed"):
+        if not d or d["stage"] in ("Lost", "Rejected", "Completed"):
             return []
         from . import provider, worker
         allit = [i for i in items(deal_id, include_closed=True) if i["status"] != "superseded"]
@@ -630,7 +630,7 @@ def tick() -> list[str]:
     now = _now()
     for it in db.query("select n.*, p.title deal_title, p.stage from next_steps n join crm_projects p on p.id=n.deal_id "
                        "where n.status='open' and n.whose='us' and n.card_id is null and n.notified_at is null "
-                       "and p.stage not in ('Lost','Dormant','Completed') order by n.due_at nulls first limit 40"):
+                       "and p.stage not in ('Lost','Rejected','Dormant','Completed') order by n.due_at nulls first limit 40"):
         try:
             due = it.get("due_at")
             if due and due > now + timedelta(days=TODO_AHEAD_DAYS):

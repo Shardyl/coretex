@@ -151,7 +151,7 @@ def _open_deals_for_phone(phone: str, slug: str) -> list[dict]:
     acc = (c or {}).get("account_id")
     return db.query(
         "select id, title, stage from crm_projects where company=%s and stage not in "
-        "('Lost','Completed','Dormant','Close & review') and ("
+        "('Lost','Rejected','Completed','Dormant','Close & review') and ("
         "regexp_replace(contacts::text, '[^0-9]', '', 'g') like %s "
         "or (%s <> '' and lower(coalesce(contact_email,''))=%s) or (%s::bigint is not null and account_id=%s)) "
         "order by id desc", (crm._org(slug), f"%{d}%", email, email, acc, acc))

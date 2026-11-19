@@ -482,6 +482,19 @@ for a link/invite (`_owner_set_slot`); a reply still needs the client to have ag
 Pre-booked attendee-less as before; the guest is invited on approval. Regress case: "an email we compose books its
 meeting...". Still open: a slot already pre-booked is not MOVED when he reschedules it on the card.
 
+## Rejected: we turned it down (owner, 19 Nov 2026)
+
+A deal stage after Lost. **Lost = they said no; Rejected = WE declined it because it did not qualify.** Defined in
+`stages.STAGES` (closed, no rhythm, cancels Cortex's reminders on entry, client mail does not attach: a new email
+from them is a fresh enquiry) and `crm.REJECTED_STAGE`; `stages.ENDED` = ("Lost", "Rejected") for "no further
+business". `crm.set_project_stage(..., reason=)` logs a `rejected` timeline event with the reason in the
+person's words (cockpit prompts for it; Talk `update_opportunity` takes `stage_reason`). The Opportunities screen
+has its own Rejected section under Lost (cockpit cortex-v96), and it is never in the forecast. **Not interested /
+not pursued (`engine.deal_not_interested`) now closes as Rejected**, since that IS us declining; deals closed that
+way before 19 Nov stay Lost. Every hand-written Lost list (flow, gate, nextsteps, pipeline, whatsapp, invariants,
+nurture, obligations, api lookups, the duplicate-title and open-deal checks) carries Rejected too. Regress case:
+"Rejected is ours...".
+
 ## An email opens with a greeting (owner, 16 Nov 2026)
 
 Card 1796, an automatic closing chase to Sarah at Shurooq (deal 183), opened "I hope you're well." with no

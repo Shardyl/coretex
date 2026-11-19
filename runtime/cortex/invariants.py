@@ -32,8 +32,8 @@ create table if not exists health_log (
 
 OPEN = "('new','drafting','queued','awaiting_approval','awaiting_correction')"
 OPEN_OR_SCHEDULED = "('new','drafting','queued','awaiting_approval','awaiting_correction','scheduled')"
-NO_CHASE = "('Lost','Completed')"          # Dormant deliberately absent: dormant deals get soft revivals
-CLOSED = "('Lost','Dormant','Completed')"
+NO_CHASE = "('Lost','Rejected','Completed')"          # Dormant deliberately absent: dormant deals get soft revivals
+CLOSED = "('Lost','Rejected','Dormant','Completed')"
 AUTO_CARD = ("(coalesce(t.request->>'followup','')<>'' or t.request->>'lead_chase'='true' "
              "or t.request->>'system_note' like 'From reminder #%%' "
              "or t.request->>'system_note' like 'From commitment reminder%%')")
@@ -119,10 +119,10 @@ CHECKS = [
     {
         "key": "clock_on_stage_without_rhythm",
         "what": "A deal in a stage with no chase rhythm (Lost, Completed, Close & review, Nurture) still has a clock",
-        "sql": "select id, title, stage from crm_projects where stage in ('Lost','Completed','Close & review','Nurture') "
+        "sql": "select id, title, stage from crm_projects where stage in ('Lost','Rejected','Completed','Close & review','Nurture') "
                "and (automation='auto' or next_followup is not null)",
         "fix": "update crm_projects set automation=null, next_followup=null, updated_at=now() where stage in "
-               "('Lost','Completed','Close & review','Nurture') and (automation='auto' or next_followup is not null) "
+               "('Lost','Rejected','Completed','Close & review','Nurture') and (automation='auto' or next_followup is not null) "
                "returning id",
     },
     {
@@ -289,7 +289,7 @@ CHECKS = [
                   "body": "This opportunity was opened recently, but the person first wrote to us over a month ago. "
                           "If it is a live job, nothing to do (dismiss this). If it was opened by mistake, close it."},
         "sql": "select p.id, p.title from crm_projects p where p.created_at > now()-interval '14 days' and "
-               "p.stage not in ('Lost','Completed','Dormant') and coalesce(p.contact_email,'')<>'' and (select "
+               "p.stage not in ('Lost','Rejected','Completed','Dormant') and coalesce(p.contact_email,'')<>'' and (select "
                "min(h->>'ts') from crm_master m, jsonb_array_elements(m.history) h where lower(m.email)="
                "lower(p.contact_email)) < (p.created_at - interval '30 days')::text",
     },
@@ -311,7 +311,7 @@ CHECKS = [
         "sql": "select r.id, r.title from reminders r join crm_projects p on r.target_type='deal' and "
                "p.id::text=r.target_id where r.status='fired' and coalesce(r.created_by,'') like 'cortex%%' and "
                "r.due_at > now()-interval '2 days' and exists (select 1 from jsonb_array_elements(p.history) e "
-               "where e->>'event'='stage_change' and e->>'text' ~ '-> (Lost|Completed|Dormant)$' and "
+               "where e->>'event'='stage_change' and e->>'text' ~ '-> (Lost|Rejected|Completed|Dormant)$' and "
                "(e->>'ts')::timestamptz < r.due_at)",
     },
 ]

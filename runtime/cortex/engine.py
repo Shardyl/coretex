@@ -1929,10 +1929,10 @@ def deal_not_interested(deal_id: int, actor: str = "owner", why: str = "") -> di
     rems = _ob.close_where("target_type='deal' and target_id=%s and status in ('pending','snoozed','fired') and "
                            "coalesce(created_by,'') like 'cortex%%'", (str(p["id"]),), "cancelled",
                            _ob.evidence("owner", who=actor), "not interested: the opportunity was not pursued")
-    if p.get("stage") != "Lost":
-        crm.set_project_stage(p["id"], "Lost", actor=actor)
+    if p.get("stage") not in ("Lost", "Rejected"):   # we declined it: Rejected (owner, 19 Nov 2026)
+        crm.set_project_stage(p["id"], "Rejected", actor=actor, reason=(why or "").strip() or "not pursued")
     db.execute("update crm_projects set automation=null, next_followup=null where id=%s", (p["id"],))
-    pipeline.log_deal(p["id"], "not_pursued", f"Not interested ({actor}): not pursued, closed as Lost."
+    pipeline.log_deal(p["id"], "not_pursued", f"Not interested ({actor}): not pursued, closed as Rejected."
                       + (f" {why.strip()}" if (why or "").strip() else "")
                       + (f" Cancelled {len(closed)} card(s)" if closed else "")
                       + (f"{' and' if closed else ' Cancelled'} {len(rems)} reminder(s)" if rems else "")
@@ -10716,7 +10716,7 @@ def _push_quote_to_client_drive(co: dict, customer: str, number: str, x: dict, p
         project = (x.get("project") or "").strip()
         if not project:
             d = db.one("select title from crm_projects p join crm_master m on m.account_id=p.account_id "
-                       "where lower(m.email)=lower(%s) and p.stage not in ('Lost','Close & review') "
+                       "where lower(m.email)=lower(%s) and p.stage not in ('Lost','Rejected','Close & review') "
                        "order by p.id desc limit 1", ((x.get("contact_email") or ""),)) if x.get("contact_email") else None
             project = ((d or {}).get("title") or "").split(" - ")[-1].strip()
         base = " - ".join(v for v in (client, project, f"Quotation {number}") if v)
@@ -10886,7 +10886,7 @@ def promote_due_tasks() -> None:
                 if _p.get("lead_status") == "left-company" or _p.get("classification") == "not_qualified":
                     _st = "a recipient who has left their company" if _p.get("lead_status") == "left-company" \
                         else "a recipient marked not qualified"
-                if _st in ("Lost", "Completed", "Dormant") or str(_st or "").startswith("a recipient"):
+                if _st in ("Lost", "Rejected", "Completed", "Dormant") or str(_st or "").startswith("a recipient"):
                     # THE DEAL CLOSED AFTER IT WAS SCHEDULED (13 Oct 2026 map: nothing stopped a scheduled chase on a
                     # deal moved to Lost). Parked for the owner, never sent blind and never silently dropped.
                     db.execute("update tasks set status='awaiting_approval', schedule_kind=null, run_at=null, "

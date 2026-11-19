@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v95';
+const APP_BUILD = 'cortex-v96';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -799,7 +799,7 @@ async function render(){
 
 // ---- CRM pages: Contacts / Projects / Opportunities ----
 const STAGECOL={Cold:'#8597A6',Contacted:'#5B8DEF',Engaged:'#00DAFF',Qualified:'#2ad17e','Not interested':'#ff5d6c','Dormant/dead':'#8597A6',
-  Opportunity:'#A78BFA',Quote:'#60A5FA',Booked:'#22D3EE',Production:'#FBBF24',Delivered:'#FB923C','Final Payment':'#F472B6','Close & review':'#34D399',Recurring:'#14B8A6',Nurture:'#4ADE80',Completed:'#8597A6',Lost:'#F43F5E'};
+  Opportunity:'#A78BFA',Quote:'#60A5FA',Booked:'#22D3EE',Production:'#FBBF24',Delivered:'#FB923C','Final Payment':'#F472B6','Close & review':'#34D399',Recurring:'#14B8A6',Nurture:'#4ADE80',Completed:'#8597A6',Lost:'#F43F5E',Rejected:'#B45309'};
 function stageChip(s){ s=s||'Cold'; const c=STAGECOL[s]||'#8597A6'; return `<span class="chip" style="color:${c};border-color:${c}55;background:transparent">${esc(s)}</span>`; }
 function realName(c){ const n=((c.first_name||'')+' '+(c.last_name||'')).trim(); return /[A-Za-z]{2}/.test(n)?n:(c.email||'Contact'); }
 function initials(s){ const m=(s||'').match(/[A-Za-z]/g)||['?']; return (m[0]+(m[1]||'')).toUpperCase(); }
@@ -930,7 +930,7 @@ async function toggleCompanyDnm(email,slug,on){
     renderContactCompanies(email,st); toast(on?('No marketing — '+slug):('Marketing allowed — '+slug)); }
   catch(e){ toast('Could not update ('+e.message+')'); }
 }
-const PROJ_STAGES=['Opportunity','Quote','Booked','Production','Recurring','Delivered','Final Payment','Close & review','Nurture','Completed','Dormant','Lost'];
+const PROJ_STAGES=['Opportunity','Quote','Booked','Production','Recurring','Delivered','Final Payment','Close & review','Nurture','Completed','Dormant','Lost','Rejected'];
 const FORECAST_STAGES=['Opportunity','Quote'];
 const CONTACT_STAGES=['Cold','Contacted','Engaged','Qualified','Not interested','Dormant/dead'];
 function contactStagePicker(c){
@@ -1026,7 +1026,11 @@ function projStagePicker(p){
 }
 async function setProjStage(id,i){
   const s=PROJ_STAGES[i];
-  try{ await api('/api/crm/project/'+id+'/stage',{method:'POST',body:JSON.stringify({stage:s})}); toast('Moved to '+s); openProject(id); }
+  // REJECTED = we turned it down (owner, 19 Nov 2026): the reason goes on the deal timeline
+  let reason='';
+  if(s==='Rejected'){ reason=prompt('Why are we rejecting this opportunity? (e.g. budget under our minimum, out of scope)');
+    if(reason===null) return; }
+  try{ await api('/api/crm/project/'+id+'/stage',{method:'POST',body:JSON.stringify({stage:s,reason})}); toast('Moved to '+s); openProject(id); }
   catch(e){ toast('Could not update ('+e.message+')'); }
 }
 // ---- the deal's OWN contacts (p.contacts): shown even when no organisation is set ----
@@ -1364,6 +1368,7 @@ async function renderOpps(b,co){
   else if(rest.length){ h+='<div class="h">In the pipeline</div>'+rest.map(dealCard).join(''); }
   if(d.dormant&&d.dormant.length){ h+=`<div class="h" style="color:var(--mut)">Dormant · ${d.dormant.length}</div><div style="opacity:.75">`+d.dormant.map(dealCard).join('')+'</div>'; }
   if(d.lost&&d.lost.length){ h+=`<div class="h" style="color:var(--mut)">Lost · ${d.lost.length}</div><div style="opacity:.55">`+d.lost.map(dealCard).join('')+'</div>'; }
+  if(d.rejected&&d.rejected.length){ h+=`<div class="h" style="color:var(--mut)">Rejected · ${d.rejected.length}</div><div style="opacity:.55">`+d.rejected.map(dealCard).join('')+'</div>'; }
   b.outerHTML='<div id="crmbody">'+h+'</div>';
 }
 let clTimer=null, clState={}, clObserver=null;

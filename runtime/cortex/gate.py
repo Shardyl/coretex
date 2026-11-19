@@ -148,7 +148,7 @@ def _check(company_id: int, email: str, deal_id, request: dict | None) -> str | 
     hist = (deal or {}).get("history") or []
     if deal:
         st = deal.get("stage")
-        if st in ("Lost", "Completed"):
+        if st in ("Lost", "Rejected", "Completed"):
             return f"the deal is {st}"
         if why in CHASE_TYPES:
             r = stages.rhythm(st)

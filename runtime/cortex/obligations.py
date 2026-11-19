@@ -246,7 +246,7 @@ def on_stage(deal_id: int, old: str | None, new: str) -> None:
         k = kind_of(r)
         if k == "proposal_owed" and new != "Opportunity":
             _done(deal_id, r, f"the deal moved to {new}", evidence("stage", stage=new))
-        elif k == "tender_close" and (new in stages.WON or new == "Lost"):
+        elif k == "tender_close" and (new in stages.WON or new in stages.ENDED):
             _done(deal_id, r, f"the deal moved to {new}", evidence("stage", stage=new))
     if old in stages.SALES and new not in stages.SALES:      # won, lost or parked: the personal touch track ends
         db.execute("update reminders set status='cancelled' where status in ('pending','snoozed') and "

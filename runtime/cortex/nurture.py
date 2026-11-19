@@ -97,7 +97,7 @@ def _account_state(account_id: int, company_id: int) -> dict:
             system = kind == "note" and bool(_SYSTEM_NOTE.match(text))
             if kind in _CONTACT_EVENTS and not system and (last_contact is None or when > last_contact):
                 last_contact = when
-            if kind == "stage_change" and text.strip().endswith("-> Lost") and (lost_at is None or when > lost_at):
+            if kind == "stage_change" and text.strip().endswith(("-> Lost", "-> Rejected")) and (lost_at is None or when > lost_at):
                 lost_at = when
             if kind in ("note", "context", "conversation") and text and not system:
                 notes.append((when, r["title"], text[:400]))
@@ -126,7 +126,7 @@ def _account_state(account_id: int, company_id: int) -> dict:
     return {"meetings": meetings, "last_contact": last_contact, "lost_at": lost_at,
             "won": any(r.get("stage") in _WON for r in rows),
             "has_deals": bool(rows),       # no deal rows at all = a past client who predates Cortex (manual enrolment)
-            "lost_titles": [r["title"] for r in rows if r.get("stage") == "Lost"],
+            "lost_titles": [r["title"] for r in rows if r.get("stage") in ("Lost", "Rejected")],
             "notes": notes[:6]}
 
 

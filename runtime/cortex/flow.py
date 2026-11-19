@@ -195,7 +195,7 @@ def _rules(deal: dict, items: dict) -> list[str]:
     hist = deal.get("history") or []
     stage = deal.get("stage") or ""
     # a closed deal owes nothing and needs nothing from him
-    if stage in ("Lost", "Completed", "Dormant"):
+    if stage in ("Lost", "Rejected", "Completed", "Dormant"):
         from . import obligations
         for r in items["reminders"]:
             if _cancel_rem(r, did, f"the opportunity is {stage}", obligations.evidence("deal_closed", stage=stage)):

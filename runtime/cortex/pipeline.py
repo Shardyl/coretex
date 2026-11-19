@@ -875,7 +875,7 @@ def log_conversation(text: str, company_slug: str = "sensa", contact_hint: str =
         candidates = db.query(
             "select id, title, stage, automation, next_followup from crm_projects where "
             "lower(contact_email)=lower(%s) and stage not in "
-            "('Lost','Completed','Nurture','Close & review') order by id desc limit 5",
+            "('Lost','Rejected','Completed','Nurture','Close & review') order by id desc limit 5",
             (person["email"],))
         if len(candidates) == 1:
             deal = candidates[0]

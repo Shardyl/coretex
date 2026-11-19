@@ -3226,6 +3226,22 @@ def _cases():
                 and _y.boat_year(None) is None)
     case("a boat cost lands in the Apr-Mar boat year its date belongs to",
          "owner, 11 Nov 2026 (YOLO boat book: berth renewals were missing because the year was ambiguous)", _boat_year)
+
+    def _rejected_is_ours():
+        from . import api as _api, crm as _crm, engine as _eng, stages as _st
+        r = _st.STAGES.get("Rejected") or {}
+        return ("Rejected" in _crm.DEAL_STAGES and _crm.REJECTED_STAGE == "Rejected"
+                and r.get("group") == "closed" and r.get("rhythm") is None
+                and "Rejected" in _st.CANCEL_ON_ENTRY and "Rejected" in _st.NO_RHYTHM
+                and "Rejected" in _st.NO_CORRESPONDENCE and "Rejected" in _crm.CLOSED_STAGES
+                and "Rejected" in _crm.NO_CHASE_STAGES and not _st.chases("Rejected")
+                and "Rejected" not in _crm.FORECAST_STAGES and "Rejected" not in _crm.WON_STAGES
+                and "reason" in inspect.signature(_crm.set_project_stage).parameters
+                and "reason" in _api.ProjectStageBody.model_fields
+                and '"rejected": rejected' in inspect.getsource(_api.crm_opportunities)
+                and '"Rejected"' in inspect.getsource(_eng.deal_not_interested))
+    case("Rejected is ours: we turned it down; it never chases, cancels Cortex's reminders and keeps the reason",
+         "owner, 19 Nov 2026 (a stage after Lost for opportunities we do not qualify)", _rejected_is_ours)
     return C
 
 

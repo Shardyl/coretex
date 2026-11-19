@@ -1000,7 +1000,8 @@ OUTSTANDING_STAGES = ["Booked", "Production", "Recurring", "Delivered", "Final P
 NURTURE_STAGE = "Nurture"       # project done, paid and reviewed -> quarterly keep-warm forever (owner, 30 Aug)
 LOST_STAGE = "Lost"                                    # pitched but didn't win — exits both screens
 DORMANT_STAGE = "Dormant"       # sequence exhausted, resting — never dead; revivable any time
-DEAL_STAGES = FORECAST_STAGES + WON_STAGES + [DORMANT_STAGE, LOST_STAGE]   # 'Recurring' = ongoing/repeat won work
+REJECTED_STAGE = "Rejected"     # WE turned it down: it did not qualify (owner, 19 Nov 2026). Lost = they said no.
+DEAL_STAGES = FORECAST_STAGES + WON_STAGES + [DORMANT_STAGE, LOST_STAGE, REJECTED_STAGE]   # 'Recurring' = ongoing/repeat won work
 PROJECT_STAGES = DEAL_STAGES   # back-compat alias (any valid deal stage)
 
 # Contact status = the relationship ladder ONLY (deals carry Opportunity/Quote — kept off contacts to avoid
@@ -1467,16 +1468,21 @@ def _apply_stage_rhythm(p: dict, old: str | None, new: str) -> None:
                    (Json([{"ts": _now(), "event": "note", "text": note}]), did))
 
 
-def set_project_stage(project_id: int, stage: str, actor: str = "system") -> dict | None:
+def set_project_stage(project_id: int, stage: str, actor: str = "system", reason: str = "") -> dict | None:
     """Move a deal to a new stage; logs the change, and (un)marks the linked contact a client across the
-    Booked boundary. Moving across 'Booked' shifts it between the Opportunities and Projects screens."""
+    Booked boundary. Moving across 'Booked' shifts it between the Opportunities and Projects screens.
+    `reason` (why it was Rejected or Lost, in the person's words) is kept on the timeline beside the move."""
     p = db.one("select * from crm_projects where id=%s", (project_id,))
     if not p:
         return None
     old = p.get("stage")
     ev = {"ts": _now(), "event": "stage_change", "text": f"{old} -> {stage}"}
+    evs = [ev]
+    if (reason or "").strip():
+        evs.append({"ts": _now(), "event": "rejected" if stage == REJECTED_STAGE else "stage_reason",
+                    "text": f"{'Rejected' if stage == REJECTED_STAGE else stage} ({actor}): {reason.strip()}"})
     db.execute("update crm_projects set stage=%s, history = history || %s::jsonb, updated_at=now() where id=%s",
-               (stage, Json([ev]), project_id))
+               (stage, Json(evs), project_id))
     p["stage"] = stage
     if p.get("starred") and stage not in FORECAST_STAGES:     # won, lost or dormant: no longer "about to close"
         set_star(project_id, False, by=f"the stage change to {stage}")
@@ -1834,9 +1840,9 @@ def auto_opportunity(email: str, company_slug: str, sug: dict | None, inq: dict 
         return None
     org = _require_business(company_slug)
     open_deal = db.one(
-        "select id, value from crm_projects where company=%s and stage not in (%s,'Won') and "
+        "select id, value from crm_projects where company=%s and stage not in (%s,%s,'Won') and "
         "(lower(contact_email)=lower(%s) or contacts @> %s::jsonb) limit 1",
-        (org, LOST_STAGE, email, Json([{"email": email}])))
+        (org, LOST_STAGE, REJECTED_STAGE, email, Json([{"email": email}])))
     est = s.get("est") or {}
     try:
         amount = float(est.get("amount") or 0)
@@ -2156,8 +2162,8 @@ def create_deal(company: str, title: str, value=None, currency: str = "AED", sta
     if not valid_contact(contact):
         raise DealNeedsContact("An opportunity needs a designated contact: a name with an email address, or a "
                                "WhatsApp number. Who is the contact for this one?")
-    dup = db.one("select id from crm_projects where company=%s and lower(title)=lower(%s) and stage <> %s limit 1",
-                 (org, title, LOST_STAGE))
+    dup = db.one("select id from crm_projects where company=%s and lower(title)=lower(%s) and stage not in (%s,%s) limit 1",
+                 (org, title, LOST_STAGE, REJECTED_STAGE))
     if dup:
         raise DuplicateDeal(f"A deal '{title}' already exists for {org} (deal #{dup['id']}). "
                             "Open that one, or give this a different name.")
