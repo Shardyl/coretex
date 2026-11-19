@@ -201,8 +201,8 @@ def _cases():
     case("Dormant gets revivals only", "audit 2a: Dormant kept chasing",
          lambda: stages.rhythm("Dormant") == "revival"
          and all(s["action"] == "revive" for s in stages.REVIVAL_CADENCE["steps"]))
-    case("a client's mail attaches to every stage but Lost", "audit 2a: Close & review replies never matched",
-         lambda: stages.NO_CORRESPONDENCE == ("Lost",))
+    case("a client's mail attaches to every stage but Lost and Rejected", "audit 2a: Close & review replies never matched",
+         lambda: stages.NO_CORRESPONDENCE == ("Lost", "Rejected"))
     case("delivery stages include Delivered", "audit 2a: _DELIVERY_STAGES lacked it",
          lambda: "Delivered" in engine._DELIVERY_STAGES and "Delivered" in __import__("cortex.pipeline", fromlist=["x"]).PLAN_STAGES)
     case("closing gate follows the stage, not a leftover cadence", "audit 2a",
@@ -1099,7 +1099,7 @@ def _cases():
         from . import obligations as ob, invariants as inv, events as ev
         return (engine._subj_norm("Reminder: RE: SSMC RFQ for UAE Flag Day") == engine._subj_norm("SSMC RFQ for UAE Flag Day")
                 and "Tender closes" not in ob._owed_sql() and "Commitment owed to" in ob._owed_sql()
-                and 'set_project_stage(p["id"], "Lost"' in inspect.getsource(engine.deal_not_interested)
+                and 'set_project_stage(p["id"], "Rejected"' in inspect.getsource(engine.deal_not_interested)
                 and "_not_pursued_match(" in inspect.getsource(engine._track_tender)
                 and "_tender_in_scope(" in inspect.getsource(engine._track_tender)
                 and "_not_pursued_match(" in inspect.getsource(engine._flag_skipped_opportunity)
