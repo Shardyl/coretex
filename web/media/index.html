@@ -18,6 +18,9 @@ header .sub{color:var(--dim);font-size:12px}
 #search{margin-left:auto;background:var(--panel);border:1px solid var(--line);color:var(--text);
 border-radius:8px;padding:7px 12px;font-size:13px;width:220px;outline:none}
 #search:focus{border-color:var(--accent)}
+#sort{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;
+padding:7px 10px;font-size:13px;outline:none;cursor:pointer}
+#sort:focus{border-color:var(--accent)}
 .chips{display:flex;gap:6px;padding:12px 18px 2px;flex-wrap:wrap}
 .chip{border:1px solid var(--line);background:var(--panel);color:var(--dim);border-radius:999px;
 padding:5px 12px;font-size:12px;cursor:pointer;user-select:none}
@@ -99,6 +102,14 @@ opacity:0;transition:opacity .2s;pointer-events:none;z-index:60}
   <h1>Media library</h1>
   <div class="sub" id="stats"></div>
   <input id="search" type="search" placeholder="Search title, client...">
+  <select id="sort" title="Sort by">
+    <option value="rating" selected>Highest rated</option>
+    <option value="views">Most viewed</option>
+    <option value="newest">Newest</option>
+    <option value="oldest">Oldest</option>
+    <option value="title">Title A to Z</option>
+    <option value="custom">Custom order (drag to arrange)</option>
+  </select>
 </header>
 <div class="chips" id="chips"></div>
 <div id="groups"></div>
@@ -305,20 +316,38 @@ function render(){
       ? (((a.sort_orders||{})['duplicates'])??1e9)-(((b.sort_orders||{})['duplicates'])??1e9)
       : (a.dup_group<b.dup_group?-1:a.dup_group>b.dup_group?1:(a.published_at<b.published_at?-1:1)));
   }
+  // SORT BY (owner, 19 Nov 2026): defaults to highest rated on every load; a saved drag order only
+  // applies under "Custom order", the one mode where dragging is on
+  const mode = document.getElementById('sort').value;
+  const rt = v => v.rating ?? v.suggested_rating ?? 0;
+  const SORTS = {
+    rating: (a,b)=> rt(b)-rt(a) || (b.views??0)-(a.views??0),
+    views:  (a,b)=> (b.views??0)-(a.views??0) || rt(b)-rt(a),
+    newest: (a,b)=> (b.published_at||'').localeCompare(a.published_at||'') || rt(b)-rt(a),
+    oldest: (a,b)=> (a.published_at||'').localeCompare(b.published_at||'') || rt(b)-rt(a),
+    title:  (a,b)=> (a.title||'').localeCompare(b.title||''),
+  };
   const order = Object.keys(groups).sort((a,b)=>{
     if(a==='untagged') return 1; if(b==='untagged') return -1;
     return groups[b].length-groups[a].length || a.localeCompare(b); });
   const root = document.getElementById('groups'); root.innerHTML='';
   for(const k of order){
     const vs = groups[k];
-    const anyManual = vs.some(v=>(v.sort_orders||{})[k]!=null);
-    if(k!=='duplicates') vs.sort((a,b)=> anyManual
-      ? ((a.sort_orders||{})[k]??1e9)-((b.sort_orders||{})[k]??1e9)
-      : (b.rating??b.suggested_rating??0)-(a.rating??a.suggested_rating??0) || (b.views??0)-(a.views??0));
+    if(k!=='duplicates'){
+      if(mode==='custom'){
+        const anyManual = vs.some(v=>(v.sort_orders||{})[k]!=null);
+        vs.sort((a,b)=> anyManual
+          ? ((a.sort_orders||{})[k]??1e9)-((b.sort_orders||{})[k]??1e9) || SORTS.rating(a,b)
+          : SORTS.rating(a,b));
+      } else vs.sort(SORTS[mode]);
+    }
     const g = document.createElement('div'); g.className='group';
     g.innerHTML = `<h2>${esc(label(k))} <span class="n">${vs.length}</span></h2>`;
     const wrap = document.createElement('div'); wrap.className='cards'; wrap.dataset.group=k;
-    for(const v of vs) wrap.appendChild(card(v, k));
+    for(const v of vs){ const el = card(v, k);
+      // dragging only means something under Custom order (Duplicates keeps its own pairing order)
+      el.draggable = (mode==='custom' || k==='duplicates') && k!=='results';
+      wrap.appendChild(el); }
     wrap.addEventListener('dragover', e=>{
       e.preventDefault();
       const dragging = wrap.querySelector('.card.dragging'); if(!dragging) return;
@@ -367,6 +396,7 @@ async function load(){
   }catch(e){ /* lock shown */ }
 }
 document.getElementById('search').addEventListener('input', render);
+document.getElementById('sort').addEventListener('change', render);
 if(!token) showLock(); else load();
 </script>
 </body>

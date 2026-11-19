@@ -482,6 +482,14 @@ for a link/invite (`_owner_set_slot`); a reply still needs the client to have ag
 Pre-booked attendee-less as before; the guest is invited on approval. Regress case: "an email we compose books its
 meeting...". Still open: a slot already pre-booked is not MOVED when he reschedules it on the card.
 
+## Media library: sort by, highest rated first (owner, 19 Nov 2026)
+
+coretex.uk/media has a "Sort by" menu in the header: Highest rated (the default on every load), Most viewed,
+Newest, Oldest, Title A to Z, Custom order. Rating = his rating, else the AI's suggested rating. A saved
+drag order (`media_assets.sort_orders`, held for AI, Documentary, Untagged) now applies ONLY under Custom
+order, the one mode where cards are draggable; before this it silently overrode ratings in those categories.
+Duplicates keeps its own pairing order. Page is not service-worker cached, so no build bump.
+
 ## Rejected: we turned it down (owner, 19 Nov 2026)
 
 A deal stage after Lost. **Lost = they said no; Rejected = WE declined it because it did not qualify.** Defined in
