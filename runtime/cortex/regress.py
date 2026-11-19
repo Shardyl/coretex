@@ -2738,6 +2738,18 @@ def _cases():
          lambda: (lambda f: (lambda c: c.index("fd-actions-top") < c.index("sorted.map(e=>"))
                   (f[f.index("function foodCard(list)"):f.index("window.foodPressStart")]))
          (open(_web + "/fitness/food.js", encoding="utf-8").read()))
+    case("the Full body calisthenics routine is data (11 exercises, 2 sets, 2 min rest, the curl and side raise "
+         "superset), has its own screen with guide images, and logs as program routine:<id>", "full body routine 19 Nov",
+         lambda: (lambda fc, m: (lambda r: len(r["items"]) == 11 and all(x["dose"].startswith("2 x") for x in r["items"])
+                  and all(x["rest_s"] == 120 for x in r["items"] if not x.get("superset"))
+                  and [x["n"] for x in r["items"] if x.get("superset")] == [10]
+                  and 'ROUTINE_PREFIX = "routine:"' in open(fc.__file__, encoding="utf-8").read()
+                  and "function renderRoutine(el,id)" in m and "cgImg(r.id,it.n,true)" in m
+                  and "caliLadderSave('routine:${r.id}')" in m)
+                  (next(x for x in __import__("json").load(open(fc.GOALS_FILE, encoding="utf-8"))["routines"]
+                        if x["id"] == "fullbody")))
+         (__import__("cortex.fitness_calisthenics", fromlist=["x"]),
+          open(_web + "/fitness/calisthenics.js", encoding="utf-8").read()))
     case("steam room calories never count in the cardio reports total", "steam kcal 16 Nov",
          lambda: (lambda m: "cardioSessions.filter(s=>!isSteam(s))" in m and "const isSteam=" in m)
          (open(_web + "/fitness/index.html", encoding="utf-8").read()))

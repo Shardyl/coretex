@@ -2811,5 +2811,179 @@
    "name": "Shoulder flexion",
    "goal": "180 degrees active overhead on both arms, upper arms by the ears, ribs not flaring: a straight-line handstand"
   }
+ ],
+ "routines": [
+  {
+   "id": "fullbody",
+   "name": "Full body calisthenics",
+   "note": "2 calisthenics days a week plus 1 gym day for 6 to 8 weeks, then compare. 2 sets each, 2 minutes rest, slow lowering on every rep. About 55 minutes plus the warm-up.",
+   "source": "Tyler Tong, Every Calisthenics Exercise You Need (YouTube aBwQBREdNEk); targets his, sets, rest and swaps ours (19 Nov 2026)",
+   "warmups": [
+    "wrist",
+    "scap"
+   ],
+   "items": [
+    {
+     "n": 1,
+     "name": "Ring rows",
+     "dose": "2 x 8-15",
+     "kind": "reps",
+     "tempo": "2011",
+     "rest_s": 120,
+     "youtube": "aBwQBREdNEk@38",
+     "cues": [
+      "Rings at waist height, overhand grip, a little wider than shoulders",
+      "Brace the abs and squeeze the glutes: one straight line from heels to head",
+      "Lower with control, never let gravity do the work"
+     ],
+     "progression": "Knees bent, then legs straight, then feet raised, until 15 reps with the body parallel to the floor"
+    },
+    {
+     "n": 2,
+     "name": "Ring chin-ups / pull-ups",
+     "dose": "2 x 4-10",
+     "kind": "reps",
+     "tempo": "2010",
+     "rest_s": 120,
+     "youtube": "aBwQBREdNEk@115",
+     "cues": [
+      "Start palms facing you and let the rings turn as you pull",
+      "Shoulders packed down, abs braced, glutes squeezed",
+      "Drive the elbows down to the waist, lower for a full 2 seconds"
+     ],
+     "progression": "Chin-ups to 5-10, then pull-ups 4-8; at 12 clean pull-ups, add weight"
+    },
+    {
+     "n": 3,
+     "name": "Deep push-ups on parallettes (the dip swap)",
+     "dose": "2 x 8-15",
+     "kind": "reps",
+     "tempo": "3010",
+     "rest_s": 120,
+     "cues": [
+      "Hands on the parallettes, body one straight line",
+      "Lower until the chest is below the hands, elbows back at about 45 degrees",
+      "Press back up squeezing the chest"
+     ],
+     "progression": "When 15 is easy, raise your feet, or move on to ring dips"
+    },
+    {
+     "n": 4,
+     "name": "Ring support hold",
+     "dose": "2 x 15-30 s",
+     "kind": "hold",
+     "rest_s": 120,
+     "cues": [
+      "Arms locked straight, rings beside the hips",
+      "Turn the rings out a little, shoulders pushed down away from the ears",
+      "Stop the set when the shaking gets big"
+     ],
+     "progression": "At 2 x 30 s steady, start ring dips with a slow lowering"
+    },
+    {
+     "n": 5,
+     "name": "Pseudo planche push-ups",
+     "dose": "2 x 6-10",
+     "kind": "reps",
+     "tempo": "2010",
+     "rest_s": 120,
+     "youtube": "aBwQBREdNEk@300",
+     "cues": [
+      "Hands turned out to the side or back, about 90 degrees",
+      "Push the upper back to the ceiling and pull the stomach in",
+      "Lean forward and keep that lean all the way down"
+     ],
+     "progression": "At 10 reps, lean a few centimetres further, until the hands are at the waist"
+    },
+    {
+     "n": 6,
+     "name": "Pike push-ups",
+     "dose": "2 x 6-10",
+     "kind": "reps",
+     "tempo": "2010",
+     "rest_s": 120,
+     "youtube": "aBwQBREdNEk@352",
+     "cues": [
+      "Hips high, feet walked in towards the hands",
+      "Elbows tucked, lower forward on a diagonal",
+      "Press back up through the palms"
+     ],
+     "progression": "At 10 reps, bring the feet closer; then feet on a chair"
+    },
+    {
+     "n": 7,
+     "name": "Hollow body hold",
+     "dose": "2 x 20-45 s",
+     "kind": "hold",
+     "rest_s": 120,
+     "youtube": "aBwQBREdNEk@412",
+     "cues": [
+      "Lower back glued to the floor",
+      "Pull the belly button in and squeeze the abs hard",
+      "Arms and legs off the floor; bend the knees to make it easier"
+     ],
+     "progression": "Build to 45 s"
+    },
+    {
+     "n": 8,
+     "name": "Seated pike leg lifts",
+     "dose": "2 x 8-15",
+     "kind": "reps",
+     "rest_s": 120,
+     "youtube": "aBwQBREdNEk@467",
+     "cues": [
+      "Legs straight, knees locked, spine tall",
+      "Lean the torso slightly forward over the legs",
+      "Lift the feet as high as you can; hands further back makes it easier"
+     ],
+     "progression": "15 reps, moving the hands forward as it gets easier"
+    },
+    {
+     "n": 9,
+     "name": "Bulgarian split squats",
+     "dose": "2 x 8-25 each",
+     "kind": "reps",
+     "tempo": "3010",
+     "rest_s": 120,
+     "youtube": "aBwQBREdNEk@520",
+     "cues": [
+      "Back foot on the couch behind you",
+      "Lower straight down until the back knee hovers above the floor",
+      "Drive through the front heel and midfoot, never push off the back leg",
+      "Upright with the knee forward works the quads; lean forward with a vertical shin for glutes and hamstrings"
+     ],
+     "progression": "At 25 per leg, hold the 10 kg dumbbells"
+    },
+    {
+     "n": 10,
+     "name": "Dumbbell curls, 10 kg (superset)",
+     "dose": "2 x 12-20",
+     "kind": "reps",
+     "tempo": "3011",
+     "rest_s": 0,
+     "superset": true,
+     "cues": [
+      "Elbows pinned to your sides, no swinging",
+      "3 seconds down",
+      "Straight into the side raises, then rest"
+     ],
+     "progression": "Slow and controlled; add reps before anything else"
+    },
+    {
+     "n": 11,
+     "name": "Side raises, 10 kg (superset)",
+     "dose": "2 x 12-20",
+     "kind": "reps",
+     "tempo": "3011",
+     "rest_s": 120,
+     "cues": [
+      "Slight bend in the elbows, raise to shoulder height",
+      "Lead with the elbows, no shrugging",
+      "3 seconds down"
+     ],
+     "progression": "Slow and controlled; add reps before anything else"
+    }
+   ]
+  }
  ]
 }

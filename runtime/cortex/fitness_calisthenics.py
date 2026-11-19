@@ -114,6 +114,7 @@ def delete_milestone(uid: str) -> dict:
 # video). The current rung = the lowest rung not passed; logging pass tests IS the placement test.
 GOALS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fitness_cali_goals.json")
 LADDER_PREFIX = "ladder:"
+ROUTINE_PREFIX = "routine:"
 
 
 def goals() -> dict:
@@ -187,7 +188,12 @@ def delete_goal_test(uid: str) -> dict:
 def log_ladder_session(week_day: str, day: str, items: list, note: str = "") -> dict:
     """A session from the draft week (warm-ups ticked, each skill's current-rung drills, extras), stored with the
     Smith sessions under program id `ladder:<day name>`, so it never shows as a Handstand Toolkit session."""
-    if week_day not in [w["day"] for w in goals().get("week") or []]:
+    # A ROUTINE (owner, 19 Nov 2026: "Full body calisthenics") logs as program `routine:<id>`, not `ladder:`.
+    routine = week_day.startswith(ROUTINE_PREFIX)
+    if routine:
+        if week_day[len(ROUTINE_PREFIX):] not in [r["id"] for r in goals().get("routines") or []]:
+            raise ValueError("unknown routine")
+    elif week_day not in [w["day"] for w in goals().get("week") or []]:
         raise ValueError("unknown training day")
     clean = []
     for it in items or []:
@@ -204,7 +210,8 @@ def log_ladder_session(week_day: str, day: str, items: list, note: str = "") -> 
         raise ValueError("nothing logged")
     uid = f"cs_{secrets.token_hex(6)}"
     db.execute("insert into fitness.cali_sessions (uid, day, program_id, items, note) values (%s,%s,%s,%s,%s)",
-               (uid, date.fromisoformat(day), LADDER_PREFIX + week_day, Json(clean), (note or "")[:300] or None))
+               (uid, date.fromisoformat(day), week_day if routine else LADDER_PREFIX + week_day, Json(clean),
+                (note or "")[:300] or None))
     return {"ok": True, "id": uid}
 
 

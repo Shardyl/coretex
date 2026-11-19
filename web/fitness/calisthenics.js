@@ -167,10 +167,11 @@ const goalN=s=>{const rs=s.rungs||[];const g=rs.find(x=>x.goal)||rs[rs.length-1]
 function renderGoalsView(el){
   if(_goalView.startsWith('skill:'))return renderSkill(el,_goalView.slice(6));
   if(_goalView.startsWith('day:'))return renderLadderDay(el,_goalView.slice(4));
+  if(_goalView.startsWith('routine:'))return renderRoutine(el,_goalView.slice(8));
   const g=G(), sk=g.skills||[];
   if(!sk.length){el.innerHTML='<div class="fd-note">No skill ladders loaded.</div>';return;}
   const anyTests=(_cali.goal_tests||[]).length>0;
-  const recent=(_cali.sessions||[]).filter(s=>String(s.program).startsWith('ladder:')).slice(0,5);
+  const recent=(_cali.sessions||[]).filter(s=>/^(ladder|routine):/.test(String(s.program))).slice(0,5);
   el.innerHTML=`<div class="section-label">Skill goals</div>
     <div style="font-size:12px;color:var(--ink3);margin-bottom:10px">Five skills, each a ladder. Pass every mark on a rung, filmed, and you move up. Form first: holds in seconds, strict reps.</div>
     ${anyTests?'':`<div class="card" style="padding:12px 14px;margin-bottom:10px;border:1px solid var(--teal)"><div style="font-size:13px;font-weight:800">Placement</div>
@@ -185,6 +186,10 @@ function renderGoalsView(el){
             <div style="font-size:12.5px;font-weight:700;margin-top:4px;color:${done?'var(--teal)':'var(--ink)'}">${done?'Goal reached':`Rung ${cur} of ${L.total}: ${esc(r.name)}`}</div>
             <div style="display:flex;gap:4px;margin-top:6px">${(s.rungs||[]).map(x=>{const st=rungState(s.id,x.n);return `<span style="flex:1;height:6px;border-radius:3px;background:${st==='passed'?'var(--teal)':st==='current'?'var(--amber)':'var(--border)'}"></span>`;}).join('')}</div>
           </div>${icon('arrow','var(--ink3)')}</div></div>`;}).join('')}
+    ${(g.routines||[]).map(r=>`<div class="card" style="padding:12px 14px;margin-bottom:10px;border:1px solid var(--teal)">
+      <div style="display:flex;align-items:center;gap:8px"><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:800">${esc(r.name)}</div>
+        <div style="font-size:11.5px;color:var(--ink3)">${r.items.length} exercises &middot; ${esc(r.note||'')}</div></div>
+        <button class="btn-sm" onclick="caliGoal('routine:${r.id}')">Start</button></div></div>`).join('')}
     <div class="card" style="padding:12px 14px;margin-bottom:10px">
       <div style="font-size:13px;font-weight:800">Training week (draft, January)</div>
       <div style="font-size:11.5px;color:var(--ink3);margin:2px 0 6px">${esc(g.week_note||'')}</div>
@@ -193,7 +198,7 @@ function renderGoalsView(el){
         <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">${esc(w.name)}</div><div style="font-size:11px;color:var(--ink3)">${esc(w.skills.map(id=>(skillOf(id)||{}).name||id).join(', '))}${(w.extra||[]).length?' + '+w.extra.length+' extras':''}</div></div>
         <button class="btn-sm" onclick="caliGoal('day:${w.day}')">Start</button></div>`).join('')}</div>
     ${recent.length?`<div class="card" style="padding:12px 14px;margin-bottom:10px"><div style="font-size:13px;font-weight:800;margin-bottom:4px">Recent sessions</div>
-      ${recent.map(s=>`<div style="border-top:0.5px solid var(--border);padding:6px 0;font-size:12px"><div style="display:flex;justify-content:space-between"><b>${fd(s.date)} &middot; ${esc(String(s.program).slice(7))}</b><button class="btn-sm" onclick="caliSessionDel('${s.id}')">Remove</button></div>
+      ${recent.map(s=>`<div style="border-top:0.5px solid var(--border);padding:6px 0;font-size:12px"><div style="display:flex;justify-content:space-between"><b>${fd(s.date)} &middot; ${esc(sessLabel(s.program))}</b><button class="btn-sm" onclick="caliSessionDel('${s.id}')">Remove</button></div>
         ${s.items.map(i=>`<div style="color:var(--ink2)">${esc(i.exercise_id)}${i.sets.length?': '+esc(i.sets.map(z=>z.hold_s!=null?z.hold_s+'s':z.reps+'').join(', ')):''}${i.note?' &middot; '+esc(i.note):''}</div>`).join('')}</div>`).join('')}</div>`:''}
     <div class="card" style="padding:12px 14px;margin-bottom:10px"><div style="font-size:13px;font-weight:800;margin-bottom:4px">Flexibility end goals</div>
       ${(g.mobility_goals||[]).map(m=>`<div style="border-top:0.5px solid var(--border);padding:6px 0"><div style="font-size:13px;font-weight:700">${esc(m.name)}</div><div style="font-size:12px;color:var(--ink2)">${esc(m.goal)}</div></div>`).join('')}</div>
@@ -289,7 +294,7 @@ window.caliRungJump=(k,instant)=>{const c=[...document.querySelectorAll('#cgCaro
   const box=document.getElementById('cgCarousel');if(c&&box)box.scrollTo({left:c.offsetLeft-box.offsetLeft-(box.clientWidth-c.clientWidth)/2,behavior:instant?'auto':'smooth'});};
 
 // a session from the draft week: warm-ups, then each skill's CURRENT rung drills, then the day's extras
-function lastDrill(name){for(const s of (_cali.sessions||[]))if(String(s.program).startsWith('ladder:')){const i=s.items.find(x=>x.exercise_id===name&&x.sets.length);if(i)return {date:s.date,it:i};}return null;}
+function lastDrill(name){for(const s of (_cali.sessions||[]))if(/^(ladder|routine):/.test(String(s.program))){const i=s.items.find(x=>x.exercise_id===name&&x.sets.length);if(i)return {date:s.date,it:i};}return null;}
 function setInputs(key,dr){const n=nSets(dr.dose), hold=dr.kind==='hold', last=lastDrill(dr.name);
   return `${last?`<div style="font-size:11px;color:var(--ink3);margin-top:2px">Last time (${fd(last.date)}): ${esc(last.it.sets.map(z=>z.hold_s!=null?z.hold_s+'s':z.reps+'').join(', '))}</div>`:''}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;margin-top:6px">${Array.from({length:n},(_,i)=>`<input data-cgset="${key}" data-hold="${hold?1:0}" type="number" inputmode="decimal" class="fd-input" style="font-size:14px;padding:6px" placeholder="${hold?'s':'reps'} ${i+1}"/>`).join('')}</div>
@@ -317,6 +322,35 @@ function renderLadderDay(el,day){
     ${warm}${skillsHtml}${extras}
     <input id="cgSessNote" class="fd-input" style="font-size:13px;margin-bottom:8px" placeholder="Session note (energy, form, anything that hurt)"/>
     <button class="fd-btn" onclick="caliLadderSave('${w.day}')">Save session</button>`;
+  loadCg();
+}
+// a ROUTINE (owner, 19 Nov 2026): a fixed list of exercises with their own guide images, logged like a week day
+const routineOf=id=>(G().routines||[]).find(r=>r.id===id);
+const sessLabel=p=>{p=String(p);if(p.startsWith('routine:')){const r=routineOf(p.slice(8));return r?r.name:p.slice(8);}return p.slice(7);};
+function renderRoutine(el,id){
+  const g=G(), r=routineOf(id);if(!r){_goalView='home';return renderGoalsView(el);}
+  _dayItems.length=0;
+  const block=(title,inner,bd)=>`<div class="card" style="padding:12px 14px;margin-bottom:10px${bd?';border:1px solid var(--amber)':''}"><div style="font-size:14px;font-weight:800;margin-bottom:4px">${title}</div>${inner}</div>`;
+  const warm=(g.warmups||[]).filter(x=>(r.warmups||[]).includes(x.id)).map(wu=>block(esc(wu.name),
+    `<div style="font-size:11.5px;color:var(--ink3);margin-bottom:4px">${esc(wu.note||'')}</div>${wu.items.map(it=>`<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;padding:3px 0"><input type="checkbox" class="cgw_${wu.id}"/><span style="flex:1">${esc(it.name)} <span style="color:var(--ink3)">${esc(it.dose)}</span></span>${watch(it,'Demo')}</label>`).join('')}
+    ${wu.id==='wrist'?'<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><label class="form-label" style="margin:0">Wrist pain 0-10</label><input id="cgWristPain" type="number" min="0" max="10" inputmode="numeric" class="fd-input" style="width:70px;font-size:14px;padding:6px"/></div>':''}`)).join('');
+  const items=r.items.map((it,i)=>{const k=_dayItems.push({code:`${r.id}:${it.n}`,exercise_id:it.name})-1, prev=r.items[i-1];
+    const ss=it.superset||(prev&&prev.superset);
+    return block(`${it.n}. ${esc(it.name)}`,`<div style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 6px">
+        <div style="width:120px;flex-shrink:0">${cgImg(r.id,it.n,true)}</div>
+        <div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:700">${esc(it.dose)}${it.rest_s?' · rest '+(it.rest_s>=60&&it.rest_s%60===0?(it.rest_s/60)+' min':it.rest_s+' s'):' · no rest, straight into the next'}</div>
+          ${it.tempo?tempoGraphic(it.tempo):''}<div style="margin-top:6px">${watch(it)}</div></div></div>
+      ${(it.cues||[]).map(c=>`<div style="font-size:12px;color:var(--ink2)">&bull; ${esc(c)}</div>`).join('')}
+      ${it.progression?`<div style="font-size:11.5px;color:var(--ink3);margin-top:4px">Next: ${esc(it.progression)}</div>`:''}
+      ${setInputs(k,it)}`,ss);}).join('');
+  el.innerHTML=`${bigBack("caliGoal('home')",'All goals')}
+    <div style="font-size:18px;font-weight:800">${esc(r.name)}</div>
+    <div style="font-size:12px;color:var(--ink3);margin:2px 0 4px">${esc(r.note||'')}</div>
+    <div style="display:flex;gap:8px;align-items:center;margin:8px 0 10px"><label class="form-label" style="margin:0">Date</label><input id="cgSessDay" type="date" value="${today()}" max="${today()}" class="fd-input" style="width:auto;font-size:14px"/></div>
+    ${warm}${items}
+    <input id="cgSessNote" class="fd-input" style="font-size:13px;margin-bottom:8px" placeholder="Session note (energy, form, anything that hurt)"/>
+    <button class="fd-btn" onclick="caliLadderSave('routine:${r.id}')">Save session</button>
+    <div style="font-size:10.5px;color:var(--ink3);margin-top:8px">${esc(r.source||'')}</div>`;
   loadCg();
 }
 window.caliLadderSave=async function(day){
