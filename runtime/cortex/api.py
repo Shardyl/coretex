@@ -35,7 +35,7 @@ from pydantic import BaseModel
 
 from . import (newsletter, anchor_score, capabilities, catalog, config, connector, contentqueue, crm, db, deck, documents, engine, fitness, gmail, knowledge, meetingprep, nurture, pipeline,
                notifications, personas, profile, provider, push, questionnaire, reminders, schedule, seo_report,
-               skillqa, social, social_comments, social_config, social_connect, social_dm, social_warm, store, voice, webauthn_auth, whatsapp,
+               skillqa, social, social_comments, social_config, social_connect, social_dm, social_warm, store, threads, voice, webauthn_auth, whatsapp,
                worker)
 
 app = FastAPI(title="Cortex API", version="0.1.0")
@@ -525,6 +525,13 @@ def _enrich_action_card(t: dict) -> dict:
             except Exception:  # noqa: BLE001
                 pass
         inq = (t.get("request") or {}).get("inquiry") or {}
+        # WHICH CONVERSATION IT SENDS ON (thread picker, owner, 20 Nov 2026), from the stored request, no Gmail call
+        try:
+            t["thread_line"] = threads.current(t)
+            t["thread_line"]["related"] = "continued_related_deal_thread" in (
+                (t.get("request") or {}).get("context_manifest") or [])
+        except Exception:  # noqa: BLE001
+            t["thread_line"] = None
         # THE INVITE IS ON THE CARD (card 1365, 20 Oct 2026): a meeting rode on an email approval unseen. Whatever
         # approving would send to the calendar is shown here, with who it invites and whether the email carries it.
         _mt = (t.get("request") or {}).get("meeting") or {}
@@ -3093,6 +3100,52 @@ def task_link_deal(task_id: int, body: CardDeal, u: dict = Depends(current_user)
     return engine.link_card_to_deal(task_id, int(body.deal_id), who)
 
 
+class CardThread(BaseModel):
+    key: str = ""                   # the conversation picked from the list (its normalised subject)
+    new_subject: str = ""           # or start a NEW thread under this subject
+
+
+def _opt_public(o: dict) -> dict:
+    return {k: o.get(k) for k in ("key", "subject", "count", "last_from", "last_at", "last_ours", "deals")}
+
+
+@app.get("/api/tasks/{task_id}/threads")
+def task_threads(task_id: int, fresh: int = 0, u: dict = Depends(current_user)) -> dict:
+    """THE THREAD PICKER (owner, 20 Nov 2026): every conversation with this card's recipient, one per subject,
+    newest first, and the one the card will send on now."""
+    _guard_task(u, task_id)
+    t = store.get_task(task_id) or {}
+    cur = threads.current(t)
+    opts = threads.options(t, fresh=bool(fresh))
+    ck = ((t.get("request") or {}).get("thread_label") or {}).get("key") or threads.norm_subject(cur.get("subject"))
+    return {"current": cur, "selected": ck if cur.get("mode") == "continue" else "",
+            "options": [_opt_public(o) for o in opts]}
+
+
+@app.post("/api/tasks/{task_id}/thread")
+def task_set_thread(task_id: int, body: CardThread, u: dict = Depends(current_user)) -> dict:
+    """Put this email on the picked conversation, or start a new thread with a subject. Never redrafts the body."""
+    _guard_task(u, task_id)
+    t = store.get_task(task_id) or {}
+    if t.get("status") in engine._SENT_STATES:
+        raise HTTPException(status_code=409, detail="this email has already gone")
+    req = dict(t.get("request") or {})
+    who = (u or {}).get("name") or (u or {}).get("email") or "owner"
+    if body.new_subject.strip():
+        r = threads.start_new(req, body.new_subject)
+        note = f"new thread '{r.get('subject')}'"
+    elif body.key:
+        r = threads.choose(t, req, key=body.key, actor=who)
+        note = f"on the thread '{r.get('subject')}'"
+    else:
+        raise HTTPException(status_code=400, detail="pick a thread or give a new subject")
+    if not r.get("ok"):
+        return r
+    req["correction_actions"] = (req.get("correction_actions") or []) + [f"{note} ({who})"]
+    t = store.update_task(task_id, request=req) or t
+    return {"ok": True, "current": threads.current(t)}
+
+
 @app.post("/api/whatsapp/nudge/{task_id}")
 def whatsapp_nudge(task_id: int, u: dict = Depends(current_user)) -> dict:
     """Ask a lead whose 24h window has shut to reopen the chat, so the reply on this card can send.
@@ -3656,7 +3709,14 @@ SKILL_TOOLS = [
                                                      "the recipient's one active deal itself"},
         "separate_email": {"type": "boolean", "description": "only after Rashad has been shown an existing "
                                                             "open card to this person and has explicitly "
-                                                            "said he wants a SECOND, separate email as well"}},
+                                                            "said he wants a SECOND, separate email as well"},
+        "thread": {"type": "string", "description": "when he names an EXISTING email thread to send this on "
+                                                    "('on the batch 2 thread', 'reply on our latest thread'): his "
+                                                    "words for it, or 'latest'. Without it Cortex continues the "
+                                                    "latest relevant thread with them by itself"},
+        "new_thread": {"type": "boolean", "description": "ONLY when he explicitly asks for a NEW email thread / a "
+                                                        "fresh email under its own subject. Default false: emails "
+                                                        "continue the existing conversation"}},
         "required": ["company", "to_name", "subject", "brief"]}},
     {"name": "save_document",
      "description": "Save the file(s) Rashad attached to THIS message. With deal_id they are filed ON THAT DEAL "
@@ -5825,6 +5885,18 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                         "create a second one. Show him that card, and ask whether to CORRECT it with "
                         "what he just said (use correct_task) or to send a genuinely separate email as "
                         "well (call draft_email again with separate_email true).")
+        # THREADS (owner, 20 Nov 2026): a thread he names is picked now, by its subject; a new thread only on his
+        # explicit word; otherwise adoption continues the latest relevant conversation at draft time.
+        _thread_note = ""
+        if inp.get("new_thread"):
+            req["new_thread"] = True
+            _thread_note = f" Starts a NEW thread: '{inp.get('subject', '')}'."
+        elif str(inp.get("thread") or "").strip() and to_email:
+            _tr = threads.choose({"company_id": co["id"], "request": req, "deal_id": req.get("deal_id")}, req,
+                                 words=str(inp["thread"]), actor="owner, via Talk")
+            _thread_note = (f" On the existing thread '{_tr['subject']}'." if _tr.get("ok") else
+                            f" Could NOT find a thread called '{inp['thread']}' with them: it will continue the "
+                            "latest one, and he can pick another from the thread list on the card.")
         t = store.create_task(co["id"], sk["id"], "email_draft", req)
         if req.get("deal_id"):
             db.execute("update tasks set deal_id=%s where id=%s", (req["deal_id"], t["id"]))
@@ -5835,6 +5907,7 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             extra += (f" NOT in the library (tell Rashad, never pretend to attach): {', '.join(missing)}.")
         if req.get("deal_id"):
             extra += f" Linked to opportunity #{req['deal_id']}, so the send is recorded on it."
+        extra += _thread_note
         return (f"Drafting an email to {to_name or 'the recipient'}{addr} — it's in your Inbox as task "
                 f"#{t['id']} showing the recipient, subject and logo, for your approval." + extra)
     if name == "save_document":

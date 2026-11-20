@@ -3254,6 +3254,57 @@ def _cases():
                 and '"Rejected"' in inspect.getsource(_eng.deal_not_interested))
     case("Rejected is ours: we turned it down; it never chases, cancels Cortex's reminders and keeps the reason",
          "owner, 19 Nov 2026 (a stage after Lost for opportunities we do not qualify)", _rejected_is_ours)
+
+    # --- THE THREAD PICKER (owner, 20 Nov 2026): D-Marin nine threads, HBMSU two 'batch 2' threads
+    def _thread_picker():
+        from . import threads as _th
+        n = _th.norm_subject
+        same = (n("Re: [EXTERNAL]Re: Request for Creative Approach – Graduation 2026 Video Production")
+                == n("[EXTERNAL]Re: Request for Creative Approach - Graduation 2026 Video Production")
+                == n("request for creative approach – graduation 2026 video production")
+                and n("D-Marin Marasi Bay marina brand video shoot - 2025/2026")
+                == n("RE: D-Marin Marasi Bay Marina Brand Video Shoot - 2025/2026"))
+        opts = [{"key": n("Learn from anywhere batch 2"), "subject": "Learn from anywhere batch 2", "_ms": 2,
+                 "msg_id": "<b2>", "references": "<b1>", "mailboxes": {}, "last_from": "Rashad", "last_at": "",
+                 "count": 2, "head": {"to": "i.salah@hbmsu.ac.ae", "cc": "", "from": "", "email": ""}},
+                {"key": n("Request for Creative Approach - Graduation 2026"), "subject": "Request for Creative "
+                 "Approach - Graduation 2026", "_ms": 3, "msg_id": "<g9>", "references": "", "mailboxes": {},
+                 "last_from": "Islam", "last_at": "", "count": 19,
+                 "head": {"to": "", "cc": "", "from": "", "email": ""}}]
+        words_ok = (_th.match_words(opts, "our Learn from anywhere batch 2 email thread")["key"] == opts[0]["key"]
+                    and _th.match_words(opts, "our latest thread of email")["key"] == opts[1]["key"]
+                    and _th.match_words(opts, "the Dubai Police tender") is None)
+        # card 1642's words are a thread, never a new one; card 1629's ask IS a new one; card 1464 names a thread
+        intent_ok = (not engine._wants_new_thread("it should be in our Learn from anywhere batch 2 email thread, do "
+                                                  "not create new one")
+                     and not engine._wants_new_thread("put it in our latest thread of email")
+                     and engine._wants_new_thread('can you create a new email thread and Subject is as "Learn from '
+                                                  'Anywhere Batch 2"')
+                     and bool(engine._ON_THREAD.search("put the email on this thread D-Marin Marasi Bay Marina "
+                                                        "Brand Video Shoot - 2025/2026 not D Marin - Marasi Bay")))
+        # a pick rewrites the card in place: the thread's subject, the newest message's headers, no new_thread
+        _orig = _th.options
+        try:
+            _th.options = lambda task, fresh=False: opts
+            co = store.get_company_by_slug("sensa") or {}
+            req = {"inquiry": {"email": "i.salah@hbmsu.ac.ae", "subject": "Learn from anywhere batch 2"},
+                   "new_thread": True}
+            r = _th.choose({"company_id": co.get("id"), "request": req}, req, words="batch 2 thread")
+            pick_ok = (r.get("ok") and req["thread"]["msg_id"] == "<b2>" and "new_thread" not in req
+                       and req["inquiry"]["subject"] == "Learn from anywhere batch 2"
+                       and _th.current({"request": req})["mode"] == "continue")
+        finally:
+            _th.options = _orig
+        src_u, src_a = inspect.getsource(engine._apply_understood), inspect.getsource(engine._adopt_existing_thread)
+        wired = ("threads.choose(" in src_u and "_thread_in_mailbox(" in src_u      # sender change keeps the thread
+                 and '_th0.get("msg_id")' in src_a and "_pick_key" in src_a
+                 and "continued_related_deal_thread" in src_a
+                 and "_thread_in_mailbox(" in inspect.getsource(engine._send_email_reply)
+                 and "threadLine(" in open(_web + "/index.html", encoding="utf-8").read()
+                 and '"new_thread"' in inspect.getsource(__import__("cortex.api", fromlist=["x"])))
+        return same and words_ok and intent_ok and pick_ok and wired
+    case("an email card says which thread it sends on, and 'put it on the X thread' picks X, never a new subject",
+         "owner, 20 Nov 2026 (D-Marin 1464/1657, HBMSU 1642/1461)", _thread_picker)
     return C
 
 

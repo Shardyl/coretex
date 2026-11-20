@@ -53,7 +53,10 @@ CAPABILITIES: list[tuple[str, str]] = [
      "quotation goes out the deal's value becomes that quotation's total before VAT and the timeline says "
      "which version went for how much. deal_timeline opens one "
      "deal (by id, or title words): read it when asked 'where is deal X up to', and BEFORE quoting, "
-     "proposing or emailing about a deal, so the scope comes from the client's own brief."),
+     "proposing or emailing about a deal, so the scope comes from the client's own brief. THREADS: every email "
+     "continues the latest relevant conversation with them by default; when he names a thread ('on the batch 2 "
+     "thread') pass draft_email thread with his words, and pass new_thread true ONLY when he asks for a new email "
+     "thread. Each email card shows the thread it sends on with a list to change it."),
     ("Off-channel conversations — paste and it moves the clocks",
      "Rashad can PASTE a WhatsApp chat (or recount a call) and log_conversation files it on the right "
      "deal, shifts that deal's automated follow-ups when he says he is away or agrees a later time, and "

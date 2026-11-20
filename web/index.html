@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v96';
+const APP_BUILD = 'cortex-v97';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -2115,6 +2115,7 @@ function actionCard(t){
         <span class="chip">${kindLabel}</span><span class="chip" style="margin-left:auto;opacity:.6" title="Task ID — quote this when troubleshooting">#${t.id}</span></div>
       <div class="title">${title}</div>
       ${dealLine(t,isEmail)}
+      ${isEmail?threadLine(t):''}
       ${isEmail&&em?envHeader(em):''}
       ${isEmail&&em&&!isOutbound?emailBlock(em):''}
       ${t.kind==='wa_reply'?waBlock(t.wa):''}
@@ -2592,6 +2593,51 @@ function dealLine(t,isEmail){
   return `<div class="meta" style="margin:2px 0 8px;flex-wrap:wrap;gap:6px"><span style="opacity:.7">${ic('arrow',13)} No opportunity linked</span>
     ${o.map(d=>`<button class="btn sm" onclick="linkCardDeal(${t.id},${+d.id})">#${d.id} ${esc(d.title||'')}</button>`).join('')}
     ${em.includes('@')?`<button class="btn sm" onclick="linkCardDeal(${t.id},0,true)">Create opportunity</button>`:''}</div>`;
+}
+// THE THREAD PICKER (owner, 20 Nov 2026): which conversation this email sends on, labelled by its subject, and a
+// drop-down of every conversation with them (one per subject, newest first) to put it on the right one.
+function thDay(iso){ if(!iso) return ''; const d=new Date(iso); return isNaN(d)?'':d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }
+function threadLine(t){
+  const c=t.thread_line; if(!c) return '';
+  const sent=['done','sending','sent'].includes(t.status);
+  const btn=sent?'':` <button class="btn sm" onclick="openThreads(${t.id})">Change thread</button>`;
+  let txt, col='';
+  if(c.mode==='continue'){
+    const bits=[c.last_from&&('last from '+esc(c.last_from)), thDay(c.last_at), c.count?(c.count+' messages'):''].filter(Boolean).join(' · ');
+    txt=`Sending on: <b>${esc(c.subject||'(no subject)')}</b>${bits?' <span style="opacity:.7">· '+bits+'</span>':''}`;
+    if(c.related){ txt+=' <span style="color:#E5A54B">· this thread is from another opportunity</span>'; col='color:#E5A54B;'; }
+  } else {
+    txt=`Starts a NEW thread: <b>${esc(c.subject||'(no subject)')}</b>${c.deliberate?'':' <span style="color:#E5A54B">(no earlier thread found)</span>'}`;
+  }
+  return `<div class="meta" style="margin:-4px 0 8px;flex-wrap:wrap;gap:6px">${ic('mail',13)} <span>${txt}</span>${btn}</div>
+    <div id="th${t.id}" style="display:none;margin:0 0 10px"></div>`;
+}
+async function openThreads(id,fresh){
+  const box=document.getElementById('th'+id); if(!box) return;
+  if(box.style.display==='block'&&!fresh){ box.style.display='none'; return; }
+  box.style.display='block'; box.innerHTML='<div class="meta">Looking through the mailboxes...</div>';
+  try{
+    const r=await api('/api/tasks/'+id+'/threads'+(fresh?'?fresh=1':''));
+    const o=r.options||[];
+    const opt=x=>`<option value="${esc(x.key)}"${x.key===r.selected?' selected':''}>${esc(x.subject)} · ${esc(x.last_from||'')} ${thDay(x.last_at)} · ${x.count} msg${x.count===1?'':'s'}${(x.deals&&x.deals.length)?' · #'+x.deals.join(', #'):''}</option>`;
+    box.innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <select id="ths${id}" style="flex:1;min-width:220px;max-width:100%;background:var(--bg2,#0e1620);color:var(--fg,#dfe7ef);border:1px solid var(--ln,#22303f);border-radius:9px;padding:7px 9px;font:inherit;font-size:13px">
+        ${o.length?'':'<option value="">No earlier conversations with them</option>'}${o.map(opt).join('')}
+        <option value="__new">New thread...</option></select>
+      <button class="btn sm go" onclick="pickThread(${id})">Use this thread</button>
+      <button class="btn sm" onclick="openThreads(${id},1)" title="Read the mailboxes again">Refresh</button></div>
+      <div class="meta" style="margin-top:5px;opacity:.75">Picking a thread keeps your email as written; only the conversation and subject change.</div>`;
+  }catch(e){ box.innerHTML='<div class="meta">Could not read the threads: '+esc(e.message)+'</div>'; }
+}
+async function pickThread(id){
+  const v=(document.getElementById('ths'+id)||{}).value;
+  let body;
+  if(v==='__new'){ const s=prompt('Subject for the new thread'); if(!s) return; body={new_subject:s}; }
+  else if(v) body={key:v}; else return;
+  try{ const r=await api('/api/tasks/'+id+'/thread',{method:'POST',body:JSON.stringify(body)});
+    if(r&&r.ok){ toast(r.current&&r.current.mode==='new'?'New thread':'On the thread: '+(r.current.subject||'')); render(); }
+    else toast('Not changed: '+((r&&r.error)||'unknown')); }
+  catch(e){ toast('Error: '+e.message); }
 }
 async function linkCardDeal(id,dealId,create){
   try{ const r=await api('/api/tasks/'+id+'/link-deal',{method:'POST',body:JSON.stringify(create?{create:true}:{deal_id:dealId})});

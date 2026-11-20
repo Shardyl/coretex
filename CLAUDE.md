@@ -482,6 +482,36 @@ for a link/invite (`_owner_set_slot`); a reply still needs the client to have ag
 Pre-booked attendee-less as before; the guest is invited on approval. Regress case: "an email we compose books its
 meeting...". Still open: a slot already pre-booked is not MOVED when he reschedules it on the card.
 
+## The thread picker: every email says which conversation it sends on (owner, 20 Nov 2026)
+
+"Cortex basically starting new threads for everything." Audit of 75 days: D-Marin ran to nine conversations in
+Ayresh's mailbox (copied on everything), HBMSU got two "Learn from anywhere batch 2" threads. Four causes, all fixed:
+1. **"Put it on the X thread" was read as a NEW SUBJECT** (no thread channel existed), and a new subject starts a
+   new thread: D-Marin card 1464, HBMSU card 1642 (told three times "do not create new one"). `_understand_correction`
+   now has a `thread` channel, and code decides it regardless of the reader: thread words (`_ON_THREAD`) without an
+   explicit new-thread ask (`_wants_new_thread`, which ignores "do not create new one") are a pick via
+   `threads.choose(words=)`, never a subject.
+2. **Changing the sender blanked the thread** (card 1461). It now keeps the reply headers and looks up the new
+   sender's own thread id by Message-Id (`threads._thread_in_mailbox`). The send path does the same for any card that
+   carries headers but no thread id, so it stays one conversation in our Gmail too.
+3. **A related opportunity was barred from the client's threads** (14 Oct Merck rule), so D-Marin boat show deal 197's
+   quotation (card 1657) opened a new thread. Another deal's thread is now the LAST resort in `_adopt_existing_thread`
+   rather than forbidden (manifest `continued_related_deal_thread`, and the card says "this thread is from another
+   opportunity" in amber).
+4. **Talk always set a subject** with no way to name a thread: `draft_email` takes `thread` (his words) and
+   `new_thread` (only on his explicit ask).
+
+`threads.py`: `options(task)` reads every conversation with the recipient (their whole company on a corporate domain)
+from every one of our mailboxes, headers only, and MERGES BY SUBJECT (`norm_subject`: Re/Fwd/AW and HBMSU's
+"[EXTERNAL]" stripped, case, spacing and spaced dashes ignored), because one conversation has a different thread id
+in each mailbox and splits again when a reply loses its headers. `choose` takes reply headers from the NEWEST message
+in that conversation, whichever mailbox holds it. A pick is remembered per opportunity (setting `deal_thread:<id>`)
+and adoption prefers it next time. A thread the card carries by id OR headers is final: adoption never overrides it.
+Cockpit (cortex-v97): `threadLine` under the opportunity line ("Sending on: <subject> · last from X · date", or
+"Starts a NEW thread"), "Change thread" opens the list (`GET /api/tasks/{id}/threads`) with "New thread..." last;
+`POST /api/tasks/{id}/thread` {key} | {new_subject}. Picking never redrafts the body. Regress case: "an email card
+says which thread it sends on...".
+
 ## Media library: sort by, highest rated first (owner, 19 Nov 2026)
 
 coretex.uk/media has a "Sort by" menu in the header: Highest rated (the default on every load), Most viewed,

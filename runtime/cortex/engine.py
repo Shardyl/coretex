@@ -30,7 +30,7 @@ from psycopg.types.json import Json
 
 from . import (contentqueue, crm, db, deck, doctext, documents, envelope, gmail, manager, media, meetnotes, policy,
                newsletter, notifications, phishing, pipeline, profile, ppc_report, provider, quotation, reminders,
-               schedule, seo_report, stages, store, webauthn_auth, whatsapp, worker)
+               schedule, seo_report, stages, store, threads, webauthn_auth, whatsapp, worker)
 from .integrations import telegram as tg, wordpress as wp
 
 MONEY_KINDS = {"payment", "invoice_send"}  # never auto, regardless of trust
@@ -913,6 +913,12 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
         else:
             send_company = None     # no brand token -> legacy global path (_send_token uses gmail_send_refresh_token)
     th = req.get("thread") or {}               # continue THEIR Gmail thread (threadId + reply headers)
+    if not th.get("id") and th.get("msg_id") and send_rt_key:
+        # a thread picked by its reply headers alone: file it on the SENDING mailbox's own copy of the conversation
+        # too, so it stays one thread in our Gmail as well as the client's (thread picker, 20 Nov 2026)
+        _tid = threads._thread_in_mailbox(send_rt_key, th["msg_id"], send_company)
+        if _tid:
+            th = {**th, "id": _tid}
     try:
         res = gmail.send_message(env["to"], env["subject"], c["plain"], from_addr=from_addr, cc=env["cc"],
                                  html=c["html"], inline_images=c["inline"], bcc=env.get("bcc"),
@@ -2881,7 +2887,8 @@ def _understand_correction(task: dict, text: str) -> dict:
             '"reply_instruction": "<everything that concerns the email reply content itself>", '
             f'"from": "<first name of a new sender if he asks to change who it is sent from; known team: {roster}>", '
             '"to_add": ["<first names/emails he wants ADDRESSED directly, i.e. on the To line>"], '
-            '"subject": "<the new SUBJECT LINE, only if he asks to change the subject: his words for it in SENTENCE CASE (only the first word and proper names capitalised), nothing added>", '
+            '"subject": "<the new SUBJECT LINE, only if he asks to CHANGE THE SUBJECT or to start a NEW thread/email with a subject: his words for it in SENTENCE CASE (only the first word and proper names capitalised), nothing added. NEVER when he asks to put the email on an EXISTING thread: that is the thread channel>", '
+            '"thread": "<ONLY when he asks to put/send/keep this email on an EXISTING email thread or conversation (\'put it on the batch 2 thread\', \'reply on our latest thread\', \'keep it in the Marasi Bay thread\'): the words he uses to name that thread, or \'latest\' when he names none>", '
             '"cc_add": ["<first names to add on cc>"], '
             '"cc_remove": ["<first names or exact emails to drop from cc>"], '
             '"attach_documents": ["<standing company documents he asks to ATTACH TO THIS EMAIL NOW, e.g. \'attach the '
@@ -2921,6 +2928,19 @@ _DETACH_ALL = re.compile(
 _ATTACH_VERB = re.compile(r"\battach(?!ments?\b)|\benclos", re.I)
 _REMOVAL = re.compile(r"\b(?:remove|take (?:off|out)|drop|strip|delete|detach|don'?t|do not|no need to|never)\b"
                       r"(?:(?!\band\b|\bthen\b|\bbut\b)[^.?!,;]){0,60}", re.I)     # stops at "and": "remove X and attach Y"
+
+
+_ON_THREAD = re.compile(r"\b(?:thread|email chain|e-?mail trail|trail|conversation)s?\b", re.I)
+_NEW_THREAD = re.compile(r"\b(?:new|fresh|separate)\s+(?:e-?mail\s+)?(?:thread|chain|conversation|e-?mail)\b|"
+                         r"\bstart\s+(?:a\s+)?(?:new|fresh|separate)\b", re.I)
+_NOT_NEW = re.compile(r"\b(?:do\s*n[o']?t|don'?t|never|not|no)\b[^.?!]{0,25}\b(?:new|fresh|separate)\b", re.I)
+
+
+def _wants_new_thread(text: str) -> bool:
+    """His words ask for a NEW conversation ('create a new email thread', 'start a fresh email'), and do not
+    say the opposite ('do not create a new one')."""
+    t = text or ""
+    return bool(_NEW_THREAD.search(t)) and not _NOT_NEW.search(t)
 
 
 def _detach_all_asked(text: str) -> bool:
@@ -2989,7 +3009,33 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
     if frm and frm in senders:
         req["from_email"], req["mailbox_rt"] = senders[frm]["email"], senders[frm]["rt_key"]
         if req.get("thread"):
-            req["thread"] = {**req["thread"], "id": ""}
+            # A NEW SENDER KEEPS THE THREAD (owner, 20 Nov 2026, card 1461): the thread id is mailbox-local, so it
+            # used to be blanked and the email went out as a new conversation. The reply headers (Message-Id,
+            # References) are what chain it for the client, and they work from any mailbox; the new sender's OWN
+            # thread id is looked up by that Message-Id.
+            _th = req["thread"]
+            req["thread"] = {**_th, "id": threads._thread_in_mailbox(
+                req["mailbox_rt"], _th.get("msg_id") or "",
+                _inbox_client_company((store.get_company(task["company_id"]) or {}).get("slug") or ""))}
+        changed = True
+    # "PUT IT ON THE X THREAD" IS A THREAD, NOT A SUBJECT (owner, 20 Nov 2026). There was no thread channel, so the
+    # reader filed the thread's name as a new SUBJECT, and a new subject starts a new conversation: D-Marin card 1464
+    # ("put the email on this thread D-Marin Marasi Bay Marina Brand Video Shoot...") and HBMSU card 1642 (three times
+    # "it should be in our Learn from anywhere batch 2 email thread, do not create new one") both went out on NEW
+    # threads. His words decide it by code: thread words without an explicit "new thread" are a pick, never a subject.
+    _tw = str(u.get("thread") or "").strip()
+    if not _tw and u.get("subject") and _ON_THREAD.search(text or "") and not _wants_new_thread(text):
+        _tw, u = str(u["subject"]), {**u, "subject": ""}
+    if _tw and not _wants_new_thread(text):
+        if u.get("subject") and not re.search(r"\bsubject\b", text or "", re.I):
+            u = {**u, "subject": ""}
+        _r = threads.choose(task, req, words=_tw, actor="owner")
+        if _r.get("ok"):
+            created.append(f"on the thread '{_r['subject']}'")
+            req.pop("card_problem", None)
+        else:
+            req["card_problem"] = (f"Could not find an email thread with them called '{_tw}'. Pick it from the "
+                                   "thread list on the card.")
         changed = True
     # HIS SUBJECT IS THE SUBJECT (21 Sep 2026): "change the subject to media content quotation" on card 837 went
     # to the body writer, who cannot touch a subject line, and the card came back unchanged. A subject he sets
@@ -6265,7 +6311,10 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
     # a follow-up, a deal-linked card, or an owner-composed email about a deal. A cold new topic with
     # no work context still opens its own thread (owner, 31 Aug: "continue the last relevant thread so
     # the recipients and the people in copy stay right").
-    if not email or (req.get("thread") or {}).get("id"):
+    # A thread the card already carries, by id OR by reply headers alone (a picked thread the sending mailbox
+    # holds no copy of), is final: adoption never second-guesses it (thread picker, 20 Nov 2026).
+    _th0 = req.get("thread") or {}
+    if not email or _th0.get("id") or _th0.get("msg_id"):
         return
     if req.get("new_thread"):
         return          # the owner deliberately wants a FRESH conversation, not a continuation
@@ -6323,6 +6372,10 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
         except Exception:  # noqa: BLE001
             pass
 
+    # THE OWNER'S PICK FOR THIS OPPORTUNITY WINS (thread picker, 20 Nov 2026): the conversation he last chose on a
+    # card for this deal, by its subject, before any other preference.
+    _pick_key = threads.remembered(req.get("deal_id") or task.get("deal_id"))
+
     def _another_deals(tid: str) -> bool:
         if not req.get("deal_id") or not tid or tid in _deal_threads:
             return False
@@ -6347,10 +6400,12 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
                                      q=f"(from:{email} OR to:{email}) newer_than:{_recent_days}d",
                                      company=_inbox_client_company(co.get("slug") or ""))
 
+            def _real(cand) -> bool:
+                return bool(cand.get("thread_id")) and not (cand.get("auto_marker")
+                                                             or _notice_subject(cand.get("subject")))
+
             def _usable(cand) -> bool:
-                if not cand.get("thread_id") or _another_deals(cand["thread_id"]):
-                    return False
-                return not (cand.get("auto_marker") or _notice_subject(cand.get("subject")))
+                return _real(cand) and not _another_deals(cand["thread_id"])
             # THE CONVERSATION THEY ANSWERED BEATS THE ONE WE STARTED. Taking the newest message
             # meant a follow-up we ourselves opened on a fresh thread became "the thread", and the
             # next chase continued THAT instead of the real exchange: Brent Woodhead's live
@@ -6358,9 +6413,21 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
             # 490 was pointed at a one-sided "your enquiry" we had sent a month later (7 Sep 2026).
             _replied = {c["thread_id"] for c in (msgs or [])
                         if c.get("thread_id") and (c.get("email") or "").lower() == email.lower()}
-            m = (next((c for c in (msgs or []) if _usable(c) and c["thread_id"] in _deal_threads), None)
+            m = (next((c for c in (msgs or []) if _pick_key and _real(c)
+                       and threads.norm_subject(c.get("subject")) == _pick_key), None)
+                 or next((c for c in (msgs or []) if _usable(c) and c["thread_id"] in _deal_threads), None)
                  or next((c for c in (msgs or []) if _usable(c) and c["thread_id"] in _replied), None)
                  or next((c for c in (msgs or []) if _usable(c)), None))
+            # CONTINUE BY DEFAULT, EVEN ACROSS A RELATED OPPORTUNITY (owner, 20 Nov 2026: "find the latest, most
+            # relevant thread and continue it, unless it truly is a new subject"). D-Marin's boat show deal 197 grew
+            # out of the shoot conversation, and its revised quotation (card 1657) opened a new thread because every
+            # thread with Jurgita belonged to deals 4 and 182. Another deal's thread is now the LAST resort rather
+            # than forbidden; the card's thread line says whose it is, and one tap changes it.
+            if not m:
+                m = next((c for c in (msgs or []) if _real(c) and c["thread_id"] in _replied), None) \
+                    or next((c for c in (msgs or []) if _real(c)), None)
+                if m:
+                    manifest.append("continued_related_deal_thread")
             if not m:
                 continue
             # A CONVERSATION WE OPENED MINUTES AGO IS NOT A CONVERSATION. Card 474 sent a thank-you on a
@@ -6458,13 +6525,22 @@ def _adopt_existing_thread(task: dict, req: dict, manifest: list) -> None:
     subj = re.sub(r"^(?:(?:re|fwd?)\s*:\s*)+", "", (m.get("subject") or ""), flags=re.I).strip()
     if subj:
         req["inquiry"] = {**(req.get("inquiry") or {}), "subject": subj}
+    # the card's thread line reads this (thread picker, 20 Nov 2026)
+    try:
+        _lat = parsedate_to_datetime(m.get("date") or "").isoformat()
+    except Exception:  # noqa: BLE001
+        _lat = ""
+    req["thread_label"] = {"subject": threads.clean_subject(subj), "last_from": m.get("name") or m.get("email") or "",
+                           "last_at": _lat, "count": 0,
+                           "key": threads.norm_subject(subj), "picked_by": "cortex"}
     manifest.append(f"existing_thread({s['email'].split('@')[0]})")
     try:
         if task.get("id"):
             db.execute(
                 "update tasks set request = request || %s::jsonb where id=%s",
                 (json.dumps({"thread": req["thread"], "from_email": req["from_email"],
-                             "mailbox_rt": req["mailbox_rt"], "inquiry": req["inquiry"], **_rekey}), task["id"]))
+                             "mailbox_rt": req["mailbox_rt"], "inquiry": req["inquiry"],
+                             "thread_label": req["thread_label"], **_rekey}), task["id"]))
     except Exception:  # noqa: BLE001
         pass
 
