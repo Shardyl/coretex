@@ -3264,15 +3264,17 @@ def _cases():
                 == n("request for creative approach – graduation 2026 video production")
                 and n("D-Marin Marasi Bay marina brand video shoot - 2025/2026")
                 == n("RE: D-Marin Marasi Bay Marina Brand Video Shoot - 2025/2026"))
-        opts = [{"key": n("Learn from anywhere batch 2"), "subject": "Learn from anywhere batch 2", "_ms": 2,
+        opts = [  # newest first, the order options() returns
+                {"key": n("Learn from anywhere batch 2"), "subject": "Learn from anywhere batch 2", "_ms": 2,
                  "msg_id": "<b2>", "references": "<b1>", "mailboxes": {}, "last_from": "Rashad", "last_at": "",
                  "count": 2, "head": {"to": "i.salah@hbmsu.ac.ae", "cc": "", "from": "", "email": ""}},
                 {"key": n("Request for Creative Approach - Graduation 2026"), "subject": "Request for Creative "
                  "Approach - Graduation 2026", "_ms": 3, "msg_id": "<g9>", "references": "", "mailboxes": {},
                  "last_from": "Islam", "last_at": "", "count": 19,
                  "head": {"to": "", "cc": "", "from": "", "email": ""}}]
-        words_ok = (_th.match_words(opts, "our Learn from anywhere batch 2 email thread")["key"] == opts[0]["key"]
-                    and _th.match_words(opts, "our latest thread of email")["key"] == opts[1]["key"]
+        opts.sort(key=lambda o: -o["_ms"])
+        words_ok = (_th.match_words(opts, "our Learn from anywhere batch 2 email thread")["key"] == n("Learn from anywhere batch 2")
+                    and _th.match_words(opts, "our latest thread of email")["key"] == opts[0]["key"]
                     and _th.match_words(opts, "the Dubai Police tender") is None)
         # card 1642's words are a thread, never a new one; card 1629's ask IS a new one; card 1464 names a thread
         intent_ok = (not engine._wants_new_thread("it should be in our Learn from anywhere batch 2 email thread, do "
