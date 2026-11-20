@@ -851,6 +851,8 @@ def _send_email_reply(task: dict, skill: dict, company: dict, actor: str, auto: 
     req = task.get("request") or {}
     files = list(req.get("attachments") or [])            # outbound drafts carry real file attachments
     file_names = list(req.get("attachment_names") or [])  # ...with their original filenames
+    if _context_only(req):   # a file he shared for Cortex to READ never leaves on the email (card 1875)
+        files, file_names = [], []
     _xl = [n for n in list(file_names) + [str(r.get("filename") or "") for r in (req.get("attach_docs") or [])]
            if documents.SPREADSHEET.search(n or "")]
     if _xl:     # we never share spreadsheets (owner, 20 Oct 2026): the last line, whatever path put one on the card
@@ -3122,7 +3124,23 @@ def _apply_understood(task: dict, u: dict, text: str) -> tuple:
     # REMOVE EVERY ATTACHMENT (DSO card 1353, 20 Oct 2026): "remove any attachments from this email" had no channel,
     # because detach only matched a FILE NAME, so both files stayed and the email kept saying "please find attached".
     # His words decide it (regex), or the reader's detach_all flag; either one clears the card's files.
-    if refs and (u.get("detach_all") is True or _detach_all_asked(text)):
+    # A FILE HE UPLOADED IS REMOVABLE TOO (owner, 20 Nov 2026, card 1875): removal only ever cleared library
+    # documents, so "don't attach our WhatsApp conversation" and then "remove the attachment" both rewrote the
+    # body and left the file on the card, ready to go to the client. Uploads and shared files answer to the same
+    # words, by name or all at once, and the card says what went.
+    _up_names = list(req.get("attachment_names") or []) + list(req.get("context_file_names") or [])
+    _clear_all = u.get("detach_all") is True or _detach_all_asked(text)
+    _named = [str(w).lower() for w in (u.get("detach_documents") or [])]
+    _drop_up = _clear_all or any(
+        n and any(w in n.lower() or all(tok in n.lower() for tok in w.split() if len(tok) > 3) for w in _named)
+        for n in _up_names)
+    if _drop_up and (req.get("attachments") or req.get("context_files")):
+        for n in _up_names:
+            created.append(f"detached '{n}'")
+        for k in ("attachments", "attachment_names", "context_files", "context_file_names"):
+            req.pop(k, None)
+        changed = True
+    if refs and _clear_all:
         for rid in list(refs):
             created.append(f"detached '{refs.pop(rid)['filename']}'")
     # "WE WILL SEND X LATER" IS NEVER AN ATTACHMENT (same card): "tell him I will send the concepts ... together with
@@ -3986,13 +4004,20 @@ def _greeting_mismatch(draft: str, req: dict) -> str:
             f"({inq.get('email')})")
 
 
+def _context_only(req: dict) -> bool:
+    """The files on this card are the drafter's EYES ONLY: the client's own inbound files, or a file the owner
+    shared in a Talk turn so Cortex could read it (owner, 20 Nov 2026, card 1875). Neither is ever sent."""
+    req = req or {}
+    return bool(req.get("inbound_attachments") or req.get("context_files"))
+
+
 def _has_outgoing_attachment(req: dict) -> bool:
     """Does this email genuinely carry a file? Library documents on the card, or our own files (never the
-    client's inbound ones, which are the drafter's eyes only and never re-sent)."""
+    client's inbound ones, nor a file he shared as context, which are the drafter's eyes only)."""
     req = req or {}
     if req.get("attach_docs"):
         return True
-    return bool(req.get("attachments")) and not req.get("inbound_attachments")
+    return bool(req.get("attachments")) and not _context_only(req)
 
 
 def _outgoing_names(req: dict) -> list[str]:
@@ -4001,7 +4026,7 @@ def _outgoing_names(req: dict) -> list[str]:
     attached and changed "Please find attached our quotation" to "Please find our quotation" (14 Oct 2026)."""
     req = req or {}
     names = [r.get("filename") for r in (req.get("attach_docs") or []) if r.get("filename")]
-    if req.get("attachments") and not req.get("inbound_attachments"):
+    if req.get("attachments") and not _context_only(req):
         up = [n for n in (req.get("attachment_names") or []) if n]
         names += up or [f"uploaded file {i + 1}" for i in range(len(req["attachments"]))]
     return names
@@ -6219,9 +6244,10 @@ def _request_for_draft(task: dict) -> dict:
     be attached back onto our reply). A failed fetch drops that file — drafting proceeds regardless."""
     req = dict(task.get("request") or {})
     refs = req.get("inbound_attachments") or []
-    if not refs:
+    ctx = [u for u in (req.get("context_files") or []) if isinstance(u, str) and u.startswith("data:")]
+    if not refs and not ctx:
         return _draft_context_for_reply(task, req)
-    datas = list(req.get("attachments") or [])
+    datas = list(req.get("attachments") or []) + ctx   # his shared files: read here, never on the send path
     texts = []
     for r in refs[:4]:
         try:

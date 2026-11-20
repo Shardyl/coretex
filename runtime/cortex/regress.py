@@ -742,6 +742,29 @@ def _cases():
     case("a new build of a core document retires the earlier copies with its name", "Body Double x5",
          lambda: "retire_same_name(" in inspect.getsource(__import__("cortex.documents", fromlist=["x"]).save))
 
+    # --- a file he SHARES in Talk is context, never an attachment, and any attachment can be removed (card 1875,
+    #     MERED: a WhatsApp screenshot sent so the opportunity notes could be updated was queued to go to the
+    #     client, and two corrections ("don't attach our WhatsApp conversation", "remove the attachment") left it
+    #     on the card, because removal only ever reached library documents, 20 Nov 2026)
+    WA = {"context_files": ["data:image/jpeg;base64,AAAA"],
+          "context_file_names": ["Screenshot_20261119_164903_WhatsApp.jpg"]}
+    case("a file shared for context is not an attachment", "card 1875, MERED",
+         lambda: engine._has_outgoing_attachment(WA) is False and engine._outgoing_names(WA) == [])
+    case("a file he asked to attach still is", "card 1875, MERED",
+         lambda: engine._outgoing_names({"attachments": ["data:x"], "attachment_names": ["Quotation.pdf"]})
+         == ["Quotation.pdf"])
+    case("Talk files are context unless his words ask to attach", "card 1875, MERED",
+         lambda: engine._attach_asked("Thank him for the WhatsApp messages and confirm the call") is False
+         and engine._attach_asked("attach the company profile") is True)
+    case("'remove the attachment' reaches an uploaded file", "card 1875, MERED",
+         lambda: engine._detach_all_asked("Remove the attachment and say confirming the call for today") is True
+         and "context_file_names" in inspect.getsource(engine._apply_understood))
+    case("a shared file never reaches the send path", "card 1875, MERED",
+         lambda: "_context_only(req)" in inspect.getsource(engine._send_email_reply))
+    case("a card names what sends and what was only read", "card 1875, MERED",
+         lambda: all(s in inspect.getsource(__import__("cortex.api", fromlist=["x"])._enrich_action_card)
+                     for s in ("att_sends", "att_context")))
+
     # --- mail to the support mailbox is support, client or not; a client's email is never a tender (Sampras, 14 Oct)
     _pol = __import__("cortex.policy", fromlist=["x"])
     case("a role mailbox decides even for a client on a deal; a person's address does not", "Sampras 1232 / #165",

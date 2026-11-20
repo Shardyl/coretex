@@ -595,8 +595,17 @@ def _enrich_action_card(t: dict) -> dict:
     req = t.get("request") or {}
     atts = req.get("attachments") or []
     t["att_count"] = len(atts) + len(req.get("attach_docs") or []) + len(req.get("inbound_attachments") or [])
-    if atts:
-        t["request"] = {**req, "attachments": []}
+    # WHAT LEAVES WITH THIS EMAIL, BY NAME (owner, 20 Nov 2026, card 1875): the card showed a paperclip and a
+    # number, so a WhatsApp screenshot queued to go to a client looked exactly like nothing at all.
+    t["att_sends"] = ([r.get("filename") for r in (req.get("attach_docs") or []) if r.get("filename")]
+                      + ([n for n in (req.get("attachment_names") or []) if n]
+                         if atts and not engine._context_only(req) else
+                         [f"uploaded file {i + 1}" for i in range(len(atts))] if atts and not engine._context_only(req)
+                         else []))
+    t["att_context"] = ([n for n in (req.get("context_file_names") or []) if n]
+                        + [r.get("filename") or r.get("mime") for r in (req.get("inbound_attachments") or [])])
+    if atts or req.get("context_files"):
+        t["request"] = {**req, "attachments": [], "context_files": []}
     pr = db.setting_get(f"rule:{t['id']}")     # a correction inferred a standing rule, not yet decided -> persist it on the card
     # only cards that HAVE a rule slot carry it (the action card); quotation/report/brief cards leave it to the
     # pending-rules banner: an old cockpit re-rendered forever looking for a slot on quotation card 990 (28 Sep 2026)
@@ -707,7 +716,13 @@ def task_attachments(tid: int, u: dict = Depends(current_user)) -> dict:
                     "src": f"/api/documents/{r.get('id')}/file", "library": True})
     inbound = [{"name": r.get("filename") or r.get("mime"), "from_client": True}
                for r in (req.get("inbound_attachments") or [])]
-    return {"attachments": out, "inbound": inbound}
+    # files HE shared in a Talk turn: read while drafting, never sent, removable one by one (card 1875)
+    ctx_names = req.get("context_file_names") or []
+    context = [{"idx": i, "name": (ctx_names[i] if i < len(ctx_names) and ctx_names[i] else f"shared file {i + 1}"),
+                "is_image": isinstance(f, str) and f.startswith("data:image/"), "src": f if isinstance(f, str) else "",
+                "context": True}
+               for i, f in enumerate(req.get("context_files") or [])]
+    return {"attachments": out, "inbound": inbound, "context": context}
 
 
 # ---------- social runner (LinkedIn automation: brain <-> office-box hands) ----------
@@ -3174,6 +3189,7 @@ class TaskAttach(BaseModel):
     name: str | None = None       # ...or upload a new file (saved to the library first, then attached)
     data: str | None = None
     kind: str = "document"
+    idx: int | None = None        # ...or detach ONE uploaded file on the card, by its position
 
 
 @app.get("/api/engine/health")
@@ -3263,12 +3279,33 @@ def task_attach(task_id: int, body: TaskAttach, u: dict = Depends(current_user))
 
 @app.post("/api/tasks/{task_id}/detach")
 def task_detach(task_id: int, body: TaskAttach, u: dict = Depends(current_user)) -> dict:
-    """Remove one attached library document from an email card (the library copy stays)."""
+    """Remove ONE attachment from an email card: a library document by `doc_id` (the library copy stays), or an
+    uploaded file by `idx` (owner, 20 Nov 2026, card 1875: only library documents could ever be taken off, so a
+    file he had uploaded could not be removed at all, by tapping or by asking)."""
     _guard_task(u, task_id)
     t = store.get_task(task_id)
     if not t:
         raise HTTPException(status_code=404, detail="no such task")
     req = dict(t.get("request") or {})
+    if body.idx is not None:
+        gone = None
+        for files, names in (("attachments", "attachment_names"), ("context_files", "context_file_names")):
+            fs, ns = list(req.get(files) or []), list(req.get(names) or [])
+            if body.idx < len(fs):
+                gone = ns[body.idx] if body.idx < len(ns) else f"uploaded file {body.idx + 1}"
+                req[files] = fs[:body.idx] + fs[body.idx + 1:]
+                req[names] = ns[:body.idx] + ns[body.idx + 1:]
+                for k in (files, names):
+                    if not req[k]:
+                        req.pop(k, None)
+                break
+        if gone is None:
+            raise HTTPException(status_code=400, detail="no uploaded file at that position")
+        store.update_task(task_id, request=req)
+        engine.reconcile_attachments(task_id)
+        store.log_decision(task_id, t.get("skill_id"), "owner", "correct",
+                           note=f"Removed the attachment '{gone}' from this email.", snapshot={"detached": gone})
+        return {"ok": True, "detached": gone}
     req["attach_docs"] = [r for r in (req.get("attach_docs") or []) if int(r.get("id", 0)) != (body.doc_id or 0)]
     store.update_task(task_id, request=req)
     engine.reconcile_attachments(task_id)
@@ -5840,8 +5877,16 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                 return (f"Could not read '{inp.get('meeting_start')}' as a date and time ({_e}) — nothing "
                         "was drafted. Ask Rashad for the exact day and time.")
         if inp.get("_images"):
-            req["attachments"] = inp["_images"]
-            req["attachment_names"] = inp.get("_image_names")
+            # A FILE HE SHARES IS CONTEXT, NOT AN ATTACHMENT (owner, 20 Nov 2026). He sent Talk a WhatsApp
+            # screenshot so the MERED opportunity notes could be updated; every file in the turn was copied
+            # straight into the card's OUTGOING list, so card 1875 was set to email that screenshot to the
+            # client, and two corrections could not take it off (the removal path only reached library
+            # documents). Shared files are now read at drafting time and never sent, unless his own words
+            # in this turn ask to attach them.
+            _asked = engine._attach_asked(" ".join(str(inp.get(k) or "") for k in ("brief", "subject")))
+            _slot = ("attachments", "attachment_names") if _asked else ("context_files", "context_file_names")
+            req[_slot[0]] = inp["_images"]
+            req[_slot[1]] = inp.get("_image_names")
         # THE EMAIL BELONGS TO ITS DEAL (owner, 12 Sep 2026): Talk drafted the Massar and Sheraa quotation
         # emails with no deal on the card, so their sends never reached the deals' timelines, values or stages.
         # An explicit deal_id wins; otherwise the recipient's one active deal is linked. Linked, the library
@@ -5905,6 +5950,13 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
                  if req.get("attach_docs") else "")
         if missing:
             extra += (f" NOT in the library (tell Rashad, never pretend to attach): {', '.join(missing)}.")
+        if req.get("context_files"):   # say plainly that his file was read, not attached
+            extra += (" Read as context and NOT attached: "
+                      + ", ".join(n for n in (req.get("context_file_names") or []) if n)
+                      + ". Say so, and tell him to ask for it to be attached if he wants it sent.")
+        if req.get("attachments"):
+            extra += (" Attached, as you asked: "
+                      + ", ".join(n for n in (req.get("attachment_names") or []) if n) + ".")
         if req.get("deal_id"):
             extra += f" Linked to opportunity #{req['deal_id']}, so the send is recorded on it."
         extra += _thread_note

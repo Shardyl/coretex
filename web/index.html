@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v97';
+const APP_BUILD = 'cortex-v98';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -2004,9 +2004,15 @@ function attachmentStrip(t){
   const r=t.request||{};
   const n=(t.att_count!=null)?t.att_count
     :(((r.attachments)||[]).length+((r.attach_docs)||[]).length+((r.inbound_attachments)||[]).length);
-  if(!n) return '';
-  // placeholder; hydrateAttachments() fetches the actual images/filenames on demand and fills this in
-  return `<div class="attwrap" id="att${t.id}" data-n="${n}"><div class="meta" style="margin-bottom:7px">${ic('file',14)} ${n} attachment${n>1?'s':''} — loading preview…</div></div>`;
+  const sends=t.att_sends||[], ctx=t.att_context||[];
+  if(!n && !ctx.length) return '';
+  // NAMES, NOT A NUMBER (owner, 20 Nov 2026, card 1875): a WhatsApp screenshot he shared as context sat queued
+  // to go to the client, and the card said only "1 attachment". What SENDS is named before anything is approved;
+  // what was only read is named too, so the difference is visible at a glance.
+  const line=(lbl,names)=>names.length?`<div class="meta" style="margin-bottom:4px">${ic('file',14)} ${lbl}: ${names.map(esc).join(', ')}</div>`:'';
+  const head=line(`${sends.length} file${sends.length>1?'s':''} send${sends.length>1?'':'s'} with this email`,sends)
+    +line('read as context, not sent',ctx);
+  return `<div class="attwrap" id="att${t.id}" data-n="${n}">${head||`<div class="meta" style="margin-bottom:7px">${ic('file',14)} ${n} attachment${n>1?'s':''} — loading preview…</div>`}</div>`;
 }
 // Fetch each card's attachments on demand (kept out of the inbox list for weight) and show image thumbnails
 // or document names, so the owner sees exactly what they're approving before they send it.
@@ -2014,8 +2020,8 @@ async function hydrateAttachments(){
   document.querySelectorAll('.attwrap[data-n]').forEach(async el=>{
     if(el.dataset.done) return; el.dataset.done='1';
     const id=el.id.slice(3);
-    try{ const r=await api('/api/tasks/'+id+'/attachments'); const a=r.attachments||[], inb=r.inbound||[];
-      if(!a.length&&!inb.length){ el.innerHTML=''; return; }
+    try{ const r=await api('/api/tasks/'+id+'/attachments'); const a=r.attachments||[], inb=r.inbound||[], ctx=r.context||[];
+      if(!a.length&&!inb.length&&!ctx.length){ el.innerHTML=''; return; }
       let h='';
       if(a.length){ h+=`<div class="meta" style="margin-bottom:7px">${ic('file',14)} sends with this email:</div><div class="attrow">`
         + a.map(x=> x.is_image
@@ -2023,8 +2029,14 @@ async function hydrateAttachments(){
             : x.library
               ? `<a class="attfile" href="#" onclick="event.preventDefault();openDoc(${x.doc_id},'${esc(x.name||'document')}')">${ic('file',15)} <span>${esc(x.name||x.media_type)}</span> <span style="opacity:.55">${x.size_kb}KB</span></a>`
               : `<a class="attfile" href="${x.src}" download="${esc(x.name||('file-'+x.idx))}">${ic('file',15)} <span>${esc(x.name||x.media_type)}</span> <span style="opacity:.55">${x.size_kb}KB</span></a>`
-              + (x.library?`<button class="iconbtn sm" title="Remove from this email" onclick="detachDoc(${id},${x.doc_id})">${ic('x',13)}</button>`:'')
+              + (x.library
+                  ? `<button class="iconbtn sm" title="Remove from this email" onclick="detachDoc(${id},${x.doc_id})">${ic('x',13)}</button>`
+                  // EVERY file gets its own remove button (owner, 20 Nov 2026, card 1875): an uploaded one could
+                  // not be taken off at all, by tapping or by asking.
+                  : `<button class="iconbtn sm" title="Remove from this email" onclick="detachFile(${id},${x.idx})">${ic('x',13)}</button>`)
           ).join('') + `</div>`; }
+      if(ctx.length){ h+=`<div class="meta" style="margin:6px 0 0">${ic('file',13)} read as context, NOT sent: `
+        + ctx.map(x=>`${esc(x.name)} <button class="iconbtn sm" title="Remove from this card" onclick="detachFile(${id},${x.idx})">${ic('x',12)}</button>`).join(', ') + `</div>`; }
       if(inb.length){ h+=`<div class="meta" style="margin:6px 0 0">${ic('inbox',13)} from the client: ${inb.map(x=>esc(x.name)).join(', ')}</div>`; }
       el.innerHTML=h;
     }catch(e){ el.innerHTML=`<div class="meta">${ic('file',14)} attachment (preview unavailable)</div>`; }
@@ -2072,6 +2084,10 @@ async function attachDoc(tid,docId){
 async function detachDoc(tid,docId){
   try{ await api('/api/tasks/'+tid+'/detach',{method:'POST',body:JSON.stringify({doc_id:docId})});
     toast('Removed from this email ✓'); render(); }catch(e){ toast('Error: '+e.message); }
+}
+async function detachFile(tid,idx){   // one uploaded or shared file off this card (card 1875)
+  try{ const r=await api('/api/tasks/'+tid+'/detach',{method:'POST',body:JSON.stringify({idx:idx})});
+    toast('Removed '+(r.detached||'the file')+' ✓'); render(); }catch(e){ toast('Error: '+e.message); }
 }
 function pickCardFile(tid,cid){
   const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv';
