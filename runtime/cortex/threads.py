@@ -269,6 +269,8 @@ def current(task: dict) -> dict:
     subj = clean_subject((req.get("inquiry") or {}).get("subject") or "")
     if th.get("id") or th.get("msg_id"):
         lab = req.get("thread_label") or {}
+        if not lab and task.get("kind") == "email_reply":     # a reply to their email: they wrote last
+            lab = {"last_from": (req.get("inquiry") or {}).get("name") or (req.get("inquiry") or {}).get("email")}
         return {"mode": "continue", "subject": lab.get("subject") or subj, "last_from": lab.get("last_from") or "",
                 "last_at": lab.get("last_at") or "", "count": lab.get("count") or 0}
     return {"mode": "new", "subject": subj, "deliberate": bool(req.get("new_thread"))}
