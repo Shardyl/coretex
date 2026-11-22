@@ -150,7 +150,7 @@ const skillOf=id=>(G().skills||[]).find(s=>s.id===id);
 const lad=id=>((_cali&&_cali.ladders)||{})[id]||{passed:[],current:null,total:0};
 const _cgCache={};
 async function loadCg(){for(const im of document.querySelectorAll('img[data-cg]')){const n=im.dataset.cg;
-  try{if(!_cgCache[n]){const r=await fetch(API_BASE+'/api/fitness/cali/img/'+encodeURIComponent(n),{headers:{'Authorization':'Bearer '+syncToken()}});
+  try{if(!_cgCache[n]){const r=await fetch(API_BASE+'/api/fitness/cali/img/'+encodeURIComponent(n),{cache:'no-cache',headers:{'Authorization':'Bearer '+syncToken()}});
       if(!r.ok){_cgCache[n]='none';}else _cgCache[n]=URL.createObjectURL(await r.blob());}
     if(_cgCache[n]==='none'){im.style.display='none';const ph=im.nextElementSibling;if(ph&&ph.dataset.cgph)ph.style.display='flex';}else im.src=_cgCache[n];}catch(e){}}}
 const cgImg=(sid,n,small)=>`<img data-cg="cg_${sid}_${n}.jpg" alt="" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:${small?8:10}px;background:var(--surface2);display:block"/><div data-cgph="1" style="display:none;width:100%;aspect-ratio:4/3;border-radius:10px;background:var(--surface2);align-items:center;justify-content:center;font-size:12px;color:var(--ink3)">Guide image coming</div>`;

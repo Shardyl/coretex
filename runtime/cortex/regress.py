@@ -2783,6 +2783,11 @@ def _cases():
          lambda: (lambda p: 'if "steam" in title.lower():\n            # Owner, 22 Nov 2026' in p
                   and 'n["steam"] += 1\n            continue' in p)
          (open(_web + "/../runtime/cortex/fitness.py", encoding="utf-8").read()))
+    case("guide images are revalidated, so a renumbered or regenerated picture shows at once", "guide image cache 22 Nov",
+         lambda: (lambda m, a: "{cache:'no-cache',headers:{'Authorization'" in m
+                  and 'headers={"Cache-Control": "private, no-cache"})' in a and "max-age=86400" not in a.split("cali/img")[1][:900])
+         (open(_web + "/fitness/calisthenics.js", encoding="utf-8").read(),
+          open(_web + "/../runtime/cortex/api.py", encoding="utf-8").read()))
     case("steam room calories never count in the cardio reports total", "steam kcal 16 Nov",
          lambda: (lambda m: "cardioSessions.filter(s=>!isSteam(s))" in m and "const isSteam=" in m)
          (open(_web + "/fitness/index.html", encoding="utf-8").read()))

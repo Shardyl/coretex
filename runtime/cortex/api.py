@@ -7742,7 +7742,7 @@ def fitness_cali_img(name: str, _: None = Depends(auth)):
     path = os.path.join("/opt/cortex-data/fitness-course/files/cali", name)
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="not found")
-    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, no-cache"})
 
 
 # ---------- physio: old injuries and niggles, their tests and drills (14 Nov 2026) ----------
