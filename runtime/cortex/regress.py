@@ -2804,6 +2804,12 @@ def _cases():
          (open(_web + "/fitness/calisthenics.js", encoding="utf-8").read(),
           open(_web + "/../runtime/cortex/fitness_calisthenics.py", encoding="utf-8").read(),
           open(_web + "/../runtime/cortex/api.py", encoding="utf-8").read()))
+    case("every calisthenics exercise has its own notes box, saved with its sets, autosaved and shown next time",
+         "exercise notes 22 Nov",
+         lambda: (lambda m, fc: 'data-cgnote="${key}"' in m and "note:cgNote(k)" in m and "notes[itemId(x)]=cgNote(k)" in m
+                  and "last.it.note?" in m and '"note": str(it.get("note") or "")[:300]' in fc)
+         (open(_web + "/fitness/calisthenics.js", encoding="utf-8").read(),
+          open(_web + "/../runtime/cortex/fitness_calisthenics.py", encoding="utf-8").read()))
     case("steam room calories never count in the cardio reports total", "steam kcal 16 Nov",
          lambda: (lambda m: "cardioSessions.filter(s=>!isSteam(s))" in m and "const isSteam=" in m)
          (open(_web + "/fitness/index.html", encoding="utf-8").read()))

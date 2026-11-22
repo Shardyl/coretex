@@ -296,8 +296,9 @@ window.caliRungJump=(k,instant)=>{const c=[...document.querySelectorAll('#cgCaro
 // a session from the draft week: warm-ups, then each skill's CURRENT rung drills, then the day's extras
 function lastDrill(name){for(const s of (_cali.sessions||[]))if(/^(ladder|routine):/.test(String(s.program))&&s.id!==_sessUid){const i=s.items.find(x=>x.exercise_id===name&&x.sets.length);if(i)return {date:s.date,it:i};}return null;}
 function setInputs(key,dr){const n=nSets(dr.dose), hold=dr.kind==='hold', last=lastDrill(dr.name);
-  return `${last?`<div style="font-size:11px;color:var(--ink3);margin-top:2px">Last time (${fd(last.date)}): ${esc(last.it.sets.map(z=>z.hold_s!=null?z.hold_s+'s':z.reps+'').join(', '))}</div>`:''}
+  return `${last?`<div style="font-size:11px;color:var(--ink3);margin-top:2px">Last time (${fd(last.date)}): ${esc(last.it.sets.map(z=>z.hold_s!=null?z.hold_s+'s':z.reps+'').join(', '))}${last.it.note?' &middot; '+esc(last.it.note):''}</div>`:''}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;margin-top:6px">${Array.from({length:n},(_,i)=>`<input data-cgset="${key}" data-hold="${hold?1:0}" type="number" inputmode="decimal" class="fd-input" style="font-size:14px;padding:6px" placeholder="${hold?'s':'reps'} ${i+1}" oninput="cgDraftSave()"/>`).join('')}</div>
+    <input data-cgnote="${key}" class="fd-input" maxlength="300" style="font-size:12.5px;padding:6px;margin-top:6px" placeholder="Notes" oninput="cgDraftSave()"/>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">${dr.rest_s&&window.mobRest?`<button class="btn-sm" onclick="mobRest(${dr.rest_s})">Rest timer ${dr.rest_s} s</button>`:''}
       <button class="btn-sm" data-cgsave="${key}" onclick="caliSaveEx(${key})">Save exercise</button><span data-cgok="${key}" style="display:none;font-size:12px;font-weight:700;color:var(--teal)">Saved</span></div>`;}
 const _dayItems=[];
@@ -368,13 +369,15 @@ const DKEY=k=>'cgDraft:'+k, itemId=x=>x.code+'|'+x.exercise_id;
 function cgReadDraft(k){try{const d=JSON.parse(localStorage.getItem(DKEY(k))||'null');return d&&d.t&&Date.now()-d.t<3*864e5?d:null;}catch(e){return null;}}
 function cgWriteDraft(d){try{localStorage.setItem(DKEY(_sessKey),JSON.stringify(d));}catch(e){}}
 const cgVals=k=>[...document.querySelectorAll(`[data-cgset="${k}"]`)].map(e=>e.value);
-const cgSig=k=>JSON.stringify(cgVals(k).filter(v=>v!==''));
-function cgSnap(){const sets={};_dayItems.forEach((x,k)=>{sets[itemId(x)]=cgVals(k);});
+const cgNote=k=>((document.querySelector(`[data-cgnote="${k}"]`)||{}).value||'').trim();
+const cgHas=k=>cgVals(k).some(v=>v!=='')||!!cgNote(k);
+const cgSig=k=>JSON.stringify([cgVals(k).filter(v=>v!==''),cgNote(k)]);
+function cgSnap(){const sets={},notes={};_dayItems.forEach((x,k)=>{sets[itemId(x)]=cgVals(k);notes[itemId(x)]=cgNote(k);});
   const warm={};(G().warmups||[]).forEach(wu=>{const b=document.querySelectorAll('.cgw_'+wu.id);if(b.length)warm[wu.id]=[...b].map(e=>e.checked);});
-  return {sets,warm,pain:(document.getElementById('cgWristPain')||{}).value||'',note:(document.getElementById('cgSessNote')||{}).value||'',
+  return {sets,notes,warm,pain:(document.getElementById('cgWristPain')||{}).value||'',note:(document.getElementById('cgSessNote')||{}).value||'',
     date:(document.getElementById('cgSessDay')||{}).value||today()};}
 function cgMarks(d){const sv=(d&&d.saved)||{};_dayItems.forEach((x,k)=>{const b=document.querySelector(`[data-cgsave="${k}"]`), ok=document.querySelector(`[data-cgok="${k}"]`);if(!b||!ok)return;
-  const sig=cgSig(k), done=sig!=='[]'&&sv[itemId(x)]===sig;b.style.display=done?'none':'';ok.style.display=done?'':'none';});}
+  const done=cgHas(k)&&sv[itemId(x)]===cgSig(k);b.style.display=done?'none':'';ok.style.display=done?'':'none';});}
 window.cgDraftSave=function(){if(!_sessKey)return;const d={...(cgReadDraft(_sessKey)||{}),...cgSnap(),uid:_sessUid,t:Date.now()};cgWriteDraft(d);cgMarks(d);};
 function cgRestore(key){const prevU=_sessKey===key?_sessUid:null;_sessKey=key;_sessUid=null;const d=cgReadDraft(key);if(!d){cgMarks(null);return;}
   if(d.uid&&((_cali&&_cali.deleted_sessions)||[]).includes(d.uid)){try{localStorage.removeItem(DKEY(key));}catch(e){}cgMarks(null);return;}
@@ -382,11 +385,12 @@ function cgRestore(key){const prevU=_sessKey===key?_sessUid:null;_sessKey=key;_s
   // one saved moments ago may not be in the loaded list yet, so the uid this screen already holds is kept
   _sessUid=d.uid&&(d.uid===prevU||(_cali.sessions||[]).some(s=>s.id===d.uid))?d.uid:null;if(!_sessUid)d.saved={};
   // an exercise renamed mid-workout keeps its sets: fall back to the same slot (code) under its old name
-  _dayItems.forEach((x,k)=>{const S=d.sets||{}, v=S[itemId(x)]||(key.startsWith('routine:')?S[Object.keys(S).find(z=>z.split('|')[0]===x.code)]:null);if(v)document.querySelectorAll(`[data-cgset="${k}"]`).forEach((e,i)=>{if(v[i]!=null)e.value=v[i];});});
+  _dayItems.forEach((x,k)=>{const S=d.sets||{}, v=S[itemId(x)]||(key.startsWith('routine:')?S[Object.keys(S).find(z=>z.split('|')[0]===x.code)]:null);if(v)document.querySelectorAll(`[data-cgset="${k}"]`).forEach((e,i)=>{if(v[i]!=null)e.value=v[i];});
+    const nt=(d.notes||{})[itemId(x)], ne=document.querySelector(`[data-cgnote="${k}"]`);if(nt&&ne)ne.value=nt;});
   Object.entries(d.warm||{}).forEach(([id,arr])=>document.querySelectorAll('.cgw_'+id).forEach((e,i)=>{e.checked=!!arr[i];}));
   const set=(id,v)=>{const e=document.getElementById(id);if(e&&v)e.value=v;};set('cgWristPain',d.pain);set('cgSessNote',d.note);set('cgSessDay',d.date);
   d.uid=_sessUid;cgWriteDraft(d);cgMarks(d);if(Object.values(d.sets||{}).some(a=>a.some(v=>v!=='')))toast('Picked up where you left off');}
-function cgItems(){const items=_dayItems.map((x,k)=>{const sets=[...document.querySelectorAll(`[data-cgset="${k}"]`)].filter(e=>e.value!=='').map(e=>e.dataset.hold==='1'?{hold_s:+e.value}:{reps:+e.value});return {...x,sets,note:''};});
+function cgItems(){const items=_dayItems.map((x,k)=>{const sets=[...document.querySelectorAll(`[data-cgset="${k}"]`)].filter(e=>e.value!=='').map(e=>e.dataset.hold==='1'?{hold_s:+e.value}:{reps:+e.value});return {...x,sets,note:cgNote(k)};});
   const warm=[];(G().warmups||[]).forEach(wu=>{const b=document.querySelectorAll('.cgw_'+wu.id);if(b.length)warm.push(`${wu.name} ${[...b].filter(e=>e.checked).length}/${b.length}`);});
   const pain=(document.getElementById('cgWristPain')||{}).value;
   if(warm.length)items.unshift({code:'warmup',exercise_id:'Warm-up',sets:[],note:warm.join('; ')+(pain!==''&&pain!=null?'; wrist pain '+pain+'/10':'')});
@@ -394,9 +398,9 @@ function cgItems(){const items=_dayItems.map((x,k)=>{const sets=[...document.que
 async function cgPost(){const r=await syncApi('/api/fitness/cali/ladder-session',{method:'POST',body:JSON.stringify({week_day:_sessKey,
     date:document.getElementById('cgSessDay').value||today(),items:cgItems(),note:document.getElementById('cgSessNote').value||'',uid:_sessUid})});
   if(!r||!r.id)throw new Error('not saved');_sessUid=r.id;
-  const d={...(cgReadDraft(_sessKey)||{}),...cgSnap(),uid:_sessUid,t:Date.now(),saved:{}};_dayItems.forEach((x,k)=>{const sg=cgSig(k);if(sg!=='[]')d.saved[itemId(x)]=sg;});
+  const d={...(cgReadDraft(_sessKey)||{}),...cgSnap(),uid:_sessUid,t:Date.now(),saved:{}};_dayItems.forEach((x,k)=>{if(cgHas(k))d.saved[itemId(x)]=cgSig(k);});
   cgWriteDraft(d);cgMarks(d);return r;}
-window.caliSaveEx=async function(k){if(cgSig(k)==='[]'){toast('Enter your reps first');return;}
+window.caliSaveEx=async function(k){if(!cgHas(k)){toast('Enter your reps first');return;}
   try{await cgPost();toast('Saved');}catch(e){window.cgDraftSave();toast('Not saved to Cortex yet (no connection). It is kept on the phone; tap Save again.');}};
 window.caliLadderSave=async function(day){
   _sessKey=day;
