@@ -1239,7 +1239,11 @@ def reconcile_watch(since: date | None = None) -> dict:
         tn, title = s["type_name"], (s["title"] or "")
         titled = _titled_preset(title)
         if "steam" in title.lower():
-            kind = "steam"
+            # Owner, 22 Nov 2026: "remove all the Steam Room sessions from the app ... they're clogging up space".
+            # A steam session is no longer filed as a cardio entry. It stays in health_sessions, so the glucose heat
+            # flags and the burn maths (which already skip steam) are unchanged.
+            n["steam"] += 1
+            continue
         elif titled:
             kind = "titled"
         elif warm.get(s["uid"]) == "warmup":
