@@ -2788,6 +2788,17 @@ def _cases():
                   and 'headers={"Cache-Control": "private, no-cache"})' in a and "max-age=86400" not in a.split("cali/img")[1][:900])
          (open(_web + "/fitness/calisthenics.js", encoding="utf-8").read(),
           open(_web + "/../runtime/cortex/api.py", encoding="utf-8").read()))
+    case("a calisthenics workout is kept on the phone as it is typed and saved to Cortex per exercise into ONE "
+         "session (updated by uid), so closing the app loses nothing", "save as you go 22 Nov",
+         lambda: (lambda m, fc, a: "window.cgDraftSave=function()" in m and "window.caliSaveEx=async function(k)" in m
+                  and "uid:_sessUid" in m and "cgRestore('routine:'+r.id);" in m and "cgRestore(w.day);" in m
+                  and m.count('oninput="cgDraftSave()"') >= 3 and "Finish workout" in m
+                  and "s.id!==_sessUid" in m
+                  and 'uid: str | None = None) -> dict:' in fc and "update fitness.cali_sessions set day=%s, items=%s" in fc
+                  and "body.note or \"\", body.uid)" in a)
+         (open(_web + "/fitness/calisthenics.js", encoding="utf-8").read(),
+          open(_web + "/../runtime/cortex/fitness_calisthenics.py", encoding="utf-8").read(),
+          open(_web + "/../runtime/cortex/api.py", encoding="utf-8").read()))
     case("steam room calories never count in the cardio reports total", "steam kcal 16 Nov",
          lambda: (lambda m: "cardioSessions.filter(s=>!isSteam(s))" in m and "const isSteam=" in m)
          (open(_web + "/fitness/index.html", encoding="utf-8").read()))

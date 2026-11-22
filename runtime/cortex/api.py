@@ -7707,6 +7707,7 @@ class CaliLadderSession(BaseModel):
     date: str
     items: list
     note: str | None = None
+    uid: str | None = None
 
 
 @app.post("/api/fitness/cali/goal-test")
@@ -7729,7 +7730,7 @@ def fitness_cali_goal_test_delete(uid: str, _: None = Depends(auth)) -> dict:
 def fitness_cali_ladder_session(body: CaliLadderSession, _: None = Depends(auth)) -> dict:
     from . import fitness_calisthenics
     try:
-        return fitness_calisthenics.log_ladder_session(body.week_day, body.date, body.items, body.note or "")
+        return fitness_calisthenics.log_ladder_session(body.week_day, body.date, body.items, body.note or "", body.uid)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

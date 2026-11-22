@@ -185,7 +185,7 @@ def delete_goal_test(uid: str) -> dict:
     return {"ok": True}
 
 
-def log_ladder_session(week_day: str, day: str, items: list, note: str = "") -> dict:
+def log_ladder_session(week_day: str, day: str, items: list, note: str = "", uid: str | None = None) -> dict:
     """A session from the draft week (warm-ups ticked, each skill's current-rung drills, extras), stored with the
     Smith sessions under program id `ladder:<day name>`, so it never shows as a Handstand Toolkit session."""
     # A ROUTINE (owner, 19 Nov 2026: "Full body calisthenics") logs as program `routine:<id>`, not `ladder:`.
@@ -208,10 +208,18 @@ def log_ladder_session(week_day: str, day: str, items: list, note: str = "") -> 
                       "sets": sets, "note": str(it.get("note") or "")[:300]})
     if not clean:
         raise ValueError("nothing logged")
+    program = week_day if routine else LADDER_PREFIX + week_day
+    # SAVED AS YOU GO (owner, 22 Nov 2026: "I might close the app and lose the data"): each exercise's Save sends the
+    # whole session so far with the uid the first save returned, and the same row is updated, so one workout stays one
+    # session. A uid that is not this program's live session is ignored and a new row is made.
+    if uid and db.one("select 1 from fitness.cali_sessions where uid=%s and program_id=%s and not deleted",
+                      (uid, program)):
+        db.execute("update fitness.cali_sessions set day=%s, items=%s, note=%s where uid=%s",
+                   (date.fromisoformat(day), Json(clean), (note or "")[:300] or None, uid))
+        return {"ok": True, "id": uid, "updated": True}
     uid = f"cs_{secrets.token_hex(6)}"
     db.execute("insert into fitness.cali_sessions (uid, day, program_id, items, note) values (%s,%s,%s,%s,%s)",
-               (uid, date.fromisoformat(day), week_day if routine else LADDER_PREFIX + week_day, Json(clean),
-                (note or "")[:300] or None))
+               (uid, date.fromisoformat(day), program, Json(clean), (note or "")[:300] or None))
     return {"ok": True, "id": uid}
 
 

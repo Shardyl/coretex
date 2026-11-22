@@ -189,7 +189,7 @@ function renderGoalsView(el){
     ${(g.routines||[]).map(r=>`<div class="card" style="padding:12px 14px;margin-bottom:10px;border:1px solid var(--teal)">
       <div style="display:flex;align-items:center;gap:8px"><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:800">${esc(r.name)}</div>
         <div style="font-size:11.5px;color:var(--ink3)">${r.items.length} exercises &middot; ${esc(r.note||'')}</div></div>
-        <button class="btn-sm" onclick="caliGoal('routine:${r.id}')">Start</button></div></div>`).join('')}
+        <button class="btn-sm" onclick="caliGoal('routine:${r.id}')">${cgReadDraft('routine:'+r.id)?'Resume':'Start'}</button></div></div>`).join('')}
     <div class="card" style="padding:12px 14px;margin-bottom:10px">
       <div style="font-size:13px;font-weight:800">Training week (draft, January)</div>
       <div style="font-size:11.5px;color:var(--ink3);margin:2px 0 6px">${esc(g.week_note||'')}</div>
@@ -294,19 +294,20 @@ window.caliRungJump=(k,instant)=>{const c=[...document.querySelectorAll('#cgCaro
   const box=document.getElementById('cgCarousel');if(c&&box)box.scrollTo({left:c.offsetLeft-box.offsetLeft-(box.clientWidth-c.clientWidth)/2,behavior:instant?'auto':'smooth'});};
 
 // a session from the draft week: warm-ups, then each skill's CURRENT rung drills, then the day's extras
-function lastDrill(name){for(const s of (_cali.sessions||[]))if(/^(ladder|routine):/.test(String(s.program))){const i=s.items.find(x=>x.exercise_id===name&&x.sets.length);if(i)return {date:s.date,it:i};}return null;}
+function lastDrill(name){for(const s of (_cali.sessions||[]))if(/^(ladder|routine):/.test(String(s.program))&&s.id!==_sessUid){const i=s.items.find(x=>x.exercise_id===name&&x.sets.length);if(i)return {date:s.date,it:i};}return null;}
 function setInputs(key,dr){const n=nSets(dr.dose), hold=dr.kind==='hold', last=lastDrill(dr.name);
   return `${last?`<div style="font-size:11px;color:var(--ink3);margin-top:2px">Last time (${fd(last.date)}): ${esc(last.it.sets.map(z=>z.hold_s!=null?z.hold_s+'s':z.reps+'').join(', '))}</div>`:''}
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;margin-top:6px">${Array.from({length:n},(_,i)=>`<input data-cgset="${key}" data-hold="${hold?1:0}" type="number" inputmode="decimal" class="fd-input" style="font-size:14px;padding:6px" placeholder="${hold?'s':'reps'} ${i+1}"/>`).join('')}</div>
-    ${dr.rest_s&&window.mobRest?`<button class="btn-sm" style="margin-top:6px" onclick="mobRest(${dr.rest_s})">Rest timer ${dr.rest_s} s</button>`:''}`;}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;margin-top:6px">${Array.from({length:n},(_,i)=>`<input data-cgset="${key}" data-hold="${hold?1:0}" type="number" inputmode="decimal" class="fd-input" style="font-size:14px;padding:6px" placeholder="${hold?'s':'reps'} ${i+1}" oninput="cgDraftSave()"/>`).join('')}</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">${dr.rest_s&&window.mobRest?`<button class="btn-sm" onclick="mobRest(${dr.rest_s})">Rest timer ${dr.rest_s} s</button>`:''}
+      <button class="btn-sm" data-cgsave="${key}" onclick="caliSaveEx(${key})">Save exercise</button><span data-cgok="${key}" style="display:none;font-size:12px;font-weight:700;color:var(--teal)">Saved</span></div>`;}
 const _dayItems=[];
 function renderLadderDay(el,day){
   const g=G(), w=(g.week||[]).find(x=>x.day===day);if(!w){_goalView='home';return renderGoalsView(el);}
   _dayItems.length=0;
   const block=(title,inner)=>`<div class="card" style="padding:12px 14px;margin-bottom:10px"><div style="font-size:14px;font-weight:800;margin-bottom:4px">${title}</div>${inner}</div>`;
   const warm=(g.warmups||[]).filter(x=>x.id==='wrist'||w.name.startsWith('Upper')).map(wu=>block(esc(wu.name),
-    `<div style="font-size:11.5px;color:var(--ink3);margin-bottom:4px">${esc(wu.note||'')}</div>${wu.items.map(it=>`<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;padding:3px 0"><input type="checkbox" class="cgw_${wu.id}"/><span style="flex:1">${esc(it.name)} <span style="color:var(--ink3)">${esc(it.dose)}</span></span>${watch(it,'Demo')}</label>`).join('')}
-    ${wu.id==='wrist'?'<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><label class="form-label" style="margin:0">Wrist pain 0-10</label><input id="cgWristPain" type="number" min="0" max="10" inputmode="numeric" class="fd-input" style="width:70px;font-size:14px;padding:6px"/></div>':''}`)).join('');
+    `<div style="font-size:11.5px;color:var(--ink3);margin-bottom:4px">${esc(wu.note||'')}</div>${wu.items.map(it=>`<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;padding:3px 0"><input type="checkbox" class="cgw_${wu.id}" onchange="cgDraftSave()"/><span style="flex:1">${esc(it.name)} <span style="color:var(--ink3)">${esc(it.dose)}</span></span>${watch(it,'Demo')}</label>`).join('')}
+    ${wu.id==='wrist'?'<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><label class="form-label" style="margin:0">Wrist pain 0-10</label><input id="cgWristPain" type="number" min="0" max="10" inputmode="numeric" oninput="cgDraftSave()" class="fd-input" style="width:70px;font-size:14px;padding:6px"/></div>':''}`)).join('');
   const skillsHtml=w.skills.map(id=>{const s=skillOf(id);if(!s)return '';const L=lad(id), r=(s.rungs||[]).find(x=>x.n===L.current)||s.rungs[s.rungs.length-1];
     return block(`${esc(s.name)} <span style="font-size:12px;color:var(--ink3);font-weight:600">· ${r.goal?'Goal':'rung '+r.n}: ${esc(r.name)}</span>`,
       `<div style="width:120px;margin:4px 0 6px">${cgImg(s.id,r.n,true)}</div>${(r.drills||[]).map(dr=>{const k=_dayItems.push({code:`${id}:${r.n}`,exercise_id:dr.name})-1;
@@ -318,10 +319,12 @@ function renderLadderDay(el,day){
       <div style="font-size:11.5px;color:var(--ink3)">${esc(dr.dose)}</div>${dr.tempo?tempoGraphic(dr.tempo):''}${setInputs(k,dr)}</div>`;}).join('')):'';
   el.innerHTML=`${bigBack("caliGoal('home')",'All goals')}
     <div style="font-size:18px;font-weight:800">${esc(w.day)} · ${esc(w.name)}</div>
-    <div style="display:flex;gap:8px;align-items:center;margin:8px 0 10px"><label class="form-label" style="margin:0">Date</label><input id="cgSessDay" type="date" value="${today()}" max="${today()}" class="fd-input" style="width:auto;font-size:14px"/></div>
+    <div style="display:flex;gap:8px;align-items:center;margin:8px 0 10px"><label class="form-label" style="margin:0">Date</label><input id="cgSessDay" onchange="cgDraftSave()" type="date" value="${today()}" max="${today()}" class="fd-input" style="width:auto;font-size:14px"/></div>
     ${warm}${skillsHtml}${extras}
-    <input id="cgSessNote" class="fd-input" style="font-size:13px;margin-bottom:8px" placeholder="Session note (energy, form, anything that hurt)"/>
-    <button class="fd-btn" onclick="caliLadderSave('${w.day}')">Save session</button>`;
+    <input id="cgSessNote" oninput="cgDraftSave()" class="fd-input" style="font-size:13px;margin-bottom:8px" placeholder="Session note (energy, form, anything that hurt)"/>
+    <button class="fd-btn" onclick="caliLadderSave('${w.day}')">Finish workout</button>
+    <div style="font-size:11px;color:var(--ink3);margin-top:6px">Everything you type is kept on the phone. Save exercise sends it to Cortex as you go.</div>`;
+  cgRestore(w.day);
   loadCg();
 }
 // a ROUTINE (owner, 19 Nov 2026): a fixed list of exercises with their own guide images, logged like a week day
@@ -332,8 +335,8 @@ function renderRoutine(el,id){
   _dayItems.length=0;
   const block=(title,inner,bd)=>`<div class="card" style="padding:12px 14px;margin-bottom:10px${bd?';border:1px solid var(--amber)':''}"><div style="font-size:14px;font-weight:800;margin-bottom:4px">${title}</div>${inner}</div>`;
   const warm=(g.warmups||[]).filter(x=>(r.warmups||[]).includes(x.id)).map(wu=>block(esc(wu.name),
-    `<div style="font-size:11.5px;color:var(--ink3);margin-bottom:4px">${esc(wu.note||'')}</div>${wu.items.map(it=>`<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;padding:3px 0"><input type="checkbox" class="cgw_${wu.id}"/><span style="flex:1">${esc(it.name)} <span style="color:var(--ink3)">${esc(it.dose)}</span></span>${watch(it,'Demo')}</label>`).join('')}
-    ${wu.id==='wrist'?'<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><label class="form-label" style="margin:0">Wrist pain 0-10</label><input id="cgWristPain" type="number" min="0" max="10" inputmode="numeric" class="fd-input" style="width:70px;font-size:14px;padding:6px"/></div>':''}`)).join('');
+    `<div style="font-size:11.5px;color:var(--ink3);margin-bottom:4px">${esc(wu.note||'')}</div>${wu.items.map(it=>`<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;padding:3px 0"><input type="checkbox" class="cgw_${wu.id}" onchange="cgDraftSave()"/><span style="flex:1">${esc(it.name)} <span style="color:var(--ink3)">${esc(it.dose)}</span></span>${watch(it,'Demo')}</label>`).join('')}
+    ${wu.id==='wrist'?'<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><label class="form-label" style="margin:0">Wrist pain 0-10</label><input id="cgWristPain" type="number" min="0" max="10" inputmode="numeric" oninput="cgDraftSave()" class="fd-input" style="width:70px;font-size:14px;padding:6px"/></div>':''}`)).join('');
   const items=r.items.map((it,i)=>{const k=_dayItems.push({code:`${r.id}:${it.n}`,exercise_id:it.name})-1, prev=r.items[i-1];
     const ss=it.superset||(prev&&prev.superset);
     return block(`${it.n}. ${esc(it.name)}`,`<div style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 6px">
@@ -346,24 +349,61 @@ function renderRoutine(el,id){
   el.innerHTML=`${bigBack("caliGoal('home')",'All goals')}
     <div style="font-size:18px;font-weight:800">${esc(r.name)}</div>
     <div style="font-size:12px;color:var(--ink3);margin:2px 0 4px">${esc(r.note||'')}</div>
-    <div style="display:flex;gap:8px;align-items:center;margin:8px 0 10px"><label class="form-label" style="margin:0">Date</label><input id="cgSessDay" type="date" value="${today()}" max="${today()}" class="fd-input" style="width:auto;font-size:14px"/></div>
+    <div style="display:flex;gap:8px;align-items:center;margin:8px 0 10px"><label class="form-label" style="margin:0">Date</label><input id="cgSessDay" onchange="cgDraftSave()" type="date" value="${today()}" max="${today()}" class="fd-input" style="width:auto;font-size:14px"/></div>
     ${warm}${items}
-    <input id="cgSessNote" class="fd-input" style="font-size:13px;margin-bottom:8px" placeholder="Session note (energy, form, anything that hurt)"/>
-    <button class="fd-btn" onclick="caliLadderSave('routine:${r.id}')">Save session</button>
+    <input id="cgSessNote" oninput="cgDraftSave()" class="fd-input" style="font-size:13px;margin-bottom:8px" placeholder="Session note (energy, form, anything that hurt)"/>
+    <button class="fd-btn" onclick="caliLadderSave('routine:${r.id}')">Finish workout</button>
+    <div style="font-size:11px;color:var(--ink3);margin-top:6px">Everything you type is kept on the phone. Save exercise sends it to Cortex as you go.</div>
     <div style="font-size:10.5px;color:var(--ink3);margin-top:8px">${esc(r.source||'')}</div>`;
+  cgRestore('routine:'+r.id);
   loadCg();
 }
-window.caliLadderSave=async function(day){
-  const items=_dayItems.map((x,k)=>{const sets=[...document.querySelectorAll(`[data-cgset="${k}"]`)].filter(e=>e.value!=='').map(e=>e.dataset.hold==='1'?{hold_s:+e.value}:{reps:+e.value});return {...x,sets,note:''};});
+// ---------- a workout in progress (owner, 22 Nov 2026: "I might close the app and lose the data") ----------
+// Every keystroke is kept on the phone (localStorage `cgDraft:<day | routine:id>`, keyed by exercise, so it survives
+// closing the app and a re-render). Save exercise sends the WHOLE session so far to the server with the uid the first
+// save returned, so the same session row is updated and one workout stays one session. Finish workout saves once
+// more, then clears the draft. A draft older than 3 days is dropped.
+let _sessKey=null,_sessUid=null;
+const DKEY=k=>'cgDraft:'+k, itemId=x=>x.code+'|'+x.exercise_id;
+function cgReadDraft(k){try{const d=JSON.parse(localStorage.getItem(DKEY(k))||'null');return d&&d.t&&Date.now()-d.t<3*864e5?d:null;}catch(e){return null;}}
+function cgWriteDraft(d){try{localStorage.setItem(DKEY(_sessKey),JSON.stringify(d));}catch(e){}}
+const cgVals=k=>[...document.querySelectorAll(`[data-cgset="${k}"]`)].map(e=>e.value);
+const cgSig=k=>JSON.stringify(cgVals(k).filter(v=>v!==''));
+function cgSnap(){const sets={};_dayItems.forEach((x,k)=>{sets[itemId(x)]=cgVals(k);});
+  const warm={};(G().warmups||[]).forEach(wu=>{const b=document.querySelectorAll('.cgw_'+wu.id);if(b.length)warm[wu.id]=[...b].map(e=>e.checked);});
+  return {sets,warm,pain:(document.getElementById('cgWristPain')||{}).value||'',note:(document.getElementById('cgSessNote')||{}).value||'',
+    date:(document.getElementById('cgSessDay')||{}).value||today()};}
+function cgMarks(d){const sv=(d&&d.saved)||{};_dayItems.forEach((x,k)=>{const b=document.querySelector(`[data-cgsave="${k}"]`), ok=document.querySelector(`[data-cgok="${k}"]`);if(!b||!ok)return;
+  const sig=cgSig(k), done=sig!=='[]'&&sv[itemId(x)]===sig;b.style.display=done?'none':'';ok.style.display=done?'':'none';});}
+window.cgDraftSave=function(){if(!_sessKey)return;const d={...(cgReadDraft(_sessKey)||{}),...cgSnap(),uid:_sessUid,t:Date.now()};cgWriteDraft(d);cgMarks(d);};
+function cgRestore(key){const prevU=_sessKey===key?_sessUid:null;_sessKey=key;_sessUid=null;const d=cgReadDraft(key);if(!d){cgMarks(null);return;}
+  // a session deleted since starts a fresh row on the next save (the server also ignores a uid it does not hold);
+  // one saved moments ago may not be in the loaded list yet, so the uid this screen already holds is kept
+  _sessUid=d.uid&&(d.uid===prevU||(_cali.sessions||[]).some(s=>s.id===d.uid))?d.uid:null;if(!_sessUid)d.saved={};
+  _dayItems.forEach((x,k)=>{const v=(d.sets||{})[itemId(x)];if(v)document.querySelectorAll(`[data-cgset="${k}"]`).forEach((e,i)=>{if(v[i]!=null)e.value=v[i];});});
+  Object.entries(d.warm||{}).forEach(([id,arr])=>document.querySelectorAll('.cgw_'+id).forEach((e,i)=>{e.checked=!!arr[i];}));
+  const set=(id,v)=>{const e=document.getElementById(id);if(e&&v)e.value=v;};set('cgWristPain',d.pain);set('cgSessNote',d.note);set('cgSessDay',d.date);
+  d.uid=_sessUid;cgWriteDraft(d);cgMarks(d);if(Object.values(d.sets||{}).some(a=>a.some(v=>v!=='')))toast('Picked up where you left off');}
+function cgItems(){const items=_dayItems.map((x,k)=>{const sets=[...document.querySelectorAll(`[data-cgset="${k}"]`)].filter(e=>e.value!=='').map(e=>e.dataset.hold==='1'?{hold_s:+e.value}:{reps:+e.value});return {...x,sets,note:''};});
   const warm=[];(G().warmups||[]).forEach(wu=>{const b=document.querySelectorAll('.cgw_'+wu.id);if(b.length)warm.push(`${wu.name} ${[...b].filter(e=>e.checked).length}/${b.length}`);});
   const pain=(document.getElementById('cgWristPain')||{}).value;
   if(warm.length)items.unshift({code:'warmup',exercise_id:'Warm-up',sets:[],note:warm.join('; ')+(pain!==''&&pain!=null?'; wrist pain '+pain+'/10':'')});
-  if(!items.some(i=>i.sets.length)){toast('Log at least one set first');return;}
+  return items;}
+async function cgPost(){const r=await syncApi('/api/fitness/cali/ladder-session',{method:'POST',body:JSON.stringify({week_day:_sessKey,
+    date:document.getElementById('cgSessDay').value||today(),items:cgItems(),note:document.getElementById('cgSessNote').value||'',uid:_sessUid})});
+  if(!r||!r.id)throw new Error('not saved');_sessUid=r.id;
+  const d={...(cgReadDraft(_sessKey)||{}),...cgSnap(),uid:_sessUid,t:Date.now(),saved:{}};_dayItems.forEach((x,k)=>{const sg=cgSig(k);if(sg!=='[]')d.saved[itemId(x)]=sg;});
+  cgWriteDraft(d);cgMarks(d);return r;}
+window.caliSaveEx=async function(k){if(cgSig(k)==='[]'){toast('Enter your reps first');return;}
+  try{await cgPost();toast('Saved');}catch(e){window.cgDraftSave();toast('Not saved to Cortex yet (no connection). It is kept on the phone; tap Save again.');}};
+window.caliLadderSave=async function(day){
+  _sessKey=day;
+  if(!cgItems().some(i=>i.sets.length)){toast('Log at least one set first');return;}
   const wu=(G().warmups||[]).some(w=>{const b=document.querySelectorAll('.cgw_'+w.id);return b.length&&[...b].some(e=>!e.checked);});
   if(wu&&!confirm('Warm-up not finished. Save anyway?'))return;
-  try{await syncApi('/api/fitness/cali/ladder-session',{method:'POST',body:JSON.stringify({week_day:day,date:document.getElementById('cgSessDay').value||today(),items,note:document.getElementById('cgSessNote').value||''})});
-    _goalView='home';await load();rerender();window.scrollTo(0,0);toast('Session saved');}
-  catch(e){toast('Could not save the session.');}
+  try{await cgPost();try{localStorage.removeItem(DKEY(day));}catch(e){}_sessUid=null;_sessKey=null;
+    _goalView='home';await load();rerender();window.scrollTo(0,0);toast('Workout saved');}
+  catch(e){window.cgDraftSave();toast('Could not reach Cortex. Your workout is kept on the phone; try Finish again.');}
 };
 
 // ---------- Library ----------
