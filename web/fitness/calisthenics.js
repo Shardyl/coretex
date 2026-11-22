@@ -380,7 +380,8 @@ function cgRestore(key){const prevU=_sessKey===key?_sessUid:null;_sessKey=key;_s
   // a session deleted since starts a fresh row on the next save (the server also ignores a uid it does not hold);
   // one saved moments ago may not be in the loaded list yet, so the uid this screen already holds is kept
   _sessUid=d.uid&&(d.uid===prevU||(_cali.sessions||[]).some(s=>s.id===d.uid))?d.uid:null;if(!_sessUid)d.saved={};
-  _dayItems.forEach((x,k)=>{const v=(d.sets||{})[itemId(x)];if(v)document.querySelectorAll(`[data-cgset="${k}"]`).forEach((e,i)=>{if(v[i]!=null)e.value=v[i];});});
+  // an exercise renamed mid-workout keeps its sets: fall back to the same slot (code) under its old name
+  _dayItems.forEach((x,k)=>{const S=d.sets||{}, v=S[itemId(x)]||(key.startsWith('routine:')?S[Object.keys(S).find(z=>z.split('|')[0]===x.code)]:null);if(v)document.querySelectorAll(`[data-cgset="${k}"]`).forEach((e,i)=>{if(v[i]!=null)e.value=v[i];});});
   Object.entries(d.warm||{}).forEach(([id,arr])=>document.querySelectorAll('.cgw_'+id).forEach((e,i)=>{e.checked=!!arr[i];}));
   const set=(id,v)=>{const e=document.getElementById(id);if(e&&v)e.value=v;};set('cgWristPain',d.pain);set('cgSessNote',d.note);set('cgSessDay',d.date);
   d.uid=_sessUid;cgWriteDraft(d);cgMarks(d);if(Object.values(d.sets||{}).some(a=>a.some(v=>v!=='')))toast('Picked up where you left off');}

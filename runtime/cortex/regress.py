@@ -2769,6 +2769,9 @@ def _cases():
                   # owner, 22 Nov 2026: hardest compound first, deep push-ups dropped, ring rows after pseudo planche
                   and [x["name"].split()[0] for x in r["items"][:3]] == ["Ring", "Pseudo", "Ring"]
                   and r["items"][0]["name"].startswith("Ring chin-ups")
+                  # owner, 22 Nov 2026: done on the parallettes, as the picture shows
+                  and r["items"][1]["name"] == "Pseudo planche push-ups on parallettes"
+                  and "z.split('|')[0]===x.code" in m
                   and not any("Deep push-ups" in x["name"] for x in r["items"])
                   and [x["n"] for x in r["items"]] == list(range(1, 11))
                   and 'ROUTINE_PREFIX = "routine:"' in open(fc.__file__, encoding="utf-8").read()
