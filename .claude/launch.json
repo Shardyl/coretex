@@ -12,6 +12,18 @@
         ".preview-tmp"
       ],
       "port": 8791
+    },
+    {
+      "name": "fitness-local",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8792",
+        "-d",
+        "web/fitness"
+      ],
+      "port": 8792
     }
   ]
 }
