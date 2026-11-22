@@ -2816,7 +2816,7 @@
   {
    "id": "fullbody",
    "name": "Full body calisthenics",
-   "note": "2 calisthenics days a week plus 1 gym day for 6 to 8 weeks, then compare. Hardest compound first. 3 sets each, 2 minutes rest on the big moves and 90 seconds on the lighter ones, slow lowering on every rep. About 65 minutes plus the warm-up.",
+   "note": "2 calisthenics days a week plus 1 gym day for 6 to 8 weeks, then compare. Hardest compound first. 3 sets each, 2 minutes rest, slow lowering on every rep. About 75 minutes plus the warm-up.",
    "source": "Tyler Tong, Every Calisthenics Exercise You Need (YouTube aBwQBREdNEk); targets his, sets, rest and swaps ours (19 Nov 2026)",
    "warmups": [
     "wrist",
@@ -2906,7 +2906,7 @@
      "name": "Hollow body hold",
      "dose": "3 x 20-45 s",
      "kind": "hold",
-     "rest_s": 90,
+     "rest_s": 120,
      "youtube": "aBwQBREdNEk@412",
      "cues": [
       "Lower back glued to the floor",
@@ -2921,7 +2921,7 @@
      "name": "Seated pike leg lifts",
      "dose": "3 x 8-15",
      "kind": "reps",
-     "rest_s": 90,
+     "rest_s": 120,
      "youtube": "aBwQBREdNEk@467",
      "cues": [
       "Legs straight, knees locked, spine tall",
@@ -2970,7 +2970,7 @@
      "dose": "3 x 12-20",
      "kind": "reps",
      "tempo": "3011",
-     "rest_s": 90,
+     "rest_s": 120,
      "cues": [
       "Slight bend in the elbows, raise to shoulder height",
       "Lead with the elbows, no shrugging",

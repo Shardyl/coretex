@@ -2764,9 +2764,8 @@ def _cases():
     case("the Full body calisthenics routine is data (11 exercises, 2 sets, 2 min rest, the curl and side raise "
          "superset), has its own screen with guide images, and logs as program routine:<id>", "full body routine 19 Nov",
          lambda: (lambda fc, m: (lambda r: len(r["items"]) == 10 and all(x["dose"].startswith("3 x") for x in r["items"])
-                  # owner, 22 Nov 2026: 3 sets; 2 min on the big moves, 90 s on hollow, leg lifts and the superset
-                  and {x["n"]: x["rest_s"] for x in r["items"] if not x.get("superset")}
-                      == {1: 120, 2: 120, 3: 120, 4: 120, 5: 120, 6: 90, 7: 90, 8: 120, 10: 90}
+                  # owner, 22 Nov 2026: 3 sets, 2 minutes rest on everything (the superset goes straight through)
+                  and all(x["rest_s"] == 120 for x in r["items"] if not x.get("superset"))
                   and "_cali.deleted_sessions" in m and '"deleted_sessions": gone' in open(fc.__file__, encoding="utf-8").read()
                   and [x["n"] for x in r["items"] if x.get("superset")] == [9]
                   # owner, 22 Nov 2026: hardest compound first, deep push-ups dropped, ring rows after pseudo planche
