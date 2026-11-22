@@ -377,6 +377,7 @@ function cgMarks(d){const sv=(d&&d.saved)||{};_dayItems.forEach((x,k)=>{const b=
   const sig=cgSig(k), done=sig!=='[]'&&sv[itemId(x)]===sig;b.style.display=done?'none':'';ok.style.display=done?'':'none';});}
 window.cgDraftSave=function(){if(!_sessKey)return;const d={...(cgReadDraft(_sessKey)||{}),...cgSnap(),uid:_sessUid,t:Date.now()};cgWriteDraft(d);cgMarks(d);};
 function cgRestore(key){const prevU=_sessKey===key?_sessUid:null;_sessKey=key;_sessUid=null;const d=cgReadDraft(key);if(!d){cgMarks(null);return;}
+  if(d.uid&&((_cali&&_cali.deleted_sessions)||[]).includes(d.uid)){try{localStorage.removeItem(DKEY(key));}catch(e){}cgMarks(null);return;}
   // a session deleted since starts a fresh row on the next save (the server also ignores a uid it does not hold);
   // one saved moments ago may not be in the loaded list yet, so the uid this screen already holds is kept
   _sessUid=d.uid&&(d.uid===prevU||(_cali.sessions||[]).some(s=>s.id===d.uid))?d.uid:null;if(!_sessUid)d.saved={};

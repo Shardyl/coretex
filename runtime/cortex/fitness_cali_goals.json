@@ -2816,7 +2816,7 @@
   {
    "id": "fullbody",
    "name": "Full body calisthenics",
-   "note": "2 calisthenics days a week plus 1 gym day for 6 to 8 weeks, then compare. Hardest compound first. 2 sets each, 2 minutes rest, slow lowering on every rep. About 50 minutes plus the warm-up.",
+   "note": "2 calisthenics days a week plus 1 gym day for 6 to 8 weeks, then compare. Hardest compound first. 3 sets each, 2 minutes rest on the big moves and 90 seconds on the lighter ones, slow lowering on every rep. About 65 minutes plus the warm-up.",
    "source": "Tyler Tong, Every Calisthenics Exercise You Need (YouTube aBwQBREdNEk); targets his, sets, rest and swaps ours (19 Nov 2026)",
    "warmups": [
     "wrist",
@@ -2826,7 +2826,7 @@
     {
      "n": 1,
      "name": "Ring chin-ups / pull-ups",
-     "dose": "2 x 4-10",
+     "dose": "3 x 4-10",
      "kind": "reps",
      "tempo": "2010",
      "rest_s": 120,
@@ -2842,7 +2842,7 @@
     {
      "n": 2,
      "name": "Pseudo planche push-ups on parallettes",
-     "dose": "2 x 6-10",
+     "dose": "3 x 6-10",
      "kind": "reps",
      "tempo": "2010",
      "rest_s": 120,
@@ -2858,7 +2858,7 @@
     {
      "n": 3,
      "name": "Ring rows",
-     "dose": "2 x 8-15",
+     "dose": "3 x 8-15",
      "kind": "reps",
      "tempo": "2011",
      "rest_s": 120,
@@ -2874,7 +2874,7 @@
     {
      "n": 4,
      "name": "Ring support hold",
-     "dose": "2 x 15-30 s",
+     "dose": "3 x 15-30 s",
      "kind": "hold",
      "rest_s": 120,
      "cues": [
@@ -2888,7 +2888,7 @@
     {
      "n": 5,
      "name": "Pike push-ups",
-     "dose": "2 x 6-10",
+     "dose": "3 x 6-10",
      "kind": "reps",
      "tempo": "2010",
      "rest_s": 120,
@@ -2904,9 +2904,9 @@
     {
      "n": 6,
      "name": "Hollow body hold",
-     "dose": "2 x 20-45 s",
+     "dose": "3 x 20-45 s",
      "kind": "hold",
-     "rest_s": 120,
+     "rest_s": 90,
      "youtube": "aBwQBREdNEk@412",
      "cues": [
       "Lower back glued to the floor",
@@ -2919,9 +2919,9 @@
     {
      "n": 7,
      "name": "Seated pike leg lifts",
-     "dose": "2 x 8-15",
+     "dose": "3 x 8-15",
      "kind": "reps",
-     "rest_s": 120,
+     "rest_s": 90,
      "youtube": "aBwQBREdNEk@467",
      "cues": [
       "Legs straight, knees locked, spine tall",
@@ -2934,7 +2934,7 @@
     {
      "n": 8,
      "name": "Bulgarian split squats",
-     "dose": "2 x 8-25 each",
+     "dose": "3 x 8-25 each",
      "kind": "reps",
      "tempo": "3010",
      "rest_s": 120,
@@ -2951,7 +2951,7 @@
     {
      "n": 9,
      "name": "Dumbbell curls, 10 kg (superset)",
-     "dose": "2 x 12-20",
+     "dose": "3 x 12-20",
      "kind": "reps",
      "tempo": "3011",
      "rest_s": 0,
@@ -2967,10 +2967,10 @@
     {
      "n": 10,
      "name": "Side raises, 10 kg (superset)",
-     "dose": "2 x 12-20",
+     "dose": "3 x 12-20",
      "kind": "reps",
      "tempo": "3011",
-     "rest_s": 120,
+     "rest_s": 90,
      "cues": [
       "Slight bend in the elbows, raise to shoulder height",
       "Lead with the elbows, no shrugging",
@@ -2980,7 +2980,8 @@
      "was_n": 11
     }
    ],
-   "order_v": "2026-11-22"
+   "order_v": "2026-11-22",
+   "sets_v": "2026-11-22"
   }
  ]
 }

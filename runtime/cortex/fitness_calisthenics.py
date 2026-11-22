@@ -241,6 +241,10 @@ def state() -> dict:
         i = [x["id"] for x in progs].index(cur)
         nxt = progs[i + 1]["id"] if i + 1 < len(progs) else None
     tests = goal_tests()
+    # owner, 22 Nov 2026 ("wipe my current data"): a session deleted on the server takes the phone's draft of it too
+    gone = [r["uid"] for r in db.query("select uid from fitness.cali_sessions where deleted "
+                                       "and day >= current_date - 7")]
     return {"data": d, "programs": progs, "current": cur, "next": nxt, "sessions": sess, "milestones": ms,
+            "deleted_sessions": gone,
             "wrist": db.setting_get("fitness_cali_wrist") or [],
             "goals": goals(), "goal_tests": tests, "ladders": ladders(tests)}
