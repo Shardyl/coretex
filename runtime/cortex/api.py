@@ -710,10 +710,13 @@ def task_attachments(tid: int, u: dict = Depends(current_user)) -> dict:
         nm = names[i] if i < len(names) and names[i] else None
         out.append({"idx": i, "media_type": media, "is_image": media.startswith("image/"),
                     "size_kb": (len(b64) * 3) // 4 // 1024, "name": nm, "src": u})
+    from . import slides as _slides
+    _tw = _slides.links_for(req.get("attach_docs") or [])      # each deck's Google Slides twin, read live
     for r in (req.get("attach_docs") or []):        # library documents that will send with this email
         out.append({"doc_id": r.get("id"), "media_type": r.get("mime") or "", "is_image": False,
                     "size_kb": int(r.get("size") or 0) // 1024, "name": r.get("filename"),
-                    "src": f"/api/documents/{r.get('id')}/file", "library": True})
+                    "src": f"/api/documents/{r.get('id')}/file", "library": True,
+                    "slides_url": _tw.get(int(r["id"])) if str(r.get("id") or "").isdigit() else None})
     inbound = [{"name": r.get("filename") or r.get("mime"), "from_client": True}
                for r in (req.get("inbound_attachments") or [])]
     # files HE shared in a Talk turn: read while drafting, never sent, removable one by one (card 1875)
@@ -3817,6 +3820,15 @@ SKILL_TOOLS = [
         "document": {"type": "string", "description": "the library id, or its current file name"},
         "new_name": {"type": "string", "description": "the new file name (the extension is kept)"}},
         "required": ["company", "document", "new_name"]}},
+    {"name": "make_slides",
+     "description": "Make (or remake) the Google Slides version of a PDF deck in the document library: page for "
+                    "page, every film playable inside its slide, filed beside the PDF on Drive and shared so anyone "
+                    "with the link can view. Every deck Cortex files gets one automatically; use this for an older "
+                    "PDF, one filed by hand, or after a film finishes processing on YouTube. Takes about a minute.",
+     "input_schema": {"type": "object", "properties": {
+        "company": {"type": "string"},
+        "document": {"type": "string", "description": "the library id, or its file name"}},
+        "required": ["company", "document"]}},
     {"name": "deal_timeline",
      "description": "Open ONE opportunity or project: its stage, value, contacts, quotations already issued, and its "
                     "full TIMELINE (the client's emails and brief, what we replied and promised, meeting notes). "
@@ -4862,6 +4874,26 @@ def _exec_skill_tool(name: str, inp: dict, u: dict | None = None) -> str:
             msg += (" These skill rules still mention the old name, tell me if they should change: "
                     + ", ".join(res["rules_mentioning_old"]))
         return msg
+    if name == "make_slides":
+        from . import documents as _docs, slides as _slides
+        _co = store.get_company_by_slug(inp.get("company") or "")
+        if not _co:
+            return "Which business is the document for?"
+        ref = str(inp.get("document") or "").strip()
+        doc = _docs.get(int(ref), _co["id"]) if ref.isdigit() else None
+        if not doc:
+            hits = [d for d in _docs.find(_co["id"], ref) if (d.get("filename") or "").lower().endswith(".pdf")]
+            exact = [d for d in hits if d["filename"].lower() == ref.lower()]
+            hits = exact or hits
+            if len(hits) != 1:
+                return "Which one? " + json.dumps([{"id": d["id"], "filename": d["filename"]} for d in hits[:8]])
+            doc = hits[0]
+        try:
+            res = _slides.twin(doc["id"])
+        except Exception as _e:  # noqa: BLE001
+            return f"Could not make the Slides version of '{doc['filename']}': {_e}"
+        return (f"Google Slides version of '{doc['filename']}' (library #{doc['id']}) is ready beside the PDF on Drive, "
+                f"shared so anyone with the link can view: {res['url']}")
     if name == "deal_timeline":
         # Talk had no way to OPEN a deal: asked to quote "opportunity 118" it searched contacts for "118",
         # never saw the brief, and asked the owner for scope the timeline already held (11 Sep 2026).

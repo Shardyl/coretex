@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v98';
+const APP_BUILD = 'cortex-v99';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -2028,6 +2028,8 @@ async function hydrateAttachments(){
             ? `<img class="attthumb" src="${x.src}" title="${esc(x.name||'image')} · ${x.size_kb}KB" onclick="enlargeImg(this)">`
             : x.library
               ? `<a class="attfile" href="#" onclick="event.preventDefault();openDoc(${x.doc_id},'${esc(x.name||'document')}')">${ic('file',15)} <span>${esc(x.name||x.media_type)}</span> <span style="opacity:.55">${x.size_kb}KB</span></a>`
+                // its Google Slides twin, made when the deck was filed (owner, 23 Nov 2026)
+                + (x.slides_url?`<a class="attfile" href="${esc(x.slides_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ic('play',15)} <span>Google Slides</span></a>`:'')
               : `<a class="attfile" href="${x.src}" download="${esc(x.name||('file-'+x.idx))}">${ic('file',15)} <span>${esc(x.name||x.media_type)}</span> <span style="opacity:.55">${x.size_kb}KB</span></a>`
               + (x.library
                   ? `<button class="iconbtn sm" title="Remove from this email" onclick="detachDoc(${id},${x.doc_id})">${ic('x',13)}</button>`

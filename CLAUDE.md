@@ -512,6 +512,27 @@ Cockpit (cortex-v97): `threadLine` under the opportunity line ("Sending on: <sub
 `POST /api/tasks/{id}/thread` {key} | {new_subject}. Picking never redrafts the body. Regress case: "an email card
 says which thread it sends on...".
 
+## Every deck PDF has its Google Slides twin (owner, 23 Nov 2026)
+
+"All of our PDFs should have an accompanying Google Slides presentation to go with them." `cortex/slides.py`:
+`twin(doc_id)` reads the library PDF's link boxes (pypdf; the box has no pymupdf) and page renders (pdftoppm at
+1920x1080), lays each film tile as a playable YouTube video (the 4:3 box whose middle 16:9 band covers the tile,
+render crops masking the rest, outlines off, a full-page film's title band back on top), every other link as an
+invisible link box, and files the presentation BESIDE its PDF (the PDF's own Drive folder), "<pdf name> (Google
+Slides)", shared anyone-with-the-link, recorded on `company_documents.slides_id / slides_url`. An earlier copy with
+the same title in that folder is trashed (the same document regenerated). A film YouTube is still processing
+(no thumbnail) stays the page's picture with a link box, never an empty video. Work files in `/var/tmp/cortex-slides`.
+- `engine._file_proposal_pdf` starts it on a thread (`start_twin`) whenever the PDF reached a client folder, so
+  proposals, creative decks, approval decks, storyboards and rebrands all get one. Quotations do not (a sheet).
+- `_request_for_draft` adds `attach_slides` (live from the library) for every attached deck, so the drafter is told
+  to include the link and the invented-link guard and the Manager see it as real.
+- Cockpit (cortex-v99): a "Google Slides" link beside the deck in the card's attachment list
+  (`/api/tasks/{id}/attachments` serves `slides_url`).
+- Talk `make_slides(company, document)` makes or remakes one for any library PDF (older and hand-filed decks).
+First twin: MERED deal 213, doc 1750 "Sensa - Real Estate AI Production", built by hand the same morning with the
+22 Oct desktop method and backfilled onto the row. Regress case: "every deck PDF Cortex files gets its Google
+Slides twin...".
+
 ## Media library: sort by, highest rated first (owner, 19 Nov 2026)
 
 coretex.uk/media has a "Sort by" menu in the header: Highest rated (the default on every load), Most viewed,

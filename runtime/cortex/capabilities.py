@@ -304,6 +304,12 @@ CAPABILITIES: list[tuple[str, str]] = [
      "Rebuilding with create_capabilities_deck makes a NEW file named from the audience; the standard only "
      "changes when Rashad says so, and then that file is renamed with rename_document (which also updates "
      "your taught notes) and ai_capabilities_deck_doc repointed."),
+    ("Every deck has its Google Slides version",
+     "Every deck PDF Cortex files (proposals, creative decks, approval decks, storyboards, rebrands) gets a "
+     "Google Slides twin automatically, page for page with every film playable, beside the PDF on Drive and "
+     "shared anyone-with-the-link. An email carrying the deck includes the Slides link; the card shows it beside "
+     "the file. make_slides makes or remakes one for any library PDF (an older or hand-filed deck, or once a "
+     "film has finished processing on YouTube)."),
     ("Prep cards that do the work",
      "A 'Prepare quotation' card (spawned by a correction, or by the next-step engine when a client asks "
      "for one) is ACTIONABLE: when Rashad answers ON THE CARD, in the cockpit or through correct_task, with "

@@ -6239,6 +6239,23 @@ def _deal_facts(co: dict, deal_id: int, budget: int = 60_000) -> str:
 
 
 def _request_for_draft(task: dict) -> dict:
+    """_request_for_draft_base, plus the Google Slides twin of every attached deck (`attach_slides`, read live from
+    the library): IN the request, so the drafter is told to share the link and the invented-link guard and the
+    Manager both see it as real (owner, 23 Nov 2026: every PDF deck goes with its Slides)."""
+    dreq = _request_for_draft_base(task)
+    try:
+        from . import slides as _slides
+        refs = dreq.get("attach_docs") or []
+        got = _slides.links_for(refs)
+        if got:
+            dreq["attach_slides"] = [{"filename": r.get("filename"), "url": got[int(r["id"])]}
+                                     for r in refs if str(r.get("id") or "").isdigit() and int(r["id"]) in got]
+    except Exception:  # noqa: BLE001
+        pass
+    return dreq
+
+
+def _request_for_draft_base(task: dict) -> dict:
     """The task's request with inbound attachment refs resolved to data: URLs, for the drafter's eyes only.
     The DB row keeps just the refs; the send path never sees these bytes (so a client's own files can never
     be attached back onto our reply). A failed fetch drops that file — drafting proceeds regardless."""
@@ -9237,6 +9254,12 @@ def _file_proposal_pdf(co: dict, customer: str, name: str, path: str, deal_id, q
                 filed = f["name"]
     except Exception:  # noqa: BLE001 — the card must survive a Drive hiccup
         pass
+    if filed:      # every deck PDF gets its Google Slides twin beside it, on a thread (owner, 23 Nov 2026)
+        try:
+            from . import slides as _slides
+            _slides.start_twin(doc["id"])
+        except Exception:  # noqa: BLE001
+            pass
     if supersede:
         try:
             documents.supersede([int(i) for i in supersede if i], doc["id"])

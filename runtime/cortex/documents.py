@@ -43,6 +43,8 @@ alter table company_documents add column if not exists verified_at timestamptz;
 alter table company_documents add column if not exists superseded_by bigint; -- retired: kept, never offered
 alter table company_documents add column if not exists deal_id bigint;      -- a client document ON a deal
 alter table company_documents add column if not exists text text;           -- extracted text, for reading
+alter table company_documents add column if not exists slides_id text;      -- its Google Slides twin (slides.py)
+alter table company_documents add column if not exists slides_url text;     -- that twin's share link
 """
 
 MAX_TEXT = 60_000    # extracted text kept per document: a 30-page brief or a full meeting write-up, never a data dump

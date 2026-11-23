@@ -425,6 +425,11 @@ def draft(skill: dict, company: dict, request: dict,
         user.append("FILES ATTACHED TO THIS OUTGOING EMAIL (they genuinely send with it): "
                     + ", ".join(_docs) + ". They are on the message already: refer to them as attached "
                     "now, and NEVER promise to send them later. How you word that is your voice.")
+    _sl = [x for x in (request.get("attach_slides") or []) if isinstance(x, dict) and x.get("url")]         if isinstance(request, dict) else []
+    if _sl:
+        user.append("THE ATTACHED DECK ALSO EXISTS AS A GOOGLE SLIDES PRESENTATION, shareable with anyone who has the "
+                    "link (films play inside it). Include its link in the email, once, as the version they can "
+                    "share with their team: " + "; ".join(f"{x.get('filename')}: {x['url']}" for x in _sl))
     _meet = ((request.get("meeting") or {}).get("meet") or "").strip() if isinstance(request, dict) else ""
     if _meet:
         user.append(f"A meeting is CONFIRMED and already booked. Its REAL Google Meet link is {_meet} — "

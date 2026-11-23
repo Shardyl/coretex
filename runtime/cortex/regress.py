@@ -3367,6 +3367,53 @@ def _cases():
         return same and words_ok and intent_ok and pick_ok and wired
     case("an email card says which thread it sends on, and 'put it on the X thread' picks X, never a new subject",
          "owner, 20 Nov 2026 (D-Marin 1464/1657, HBMSU 1642/1461)", _thread_picker)
+
+    def _slides_twin():
+        import inspect, io, tempfile
+        from pypdf import PdfWriter
+        from pypdf.annotations import Link
+        from . import slides as _sl, engine as _en, worker as _wk, api as _api, capabilities as _cap
+        # the PDF's link boxes come out in render pixels, top-left origin (a 960x540 pt page renders 2x)
+        w = PdfWriter()
+        w.add_blank_page(width=960, height=540)
+        w.add_annotation(0, Link(rect=(96, 54, 480, 270), url="https://www.youtube.com/watch?v=Vfi5xhXGci4"))
+        f = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        w.write(f)
+        f.close()
+        _, _, pages = _sl.pdf_links(f.name)
+        os.unlink(f.name)
+        r = pages[0][0]["rect"]
+        geom = all(abs(a - b) < 0.5 for a, b in zip(r, [192, 540, 960, 972]))
+        # page 13 of the Real Estate deck: three tiles, the nurse film still processing on YouTube, plus a site link
+        links = [{"url": "https://www.youtube.com/watch?v=Vfi5xhXGci4", "rect": [108, 311, 651, 616]},
+                 {"url": "https://www.youtube.com/watch?v=e5KVA8OTJsQ", "rect": [688, 311, 1231, 616]},
+                 {"url": "https://www.youtube.com/watch?v=tcI0AfGytuc", "rect": [1268, 311, 1811, 616]},
+                 {"url": "https://sensa.digital", "rect": [100, 1000, 300, 1050]}]
+        plan = _sl.plan_page(links, playable=lambda v: v != "Vfi5xhXGci4")
+        vids = [e["id"] for e in plan if e["type"] == "video"]
+        boxes = [e["url"] for e in plan if e["type"] == "link"]
+        plan_ok = (vids == ["e5KVA8OTJsQ", "tcI0AfGytuc"]                       # processing film is never a video
+                   and "https://www.youtube.com/watch?v=Vfi5xhXGci4" in boxes      # ...it links to the film instead
+                   and "https://sensa.digital" in boxes
+                   and all(e["type"] != "mask" or e["rect"][1] >= 0 for e in plan))
+        # a full-page film keeps its title band on top
+        full = _sl.plan_page([{"url": "https://youtu.be/fR-UJ5Zb8Lk", "rect": [0, 0, 1920, 1080]}])
+        full_ok = [e["type"] for e in full][0] == "video" and full[-1]["type"] == "band"
+        reqs = _sl.requests_for({"slides": [{"page": 1, "bg": "p-01.png", "elements": plan}]}, lambda x: "u:" + x)
+        req_ok = (sum(1 for q in reqs if "createVideo" in q) == 2
+                  and all(q["updateVideoProperties"]["videoProperties"]["outline"]["propertyState"] == "NOT_RENDERED"
+                          for q in reqs if "updateVideoProperties" in q)
+                  and _sl.title_for("Sensa - Real Estate AI Production.pdf")
+                  == "Sensa - Real Estate AI Production (Google Slides)")
+        wired = ("start_twin" in inspect.getsource(_en._file_proposal_pdf)
+                 and "attach_slides" in inspect.getsource(_en._request_for_draft)
+                 and "attach_slides" in inspect.getsource(_wk)
+                 and '"make_slides"' in inspect.getsource(_api)
+                 and "slides_url" in inspect.getsource(_api)
+                 and "make_slides" in inspect.getsource(_cap))
+        return geom and plan_ok and full_ok and req_ok and wired
+    case("every deck PDF Cortex files gets its Google Slides twin, films playable, and the email carries its link",
+         "owner, 23 Nov 2026 (MERED deal 213, Real Estate AI Production deck)", _slides_twin)
     return C
 
 
