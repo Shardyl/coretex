@@ -411,7 +411,7 @@ def health_pull(days: int = 400) -> dict:
           for r in db.query("select * from fitness.sleep_8 where day > current_date - %s order by day", (days,))]
     s = [{"id": r["uid"], "date": r["day"].isoformat(), "start": r["start_at"].isoformat(),
           "end": _trim(r)[0].isoformat(), "type": r["type"], "typeName": r["type_name"], "title": r["title"],
-          "kcal": _trim(r)[1], "avgHR": _num(r["avg_hr"]), "maxHR": _num(r["max_hr"]),
+          "kcal": _kcal_served(r), "kcalWatch": _trim(r)[1], "avgHR": _num(r["avg_hr"]), "maxHR": _num(r["max_hr"]),
           "minHR": _num(r["min_hr"]), "distanceM": _num(r["distance_m"]), "steps": _num(r["steps"]),
           "minutes": _trim(r)[2], "trimmed": bool(r.get("trim_min")), "source": r["source"]}
          # A watch session whose log entry he DELETED (a false start, 22 Oct 2026) leaves the burn and the glucose
@@ -460,6 +460,21 @@ def _sleep_vals(r: dict) -> list:
     n = _num(r.get("day_hr_samples"))
     v += [int(n) if n is not None else None, _num(r.get("day_hr_gap_s"))]
     return v
+
+
+# Owner, 24 Nov 2026: "the weightlifting sessions, let's put them at 400 calories ... more realistic". The watch
+# reads ~540 kcal for an hour of weights; cardio readings are trusted as they are. A weights session counts at most
+# WEIGHTS_KCAL_CAP (a shorter session the watch reads lower keeps its own figure). The raw watch figure stays in
+# health_sessions and is served as kcalWatch.
+WEIGHTS_KCAL_CAP = 400
+_WEIGHTS_TYPE = re.compile(r"WEIGHT|STRENGTH", re.I)
+
+
+def _kcal_served(r):
+    k = _trim(r)[1]
+    if k is not None and _WEIGHTS_TYPE.search(r.get("type_name") or "") and k > WEIGHTS_KCAL_CAP:
+        return float(WEIGHTS_KCAL_CAP)
+    return k
 
 
 def _trim(r):

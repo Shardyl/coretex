@@ -2810,6 +2810,12 @@ def _cases():
                   and "last.it.note?" in m and '"note": str(it.get("note") or "")[:300]' in fc)
          (open(_web + "/fitness/calisthenics.js", encoding="utf-8").read(),
           open(_web + "/../runtime/cortex/fitness_calisthenics.py", encoding="utf-8").read()))
+    case("a watch weights session counts at most 400 kcal; cardio keeps the watch figure", "weights 400 24 Nov",
+         lambda: (lambda d: _fit._kcal_served({**d, "type_name": "WEIGHT_MACHINE"}) == 400.0
+                  and _fit._kcal_served({**d, "type_name": "WEIGHT_MACHINE", "kcal": 300}) == 300.0
+                  and _fit._kcal_served({**d, "type_name": "TREADMILL"}) == 541.0)
+         ({"start_at": __import__("datetime").datetime(2026, 11, 24, 11, 49), "trim_min": None,
+           "end_at": __import__("datetime").datetime(2026, 11, 24, 12, 48), "kcal": 541}))
     case("steam room calories never count in the cardio reports total", "steam kcal 16 Nov",
          lambda: (lambda m: "cardioSessions.filter(s=>!isSteam(s))" in m and "const isSteam=" in m)
          (open(_web + "/fitness/index.html", encoding="utf-8").read()))
