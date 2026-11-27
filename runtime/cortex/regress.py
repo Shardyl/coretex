@@ -1536,28 +1536,23 @@ def _cases():
     def _keeps_place():
         root = os.path.join(os.path.dirname(__file__), "..", "..")
         web = open(os.path.join(root, "web", "index.html"), encoding="utf-8").read()
-        r = web.split("async function render(){", 1)[1].split("
-}
-", 1)[0]
-        ib = web.split("async function renderInbox(v){", 1)[1].split("
-}
-", 1)[0]
-        ni = web.split("async function notInterested(id){", 1)[1].split("
-}
-", 1)[0]
-        dn = web.split("async function dealNotInterested(id, el){", 1)[1].split("
-}
-", 1)[0]
+        end = chr(10) + "}" + chr(10)
+
+        def body(head):
+            return web.split(head, 1)[1].split(end, 1)[0]
+        r = body("async function render(){")
+        ib = body("async function renderInbox(v){")
+        ni = body("async function notInterested(id){")
+        dn = body("async function dealNotInterested(id, el){")
         return ("v.style.minHeight=v.offsetHeight" in r and "await renderInbox(v)" in r and "finally" in r
-                and "pageScroller()" in r and "window.scrollY" not in r   # the page scrolls in <body>, never the window
+                and "pageScroller()" in r and "sc.scrollTop=_y" in r   # the page scrolls in <body>, never the window
+                and "window.scrollTo(0,_y)" not in r
                 and "setTimeout(_restore, 0)" not in r
                 and ib.index("await api('/api/inbox'") < ib.index('<div class="ibhead">')   # fetch BEFORE the redraw
                 and "const refreshing=" in ib and "${prevRules}" in ib
                 and "cardGone(card); render();" in ni and "cardGone(card)" in dn
                 and "dealNotInterested(${p.id},this)" in web and "dealNotInterested(${+t.target_id},this)" in web
-                and "if(card) card.remove();" not in web.split("async function act(", 1)[1].split("
-}
-", 1)[0])
+                and "if(card) card.remove();" not in body("async function act("))
     case("an action on a card keeps the page where it is: the card folds away, the list refreshes without a jump",
          "owner 27 Nov: 'I don't want it to refresh the page and go all the way to the top again'", _keeps_place)
 
