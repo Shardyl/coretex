@@ -4274,6 +4274,22 @@ shoot needs none), then 10% off the whole quotation.
 - First use: Heaven Properties deal 150, SEN-2026-0048 (v5 is the live draft). The terms are a v1 and will
   move when the client comes back with scope.
 
+## The AI demo preset, and the retainer at one revision round (owner, 27 Nov 2026)
+- `ai-demo` in `settings.quotation_presets`: a PAID capture of a real person's likeness and voice, the model
+  built from it and one short demo film. 100% in advance, non-refundable, NO revision rounds; its own
+  `payment_lines` and its own 15-clause terms (consent and likeness clauses taken from content-retainer 14
+  and 18). Its own preset because it is its own contract type: `set_rounds` cannot express zero rounds and
+  `ai-production` hardcodes 70/30 in clause 1. Named in sales-quotation rule 1. Sensa never does free, so a
+  demo is always this paid quote, never a "free watermarked demo".
+- `content-retainer` clause 9 and its deliverables now say ONE consolidated revision round per monthly
+  batch (after delivery), and its master-file bullet no longer lists 1:1. The rate card's retainer tier
+  descriptions still say two rounds: OWNER TO CONFIRM.
+- Backups: `quotation_presets:backup-2026-11-27`, `sales_quotation_rules_backup_2026_11_27`. Templates re-exported.
+- First use: Loewenhardt & Partners, deal 218: SEN-2026-0076 (A, ai-demo, AED 6,000), SEN-2026-0077
+  (B, ai-production, AED 24,000, two rounds), SEN-2026-0075 (C, content-retainer, 6 x AED 10,000).
+- Found on the way: Talk typed the customer as "Loewenhardt &amp; Partners" and `create_quotation number=`
+  then refuses a corrected name ("must be for the same client"), so the only repair is a new number.
+
 ## Meeting notes to a client: the summary only (owner, 18 Oct 2026)
 - Clients ask for the meeting notes; card 1301 (Heaven) retold the meeting in the email body. Gemini's doc has three
   parts: Quick notes (summary + next steps), Full notes (Details, with internal asides: the AI models we use, per-video
