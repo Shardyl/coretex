@@ -357,7 +357,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 // THE APP KNOWS ITS OWN VERSION (14 Oct 2026). An open app runs the code it loaded; after a deploy it must reload,
 // never post an old form to a server that has moved on (Gino's old create form had no contact fields). Keep equal to
 // sw.js CACHE; the server reads this line and refuses writes from any other build.
-const APP_BUILD = 'cortex-v99';
+const APP_BUILD = 'cortex-v100';
 const API = localStorage.getItem('cortex_api') || (location.hostname.match(/^(localhost|127|192|file)/)||location.protocol==='file:' ? '' : '');
 let token = localStorage.getItem('cortex_token') || '';
 let tab = 'talk', companies = [], skills = {}, demo = false;
@@ -783,18 +783,47 @@ function closeStepup(){ lockMode='login'; pinBuf=''; document.getElementById('lo
 function cancelStepup(){ const r=stepupResolve; stepupResolve=null; closeStepup(); r&&r(null); }
 
 async function render(){
-  // KEEP THE PLACE: re-rendering a tab used to jump to the top, so dismissing one item halfway down
-  // meant scrolling all the way back (owner, 31 Aug). Capture the position and restore it after paint.
-  const _y = window.scrollY || document.documentElement.scrollTop || 0;
-  const _restore = () => requestAnimationFrame(() => window.scrollTo(0, _y));
+  // KEEP THE PLACE (owner, 31 Aug; fixed properly 27 Nov 2026). A redraw empties the tab while its list loads, so the
+  // page went short and the browser clamped the scroll to the top; the old restore ran BEFORE the list came back and
+  // so restored nothing. Now the tab's height is held while it redraws, and the place is put back only after the
+  // redraw has finished, unless the person scrolled in the meantime.
+  // THE PAGE SCROLLS IN <body>, NOT THE WINDOW: html and body are height:100% with overflow-x:hidden, so window.scrollY
+  // is always 0 here. Reading the window is why the 31 Aug fix never restored anything. pageScroller() finds the one
+  // that really scrolls.
+  const sc=pageScroller();
+  const _y = sc.scrollTop || 0;
   const v=document.getElementById('view');
-  if(_y > 0) setTimeout(_restore, 0);
-  if(tab==='talk')  return renderChat(v);
-  if(tab==='inbox') return renderInbox(v);
-  if(tab==='crm')   return renderCRM(v);
-  if(tab==='calendar') return renderCalendar(v);
-  if(tab==='skills')return renderSkills(v);
-  if(tab==='log')   return renderLog(v);
+  let _moved=false; const _mark=()=>{ _moved=true; };
+  const _ev=['wheel','touchmove','keydown'];
+  if(_y>0){ v.style.minHeight=v.offsetHeight+'px'; _ev.forEach(e=>window.addEventListener(e,_mark,{passive:true})); }
+  try{
+    if(tab==='talk')  return await renderChat(v);
+    if(tab==='inbox') return await renderInbox(v);
+    if(tab==='crm')   return await renderCRM(v);
+    if(tab==='calendar') return await renderCalendar(v);
+    if(tab==='skills')return await renderSkills(v);
+    if(tab==='log')   return await renderLog(v);
+  } finally {
+    if(_y>0){
+      _ev.forEach(e=>window.removeEventListener(e,_mark));
+      v.style.minHeight='';
+      if(!_moved && Math.abs((sc.scrollTop||0)-_y)>1) requestAnimationFrame(()=>{ sc.scrollTop=_y; });
+    }
+  }
+}
+function pageScroller(){
+  const b=document.body;
+  if(b && b.scrollHeight>b.clientHeight+1 && /(auto|scroll)/.test(getComputedStyle(b).overflowY)) return b;
+  return document.scrollingElement||document.documentElement;
+}
+// A card that is finished folds away where it sits; the cards below close up and nothing else moves.
+function cardGone(card){
+  if(!card) return;
+  card.style.overflow='hidden'; card.style.maxHeight=card.offsetHeight+'px';
+  card.style.transition='opacity .2s, max-height .25s, margin .25s, padding .25s';
+  requestAnimationFrame(()=>{ card.style.opacity=0; card.style.maxHeight='0px'; card.style.marginTop=card.style.marginBottom='0px';
+    card.style.paddingTop=card.style.paddingBottom='0px'; card.style.borderWidth='0px'; });
+  setTimeout(()=>card.remove(),280);
 }
 
 // ---- CRM pages: Contacts / Projects / Opportunities ----
@@ -1242,7 +1271,7 @@ async function openProject(id){
   const forecast=FORECAST_STAGES.includes(p.stage);
   const fld=(ic_,t)=>t?`<div class="dfld">${ic(ic_,15)} ${esc(t)}</div>`:'';
   v.innerHTML=`<div class="qhead"><button class="iconbtn sm" onclick="go('crm')" aria-label="Back">${ic('back',18)}</button><b>${forecast?'Opportunity':'Project'}</b>
-      <div style="margin-left:auto;display:flex;gap:6px">${['Opportunity','Quote'].includes(p.stage)?`<button class="btn sm" onclick="dealNotInterested(${p.id})">Not interested</button>`:''}${starBtn(p,16)}<button class="iconbtn sm" title="Edit" onclick="openEditDeal(${p.id})">${ic('edit',16)}</button><button class="iconbtn sm" title="Delete" onclick="deleteDeal(${p.id})">${ic('trash',16)}</button></div></div>
+      <div style="margin-left:auto;display:flex;gap:6px">${['Opportunity','Quote'].includes(p.stage)?`<button class="btn sm" onclick="dealNotInterested(${p.id},this)">Not interested</button>`:''}${starBtn(p,16)}<button class="iconbtn sm" title="Edit" onclick="openEditDeal(${p.id})">${ic('edit',16)}</button><button class="iconbtn sm" title="Delete" onclick="deleteDeal(${p.id})">${ic('trash',16)}</button></div></div>
     <div class="card">
       <div class="cname" style="font-size:17px">${esc(p.title||'Untitled')}</div>
       <div class="csub" style="margin-bottom:10px">${esc(p.company||'')} <span class="dnum" style="display:inline">#${p.id}</span></div>
@@ -1840,6 +1869,17 @@ function timeTag(ts){ if(!ts) return ''; const d=new Date(ts), diff=(Date.now()-
 async function renderInbox(v){
   ensurePush();   // once per session: repair a dead push subscription / resurface the banner if the flag lied
   if(inboxView==='history') return renderInboxHistory(v);
+  // A REFRESH NEVER BLANKS THE LIST: when the Inbox is already on screen, fetch first and swap in one go, so there is
+  // no "Loading" flash and no jump. The rules banner keeps what it showed until its own refresh lands.
+  const refreshing=!!v.querySelector('#ibSeg');
+  const prevRules=refreshing?((document.getElementById('pendingRules')||{}).innerHTML||''):'';
+  const fco=document.getElementById('coSel').value;
+  if(!refreshing) v.innerHTML='<div class="empty">Loading…</div>';
+  let resp;
+  try{ resp = demo?{items:(SAMPLE.inbox||[]).map(x=>({...x,card:'action'})),needs_you:(SAMPLE.inbox||[]).length,updates:0,unread:0}
+                  :await api('/api/inbox'+(fco?'?company='+encodeURIComponent(fco):'')); }
+  catch(e){ resp={items:[],needs_you:0,updates:0,unread:0}; }
+  if(tab!=='inbox'||inboxView==='history') return;   // they moved on while it loaded
   v.innerHTML=`<div class="ibhead"><div class="h" style="margin:0">Needs your yes</div>
     <div style="display:flex;gap:6px;flex:none">
       <button class="btn sm" onclick="addReminder()">${ic('clock',15)} Reminder</button>
@@ -1847,13 +1887,8 @@ async function renderInbox(v){
     ${(!demo && IS_MOBILE && !biometricReg)?`<div class="banner" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>${ic('finger',15)} Faster approvals: unlock with your fingerprint on this phone</span><button class="btn sm go" style="flex:none" onclick="registerDevice()">Enable fingerprint</button></div>`:''}
     ${(!demo && IS_MOBILE && localStorage.getItem('cortex_push')!=='1')?`<div class="banner" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>${ic('alert',15)} Get Cortex alerts on your lock screen</span><button class="btn sm go" style="flex:none" onclick="enablePush()">Enable alerts</button></div>`:''}
     <div class="convbar" id="ibSeg" style="margin:0 0 10px"></div>
-    <div id="pendingRules"></div>
+    <div id="pendingRules">${prevRules}</div>
     <div id="ib" class="empty">Loading…</div>`;
-  const fco=document.getElementById('coSel').value;
-  let resp;
-  try{ resp = demo?{items:(SAMPLE.inbox||[]).map(x=>({...x,card:'action'})),needs_you:(SAMPLE.inbox||[]).length,updates:0,unread:0}
-                  :await api('/api/inbox'+(fco?'?company='+encodeURIComponent(fco):'')); }
-  catch(e){ resp={items:[],needs_you:0,updates:0,unread:0}; }
   const items=resp.items||[]; renderSeg(resp); updateInboxBadge((resp.needs_you||0)+(resp.unread||0));
   const shown=items.filter(it=> inboxSeg==='all'?true : inboxSeg==='updates'? it.card==='info' : it.card!=='info');
   const ib=document.getElementById('ib');
@@ -1930,7 +1965,7 @@ function infoCard(t){
       ${(t.target_type==='contact'&&t.target_id&&!grouped)?`<button class="btn sm go" onclick="inboxContact('${esc(t.target_id)}')">${ic('arrow',13)} View contact</button>`:''}
       ${(t.target_type==='task'&&t.target_id&&t.target_open)?`<button class="btn sm go" onclick="inboxCard(${+t.target_id})">${ic('arrow',13)} Open card</button>`:''}
       ${(t.target_type==='deal'&&t.target_id&&t.target_open)?`<button class="btn sm go" onclick="openProject(${+t.target_id})">${ic('arrow',13)} View deal</button>`:''}
-      ${(t.target_type==='deal'&&t.target_id&&t.target_open&&!t.next_step)?`<button class="btn sm" onclick="dealNotInterested(${+t.target_id})">Not interested</button>`:''}
+      ${(t.target_type==='deal'&&t.target_id&&t.target_open&&!t.next_step)?`<button class="btn sm" onclick="dealNotInterested(${+t.target_id},this)">Not interested</button>`:''}
       ${t.next_step?`<button class="btn sm go" onclick="todoAct(${t.id},${+t.target_id},${t.next_step},'done')">Done</button><button class="btn sm" onclick="todoAct(${t.id},${+t.target_id},${t.next_step},'dismiss')">Not needed</button><button class="btn warn sm" onclick="todoTalkOpen(${t.id},true)">${ic('mic',14)} Tap to talk</button><button class="btn sm" onclick="todoTalkOpen(${t.id},false)">Type</button><button class="btn sm" onclick="notifAct(${t.id},'dismiss')">Dismiss</button>`:`<button class="btn sm" onclick="notifAct(${t.id},'dismiss')">Dismiss</button>`}
       <button class="btn sm" onclick="notifAct(${t.id},'snooze')">Snooze 1h</button></div>
     ${t.next_step?`<div id="tt${t.id}w" hidden style="margin-top:8px"><textarea id="tt${t.id}" rows="3" style="width:100%" placeholder="Tell Cortex what to do (for example: build three treatments, no quote)"></textarea>
@@ -1944,12 +1979,12 @@ function todoTalk(nid,deal,what){
     const msg=`About the To do on opportunity #${deal}: "${what}". ${said}`; go('talk'); setTimeout(()=>sendChat(msg),300); };
   if(recording){ const m=document.getElementById('tt'+nid+'m'); if(m) stopDictation(m); setTimeout(send,700); } else send(); }   // the last words land first
 async function todoAct(nid,deal,item,action){ const el=document.getElementById('n'+nid); if(el) el.style.opacity=.4;
-  try{ await api('/api/nextsteps/'+deal,{method:'POST',body:JSON.stringify({action,item_id:item})}); if(el) el.remove(); toast(action==='done'?'Done':'Marked not needed'); }
+  try{ await api('/api/nextsteps/'+deal,{method:'POST',body:JSON.stringify({action,item_id:item})}); cardGone(el); toast(action==='done'?'Done':'Marked not needed'); }
   catch(e){ if(el) el.style.opacity=1; toast((e&&e.message)||'Could not save'); } }
 async function notifAct(id,action){
   const el=document.getElementById('n'+id); if(el) el.style.opacity=.4;
   try{ await api(`/api/notifications/${id}/${action}`,{method:'POST',body:action==='snooze'?JSON.stringify({minutes:60}):undefined});
-    if(el) el.remove();          // the row is gone; nothing else on screen changed, so do NOT re-render
+    cardGone(el);          // the row folds away; nothing else on screen changed, so do NOT re-render
     refreshBadge(); }catch(e){ if(el) el.style.opacity=1; toast('Error'); }
 }
 async function addReminder(){
@@ -2485,7 +2520,7 @@ async function menuPick(id){
     if(card) card.style.opacity=1;
     if(!(r&&r.ok)){ toast('Not done: '+((r&&r.error)||'failed')); return; }
     toast(`Writing ${r.built_from_menu} post${r.built_from_menu===1?'':'s'} — full-text drafts land in your Inbox shortly ✓`);
-    if(card) card.remove(); refreshBadge();
+    cardGone(card); refreshBadge();
   }catch(e){ if(card) card.style.opacity=1; toast('Error: '+e.message); }
 }
 function laneRow(lane){
@@ -2539,7 +2574,7 @@ function confirmSchedule(id){
 }
 async function act(id,what,runAt){
   const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;
-  if(demo){ toast(what==='approve'?'Approved ✓ (demo)':'Done (demo)'); if(card) card.remove(); return; }
+  if(demo){ toast(what==='approve'?'Approved ✓ (demo)':'Done (demo)'); cardGone(card); return; }
   const qs = runAt? ('?run_at='+encodeURIComponent(runAt)) : '';
   try{ if(what==='approve') toast(runAt?'Scheduling…':'Working on it…');
     let r=await api(`/api/tasks/${id}/${what}${qs}`,{method:'POST'});
@@ -2561,7 +2596,7 @@ async function act(id,what,runAt){
     const building=r&&r.result&&r.result.building, sent=r&&r.result&&r.result.sent_to, err=r&&r.result&&r.result.error;
     toast(err? ('Note: '+err) : building? 'Building the post — it returns to your Inbox for review when ready ✓'
           : sent? ('Sent to '+sent+' ✓') : (what==='approve'?'Approved ✓':'Done ✓'));
-    if(card) card.remove();      // handled: remove it in place, keep the rest of the list where it is
+    cardGone(card);      // handled: fold it away in place, keep the rest of the list where it is
     refreshBadge(); }
   catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
 }
@@ -2594,7 +2629,7 @@ async function confirmLiveSend(id, r){
     if(cr&&cr.ok&&res&&res.scheduled) toast('Scheduled for '+res.scheduled+' ✓');
     else if(cr&&cr.ok&&res&&res.sent_to) toast(res.sent_to+' ✓');
     else toast('Not done: '+((cr&&cr.error)||(res&&res.error)||'cancelled'));
-    if(done){ const card=document.getElementById('t'+id); if(card) card.remove(); }   // the card is finished: gone now, not on the next refresh
+    if(done){ cardGone(document.getElementById('t'+id)); }   // the card is finished: gone now, not on the next refresh
     else { const card=document.getElementById('t'+id); if(card) card.style.opacity=1; }
     render(); }
   catch(e){ toast('Error: '+e.message); }
@@ -2697,15 +2732,19 @@ async function meetingOff(id){
   try{ const r=await api(`/api/tasks/${id}/meeting-off`,{method:'POST',body:'{}'}); toast(r&&(r.note||r.error)||'Removed'); render(); }
   catch(e){ toast('Error: '+e.message); }
 }
-async function dealNotInterested(id){
+async function dealNotInterested(id, el){
   if(!confirm('Not interested: close this opportunity as not pursued, with everything Cortex raised for it. A repeat of it stays quiet. Nothing is sent. Continue?')) return;
-  try{ const r=await api(`/api/crm/project/${id}/not-interested`,{method:'POST',body:'{}'}); toast(r&&r.note||'Closed'); render(); }
-  catch(e){ toast('Error: '+e.message); }
+  const card=el&&el.closest?el.closest('.card'):null; if(card) card.style.opacity=.5;
+  try{ const r=await api(`/api/crm/project/${id}/not-interested`,{method:'POST',body:'{}'}); toast(r&&r.note||'Closed');
+    const v=document.getElementById('view');
+    if(v&&v.querySelector('#cuBox')) openProject(id);     // on the deal page: show it closed, stay on it
+    else { cardGone(card); render(); } }                  // anywhere else: fold the card away, refresh quietly
+  catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
 }
 async function notInterested(id){
   if(!confirm('Not interested: close this and every card this email raised. Nothing is sent. Continue?')) return;
   const card=document.getElementById('t'+id); if(card) card.style.opacity=.5;
-  try{ const r=await api(`/api/tasks/${id}/not-interested`,{method:'POST',body:'{}'}); toast(r&&r.note||'Closed'); render(); }
+  try{ const r=await api(`/api/tasks/${id}/not-interested`,{method:'POST',body:'{}'}); toast(r&&r.note||'Closed'); cardGone(card); render(); }
   catch(e){ toast('Error: '+e.message); if(card) card.style.opacity=1; }
 }
 async function dealPick(id, dealId, text){

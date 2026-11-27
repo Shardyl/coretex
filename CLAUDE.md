@@ -512,6 +512,18 @@ Cockpit (cortex-v97): `threadLine` under the opportunity line ("Sending on: <sub
 `POST /api/tasks/{id}/thread` {key} | {new_subject}. Picking never redrafts the body. Regress case: "an email card
 says which thread it sends on...".
 
+## A card action keeps your place (owner, 27 Nov 2026)
+
+"I don't want it to refresh the page and go all the way to the top again." Every card action (Not interested, a
+deal's Not interested, link opportunity, pick thread, attach) and the Inbox's own rev poll call `render()`, which
+redrew the tab from "Loading" and landed at the top. The 31 Aug "keep the place" fix never worked: **the page scrolls in
+`<body>`, not the window** (html and body are height:100% with overflow-x:hidden, so `window.scrollY` is always 0),
+and it restored before the list had loaded anyway. Now `render()` reads `pageScroller()`, holds `#view`'s height
+while the tab redraws, awaits it, and puts the place back unless the person scrolled meanwhile; `renderInbox`
+fetches BEFORE it touches the page when the Inbox is already showing (no Loading flash, the rules banner keeps its
+content); a finished card folds away in place (`cardGone`), the cards below close up. Never read `window.scrollY`
+for the cockpit page. Cockpit build cortex-v100. Regress case: "an action on a card keeps the page where it is...".
+
 ## Every deck PDF has its Google Slides twin (owner, 23 Nov 2026)
 
 "All of our PDFs should have an accompanying Google Slides presentation to go with them." `cortex/slides.py`:
